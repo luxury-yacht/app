@@ -1,0 +1,206 @@
+/* Network Overview Styles */
+
+/* Service Overview Styles */
+.endpoint-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-small);
+}
+
+.endpoint-item {
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+
+.ports-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.port-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-small);
+}
+
+.port-name {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.port-details {
+  color: var(--text-secondary);
+  font-family: var(--font-family-mono);
+}
+
+.selector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-small);
+}
+
+.selector-item {
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+
+.status-healthy {
+  color: var(--status-success);
+}
+
+.status-warning {
+  color: var(--status-warning);
+}
+
+/* Ingress Overview Styles */
+.ingress-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.ingress-rule {
+  padding: var(--spacing-sm);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.rule-host {
+  margin-bottom: var(--spacing-xs);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.rule-paths {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-left: var(--spacing-md);
+}
+
+.path-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-small);
+}
+
+.path-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.path-type {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xsmall);
+}
+
+.path-arrow {
+  color: var(--text-tertiary);
+}
+
+.backend-service,
+.backend-resource {
+  color: var(--text-secondary);
+}
+
+.tls-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.tls-item {
+  padding: var(--spacing-xs);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.tls-hosts,
+.tls-secret {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+}
+
+.tls-hosts strong,
+.tls-secret strong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* NetworkPolicy Overview Styles */
+.policy-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.policy-rule {
+  padding: var(--spacing-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.rule-header {
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.rule-peers {
+  margin-bottom: var(--spacing-sm);
+}
+
+.rule-peers strong,
+.rule-ports strong {
+  color: var(--text-primary);
+  font-weight: 500;
+  display: block;
+  margin-bottom: var(--spacing-xs);
+}
+
+.peer-item {
+  margin-left: var(--spacing-md);
+  margin-bottom: var(--spacing-xs);
+}
+
+.peer-selector,
+.peer-ipblock {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  padding: 2px 0;
+}
+
+.ipblock-except {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xsmall);
+}
+
+.rule-ports .ports-list {
+  margin-left: var(--spacing-md);
+}
+
+.rule-ports .port-item {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-small);
+}
+
+.port-protocol,
+.port-number {
+  color: var(--text-secondary);
+}
+
+.port-range {
+  color: var(--text-tertiary);
+}

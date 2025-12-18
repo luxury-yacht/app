@@ -1,0 +1,28 @@
+/* Temporary overrides for legacy modal implementations. */
+
+@media (max-width: 768px) {
+  .error-message {
+    left: 0.5rem;
+    right: 0.5rem;
+    bottom: 0.5rem;
+  }
+
+  .settings-modal {
+    width: 95%;
+    margin: 1rem;
+  }
+
+  .setting-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--spacing-sm);
+  }
+
+  .setting-item label {
+    min-width: auto;
+  }
+
+  .setting-item select {
+    width: 100%;
+  }
+}

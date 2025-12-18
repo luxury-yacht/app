@@ -1,0 +1,26 @@
+/* NsCustomView specific styles */
+
+.ns-custom-table .api-version {
+}
+
+.ns-custom-table .custom-status {
+}
+
+.ns-custom-table .custom-status.ready,
+.ns-custom-table .custom-status.running,
+.ns-custom-table .custom-status.active,
+.ns-custom-table .custom-status.available {
+}
+
+.ns-custom-table .custom-status.not-ready,
+.ns-custom-table .custom-status.pending,
+.ns-custom-table .custom-status.failed,
+.ns-custom-table .custom-status.error {
+}
+
+.ns-custom-table .custom-status.unknown,
+.ns-custom-table .custom-status.progressing {
+}
+
+.ns-custom-table .custom-field {
+}

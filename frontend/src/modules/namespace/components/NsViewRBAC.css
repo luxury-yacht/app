@@ -1,0 +1,90 @@
+/* NsRBACView specific styles */
+
+.ns-rbac-table .rule-count,
+.ns-rbac-table .binding-count {
+  color: var(--color-text-secondary);
+  font-size: 0.9em;
+}
+
+.ns-rbac-table .role-ref {
+  color: var(--color-link);
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.ns-rbac-table .role-ref:hover {
+  text-decoration: underline;
+}
+
+.ns-rbac-table .sa-details {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ns-rbac-table .secret-count {
+  color: var(--color-text-secondary);
+  font-size: 0.9em;
+}
+
+.ns-rbac-table .token-mount {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+  font-size: 0.85em;
+}
+
+.ns-rbac-table .subjects {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--color-text-secondary);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ns-rbac-table .no-bindings {
+  color: var(--color-text-tertiary);
+  font-style: italic;
+  font-size: 0.9em;
+}
+
+.ns-rbac-table .permissions-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  align-items: center;
+  font-size: 0.85em;
+}
+
+.ns-rbac-table .permissions.wildcard {
+  padding: 2px 8px;
+  border-radius: 3px;
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-weight: 500;
+}
+
+.ns-rbac-table .verbs {
+  color: var(--color-accent);
+  font-family: var(--font-mono);
+}
+
+.ns-rbac-table .resources {
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+}
+
+.ns-rbac-table .labels {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--color-text-tertiary);
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

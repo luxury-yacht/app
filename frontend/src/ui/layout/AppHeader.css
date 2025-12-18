@@ -1,0 +1,62 @@
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  --wails-draggable: true;
+  user-select: none;
+  padding: 0 12px;
+}
+
+.app-header--mac {
+  /* Offset for macOS window controls */
+  padding-left: 80px;
+}
+
+.app-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-header-logo {
+  width: 24px;
+  height: 24px;
+  --wails-draggable: none;
+}
+
+.app-header-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.app-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  --wails-draggable: none;
+}
+
+.app-header .settings-button {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+}
+
+.app-header .settings-button:hover {
+  background-color: var(--hover-bg);
+}
+
+.app-header .settings-button:active {
+  background-color: var(--active-bg);
+}

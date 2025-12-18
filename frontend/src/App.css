@@ -1,0 +1,121 @@
+/* application */
+
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  position: relative;
+  /* Prevent text selection by default */
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Utility class to allow text selection on specific elements */
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+.app-container {
+  flex: 1;
+  display: grid;
+  grid-template-rows: 38px 1fr;
+  grid-template-columns: auto 1fr;
+  border: 1px solid var(--color-bg-secondary);
+  overflow: hidden;
+  min-height: 0;
+}
+
+.app-header {
+  grid-column: 1 / -1; /* Span full width */
+  grid-row: 1;
+}
+
+.app-main {
+  grid-column: 1 / -1; /* Span full width */
+  grid-row: 2;
+  display: flex;
+  overflow: hidden;
+  min-height: 0; /* Important for flex children */
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  color: var(--color-text-secondary);
+}
+
+/* main content window */
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0; /* Important for nested flex containers */
+}
+
+/* main content body */
+
+.content-body {
+  flex: 1;
+  overflow: hidden; /* Prevent scrolling at this level */
+  position: relative; /* Contain the flyout */
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* Important for nested flex containers */
+}
+
+.content h2 {
+  font-size: var(--font-size-title);
+  margin-top: 0;
+  color: var(--color-text);
+}
+
+/* main content body - welcome message */
+
+.welcome {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: var(--color-text-secondary);
+  font-size: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.captain-k8s {
+  width: 200px;
+  height: auto;
+}
+
+.welcome-logo {
+  width: 400px;
+  height: auto;
+  margin-bottom: 1rem;
+  margin-left: 1rem;
+  filter: brightness(0.9);
+}
+
+.welcome h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin: 0 0 1rem 0;
+  color: var(--color-text);
+}
+
+.welcome p {
+  font-size: 1rem;
+  color: var(--color-text-secondary);
+  max-width: 400px;
+  line-height: 1.5;
+}

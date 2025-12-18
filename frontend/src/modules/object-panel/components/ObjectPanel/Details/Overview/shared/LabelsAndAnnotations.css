@@ -1,0 +1,83 @@
+/* Labels and Annotations Styles */
+
+.metadata-section-separator {
+  margin-top: var(--spacing-xs);
+  margin-bottom: var(--spacing-xs);
+}
+
+.metadata-section {
+  margin-bottom: var(--spacing-sm);
+}
+
+.metadata-label {
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  padding-bottom: 0.3rem;
+  min-width: 8rem;
+  text-align: left;
+}
+
+.metadata-pairs {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  line-height: 0.7rem;
+}
+
+.metadata-pair {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) 0;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.metadata-pair--selector {
+  border-color: var(--color-warning);
+}
+
+.metadata-key {
+  font-family: var(--font-family-mono);
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.metadata-value {
+  font-family: var(--font-family-mono);
+  font-size: 0.7rem;
+  color: var(--color-text);
+  word-break: break-all;
+}
+
+.metadata-value.clickable {
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.metadata-value.clickable:hover {
+  color: var(--color-link);
+}
+
+.metadata-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--spacing-xs);
+  border-radius: var(--border-radius-pill);
+  font-size: 0.65rem;
+  font-weight: var(--font-weight-semibold);
+  margin-left: var(--spacing-xs);
+  border: 1px solid transparent;
+  text-transform: uppercase;
+}
+
+.metadata-chip--selector {
+  background-color: var(--color-warning-bg);
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}

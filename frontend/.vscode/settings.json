@@ -1,0 +1,24 @@
+{
+  "typescript.validate.enable": true,
+  "javascript.validate.enable": false,
+  "typescript.tsserver.experimental.enableProjectDiagnostics": false,
+  "files.exclude": {
+    "wailsjs/**/*.js": false
+  },
+  "search.exclude": {
+    "wailsjs/**/*.js": true
+  },
+  "typescript.tsserver.excludeLibrarySymbolsInNavigation": true,
+  "typescript.preferences.includePackageJsonAutoImports": "off",
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "javascript.suggest.autoImports": false,
+  "typescript.suggest.autoImports": true,
+  "editor.quickSuggestions": {
+    "strings": true
+  },
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "javascript.preferences.importModuleSpecifier": "relative"
+}

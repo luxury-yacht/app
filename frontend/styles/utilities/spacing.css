@@ -1,0 +1,50 @@
+/* Gap utilities */
+.u-gap-xs {
+  gap: var(--spacing-xs);
+}
+
+.u-gap-sm {
+  gap: var(--spacing-sm);
+}
+
+.u-gap-md {
+  gap: var(--spacing-md);
+}
+
+.u-gap-lg {
+  gap: var(--spacing-lg);
+}
+
+/* Padding utilities */
+.u-padding-xs {
+  padding: var(--spacing-xs);
+}
+
+.u-padding-sm {
+  padding: var(--spacing-sm);
+}
+
+.u-padding-md {
+  padding: var(--spacing-md);
+}
+
+.u-padding-lg {
+  padding: var(--spacing-lg);
+}
+
+/* Margin utilities */
+.u-margin-top-sm {
+  margin-top: var(--spacing-sm);
+}
+
+.u-margin-top-md {
+  margin-top: var(--spacing-md);
+}
+
+.u-margin-bottom-sm {
+  margin-bottom: var(--spacing-sm);
+}
+
+.u-margin-bottom-md {
+  margin-bottom: var(--spacing-md);
+}

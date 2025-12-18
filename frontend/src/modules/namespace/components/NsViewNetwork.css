@@ -1,0 +1,74 @@
+/* NsNetworkView specific styles */
+
+.ns-network-table .network-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.ns-network-table .service-type {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background-color: var(--color-info-bg);
+  color: var(--color-info);
+  font-size: 0.85em;
+}
+
+.ns-network-table .cluster-ip,
+.ns-network-table .external-ip {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--color-text-secondary);
+}
+
+.ns-network-table .external-ip {
+  color: var(--color-success);
+}
+
+.ns-network-table .pending {
+  color: var(--color-warning);
+  font-style: italic;
+}
+
+.ns-network-table .ingress-class {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background-color: var(--color-accent-bg);
+  color: var(--color-accent);
+  font-size: 0.85em;
+}
+
+.ns-network-table .hosts {
+  color: var(--color-text-secondary);
+  font-size: 0.9em;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ns-network-table .policy-types {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+  font-size: 0.85em;
+}
+
+.ns-network-table .ports,
+.ns-network-table .rules-count {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--color-text-secondary);
+}
+
+.ns-network-table .selector {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--color-text-tertiary);
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

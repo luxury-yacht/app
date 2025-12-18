@@ -1,0 +1,71 @@
+version: 2
+updates:
+  # Go modules
+  - package-ecosystem: 'gomod'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'go'
+    commit-message:
+      prefix: 'chore'
+      include: 'scope'
+    groups:
+      kubernetes:
+        patterns:
+          - 'k8s.io/*'
+      testing:
+        patterns:
+          - '*test*'
+          - '*mock*'
+
+  # NPM dependencies
+  - package-ecosystem: 'npm'
+    directory: '/frontend'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'javascript'
+    commit-message:
+      prefix: 'chore'
+      include: 'scope'
+    groups:
+      react:
+        patterns:
+          - 'react'
+          - 'react-*'
+          - '@types/react*'
+      build-tools:
+        patterns:
+          - 'vite*'
+          - 'typescript'
+          - 'eslint*'
+          - 'prettier'
+      testing:
+        patterns:
+          - '*test*'
+          - '*jest*'
+          - '@testing-library/*'
+
+  # GitHub Actions
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'ci/cd'
+    commit-message:
+      prefix: 'ci'
+      include: 'scope'

@@ -1,0 +1,22 @@
+/* NsAutoscalingView specific styles */
+
+.ns-autoscaling-table .scale-reference {
+}
+
+.ns-autoscaling-table .target-metric {
+}
+
+.ns-autoscaling-table .replica-range {
+}
+
+.ns-autoscaling-table .current-replicas {
+}
+
+.ns-autoscaling-table .vpa-status {
+}
+
+.ns-autoscaling-table .vpa-status.running {
+}
+
+.ns-autoscaling-table .vpa-status.unknown {
+}

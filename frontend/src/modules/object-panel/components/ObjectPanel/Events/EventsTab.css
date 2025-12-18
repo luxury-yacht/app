@@ -1,0 +1,82 @@
+/* Events Tab Styles */
+
+/* Container for the events display */
+.events-display {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Grid layout for object events table */
+.gridtable-object-events {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+/* Ensure the header stays at the top of the scrollable area */
+
+.object-panel-placeholder {
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-text-secondary);
+}
+
+.object-panel-placeholder.error {
+  color: var(--color-error);
+}
+
+/* Event type badges */
+.event-type {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: var(--font-size-small);
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.event-type-normal {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.event-type-warning {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+.event-type-error {
+  background-color: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+/* Event message */
+.event-message {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Custom scrollbar for events table */
+.gridtable-object-events::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.gridtable-object-events::-webkit-scrollbar-track {
+  background: var(--events-scroll-track);
+}
+
+.gridtable-object-events::-webkit-scrollbar-thumb {
+  background: var(--events-scroll-thumb);
+  border-radius: var(--border-radius-sm);
+}
+
+.gridtable-object-events::-webkit-scrollbar-thumb:hover {
+  background: var(--events-scroll-thumb-hover);
+}

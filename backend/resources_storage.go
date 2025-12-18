@@ -1,0 +1,24 @@
+package backend
+
+import "github.com/luxury-yacht/app/backend/resources/storage"
+
+func (a *App) GetPersistentVolume(name string) (*PersistentVolumeDetails, error) {
+	deps := storage.Dependencies{Common: a.resourceDependencies()}
+	return FetchClusterResource(a, "PersistentVolume", name, func() (*PersistentVolumeDetails, error) {
+		return storage.NewService(deps).PersistentVolume(name)
+	})
+}
+
+func (a *App) GetPersistentVolumeClaim(namespace, name string) (*PersistentVolumeClaimDetails, error) {
+	deps := storage.Dependencies{Common: a.resourceDependencies()}
+	return FetchNamespacedResource(a, "PVC", namespace, name, func() (*PersistentVolumeClaimDetails, error) {
+		return storage.NewService(deps).PersistentVolumeClaim(namespace, name)
+	})
+}
+
+func (a *App) GetStorageClass(name string) (*StorageClassDetails, error) {
+	deps := storage.Dependencies{Common: a.resourceDependencies()}
+	return FetchClusterResource(a, "StorageClass", name, func() (*StorageClassDetails, error) {
+		return storage.NewService(deps).StorageClass(name)
+	})
+}

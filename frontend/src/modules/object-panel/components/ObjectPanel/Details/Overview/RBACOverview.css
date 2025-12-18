@@ -1,0 +1,41 @@
+/* RBAC Overview Styles */
+
+/* Rules use the existing metadata-section styles from LabelsAndAnnotations.css */
+/* Additional styles specific to rules */
+
+.metadata-pair.rules-pair {
+  flex-direction: column;
+  padding: var(--spacing-sm);
+}
+
+.rule-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-left: 1rem;
+  width: 100%;
+}
+
+.rule-field {
+  display: flex;
+  gap: 0rem;
+  align-items: baseline;
+}
+
+.field-label {
+  font-size: 0.7rem;
+  color: var(--color-text-secondary);
+  min-width: 5rem;
+  flex-shrink: 0;
+}
+
+.field-value {
+  font-family: var(--font-family-mono);
+  font-size: 0.7rem;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.field-value.verbs {
+  color: var(--accent-primary);
+}

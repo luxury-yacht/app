@@ -1,0 +1,44 @@
+/* Details Tab Shared Styles */
+
+.scale-input.small {
+  width: 60px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.collapse-icon {
+  font-size: 0.8em;
+  display: inline-block;
+  transition: transform 0.2s;
+}
+
+/* Shared link style for clickable objects */
+.object-panel-link {
+  color: var(--color-object-panel-link);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.object-panel-link:hover {
+  color: var(--color-object-panel-link);
+  text-decoration: underline;
+}
+
+.object-panel-pods {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  position: relative;
+  gap: 0.5rem;
+}
+
+.object-panel-pods__table {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}

@@ -1,0 +1,25 @@
+.cluster-custom-table .api-group {
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono);
+}
+
+.cluster-custom-table .custom-status.ready,
+.cluster-custom-table .custom-status.running,
+.cluster-custom-table .custom-status.active,
+.cluster-custom-table .custom-status.available {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.cluster-custom-table .custom-status.pending,
+.cluster-custom-table .custom-status.failed,
+.cluster-custom-table .custom-status.error {
+  background-color: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+.cluster-custom-table .custom-status.unknown,
+.cluster-custom-table .custom-status.progressing {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+}

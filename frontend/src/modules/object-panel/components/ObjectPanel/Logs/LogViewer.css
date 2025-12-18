@@ -1,0 +1,477 @@
+/* Logs Tab Styles */
+
+.pod-logs-display {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Note: This component uses the Dropdown component with standard styles from Dropdown.css */
+
+/* Maximized view - takes full content-body area */
+.pod-logs-display.maximized {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  background-color: var(--log-surface-maximized-bg);
+  width: 100%;
+  height: 100%;
+}
+
+/* Placeholder shown when logs are maximized */
+.pod-logs-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--log-placeholder-text);
+  font-style: italic;
+  background-color: var(--log-placeholder-bg);
+  border: 1px dashed var(--log-placeholder-border);
+  border-radius: var(--border-radius);
+}
+
+/* Enhance controls visibility in maximized mode */
+.pod-logs-display.maximized .pod-logs-controls {
+  background-color: var(--log-controls-maximized-bg);
+  box-shadow: var(--log-controls-maximized-shadow);
+}
+
+.pod-logs-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--log-controls-border);
+  background-color: var(--log-controls-bg);
+  box-shadow: var(--log-controls-shadow, none);
+}
+
+.pod-logs-controls-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.pod-logs-control-group {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.pod-logs-control-group label {
+  font-size: var(--font-size-normal);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+/* Logs control select inherits from unified dropdown styles */
+.pod-logs-control-select {
+  min-width: 80px;
+}
+
+.pod-logs-control-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  cursor: pointer;
+}
+
+.pod-logs-control-checkbox input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.pod-logs-filter-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.pod-logs-text-filter {
+  padding: 4px 28px 4px 8px; /* Add right padding for clear button */
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text);
+  font-size: var(--font-size-normal);
+  width: 150px;
+  outline: none;
+}
+
+.pod-logs-text-filter:focus {
+  border-color: var(--color-primary);
+}
+
+.pod-logs-text-filter::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.6;
+}
+
+.pod-logs-filter-clear {
+  position: absolute;
+  right: 4px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: color 0.2s;
+  outline: none;
+}
+
+.pod-logs-filter-clear:hover {
+  color: var(--color-text);
+}
+
+.pod-logs-filter-clear:active {
+  transform: scale(0.9);
+}
+
+.pod-logs-control-btn {
+  padding: var(--spacing-xs) 0.75rem;
+  font-size: var(--font-size-normal);
+  border-radius: var(--border-radius-round);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+  border: 1px solid;
+}
+
+.pod-logs-control-btn.refresh {
+  background-color: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.pod-logs-control-btn.refresh:hover:not(:disabled) {
+  background-color: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.pod-logs-control-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Maximize button styles */
+.pod-logs-maximize-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--border-radius);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.pod-logs-maximize-btn:hover {
+  background-color: var(--log-maximize-hover-bg);
+  color: var(--log-text-primary);
+}
+
+.pod-logs-maximize-btn:active {
+  transform: scale(0.95);
+}
+
+.pod-logs-maximize-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.pod-logs-content {
+  flex: 1;
+  overflow: auto;
+  background-color: var(--log-surface-bg);
+  font-family:
+    "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
+  position: relative;
+}
+
+.pod-logs-text {
+  color: var(--log-text-primary);
+  font-size: var(--font-size-mono);
+  line-height: 1.4;
+  padding: 0.5rem;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+/* No wrap mode - disable text wrapping */
+.pod-logs-text.no-wrap .pod-log-line {
+  white-space: pre;
+  word-wrap: normal;
+  word-break: normal;
+  overflow-x: visible;
+}
+
+/* Individual log line with hanging indent for wrapped text */
+.pod-log-line {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  word-break: break-all;
+  /* Create hanging indent: first line flush left, wrapped lines indented */
+  padding-left: 1rem;
+  text-indent: -1rem;
+  /* Add small spacing between log lines for clarity */
+  margin-bottom: 0.1rem;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+.pod-log-line .pod-log-metadata {
+  color: var(--log-metadata-text);
+}
+
+.pod-logs-loading,
+.pod-logs-error {
+  color: var(--color-text-secondary);
+  padding: var(--spacing-lg);
+}
+
+.pod-logs-error {
+  color: var(--color-error, #dc3545);
+}
+
+.pod-logs-display-loading,
+.pod-logs-display-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary);
+}
+
+.pod-logs-display-error {
+  color: var(--color-error, #dc3545);
+}
+
+.pod-logs-fallback-banner {
+  margin: 0.5rem 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--border-radius, 4px);
+  border: 1px solid var(--color-warning-border, rgba(255, 193, 7, 0.35));
+  background: var(--color-warning-bg, rgba(255, 193, 7, 0.12));
+  color: var(--color-warning-text, #ffb400);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  flex-wrap: wrap;
+}
+
+.pod-logs-fallback-banner .pod-logs-fallback-retry {
+  padding: 4px 12px;
+  border-radius: var(--border-radius-round, 16px);
+  border: 1px solid var(--color-warning-border, rgba(255, 193, 7, 0.35));
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: var(--font-size-normal, 14px);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.pod-logs-fallback-banner .pod-logs-fallback-retry:hover {
+  background: rgba(255, 193, 7, 0.2);
+}
+
+/* Custom scrollbar for logs content */
+.pod-logs-content::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.pod-logs-content::-webkit-scrollbar-track {
+  background: var(--log-scroll-track);
+}
+
+.pod-logs-content::-webkit-scrollbar-thumb {
+  background: var(--log-scroll-thumb);
+  border-radius: var(--border-radius-sm);
+}
+
+.pod-logs-content::-webkit-scrollbar-thumb:hover {
+  background: var(--log-scroll-thumb-hover);
+}
+
+/* Parsed logs table */
+.parsed-logs-table {
+  height: 100%;
+}
+
+/* Override absolute positioning from tables.css for ANY table inside pod-logs-content */
+.pod-logs-content > .table-container {
+  position: relative !important;
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  height: 100%;
+  background-color: transparent;
+}
+
+/* Additional specificity for parsed-logs-table */
+.pod-logs-content .parsed-logs-table {
+  position: relative !important;
+  height: 100%;
+}
+
+.parsed-logs-table .table-wrapper {
+  height: 100%;
+  max-height: 100%;
+  overflow: auto;
+}
+
+.parsed-logs-table table {
+  font-size: var(--font-size-small);
+  width: 100%;
+  border-collapse: collapse;
+  background-color: transparent;
+}
+
+.parsed-logs-table th {
+  background-color: var(--log-table-header-bg);
+  padding: var(--spacing-sm);
+  text-align: left;
+  font-size: var(--font-size-parsed-logs-header);
+  font-weight: var(--font-weight-parsed-logs-header);
+  border-bottom: 1px solid var(--log-table-header-border);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--log-text-primary);
+}
+
+.parsed-logs-table tbody tr {
+  border-bottom: 1px solid var(--log-table-row-border);
+}
+
+.parsed-logs-table tbody tr:hover {
+  background-color: var(--log-table-row-hover-bg);
+}
+
+.parsed-logs-table td {
+  color: var(--log-table-cell-text);
+}
+
+.gridtable-parsed-logs .grid-cell {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-parsed-logs);
+  font-weight: var(--font-weight-parsed-logs);
+  color: var(--log-table-cell-text);
+  max-width: 300px;
+}
+
+.gridtable-parsed-logs .grid-cell-content {
+  font-size: inherit;
+}
+
+.parsed-log-cell {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+.parsed-log-cell:hover {
+  background-color: var(--log-cell-hover-bg);
+}
+
+.parsed-log-cell:active {
+  background-color: var(--log-cell-active-bg);
+}
+
+/* Visual feedback when copied */
+.parsed-log-cell.copied {
+  background-color: var(--log-cell-copied-bg) !important;
+  animation: copyFeedback 0.3s ease-out;
+}
+
+@keyframes copyFeedback {
+  0% {
+    background-color: rgba(76, 175, 80, 0.4);
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.98);
+  }
+  100% {
+    background-color: rgba(76, 175, 80, 0.2);
+    transform: scale(1);
+  }
+}
+
+/* Viewport-aware tooltip */
+.parsed-log-tooltip {
+  background-color: var(--log-tooltip-bg);
+  color: var(--log-tooltip-text);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--log-tooltip-border);
+  border-radius: var(--border-radius);
+  white-space: pre-wrap;
+  word-break: break-word;
+  /* Dynamic sizing with constraints */
+  width: max-content;
+  max-width: min(600px, 80vw);
+  min-width: 150px;
+  /* Allow dynamic height but with a safety max */
+  max-height: min(500px, 80vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  box-shadow: var(--log-tooltip-shadow);
+  /* Match table cell font styling */
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-normal);
+  line-height: 1.5;
+  z-index: var(--z-tooltip, 9999);
+  pointer-events: none;
+}
+
+/* Tooltip scrollbar styling */
+
+.parsed-log-tooltip::-webkit-scrollbar {
+  width: 6px;
+}
+
+.parsed-log-tooltip::-webkit-scrollbar-track {
+  background: var(--log-scroll-track);
+  border-radius: 3px;
+}
+
+.parsed-log-tooltip::-webkit-scrollbar-thumb {
+  background: var(--log-scroll-thumb);
+  border-radius: 3px;
+}
+
+.parsed-log-tooltip::-webkit-scrollbar-thumb:hover {
+  background: var(--log-scroll-thumb-hover);
+}
+
+/* Light theme adjustments for parsed table */

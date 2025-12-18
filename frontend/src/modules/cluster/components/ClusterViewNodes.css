@@ -1,0 +1,38 @@
+/* Import shared GridTable styles */
+@import "@styles/components/gridtables.css";
+@import "@styles/components/metricsBanner.css";
+
+.gridtable-nodes .gridtable-row--pod {
+  background-color: var(--color-bg-secondary);
+}
+
+.gridtable-nodes .gridtable-row--capability .grid-cell,
+.gridtable-nodes .gridtable-row--placeholder .grid-cell {
+  background-color: transparent;
+}
+
+.nodes-table-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.nodes-table-name__spacer {
+  width: 1.25rem;
+  flex: 0 0 auto;
+}
+
+.nodes-table-name--pod .name-text {
+  font-weight: 500;
+}
+
+.nodes-table-placeholder {
+  font-style: italic;
+  color: var(--color-text-secondary);
+  padding: 0.35rem 0.25rem;
+}
+
+.gridtable-row--placeholder-error .nodes-table-placeholder {
+  color: var(--color-error-text, var(--color-error));
+}

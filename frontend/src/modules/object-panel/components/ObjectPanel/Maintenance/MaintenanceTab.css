@@ -1,0 +1,197 @@
+.node-maintenance-tab {
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.node-maintenance-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+}
+
+.node-maintenance-header h3 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+}
+
+.node-maintenance-header p {
+  margin: var(--spacing-xs) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.node-maintenance-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  padding-top: 10px;
+}
+
+.node-maintenance-helper {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.node-maintenance-error {
+  border: 1px solid var(--color-danger, #f87171);
+  background-color: var(--color-bg-danger, rgba(248, 113, 113, 0.1));
+  color: var(--color-danger, #f87171);
+  padding: var(--spacing-sm);
+  border-radius: var(--border-radius);
+  font-size: var(--font-size-sm);
+}
+
+.node-maintenance-empty {
+  border: 1px dashed var(--color-border);
+  border-radius: var(--border-radius);
+  padding: var(--spacing-lg);
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
+.node-maintenance-drain-options {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--spacing-sm);
+  align-items: flex-start;
+  padding-top: 10px;
+}
+
+.node-maintenance-option-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.node-maintenance-option-group input[type="number"] {
+  width: 3rem;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.node-maintenance-option-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.node-maintenance-option-inline span {
+  white-space: nowrap;
+}
+
+.node-maintenance-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+}
+
+.node-maintenance-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+}
+
+.node-maintenance-grace-option {
+  align-items: flex-start;
+}
+
+.node-maintenance-grace-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.node-maintenance-grace-inline input[type="number"] {
+  width: 3rem;
+  padding: var(--spacing-xs) 4px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.node-maintenance-grace-unit {
+  color: var(--color-text-secondary);
+}
+
+.node-maintenance-status {
+  color: var(--color-success);
+  font-size: var(--font-size-sm);
+}
+
+.node-maintenance-status-label.warning {
+  color: var(--color-warning);
+}
+
+.node-maintenance-status-label.success {
+  color: var(--color-text);
+}
+
+.node-maintenance-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-md);
+}
+
+.node-maintenance-job {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--spacing-sm);
+}
+
+.node-maintenance-job-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.node-maintenance-job-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.node-maintenance-job-events {
+  list-style: none;
+  margin: var(--spacing-sm) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.node-maintenance-job-event {
+  display: grid;
+  grid-template-columns: minmax(120px, auto) 100px 1fr;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.node-maintenance-job-event.error {
+  color: var(--color-danger, #f87171);
+}
+
+.node-maintenance-job-event-time {
+  font-weight: var(--font-weight-medium);
+}
+
+.node-maintenance-job-event-label {
+  text-transform: capitalize;
+}

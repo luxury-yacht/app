@@ -1,0 +1,309 @@
+/* ==========================================================================
+   Error Notification System Styles
+   ========================================================================== */
+
+/* ==========================================================================
+   Container & Layout
+   ========================================================================== */
+
+.error-notification-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 9999;
+  width: min(500px, calc(100% - 32px));
+  max-height: 80vh;
+  overflow-y: visible;
+  pointer-events: none;
+  --notification-card-height: 15rem;
+  --notification-stack-peek: 1.2rem;
+}
+
+.error-notification-container > * {
+  pointer-events: auto;
+}
+
+.error-notification-list {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  gap: 0;
+}
+
+/* ==========================================================================
+   Base Notification Card
+   ========================================================================== */
+
+.error-notification {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: var(--notification-card-height);
+  margin: 0 0 calc(var(--notification-stack-peek) - var(--notification-card-height));
+  overflow: hidden;
+  background: var(--toast-card-bg);
+  color: var(--toast-text-primary);
+  border: 1px solid var(--toast-card-border);
+  border-radius: 14px;
+  box-shadow: var(--toast-card-shadow);
+  transition:
+    transform 160ms ease,
+    opacity 160ms ease,
+    filter 160ms ease;
+  z-index: calc(100 - var(--notification-stack-index, 0));
+}
+
+.error-notification.dismissed {
+  display: none;
+}
+
+/* ==========================================================================
+   Stacking Behaviour
+   ========================================================================== */
+
+.error-notification--stacked {
+  pointer-events: none;
+  transform-origin: bottom center;
+  transform: scale(calc(1 - min(var(--notification-stack-index, 0), 4) * 0.04));
+}
+
+.error-notification--active {
+  pointer-events: auto;
+  margin-bottom: 0;
+}
+
+.error-notification--active .error-notification-count {
+  display: inline-flex;
+}
+
+.error-notification .error-notification-count {
+  display: none;
+}
+
+/* ==========================================================================
+   Notification Header
+   ========================================================================== */
+
+.error-notification-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--toast-card-header-bg);
+  border-bottom: 1px solid var(--toast-card-border);
+}
+
+.error-notification-category {
+  flex: 1;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--toast-card-header-text);
+}
+
+.error-notification-count {
+  color: var(--toast-count-text);
+  background: var(--toast-count-bg);
+  font-size: 14px;
+  font-weight: bold;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  display: inline-flex;
+}
+
+.error-notification-auto-dismiss {
+  font-size: 12px;
+  color: var(--toast-text-secondary);
+}
+
+.error-notification-dismiss {
+  color: var(--toast-dismiss-text);
+  background: var(--toast-dismiss-bg);
+  border: 1px solid var(--toast-dismiss-border);
+  cursor: pointer;
+  font-size: 18px;
+  padding: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.error-notification-dismiss:hover {
+  background: var(--toast-dismiss-hover-bg);
+  color: var(--toast-dismiss-text);
+}
+
+/* ==========================================================================
+   Notification Body
+   ========================================================================== */
+
+.error-notification-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  background: transparent;
+  scrollbar-gutter: stable;
+}
+
+.error-notification-message {
+  margin: 0;
+  color: var(--toast-text-primary);
+  line-height: 1.6;
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.error-notification-suggestions {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--color-bg-secondary);
+  border-radius: 8px;
+  border: 1px solid var(--toast-card-border);
+  color: var(--toast-text-secondary);
+}
+
+.suggestions-label {
+  margin: 0 0 8px 0;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--toast-text-secondary);
+}
+
+.error-notification-suggestions ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--toast-text-secondary);
+}
+
+.error-notification-suggestions li {
+  margin: 6px 0;
+  line-height: 1.5;
+}
+
+.error-notification-details {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--toast-text-secondary);
+}
+
+.error-notification-details summary {
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 6px;
+  transition: background 160ms ease;
+}
+
+.error-notification-details summary:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.technical-details {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--toast-card-details-bg);
+  border: 1px solid var(--toast-card-border);
+  max-height: 300px;
+  overflow: auto;
+}
+
+.technical-message {
+  margin: 0 0 8px 0;
+  color: var(--toast-text-secondary);
+  font-family: "SF Mono", "Monaco", "Inconsolata", "Fira Code", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.error-context {
+  margin: 0;
+  padding: 12px;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: "SF Mono", "Monaco", "Inconsolata", "Fira Code", monospace;
+  overflow-x: auto;
+  color: var(--toast-text-secondary);
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   Action Buttons
+   ========================================================================== */
+
+.error-notification-actions {
+  padding: 0 16px 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.error-notification-retry {
+  padding: 8px 16px;
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 160ms ease;
+}
+
+.error-notification-retry:hover {
+  background: var(--color-accent-hover);
+}
+
+/* ==========================================================================
+   Header CTA
+   ========================================================================== */
+
+.error-notification-header-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.dismiss-all-btn {
+  color: var(--toast-dismiss-text);
+  background: var(--toast-dismiss-bg);
+  border: 1px solid var(--toast-dismiss-border);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.dismiss-all-btn:hover {
+  color: var(--toast-dismiss-text);
+  background: var(--toast-dismiss-hover-bg);
+  border-color: var(--toast-dismiss-border);
+}
+
+/* ==========================================================================
+   Media Queries
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  .error-notification-container {
+    left: 16px;
+    right: 16px;
+    width: auto;
+  }
+}

@@ -1,0 +1,32 @@
+/* Containers Component Styles */
+
+.containers-item {
+  font-size: var(--font-size-normal);
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.containers-item-full {
+  grid-column: 1 / -1;
+}
+
+.containers-label {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  min-width: 6rem;
+  flex-shrink: 0;
+}
+
+.containers-value {
+  color: var(--color-text);
+  word-break: break-all;
+  flex: 1;
+}
+
+.containers-tag {
+  color: var(--color-text);
+  word-break: break-all;
+}

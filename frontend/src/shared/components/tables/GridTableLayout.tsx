@@ -1,0 +1,41 @@
+import React from 'react';
+
+interface GridTableLayoutProps {
+  embedded: boolean;
+  className: string;
+  loading: boolean;
+  filters?: React.ReactNode;
+  header?: React.ReactNode;
+  body: React.ReactNode;
+  loadingOverlay?: React.ReactNode;
+  contextMenu?: React.ReactNode;
+}
+
+const GridTableLayout: React.FC<GridTableLayoutProps> = ({
+  embedded,
+  className,
+  loading,
+  filters,
+  header,
+  body,
+  loadingOverlay,
+  contextMenu,
+}) => {
+  return (
+    <>
+      <div
+        className={`gridtable-container ${embedded ? 'embedded' : ''} ${className} ${
+          loading ? 'is-loading' : ''
+        }`}
+      >
+        {loadingOverlay}
+        {filters}
+        {header}
+        {body}
+      </div>
+      {contextMenu}
+    </>
+  );
+};
+
+export default GridTableLayout;

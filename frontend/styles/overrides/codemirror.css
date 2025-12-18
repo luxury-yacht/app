@@ -1,0 +1,42 @@
+/* Codemirror-specific shell styles that sit outside the editor theme tokens. */
+
+.codemirror-shell {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: auto;
+}
+
+.codemirror-shell .cm-editor {
+  height: 100%;
+  border-radius: var(--border-radius-sm);
+  background-color: transparent;
+}
+
+.codemirror-shell .cm-content,
+.codemirror-shell .cm-line,
+.codemirror-shell .cm-lineNumbers .cm-gutterElement {
+  font-size: inherit;
+}
+
+.codemirror-shell .cm-scroller {
+  overflow: auto;
+}
+
+.codemirror-shell .cm-scroller::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.codemirror-shell .cm-scroller::-webkit-scrollbar-track {
+  background: var(--scrollbar-track-bg);
+}
+
+.codemirror-shell .cm-scroller::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg);
+  border-radius: var(--border-radius-sm);
+}
+
+.codemirror-shell .cm-scroller::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover-bg);
+}

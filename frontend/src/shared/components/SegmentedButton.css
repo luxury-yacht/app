@@ -1,0 +1,66 @@
+.segmented-button {
+  display: inline-flex;
+  background-color: var(--segmented-bg);
+  border-radius: var(--border-radius-round);
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.segmented-button__option {
+  /* Inherit button styles but modify for segmented appearance */
+  padding: 0.3rem var(--spacing-md);
+  font-size: var(--font-size-button);
+  font-weight: var(--font-weight-button);
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  white-space: nowrap;
+  background-color: transparent;
+  color: var(--segmented-option-text);
+  -webkit-app-region: no-drag;
+  position: relative;
+}
+
+/* Add subtle separators between options */
+.segmented-button__option:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 25%;
+  height: 50%;
+  width: 1px;
+  background-color: var(--segmented-option-divider);
+  opacity: var(--segmented-option-divider-opacity);
+}
+
+.segmented-button__option:hover:not(.segmented-button__option--active) {
+  background-color: var(--segmented-option-hover);
+}
+
+.segmented-button__option--active {
+  background-color: var(--segmented-option-active-bg);
+  color: var(--segmented-option-active-text);
+  font-weight: 600;
+}
+
+/* Hide separator next to active button */
+.segmented-button__option--active::after,
+.segmented-button__option--active + .segmented-button__option::after {
+  opacity: 0;
+}
+
+.segmented-button__option--active:hover {
+  background-color: var(--segmented-option-active-hover);
+}
+
+/* Size variations - keeping minimal for now */
+.segmented-button--small .segmented-button__option {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+}
+
+.segmented-button--large .segmented-button__option {
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem;
+}

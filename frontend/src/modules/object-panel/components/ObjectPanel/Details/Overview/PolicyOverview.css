@@ -1,0 +1,53 @@
+/* PolicyOverview styles - HPA, PDB, ResourceQuota, LimitRange */
+
+.policy-detail-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.policy-detail-row {
+  display: flex;
+  flex-direction: row;
+}
+
+.policy-detail-label {
+  display: inline-block;
+  min-width: 5.5rem;
+}
+
+.policy-detail-label--narrow {
+  display: inline-block;
+  min-width: 3.5rem;
+}
+
+.policy-detail-label--medium {
+  display: inline-block;
+  min-width: 4rem;
+}
+
+.policy-detail-muted {
+  opacity: 0.7;
+}
+
+/* Metric block styles */
+.policy-metric-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.policy-metric-block:not(:last-child) {
+  padding-bottom: 0.5rem;
+}
+
+.policy-metric-name {
+  font-weight: 500;
+}
+
+.policy-metric-details {
+  padding-left: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}

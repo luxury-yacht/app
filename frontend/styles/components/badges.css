@@ -1,0 +1,181 @@
+/* Table badge foundations */
+.kind-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--border-radius-round);
+  font-size: var(--font-size-badge);
+  font-weight: var(--font-weight-badge);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.kind-badge.clickable {
+  cursor: pointer;
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease;
+}
+
+.kind-badge.clickable:hover {
+  box-shadow: var(--shadow-interactive-soft);
+}
+
+.kind-badge.clickable:active {
+  transform: scale(0.98);
+}
+
+/* Status badges */
+.status-badge {
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.status-badge.warning {
+  color: var(--status-warning-text);
+}
+
+.status-badge.notready {
+  color: var(--status-notready-text);
+}
+
+.status-badge.status-available {
+  background-color: var(--status-available-bg);
+  color: var(--status-available-text);
+}
+
+.status-badge.status-bound {
+  background-color: var(--status-bound-bg);
+  color: var(--status-bound-text);
+}
+
+.status-badge.status-released {
+  background-color: var(--status-released-bg);
+  color: var(--status-released-text);
+}
+
+.status-badge.status-failed {
+  background-color: var(--status-failed-bg);
+  color: var(--status-failed-text);
+}
+
+.status-badge.restarted {
+  color: var(--status-restarted-text);
+  font-weight: 600;
+}
+
+/* Kind badges */
+
+/* Generic badge -- used as a fallback */
+.kind-badge {
+  background-color: var(--badge-grey-bg);
+  color: var(--badge-grey-text);
+}
+
+/* Blue badges */
+.kind-badge.configmap,
+.kind-badge.deployment,
+.kind-badge.endpointslice,
+.kind-badge.helmrelease,
+.kind-badge.horizontalpodautoscaler,
+.kind-badge.persistentvolumeclaim {
+  background-color: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+}
+
+/* Green badges */
+.kind-badge.cronjob,
+.kind-badge.customresourcedefinition,
+.kind-badge.validatingwebhookconfiguration {
+  background-color: var(--badge-green-bg);
+  color: var(--badge-green-text);
+}
+
+/* Orange badges */
+.kind-badge.clusterrole,
+.kind-badge.daemonset,
+.kind-badge.rolebinding,
+.kind-badge.role,
+.kind-badge.resourcequota,
+.kind-badge.mutatingwebhookconfiguration,
+.kind-badge.ingress {
+  background-color: var(--badge-orange-bg);
+  color: var(--badge-orange-text);
+}
+
+/* Lime badges */
+.kind-badge.node {
+  background-color: var(--badge-lime-bg);
+  color: var(--badge-lime-text);
+}
+
+/* Pink badges */
+.kind-badge.job,
+.kind-badge.persistentvolume,
+.kind-badge.secret,
+.kind-badge.storageclass {
+  background-color: var(--badge-pink-bg);
+  color: var(--badge-pink-text);
+}
+
+/* Purple badges */
+.kind-badge.clusterrolebinding,
+.kind-badge.custom,
+.kind-badge.event,
+.kind-badge.networkpolicy,
+.kind-badge.poddisruptionbudget,
+.kind-badge.replicaset,
+.kind-badge.pod {
+  background-color: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
+}
+
+/* Teal badges */
+.kind-badge.ingressclass,
+.kind-badge.namespace {
+  background-color: var(--badge-teal-bg);
+  color: var(--badge-teal-text);
+}
+
+.kind-badge.service,
+.kind-badge.serviceaccount,
+.kind-badge.statefulset {
+  background-color: var(--status-available-bg);
+  color: var(--status-available-text);
+}
+
+/* Event badges */
+.kind-badge.normal {
+  background-color: var(--badge-green-soft-bg);
+  color: var(--badge-green-soft-text);
+}
+
+.kind-badge.warning {
+  background-color: var(--status-released-bg);
+  color: var(--status-released-text);
+}
+
+.kind-badge.error {
+  background-color: var(--status-failed-bg);
+  color: var(--status-failed-text);
+}
+
+/* Scope badges */
+.scope-badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--border-radius-round);
+  font-size: var(--font-size-badge);
+  font-weight: var(--font-weight-badge);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.scope-badge.namespace {
+  background-color: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+}
+
+.scope-badge.cluster {
+  background-color: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
+}

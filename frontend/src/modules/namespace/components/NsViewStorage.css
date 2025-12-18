@@ -1,0 +1,41 @@
+/* NsStorageView specific styles */
+
+.ns-storage-table .status-badge {
+}
+
+.ns-storage-table .status-badge.bound,
+.ns-storage-table .status-badge.attached {
+  color: var(--color-success);
+}
+
+.ns-storage-table .status-badge.pending {
+  color: var(--color-warning);
+}
+
+.ns-storage-table .status-badge.error,
+.ns-storage-table .status-badge.detached {
+  color: var(--color-error);
+}
+
+.ns-storage-table .volume-link,
+.ns-storage-table .storage-class-link,
+.ns-storage-table .node-link {
+}
+
+.ns-storage-table .volume-link:hover,
+.ns-storage-table .storage-class-link:hover,
+.ns-storage-table .node-link:hover {
+  text-decoration: underline;
+}
+
+.ns-storage-table .capacity {
+}
+
+.ns-storage-table .access-modes {
+}
+
+.ns-storage-table .default-class {
+}
+
+.ns-storage-table .used-by {
+}

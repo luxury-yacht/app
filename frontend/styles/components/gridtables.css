@@ -1,0 +1,766 @@
+/* ============================================
+   GRID TABLE COMPONENT STYLES
+   ============================================
+   Structure:
+   1. Dependency Imports
+   2. Utility Helpers
+   3. Design Tokens
+   4. Layout & Container Structure
+   5. Header & Sorting
+   6. Column Resizing
+   7. Rows & Cells
+   8. Component States & Loading
+   9. Embedded & Responsive Tweaks
+   10. Shared Base Layout (GridTableCommon.css)
+   11. Table Utilities & Badges
+   12. Pod Table Contract
+   ============================================ */
+
+/* ============================================
+   1. Dependency Imports
+   ============================================ */
+@import "@styles/components/badges.css";
+
+/* ============================================
+   2. Utility Helpers
+   ============================================ */
+
+/* Utility Classes */
+.text-right {
+  text-align: right;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-muted {
+  color: var(--grid-text-secondary);
+}
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Spacing Utilities */
+.mt-0 {
+  margin-top: 0;
+}
+.mt-1 {
+  margin-top: var(--grid-spacing-xs);
+}
+.mt-2 {
+  margin-top: var(--grid-spacing-sm);
+}
+.mt-3 {
+  margin-top: var(--grid-spacing-md);
+}
+.mt-4 {
+  margin-top: var(--grid-spacing-lg);
+}
+
+.mb-0 {
+  margin-bottom: 0;
+}
+.mb-1 {
+  margin-bottom: var(--grid-spacing-xs);
+}
+.mb-2 {
+  margin-bottom: var(--grid-spacing-sm);
+}
+.mb-3 {
+  margin-bottom: var(--grid-spacing-md);
+}
+.mb-4 {
+  margin-bottom: var(--grid-spacing-lg);
+}
+
+.p-0 {
+  padding: 0;
+}
+.p-1 {
+  padding: var(--grid-spacing-xs);
+}
+.p-2 {
+  padding: var(--grid-spacing-sm);
+}
+.p-3 {
+  padding: var(--grid-spacing-md);
+}
+.p-4 {
+  padding: var(--grid-spacing-lg);
+}
+
+/* Visibility */
+.hidden {
+  display: none !important;
+}
+
+.invisible {
+  visibility: hidden;
+}
+
+/* Remove last row border */
+.gridtable-row:last-child {
+  border-bottom: none;
+}
+
+/* ============================================
+   3. Design Tokens (CSS Variables)
+   ============================================ */
+:root {
+  /* Colors */
+  --grid-bg-primary: var(--color-bg);
+  --grid-bg-secondary: var(--color-bg-secondary);
+  --grid-bg-tertiary: var(--color-bg-tertiary);
+  --grid-bg-header: var(--color-bg-secondary);
+  --grid-bg-hover: var(--color-bg-tertiary);
+  --grid-text-primary: var(--color-text);
+  --grid-text-secondary: var(--color-text-secondary);
+  --grid-border-color: var(--color-table-border);
+
+  /* Typography */
+  --grid-font-size-header: var(--font-size-table-header);
+  --grid-font-size-data: var(--font-size-table-data);
+
+  /* Spacing */
+  --grid-spacing-xs: var(--spacing-xs);
+  --grid-spacing-sm: var(--spacing-sm);
+  --grid-spacing-cell-x: 1rem;
+  --grid-spacing-cell-y: var(--spacing-sm);
+
+  /* Note: Table-specific column definitions moved to individual CSS files */
+}
+
+/* ============================================
+   4. Layout & Container Structure
+   ============================================ */
+.gridtable-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.gridtable-container.embedded {
+  position: relative;
+  background-color: var(--grid-bg-primary);
+}
+
+.gridtable-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.gridtable-wrapper:focus {
+  outline: none;
+}
+
+.gridtable-wrapper::-webkit-scrollbar-corner {
+  background: var(--grid-bg-primary);
+}
+
+.gridtable {
+  position: relative;
+  width: fit-content;
+  min-width: 100%;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* ============================================
+   5. Header & Sorting
+   ============================================ */
+.gridtable-header-container {
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--grid-bg-header);
+}
+
+.gridtable--header {
+  position: relative;
+  width: fit-content;
+  min-width: 100%;
+  will-change: transform;
+}
+
+.gridtable--body {
+  width: fit-content;
+  min-width: 100%;
+}
+
+.gridtable-header {
+  display: flex;
+  position: relative;
+  top: 0;
+  z-index: var(--z-index-grid-header);
+  background-color: var(--grid-bg-header);
+  width: 100%;
+  text-transform: uppercase;
+}
+
+.gridtable-header::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -9999px;
+  bottom: 0;
+  width: 10000px;
+  background-color: var(--grid-bg-header);
+  pointer-events: none;
+}
+
+.grid-cell-header {
+  font-size: var(--grid-font-size-header);
+  font-weight: var(--font-weight-bold);
+  /* text-transform: uppercase; */
+  padding: var(--grid-spacing-cell-y) var(--grid-spacing-cell-x);
+  text-align: left;
+  color: var(--grid-text-secondary);
+  background-color: var(--grid-bg-header);
+  position: relative;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+  display: flex;
+  align-items: center; /* Vertically center header content */
+  min-width: 0; /* Important for ellipsis to work */
+  flex-shrink: 0;
+  box-sizing: border-box; /* Include padding in width */
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  overflow: hidden;
+}
+
+.header-content > span {
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.grid-cell-header[data-sortable="true"] {
+  transition: background-color var(--transition-fast);
+}
+
+.sort-indicator {
+  color: var(--grid-text-secondary);
+  display: inline-block;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+/* ============================================
+   6. Column Resizing
+   ============================================ */
+.resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  background-color: transparent;
+  z-index: var(--z-index-grid-resize-handle);
+  transition: background-color 0.2s;
+  touch-action: none;
+}
+
+.resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background-color: var(--grid-border-color);
+  opacity: 0.65;
+  transition:
+    background-color 0.2s,
+    opacity 0.2s;
+}
+
+.resize-handle:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.resize-handle:hover::before {
+  background-color: var(--color-accent);
+  opacity: 1;
+}
+
+/* ============================================
+   7. Rows & Cells
+   ============================================ */
+.gridtable-virtual-body {
+  position: relative;
+  width: 100%;
+}
+
+.gridtable-virtual-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
+  min-width: 100%;
+}
+
+.gridtable-row {
+  display: flex;
+  width: 100%;
+  border-bottom: 1px solid var(--grid-border-color);
+  background-color: var(--grid-bg-primary);
+  position: relative;
+  z-index: 1;
+}
+
+.gridtable-row.gridtable-row--focused {
+  background-color: var(--color-bg-secondary);
+  box-shadow: inset 0 0 0 1px var(--color-accent, #3b82f6);
+}
+
+.gridtable-hover-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  background-color: var(--grid-bg-hover);
+  border-bottom: 1px solid var(--grid-border-color);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+  will-change: transform;
+}
+
+.gridtable-hover-overlay.is-visible {
+  opacity: 1;
+}
+
+.gridtable-hover-overlay.is-selected {
+  background-color: var(--grid-bg-selected, rgba(59, 130, 246, 0.15));
+}
+
+.gridtable-hover-overlay.is-focused {
+  box-shadow: inset 0 0 0 1px var(--color-accent, #3b82f6);
+}
+
+body.gridtable-disable-hover .gridtable-hover-overlay {
+  opacity: 0 !important;
+}
+
+.gridtable-row:last-child {
+  border-bottom: none;
+}
+
+.grid-cell {
+  font-size: var(--grid-font-size-data);
+  padding: var(--grid-spacing-cell-y) var(--grid-spacing-cell-x);
+  text-align: left;
+  display: flex;
+  align-items: center; /* Vertically center content */
+  min-width: 0; /* Important for ellipsis to work */
+  flex-shrink: 0;
+  overflow: hidden;
+  box-sizing: border-box; /* Include padding in width */
+}
+
+/* Content wrapper for proper truncation within flex container */
+.grid-cell-content {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+  display: block;
+}
+
+/* Type column - no ellipsis for badge display */
+.grid-cell[data-column="type"] {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal; /* Allow badges to wrap if needed */
+}
+
+/* Event column - full text should always be visible */
+.grid-cell[data-column="event"] {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal; /* Allow event text to wrap */
+  line-height: 1.4;
+}
+
+/* Context menu hints */
+.grid-cell[data-has-context-menu="true"] {
+  position: relative;
+}
+
+.grid-cell[data-has-context-menu="true"]:hover::after {
+  content: "⋮";
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.3;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+/* --- Table Variants ------------------------------------------------------ */
+/* Note: Table-specific styles moved to individual CSS files. */
+
+/* ============================================
+   8. Component States & Loading
+   ============================================ */
+.gridtable-empty {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: var(--grid-text-secondary);
+  font-size: var(--grid-font-size-data);
+  background-color: var(--grid-bg-primary);
+  border-radius: 4px;
+  margin: 1rem;
+}
+
+/* Initial loading state - consistent positioning */
+.gridtable-container.gridtable-initial-loading {
+  min-height: 400px;
+  position: relative;
+}
+
+/* Position the LoadingSpinner exactly 200px from top for initial load */
+.gridtable-container.gridtable-initial-loading .loading-spinner-container {
+  position: absolute;
+  top: 100px; /* Fixed distance from top */
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0;
+  min-height: auto;
+}
+
+/* Loading overlay for refreshing with existing data */
+.gridtable-loading-overlay {
+  position: absolute;
+  top: 100px; /* Fixed distance from top */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-index-grid-loading-spinner);
+  pointer-events: none;
+}
+
+/* Ensure LoadingSpinner in overlay doesn't have extra padding */
+.gridtable-loading-overlay .loading-spinner-container {
+  padding: 0;
+  min-height: auto;
+}
+
+/* Dark backdrop for the entire container */
+.gridtable-container.is-loading::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+  z-index: var(--z-index-grid-loading-overlay);
+  pointer-events: none;
+}
+
+.gridtable-container.is-loading {
+  position: relative;
+}
+
+/* Pagination footer */
+.gridtable-pagination {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--grid-spacing-sm);
+  padding: var(--grid-spacing-md) var(--grid-spacing-cell-x);
+  border-top: 1px solid var(--grid-border-color);
+  background-color: var(--grid-bg-primary);
+}
+
+.gridtable-pagination-sentinel {
+  width: 100%;
+  height: 1px;
+  pointer-events: none;
+}
+
+.gridtable-pagination-button {
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--border-radius-md);
+  border: 1px solid var(--grid-border-color);
+  background: var(--grid-bg-secondary);
+  color: var(--grid-text-primary);
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.gridtable-pagination-button:hover:not(:disabled) {
+  background: var(--grid-bg-hover);
+}
+
+.gridtable-pagination-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.gridtable-pagination-status {
+  font-size: 0.85rem;
+  color: var(--grid-text-secondary);
+  min-height: 1rem;
+}
+
+/* ============================================
+   9. Embedded & Responsive Tweaks
+   ============================================ */
+.gridtable-container.embedded .gridtable-wrapper {
+  max-height: none;
+  overflow: visible;
+}
+
+.gridtable-container.embedded .gridtable-header {
+  background-color: var(--grid-bg-primary);
+  border-top: 1px solid var(--grid-border-color);
+}
+
+/* Responsive breakpoint guard */
+@media (max-width: 1200px) {
+  .gridtable-wrapper {
+    min-width: 800px;
+  }
+}
+
+/* ============================================
+   10. Shared Base Layout (GridTableCommon.css)
+   ============================================ */
+/* Shared styles for all GridTable components; feature-level CSS should only define grid-template-columns. (All base layout rules live near the top of this file.) */
+
+/* ============================================
+   11. Table Utilities & Badges
+   ============================================ */
+
+/* ============================================
+   Event Badges (from ClusterViewEvents.css)
+   ============================================ */
+
+/* Event severity badges */
+.event-badge {
+  padding: 0.125rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.event-badge.normal {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.event-badge.warning {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
+}
+
+/* ============================================
+   Clickable Elements (from multiple files)
+   ============================================ */
+
+.gridtable-link {
+  color: var(--color-text);
+  transition: color 0.2s;
+}
+
+.gridtable-link:hover {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+
+/* ============================================
+   Event Type Badges (from NsViewEvents.css)
+   ============================================ */
+
+.event-type {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.event-type-normal {
+  background-color: var(--success-bg, #d4edda);
+  color: var(--success-text, #155724);
+}
+
+.event-type-warning {
+  background-color: var(--warning-bg, #fff3cd);
+  color: var(--warning-text, #856404);
+}
+
+.event-type-error {
+  background-color: var(--danger-bg, #f8d7da);
+  color: var(--danger-text, #721c24);
+}
+
+/* ============================================
+   Object Reference (from NsViewEvents.css)
+   ============================================ */
+
+.object-ref {
+  color: var(--text-secondary, #6c757d);
+  font-family: monospace;
+  font-size: 0.9rem;
+}
+
+/* ============================================
+   Event Message (from NsViewEvents.css)
+   ============================================ */
+
+.event-message {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================
+   12. Pod Table Contract
+   ============================================ */
+
+/* Shared styling contract for pod tables */
+.gridtable-pods .name-cell {
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.gridtable-pods .name-cell:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+/* GridTable Filters */
+.gridtable-filter-bar {
+  background-color: var(--color-bg-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 3px 0 6px 0;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gridtable-filter-cluster {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.gridtable-filter-cluster[data-gridtable-filter-cluster="primary"] {
+  flex: 1;
+  justify-content: flex-start;
+  padding-left: 0.7rem;
+}
+
+.gridtable-filter-cluster[data-gridtable-filter-cluster="tertiary"] {
+  justify-content: flex-end;
+  padding-right: 1rem;
+}
+
+.gridtable-filter-subcluster {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.gridtable-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dropdown-filter-option--action {
+  padding-left: 0;
+}
+
+.dropdown-filter-option--action .dropdown-filter-check {
+  display: none;
+}
+
+.gridtable-filter-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.gridtable-filter-custom-actions {
+  display: flex;
+  align-items: center;
+}
+
+.gridtable-filter-group label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+}
+
+.gridtable-filter-group input,
+.gridtable-filter-group select {
+  min-width: 10rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.gridtable-filter-group select {
+  min-height: 6.5rem;
+}
+
+.gridtable-filter-group input:focus,
+.gridtable-filter-group select:focus {
+  outline: none;
+}
+
+.gridtable-filter-group[data-gridtable-filter-role="columns"] {
+  align-items: flex-end;
+}
+
+.gridtable-filter-group[data-gridtable-filter-role="columns"] label {
+  text-align: right;
+}

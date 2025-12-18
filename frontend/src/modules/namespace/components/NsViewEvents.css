@@ -1,0 +1,19 @@
+/* Import shared GridTable styles */
+@import "@styles/components/gridtables.css";
+
+/* Namespace Events table layout refinements */
+.gridtable-ns-events .grid-cell[data-column="source"] .grid-cell-content,
+.gridtable-ns-events .grid-cell[data-column="object"] .grid-cell-content,
+.gridtable-ns-events .grid-cell[data-column="reason"] .grid-cell-content,
+.gridtable-ns-events .grid-cell[data-column="message"] .grid-cell-content {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: initial;
+}
+
+.gridtable-ns-events .grid-cell[data-column="source"],
+.gridtable-ns-events .grid-cell[data-column="object"],
+.gridtable-ns-events .grid-cell[data-column="reason"],
+.gridtable-ns-events .grid-cell[data-column="message"] {
+  align-items: flex-start;
+}

@@ -1,0 +1,21 @@
+.keycap {
+  margin-left: auto;
+  padding-left: 1rem;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.keycap kbd {
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-tertiary);
+  min-width: 1.2rem;
+  padding: 0.1rem 0.25rem;
+  font-size: 0.8rem;
+  font-family: var(--font-family-base);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius-round);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}

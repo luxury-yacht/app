@@ -1,0 +1,108 @@
+/* Base button styles */
+.button {
+  padding: 0.3rem var(--spacing-md);
+  font-size: var(--font-size-button);
+  font-weight: var(--font-weight-button);
+  border-radius: var(--border-radius-round);
+  border: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  white-space: nowrap;
+}
+
+.button.generic {
+  background-color: var(--button-generic-bg);
+  color: var(--button-generic-text);
+}
+.button.generic:hover {
+  background-color: var(--button-generic-hover);
+}
+
+.button.save {
+  background-color: var(--button-save-bg);
+  color: var(--button-save-text);
+}
+.button.save:hover {
+  background-color: var(--button-save-hover);
+}
+
+.button.cancel {
+  background-color: var(--button-cancel-bg);
+  color: var(--button-cancel-text);
+}
+.button.cancel:hover {
+  background-color: var(--button-cancel-hover);
+}
+
+.button:disabled,
+.button[disabled] {
+  background-color: var(--button-disabled-bg);
+  color: var(--button-disabled-text);
+  cursor: not-allowed;
+  box-shadow: inset 0 0 0 1px var(--button-disabled-border);
+  opacity: 1;
+}
+
+.button:disabled:hover,
+.button[disabled]:hover,
+.button:disabled:focus,
+.button[disabled]:focus {
+  background-color: var(--button-disabled-bg);
+}
+
+.button.edit {
+  background-color: var(--button-edit-bg);
+  color: var(--button-edit-text);
+}
+.button.edit:hover {
+  background-color: var(--button-edit-hover);
+}
+
+.button.danger {
+  background-color: var(--button-danger-bg);
+  color: var(--button-danger-text);
+}
+.button.danger:hover {
+  background-color: var(--button-danger-hover);
+}
+
+.button.action {
+  background-color: var(--button-action-bg);
+  color: var(--button-action-text);
+}
+.button.action:hover {
+  background-color: var(--button-action-hover);
+}
+
+.button.warning {
+  background-color: var(--button-warning-bg);
+  color: var(--button-warning-text);
+}
+.button.warning:hover {
+  background-color: var(--button-warning-hover);
+}
+
+/* Settings button - used in App.tsx header */
+.settings-button {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0.4rem;
+  border-radius: var(--border-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.settings-button:hover {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.settings-button:active {
+  background-color: var(--color-bg-secondary);
+}

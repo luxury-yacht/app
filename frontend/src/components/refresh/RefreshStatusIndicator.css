@@ -1,0 +1,83 @@
+.refresh-status-wrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.refresh-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+/* Disabled state - grey */
+.refresh-status-indicator.status-disabled .status-dot {
+  background-color: var(--refresh-status-disabled);
+  box-shadow: none;
+}
+
+/* Active state - green */
+.refresh-status-indicator.status-active .status-dot {
+  background-color: var(--refresh-status-active);
+  box-shadow: 0 0 4px var(--refresh-status-active-shadow);
+}
+
+/* Refreshing state - green with pulse animation */
+.refresh-status-indicator.status-refreshing .status-dot {
+  background-color: var(--refresh-status-active);
+  box-shadow: 0 0 6px var(--refresh-status-refreshing-shadow);
+  animation: pulseScale 1s infinite;
+}
+
+.refresh-status-indicator.status-retrying .status-dot {
+  background-color: var(--refresh-status-retrying);
+  box-shadow: 0 0 4px var(--refresh-status-retrying-shadow);
+}
+
+.refresh-status-indicator.status-offline .status-dot {
+  background-color: var(--refresh-status-offline);
+  box-shadow: 0 0 6px var(--refresh-status-offline-shadow);
+}
+
+.refresh-status-indicator.status-auth .status-dot {
+  background-color: var(--refresh-status-auth);
+  box-shadow: 0 0 6px var(--refresh-status-auth-shadow);
+}
+
+.refresh-status-indicator.status-rebuilding .status-dot {
+  background-color: var(--refresh-status-rebuilding);
+  box-shadow: 0 0 6px var(--refresh-status-rebuilding-shadow);
+  animation: pulseScale 1.2s infinite;
+}
+
+.metrics-status-indicator {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+}
+
+.metrics-status-indicator .status-dot {
+  background-color: var(--refresh-metrics-dot);
+  box-shadow: 0 0 6px var(--refresh-metrics-dot-shadow);
+  animation: pulseScale 1.5s infinite;
+}
+
+/* Dark theme adjustments */
+@keyframes pulseScale {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
+}

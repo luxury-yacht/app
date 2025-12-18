@@ -1,0 +1,27 @@
+{
+  "recommendations": [
+    // Prettier - Code formatter
+    "esbenp.prettier-vscode",
+
+    // Go support
+    "golang.go",
+
+    // TypeScript/JavaScript
+    "ms-vscode.vscode-typescript-next",
+
+    // CSS
+    "stylelint.vscode-stylelint",
+
+    // Git
+    "eamodio.gitlens",
+
+    // Markdown
+    "yzhang.markdown-all-in-one",
+
+    // YAML
+    "redhat.vscode-yaml",
+
+    // Docker (if you use it)
+    "ms-azuretools.vscode-docker"
+  ]
+}

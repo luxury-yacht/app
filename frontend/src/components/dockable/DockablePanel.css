@@ -1,0 +1,333 @@
+/* DockablePanel Component Styles */
+
+.dockable-panel-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 999;
+}
+
+.dockable-panel-layer .dockable-panel {
+  pointer-events: auto;
+}
+
+.dockable-panel {
+  position: fixed;
+  background: var(--color-bg, #1a1a1a);
+  border: 1px solid var(--color-border, #333);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  transition: none; /* We'll handle animations separately */
+}
+
+/* Position variants */
+.dockable-panel--right {
+  top: var(--app-header-height);
+  right: 0;
+  bottom: 0;
+  border-left: 2px solid var(--color-border, #333);
+  border-right: none;
+  max-height: calc(100vh - var(--app-header-height));
+}
+
+.dockable-panel--bottom {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-top: 2px solid var(--color-border, #333);
+  border-bottom: none;
+}
+
+.dockable-panel--floating {
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--color-border, #333);
+  top: 0;
+  left: 0;
+  contain: layout paint;
+  will-change: transform;
+}
+
+.dockable-panel--maximized {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.dockable-panel--maximized .dockable-panel__header {
+  cursor: default;
+  border-radius: 8px 8px 0 0;
+}
+
+/* Header */
+.dockable-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.5rem;
+  background: var(--color-bg-secondary, #242424);
+  border-bottom: 1px solid var(--color-border, #333);
+  flex-shrink: 0;
+  user-select: none;
+  overflow: visible; /* Allow dropdowns to overflow */
+  position: relative;
+  z-index: 1;
+}
+
+.dockable-panel--floating .dockable-panel__header {
+  cursor: move;
+  border-radius: 8px 8px 0 0;
+}
+
+.dockable-panel__header-content {
+  flex: 1 1 0; /* Use flex-basis: 0 to ensure proper shrinking */
+  display: flex;
+  align-items: center;
+  min-width: 0; /* Allow text truncation */
+  overflow: visible; /* Allow dropdowns to overflow */
+  max-width: 100%;
+}
+
+.dockable-panel__title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text, #fff);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0; /* Allow shrinking */
+  max-width: 100%; /* Don't exceed container */
+}
+
+/* Ensure custom header content also truncates properly */
+.dockable-panel__header-content > * {
+  min-width: 0;
+  overflow: visible; /* Allow dropdowns to overflow */
+}
+
+/* Controls */
+.dockable-panel__controls {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0; /* Never shrink */
+  margin-left: auto; /* Push to the right */
+  z-index: 1; /* Ensure controls are above other content */
+}
+
+.dockable-panel__control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--color-text-secondary, #999);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dockable-panel__control-btn:hover {
+  background: var(--color-bg-tertiary, rgba(255, 255, 255, 0.1));
+  color: var(--color-text, #fff);
+}
+
+.dockable-panel__control-btn--close:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: rgb(239, 68, 68);
+}
+
+.dockable-panel__control-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Content */
+.dockable-panel__content {
+  flex: 1;
+  overflow: auto;
+  min-height: 0; /* Important for flexbox overflow */
+}
+
+/* Resize handles */
+.dockable-panel__resize-handle {
+  position: absolute;
+  background: transparent;
+  transition: background 0.2s;
+}
+
+.dockable-panel__resize-handle:hover {
+  background: var(--color-accent, #3b82f6);
+}
+
+.dockable-panel__resize-handle--left {
+  left: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+}
+
+.dockable-panel__resize-handle--top {
+  left: 0;
+  right: 0;
+  top: -2px;
+  height: 4px;
+  cursor: ns-resize;
+}
+
+/* Invisible resize zones for floating panels */
+.dockable-panel__resize-zone {
+  position: absolute;
+  z-index: 10;
+}
+
+.dockable-panel__resize-zone--top {
+  top: 0;
+  left: var(--dockable-panel-floating-resize-zone);
+  right: var(--dockable-panel-floating-resize-zone);
+  height: var(--dockable-panel-floating-resize-zone);
+  cursor: ns-resize;
+}
+
+.dockable-panel__resize-zone--bottom {
+  bottom: 0;
+  left: var(--dockable-panel-floating-resize-zone);
+  right: var(--dockable-panel-floating-resize-zone);
+  height: var(--dockable-panel-floating-resize-zone);
+  cursor: ns-resize;
+}
+
+.dockable-panel__resize-zone--left {
+  left: 0;
+  top: var(--dockable-panel-floating-resize-zone);
+  bottom: var(--dockable-panel-floating-resize-zone);
+  width: var(--dockable-panel-floating-resize-zone);
+  cursor: ew-resize;
+}
+
+.dockable-panel__resize-zone--right {
+  right: 0;
+  top: var(--dockable-panel-floating-resize-zone);
+  bottom: var(--dockable-panel-floating-resize-zone);
+  width: var(--dockable-panel-floating-resize-zone);
+  cursor: ew-resize;
+}
+
+.dockable-panel__resize-zone--top-left {
+  top: 0;
+  left: 0;
+  width: var(--dockable-panel-floating-resize-zone);
+  height: var(--dockable-panel-floating-resize-zone);
+  cursor: nwse-resize;
+}
+
+.dockable-panel__resize-zone--top-right {
+  top: 0;
+  right: 0;
+  width: var(--dockable-panel-floating-resize-zone);
+  height: var(--dockable-panel-floating-resize-zone);
+  cursor: nesw-resize;
+}
+
+.dockable-panel__resize-zone--bottom-left {
+  bottom: 0;
+  left: 0;
+  width: var(--dockable-panel-floating-resize-zone);
+  height: var(--dockable-panel-floating-resize-zone);
+  cursor: nesw-resize;
+}
+
+.dockable-panel__resize-zone--bottom-right {
+  bottom: 0;
+  right: 0;
+  width: var(--dockable-panel-floating-resize-zone);
+  height: var(--dockable-panel-floating-resize-zone);
+  cursor: nwse-resize;
+}
+
+/* Animations */
+@keyframes dockablePanelSlideInFromRight {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes dockablePanelSlideInFromBottom {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes dockablePanelFadeIn {
+  from {
+    opacity: 0;
+    transform: translate3d(
+        var(--dockable-panel-translate-x, 0px),
+        var(--dockable-panel-translate-y, 0px),
+        0
+      )
+      scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(
+        var(--dockable-panel-translate-x, 0px),
+        var(--dockable-panel-translate-y, 0px),
+        0
+      )
+      scale(1);
+  }
+}
+
+/* Apply animations on mount */
+.dockable-panel--right {
+  animation: dockablePanelSlideInFromRight 0.3s ease-out;
+}
+
+.dockable-panel--bottom {
+  animation: dockablePanelSlideInFromBottom 0.3s ease-out;
+}
+
+.dockable-panel--floating {
+  animation: dockablePanelFadeIn 0.2s ease-out;
+}
+
+/* Dragging state */
+.dockable-panel--dragging {
+  cursor: move !important;
+}
+
+.dockable-panel--dragging * {
+  cursor: move !important;
+  user-select: none !important;
+}
+
+/* Resizing state */
+.dockable-panel--resizing {
+  user-select: none;
+}
+
+.dockable-panel--resizing * {
+  user-select: none !important;
+  pointer-events: none !important;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+  .dockable-panel--floating {
+    box-shadow: 0 10px 50px rgba(0, 0, 0, 0.7);
+  }
+}

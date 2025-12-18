@@ -1,0 +1,31 @@
+/* ==========================================================================
+   Confirmation Modal Specific Styles
+   ========================================================================== */
+
+/* Modal Sizing */
+.confirmation-modal {
+  min-width: 400px;
+  max-width: 500px;
+}
+
+/* Content Body */
+.confirmation-modal-body {
+  padding: 1.5rem;
+}
+
+.confirmation-modal-body p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+/* Footer - Uses common .modal-footer from modals.css */
+.confirmation-modal-footer {
+  padding: var(--spacing-lg) 1.5rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}

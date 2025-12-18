@@ -1,0 +1,140 @@
+/* ==========================================================================
+   About Modal Specific Styles
+   ========================================================================== */
+
+/* Modal Sizing */
+.about-modal {
+  max-width: 500px;
+}
+
+/* Center content */
+.about-modal .modal-content {
+  text-align: center;
+}
+
+/* ==========================================================================
+   Logo Section
+   ========================================================================== */
+
+.about-logo-section {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.about-captain-k8s {
+  width: 150px;
+  height: auto;
+}
+
+.about-logo {
+  width: 250px;
+  height: auto;
+}
+
+/* ==========================================================================
+   About Info Section
+   ========================================================================== */
+
+.about-info h3 {
+  font-size: 1.5rem;
+  margin: 0 0 0.5rem 0;
+  color: var(--color-accent);
+}
+
+.about-tagline {
+  font-style: italic;
+  color: var(--color-text-muted);
+  margin-bottom: 2rem;
+  font-size: 1rem;
+}
+
+/* ==========================================================================
+   Details Section
+   ========================================================================== */
+
+.about-details {
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--border-radius);
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  text-align: left;
+}
+
+.about-field {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.about-field:last-child {
+  margin-bottom: 0;
+}
+
+.about-label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+}
+
+.about-value {
+  color: var(--color-text);
+}
+
+/* ==========================================================================
+   Description Section
+   ========================================================================== */
+
+.about-description {
+  margin-bottom: 1.5rem;
+}
+
+.about-description p {
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+}
+
+.about-description a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  transition: opacity 150ms ease;
+}
+
+.about-description a:hover {
+  opacity: 0.8;
+}
+
+/* ==========================================================================
+   Footer Section
+   ========================================================================== */
+
+.about-footer {
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.about-license {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  margin: 0;
+}
+
+.about-license a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  transition: opacity 150ms ease;
+}
+
+.about-license a:hover {
+  opacity: 0.8;
+}
+
+.about-copyright {
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  margin: 0;
+  padding-top: 1rem;
+}

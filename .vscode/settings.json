@@ -1,0 +1,81 @@
+{
+  // Editor settings
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "editor.formatOnType": false,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+
+  // Language-specific settings
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+
+  // Prettier settings
+  "prettier.enable": true,
+  "prettier.requireConfig": true,
+  "prettier.configPath": "./frontend/.prettierrc.json",
+
+  // File associations
+  "files.associations": {
+    "*.js": "javascript",
+    "*.jsx": "javascriptreact",
+    "*.ts": "typescript",
+    "*.tsx": "typescriptreact"
+  },
+
+  // Exclude patterns
+  "files.exclude": {
+    "**/node_modules": true,
+    "**/dist": false,
+    "**/.git": true
+  },
+
+  // TypeScript settings
+  "typescript.tsdk": "./frontend/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+
+  // Disable @ts-check in JavaScript files
+  "javascript.implicitProjectConfig.checkJs": false,
+  "js/ts.implicitProjectConfig.checkJs": false,
+
+  // Auto-save settings (optional - you can enable if desired)
+  "files.autoSave": "off",
+
+  // ESLint settings (if you add ESLint later)
+  "eslint.enable": false,
+
+  // Trailing spaces
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "files.trimFinalNewlines": true,
+  "[go]": {
+    "editor.defaultFormatter": "golang.go"
+  },
+  // Stop gopls from complaining about mage build tags
+  "gopls": {
+    "build.buildFlags": ["-tags=mage"]
+  },
+  "makefile.configureOnOpen": false,
+  "git.ignoreLimitWarning": true
+}

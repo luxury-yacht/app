@@ -1,0 +1,358 @@
+:root {
+  /* Light theme colors */
+  --color-bg: #ffffff;
+  --color-bg-secondary: #f8f9fa;
+  --color-bg-tertiary: #e9ecef;
+  --color-text: #495057;
+  --color-text-secondary: #6c757d;
+  --color-text-tertiary: #8a8a8a;
+  --color-border: #dee2e6;
+  --color-accent: #007bff;
+  --color-accent-hover: #0056b3;
+  --color-accent-bg: #007bff1a;
+  --color-success: #28a745;
+  --color-warning: #ffc107;
+  --color-error: #dc3545;
+  --color-error-bg: #f8d7da;
+  --color-error-border: #f5c6cb;
+  --color-error-text: #721c24;
+  --color-table-header-bg: #f1f3f5;
+  --color-table-border: #d3d3d3;
+  --color-sidebar-active: #6c757d;
+  --color-object-panel-link: #0277bd;
+  --color-text-inverse: #ffffff;
+  --color-success-bg: rgba(76, 175, 80, 0.1);
+  --color-warning-bg: rgba(255, 152, 0, 0.1);
+  --color-info-bg: rgba(33, 150, 243, 0.1);
+  --delta-success-bg: rgba(76, 175, 80, 0.1);
+  --delta-error-bg: rgba(244, 67, 54, 0.1);
+  --delta-warning-bg: rgba(255, 152, 0, 0.1);
+  --delta-info-bg: rgba(33, 150, 243, 0.1);
+
+  /* Button colors */
+  --button-generic-bg: #ccc;
+  --button-generic-hover: #aaa;
+  --button-generic-text: #212529;
+  --button-save-bg: #007b55;
+  --button-save-hover: #006948;
+  --button-cancel-bg: #ccc;
+  --button-cancel-hover: #aaa;
+  --button-edit-bg: #007bff;
+  --button-edit-hover: #0069d9;
+  --button-danger-bg: #dc3545;
+  --button-danger-hover: #c82333;
+  --button-save-text: #ffffff;
+  --button-cancel-text: #212529;
+  --button-edit-text: #ffffff;
+  --button-danger-text: #ffffff;
+  --button-action-bg: #ffc107;
+  --button-action-hover: #e0a800;
+  --button-action-text: #212529;
+  --button-warning-bg: #e67e22;
+  --button-warning-hover: #d35400;
+  --button-warning-text: #ffffff;
+  --button-disabled-bg: #d7dbdf;
+  --button-disabled-text: #7a828a;
+  --button-disabled-border: rgba(0, 0, 0, 0.08);
+
+  /* Badge colors */
+  --badge-blue-bg: #e1f5fe;
+  --badge-blue-text: #0277bd;
+  --badge-green-bg: #f1f8e9;
+  --badge-green-text: #558b2f;
+  --badge-grey-bg: #e9ecef;
+  --badge-grey-text: #6c757d;
+  --badge-lime-bg: #f0f4c3;
+  --badge-lime-text: #827717;
+  --badge-orange-bg: #fff3e0;
+  --badge-orange-text: #ef6c00;
+  --badge-pink-bg: #fce4ec;
+  --badge-pink-text: #c2185b;
+  --badge-purple-bg: #f3e5f5;
+  --badge-purple-text: #8e24aa;
+  --badge-teal-bg: #e0f2f1;
+  --badge-teal-text: #00796b;
+  --badge-warning-bg: #fff8e1;
+  --badge-warning-text: #f57f17;
+
+  /* Status colors */
+  --status-available-bg: #e8f5e8;
+  --status-available-text: #2e7d32;
+  --status-bound-bg: #e3f2fd;
+  --status-bound-text: #1976d2;
+  --status-failed-bg: #ffebee;
+  --status-failed-text: #d32f2f;
+  --status-notready-text: #d32f2f;
+  --status-released-bg: #fff3e0;
+  --status-released-text: #f57c00;
+  --status-restarted-text: #d32f2f;
+  --status-warning-text: #ffa726;
+
+  /* Code editor colors */
+  --code-surface: var(--color-bg-secondary);
+  --code-background: var(--color-bg);
+  --code-border: var(--color-border);
+  --code-text-primary: var(--color-text);
+  --code-text-muted: var(--color-text-secondary);
+  --code-gutter-text: var(--color-text-secondary);
+  --code-caret: var(--color-accent);
+  --code-selection-bg: rgba(0, 123, 255, 0.18);
+  --code-selection-match-bg: rgba(255, 214, 102, 0.35);
+  --code-selection-match-outline: rgba(255, 214, 102, 0.6);
+  --code-selection-match-selected-bg: rgba(255, 214, 102, 0.5);
+  --code-active-line-bg: rgba(0, 0, 0, 0.04);
+  --code-active-gutter-bg: rgba(0, 0, 0, 0.06);
+  --code-focus-ring: rgba(0, 120, 212, 0.6);
+  --code-matching-bracket-bg: rgba(0, 123, 255, 0.14);
+  --code-matching-bracket-outline: rgba(0, 123, 255, 0.45);
+  --code-button-bg: var(--color-bg-secondary);
+  --code-button-hover-bg: var(--color-bg-tertiary);
+  --code-token-string: #0c7a5f;
+  --code-token-number: #b4690e;
+  --code-token-boolean: #c92a2a;
+  --code-token-nullish: #7950f2;
+  --code-token-comment: #868e96;
+  --code-token-punctuation: #adb5bd;
+  --code-token-property: #0056b3;
+  --code-token-tag: #0b7285;
+  --code-token-operator: #495057;
+  --code-token-invalid: rgba(220, 53, 69, 0.6);
+
+  /* Scrollbar styles */
+  --scrollbar-width: 6px;
+  --scrollbar-height: 6px;
+
+  /* Scrollbar colors */
+  --scrollbar-track-bg: #e9ecef;
+  --scrollbar-thumb-bg: #afafaf;
+  --scrollbar-thumb-hover-bg: #777;
+  --scrollbar-corner-bg: #1a1a1a;
+
+  /* Shadows */
+  --shadow-interactive-soft: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+  /* Toast/notification surface */
+  --toast-overlay-bg: rgba(248, 249, 250);
+  --toast-overlay-border: rgba(255, 255, 255, 0.6);
+  --toast-overlay-highlight: rgba(255, 255, 255, 0.55);
+  --toast-overlay-shadow: 0 26px 54px rgba(33, 37, 41, 0.18);
+  --toast-overlay-blur: 20px;
+  --toast-card-bg: rgba(255, 255, 255);
+  --toast-card-border: rgba(0, 0, 0, 0.07);
+  --toast-card-shadow: 0 14px 28px rgba(9, 14, 31, 0.16);
+  --toast-card-header-text: rgba(255, 255, 255);
+  --toast-card-header-bg: rgba(255, 50, 50);
+  --toast-card-details-bg: var(--color-bg-secondary);
+  --toast-text-primary: var(--color-text);
+  --toast-text-secondary: var(--color-text);
+  --toast-dismiss-text: rgba(255, 255, 255);
+  --toast-dismiss-bg: rgba(255, 50, 50);
+  --toast-dismiss-hover-bg: rgba(255, 100, 100);
+  --toast-dismiss-border: rgba(0, 0, 0, 0.1);
+  --toast-count-bg: rgba(255, 180, 180);
+  --toast-count-text: #ffffff;
+
+  /* Log viewer */
+  --log-surface-bg: #f6f8fa;
+  --log-surface-maximized-bg: #f6f8fa;
+  --log-text-primary: #24292e;
+  --log-metadata-text: var(--color-text-tertiary);
+  --log-controls-bg: #ffffff;
+  --log-controls-border: #d1d5da;
+  --log-controls-shadow: none;
+  --log-controls-maximized-bg: #ffffff;
+  --log-controls-maximized-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --log-placeholder-bg: #f6f8fa;
+  --log-placeholder-border: #d1d5da;
+  --log-placeholder-text: #586069;
+  --log-maximize-hover-bg: rgba(0, 0, 0, 0.05);
+  --log-scroll-track: rgba(0, 0, 0, 0.05);
+  --log-scroll-thumb: rgba(0, 0, 0, 0.2);
+  --log-scroll-thumb-hover: rgba(0, 0, 0, 0.3);
+  --log-table-header-bg: rgba(0, 0, 0, 0.03);
+  --log-table-header-border: rgba(0, 0, 0, 0.1);
+  --log-table-row-border: rgba(0, 0, 0, 0.05);
+  --log-table-row-hover-bg: rgba(0, 0, 0, 0.02);
+  --log-table-cell-text: #24292e;
+  --log-cell-hover-bg: rgba(0, 0, 0, 0.03);
+  --log-cell-active-bg: rgba(0, 0, 0, 0.05);
+  --log-cell-copied-bg: rgba(76, 175, 80, 0.15);
+  --log-tooltip-bg: #ffffff;
+  --log-tooltip-text: #24292e;
+  --log-tooltip-border: rgba(0, 0, 0, 0.1);
+  --log-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --log-fallback-retry-hover-bg: rgba(255, 193, 7, 0.2);
+
+  /* Log pod colors - darker variants for light backgrounds */
+  --log-pod-color-1: #2E7D32;
+  --log-pod-color-2: #1565C0;
+  --log-pod-color-3: #E65100;
+  --log-pod-color-4: #7B1FA2;
+  --log-pod-color-5: #00838F;
+  --log-pod-color-6: #827717;
+  --log-pod-color-7: #FF8F00;
+  --log-pod-color-8: #C2185B;
+  --log-pod-color-9: #00695C;
+  --log-pod-color-10: #5D4037;
+  --log-pod-color-11: #455A64;
+  --log-pod-color-12: #E64A19;
+  --log-pod-color-fallback: #666666;
+
+  /* Dropdown */
+  --dropdown-trigger-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --dropdown-trigger-focus-shadow: 0 0 0 3px rgba(77, 171, 247, 0.15);
+  --dropdown-menu-bg: #ffffff;
+  --dropdown-menu-border: var(--color-border);
+  --dropdown-menu-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --dropdown-shortcut-text: #586069;
+  --dropdown-shortcut-bg: rgba(0, 0, 0, 0.03);
+  --dropdown-shortcut-border: rgba(0, 0, 0, 0.06);
+
+  /* Actions menu */
+  --actions-menu-button-text: var(--color-text-secondary);
+  --actions-menu-button-hover-bg: var(--color-bg-tertiary);
+  --actions-menu-button-hover-border: var(--color-border);
+  --actions-menu-dropdown-bg: #ffffff;
+  --actions-menu-dropdown-border: var(--color-border);
+  --actions-menu-dropdown-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --actions-menu-item-hover-bg: var(--color-bg-secondary);
+  --actions-menu-item-danger-hover-bg: rgba(220, 53, 69, 0.1);
+
+  /* Context menu */
+  --context-menu-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+
+  /* Segmented button */
+  --segmented-bg: var(--button-generic-bg);
+  --segmented-option-text: var(--button-generic-text);
+  --segmented-option-divider: var(--color-border);
+  --segmented-option-divider-opacity: 0.3;
+  --segmented-option-hover: var(--button-generic-hover);
+  --segmented-option-active-bg: #6c757d;
+  --segmented-option-active-hover: #5a6268;
+  --segmented-option-active-text: #ffffff;
+
+  /* Shortcut help modal */
+  --shortcut-item-bg: var(--color-bg-secondary);
+  --shortcut-item-border: var(--color-border);
+  --shortcut-key-bg: var(--color-bg-tertiary);
+  --shortcut-key-border: var(--color-border);
+  --shortcut-key-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.1), inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  --shortcut-key-text: var(--color-text);
+
+  /* Refresh indicators */
+  --refresh-status-disabled: #999999;
+  --refresh-status-active: #4caf50;
+  --refresh-status-active-shadow: rgba(76, 175, 80, 0.5);
+  --refresh-status-refreshing-shadow: rgba(76, 175, 80, 0.7);
+  --refresh-status-retrying: #ffa000;
+  --refresh-status-retrying-shadow: rgba(255, 160, 0, 0.7);
+  --refresh-status-offline: #e53935;
+  --refresh-status-offline-shadow: rgba(229, 57, 53, 0.7);
+  --refresh-status-auth: #d81b60;
+  --refresh-status-auth-shadow: rgba(216, 27, 96, 0.7);
+  --refresh-status-rebuilding: #1e88e5;
+  --refresh-status-rebuilding-shadow: rgba(30, 136, 229, 0.7);
+  --refresh-metrics-dot: #fb8c00;
+  --refresh-metrics-dot-shadow: rgba(251, 140, 0, 0.7);
+
+  /* Modal overlays */
+  --modal-overlay-bg: rgba(0, 0, 0, 0.35);
+  --modal-container-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.15);
+  --modal-content-bg: var(--color-bg);
+  --modal-footer-bg: var(--color-bg-secondary);
+  --modal-scroll-thumb: var(--color-border);
+  --modal-scroll-thumb-hover: var(--color-border-hover, rgba(0, 0, 0, 0.4));
+
+  /* Editor content shared tokens */
+  --editor-scroll-track: rgba(0, 0, 0, 0.05);
+  --editor-scroll-thumb: rgba(0, 0, 0, 0.2);
+  --editor-scroll-thumb-hover: rgba(0, 0, 0, 0.3);
+
+  /* Helm values tab */
+  --helm-values-override-bg: rgba(255, 193, 7, 0.3);
+
+  /* YAML tab */
+  --yaml-validation-bg: rgba(220, 53, 69, 0.15);
+  --yaml-validation-border: rgba(220, 53, 69, 0.35);
+  --yaml-notice-bg: rgba(255, 215, 0, 0.1);
+  --yaml-notice-border: rgba(255, 215, 0, 0.25);
+  --yaml-notice-text: var(--color-text);
+  --yaml-drift-bg: rgba(0, 0, 0, 0.05);
+
+  /* Utilization indicators */
+  --utilization-indicator-usage-normal: var(--resourcebar-usage-normal);
+  --utilization-indicator-usage-warning: var(--resourcebar-usage-warning);
+  --utilization-indicator-usage-critical: var(--resourcebar-usage-critical);
+  --utilization-indicator-allocatable: linear-gradient(90deg, #cbd5e1 0%, #94a3b8 100%);
+  --utilization-indicator-allocatable-overcommit: repeating-linear-gradient(
+    45deg,
+    #fbbf24,
+    #fbbf24 4px,
+    #f59e0b 4px,
+    #f59e0b 8px
+  );
+  --utilization-indicator-request: linear-gradient(90deg, #94a3b8 0%, #64748b 100%);
+  --utilization-indicator-limit: repeating-linear-gradient(
+    45deg,
+    #fbbf24,
+    #fbbf24 4px,
+    #f59e0b 4px,
+    #f59e0b 8px
+  );
+  --utilization-indicator-limit-overcommit: repeating-linear-gradient(
+    45deg,
+    #ef4444,
+    #ef4444 4px,
+    #dc2626 4px,
+    #dc2626 8px
+  );
+  --utilization-overcommitted-text: var(--resourcebar-warning-text);
+
+  /* Events tab */
+  --events-scroll-track: var(--editor-scroll-track);
+  --events-scroll-thumb: var(--editor-scroll-thumb);
+  --events-scroll-thumb-hover: var(--editor-scroll-thumb-hover);
+
+  /* Resource bar */
+  --resourcebar-track-bg: var(--color-bg-tertiary, #e0e0e0);
+  --resourcebar-overcommit-track-bg: rgba(0, 0, 0, 0.05);
+  --resourcebar-overcommit-fill: linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%);
+  --resourcebar-overcommit-shadow: 0 0 4px rgba(139, 92, 246, 0.3);
+  --resourcebar-reserved-fill: repeating-linear-gradient(
+    45deg,
+    rgba(148, 163, 184, 0.3),
+    rgba(148, 163, 184, 0.3) 4px,
+    rgba(148, 163, 184, 0.1) 4px,
+    rgba(148, 163, 184, 0.1) 8px
+  );
+  --resourcebar-marker-request: rgba(0, 0, 0, 0.7);
+  --resourcebar-marker-request-shadow: 0 0 3px rgba(0, 0, 0, 0.4);
+  --resourcebar-marker-limit: #dc2626;
+  --resourcebar-marker-limit-shadow: 0 0 3px rgba(220, 38, 38, 0.5);
+  --resourcebar-empty-bg: var(--color-bg-tertiary);
+  --resourcebar-status-stale: #fb8c00;
+  --resourcebar-status-error: #ef4444;
+  --resourcebar-status-shadow: 0 0 4px rgba(251, 140, 0, 0.5);
+  --resourcebar-status-stale-shadow: 0 0 4px rgba(251, 140, 0, 0.5);
+  --resourcebar-status-error-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
+  --resourcebar-usage-normal: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+  --resourcebar-usage-warning: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+  --resourcebar-usage-critical: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+  --resourcebar-usage-unbounded: linear-gradient(90deg, #6b7280 0%, #4b5563 100%);
+  --resourcebar-usage-shadow-normal: 0 0 8px rgba(34, 197, 94, 0.3);
+  --resourcebar-usage-shadow-warning: 0 0 8px rgba(245, 158, 11, 0.3);
+  --resourcebar-usage-shadow-critical: 0 0 8px rgba(239, 68, 68, 0.3);
+  --resourcebar-usage-shadow-unbounded: 0 0 8px rgba(107, 114, 128, 0.3);
+  --resourcebar-tooltip-bg: var(--color-bg-secondary);
+  --resourcebar-tooltip-border: var(--color-border);
+  --resourcebar-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  --resourcebar-warning-text: var(--color-warning, #f59e0b);
+
+  /* Metrics availability banner */
+  --metrics-banner-bg: rgba(251, 140, 0, 0.12);
+  --metrics-banner-border: rgba(251, 140, 0, 0.35);
+  --metrics-banner-text: #fb8c00;
+  --metrics-banner-dot: #fb8c00;
+  --metrics-banner-dot-shadow: 0 0 6px rgba(251, 140, 0, 0.45);
+}

@@ -1,0 +1,54 @@
+/* HelmOverview specific styles */
+
+/* Managed Resources */
+.helm-resource-link {
+  cursor: pointer;
+  color: var(--color-link);
+}
+
+/* Release History */
+.helm-history-item {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.helm-history-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-sm);
+  width: 100%;
+}
+
+.helm-history-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.helm-history-status {
+  font-size: var(--font-size-x-small);
+}
+
+.helm-history-description {
+  margin-left: 1rem;
+  margin-top: 0.25rem;
+  opacity: 0.8;
+}
+
+.helm-history-more {
+  opacity: 0.7;
+}
+
+/* Release Notes */
+.helm-release-notes {
+  padding: 0.5rem;
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  background-color: var(--color-bg-tertiary);
+  white-space: pre;
+  word-break: normal;
+  width: 100%;
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: auto;
+}

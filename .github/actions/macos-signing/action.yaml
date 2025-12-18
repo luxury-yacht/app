@@ -1,0 +1,58 @@
+name: Setup macOS Code Signing
+description: Import a macOS signing certificate into the keychain and expose the signing identity.
+
+inputs:
+  macos_certificate:
+    description: Base64-encoded PKCS12 certificate
+    required: true
+  macos_certificate_pwd:
+    description: Password for the PKCS12 certificate
+    required: true
+  keychain_timeout_seconds:
+    description: Keychain unlock timeout in seconds
+    required: false
+    default: '21600'
+
+outputs:
+  macos_identity:
+    description: The discovered Developer ID Application identity
+    value: ${{ steps.signing.outputs.macos_identity }}
+  keychain_path:
+    description: Path to the created temporary keychain
+    value: ${{ steps.signing.outputs.keychain_path }}
+
+runs:
+  using: composite
+  steps:
+    - id: signing
+      shell: bash
+      env:
+        MACOS_CERTIFICATE: ${{ inputs.macos_certificate }}
+        MACOS_CERTIFICATE_PWD: ${{ inputs.macos_certificate_pwd }}
+        KEYCHAIN_TIMEOUT: ${{ inputs.keychain_timeout_seconds }}
+      run: |
+        set -euo pipefail
+
+        MACOS_KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+        KEYCHAIN_PWD="$(openssl rand -hex 32)"
+
+        security create-keychain -p "$KEYCHAIN_PWD" "$MACOS_KEYCHAIN_PATH"
+        security default-keychain -s "$MACOS_KEYCHAIN_PATH"
+        security set-keychain-settings -lut "$KEYCHAIN_TIMEOUT" "$MACOS_KEYCHAIN_PATH"
+        security unlock-keychain -p "$KEYCHAIN_PWD" "$MACOS_KEYCHAIN_PATH"
+
+        echo "$MACOS_CERTIFICATE" | base64 --decode -o certificate.p12
+        security import certificate.p12 -P "$MACOS_CERTIFICATE_PWD" -k "$MACOS_KEYCHAIN_PATH" -T /usr/bin/codesign -T /usr/bin/security
+
+        security list-keychain -d user -s "$MACOS_KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
+
+        IDENTITY="$(security find-identity -v -p codesigning "$MACOS_KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | awk '{print $2}')"
+
+        if [[ -z "$IDENTITY" ]]; then
+          echo "❌ No 'Developer ID Application' identity found in imported certificate."
+          exit 1
+        fi
+
+        echo "✅ Found signing identity: $IDENTITY"
+        echo "macos_identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+        echo "keychain_path=$MACOS_KEYCHAIN_PATH" >> "$GITHUB_OUTPUT"

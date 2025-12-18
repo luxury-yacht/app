@@ -1,0 +1,126 @@
+/* Import shared GridTable styles */
+@import "@styles/components/gridtables.css";
+
+/* Define column widths at root level for both tables to share */
+/* Scale modal styling for workload context menu */
+.scale-modal {
+  min-width: 320px;
+  max-width: 320px;
+}
+
+.scale-modal-body {
+  padding: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scale-modal-body label {
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.scale-input-group {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+.scale-input-group:focus-within {
+  border-color: var(--color-primary);
+}
+
+.scale-spinner-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.scale-spinner-btn:hover:not(:disabled) {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.scale-spinner-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.scale-modal-body .scale-input {
+  width: 70px;
+  padding: 6px 4px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 14px;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.scale-modal-body .scale-input::-webkit-inner-spin-button,
+.scale-modal-body .scale-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.scale-modal-body .scale-input:focus {
+  outline: none;
+  background: var(--color-bg-tertiary);
+}
+
+.scale-modal-footer {
+  padding: var(--spacing-lg) 1.5rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.scale-modal-error {
+  color: var(--color-error);
+  font-size: var(--font-size-small);
+  padding: 0 1.5rem;
+}
+.gridtable-workloads .gridtable-row--pod {
+  background-color: var(--color-bg-secondary);
+}
+
+.gridtable-workloads .gridtable-row--placeholder .grid-cell {
+  background-color: transparent;
+}
+
+.workloads-table-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.workloads-table-name__spacer {
+  flex: 0 0 1.25rem;
+}
+
+.workloads-table-placeholder {
+  font-style: italic;
+  color: var(--color-text-secondary);
+  padding: 0.35rem 0.25rem;
+}
+
+.gridtable-row--placeholder-error .workloads-table-placeholder {
+  color: var(--color-error-text, var(--color-error));
+}

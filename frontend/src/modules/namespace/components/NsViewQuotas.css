@@ -1,0 +1,37 @@
+/* NsQuotasView specific styles */
+
+.ns-quotas-table .quota-resources-inline {
+  color: var(--color-text-secondary);
+  font-size: 0.85em;
+  font-family: var(--font-mono);
+}
+
+.ns-quotas-table .limit-type {
+  color: var(--color-info);
+  font-size: 0.9em;
+  padding: 2px 6px;
+  background-color: var(--color-info-bg);
+  border-radius: 3px;
+}
+
+.ns-quotas-table .pdb-policy {
+  color: var(--color-warning);
+  font-size: 0.9em;
+  font-weight: 500;
+}
+
+.ns-quotas-table .quota-usage-inline {
+  color: var(--color-text-primary);
+  font-size: 0.85em;
+  font-family: var(--font-mono);
+}
+
+.ns-quotas-table .pdb-status {
+  color: var(--color-success);
+  font-size: 0.9em;
+}
+
+.ns-quotas-table .quota-scopes-inline {
+  color: var(--color-text-secondary);
+  font-size: 0.85em;
+}

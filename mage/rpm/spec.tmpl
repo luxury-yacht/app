@@ -1,0 +1,37 @@
+Name:           {{.AppShortName}}
+Version:        {{.RPMVersion}}
+Release:        1
+Summary:        Luxury Yacht - Kubernetes management app
+License:        Proprietary
+URL:            https://luxury-yacht.app
+Vendor:         Luxury Yacht
+Packager:       Luxury Yacht <info@luxury-yacht.app>
+BuildArch:      {{.RPMArch}}
+Source0:        %{name}
+Source1:        %{name}.desktop
+Source2:        %{name}.png
+Source3:        %{name}.metainfo.xml
+
+%description
+Luxury Yacht is a Kubernetes management application. Sail the seas of Kubernetes in style!
+
+%prep
+
+%build
+
+%install
+mkdir -p %{buildroot}/usr/local/bin
+cp %{SOURCE0} %{buildroot}/usr/local/bin/%{name}
+chmod 755 %{buildroot}/usr/local/bin/%{name}
+mkdir -p %{buildroot}/usr/share/applications
+cp %{SOURCE1} %{buildroot}/usr/share/applications/{{.AppShortName}}.desktop
+mkdir -p %{buildroot}/usr/share/icons/hicolor/256x256/apps
+cp %{SOURCE2} %{buildroot}/usr/share/icons/hicolor/256x256/apps/{{.AppShortName}}.png
+mkdir -p %{buildroot}/usr/share/metainfo
+cp %{SOURCE3} %{buildroot}/usr/share/metainfo/{{.AppShortName}}.metainfo.xml
+
+%files
+/usr/local/bin/%{name}
+/usr/share/applications/{{.AppShortName}}.desktop
+/usr/share/icons/hicolor/256x256/apps/{{.AppShortName}}.png
+/usr/share/metainfo/{{.AppShortName}}.metainfo.xml

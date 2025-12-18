@@ -1,0 +1,21 @@
+.metrics-warning-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--metrics-banner-bg);
+  border: 1px solid var(--metrics-banner-border);
+  color: var(--metrics-banner-text);
+  border-radius: 999px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  margin-bottom: 0.75rem;
+  width: fit-content;
+}
+
+.metrics-warning-banner__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--metrics-banner-dot);
+  box-shadow: var(--metrics-banner-dot-shadow);
+}

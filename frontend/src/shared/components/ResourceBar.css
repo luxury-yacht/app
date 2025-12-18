@@ -1,0 +1,364 @@
+.resource-bar-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  position: relative;
+  overflow: visible;
+}
+
+/* Compact variant for table views */
+.resource-bar-compact {
+  min-height: 1.5rem; /* Ensure adequate hover area */
+  padding: 2px 0;
+}
+
+.resource-bar-compact .resource-bar {
+  height: 0.4rem;
+}
+
+.resource-bar-compact .resource-bar-track {
+  height: 0.4rem;
+}
+
+/* Overcommit bar shown below main bar for nodes */
+.resource-bar-overcommit {
+  margin-top: 2px;
+}
+
+.resource-bar-overcommit-track {
+  position: relative;
+  height: 0.3rem;
+  background-color: var(--resourcebar-track-bg);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.resource-bar-overcommit-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: var(--resourcebar-overcommit-fill);
+  box-shadow: var(--resourcebar-overcommit-shadow);
+  border-radius: 4px 0 0 4px;
+  transition: width 0.3s ease;
+}
+
+/* Usage value shown above bar in compact mode */
+.resource-bar-value {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-text);
+  margin-bottom: 2px;
+  line-height: 1;
+  pointer-events: none; /* Ensure this doesn't block hover events */
+}
+
+.resource-bar-leading {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.resource-bar-warning-inline {
+  font-size: 0.7rem;
+}
+
+.resource-bar-value .usage-percentage {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+.resource-bar-value .usage-percentage.warning {
+  color: var(--color-warning);
+  font-weight: 500;
+}
+
+/* Metrics shown below bar in standard view */
+.resource-bar-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  font-size: 0.75rem;
+}
+
+.metrics-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.metrics-row span:first-child {
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+}
+
+.metrics-value {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.metrics-value.warning {
+  color: var(--color-warning, #f59e0b);
+}
+
+/* Empty state */
+.resource-bar-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1rem;
+  background-color: var(--resourcebar-empty-bg);
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+}
+
+.resource-bar-empty.resource-bar-empty--suppressed {
+  visibility: hidden;
+}
+
+.resource-bar {
+  position: relative;
+  height: 1rem;
+  background-color: var(--resourcebar-track-bg);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+/* Main bar track */
+.resource-bar-track {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  border-radius: 6px;
+}
+
+/* Usage bar */
+.resource-bar-usage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  transition: width 0.3s ease;
+  border-radius: 6px 0 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.resource-bar-usage.normal {
+  background: var(--resourcebar-usage-normal);
+  box-shadow: var(--resourcebar-usage-shadow-normal);
+}
+
+.resource-bar-usage.warning {
+  background: var(--resourcebar-usage-warning);
+  box-shadow: var(--resourcebar-usage-shadow-warning);
+}
+
+.resource-bar-usage.critical {
+  background: var(--resourcebar-usage-critical);
+  box-shadow: var(--resourcebar-usage-shadow-critical);
+}
+
+.resource-bar-usage.unbounded {
+  background: var(--resourcebar-usage-unbounded);
+  box-shadow: var(--resourcebar-usage-shadow-unbounded);
+}
+
+/* Unbounded state shows full width with subtle animation */
+.resource-bar-usage.unbounded {
+  animation: unbounded-pulse 4s ease-in-out infinite;
+}
+
+.resource-bar-no-animation .resource-bar-usage,
+.resource-bar-no-animation .resource-bar-reserved,
+.resource-bar-no-animation .resource-bar-overcommit-fill,
+.resource-bar-no-animation .resource-bar-marker {
+  transition: none !important;
+}
+
+@keyframes unbounded-pulse {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Reserved but unused resources */
+.resource-bar-reserved {
+  position: absolute;
+  height: 100%;
+  background: var(--resourcebar-reserved-fill);
+  z-index: 1;
+}
+
+/* Resource markers */
+.resource-bar-marker {
+  position: absolute;
+  width: 2px;
+  height: 140%;
+  top: -20%;
+  z-index: 5;
+  transition: left 0.3s ease;
+}
+
+/* Adjust markers for compact variant */
+.resource-bar-compact .resource-bar-marker {
+  height: 160%;
+  top: -30%;
+  width: 1px;
+}
+
+.resource-bar-marker.request {
+  background-color: var(--resourcebar-marker-request);
+  box-shadow: var(--resourcebar-marker-request-shadow);
+}
+
+.resource-bar-marker.limit {
+  background-color: var(--resourcebar-marker-limit);
+  box-shadow: var(--resourcebar-marker-limit-shadow);
+}
+
+/* Percentage label */
+.resource-bar-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+/* Configuration warning indicator */
+.resource-bar-warning {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  font-size: 0.8rem;
+  z-index: 10;
+  cursor: help;
+}
+
+/* Status classes for container */
+.resource-bar-container.warning {
+  animation: pulse-subtle 3s infinite;
+}
+
+.resource-bar-container.critical {
+  animation: pulse-subtle 2s infinite;
+}
+
+.resource-bar-container.metrics-stale .resource-bar-usage,
+.resource-bar-container.metrics-stale .resource-bar-reserved,
+.resource-bar-container.metrics-stale .resource-bar-overcommit-fill {
+  filter: saturate(0.75);
+}
+
+.resource-bar-container.metrics-error .resource-bar-usage,
+.resource-bar-container.metrics-error .resource-bar-reserved,
+.resource-bar-container.metrics-error .resource-bar-overcommit-fill {
+  opacity: 0.4;
+  filter: grayscale(0.3);
+}
+
+.resource-bar-container.metrics-error .resource-bar-empty,
+.resource-bar-container.metrics-stale .resource-bar-empty {
+  color: var(--color-text-secondary);
+}
+
+@keyframes pulse-subtle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+.resource-bar-tooltip {
+  padding: 10px;
+  background-color: var(--resourcebar-tooltip-bg);
+  color: var(--color-text);
+  font-size: 0.75rem;
+  border-radius: var(--border-radius-sm);
+  white-space: normal;
+  min-width: 200px;
+  max-width: 200px;
+  z-index: 10000;
+  pointer-events: none;
+  box-shadow: var(--resourcebar-tooltip-shadow);
+  border: 1px solid var(--resourcebar-tooltip-border);
+  position: relative;
+}
+
+.tooltip-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tooltip-divider {
+  height: 1px;
+  background-color: var(--color-border);
+  margin: 4px 0;
+}
+
+.tooltip-row {
+  display: grid;
+  grid-template-columns: 80px 60px 40px;
+  align-items: center;
+}
+
+.tooltip-row span:first-child {
+  color: var(--color-text-secondary);
+  font-size: 0.7rem;
+  text-align: left;
+}
+
+.tooltip-value {
+  font-weight: 600;
+  color: var(--color-text);
+  font-size: 0.7rem;
+  text-align: right;
+}
+
+.tooltip-row.warning {
+  color: var(--resourcebar-warning-text);
+  font-weight: 500;
+  padding-top: 4px;
+  margin-top: 4px;
+  display: block;
+}
+
+.resource-bar-tooltip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+}
+
+.resource-bar-tooltip.tooltip-top::after {
+  top: 100%;
+  border-top-color: rgba(0, 0, 0, 0.9);
+}
+
+.resource-bar-tooltip.tooltip-bottom::after {
+  bottom: 100%;
+  border-bottom-color: rgba(0, 0, 0, 0.9);
+}

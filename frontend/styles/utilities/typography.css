@@ -1,0 +1,30 @@
+/* Reusable text utility classes (weight, transform, alignment). */
+
+.text-center,
+.u-text-center {
+  text-align: center;
+}
+
+.u-text-left {
+  text-align: left;
+}
+
+.u-text-right {
+  text-align: right;
+}
+
+.u-text-uppercase {
+  text-transform: uppercase;
+}
+
+.u-text-muted {
+  color: var(--color-text-muted);
+}
+
+.u-text-secondary {
+  color: var(--color-text-secondary);
+}
+
+.u-text-mono {
+  font-family: var(--font-family-mono);
+}

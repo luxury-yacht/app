@@ -1,0 +1,125 @@
+/* Settings  */
+
+.settings-view {
+  padding: 0 1rem;
+  flex: 1;
+  overflow-y: auto;
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-close-button {
+  display: none;
+}
+
+.settings-section {
+  margin-bottom: 1.5rem;
+}
+
+.settings-section h3 {
+  color: var(--color-text-secondary);
+  padding: 0.7rem 0;
+  font-size: var(--font-size-title);
+  text-transform: uppercase;
+}
+
+/* Refresh Settings */
+
+.refresh-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.setting-item {
+  display: block;
+  padding-left: 1rem;
+}
+
+.setting-item button {
+  margin-top: var(--spacing-md);
+}
+
+.setting-item label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+}
+
+.setting-item input[type="checkbox"] {
+  margin: 0;
+}
+
+/* Theme Selector Radio Buttons */
+.theme-selector {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.theme-option {
+  position: relative;
+  flex: 1 1 140px;
+  max-width: 100px;
+}
+
+.theme-option input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.theme-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) 1rem;
+  border: 2px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  background-color: var(--color-bg);
+  min-width: 0;
+  width: 100%;
+}
+
+.theme-label:hover {
+  border-color: var(--color-accent);
+  background-color: var(--color-bg-tertiary);
+}
+
+.theme-option input[type="radio"]:checked + .theme-label {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent-bg);
+  box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.15);
+  transform: scale(1.02);
+}
+
+.theme-option input[type="radio"]:disabled + .theme-label {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.theme-icon {
+  font-size: 1rem;
+}
+
+.theme-name {
+  font-size: var(--font-size-normal);
+  font-weight: 500;
+  color: var(--color-text);
+}
+
+.setting-description {
+  margin-top: 0.25rem;
+  margin-left: 1.5rem;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}

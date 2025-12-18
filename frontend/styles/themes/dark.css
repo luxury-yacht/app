@@ -1,0 +1,358 @@
+[data-theme="dark"] {
+  /* Dark theme colors */
+  --color-bg: #1a1a1a;
+  --color-bg-secondary: #2d2d2d;
+  --color-bg-tertiary: #404040;
+  --color-text: #e0e0e0;
+  --color-text-secondary: #b0b0b0;
+  --color-text-tertiary: #707070;
+  --color-border: #404040;
+  --color-accent: #4dabf7;
+  --color-accent-hover: #339af0;
+  --color-accent-bg: rgba(77, 171, 247, 0.1);
+  --color-success: #51cf66;
+  --color-warning: #ffd43b;
+  --color-error: #ff6b6b;
+  --color-error-bg: #2d1b1b;
+  --color-error-border: #4a2c2c;
+  --color-error-text: #ff9999;
+  --color-table-header-bg: #272727;
+  --color-table-border: #333;
+  --color-sidebar-active: #4a4a4a;
+  --color-object-panel-link: #b1d7fe;
+  --color-text-inverse: #111111;
+  --color-success-bg: rgba(76, 175, 80, 0.15);
+  --color-warning-bg: rgba(255, 193, 7, 0.18);
+  --color-info-bg: rgba(77, 171, 247, 0.18);
+  --delta-success-bg: rgba(76, 175, 80, 0.2);
+  --delta-error-bg: rgba(235, 75, 90, 0.22);
+  --delta-warning-bg: rgba(255, 193, 7, 0.2);
+  --delta-info-bg: rgba(77, 171, 247, 0.22);
+
+  /* Button colors */
+  --button-generic-bg: #343a40;
+  --button-generic-hover: #495057;
+  --button-generic-text: #f8f9fa;
+  --button-save-bg: #28a77a;
+  --button-save-hover: #208864;
+  --button-save-text: #ffffff;
+  --button-cancel-bg: #6c757d;
+  --button-cancel-hover: #5a6268;
+  --button-cancel-text: #ffffff;
+  --button-edit-bg: #008cff;
+  --button-edit-hover: #0073d2;
+  --button-edit-text: #ffffff;
+  --button-danger-bg: #ae0011;
+  --button-danger-hover: #eb4b5a;
+  --button-danger-text: #ffffff;
+  --button-action-bg: #ffc81e;
+  --button-action-hover: #ebb40a;
+  --button-action-text: #212529;
+  --button-warning-bg: #e67e22;
+  --button-warning-hover: #d35400;
+  --button-warning-text: #ffffff;
+  --button-disabled-bg: #3a3f43;
+  --button-disabled-text: #8f9aa3;
+  --button-disabled-border: rgba(255, 255, 255, 0.08);
+
+  /* Badge colors */
+  --badge-blue-bg: #0277bd;
+  --badge-blue-text: #e1f5fe;
+  --badge-green-bg: #2e7d32;
+  --badge-green-text: #f1f8e9;
+  --badge-grey-bg: #6c757d;
+  --badge-grey-text: #dee2e6;
+  --badge-lime-bg: #827717;
+  --badge-lime-text: #f0f4c3;
+  --badge-orange-bg: #ef6c00;
+  --badge-orange-text: #fff3e0;
+  --badge-pink-bg: #c2185b;
+  --badge-pink-text: #fce4ec;
+  --badge-purple-bg: #8e24aa;
+  --badge-purple-text: #f3e5f5;
+  --badge-teal-bg: #00796b;
+  --badge-teal-text: #e0f2f1;
+  --badge-warning-bg: #f57c00;
+  --badge-warning-text: #fff3e0;
+
+  /* Status colors */
+  --status-available-bg: #2e7d32;
+  --status-available-text: #e8f5e8;
+  --status-bound-bg: #1976d2;
+  --status-bound-text: #e3f2fd;
+  --status-failed-bg: #d32f2f;
+  --status-failed-text: #ffebee;
+  --status-notready-text: #ef5350;
+  --status-released-bg: #f57c00;
+  --status-released-text: #fff3e0;
+  --status-restarted-text: #ec6f6f;
+  --status-warning-text: #ffb74d;
+
+  /* Code editor colors */
+  --code-surface: var(--color-bg-secondary);
+  --code-background: var(--color-bg);
+  --code-border: var(--color-border);
+  --code-text-primary: var(--color-text);
+  --code-text-muted: var(--color-text-secondary);
+  --code-gutter-text: var(--color-text-tertiary);
+  --code-caret: var(--color-accent);
+  --code-selection-bg: rgba(77, 171, 247, 0.24);
+  --code-selection-match-bg: rgba(255, 214, 102, 0.28);
+  --code-selection-match-outline: rgba(255, 214, 102, 0.55);
+  --code-selection-match-selected-bg: rgba(255, 214, 102, 0.4);
+  --code-active-line-bg: rgba(255, 255, 255, 0.04);
+  --code-active-gutter-bg: rgba(255, 255, 255, 0.08);
+  --code-focus-ring: rgba(77, 171, 247, 0.55);
+  --code-matching-bracket-bg: rgba(77, 171, 247, 0.18);
+  --code-matching-bracket-outline: rgba(77, 171, 247, 0.4);
+  --code-button-bg: rgba(255, 255, 255, 0.04);
+  --code-button-hover-bg: rgba(255, 255, 255, 0.08);
+  --code-token-string: #63e6be;
+  --code-token-number: #ffd8a8;
+  --code-token-boolean: #ffad60;
+  --code-token-nullish: #d0bfff;
+  --code-token-comment: #868e96;
+  --code-token-punctuation: #adb5bd;
+  --code-token-property: #74c0fc;
+  --code-token-tag: #8ce99a;
+  --code-token-operator: #e0e0e0;
+  --code-token-invalid: rgba(255, 107, 107, 0.6);
+
+  /* Scrollbar colors */
+  --scrollbar-track-bg: #1a1a1a;
+  --scrollbar-thumb-bg: #555;
+  --scrollbar-thumb-hover-bg: #777;
+  --scrollbar-corner-bg: #1a1a1a;
+
+  /* Shadows */
+  --shadow-interactive-soft: 0 2px 4px rgba(0, 0, 0, 0.35);
+
+  /* Toast/notification surface */
+  --toast-overlay-bg: rgba(12, 12, 16);
+  --toast-overlay-border: rgba(255, 255, 255, 0.05);
+  --toast-overlay-highlight: rgba(255, 255, 255, 0.08);
+  --toast-overlay-shadow: 0 26px 54px rgba(0, 0, 0, 0.55);
+  --toast-overlay-blur: 16px;
+  --toast-card-bg: rgba(28, 28, 32);
+  --toast-card-border: rgba(255, 255, 255, 0.06);
+  --toast-card-shadow: 0 14px 28px rgba(0, 0, 0, 0.45);
+  --toast-card-header-text: rgba(255, 255, 255);
+  --toast-card-header-bg: rgba(120, 0, 0);
+  --toast-card-details-bg: var(--color-bg-secondary);
+  --toast-text-primary: var(--color-text);
+  --toast-text-secondary: var(--color-text-secondary);
+  --toast-dismiss-text: rgba(255, 255, 255);
+  --toast-dismiss-bg: rgba(120, 0, 0);
+  --toast-dismiss-hover-bg: rgba(180, 0, 0);
+  --toast-dismiss-border: rgba(255, 255, 255, 0.08);
+  --toast-count-bg: rgba(235, 87, 87, 0.95);
+  --toast-count-text: #ffffff;
+
+  /* Log viewer */
+  --log-surface-bg: #1e1e1e;
+  --log-surface-maximized-bg: #1a1a1a;
+  --log-text-primary: #d4d4d4;
+  --log-metadata-text: var(--color-text-tertiary);
+  --log-controls-bg: #2a2a2a;
+  --log-controls-border: var(--color-border);
+  --log-controls-shadow: none;
+  --log-controls-maximized-bg: #2a2a2a;
+  --log-controls-maximized-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --log-placeholder-bg: var(--color-bg-secondary);
+  --log-placeholder-border: var(--color-border);
+  --log-placeholder-text: var(--color-text-secondary);
+  --log-maximize-hover-bg: rgba(255, 255, 255, 0.1);
+  --log-scroll-track: rgba(0, 0, 0, 0.1);
+  --log-scroll-thumb: rgba(255, 255, 255, 0.2);
+  --log-scroll-thumb-hover: rgba(255, 255, 255, 0.3);
+  --log-table-header-bg: rgba(255, 255, 255, 0.05);
+  --log-table-header-border: rgba(255, 255, 255, 0.1);
+  --log-table-row-border: rgba(255, 255, 255, 0.05);
+  --log-table-row-hover-bg: rgba(255, 255, 255, 0.02);
+  --log-table-cell-text: var(--color-text);
+  --log-cell-hover-bg: rgba(255, 255, 255, 0.024);
+  --log-cell-active-bg: rgba(255, 255, 255, 0.08);
+  --log-cell-copied-bg: rgba(76, 175, 80, 0.2);
+  --log-tooltip-bg: #2d2d2d;
+  --log-tooltip-text: #d4d4d4;
+  --log-tooltip-border: rgba(255, 255, 255, 0.2);
+  --log-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --log-fallback-retry-hover-bg: rgba(255, 193, 7, 0.2);
+
+  /* Log pod colors - for distinguishing pods in multi-pod log views */
+  --log-pod-color-1: #4CAF50;
+  --log-pod-color-2: #2196F3;
+  --log-pod-color-3: #FF9800;
+  --log-pod-color-4: #9C27B0;
+  --log-pod-color-5: #00BCD4;
+  --log-pod-color-6: #CDDC39;
+  --log-pod-color-7: #FFC107;
+  --log-pod-color-8: #E91E63;
+  --log-pod-color-9: #009688;
+  --log-pod-color-10: #795548;
+  --log-pod-color-11: #607D8B;
+  --log-pod-color-12: #FF5722;
+  --log-pod-color-fallback: #888888;
+
+  /* Dropdown */
+  --dropdown-trigger-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --dropdown-trigger-focus-shadow: 0 0 0 3px rgba(77, 171, 247, 0.25);
+  --dropdown-menu-bg: var(--color-bg-secondary);
+  --dropdown-menu-border: var(--color-border);
+  --dropdown-menu-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --dropdown-shortcut-text: rgba(255, 255, 255, 0.6);
+  --dropdown-shortcut-bg: rgba(255, 255, 255, 0.06);
+  --dropdown-shortcut-border: rgba(255, 255, 255, 0.12);
+
+  /* Actions menu */
+  --actions-menu-button-text: var(--color-text-secondary);
+  --actions-menu-button-hover-bg: var(--color-bg-tertiary);
+  --actions-menu-button-hover-border: var(--color-border);
+  --actions-menu-dropdown-bg: var(--color-bg-secondary);
+  --actions-menu-dropdown-border: var(--color-border);
+  --actions-menu-dropdown-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --actions-menu-item-hover-bg: var(--color-bg-tertiary);
+  --actions-menu-item-danger-hover-bg: rgba(220, 53, 69, 0.1);
+
+  /* Context menu */
+  --context-menu-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+
+  /* Segmented button */
+  --segmented-bg: rgb(52, 58, 64);
+  --segmented-option-text: rgba(248, 249, 250, 0.95);
+  --segmented-option-divider: rgba(255, 255, 255, 0.4);
+  --segmented-option-divider-opacity: 1;
+  --segmented-option-hover: rgb(73, 80, 87);
+  --segmented-option-active-bg: rgb(108, 117, 125);
+  --segmented-option-active-hover: rgb(90, 98, 104);
+  --segmented-option-active-text: rgb(255, 255, 255);
+
+  /* Shortcut help modal */
+  --shortcut-item-bg: rgba(255, 255, 255, 0.02);
+  --shortcut-item-border: rgba(255, 255, 255, 0.08);
+  --shortcut-key-bg: rgba(255, 255, 255, 0.06);
+  --shortcut-key-border: rgba(255, 255, 255, 0.12);
+  --shortcut-key-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  --shortcut-key-text: var(--color-text);
+
+  /* Refresh indicators */
+  --refresh-status-disabled: #666666;
+  --refresh-status-active: #66bb6a;
+  --refresh-status-active-shadow: rgba(102, 187, 106, 0.5);
+  --refresh-status-refreshing-shadow: rgba(102, 187, 106, 0.7);
+  --refresh-status-retrying: #ffca28;
+  --refresh-status-retrying-shadow: rgba(255, 202, 40, 0.7);
+  --refresh-status-offline: #ef5350;
+  --refresh-status-offline-shadow: rgba(239, 83, 80, 0.8);
+  --refresh-status-auth: #f06292;
+  --refresh-status-auth-shadow: rgba(240, 98, 146, 0.8);
+  --refresh-status-rebuilding: #64b5f6;
+  --refresh-status-rebuilding-shadow: rgba(100, 181, 246, 0.8);
+  --refresh-metrics-dot: #ffb74d;
+  --refresh-metrics-dot-shadow: rgba(255, 183, 77, 0.7);
+  /* Modal overlays */
+  --modal-overlay-bg: rgba(0, 0, 0, 0.7);
+  --modal-container-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
+  --modal-content-bg: var(--color-bg);
+  --modal-footer-bg: var(--color-bg-secondary);
+  --modal-scroll-thumb: var(--color-border);
+  --modal-scroll-thumb-hover: var(--color-border-hover, rgba(255, 255, 255, 0.4));
+
+  /* Editor content shared tokens */
+  --editor-scroll-track: rgba(0, 0, 0, 0.1);
+  --editor-scroll-thumb: rgba(255, 255, 255, 0.2);
+  --editor-scroll-thumb-hover: rgba(255, 255, 255, 0.3);
+
+  /* Helm values tab */
+  --helm-values-override-bg: rgba(255, 152, 0, 0.2);
+
+  /* YAML tab */
+  --yaml-validation-bg: rgba(220, 53, 69, 0.15);
+  --yaml-validation-border: rgba(220, 53, 69, 0.35);
+  --yaml-notice-bg: rgba(255, 215, 0, 0.1);
+  --yaml-notice-border: rgba(255, 215, 0, 0.25);
+  --yaml-notice-text: var(--color-text-secondary);
+  --yaml-drift-bg: rgba(0, 0, 0, 0.25);
+
+  /* Utilization indicators */
+  --utilization-indicator-usage-normal: var(--resourcebar-usage-normal);
+  --utilization-indicator-usage-warning: var(--resourcebar-usage-warning);
+  --utilization-indicator-usage-critical: var(--resourcebar-usage-critical);
+  --utilization-indicator-allocatable: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  --utilization-indicator-allocatable-overcommit: repeating-linear-gradient(
+    45deg,
+    rgba(251, 191, 36, 0.7),
+    rgba(251, 191, 36, 0.7) 4px,
+    rgba(245, 158, 11, 0.45) 4px,
+    rgba(245, 158, 11, 0.45) 8px
+  );
+  --utilization-indicator-request: linear-gradient(90deg, #94a3b8 0%, #64748b 100%);
+  --utilization-indicator-limit: repeating-linear-gradient(
+    45deg,
+    #fbbf24,
+    #fbbf24 4px,
+    #f59e0b 4px,
+    #f59e0b 8px
+  );
+  --utilization-indicator-limit-overcommit: repeating-linear-gradient(
+    45deg,
+    #ef4444,
+    #ef4444 4px,
+    #dc2626 4px,
+    #dc2626 8px
+  );
+  --utilization-overcommitted-text: var(--resourcebar-warning-text);
+
+  /* Events tab */
+  --events-scroll-track: var(--editor-scroll-track);
+  --events-scroll-thumb: var(--editor-scroll-thumb);
+  --events-scroll-thumb-hover: var(--editor-scroll-thumb-hover);
+
+  /* Resource bar */
+  --resourcebar-track-bg: rgba(255, 255, 255, 0.08);
+  --resourcebar-overcommit-track-bg: rgba(255, 255, 255, 0.08);
+  --resourcebar-overcommit-fill: linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%);
+  --resourcebar-overcommit-shadow: 0 0 4px rgba(139, 92, 246, 0.3);
+  --resourcebar-reserved-fill: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.15),
+    rgba(255, 255, 255, 0.15) 4px,
+    rgba(255, 255, 255, 0.05) 4px,
+    rgba(255, 255, 255, 0.05) 8px
+  );
+  --resourcebar-marker-request: rgba(255, 255, 255, 0.8);
+  --resourcebar-marker-request-shadow: 0 0 3px rgba(255, 255, 255, 0.4);
+  --resourcebar-marker-limit: #fbbf24;
+  --resourcebar-marker-limit-shadow: 0 0 3px rgba(251, 191, 36, 0.5);
+  --resourcebar-empty-bg: rgba(255, 255, 255, 0.05);
+  --resourcebar-status-stale: #ffb74d;
+  --resourcebar-status-error: #f87171;
+  --resourcebar-status-shadow: 0 0 4px rgba(255, 183, 77, 0.5);
+  --resourcebar-status-stale-shadow: 0 0 4px rgba(255, 183, 77, 0.5);
+  --resourcebar-status-error-shadow: 0 0 4px rgba(248, 113, 113, 0.5);
+  --resourcebar-usage-normal: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+  --resourcebar-usage-warning: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+  --resourcebar-usage-critical: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+  --resourcebar-usage-unbounded: linear-gradient(90deg, #6b7280 0%, #4b5563 100%);
+  --resourcebar-usage-shadow-normal: 0 0 8px rgba(34, 197, 94, 0.3);
+  --resourcebar-usage-shadow-warning: 0 0 8px rgba(245, 158, 11, 0.3);
+  --resourcebar-usage-shadow-critical: 0 0 8px rgba(239, 68, 68, 0.3);
+  --resourcebar-usage-shadow-unbounded: 0 0 8px rgba(107, 114, 128, 0.3);
+  --resourcebar-tooltip-bg: var(--color-bg-secondary);
+  --resourcebar-tooltip-border: var(--color-border);
+  --resourcebar-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --resourcebar-warning-text: var(--color-warning, #f59e0b);
+
+  /* Metrics availability banner */
+  --metrics-banner-bg: rgba(255, 183, 77, 0.16);
+  --metrics-banner-border: rgba(255, 183, 77, 0.45);
+  --metrics-banner-text: #ffcb7d;
+  --metrics-banner-dot: #ffcb7d;
+  --metrics-banner-dot-shadow: 0 0 6px rgba(255, 183, 77, 0.5);
+}

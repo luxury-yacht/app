@@ -1,0 +1,19 @@
+<component type="desktop-application">
+  <id>{{.AppShortName}}.desktop</id>
+  <name>{{.AppLongName}}</name>
+  <summary>A Kubernetes cluster management app. Sail the seas of Kubernetes in style!</summary>
+  <developer_name>Luxury Yacht</developer_name>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-proprietary</project_license>
+  <url type="homepage">https://luxury-yacht.app</url>
+  <url type="bugtracker">https://github.com/luxury-yacht/app/issues</url>
+  <provides>
+    <binary>{{.AppShortName}}</binary>
+  </provides>
+  <description>
+    <p>Luxury Yacht helps you inspect, troubleshoot, and manage your Kubernetes clusters.</p>
+  </description>
+  <releases>
+    <release version="{{.Version}}"/>
+  </releases>
+</component>

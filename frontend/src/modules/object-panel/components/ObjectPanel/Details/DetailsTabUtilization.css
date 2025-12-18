@@ -1,0 +1,137 @@
+/* Utilization Component Styles */
+
+.utilization-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  container-type: inline-size;
+}
+
+.utilization-resources-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+
+/* Width at which the resources should switch to a single column */
+@container (max-width: 600px) {
+  .utilization-resources-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.utilization-resource {
+  border-radius: var(--border-radius);
+}
+
+.utilization-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.utilization-title {
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.utilization-usage {
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-primary);
+}
+
+.utilization-details {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  padding-top: 0.75rem;
+}
+
+/* Width at which the detail info should switch to 2 columns */
+@container (max-width: 850px) {
+  .utilization-details {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.utilization-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.utilization-detail-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.utilization-color-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.utilization-color-indicator.usage.normal {
+  background: var(--utilization-indicator-usage-normal);
+}
+
+.utilization-color-indicator.usage.warning {
+  background: var(--utilization-indicator-usage-warning);
+}
+
+.utilization-color-indicator.usage.critical {
+  background: var(--utilization-indicator-usage-critical);
+}
+
+.utilization-color-indicator.allocatable {
+  background: var(--utilization-indicator-allocatable);
+  opacity: 0.7;
+}
+
+.utilization-color-indicator.allocatable.overcommitted {
+  background: var(--utilization-indicator-allocatable-overcommit);
+}
+
+.utilization-color-indicator.request {
+  background: var(--utilization-indicator-request);
+}
+
+.utilization-color-indicator.limit {
+  background: var(--utilization-indicator-limit);
+  opacity: 0.7;
+}
+
+.utilization-color-indicator.limit.overcommitted {
+  background: var(--utilization-indicator-limit-overcommit);
+}
+
+.utilization-detail-value {
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+}
+
+.utilization-detail-value .overcommitted-text {
+  color: var(--utilization-overcommitted-text);
+  font-weight: 600;
+}
+
+.utilization-empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+  background: var(--color-bg-primary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+}

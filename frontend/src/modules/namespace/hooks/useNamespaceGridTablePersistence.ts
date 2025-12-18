@@ -1,0 +1,106 @@
+import { useMemo, useState } from 'react';
+import type {
+  ColumnWidthState,
+  GridColumnDefinition,
+  GridTableFilterState,
+} from '@shared/components/tables/GridTable.types';
+import type { SortConfig } from '@hooks/useTableSort';
+import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import type { GridTableFilterPersistenceOptions } from '@shared/components/tables/persistence/gridTablePersistence';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+
+export interface NamespaceGridTablePersistenceParams<T> {
+  viewId: string;
+  namespace: string;
+  columns: GridColumnDefinition<T>[];
+  data: T[];
+  keyExtractor: (item: T, index: number) => string;
+  defaultSort?: SortConfig;
+  filterOptions?: GridTableFilterPersistenceOptions;
+}
+
+export interface NamespaceGridTablePersistenceResult {
+  sortConfig: SortConfig;
+  onSortChange: (next: SortConfig) => void;
+  columnWidths: Record<string, ColumnWidthState> | null;
+  setColumnWidths: (next: Record<string, ColumnWidthState>) => void;
+  columnVisibility: Record<string, boolean> | null;
+  setColumnVisibility: (next: Record<string, boolean>) => void;
+  filters: GridTableFilterState;
+  setFilters: (next: GridTableFilterState) => void;
+  isNamespaceScoped: boolean;
+  resetState: () => void;
+}
+
+export function useNamespaceGridTablePersistence<T>({
+  viewId,
+  namespace,
+  columns,
+  data,
+  keyExtractor,
+  defaultSort = { key: '', direction: null },
+  filterOptions,
+}: NamespaceGridTablePersistenceParams<T>): NamespaceGridTablePersistenceResult {
+  const { selectedKubeconfig } = useKubeconfig();
+  const isNamespaceScoped = namespace !== ALL_NAMESPACES_SCOPE;
+  const [localSort, setLocalSort] = useState<SortConfig>(defaultSort);
+
+  const {
+    sortConfig: persistedSort,
+    setSortConfig: setPersistedSort,
+    columnWidths,
+    setColumnWidths,
+    columnVisibility,
+    setColumnVisibility,
+    filters,
+    setFilters,
+    resetState,
+  } = useGridTablePersistence<T>({
+    viewId,
+    clusterIdentity: selectedKubeconfig,
+    namespace,
+    isNamespaceScoped,
+    columns,
+    data,
+    keyExtractor,
+    filterOptions: {
+      ...(filterOptions ?? {}),
+      isNamespaceScoped,
+    },
+  });
+
+  const sortConfig = useMemo<SortConfig>(
+    () => persistedSort ?? localSort,
+    [localSort, persistedSort]
+  );
+
+  const handleSortChange = useMemo(
+    () => (next: SortConfig) => {
+      setLocalSort(next);
+      setPersistedSort(next);
+    },
+    [setPersistedSort]
+  );
+
+  const handleReset = useMemo(
+    () => () => {
+      setLocalSort(defaultSort);
+      resetState();
+    },
+    [defaultSort, resetState]
+  );
+
+  return {
+    sortConfig,
+    onSortChange: handleSortChange,
+    columnWidths,
+    setColumnWidths,
+    columnVisibility,
+    setColumnVisibility,
+    filters,
+    setFilters,
+    isNamespaceScoped,
+    resetState: handleReset,
+  };
+}

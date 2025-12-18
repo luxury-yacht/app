@@ -1,0 +1,279 @@
+/* Object Details Flyout Styles */
+
+.object-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--color-bg);
+  border-left: 1px solid var(--color-border);
+  z-index: var(--z-index-panel);
+  display: flex;
+  flex-direction: column;
+}
+
+.object-panel.opening {
+  animation: slideInFromRight 0.3s ease-out;
+}
+
+.object-panel-resizer {
+  position: absolute;
+  left: -2px;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  cursor: ew-resize;
+  transition: background-color var(--transition-fast);
+  z-index: var(--z-index-base);
+}
+
+.object-panel-resizer:hover {
+  background-color: var(--color-accent);
+}
+
+.object-panel-resizer:active {
+  background-color: var(--color-accent-hover);
+}
+
+.object-panel-header {
+  display: flex;
+  align-items: center;
+  padding: 10px 0px;
+  /* border-bottom: 1px solid var(--color-border); */
+  background-color: var(--color-bg-secondary);
+  position: relative;
+}
+
+.object-panel-navigation {
+  padding-right: 15px;
+}
+
+.object-panel-nav-controls {
+  position: absolute;
+  left: 45px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 4px;
+}
+
+.object-panel-nav-button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius-sm);
+  transition: all 0.2s;
+}
+
+.object-panel-nav-button:hover:not(:disabled) {
+  background-color: var(--color-bg-tertiary);
+  border-color: var(--color-accent);
+}
+
+.object-panel-nav-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.object-panel-nav-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--color-text-tertiary);
+}
+
+.object-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 120px;
+  flex: 1;
+}
+
+.object-panel-title .badge {
+  flex-shrink: 0;
+}
+
+.object-panel-title h2 {
+  margin: 0;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-bold);
+  padding-left: 0.5rem;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.object-panel-close-button {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: none;
+  color: var(--color-text-secondary);
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius-sm);
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+
+.object-panel-close-button:hover {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+/* Tabs use the shared styles from tabs.css */
+.object-panel .tab {
+  cursor: pointer;
+}
+
+/* Make the panel body a flex container */
+.object-panel-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Tabs should not scroll - fixed at top */
+.object-panel-body > .tabs {
+  flex-shrink: 0;
+}
+
+.object-panel-content {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  position: relative;
+}
+
+.object-panel-tab-content {
+  height: 100%;
+}
+
+.object-panel-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-normal);
+}
+
+.object-panel-empty-state {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-xl);
+  color: var(--color-text-secondary);
+  gap: var(--spacing-md);
+}
+
+.object-panel-empty-state h3 {
+  margin: 0;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+}
+
+/* Closing animations */
+.object-panel.closing {
+  animation: slideOutToRight 0.3s ease-in forwards;
+}
+
+/* Table row hover effect for clickable rows */
+.table-container tbody tr:hover {
+  background-color: var(--color-bg-tertiary);
+  transition: background-color 0.2s;
+}
+
+/* Dockable Object Panel Header Styles */
+.object-panel-header-content {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  padding: 0 10px;
+}
+
+.nav-controls {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.nav-button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius-sm);
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.nav-button:hover:not(:disabled) {
+  background-color: var(--color-bg-tertiary);
+  border-color: var(--color-accent);
+}
+
+.nav-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.nav-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: var(--color-text-tertiary);
+}
+
+.nav-position {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.object-panel-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.object-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.object-namespace {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}

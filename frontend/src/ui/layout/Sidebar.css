@@ -1,0 +1,301 @@
+/* Sidebar */
+
+.sidebar {
+  min-width: 200px;
+  max-width: 300px;
+  background-color: var(--color-bg-secondary);
+  position: relative;
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  transition:
+    transform 0.3s ease,
+    opacity 0.3s ease;
+  transform-origin: left;
+  height: 100%;
+}
+
+/* Sidebar content styles */
+
+.sidebar-content {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  padding-left: 1rem;
+  overflow-y: hidden;
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-section {
+  margin-bottom: 1.5rem;
+}
+
+.sidebar-section:last-child {
+  margin-bottom: 0;
+}
+
+.sidebar-section.namespaces-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+/* sidebar section header (CLUSTER, NAMESPACE) */
+.sidebar h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-bold);
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  color: var(--color-text-tertiary);
+  text-transform: uppercase;
+}
+
+.sidebar h3 svg {
+  flex-shrink: 0;
+}
+
+/* Namespace views container with animation */
+.namespace-views {
+  max-height: 400px;
+  overflow: hidden;
+  animation: expandDown 0.3s ease-out;
+  transform-origin: top;
+}
+
+@keyframes expandDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 400px;
+  }
+}
+
+.cluster-items {
+  margin-top: 0.5rem;
+}
+
+.namespace-items {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text);
+  font-size: var(--font-size-normal);
+  padding: 0.2rem 0.5rem;
+  margin-bottom: 0.2rem;
+  border-radius: var(--border-radius-round);
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+  -webkit-app-region: no-drag;
+  overflow: hidden;
+  cursor: pointer;
+  outline: none;
+}
+
+.sidebar-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-item svg {
+  flex-shrink: 0;
+}
+
+.sidebar-item:not(.active):hover {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.sidebar.keyboard-mode .sidebar-item:not(.active):hover {
+  background-color: transparent;
+  color: inherit;
+}
+
+.sidebar-item.active {
+  background-color: var(--color-sidebar-active);
+  color: #fff;
+}
+
+.sidebar-item.keyboard-preview {
+  box-shadow: inset 0 0 0 2px var(--color-accent, #4c83ff);
+}
+
+/* Non-clickable header items like "Resources" */
+.sidebar-item.header {
+  cursor: default;
+  pointer-events: none;
+}
+
+.sidebar-item.header:hover {
+  background-color: transparent;
+  color: var(--color-text);
+}
+
+/* Clickable header items (like collapsible Resources) */
+.sidebar-item.header.clickable {
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.sidebar-item.header.clickable:hover {
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+/* Indented child items under Resources or expanded namespaces */
+.sidebar-item.indented {
+  padding-left: 1.8rem;
+}
+
+.sidebar-item.dimmed {
+  color: var(--color-text-secondary);
+  font-style: italic;
+}
+
+.sidebar-item.dimmed:hover {
+  color: var(--color-text-secondary);
+}
+
+/* Combined active and dimmed state */
+.sidebar-item.active.dimmed {
+  color: #fff;
+  background-color: var(--color-sidebar-active);
+}
+
+.sidebar-item.workloads-unknown {
+  color: var(--color-warning, #f59e0b);
+}
+
+.sidebar-item.workloads-unknown:hover {
+  color: var(--color-warning, #f59e0b);
+}
+
+.sidebar-item .namespace-status-badge {
+  margin-left: auto;
+  padding: 0 0.4rem;
+  border-radius: var(--border-radius-round);
+  background-color: var(--color-warning-bg, rgba(255, 193, 7, 0.2));
+  color: var(--color-warning, #f59e0b);
+  font-size: 0.675rem;
+  font-weight: var(--font-weight-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Sidebar toggle button */
+
+.sidebar-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 10;
+  background: transparent;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--border-radius);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+  -webkit-app-region: no-drag; /* Make button clickable in draggable area */
+  flex-shrink: 0;
+}
+
+.sidebar-toggle:hover {
+  background-color: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+.sidebar-toggle:active {
+  background-color: var(--color-bg-active);
+}
+
+/* Sidebar Collapsed styles */
+
+.sidebar.collapsed {
+  min-width: 30px;
+  max-width: 30px;
+}
+
+.sidebar.collapsed .sidebar-content {
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  position: absolute;
+  top: 0;
+  right: auto;
+}
+
+/* Sidebar Resizer styles */
+
+.sidebar-resizer {
+  width: 4px;
+  background-color: var(--color-bg-secondary);
+  cursor: col-resize;
+  position: relative;
+  /* border-right: 1px solid var(--color-border); */
+  transition: background-color var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.sidebar-resizer:hover {
+  background-color: var(--color-accent);
+}
+
+.sidebar-resizer:active {
+  background-color: var(--color-accent-hover);
+}
+
+.keyboard-focus-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0.5rem 0.75rem;
+  background: rgba(0, 0, 0, 0.35);
+  border-top: 1px dashed rgba(255, 255, 255, 0.25);
+  color: var(--color-text);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.keyboard-focus-overlay__label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-tertiary);
+  margin-bottom: 0.1rem;
+}
+
+.keyboard-focus-overlay__value {
+  font-family: var(--font-family-mono, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text);
+}

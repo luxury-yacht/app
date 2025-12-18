@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "checkJs": false,
+    "allowJs": true,
+    "noEmit": true
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "wailsjs/**/*.js"
+  ],
+  "typeAcquisition": {
+    "enable": false
+  }
+}
