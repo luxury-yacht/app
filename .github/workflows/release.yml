@@ -55,22 +55,22 @@ jobs:
             goos: darwin
             targets: darwin/arm64,darwin/amd64
             artifact_name: artifacts-darwin
-          # - runner: windows-latest
-          #   goos: windows
-          #   targets: windows/amd64
-          #   artifact_name: artifacts-windows-amd64
-          # - runner: windows-latest-arm
-          #   goos: windows
-          #   targets: windows/arm64
-          #   artifact_name: artifacts-windows-arm64
-          # - runner: ubuntu-latest
-          #   goos: linux
-          #   targets: linux/amd64
-          #   artifact_name: artifacts-linux-amd64
-          # - runner: ubuntu-latest-arm
-          #   goos: linux
-          #   targets: linux/arm64
-          #   artifact_name: artifacts-linux-arm64
+          - runner: windows-latest
+            goos: windows
+            targets: windows/amd64
+            artifact_name: artifacts-windows-amd64
+          - runner: windows-latest-arm
+            goos: windows
+            targets: windows/arm64
+            artifact_name: artifacts-windows-arm64
+          - runner: ubuntu-latest
+            goos: linux
+            targets: linux/amd64
+            artifact_name: artifacts-linux-amd64
+          - runner: ubuntu-latest-arm
+            goos: linux
+            targets: linux/arm64
+            artifact_name: artifacts-linux-arm64
 
     runs-on: ${{ matrix.runner }}
     name: Build ${{ matrix.goos }} (${{ matrix.targets}})
