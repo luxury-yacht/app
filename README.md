@@ -70,7 +70,7 @@ mage build
 To install the app locally:
 
 ```bash
-make install:unsigned
+mage install:unsigned
 ```
 
 ## Versions
