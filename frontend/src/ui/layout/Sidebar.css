@@ -61,8 +61,8 @@
   flex-shrink: 0;
 }
 
-/* Namespace views container with animation */
-.namespace-views {
+/* Sidebar views container with animation (namespace/resources). */
+.sidebar-views {
   max-height: 400px;
   overflow: hidden;
   animation: expandDown 0.3s ease-out;

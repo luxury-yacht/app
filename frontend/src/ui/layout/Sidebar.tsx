@@ -138,7 +138,7 @@ function Sidebar() {
           const parentContainer = namespaceElement.closest('.namespace-items');
           if (parentContainer) {
             // Get the expanded views container that follows this namespace item
-            const expandedViews = namespaceElement.parentElement?.querySelector('.namespace-views');
+            const expandedViews = namespaceElement.parentElement?.querySelector('.sidebar-views');
             if (expandedViews) {
               // Calculate if we need to scroll to show the entire expanded content
               const containerRect = parentContainer.getBoundingClientRect();
@@ -268,29 +268,33 @@ function Sidebar() {
                   <ClusterResourcesIcon width={14} height={14} />
                   <span>Resources</span>
                 </div>
-                {clusterResourcesExpanded &&
-                  resourceViews.map((view) => (
-                    <div
-                      key={view.id}
-                      className={buildSidebarItemClassName(['sidebar-item', 'indented'], {
-                        kind: 'cluster-view',
-                        view: view.id,
-                      })}
-                      onClick={() => {
-                        if (!keyboardActivationRef.current) {
-                          clearKeyboardPreview();
-                        }
-                        handleClusterViewSelect(view.id);
-                      }}
-                      data-sidebar-focusable="true"
-                      data-sidebar-target-kind="cluster-view"
-                      data-sidebar-target-view={view.id}
-                      tabIndex={-1}
-                    >
-                      <CategoryIcon width={14} height={14} />
-                      <span>{view.label}</span>
-                    </div>
-                  ))}
+                {clusterResourcesExpanded && (
+                  <div className="sidebar-views">
+                    {/* Animate Resources the same way as namespace views. */}
+                    {resourceViews.map((view) => (
+                      <div
+                        key={view.id}
+                        className={buildSidebarItemClassName(['sidebar-item', 'indented'], {
+                          kind: 'cluster-view',
+                          view: view.id,
+                        })}
+                        onClick={() => {
+                          if (!keyboardActivationRef.current) {
+                            clearKeyboardPreview();
+                          }
+                          handleClusterViewSelect(view.id);
+                        }}
+                        data-sidebar-focusable="true"
+                        data-sidebar-target-kind="cluster-view"
+                        data-sidebar-target-view={view.id}
+                        tabIndex={-1}
+                      >
+                        <CategoryIcon width={14} height={14} />
+                        <span>{view.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -355,7 +359,7 @@ function Sidebar() {
                           )}
                         </div>
                         {isExpanded && (
-                          <div className="namespace-views">
+                          <div className="sidebar-views">
                             {namespaceViews.map((view) => (
                               <div
                                 key={view.id}
