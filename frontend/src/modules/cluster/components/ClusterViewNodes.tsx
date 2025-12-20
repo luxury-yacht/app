@@ -95,6 +95,8 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
         }),
         cf.createTextColumn<ClusterNodeRow>('name', 'Name', (row) => row.name || '', {
           onClick: (row) => handleNodeClick(row),
+          // Use the shared link styling for object panel navigation.
+          getClassName: () => 'object-panel-link',
           isInteractive: () => true,
         }),
         (() => {
