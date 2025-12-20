@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -23,6 +24,7 @@ import (
 	corelisters "k8s.io/client-go/listers/core/v1"
 	discoverylisters "k8s.io/client-go/listers/discovery/v1"
 	networklisters "k8s.io/client-go/listers/networking/v1"
+	policylisters "k8s.io/client-go/listers/policy/v1"
 	rbaclisters "k8s.io/client-go/listers/rbac/v1"
 	storagelisters "k8s.io/client-go/listers/storage/v1"
 )
@@ -251,6 +253,25 @@ func NewLimitRangeLister(t testing.TB, limits ...*corev1.LimitRange) corelisters
 		}
 	}
 	return corelisters.NewLimitRangeLister(indexer)
+}
+
+// NewPodDisruptionBudgetLister constructs a PDB lister backed by an indexer.
+func NewPodDisruptionBudgetLister(
+	t testing.TB,
+	budgets ...*policyv1.PodDisruptionBudget,
+) policylisters.PodDisruptionBudgetLister {
+	t.Helper()
+
+	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+	for _, budget := range budgets {
+		if budget == nil {
+			continue
+		}
+		if err := indexer.Add(budget); err != nil {
+			t.Fatalf("failed to add pod disruption budget %s/%s to indexer: %v", budget.Namespace, budget.Name, err)
+		}
+	}
+	return policylisters.NewPodDisruptionBudgetLister(indexer)
 }
 
 // NewHorizontalPodAutoscalerLister constructs an HPA lister backed by an indexer.

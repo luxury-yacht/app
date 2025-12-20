@@ -12,9 +12,11 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	networkingv1 "k8s.io/api/networking/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -463,10 +465,28 @@ func TestNamespaceQuotasBuilder(t *testing.T) {
 		},
 		Spec: corev1.LimitRangeSpec{Limits: []corev1.LimitRangeItem{{Type: corev1.LimitTypePod}}},
 	}
+	minAvailable := intstr.FromInt(1)
+	pdb := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "pdb-policy",
+			Namespace:         "default",
+			ResourceVersion:   "33",
+			CreationTimestamp: metav1.NewTime(now.Add(-10 * time.Minute)),
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MinAvailable: &minAvailable,
+		},
+		Status: policyv1.PodDisruptionBudgetStatus{
+			CurrentHealthy:     1,
+			DesiredHealthy:     2,
+			DisruptionsAllowed: 1,
+		},
+	}
 
 	builder := &NamespaceQuotasBuilder{
 		quotaLister: testsupport.NewResourceQuotaLister(t, quota),
 		limitLister: testsupport.NewLimitRangeLister(t, limit),
+		pdbLister:   testsupport.NewPodDisruptionBudgetLister(t, pdb),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:default")
@@ -475,10 +495,22 @@ func TestNamespaceQuotasBuilder(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceQuotasSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 2)
+	require.Len(t, payload.Resources, 3)
 	for _, summary := range payload.Resources {
 		require.NotEmpty(t, summary.Age)
 	}
+	var pdbSummary *QuotaSummary
+	for i := range payload.Resources {
+		if payload.Resources[i].Kind == "PodDisruptionBudget" {
+			pdbSummary = &payload.Resources[i]
+			break
+		}
+	}
+	// Ensure PDB-specific fields are present for the quotas view.
+	require.NotNil(t, pdbSummary)
+	require.NotNil(t, pdbSummary.MinAvailable)
+	require.NotNil(t, pdbSummary.Status)
+	require.Equal(t, int32(1), pdbSummary.Status.DisruptionsAllowed)
 }
 
 func TestNamespaceQuotasBuilderAllNamespaces(t *testing.T) {
@@ -508,10 +540,24 @@ func TestNamespaceQuotasBuilderAllNamespaces(t *testing.T) {
 			CreationTimestamp: metav1.NewTime(now.Add(-20 * time.Minute)),
 		},
 	}
+	maxUnavailable := intstr.FromInt(2)
+	pdbDefault := &policyv1.PodDisruptionBudget{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "pdb-policy",
+			Namespace:         "default",
+			ResourceVersion:   "34",
+			CreationTimestamp: metav1.NewTime(now.Add(-15 * time.Minute)),
+		},
+		Spec: policyv1.PodDisruptionBudgetSpec{
+			MaxUnavailable: &maxUnavailable,
+		},
+		Status: policyv1.PodDisruptionBudgetStatus{DisruptionsAllowed: 2},
+	}
 
 	builder := &NamespaceQuotasBuilder{
 		quotaLister: testsupport.NewResourceQuotaLister(t, quotaDefault, quotaOther),
 		limitLister: testsupport.NewLimitRangeLister(t, limitDefault),
+		pdbLister:   testsupport.NewPodDisruptionBudgetLister(t, pdbDefault),
 	}
 
 	snapshot, err := builder.Build(context.Background(), "namespace:all")
@@ -521,7 +567,7 @@ func TestNamespaceQuotasBuilderAllNamespaces(t *testing.T) {
 
 	payload, ok := snapshot.Payload.(NamespaceQuotasSnapshot)
 	require.True(t, ok)
-	require.Len(t, payload.Resources, 3)
+	require.Len(t, payload.Resources, 4)
 
 	namespaces := make(map[string]struct{})
 	for _, entry := range payload.Resources {

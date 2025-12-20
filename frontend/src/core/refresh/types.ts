@@ -438,6 +438,14 @@ export interface NamespaceQuotaSummary {
   namespace: string;
   details: string;
   age: string;
+  // PDB-only fields used by the quotas view.
+  minAvailable?: string;
+  maxUnavailable?: string;
+  status?: {
+    disruptionsAllowed?: number;
+    currentHealthy?: number;
+    desiredHealthy?: number;
+  };
 }
 
 export interface NamespaceQuotasSnapshotPayload {

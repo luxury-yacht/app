@@ -35,12 +35,17 @@ export interface QuotaData {
   hard?: Record<string, string | number>;
   used?: Record<string, string | number>;
   limits?: any;
-  minAvailable?: number;
-  maxUnavailable?: number;
+  // PDB values can be absolute numbers or percentage strings.
+  minAvailable?: string | number;
+  maxUnavailable?: string | number;
   currentHealthy?: number;
   desiredHealthy?: number;
+  status?: {
+    disruptionsAllowed?: number;
+    currentHealthy?: number;
+    desiredHealthy?: number;
+  };
   scopes?: string[];
-  status?: any;
   age?: string;
   [key: string]: any; // Allow additional fields for flexibility
 }

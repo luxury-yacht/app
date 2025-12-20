@@ -213,6 +213,13 @@ const NAMESPACE_CAPABILITY_SPECS: Partial<
       verbs: ['list', 'update', 'delete'],
       feature: 'Namespace quotas',
     },
+    {
+      // Include PDBs so the quotas view can surface disruption policies.
+      id: 'namespace:poddisruptionbudgets',
+      resourceKind: 'PodDisruptionBudget',
+      verbs: ['list', 'update', 'delete'],
+      feature: 'Namespace quotas',
+    },
   ],
   events: [
     {
