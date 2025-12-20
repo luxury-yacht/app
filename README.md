@@ -2,6 +2,8 @@
 
 Luxury Yacht is a desktop app for managing Kubernetes clusters, available for Linux, macOS, and Windows.
 
+![Luxury Yacht](docs/images/objectpanel-float.png)
+
 New to Luxury Yacht? Read the [primer](docs/primer.md)!
 
 ## Installation
