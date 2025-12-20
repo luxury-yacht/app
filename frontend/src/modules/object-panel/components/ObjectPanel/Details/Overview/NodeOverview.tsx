@@ -64,25 +64,8 @@ export const NodeOverview: React.FC<NodeOverviewProps> = ({
       {externalIP && <OverviewItem label="External IP" value={externalIP} />}
       {hostname && hostname !== name && <OverviewItem label="Hostname" value={hostname} />}
 
-      {/* Pod capacity - highlight if near capacity */}
-      {podsCount !== undefined && podsCapacity && (
-        <OverviewItem
-          label="Pods"
-          value={(() => {
-            const capacity = parseInt(podsCapacity);
-            const usage = podsCount;
-            const percentUsed = (usage / capacity) * 100;
-            const displayValue = `${usage}/${capacity}`;
-
-            if (percentUsed >= 90) {
-              return <span className="status-badge warning">{displayValue}</span>;
-            } else if (percentUsed >= 75) {
-              return <span className="status-badge info">{displayValue}</span>;
-            }
-            return displayValue;
-          })()}
-        />
-      )}
+      {/* Pod count and capacity. If either value is unknown, display `unknown` */}
+      <OverviewItem label="Pods" value={`${podsCount ?? 'unknown'}/${podsCapacity ?? 'unknown'}`} />
 
       {/* Version information - combine related fields */}
       {version && <OverviewItem label="Kubernetes" value={version} />}

@@ -121,10 +121,13 @@ describe('PolicyOverview', () => {
       currentHealthy: 4,
       desiredHealthy: 5,
       disruptionsAllowed: 2,
+      selector: { app: 'web' },
     });
 
     expect(getValueForLabel(container, 'Min Available')?.textContent).toBe('50%');
     expect(getValueForLabel(container, 'Disruptions Allowed')?.textContent).toBe('2');
+    const selectorChip = container.querySelector('.metadata-chip--selector');
+    expect(selectorChip?.textContent).toBe('Selector');
   });
 
   it('renders ResourceQuota hard and used limits', async () => {
