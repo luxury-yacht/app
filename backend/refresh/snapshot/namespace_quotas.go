@@ -7,9 +7,11 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
 	corelisters "k8s.io/client-go/listers/core/v1"
+	policylisters "k8s.io/client-go/listers/policy/v1"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
@@ -20,10 +22,11 @@ const (
 	namespaceQuotasEntryLimit = 1000
 )
 
-// NamespaceQuotasBuilder constructs ResourceQuota/LimitRange summaries.
+// NamespaceQuotasBuilder constructs ResourceQuota/LimitRange/PodDisruptionBudget summaries.
 type NamespaceQuotasBuilder struct {
 	quotaLister corelisters.ResourceQuotaLister
 	limitLister corelisters.LimitRangeLister
+	pdbLister   policylisters.PodDisruptionBudgetLister
 }
 
 // NamespaceQuotasSnapshot payload for quotas tab.
@@ -31,13 +34,24 @@ type NamespaceQuotasSnapshot struct {
 	Resources []QuotaSummary `json:"resources"`
 }
 
-// QuotaSummary captures quota/limit range info.
+// QuotaSummary captures quota/limit range/PDB info.
 type QuotaSummary struct {
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 	Details   string `json:"details"`
 	Age       string `json:"age"`
+	// PDB-specific fields used by the quotas view.
+	MinAvailable   *string      `json:"minAvailable,omitempty"`
+	MaxUnavailable *string      `json:"maxUnavailable,omitempty"`
+	Status         *QuotaStatus `json:"status,omitempty"`
+}
+
+// QuotaStatus carries PDB status fields needed by the quotas table.
+type QuotaStatus struct {
+	DisruptionsAllowed int32 `json:"disruptionsAllowed"`
+	CurrentHealthy     int32 `json:"currentHealthy"`
+	DesiredHealthy     int32 `json:"desiredHealthy"`
 }
 
 // RegisterNamespaceQuotasDomain registers quotas domain.
@@ -51,6 +65,7 @@ func RegisterNamespaceQuotasDomain(
 	builder := &NamespaceQuotasBuilder{
 		quotaLister: factory.Core().V1().ResourceQuotas().Lister(),
 		limitLister: factory.Core().V1().LimitRanges().Lister(),
+		pdbLister:   factory.Policy().V1().PodDisruptionBudgets().Lister(),
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceQuotasDomainName,
@@ -90,7 +105,12 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, fmt.Errorf("namespace quotas: failed to list limitranges: %w", err)
 	}
 
-	return b.buildSnapshot(scopeLabel, quotas, limits)
+	pdbs, err := b.listPodDisruptionBudgets(namespace)
+	if err != nil {
+		return nil, fmt.Errorf("namespace quotas: failed to list poddisruptionbudgets: %w", err)
+	}
+
+	return b.buildSnapshot(scopeLabel, quotas, limits, pdbs)
 }
 
 func (b *NamespaceQuotasBuilder) listResourceQuotas(namespace string) ([]*corev1.ResourceQuota, error) {
@@ -107,8 +127,20 @@ func (b *NamespaceQuotasBuilder) listLimitRanges(namespace string) ([]*corev1.Li
 	return b.limitLister.LimitRanges(namespace).List(labels.Everything())
 }
 
-func (b *NamespaceQuotasBuilder) buildSnapshot(namespace string, quotas []*corev1.ResourceQuota, limits []*corev1.LimitRange) (*refresh.Snapshot, error) {
-	resources := make([]QuotaSummary, 0, len(quotas)+len(limits))
+func (b *NamespaceQuotasBuilder) listPodDisruptionBudgets(namespace string) ([]*policyv1.PodDisruptionBudget, error) {
+	if namespace == "" {
+		return b.pdbLister.List(labels.Everything())
+	}
+	return b.pdbLister.PodDisruptionBudgets(namespace).List(labels.Everything())
+}
+
+func (b *NamespaceQuotasBuilder) buildSnapshot(
+	namespace string,
+	quotas []*corev1.ResourceQuota,
+	limits []*corev1.LimitRange,
+	pdbs []*policyv1.PodDisruptionBudget,
+) (*refresh.Snapshot, error) {
+	resources := make([]QuotaSummary, 0, len(quotas)+len(limits)+len(pdbs))
 	var version uint64
 
 	for _, quota := range quotas {
@@ -145,6 +177,36 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(namespace string, quotas []*corev
 		}
 	}
 
+	for _, pdb := range pdbs {
+		if pdb == nil {
+			continue
+		}
+		summary := QuotaSummary{
+			Kind:      "PodDisruptionBudget",
+			Name:      pdb.Name,
+			Namespace: pdb.Namespace,
+			Details:   describePodDisruptionBudget(pdb),
+			Age:       formatAge(pdb.CreationTimestamp.Time),
+			Status: &QuotaStatus{
+				DisruptionsAllowed: pdb.Status.DisruptionsAllowed,
+				CurrentHealthy:     pdb.Status.CurrentHealthy,
+				DesiredHealthy:     pdb.Status.DesiredHealthy,
+			},
+		}
+		if pdb.Spec.MinAvailable != nil {
+			value := pdb.Spec.MinAvailable.String()
+			summary.MinAvailable = &value
+		}
+		if pdb.Spec.MaxUnavailable != nil {
+			value := pdb.Spec.MaxUnavailable.String()
+			summary.MaxUnavailable = &value
+		}
+		resources = append(resources, summary)
+		if v := resourceVersionOrTimestamp(pdb); v > version {
+			version = v
+		}
+	}
+
 	sort.Slice(resources, func(i, j int) bool {
 		if resources[i].Namespace == resources[j].Namespace {
 			return resources[i].Name < resources[j].Name
@@ -177,4 +239,19 @@ func describeLimitRange(limit *corev1.LimitRange) string {
 		return ""
 	}
 	return fmt.Sprintf("Limits: %d", len(limit.Spec.Limits))
+}
+
+func describePodDisruptionBudget(pdb *policyv1.PodDisruptionBudget) string {
+	if pdb == nil {
+		return ""
+	}
+	parts := []string{}
+	if pdb.Spec.MinAvailable != nil {
+		parts = append(parts, fmt.Sprintf("MinAvailable: %s", pdb.Spec.MinAvailable.String()))
+	}
+	if pdb.Spec.MaxUnavailable != nil {
+		parts = append(parts, fmt.Sprintf("MaxUnavailable: %s", pdb.Spec.MaxUnavailable.String()))
+	}
+	parts = append(parts, fmt.Sprintf("Disruptions Allowed: %d", pdb.Status.DisruptionsAllowed))
+	return strings.Join(parts, ", ")
 }

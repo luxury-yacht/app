@@ -148,6 +148,10 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     }, [effectiveMetrics?.collectedAt]);
 
     const columns: GridColumnDefinition<PodSnapshotEntry>[] = useMemo(() => {
+      // Use the same warning styling as workloads when restarts are non-zero.
+      const getRestartsClassName = (pod: PodSnapshotEntry) =>
+        (pod.restarts ?? 0) > 0 ? 'status-badge warning' : undefined;
+
       const baseColumns: GridColumnDefinition<PodSnapshotEntry>[] = [
         cf.createKindColumn<PodSnapshotEntry>({
           getKind: () => 'Pod',
@@ -171,6 +175,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         cf.createTextColumn<PodSnapshotEntry>('restarts', 'Restarts', (pod) => pod.restarts ?? 0, {
           className: 'text-right',
           getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
+          getClassName: (pod) => getRestartsClassName(pod),
         }),
         cf.createTextColumn<PodSnapshotEntry>(
           'owner',

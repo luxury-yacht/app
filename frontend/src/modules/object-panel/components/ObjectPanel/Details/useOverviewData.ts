@@ -478,6 +478,8 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         disruptionsAllowed: pdbDetails.disruptionsAllowed,
         expectedPods: pdbDetails.expectedPods,
         selector: pdbDetails.selector,
+        labels: pdbDetails.labels,
+        annotations: pdbDetails.annotations,
       };
     }
 

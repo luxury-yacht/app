@@ -37,6 +37,16 @@ const LAYOUT = {
   RESIZE_DEBOUNCE_MS: 100,
 } as const;
 
+// Read the CSS token so drag/resizes match the actual header height.
+const getAppHeaderHeight = (): number => {
+  if (typeof document === 'undefined') {
+    return LAYOUT.APP_HEADER_HEIGHT;
+  }
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--app-header-height');
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : LAYOUT.APP_HEADER_HEIGHT;
+};
+
 /**
  * Custom hook to constrain panel size and position within window bounds on resize.
  * Handles debouncing, different dock positions, and respects user resize operations.
@@ -51,6 +61,12 @@ function useWindowBoundsConstraint(
   }
 ) {
   const { minWidth, minHeight, isResizing, isMaximized } = options;
+  const panelStateRef = useRef(panelState);
+
+  useEffect(() => {
+    // Keep the latest panel state without resubscribing resize handlers on every update.
+    panelStateRef.current = panelState;
+  }, [panelState]);
 
   useEffect(() => {
     if (isMaximized) {
@@ -66,15 +82,16 @@ function useWindowBoundsConstraint(
 
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
-        if (!panelState.isOpen || isResizing) return;
+        const currentPanelState = panelStateRef.current;
+        if (!currentPanelState.isOpen || isResizing) return;
 
-        const currentSize = panelState.size;
-        const currentPosition = panelState.floatingPosition;
+        const currentSize = currentPanelState.size;
+        const currentPosition = currentPanelState.floatingPosition;
         let needsUpdate = false;
         let newSize = { ...currentSize };
         let newPosition = { ...currentPosition };
 
-        if (panelState.position === 'floating') {
+        if (currentPanelState.position === 'floating') {
           const maxWidth = window.innerWidth - LAYOUT.WINDOW_MARGIN;
           const maxHeight = window.innerHeight - LAYOUT.WINDOW_MARGIN;
 
@@ -113,13 +130,13 @@ function useWindowBoundsConstraint(
             newPosition.y = LAYOUT.MIN_EDGE_DISTANCE;
             needsUpdate = true;
           }
-        } else if (panelState.position === 'right') {
+        } else if (currentPanelState.position === 'right') {
           const maxWidth = window.innerWidth - LAYOUT.SIDEBAR_WIDTH;
           if (currentSize.width > maxWidth) {
             newSize.width = Math.max(minWidth, maxWidth);
             needsUpdate = true;
           }
-        } else if (panelState.position === 'bottom') {
+        } else if (currentPanelState.position === 'bottom') {
           const maxHeight = window.innerHeight - LAYOUT.BOTTOM_RESERVED_HEIGHT;
           if (currentSize.height > maxHeight) {
             newSize.height = maxHeight;
@@ -129,13 +146,13 @@ function useWindowBoundsConstraint(
 
         if (needsUpdate) {
           if (newSize.width !== currentSize.width || newSize.height !== currentSize.height) {
-            panelState.setSize(newSize);
+            currentPanelState.setSize(newSize);
           }
           if (
-            panelState.position === 'floating' &&
+            currentPanelState.position === 'floating' &&
             (newPosition.x !== currentPosition.x || newPosition.y !== currentPosition.y)
           ) {
-            panelState.setFloatingPosition(newPosition);
+            currentPanelState.setFloatingPosition(newPosition);
           }
         }
       }, LAYOUT.RESIZE_DEBOUNCE_MS);
@@ -148,7 +165,7 @@ function useWindowBoundsConstraint(
       clearTimeout(resizeTimer);
       window.removeEventListener('resize', handleWindowResize);
     };
-  }, [panelState, minWidth, minHeight, isResizing, isMaximized]);
+  }, [minWidth, minHeight, isResizing, isMaximized]);
 }
 
 export type DockPosition = 'right' | 'bottom' | 'floating';
@@ -238,6 +255,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const safeMaxWidth = maxWidth ? Math.max(safeMinWidth, maxWidth) : undefined;
   const safeMaxHeight = maxHeight ? Math.max(safeMinHeight, maxHeight) : undefined;
   const panelState = useDockablePanelState(panelId);
+  const panelStateRef = useRef(panelState);
   const { registerPanel, unregisterPanel } = useDockablePanelContext();
   const panelHostNode = useDockablePanelHost();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -270,6 +288,12 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const maximizeTargetRef = useRef<HTMLElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const skipNextControlledSyncRef = useRef(false);
+  const appHeaderHeightRef = useRef<number>(LAYOUT.APP_HEADER_HEIGHT);
+
+  useEffect(() => {
+    // Keep the latest panel state for global event handlers without re-binding them.
+    panelStateRef.current = panelState;
+  }, [panelState]);
 
   const resolveMaximizeTarget = useCallback((): HTMLElement | null => {
     if (typeof document === 'undefined') {
@@ -447,6 +471,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       const rect = panelRef.current?.getBoundingClientRect();
       if (!rect) return;
 
+      appHeaderHeightRef.current = getAppHeaderHeight();
       setIsDragging(true);
       setDragOffset({
         x: e.clientX - rect.left,
@@ -462,6 +487,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     (e: React.MouseEvent, direction: string) => {
       if (isMaximized) return;
       e.stopPropagation();
+      appHeaderHeightRef.current = getAppHeaderHeight();
       setIsResizing(true);
       setResizeDirection(direction);
       setResizeStart({
@@ -535,8 +561,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       return;
     }
     pendingDragPositionRef.current = null;
-    panelState.setFloatingPosition(pending);
-  }, [panelState]);
+    panelStateRef.current.setFloatingPosition(pending);
+  }, [panelStateRef]);
 
   const scheduleFloatingPosition = useCallback(
     (position: { x: number; y: number }) => {
@@ -560,18 +586,20 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       return;
     }
     pendingSizeRef.current = null;
-    panelState.setSize({ width: pending.width, height: pending.height });
-    if (panelState.position === 'floating' && pending.position) {
-      panelState.setFloatingPosition(pending.position);
+    const currentPanelState = panelStateRef.current;
+    currentPanelState.setSize({ width: pending.width, height: pending.height });
+    if (currentPanelState.position === 'floating' && pending.position) {
+      currentPanelState.setFloatingPosition(pending.position);
     }
-  }, [panelState]);
+  }, [panelStateRef]);
 
   const scheduleSizeUpdate = useCallback(
     (size: { width: number; height: number }, floatingPosition?: { x: number; y: number }) => {
+      const currentPanelState = panelStateRef.current;
       pendingSizeRef.current = {
         width: size.width,
         height: size.height,
-        position: panelState.position === 'floating' ? (floatingPosition ?? null) : null,
+        position: currentPanelState.position === 'floating' ? (floatingPosition ?? null) : null,
       };
       if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
         flushSizeUpdate();
@@ -582,7 +610,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       }
       sizeFrameRef.current = window.requestAnimationFrame(flushSizeUpdate);
     },
-    [flushSizeUpdate, panelState.position]
+    [flushSizeUpdate, panelStateRef]
   );
 
   useEffect(() => {
@@ -607,19 +635,20 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     if (!isDragging && !isResizing) return;
 
     const handleMouseMove = (e: MouseEvent) => {
+      const currentPanelState = panelStateRef.current;
       // Don't update position if panel is not open (prevents race conditions during close)
-      if (!panelState.isOpen) return;
+      if (!currentPanelState.isOpen) return;
 
-      if (isDragging && panelState.position === 'floating') {
-        const headerHeight = LAYOUT.APP_HEADER_HEIGHT;
+      if (isDragging && currentPanelState.position === 'floating') {
+        const headerHeight = appHeaderHeightRef.current;
         const minDistanceFromEdge = LAYOUT.MIN_EDGE_DISTANCE;
         const newX = Math.max(
           minDistanceFromEdge,
-          Math.min(window.innerWidth - panelState.size.width, e.clientX - dragOffset.x)
+          Math.min(window.innerWidth - currentPanelState.size.width, e.clientX - dragOffset.x)
         );
         const newY = Math.max(
           Math.max(headerHeight, minDistanceFromEdge),
-          Math.min(window.innerHeight - panelState.size.height, e.clientY - dragOffset.y)
+          Math.min(window.innerHeight - currentPanelState.size.height, e.clientY - dragOffset.y)
         );
 
         scheduleFloatingPosition({ x: newX, y: newY });
@@ -632,7 +661,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         let newLeft = resizeStart.left;
         let newTop = resizeStart.top;
 
-        if (panelState.position === 'right') {
+        if (currentPanelState.position === 'right') {
           // For right-docked panels, dragging left (negative deltaX) increases width
           const sidebarWidth = LAYOUT.SIDEBAR_WIDTH;
           const maxAvailableWidth = window.innerWidth - sidebarWidth;
@@ -640,13 +669,13 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
             safeMinWidth,
             Math.min(safeMaxWidth || maxAvailableWidth, resizeStart.width - deltaX)
           );
-        } else if (panelState.position === 'bottom') {
+        } else if (currentPanelState.position === 'bottom') {
           // For bottom-docked panels, dragging up (negative deltaY) increases height
           newHeight = Math.max(
             safeMinHeight,
             Math.min(safeMaxHeight || window.innerHeight, resizeStart.height - deltaY)
           );
-        } else if (panelState.position === 'floating') {
+        } else if (currentPanelState.position === 'floating') {
           // Handle multi-directional resizing for floating panels
           if (resizeDirection.includes('e')) {
             // Don't allow resizing beyond the right edge of the window
@@ -678,7 +707,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
           }
           if (resizeDirection.includes('n')) {
             const proposedHeight = resizeStart.height - deltaY;
-            const headerHeight = LAYOUT.APP_HEADER_HEIGHT;
+            const headerHeight = appHeaderHeightRef.current;
             if (proposedHeight >= safeMinHeight) {
               newHeight = Math.min(
                 safeMaxHeight || window.innerHeight - headerHeight,
@@ -696,7 +725,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
         const nextSize = { width: newWidth, height: newHeight };
         const nextPosition =
-          panelState.position === 'floating' ? { x: newLeft, y: newTop } : undefined;
+          currentPanelState.position === 'floating' ? { x: newLeft, y: newTop } : undefined;
         scheduleSizeUpdate(nextSize, nextPosition);
       }
     };
@@ -726,7 +755,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     resizeDirection,
     dragOffset,
     resizeStart,
-    panelState,
     safeMinWidth,
     safeMinHeight,
     safeMaxWidth,
@@ -796,6 +824,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
   // Handle cursor style for floating panels
   const [cursorStyle, setCursorStyle] = useState<string>('default');
+  const cursorStyleRef = useRef(cursorStyle);
 
   const handleMouseMove = useCallback(
     (e: React.MouseEvent) => {
@@ -813,7 +842,11 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         se: 'nwse-resize',
       };
 
-      setCursorStyle(cursors[direction] || 'default');
+      const nextCursor = cursors[direction] || 'default';
+      if (cursorStyleRef.current !== nextCursor) {
+        cursorStyleRef.current = nextCursor;
+        setCursorStyle(nextCursor);
+      }
     },
     [panelState.position, isDragging, isResizing, getResizeDirection, isMaximized]
   );
@@ -921,7 +954,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         <div className="dockable-panel__header-content">
           {headerContent || <span className="dockable-panel__title">{title}</span>}
         </div>
-        <div className="dockable-panel__controls">
+        <div className="dockable-panel__controls" onMouseDown={(e) => e.stopPropagation()}>
           {/* When floating, show bottom and right buttons */}
           {!isMaximized && panelState.position === 'floating' && (
             <>

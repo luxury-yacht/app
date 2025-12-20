@@ -26,6 +26,7 @@ interface PolicyOverviewProps {
   currentHealthy?: number;
   desiredHealthy?: number;
   disruptionsAllowed?: number;
+  selector?: Record<string, string>;
   // ResourceQuota fields
   hard?: Record<string, string>;
   used?: Record<string, string>;
@@ -327,6 +328,13 @@ export const PolicyOverview: React.FC<PolicyOverviewProps> = (props) => {
           <OverviewItem label="Current Healthy" value={props.currentHealthy} />
           <OverviewItem label="Desired Healthy" value={props.desiredHealthy} />
           <OverviewItem label="Disruptions Allowed" value={props.disruptionsAllowed} />
+          {/* Surface selector metadata for PDBs. */}
+          <ResourceMetadata
+            labels={props.labels}
+            annotations={props.annotations}
+            selector={props.selector}
+            showSelector
+          />
         </>
       )}
 

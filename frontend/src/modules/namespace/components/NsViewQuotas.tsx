@@ -35,12 +35,17 @@ export interface QuotaData {
   hard?: Record<string, string | number>;
   used?: Record<string, string | number>;
   limits?: any;
-  minAvailable?: number;
-  maxUnavailable?: number;
+  // PDB values can be absolute numbers or percentage strings.
+  minAvailable?: string | number;
+  maxUnavailable?: string | number;
   currentHealthy?: number;
   desiredHealthy?: number;
+  status?: {
+    disruptionsAllowed?: number;
+    currentHealthy?: number;
+    desiredHealthy?: number;
+  };
   scopes?: string[];
-  status?: any;
   age?: string;
   [key: string]: any; // Allow additional fields for flexibility
 }
@@ -83,25 +88,8 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       return [resource.namespace, resource.kind, resource.name].filter(Boolean).join('/');
     }, []);
 
-    const formatResourceValue = (value: string | number) => {
-      if (!value) return '-';
-
-      // Handle memory values (convert from bytes if needed)
-      if (typeof value === 'string' && value.match(/^\d+$/)) {
-        const bytes = parseInt(value);
-        if (bytes >= 1024 * 1024 * 1024) {
-          return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}Gi`;
-        } else if (bytes >= 1024 * 1024) {
-          return `${(bytes / (1024 * 1024)).toFixed(1)}Mi`;
-        } else if (bytes >= 1024) {
-          return `${(bytes / 1024).toFixed(1)}Ki`;
-        }
-      }
-
-      return value.toString();
-    };
-
     const columns: GridColumnDefinition<QuotaData>[] = useMemo(() => {
+      // Keep the quotas table focused on core identity fields.
       const baseColumns: GridColumnDefinition<QuotaData>[] = [
         cf.createKindColumn<QuotaData>({
           key: 'kind',
@@ -114,115 +102,6 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
           onClick: handleResourceClick,
           getClassName: () => 'object-panel-link',
         }),
-        cf.createTextColumn<QuotaData>(
-          'resources',
-          'Resources',
-          (resource) => {
-            if (resource.kind === 'ResourceQuota' && resource.hard) {
-              const quotas: string[] = [];
-              if (resource.hard['requests.cpu']) {
-                quotas.push(`CPU: ${resource.hard['requests.cpu']}`);
-              }
-              if (resource.hard['requests.memory']) {
-                quotas.push(`Memory: ${formatResourceValue(resource.hard['requests.memory'])}`);
-              }
-              if (resource.hard['pods']) {
-                quotas.push(`Pods: ${resource.hard['pods']}`);
-              }
-              if (quotas.length > 0) {
-                return quotas.join(' • ');
-              }
-            }
-            if (resource.kind === 'LimitRange' && resource.limits && resource.limits.length > 0) {
-              const limit = resource.limits[0];
-              return limit.type || 'Container';
-            }
-            if (resource.kind === 'PodDisruptionBudget') {
-              if (resource.minAvailable !== undefined && resource.minAvailable !== null) {
-                return `Min Available: ${resource.minAvailable}`;
-              }
-              if (resource.maxUnavailable !== undefined && resource.maxUnavailable !== null) {
-                return `Max Unavailable: ${resource.maxUnavailable}`;
-              }
-            }
-            if (resource.details) {
-              return resource.details;
-            }
-            return '-';
-          },
-          {
-            getClassName: (resource) => {
-              if (resource.kind === 'ResourceQuota' && resource.hard) {
-                return 'quota-resources-inline';
-              }
-              if (resource.kind === 'LimitRange') {
-                return 'limit-type';
-              }
-              if (resource.kind === 'PodDisruptionBudget') {
-                return 'pdb-policy';
-              }
-              return undefined;
-            },
-            sortable: false,
-          }
-        ),
-        cf.createTextColumn<QuotaData>(
-          'status',
-          'Status',
-          (resource) => {
-            if (resource.kind === 'ResourceQuota' && resource.used && resource.hard) {
-              const items: string[] = [];
-              if (resource.used['requests.cpu'] && resource.hard['requests.cpu']) {
-                const used = resource.used['requests.cpu'];
-                const hard = resource.hard['requests.cpu'];
-                items.push(`CPU: ${used}/${hard}`);
-              }
-              if (resource.used['requests.memory'] && resource.hard['requests.memory']) {
-                const used = formatResourceValue(resource.used['requests.memory']);
-                const hard = formatResourceValue(resource.hard['requests.memory']);
-                items.push(`Mem: ${used}/${hard}`);
-              }
-              if (items.length > 0) {
-                return items.join(' • ');
-              }
-            }
-            if (resource.kind === 'PodDisruptionBudget' && resource.status) {
-              return `${resource.status.disruptionsAllowed || 0} disruptions allowed`;
-            }
-            if (resource.details) {
-              return resource.details;
-            }
-            return '-';
-          },
-          {
-            getClassName: (resource) => {
-              if (resource.kind === 'ResourceQuota' && resource.used && resource.hard) {
-                return 'quota-usage-inline';
-              }
-              if (resource.kind === 'PodDisruptionBudget' && resource.status) {
-                return 'pdb-status';
-              }
-              return undefined;
-            },
-            sortable: false,
-          }
-        ),
-        cf.createTextColumn<QuotaData>(
-          'scope',
-          'Scope',
-          (resource) => {
-            if (resource.kind === 'ResourceQuota' && resource.scopes) {
-              return resource.scopes.join(', ');
-            }
-            return '-';
-          },
-          {
-            getClassName: (resource) =>
-              resource.kind === 'ResourceQuota' && resource.scopes
-                ? 'quota-scopes-inline'
-                : undefined,
-          }
-        ),
         cf.createAgeColumn(),
       ];
 
@@ -230,9 +109,6 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
         kind: { autoWidth: true },
         name: { autoWidth: true },
         namespace: { autoWidth: true },
-        resources: { autoWidth: true },
-        status: { autoWidth: true },
-        scope: { autoWidth: true },
         age: { autoWidth: true },
       };
       cf.applyColumnSizing(baseColumns, sizing);

@@ -138,6 +138,8 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	result.registerInformer(kubeFactory.Networking().V1().Ingresses().Informer())
 	result.registerInformer(kubeFactory.Networking().V1().NetworkPolicies().Informer())
 	result.registerInformer(kubeFactory.Autoscaling().V1().HorizontalPodAutoscalers().Informer())
+	// Keep PDBs in sync for the namespace quotas refresh domain.
+	result.registerInformer(kubeFactory.Policy().V1().PodDisruptionBudgets().Informer())
 	result.registerClusterInformer("admissionregistration.k8s.io", "validatingwebhookconfigurations", func() cache.SharedIndexInformer {
 		return kubeFactory.Admissionregistration().V1().ValidatingWebhookConfigurations().Informer()
 	})

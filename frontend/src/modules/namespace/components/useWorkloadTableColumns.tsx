@@ -58,6 +58,8 @@ const useWorkloadTableColumns = ({
     columns.push(
       cf.createTextColumn<WorkloadData>('name', 'Name', (row) => row.name, {
         onClick: (row) => handleWorkloadClick(row),
+        // Match object panel link styling for clickable names.
+        getClassName: () => 'object-panel-link',
         isInteractive: () => true,
       })
     );

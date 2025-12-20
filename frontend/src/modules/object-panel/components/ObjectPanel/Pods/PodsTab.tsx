@@ -20,6 +20,8 @@ import { useGridTablePersistence } from '@shared/components/tables/persistence/u
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
+import { useViewState } from '@core/contexts/ViewStateContext';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
 
 interface PodsTabProps {
@@ -50,6 +52,8 @@ const workloadNameFromOwner = (pod: PodSnapshotEntry) =>
 export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error, isActive }) => {
   const { openWithObject } = useObjectPanel();
   const { selectedKubeconfig } = useKubeconfig();
+  const viewState = useViewState();
+  const namespaceContext = useNamespace();
 
   const metricsBanner = useMemo(() => getMetricsBannerInfo(metrics ?? null), [metrics]);
   const metricsLastUpdated = useMemo(
@@ -58,8 +62,24 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
   );
 
   const keyExtractor = useCallback((pod: PodSnapshotEntry) => `${pod.namespace}:${pod.name}`, []);
+  const handleNamespaceSelect = useCallback(
+    (pod: PodSnapshotEntry) => {
+      if (!pod.namespace) {
+        return;
+      }
+      // Route namespace clicks to the sidebar selection instead of the object panel.
+      namespaceContext.setSelectedNamespace(pod.namespace);
+      viewState.onNamespaceSelect(pod.namespace);
+      viewState.setActiveNamespaceTab('workloads');
+    },
+    [namespaceContext, viewState]
+  );
 
   const columns = useMemo<GridColumnDefinition<PodSnapshotEntry>[]>(() => {
+    // Match workloads warning styling when restarts are non-zero.
+    const getRestartsClassName = (pod: PodSnapshotEntry) =>
+      (pod.restarts ?? 0) > 0 ? 'status-badge warning' : undefined;
+
     const base: GridColumnDefinition<PodSnapshotEntry>[] = [
       createKindColumn<PodSnapshotEntry>({
         getKind: () => 'Pod',
@@ -83,6 +103,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
       createTextColumn<PodSnapshotEntry>('restarts', 'Restarts', (pod) => pod.restarts ?? 0, {
         className: 'text-right',
         getTitle: (pod) => `${pod.restarts ?? 0} restarts`,
+        getClassName: (pod) => getRestartsClassName(pod),
       }),
       createTextColumn<PodSnapshotEntry>('owner', 'Owner', (pod) => workloadNameFromOwner(pod), {
         onClick: (pod) =>
@@ -111,7 +132,9 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
 
     upsertNamespaceColumn(base, {
       accessor: (pod) => pod.namespace,
-      onClick: (pod) => openWithObject({ kind: 'Namespace', name: pod.namespace }),
+      onClick: handleNamespaceSelect,
+      isInteractive: (pod) => Boolean(pod.namespace),
+      getClassName: () => 'object-panel-link',
     });
 
     base.push(
@@ -152,7 +175,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
 
     applyColumnSizing(base, COLUMN_SIZING);
     return base;
-  }, [metrics?.lastError, metrics?.stale, metricsLastUpdated, openWithObject]);
+  }, [handleNamespaceSelect, metrics?.lastError, metrics?.stale, metricsLastUpdated, openWithObject]);
 
   const {
     sortConfig,

@@ -1,6 +1,5 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import NsViewQuotas, { type QuotaData } from '@modules/namespace/components/NsViewQuotas';
@@ -151,19 +150,6 @@ describe('NsViewQuotas', () => {
     ...overrides,
   });
 
-  const renderOutputToText = (output: any): string => {
-    if (typeof output === 'string') {
-      return output;
-    }
-    if (Array.isArray(output)) {
-      return output.map(renderOutputToText).join('');
-    }
-    if (output === null || output === undefined) {
-      return '';
-    }
-    return renderToStaticMarkup(output);
-  };
-
   const renderQuotaView = async (
     rows: QuotaData[] = [baseQuota()],
     overrides: Partial<React.ComponentProps<typeof NsViewQuotas>> = {}
@@ -206,49 +192,11 @@ describe('NsViewQuotas', () => {
     });
   });
 
-  it('formats resource quota memory values and usage strings', async () => {
-    permissionState.set('ResourceQuota:delete:team-a', { allowed: true, pending: false });
-    const quota = baseQuota();
-    await renderQuotaView([quota]);
-
-    const resourcesColumn = getColumn('resources');
-    expect(resourcesColumn).toBeTruthy();
-
-    const rendered = renderOutputToText(resourcesColumn.render(quota));
-    expect(rendered).toContain('CPU: 2');
-    expect(rendered).toContain('Memory: 2.0Gi');
-    expect(rendered).toContain('Pods: 10');
-
-    const statusColumn = getColumn('status');
-    const status = renderOutputToText(statusColumn.render(quota));
-    expect(status).toContain('CPU: 1/2');
-    expect(status).toContain('Mem: 1.0Gi/2.0Gi');
-  });
-
-  it('renders LimitRange and PodDisruptionBudget rows with specialised formatting', async () => {
-    const limitRange = baseQuota({
-      kind: 'LimitRange',
-      name: 'limits',
-      limits: [{ type: 'Container' }],
-    });
-    const pdb = baseQuota({
-      kind: 'PodDisruptionBudget',
-      name: 'pdb',
-      minAvailable: 1,
-      used: undefined,
-      hard: undefined,
-    });
-
-    await renderQuotaView([limitRange, pdb]);
-    const resourcesColumn = getColumn('resources');
-
-    const limitMarkup = renderOutputToText(resourcesColumn.render(limitRange));
-    expect(limitMarkup).toContain('Container');
-    expect(limitMarkup).toContain('class="limit-type"');
-
-    const pdbMarkup = renderOutputToText(resourcesColumn.render(pdb));
-    expect(pdbMarkup).toContain('Min Available: 1');
-    expect(pdbMarkup).toContain('class="pdb-policy"');
+  it('omits Resources, Status, and Scope columns', async () => {
+    await renderQuotaView([baseQuota()]);
+    expect(getColumn('resources')).toBeUndefined();
+    expect(getColumn('status')).toBeUndefined();
+    expect(getColumn('scope')).toBeUndefined();
   });
 
   it('shows delete option, confirms and handles backend success', async () => {
