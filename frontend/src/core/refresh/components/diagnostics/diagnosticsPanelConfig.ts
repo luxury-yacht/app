@@ -10,9 +10,9 @@ import type { ClusterViewType, NamespaceViewType, ViewType } from '@/types/navig
 export const STALE_THRESHOLD_MS = 45_000;
 export const CLUSTER_SCOPE = '__cluster__';
 
-export const OVERVIEW_FEATURES = ['Cluster overview'] as const;
+const OVERVIEW_FEATURES = ['Cluster overview'] as const;
 
-export const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly string[]> = {
+const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly string[]> = {
   nodes: ['Nodes table', 'Node actions (cordon/drain)', 'Node actions', 'Namespace workloads'],
   rbac: ['Cluster RBAC'],
   storage: ['Storage view', 'Storage actions'],
@@ -23,7 +23,7 @@ export const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly string[]> = {
   browse: ['Browse catalog'],
 };
 
-export const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly string[]> = {
+const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly string[]> = {
   pods: ['Namespace pods'],
   workloads: ['Namespace workloads'],
   config: ['Namespace config'],

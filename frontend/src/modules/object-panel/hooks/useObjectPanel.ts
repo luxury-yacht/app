@@ -74,7 +74,10 @@ export function useObjectPanel() {
 /**
  * Close the object panel from outside of React components.
  * Prefer using the close() method from useObjectPanel() when possible.
+ *
+ * This is lintignored because it's only used by tests.
  */
+/** @lintignore */
 export function closeObjectPanelGlobal() {
   closeCallback?.();
 }
