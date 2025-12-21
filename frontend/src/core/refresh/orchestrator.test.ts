@@ -156,6 +156,26 @@ describe('refreshOrchestrator', () => {
     });
   };
 
+  it('normalizes object panel kind casing before updating refresh context', () => {
+    refreshOrchestrator.updateContext({
+      objectPanel: {
+        isOpen: true,
+        objectKind: 'Pod',
+        objectName: 'demo',
+        objectNamespace: 'default',
+      },
+    });
+
+    expect(refreshManagerMocks.updateContextMock).toHaveBeenCalledWith({
+      objectPanel: {
+        isOpen: true,
+        objectKind: 'pod',
+        objectName: 'demo',
+        objectNamespace: 'default',
+      },
+    });
+  });
+
   const registerNamespacesDomain = () => {
     refreshOrchestrator.registerDomain({
       domain: 'namespaces',
