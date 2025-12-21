@@ -1,5 +1,5 @@
 // Map of Kubernetes resource types to their short names (Kind -> alias)
-export const kindAliasMap: Record<string, string> = {
+const kindAliasMap: Record<string, string> = {
   // Workloads (singular forms as sent by backend)
   Pod: 'pod',
   Deployment: 'deploy',
@@ -153,8 +153,3 @@ export const aliasToKindMap = buildAliasToKindMap();
 export const canonicalKinds = Array.from(new Set(aliasToKindMap.values())).map((k) =>
   k.toLowerCase()
 );
-
-// Resolve a user input token to a canonical Kind (or undefined if no match)
-export function resolveKindAlias(input: string): string | undefined {
-  return aliasToKindMap.get(input.toLowerCase());
-}

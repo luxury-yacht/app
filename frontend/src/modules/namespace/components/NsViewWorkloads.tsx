@@ -365,7 +365,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           message={`Are you sure you want to restart ${restartConfirm.workload?.kind?.toLowerCase() ?? 'workload'} "${restartConfirm.workload?.name}"?\n\nThis will perform a rolling restart of all pods.`}
           confirmText="Restart"
           cancelText="Cancel"
-          confirmButtonClass="primary"
+          confirmButtonClass="danger"
           onConfirm={handleRestartConfirm}
           onCancel={() => setRestartConfirm({ show: false, workload: null })}
         />
