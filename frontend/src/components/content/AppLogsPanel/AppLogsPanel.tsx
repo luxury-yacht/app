@@ -184,7 +184,7 @@ function AppLogsPanel() {
 
       setLogLevelFilter(value.filter((item) => item !== LOG_LEVEL_SELECT_ALL_VALUE));
     },
-    [ALL_LEVEL_VALUES, logLevelFilter]
+    [logLevelFilter]
   );
 
   const renderLogLevelOption = useCallback(
@@ -198,7 +198,7 @@ function AppLogsPanel() {
         </span>
       );
     },
-    [ALL_LEVEL_VALUES, logLevelFilter]
+    [logLevelFilter]
   );
 
   const componentNames = useMemo(
