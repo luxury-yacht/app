@@ -60,9 +60,9 @@ function AppContent() {
 
   // Handle Wails runtime events (menu items, etc.)
   useWailsRuntimeEvents({
-    onOpenSettings: useCallback(() => viewState.setIsSettingsOpen(true), [viewState]),
-    onOpenAbout: useCallback(() => viewState.setIsAboutOpen(true), [viewState]),
-    onToggleSidebar: useCallback(() => viewState.toggleSidebar(), [viewState]),
+    onOpenSettings: () => viewState.setIsSettingsOpen(true),
+    onOpenAbout: () => viewState.setIsAboutOpen(true),
+    onToggleSidebar: () => viewState.toggleSidebar(),
     onToggleAppLogs: handleToggleAppLogsPanel,
     onToggleDiagnostics: handleToggleDiagnostics,
   });
@@ -70,8 +70,8 @@ function AppContent() {
   // Handle sidebar resize
   useSidebarResize({
     isResizing: viewState.isResizing,
-    onWidthChange: useCallback((width: number) => viewState.setSidebarWidth(width), [viewState]),
-    onResizeEnd: useCallback(() => viewState.setIsResizing(false), [viewState]),
+    onWidthChange: (width: number) => viewState.setSidebarWidth(width),
+    onResizeEnd: () => viewState.setIsResizing(false),
   });
 
   // Listen for app logs toggle events from command palette

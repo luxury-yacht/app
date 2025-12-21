@@ -104,8 +104,7 @@ function GridTableBody<T>({
         }
         const lastDecision = stretchDecisionRef.current;
         const nextDecision =
-          lastDecision ??
-          (viewportWidth === 0 || contentWidth > viewportWidth + 0.5);
+          lastDecision ?? (viewportWidth === 0 || contentWidth > viewportWidth + 0.5);
         // Use a small hysteresis window so scrollbar jitter doesn't flip this every render.
         if (nextDecision) {
           if (viewportWidth > 0 && contentWidth <= viewportWidth - 1) {

@@ -179,10 +179,7 @@ const YamlTab: React.FC<YamlTabProps> = ({ scope, isActive = false, canEdit = fa
     }
   }, [latestObjectIdentity, manualYamlOverride, yamlContent]);
 
-  const activeYaml = useMemo(
-    () => (isEditing ? draftYaml : (displayYaml ?? '')),
-    [displayYaml, draftYaml, isEditing]
-  );
+  const activeYaml = isEditing ? draftYaml : (displayYaml ?? '');
 
   const driftDiff = useMemo(() => {
     if (backendDriftDiff) {

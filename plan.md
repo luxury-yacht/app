@@ -2,29 +2,29 @@
 
 ## Redundant memoization candidates
 
-- `frontend/src/App.tsx:53`-`frontend/src/App.tsx:75`: multiple `useCallback` wrappers depend on the entire `viewState` object or `appLogsPanel`. Since those objects likely change on any context update, the callbacks are recreated anyway; memoization does not buy referential stability here.
+- ✅ Completed: inlined viewState-bound callbacks in `frontend/src/App.tsx` (kept `handleToggleAppLogsPanel` intact).
 
-- `frontend/src/shared/components/tables/hooks/useGridTableHeaderRow.tsx:28`: `useMemo` wraps JSX but depends on many functions/props that are commonly re-created each render in GridTable; the memo is likely invalidated every render, so it may be redundant.
+- ✅ Completed: removed redundant `useMemo` in `frontend/src/shared/components/tables/hooks/useGridTableHeaderRow.tsx`.
 
-- `frontend/src/shared/components/tables/hooks/useGridTableRowRenderer.tsx:69`: `useCallback` depends on large, frequently changing inputs (e.g., `columnRenderModelsWithOffsets`), so the callback is re-created each render; may be unnecessary noise unless upstream stabilizes those inputs.
+- ✅ Completed: removed redundant `useCallback` in `frontend/src/shared/components/tables/hooks/useGridTableRowRenderer.tsx`.
 
-- `frontend/src/shared/components/ResourceLoadingBoundary.tsx:23`: `useMemo` for `shouldShowSpinner` is a trivial boolean computation; likely not worth memoization.
+- ✅ Completed: removed memoization for `shouldShowSpinner` (cheap boolean) in `frontend/src/shared/components/ResourceLoadingBoundary.tsx`.
 
-- `frontend/src/shared/components/tables/hooks/useFrameSampler.ts:36`: the `useMemo` blocks for `defaultLogResults` and the window function fallbacks are simple and could be local variables; memoization adds complexity without clear perf benefit.
+- Reviewed: keep — `frontend/src/shared/components/tables/hooks/useFrameSampler.ts:36`: not redundant; the `useMemo` fallbacks stabilize function references used by `start`/`stop` so `useEffect([stop])` doesn’t churn on every render.
 
-- `frontend/src/ui/layout/AppLayout.tsx:62`: `handleAboutClose` uses `useCallback` with the entire `viewState` object as a dependency; this callback is recreated whenever any view state changes, so memoization provides little stability.
+- ✅ Completed: inlined `handleAboutClose` in `frontend/src/ui/layout/AppLayout.tsx`.
 
-- `frontend/src/ui/layout/Sidebar.tsx:80`: `resourceViews` is a static array wrapped in `useMemo([])`; could be module-level constant instead of runtime memoization.
+- ✅ Completed: moved `resourceViews` to a module constant in `frontend/src/ui/layout/Sidebar.tsx`.
 
-- `frontend/src/ui/layout/Sidebar.tsx:95`: `namespaceViews` is another static array wrapped in `useMemo([])`; same as above.
+- ✅ Completed: moved `namespaceViews` to a module constant in `frontend/src/ui/layout/Sidebar.tsx`.
 
-- `frontend/src/components/content/AppLogsPanel/AppLogsPanel.tsx:29`: log-level option arrays and defaults (`LOG_LEVEL_BASE_OPTIONS`, `LOG_LEVEL_OPTIONS`, `ALL_LEVEL_VALUES`, `DEFAULT_LOG_LEVELS`) are all memoized but are static constants; could be defined once at module scope.
+- ✅ Completed: moved log-level option arrays/defaults to module constants in `frontend/src/components/content/AppLogsPanel/AppLogsPanel.tsx`.
 
-- `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelKind.ts:26`: `useMemo` for `objectKind`, `scopeNamespace`, `detailScope`, and `helmScope` are simple string transforms; memoization adds little value for primitives.
+- ✅ Completed: removed redundant memos in `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelKind.ts`.
 
-- `frontend/src/modules/object-panel/components/ObjectPanel/Details/useUtilizationData.ts:25`: `useMemo` for `hasUtilization` boolean is trivial; inline computation is simpler.
+- ✅ Completed: inlined `hasUtilization` calculation in `frontend/src/modules/object-panel/components/ObjectPanel/Details/useUtilizationData.ts`.
 
-- `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx:182`: `activeYaml` is a simple ternary string; `useMemo` offers little benefit here.
+- ✅ Completed: inlined `activeYaml` calculation in `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx`.
 
 ## Potential maximum update depth risks
 
@@ -90,7 +90,7 @@
 
 - ✅ P1: consolidate object-panel context updates to a single `refreshOrchestrator.updateContext` writer (`frontend/src/core/contexts/ObjectPanelStateContext.tsx`, `frontend/src/core/contexts/ViewStateContext.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.ts`).
 - ✅ P1: add guards for resize-driven loops across docked panel layout + GridTable width reconciliation (`frontend/src/components/dockable/DockablePanel.tsx`, `frontend/src/shared/components/tables/GridTable.tsx`, `frontend/src/shared/components/tables/hooks/useContainerWidthObserver.ts`).
-- P1: harden focus/hover state updates against repeated re-entry on panel open (`frontend/src/shared/components/tables/hooks/useGridTableFocusNavigation.ts`, `frontend/src/shared/components/tables/hooks/useGridTableHoverSync.ts`).
+- ✅ P1: investigated focus/hover re-entry risk; current guards in `useGridTableFocusNavigation` + `useGridTableHoverSync` already de-dupe state updates, so no change needed unless errors persist (`frontend/src/shared/components/tables/hooks/useGridTableFocusNavigation.ts`, `frontend/src/shared/components/tables/hooks/useGridTableHoverSync.ts`).
 - P2: stabilize object-panel scoped-domain effects (details/events/pods) so they only toggle when scopes truly change (`frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods.ts`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.tsx`, `frontend/src/modules/object-panel/hooks/useObjectPanel.ts`).
 - P2: guard GridTable sizing/virtualization loops (auto-grow, initial measurement, row height changes) against render churn (`frontend/src/shared/components/tables/hooks/useGridTableColumnWidths.helpers.ts`, `frontend/src/shared/components/tables/hooks/useGridTableAutoGrow.ts`, `frontend/src/shared/components/tables/hooks/useGridTableVirtualization.ts`).
 - P3: address logs-tab state churn/refresh store writes (`frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx`).
