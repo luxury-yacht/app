@@ -207,8 +207,17 @@ class RefreshOrchestrator {
 
   updateContext(context: Partial<RefreshContext>): void {
     const previousContext = this.context;
-    this.context = { ...this.context, ...context };
-    refreshManager.updateContext(context);
+    // Normalize object-panel kinds so case-only changes don't thrash refresh targets.
+    const normalizedContext: Partial<RefreshContext> = { ...context };
+    if (context.objectPanel) {
+      const normalizedPanel = { ...context.objectPanel };
+      if (typeof normalizedPanel.objectKind === 'string') {
+        normalizedPanel.objectKind = normalizedPanel.objectKind.toLowerCase();
+      }
+      normalizedContext.objectPanel = normalizedPanel;
+    }
+    this.context = { ...this.context, ...normalizedContext };
+    refreshManager.updateContext(normalizedContext);
 
     const wasNamespaceActive = this.isNamespaceContextActive(previousContext);
     const isNamespaceActive = this.isNamespaceContextActive(this.context);

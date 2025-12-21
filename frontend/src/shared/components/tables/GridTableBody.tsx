@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import type { RefObject } from 'react';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
 import GridTablePagination from '@shared/components/tables/GridTablePagination';
@@ -78,6 +78,12 @@ function GridTableBody<T>({
   allowHorizontalOverflow,
   viewportWidth,
 }: GridTableBodyProps<T>) {
+  const stretchDecisionRef = useRef<boolean | null>(null);
+
+  if (!shouldVirtualize) {
+    stretchDecisionRef.current = null;
+  }
+
   const renderRows = () => {
     if (tableData.length === 0) {
       return <div className="gridtable-empty">{emptyMessage}</div>;
@@ -91,10 +97,26 @@ function GridTableBody<T>({
       }
 
       firstVirtualRowRef.current = null;
-      const shouldStretch =
-        allowHorizontalOverflow &&
-        contentWidth > 0 &&
-        (viewportWidth === 0 || contentWidth > viewportWidth + 0.5);
+      const shouldStretch = (() => {
+        if (!allowHorizontalOverflow || contentWidth <= 0) {
+          stretchDecisionRef.current = false;
+          return false;
+        }
+        const lastDecision = stretchDecisionRef.current;
+        const nextDecision =
+          lastDecision ?? (viewportWidth === 0 || contentWidth > viewportWidth + 0.5);
+        // Use a small hysteresis window so scrollbar jitter doesn't flip this every render.
+        if (nextDecision) {
+          if (viewportWidth > 0 && contentWidth <= viewportWidth - 1) {
+            stretchDecisionRef.current = false;
+          } else {
+            stretchDecisionRef.current = true;
+          }
+        } else if (viewportWidth === 0 || contentWidth > viewportWidth + 1) {
+          stretchDecisionRef.current = true;
+        }
+        return stretchDecisionRef.current ?? false;
+      })();
       const resolvedWidth = shouldStretch ? `${contentWidth}px` : undefined;
       return (
         <div

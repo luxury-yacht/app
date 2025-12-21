@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './Sidebar.css';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -14,6 +14,32 @@ import {
 } from '@shared/components/icons/MenuIcons';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
 import { useSidebarKeyboardControls, SidebarCursorTarget } from './SidebarKeys';
+
+// Static cluster view list to avoid re-creating the array each render.
+const RESOURCE_VIEWS: Array<{ id: ClusterViewType; label: string }> = [
+  { id: 'nodes', label: 'Nodes' },
+  { id: 'config', label: 'Config' },
+  { id: 'crds', label: 'CRDs' },
+  { id: 'custom', label: 'Custom' },
+  { id: 'events', label: 'Events' },
+  { id: 'rbac', label: 'RBAC' },
+  { id: 'storage', label: 'Storage' },
+];
+
+// Static namespace view list to avoid re-creating the array each render.
+const NAMESPACE_VIEWS: Array<{ id: NamespaceViewType; label: string }> = [
+  { id: 'workloads', label: 'Workloads' },
+  { id: 'pods', label: 'Pods' },
+  { id: 'autoscaling', label: 'Autoscaling' },
+  { id: 'config', label: 'Config' },
+  { id: 'custom', label: 'Custom' },
+  { id: 'events', label: 'Events' },
+  { id: 'helm', label: 'Helm' },
+  { id: 'network', label: 'Network' },
+  { id: 'quotas', label: 'Quotas' },
+  { id: 'rbac', label: 'RBAC' },
+  { id: 'storage', label: 'Storage' },
+];
 
 function Sidebar() {
   const { namespaces, namespaceLoading, setSelectedNamespace } = useNamespace();
@@ -78,36 +104,10 @@ function Sidebar() {
   });
 
   // Cluster view items (always visible)
-  const resourceViews = useMemo<Array<{ id: ClusterViewType; label: string }>>(
-    () => [
-      { id: 'nodes', label: 'Nodes' },
-      { id: 'config', label: 'Config' },
-      { id: 'crds', label: 'CRDs' },
-      { id: 'custom', label: 'Custom' },
-      { id: 'events', label: 'Events' },
-      { id: 'rbac', label: 'RBAC' },
-      { id: 'storage', label: 'Storage' },
-    ],
-    []
-  );
+  const resourceViews = RESOURCE_VIEWS;
 
   // Namespace view items (shown when namespace is expanded)
-  const namespaceViews = useMemo<Array<{ id: NamespaceViewType; label: string }>>(
-    () => [
-      { id: 'workloads', label: 'Workloads' },
-      { id: 'pods', label: 'Pods' },
-      { id: 'autoscaling', label: 'Autoscaling' },
-      { id: 'config', label: 'Config' },
-      { id: 'custom', label: 'Custom' },
-      { id: 'events', label: 'Events' },
-      { id: 'helm', label: 'Helm' },
-      { id: 'network', label: 'Network' },
-      { id: 'quotas', label: 'Quotas' },
-      { id: 'rbac', label: 'RBAC' },
-      { id: 'storage', label: 'Storage' },
-    ],
-    []
-  );
+  const namespaceViews = NAMESPACE_VIEWS;
 
   // Scroll selected namespace into view when it changes
   useEffect(() => {

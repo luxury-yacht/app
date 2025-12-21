@@ -1,5 +1,3 @@
-import { useMemo } from 'react';
-
 import type { PanelObjectData } from '../types';
 
 export interface UseObjectPanelKindOptions {
@@ -23,33 +21,20 @@ export const useObjectPanelKind = (
 ): ObjectPanelKindResult => {
   const clusterScope = options.clusterScope ?? DEFAULT_CLUSTER_SCOPE;
 
-  const objectKind = useMemo(() => {
-    if (!objectData?.kind) {
-      return null;
-    }
-    return objectData.kind.toLowerCase();
-  }, [objectData?.kind]);
+  const objectKind = objectData?.kind ? objectData.kind.toLowerCase() : null;
 
-  const scopeNamespace = useMemo(() => {
-    if (!objectData?.namespace || objectData.namespace.length === 0) {
-      return clusterScope;
-    }
-    return objectData.namespace;
-  }, [clusterScope, objectData?.namespace]);
+  const scopeNamespace =
+    !objectData?.namespace || objectData.namespace.length === 0
+      ? clusterScope
+      : objectData.namespace;
 
-  const detailScope = useMemo(() => {
-    if (!objectData?.name || !objectKind) {
-      return null;
-    }
-    return `${scopeNamespace}:${objectKind}:${objectData.name}`;
-  }, [scopeNamespace, objectData?.name, objectKind]);
+  const detailScope =
+    !objectData?.name || !objectKind ? null : `${scopeNamespace}:${objectKind}:${objectData.name}`;
 
-  const helmScope = useMemo(() => {
-    if (objectKind !== 'helmrelease' || !objectData?.name) {
-      return null;
-    }
-    return `${scopeNamespace}:${objectData.name}`;
-  }, [scopeNamespace, objectData?.name, objectKind]);
+  const helmScope =
+    objectKind !== 'helmrelease' || !objectData?.name
+      ? null
+      : `${scopeNamespace}:${objectData.name}`;
 
   const isHelmRelease = objectKind === 'helmrelease';
   const isEvent = objectKind === 'event';

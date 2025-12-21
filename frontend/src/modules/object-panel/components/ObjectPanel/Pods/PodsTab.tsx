@@ -175,7 +175,13 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
 
     applyColumnSizing(base, COLUMN_SIZING);
     return base;
-  }, [handleNamespaceSelect, metrics?.lastError, metrics?.stale, metricsLastUpdated, openWithObject]);
+  }, [
+    handleNamespaceSelect,
+    metrics?.lastError,
+    metrics?.stale,
+    metricsLastUpdated,
+    openWithObject,
+  ]);
 
   const {
     sortConfig,

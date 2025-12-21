@@ -132,11 +132,7 @@ describe('useObjectPanelRefresh', () => {
       'team-a:deployment:api',
       true
     );
-    expect(mockRefreshOrchestrator.updateContext).toHaveBeenCalledWith(
-      expect.objectContaining({
-        objectPanel: expect.objectContaining({ isOpen: true, objectName: 'api' }),
-      })
-    );
+    expect(mockRefreshOrchestrator.updateContext).not.toHaveBeenCalled();
   });
 
   it('cleans up refresh subscriptions on unmount', async () => {

@@ -15,6 +15,20 @@ interface LogEntry {
   source?: string;
 }
 
+const LOG_LEVEL_SELECT_ALL_VALUE = '__log_levels_all__';
+const LOG_LEVEL_BASE_OPTIONS = [
+  { value: 'info', label: 'Info' },
+  { value: 'warn', label: 'Warning' },
+  { value: 'error', label: 'Error' },
+  { value: 'debug', label: 'Debug' },
+];
+const LOG_LEVEL_OPTIONS = [
+  { value: LOG_LEVEL_SELECT_ALL_VALUE, label: 'Select All' },
+  ...LOG_LEVEL_BASE_OPTIONS,
+];
+const ALL_LEVEL_VALUES = LOG_LEVEL_BASE_OPTIONS.map((option) => option.value);
+const DEFAULT_LOG_LEVELS = ['info', 'warn', 'error'];
+
 export function useAppLogsPanel() {
   const panelState = useDockablePanelState('app-logs');
   return panelState;
@@ -25,25 +39,6 @@ function AppLogsPanel() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isAutoScroll, setIsAutoScroll] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const LOG_LEVEL_SELECT_ALL_VALUE = '__log_levels_all__';
-  const LOG_LEVEL_BASE_OPTIONS = useMemo(
-    () => [
-      { value: 'info', label: 'Info' },
-      { value: 'warn', label: 'Warning' },
-      { value: 'error', label: 'Error' },
-      { value: 'debug', label: 'Debug' },
-    ],
-    []
-  );
-  const LOG_LEVEL_OPTIONS = useMemo(
-    () => [{ value: LOG_LEVEL_SELECT_ALL_VALUE, label: 'Select All' }, ...LOG_LEVEL_BASE_OPTIONS],
-    [LOG_LEVEL_BASE_OPTIONS]
-  );
-  const ALL_LEVEL_VALUES = useMemo(
-    () => LOG_LEVEL_BASE_OPTIONS.map((option) => option.value),
-    [LOG_LEVEL_BASE_OPTIONS]
-  );
-  const DEFAULT_LOG_LEVELS = useMemo(() => ['info', 'warn', 'error'], []);
 
   const [logLevelFilter, setLogLevelFilter] = useState<string[]>(DEFAULT_LOG_LEVELS);
   const [componentFilter, setComponentFilter] = useState<string[]>([]);
@@ -189,7 +184,7 @@ function AppLogsPanel() {
 
       setLogLevelFilter(value.filter((item) => item !== LOG_LEVEL_SELECT_ALL_VALUE));
     },
-    [ALL_LEVEL_VALUES, logLevelFilter]
+    [logLevelFilter]
   );
 
   const renderLogLevelOption = useCallback(
@@ -203,7 +198,7 @@ function AppLogsPanel() {
         </span>
       );
     },
-    [ALL_LEVEL_VALUES, logLevelFilter]
+    [logLevelFilter]
   );
 
   const componentNames = useMemo(

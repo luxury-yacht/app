@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 // Assets
 import logo from '@assets/luxury-yacht-logo.png';
@@ -59,10 +59,9 @@ export const AppLayout: React.FC = () => {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isFocusOverlayVisible, setIsFocusOverlayVisible] = useState(false);
   const [isErrorOverlayVisible, setIsErrorOverlayVisible] = useState(false);
-  // Memoize callbacks to prevent unnecessary re-renders
-  const handleAboutClose = useCallback(() => {
+  const handleAboutClose = () => {
     viewState.setIsAboutOpen(false);
-  }, [viewState]);
+  };
 
   useEffect(() => {
     const handleDebugShortcut = (event: KeyboardEvent) => {

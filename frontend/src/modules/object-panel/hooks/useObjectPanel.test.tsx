@@ -36,12 +36,6 @@ vi.mock('@components/dockable', () => ({
   useDockablePanelState: mockUseDockablePanelState,
 }));
 
-vi.mock('@/core/refresh', () => ({
-  refreshOrchestrator: {
-    updateContext: vi.fn(),
-  },
-}));
-
 beforeAll(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 });

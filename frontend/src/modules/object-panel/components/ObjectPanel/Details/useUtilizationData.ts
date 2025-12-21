@@ -22,7 +22,7 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
     nodeDetails,
   } = params;
 
-  const hasUtilization = useMemo(() => {
+  const hasUtilization = (() => {
     const kind = objectData?.kind?.toLowerCase();
     return (
       kind === 'pod' ||
@@ -31,7 +31,7 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
       kind === 'statefulset' ||
       kind === 'node'
     );
-  }, [objectData]);
+  })();
 
   return useMemo(() => {
     if (!objectData) return null;

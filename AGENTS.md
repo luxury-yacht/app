@@ -1,52 +1,39 @@
-# Repository Guidelines
+# AGENTS.md
 
-This is a Wails desktop app. It uses Go for the backend, and React for the frontend.
+You are a developer working on Luxury Yacht, an application for viewing and managing kubernetes cluster resources.
 
-- Documentation for the backend code is in backend/docs
-- Documentation for the frontend code is in frontend/docs
+Luxury Yacht is a Wails desktop app. We use Wails v2, as v3 is in alpha and not production-ready. Documentation for Wails version 2 is here: https://wails.io/docs/introduction
+
+Luxury Yacht uses Go for the backend and React for the frontend.
+
+## Scope
+
+- This file contains cross-cutting rules for the whole repo.
+- Area-specific instructions live in `backend/AGENTS.md` and `frontend/AGENTS.md`.
+- Treat the requirements in this file and the area-specific AGENTS files as part of the user request, even if not explicitly asked for.
 
 ## Rules
 
-You must adhere to these at all times, no exceptions without explicit permission.
+You must adhere to these at all times. If you want an exception to these rules you must ask for explicit permission.
 
-- Never do more than requested by the user without asking first.
-- When stuck on a tough problem, ask questions.
-- If you're not completely clear on what the problem is, ask questions.
+- Never do more than what is requested by the user.
 - Never change the appearance or behavior of the app unless asked to do so.
-- Use the latest stable versions for all dependencies.
-- Don't add heavy dependencies without approval.
-- Reuse existing components and styles as much as possible.
-- Always add clear, understandable comments to code.
-- Review and update the documentation as necessary after making changes.
+- Only add or upgrade dependencies when explicitly requested and approved; use the latest stable version when you do.
+- When stuck on a tough problem, ask for help.
+- If you're not completely clear about what the problem is, ask clarifying questions.
 
 ## Development Guidelines
 
-- Treat the object catalog as the single source of truth for namespace/cluster listings (`frontend/docs/architecture/refresh.md`); rely on `hasWorkloads`/`workloadsUnknown` flags instead of custom probes.
-- All namespace/cluster data surfaces must be wired through the refresh orchestrator + diagnostics flow (`frontend/src/core/refresh`); register refresher constants, scopes, and manual targets per the refresh checklist and validate them in the Diagnostics panel—no ad-hoc polling loops.
-- Manual refreshes and streaming domains belong to the backend refresh registry + ManualQueue; do not invent bespoke goroutines or HTTP handlers outside that lifecycle.
-- All CSS colors and sizes must be tokenized, and must support Light and Dark themes
-- Always render tabular data through the `GridTable` component and its shared column factories (see `frontend/docs/architecture/gridtable-consumer-guide.md`) instead of ad-hoc tables
-  - Follow the column/interaction rules in `frontend/docs/architecture/tables.md` when updating or adding tables.
+- Always add clear, understandable comments to code.
+- Treat the object catalog as the source of truth for namespace/cluster listings (details in `backend/AGENTS.md#Object-Catalog`).
 
 ## Project Structure & Module Organization
 
 - `main.go` launches Wails and ties the Go backend in `backend/` to the React frontend in `frontend/`.
-- `backend/` hosts Kubernetes integrations; resource handlers follow `resource_<Kind>.go` and keep `_test.go` suites beside the code (for example `kubeconfigs_test.go`).
-- `frontend/src/` adopts feature folders resolved through the `@core`, `@modules`, `@ui`, and `@shared` aliases; Vitest specs live next to implementations in `*.test.ts[x]` files.
-
-## Coding Style & Naming Conventions
-
-- The React/TypeScript side relies on Prettier (2-space indentation) and ESLint. Components are PascalCase, hooks begin with `use`, and cross-cutting helpers live in `frontend/src/shared`.
-- Prefer the path aliases documented in `tsconfig.json` (`@core/refresh`, `@shared/utils`, etc.) instead of deep relative imports.
-  - You may add new path aliases if necessary.
-- Permission gating must flow through `ensureNamespaceActionCapabilities`, `registerAdHocCapabilities`, `evaluateNamespacePermissions`, and the bootstrap helpers in `frontend/src/core/capabilities` so TTLs, diagnostics, and batching remain accurate—no bespoke SubjectAccessReviews.
-- Complex tables/streams (Cluster Nodes view, Object Panel logs, etc.) rely on shared hooks for virtualization, fallbacks, and context menus; extend those utilities instead of reimplementing scroll/selection/fallback logic.
 
 ## Testing Guidelines
 
-- Always strive for test coverage of at least 80%.
-- Backend tests stay adjacent to their targets with `_test.go` suffixes and `TestXxx` functions.
-- Frontend specs mirror their features (for example `DiagnosticsPanel.test.ts`) and run with Vitest; append `--watch` for interactive loops.
+- Aim for at least 80% coverage for changed packages/modules; if that is not feasible, note the gap and ask for guidance.
 
 ## Commit & Pull Request Guidelines
 

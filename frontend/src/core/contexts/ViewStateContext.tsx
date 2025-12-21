@@ -182,7 +182,7 @@ const RefreshSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { viewType, activeNamespaceTab, activeClusterTab } = useNavigationState();
   const { showObjectPanel, selectedObject } = useObjectPanelState();
 
-  // Sync state with RefreshManager
+  // Single writer for refresh context to avoid duplicate object-panel updates.
   useEffect(() => {
     refreshOrchestrator.updateContext({
       currentView: viewType,

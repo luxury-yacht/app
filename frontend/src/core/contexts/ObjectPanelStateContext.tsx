@@ -6,8 +6,6 @@
  */
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import type { KubernetesObjectReference, NavigationHistoryEntry } from '@/types/view-state';
-import { getObjectKind, getObjectName, getObjectNamespace } from '@/types/view-state';
-import { refreshOrchestrator } from '@/core/refresh';
 
 interface ObjectPanelStateContextType {
   showObjectPanel: boolean;
@@ -47,16 +45,6 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       setSelectedObject(data);
       setShowObjectPanel(true);
 
-      // Notify RefreshManager of object panel state
-      refreshOrchestrator.updateContext({
-        objectPanel: {
-          isOpen: true,
-          objectKind: getObjectKind(data),
-          objectName: getObjectName(data),
-          objectNamespace: getObjectNamespace(data),
-        },
-      });
-
       // Add to navigation history
       setNavigationHistory((prev) => {
         const newHistory = [...prev.slice(0, navigationIndex + 1), data];
@@ -72,13 +60,6 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
     setSelectedObject(null);
     setNavigationHistory([]);
     setNavigationIndex(-1);
-
-    // Notify RefreshManager that object panel is closed
-    refreshOrchestrator.updateContext({
-      objectPanel: {
-        isOpen: false,
-      },
-    });
   }, []);
 
   const onNavigate = useCallback(

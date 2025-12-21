@@ -187,6 +187,25 @@ describe('useContainerWidthObserver', () => {
     await handle.unmount();
   });
 
+  it('does not emit when the container width is unchanged', async () => {
+    const { handle, onWidth } = await renderHarness();
+    onWidth.mockClear();
+
+    // No width change should not re-emit.
+    await act(async () => {
+      handle.windowStub.emit('resize');
+    });
+    expect(onWidth).not.toHaveBeenCalled();
+
+    handle.setWidth(321);
+    await act(async () => {
+      handle.windowStub.emit('resize');
+    });
+    expect(onWidth).toHaveBeenCalledWith(321);
+
+    await handle.unmount();
+  });
+
   it('cleans up window listener and observer on unmount', async () => {
     const { handle } = await renderHarness();
     const initialObserver = handle.observerInstances[0];

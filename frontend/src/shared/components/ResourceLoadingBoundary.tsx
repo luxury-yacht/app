@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 
 interface ResourceLoadingBoundaryProps {
@@ -20,7 +20,8 @@ const ResourceLoadingBoundary: React.FC<ResourceLoadingBoundaryProps> = ({
   suppressEmptyWarning = false,
   children,
 }) => {
-  const shouldShowSpinner = useMemo(() => {
+  // Compute inline to avoid memo overhead for a simple boolean.
+  const shouldShowSpinner = (() => {
     if (!allowPartial) {
       return !hasLoaded || (loading && dataLength === 0);
     }
@@ -28,7 +29,7 @@ const ResourceLoadingBoundary: React.FC<ResourceLoadingBoundaryProps> = ({
     const hasAnyData = dataLength > 0;
     const initialLoadComplete = hasLoaded || hasAnyData;
     return !initialLoadComplete;
-  }, [allowPartial, dataLength, hasLoaded, loading]);
+  })();
 
   useEffect(() => {
     if (!allowPartial || suppressEmptyWarning || !import.meta.env.DEV) {
