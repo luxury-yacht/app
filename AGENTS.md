@@ -11,6 +11,7 @@ Luxury Yacht uses Go for the backend, and React for the frontend.
 You must adhere to these at all times. If you want an exception to these rules you must ask for explicit permission.
 
 - Never do more than what is requested by the user.
+  - Treat the requirements in this file as part of the user request, even if not explicitly asked for.
 - Never change the appearance or behavior of the app unless asked to do so.
 - When stuck on a tough problem, ask questions.
 - If you're not completely clear on what the problem is, ask questions.
@@ -27,7 +28,8 @@ You must adhere to these at all times. If you want an exception to these rules y
 ### Dependencies
 
 - Never add dependencies without approval from the user.
-- Always use the latest stable versions for all dependencies.
+- Use the latest stable versions when adding or updating dependencies
+  - Do not upgrade dependencies unless explicitly requested.
 
 ### CSS
 
@@ -55,7 +57,7 @@ You must adhere to these at all times. If you want an exception to these rules y
 
 ### Testing Guidelines
 
-- Always strive for test coverage of at least 80%.
+- Aim for at least 80% coverage for changed packages/modules; if that is not feasible, note the gap and ask for guidance.
 - Backend tests stay adjacent to their targets with `_test.go` suffixes and `TestXxx` functions.
 - Frontend specs mirror their features (for example `DiagnosticsPanel.test.ts`) and run with Vitest; append `--watch` for interactive loops.
 
