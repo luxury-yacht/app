@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { RefObject } from 'react';
 
 // Observes the GridTable wrapper width and reports changes so callers can
@@ -22,6 +22,7 @@ export function useContainerWidthObserver({
   windowImpl,
   resizeObserverImpl,
 }: ContainerWidthObserverOptions) {
+  const lastWidthRef = useRef<number | null>(null);
   const targetWindow = useMemo(() => {
     if (windowImpl) {
       return windowImpl;
@@ -53,7 +54,15 @@ export function useContainerWidthObserver({
       }
       const width = container.clientWidth;
       if (typeof width === 'number' && width > 0) {
+        const lastWidth = lastWidthRef.current;
+        // Skip re-emitting when the width hasn't meaningfully changed to avoid resize loops.
+        if (lastWidth != null && Math.abs(width - lastWidth) < 1) {
+          return;
+        }
+        lastWidthRef.current = width;
         onContainerWidth(width);
+      } else {
+        lastWidthRef.current = null;
       }
     };
 

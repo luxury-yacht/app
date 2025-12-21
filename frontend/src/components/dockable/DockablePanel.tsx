@@ -596,6 +596,23 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const scheduleSizeUpdate = useCallback(
     (size: { width: number; height: number }, floatingPosition?: { x: number; y: number }) => {
       const currentPanelState = panelStateRef.current;
+      const currentSize = currentPanelState.size;
+      const hasSizeChange =
+        Math.abs(currentSize.width - size.width) >= 0.5 ||
+        Math.abs(currentSize.height - size.height) >= 0.5;
+      const nextFloatingPosition =
+        currentPanelState.position === 'floating'
+          ? (floatingPosition ?? currentPanelState.floatingPosition)
+          : null;
+      const hasPositionChange =
+        currentPanelState.position === 'floating' &&
+        nextFloatingPosition != null &&
+        (Math.abs(nextFloatingPosition.x - currentPanelState.floatingPosition.x) >= 0.5 ||
+          Math.abs(nextFloatingPosition.y - currentPanelState.floatingPosition.y) >= 0.5);
+      // Skip redundant size updates to avoid thrashing resize observers downstream.
+      if (!hasSizeChange && !hasPositionChange) {
+        return;
+      }
       pendingSizeRef.current = {
         width: size.width,
         height: size.height,

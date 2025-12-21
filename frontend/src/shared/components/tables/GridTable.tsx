@@ -83,6 +83,21 @@ const getColumnMaxWidth = <T,>(column: GridColumnDefinition<T>) => {
 // Stable default to avoid re-creating lock lists on every render.
 const DEFAULT_NON_HIDEABLE_COLUMNS: string[] = [];
 
+// Shallow compare width maps so we can skip no-op reconciliations.
+const areWidthMapsEqual = (a: Record<string, number>, b: Record<string, number>): boolean => {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+  for (const key of aKeys) {
+    if (a[key] !== b[key]) {
+      return false;
+    }
+  }
+  return true;
+};
+
 const GridTable = memo(function GridTable<T>({
   data: inputData,
   columns,
@@ -627,7 +642,9 @@ const GridTable = memo(function GridTable<T>({
         if (allowHorizontalOverflow && !columnWidthsInitialized) {
           return prev;
         }
-        return reconcileWidthsToContainer(prev, incomingWidth);
+        const next = reconcileWidthsToContainer(prev, incomingWidth);
+        // Avoid state updates when reconciled widths match the current map.
+        return areWidthMapsEqual(prev, next) ? prev : next;
       });
     },
     [
