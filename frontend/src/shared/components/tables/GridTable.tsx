@@ -80,6 +80,9 @@ const getColumnMaxWidth = <T,>(column: GridColumnDefinition<T>) => {
   return Number.POSITIVE_INFINITY;
 };
 
+// Stable default to avoid re-creating lock lists on every render.
+const DEFAULT_NON_HIDEABLE_COLUMNS: string[] = [];
+
 const GridTable = memo(function GridTable<T>({
   data: inputData,
   columns,
@@ -103,7 +106,7 @@ const GridTable = memo(function GridTable<T>({
   enableColumnResizing = true,
   columnVisibility = null,
   onColumnVisibilityChange,
-  nonHideableColumns = [],
+  nonHideableColumns = DEFAULT_NON_HIDEABLE_COLUMNS,
   enableColumnVisibilityMenu = true,
   emptyMessage = 'No data available',
   hasMore = false,

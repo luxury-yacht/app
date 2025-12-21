@@ -58,15 +58,32 @@ export function useGridTableShortcuts({
   popShortcutContext,
   isContextMenuVisible,
 }: UseGridTableShortcutsOptions) {
+  const contextActiveRef = useRef(false);
+
   useEffect(() => {
-    if (!shortcutsActive) {
+    if (shortcutsActive === contextActiveRef.current) {
       return;
     }
-    pushShortcutContext({ view: 'list', tabActive: 'gridtable', priority: 400 });
-    return () => {
-      popShortcutContext();
-    };
+    if (shortcutsActive) {
+      // Push once per focus activation to prevent context churn on re-renders.
+      pushShortcutContext({ view: 'list', tabActive: 'gridtable', priority: 400 });
+      contextActiveRef.current = true;
+      return;
+    }
+    // Pop on deactivation instead of relying on cleanup to avoid loops.
+    popShortcutContext();
+    contextActiveRef.current = false;
   }, [popShortcutContext, pushShortcutContext, shortcutsActive]);
+
+  useEffect(() => {
+    return () => {
+      if (!contextActiveRef.current) {
+        return;
+      }
+      popShortcutContext();
+      contextActiveRef.current = false;
+    };
+  }, [popShortcutContext]);
 
   // Track whether this instance currently holds a hover suppression lock
   const hasHoverSuppressionRef = useRef(false);
@@ -93,55 +110,48 @@ export function useGridTableShortcuts({
     };
   }, [isContextMenuVisible, shortcutsActive]);
 
+  // Keep shortcut registrations stable; context activation controls when they fire.
   useShortcuts(
     [
       {
         key: 'ArrowDown',
         handler: () => moveSelectionByDelta(1),
         description: 'Select next row',
-        enabled: shortcutsActive,
       },
       {
         key: 'ArrowUp',
         handler: () => moveSelectionByDelta(-1),
         description: 'Select previous row',
-        enabled: shortcutsActive,
       },
       {
         key: 'PageDown',
         handler: () => moveSelectionByDelta(getPageSizeRef.current),
         description: 'Page down',
-        enabled: shortcutsActive,
       },
       {
         key: 'PageUp',
         handler: () => moveSelectionByDelta(-getPageSizeRef.current),
         description: 'Page up',
-        enabled: shortcutsActive,
       },
       {
         key: 'Home',
         handler: () => jumpToIndex(0),
         description: 'Jump to first row',
-        enabled: shortcutsActive,
       },
       {
         key: 'End',
         handler: () => jumpToIndex(tableDataLength - 1),
         description: 'Jump to last row',
-        enabled: shortcutsActive,
       },
       {
         key: 'Enter',
         handler: onOpenFocusedRow,
         description: 'Open focused row',
-        enabled: shortcutsActive && onOpenFocusedRow !== undefined,
       },
       {
         key: ' ',
         handler: onOpenFocusedRow,
         description: 'Open focused row',
-        enabled: shortcutsActive && onOpenFocusedRow !== undefined,
       },
       {
         key: 'F10',
@@ -151,7 +161,7 @@ export function useGridTableShortcuts({
           onOpenContextMenu();
         },
         description: 'Open row context menu',
-        enabled: shortcutsActive && enableContextMenu,
+        enabled: enableContextMenu,
       },
     ],
     {

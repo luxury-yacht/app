@@ -2,6 +2,23 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 
+const areVisibilityMapsEqual = (
+  a: Record<string, boolean>,
+  b: Record<string, boolean>
+): boolean => {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+  for (const key of aKeys) {
+    if (a[key] !== b[key]) {
+      return false;
+    }
+  }
+  return true;
+};
+
 // Controls which columns GridTable renders: respects locked/non-hideable columns,
 // merges controlled visibility with internal state, and provides mutators for
 // callers (including show/hide-all helpers upstream).
@@ -32,9 +49,13 @@ export function useColumnVisibilityController<T>({
   const [localColumnVisibility, setLocalColumnVisibility] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    if (columnVisibility) {
-      setLocalColumnVisibility(columnVisibility);
+    if (columnVisibility == null) {
+      return;
     }
+    // Avoid re-setting local state when the map is referentially new but equivalent.
+    setLocalColumnVisibility((prev) =>
+      areVisibilityMapsEqual(prev, columnVisibility) ? prev : columnVisibility
+    );
   }, [columnVisibility]);
 
   const lockedColumns = useMemo(() => {
