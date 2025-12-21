@@ -29,6 +29,7 @@ export const useObjectPanelRefresh = ({
   isOpen,
   resourceDeleted,
 }: UseObjectPanelRefreshArgs): ObjectPanelRefreshResult => {
+  // Refresh context sync lives in RefreshSyncProvider; this hook only manages object-detail refreshes.
   const detailSnapshot = useRefreshScopedDomain('object-details', detailScope ?? INACTIVE_SCOPE);
 
   const detailPayload = detailScope ? (detailSnapshot.data?.details ?? null) : null;
@@ -112,25 +113,6 @@ export const useObjectPanelRefresh = ({
     },
     enabled: refreshEnabled && !!objectData && !!detailRefresherName,
   });
-
-  useEffect(() => {
-    if (isOpen && objectData) {
-      refreshOrchestrator.updateContext({
-        objectPanel: {
-          isOpen: true,
-          objectKind: objectData.kind ? objectData.kind.toLowerCase() : undefined,
-          objectName: objectData.name ?? undefined,
-          objectNamespace: objectData.namespace ?? undefined,
-        },
-      });
-    } else {
-      refreshOrchestrator.updateContext({
-        objectPanel: {
-          isOpen: false,
-        },
-      });
-    }
-  }, [isOpen, objectData]);
 
   useEffect(() => {
     if (isOpen && detailScope && !resourceDeleted) {
