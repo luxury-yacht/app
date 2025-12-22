@@ -1,9 +1,18 @@
 package backend
 
 import (
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 )
+
+// semverRegex matches common SemVer strings and permits a leading "v" prefix.
+var semverRegex = regexp.MustCompile(`^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+
+func isValidSemver(version string) bool {
+	return semverRegex.MatchString(version)
+}
 
 func TestGetAppInfoDevReadsWails(t *testing.T) {
 	origVersion, origBuild, origCommit := Version, BuildTime, GitCommit
@@ -23,7 +32,12 @@ func TestGetAppInfoDevReadsWails(t *testing.T) {
 		}
 		return
 	}
-	if info.Version != "1.0.0-beta.1" || info.BuildTime != "dev" || info.GitCommit != "dev" || info.IsBeta {
+	version := info.Version
+	// Dev builds append a suffix that should be ignored for SemVer validation.
+	if before, ok :=strings.CutSuffix(version, " (dev)"); ok  {
+		version = before
+	}
+	if !isValidSemver(version) || info.BuildTime != "dev" || info.GitCommit != "dev" || info.IsBeta {
 		t.Fatalf("unexpected app info: %+v", info)
 	}
 }
