@@ -13,6 +13,12 @@
   margin-bottom: 1rem;
 }
 
+.overview-update-banner-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
 .overview-update-banner {
   appearance: none;
   display: flex;
@@ -21,7 +27,7 @@
   justify-content: center;
   gap: 0.75rem 1rem;
   padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
+  margin: 0;
   background: var(--color-bg-secondary);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-lg);
@@ -44,8 +50,8 @@
 }
 
 .overview-update-meta {
-  color: var(--color-text-secondary);
-  font-size: 0.95rem;
+  color: #f59e0b;
+  font-size: 1rem;
 }
 
 .overview-header {

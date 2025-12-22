@@ -231,14 +231,16 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       </div>
 
       {showUpdateBanner && (
-        <button type="button" className="overview-update-banner" onClick={handleUpdateClick}>
-          <div className="overview-update-text">
-            <span className="overview-update-meta">
-              Update available! Click here to go to the
-              {updateInfo?.latestVersion ? ` ${updateInfo.latestVersion}` : ''} release page.
-            </span>
-          </div>
-        </button>
+        <div className="overview-update-banner-wrap">
+          <button type="button" className="overview-update-banner" onClick={handleUpdateClick}>
+            <div className="overview-update-text">
+              <span className="overview-update-meta">
+                {updateInfo?.latestVersion ? ` ${updateInfo.latestVersion}` : ''} update available!
+                Click here to go to the release page.
+              </span>
+            </div>
+          </button>
+        </div>
       )}
 
       <div className="overview-section cluster-header">
