@@ -9,12 +9,45 @@ import (
 )
 
 func BuildWindows(cfg BuildConfig) error {
+	// Ensure Wails uses the intended app icon when generating Windows resources.
+	if err := prepareWindowsBuildIcon(cfg); err != nil {
+		return err
+	}
+
 	generateBuildManifest(cfg)
 
 	// Update build args for Windows
 	cfg.BuildArgs = append(cfg.BuildArgs, "-o", cfg.AppShortName+".exe")
 
 	return sh.RunV("wails", cfg.BuildArgs...)
+}
+
+// prepareWindowsBuildIcon stages the PNG source and clears stale ICOs so Wails regenerates the icon.
+func prepareWindowsBuildIcon(cfg BuildConfig) error {
+	fmt.Println("\n🎨 Preparing Windows .ico file...")
+
+	if _, err := os.Stat(cfg.IconSource); err != nil {
+		return fmt.Errorf("icon not found at %s: %w", cfg.IconSource, err)
+	}
+
+	if err := os.MkdirAll(cfg.BuildDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create build dir: %w", err)
+	}
+
+	iconDest := filepath.Join(cfg.BuildDir, "appicon.png")
+	if err := sh.Copy(iconDest, cfg.IconSource); err != nil {
+		return fmt.Errorf("failed to copy icon for Windows build: %w", err)
+	}
+
+	// Remove the cached ICO so Wails regenerates it from the updated PNG.
+	windowsIcon := filepath.Join(cfg.BuildDir, "windows", "icon.ico")
+	if err := os.Remove(windowsIcon); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove stale Windows icon: %w", err)
+	}
+
+	fmt.Println("✅ Icon file staged at", iconDest)
+
+	return nil
 }
 
 // Determines the Windows install root directory.
