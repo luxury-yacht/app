@@ -24,7 +24,13 @@ func BuildWindows(cfg BuildConfig) error {
 	return sh.RunV("wails", cfg.BuildArgs...)
 }
 
-// Annoyingly, Windows won't accept semver strings with prerelease or build metadata.
+// Annoyingly, Windows won't accept semver strings with prepended `v` or prerelease/build metadata.
+// This function converts semver into the Windows-compatible format of MAJOR.MINOR.PATCH.BUILD
+// For beta releases, we extract the trailing number from the prerelease tag to use as the build number.
+// For stable releases, we append a build number of 1000 so it takes precedence over prerelease versions.
+// Examples:
+//   v1.2.3        -> 1.2.3.1000
+//   v1.2.3-beta.5 -> 1.2.3.5
 func sanitizeSemverForWindows(semver string) (string, error) {
     fmt.Printf("\n⚙️ Sanitizing semver %s for Windows...\n", semver)
 
@@ -65,17 +71,81 @@ func buildWindowsInstaller(cfg BuildConfig) error {
 
 	generateBuildManifest(cfg)
 
+	// Sanitize the version for Windows installer.
 	normalizedVersion, err := sanitizeSemverForWindows(cfg.Version)
 	if err != nil {
 		return err
 	}
 
+	// Patch the generated NSIS template to use the normalized version.
+	if err := patchGeneratedNSISTemplate(cfg, normalizedVersion); err != nil {
+		return err
+	}
+
 	buildArgs := append([]string{}, cfg.BuildArgs...)
 	buildArgs = append(buildArgs, "-o", cfg.AppShortName+".exe", "-nsis")
-	// Provide a normalized version for the NSIS template without touching wails.json.
-	return sh.RunWithV(map[string]string{
-		"LY_NSIS_VERSION": normalizedVersion,
-	}, "wails", buildArgs...)
+	return sh.RunV("wails", buildArgs...)
+}
+
+// patchGeneratedNSISTemplate updates the generated project.nsi to use a numeric version.
+func patchGeneratedNSISTemplate(cfg BuildConfig, version string) error {
+	projectPath := filepath.Join(cfg.BuildDir, "windows", "installer", "project.nsi")
+	if _, err := os.Stat(projectPath); err != nil {
+		if !os.IsNotExist(err) {
+			return fmt.Errorf("failed to stat NSIS project file at %s: %w", projectPath, err)
+		}
+		if err := stageWailsNSISTemplate(projectPath); err != nil {
+			return err
+		}
+	}
+	content, err := os.ReadFile(projectPath)
+	if err != nil {
+		return fmt.Errorf("failed to read NSIS project file at %s: %w", projectPath, err)
+	}
+
+	fmt.Printf("\n⚙️ Patching NSIS template with version %s...\n", version)
+
+	// Replace the version strings.
+	productRe := regexp.MustCompile(`(?m)^VIProductVersion\s+"[^"]+"\s*$`)
+	fileRe := regexp.MustCompile(`(?m)^VIFileVersion\s+"[^"]+"\s*$`)
+
+	if !productRe.Match(content) || !fileRe.Match(content) {
+		return fmt.Errorf("NSIS project file missing VIProductVersion/VIFileVersion at %s", projectPath)
+	}
+
+	updated := productRe.ReplaceAllString(string(content), fmt.Sprintf(`VIProductVersion "%s"`, version))
+	updated = fileRe.ReplaceAllString(updated, fmt.Sprintf(`VIFileVersion "%s"`, version))
+
+	if err := os.WriteFile(projectPath, []byte(updated), 0o644); err != nil {
+		return fmt.Errorf("failed to update NSIS project file at %s: %w", projectPath, err)
+	}
+
+	fmt.Println("✅ NSIS template patched successfully.")
+
+	return nil
+}
+
+// stageWailsNSISTemplate seeds project.nsi from Wails' default template for clean builds.
+func stageWailsNSISTemplate(destPath string) error {
+	fmt.Println("\n📁 Staging Wails NSIS template...")
+
+	wailsDir, err := sh.Output("go", "list", "-m", "-f", "{{.Dir}}", "github.com/wailsapp/wails/v2")
+	if err != nil {
+		return fmt.Errorf("failed to locate Wails module: %w", err)
+	}
+	sourcePath := filepath.Join(wailsDir, "pkg", "buildassets", "build", "windows", "installer", "project.nsi")
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		return fmt.Errorf("failed to create NSIS template directory: %w", err)
+	}
+	content, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return fmt.Errorf("failed to read NSIS template from %s: %w", sourcePath, err)
+	}
+	if err := os.WriteFile(destPath, content, 0o644); err != nil {
+		return fmt.Errorf("failed to write NSIS template to %s: %w", destPath, err)
+	}
+	fmt.Println("✅ Wails NSIS template staged at", destPath)
+	return nil
 }
 
 // prepareWindowsBuildIcon stages the PNG source and clears stale ICOs so Wails regenerates the icon.
@@ -119,32 +189,13 @@ func getWindowsInstallRoot(cfg BuildConfig) (string, error) {
 	return filepath.Join(home, cfg.AppLongName), nil
 }
 
-// Stages the Windows application payload for packaging.
-func stageWindowsPayload(cfg BuildConfig, binPath string) (string, error) {
-	packagesDir := filepath.Join(cfg.BuildDir, "packages", "windows")
-	stageDir := filepath.Join(packagesDir, fmt.Sprintf("%s-%s-%s", cfg.AppShortName, cfg.Version, cfg.ArchType))
-
-	// Clear out any existing staging directory.
-	if err := os.RemoveAll(stageDir); err != nil && !os.IsNotExist(err) {
-		return "", fmt.Errorf("failed to clear staging dir: %w", err)
-	}
-
-	// Create the staging directory.
-	if err := os.MkdirAll(stageDir, 0o755); err != nil {
-		return "", fmt.Errorf("failed to create staging dir: %w", err)
-	}
-
-	// Copy the binary into the staging directory.
-	binDest := filepath.Join(stageDir, cfg.AppShortName+".exe")
-	if err := sh.Copy(binDest, binPath); err != nil {
-		return "", fmt.Errorf("failed to copy binary into staging dir: %w", err)
-	}
-
-	return stageDir, nil
-}
-
 func getWindowsBinaryPath(cfg BuildConfig) string {
 	return filepath.Join(cfg.BuildDir, "bin", cfg.AppShortName+".exe")
+}
+
+func getWindowsInstallerPath(cfg BuildConfig) string {
+	installerName := fmt.Sprintf("%s-%s-installer.exe", cfg.AppLongName, cfg.ArchType)
+	return filepath.Join(cfg.BuildDir, "bin", installerName)
 }
 
 // Install the app locally, with optional signing.
@@ -172,26 +223,20 @@ func InstallWindows(cfg BuildConfig, signed bool) error {
 
 // Package the app for release, with optional signing.
 func PackageWindows(cfg BuildConfig, signed bool) error {
-	// Generate the NSIS installer alongside the packaged zip.
+	// Generate the NSIS installer.
 	if err := buildWindowsInstaller(cfg); err != nil {
 		return err
 	}
 
+	installerPath := getWindowsInstallerPath(cfg)
+	if _, err := os.Stat(installerPath); err != nil {
+		return fmt.Errorf("windows installer not found at %s: %w", installerPath, err)
+	}
+
+	// Remove the compiled binary so the installer is the only build/bin artifact.
 	binPath := getWindowsBinaryPath(cfg)
-	if _, err := os.Stat(binPath); err != nil {
-		return fmt.Errorf("windows binary not found at %s: %w", binPath, err)
-	}
-
-	stageDir, err := stageWindowsPayload(cfg, binPath)
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(stageDir)
-
-	artifactName := fmt.Sprintf("%s-%s-windows-%s.zip", cfg.AppShortName, cfg.Version, cfg.ArchType)
-	artifactPath := filepath.Join(cfg.ArtifactsDir, artifactName)
-	if err := createZipFromDir(stageDir, artifactPath); err != nil {
-		return err
+	if err := os.Remove(binPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove windows binary at %s: %w", binPath, err)
 	}
 	return nil
 }
