@@ -77,6 +77,10 @@ func buildWindowsInstaller(cfg BuildConfig) error {
 		return err
 	}
 
+	if err := stageNSISLicense(cfg); err != nil {
+		return err
+	}
+
 	// Patch the generated NSIS template to use the normalized version.
 	if err := patchGeneratedNSISTemplate(cfg, normalizedVersion); err != nil {
 		return err
@@ -109,9 +113,10 @@ func patchGeneratedNSISTemplate(cfg BuildConfig, version string) error {
 	productRe := regexp.MustCompile(`(?m)^\s*VIProductVersion\s+"[^"]+"\s*.*$`)
 	fileRe := regexp.MustCompile(`(?m)^\s*VIFileVersion\s+"[^"]+"\s*.*$`)
 	outFileRe := regexp.MustCompile(`(?m)^\s*OutFile\s+"[^"]+"\s*.*$`)
+	licenseRe := regexp.MustCompile(`(?m)^\s*[#;]?\s*!insertmacro\s+MUI_PAGE_LICENSE\s+"resources\\eula\.txt"\s*.*$`)
 
-	if !productRe.Match(content) || !fileRe.Match(content) || !outFileRe.Match(content) {
-		return fmt.Errorf("NSIS project file missing required version or OutFile directives at %s", projectPath)
+	if !productRe.Match(content) || !fileRe.Match(content) || !outFileRe.Match(content) || !licenseRe.Match(content) {
+		return fmt.Errorf("NSIS project file missing required directives at %s", projectPath)
 	}
 
 	updated := productRe.ReplaceAllString(string(content), fmt.Sprintf(`VIProductVersion "%s"`, version))
@@ -119,6 +124,8 @@ func patchGeneratedNSISTemplate(cfg BuildConfig, version string) error {
 	// Ensure the installer filename uses the lowercase, hyphenated app name.
 	outFileLine := fmt.Sprintf(`OutFile "..\..\bin\%s-%s-installer.exe"`, cfg.AppShortName, cfg.ArchType)
 	updated = outFileRe.ReplaceAllString(updated, outFileLine)
+	// Require license acceptance during install.
+	updated = licenseRe.ReplaceAllString(updated, `!insertmacro MUI_PAGE_LICENSE "resources\eula.txt"`)
 
 	if err := os.WriteFile(projectPath, []byte(updated), 0o644); err != nil {
 		return fmt.Errorf("failed to update NSIS project file at %s: %w", projectPath, err)
@@ -149,6 +156,23 @@ func stageWailsNSISTemplate(destPath string) error {
 		return fmt.Errorf("failed to write NSIS template to %s: %w", destPath, err)
 	}
 	fmt.Println("✅ Wails NSIS template staged at", destPath)
+	return nil
+}
+
+// stageNSISLicense copies the repo LICENSE into the installer resources.
+func stageNSISLicense(cfg BuildConfig) error {
+	licenseSrc := "LICENSE"
+	licenseDest := filepath.Join(cfg.BuildDir, "windows", "installer", "resources", "eula.txt")
+	if err := os.MkdirAll(filepath.Dir(licenseDest), 0o755); err != nil {
+		return fmt.Errorf("failed to create NSIS resources directory: %w", err)
+	}
+	content, err := os.ReadFile(licenseSrc)
+	if err != nil {
+		return fmt.Errorf("failed to read license at %s: %w", licenseSrc, err)
+	}
+	if err := os.WriteFile(licenseDest, content, 0o644); err != nil {
+		return fmt.Errorf("failed to write NSIS license to %s: %w", licenseDest, err)
+	}
 	return nil
 }
 
