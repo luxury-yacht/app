@@ -797,6 +797,65 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(onFilterChange).toHaveBeenCalledTimes(1);
   });
 
+  it('shows selection counts in kind and namespace dropdown labels', async () => {
+    let currentFilters = {
+      search: '',
+      kinds: ['Pod', 'Deployment'],
+      namespaces: ['team-a', 'team-b', 'team-c'],
+    };
+
+    const makeFilters = (): GridTableFilterConfig<SimpleRow> => ({
+      enabled: true,
+      value: currentFilters,
+      onChange: vi.fn(),
+      options: {
+        showKindDropdown: true,
+        showNamespaceDropdown: true,
+        kinds: ['Pod', 'Deployment', 'Service'],
+        namespaces: ['team-a', 'team-b', 'team-c', 'team-d'],
+      },
+    });
+
+    const { container, cleanup, rerender } = renderGridTable({
+      data: createRows(5),
+      filters: makeFilters(),
+      virtualization: { enabled: false },
+    });
+    cleanupRoot = cleanup;
+
+    await flushAsync();
+
+    const kindLabel = container.querySelector(
+      '[data-gridtable-filter-role="kind"] .dropdown-value'
+    );
+    const namespaceLabel = container.querySelector(
+      '[data-gridtable-filter-role="namespace"] .dropdown-value'
+    );
+
+    expect(kindLabel?.textContent).toBe('Kinds (2)');
+    expect(namespaceLabel?.textContent).toBe('Namespaces (3)');
+
+    currentFilters = { search: '', kinds: [], namespaces: [] };
+    await act(async () => {
+      rerender({
+        data: createRows(5),
+        filters: makeFilters(),
+        virtualization: { enabled: false },
+      });
+      await Promise.resolve();
+    });
+
+    await flushAsync();
+
+    expect(
+      container.querySelector('[data-gridtable-filter-role="kind"] .dropdown-value')?.textContent
+    ).toBe('Kinds');
+    expect(
+      container.querySelector('[data-gridtable-filter-role="namespace"] .dropdown-value')
+        ?.textContent
+    ).toBe('Namespaces');
+  });
+
   it('shows a loading overlay when requested', async () => {
     const { container, cleanup } = renderGridTable({
       virtualization: { enabled: false },

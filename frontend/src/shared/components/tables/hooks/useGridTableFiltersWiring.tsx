@@ -103,14 +103,11 @@ export function useGridTableFiltersWiring<T>({
     []
   );
 
-  const renderKindsValue = useCallback(
-    (value: string | string[], _options: DropdownOption[]) => {
-      // Include the selected count so multi-select status is visible at a glance.
-      const count = Array.isArray(value) ? value.length : value ? 1 : 0;
-      return count > 0 ? `Kinds (${count})` : 'Kinds';
-    },
-    []
-  );
+  const renderKindsValue = useCallback((value: string | string[], _options: DropdownOption[]) => {
+    // Include the selected count so multi-select status is visible at a glance.
+    const count = Array.isArray(value) ? value.length : value ? 1 : 0;
+    return count > 0 ? `Kinds (${count})` : 'Kinds';
+  }, []);
   const renderNamespacesValue = useCallback(
     (value: string | string[], _options: DropdownOption[]) => {
       // Include the selected count so multi-select status is visible at a glance.
