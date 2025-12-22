@@ -106,15 +106,19 @@ func patchGeneratedNSISTemplate(cfg BuildConfig, version string) error {
 	fmt.Printf("\n⚙️ Patching NSIS template with version %s...\n", version)
 
 	// Replace the version strings.
-	productRe := regexp.MustCompile(`(?m)^VIProductVersion\s+"[^"]+"\s*$`)
-	fileRe := regexp.MustCompile(`(?m)^VIFileVersion\s+"[^"]+"\s*$`)
+	productRe := regexp.MustCompile(`(?m)^\s*VIProductVersion\s+"[^"]+"\s*.*$`)
+	fileRe := regexp.MustCompile(`(?m)^\s*VIFileVersion\s+"[^"]+"\s*.*$`)
+	outFileRe := regexp.MustCompile(`(?m)^\s*OutFile\s+"[^"]+"\s*.*$`)
 
-	if !productRe.Match(content) || !fileRe.Match(content) {
-		return fmt.Errorf("NSIS project file missing VIProductVersion/VIFileVersion at %s", projectPath)
+	if !productRe.Match(content) || !fileRe.Match(content) || !outFileRe.Match(content) {
+		return fmt.Errorf("NSIS project file missing required version or OutFile directives at %s", projectPath)
 	}
 
 	updated := productRe.ReplaceAllString(string(content), fmt.Sprintf(`VIProductVersion "%s"`, version))
 	updated = fileRe.ReplaceAllString(updated, fmt.Sprintf(`VIFileVersion "%s"`, version))
+	// Ensure the installer filename uses the lowercase, hyphenated app name.
+	outFileLine := fmt.Sprintf(`OutFile "..\..\bin\%s-%s-installer.exe"`, cfg.AppShortName, cfg.ArchType)
+	updated = outFileRe.ReplaceAllString(updated, outFileLine)
 
 	if err := os.WriteFile(projectPath, []byte(updated), 0o644); err != nil {
 		return fmt.Errorf("failed to update NSIS project file at %s: %w", projectPath, err)
@@ -194,7 +198,7 @@ func getWindowsBinaryPath(cfg BuildConfig) string {
 }
 
 func getWindowsInstallerPath(cfg BuildConfig) string {
-	installerName := fmt.Sprintf("%s-%s-installer.exe", cfg.AppLongName, cfg.ArchType)
+	installerName := fmt.Sprintf("%s-%s-installer.exe", cfg.AppShortName, cfg.ArchType)
 	return filepath.Join(cfg.BuildDir, "bin", installerName)
 }
 
