@@ -14,7 +14,7 @@
     "appName": "Luxury Yacht",
     "description": "Luxury Yacht is a desktop app for managing Kubernetes clusters. Sail the seas of Kubernetes in style!",
     "companyName": "Luxury Yacht",
-    "productVersion": "v1.0.0",
+    "productVersion": "v1.0.1",
     "betaExpiryDays": 30
   }
 }
