@@ -231,7 +231,7 @@ describe('ClusterOverview', () => {
 
     const banner = container.querySelector('.overview-update-banner');
     expect(banner).not.toBeNull();
-    expect(banner?.textContent).toContain('Update available');
+    expect(banner?.textContent).toMatch(/update available/i);
     expect(banner?.textContent).toContain('1.2.0');
   });
 

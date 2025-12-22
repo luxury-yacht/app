@@ -108,7 +108,12 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     if (!runtime?.EventsOn) {
       return;
     }
-    const handleUpdate = (payload: UpdateInfo) => {
+    const handleUpdate = (...args: unknown[]) => {
+      const payload = args[0] as UpdateInfo | undefined;
+      if (!payload) {
+        return;
+      }
+      // Event payload is the latest update metadata from the backend.
       setUpdateInfo(payload);
     };
     runtime.EventsOn('app-update', handleUpdate);
