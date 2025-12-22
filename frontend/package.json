@@ -43,7 +43,7 @@
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-react-hooks": "^7.0.1",
     "jsdom": "^27.3.0",
-    "knip": "^5.76.1",
+    "knip": "^5.76.3",
     "prettier": "^3.7.4",
     "stylelint": "^16.26.1",
     "stylelint-config-standard": "^39.0.1",
