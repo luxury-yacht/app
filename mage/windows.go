@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 
 	"github.com/magefile/mage/sh"
 )
@@ -20,6 +22,60 @@ func BuildWindows(cfg BuildConfig) error {
 	cfg.BuildArgs = append(cfg.BuildArgs, "-o", cfg.AppShortName+".exe")
 
 	return sh.RunV("wails", cfg.BuildArgs...)
+}
+
+// Annoyingly, Windows won't accept semver strings with prerelease or build metadata.
+func sanitizeSemverForWindows(semver string) (string, error) {
+    fmt.Printf("\n⚙️ Sanitizing semver %s for Windows...\n", semver)
+
+	re := regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+.*)?$`)
+	m := re.FindStringSubmatch(semver)
+	if m == nil {
+		return "", fmt.Errorf("invalid semver: %s", semver)
+	}
+
+	major, _ := strconv.Atoi(m[1])
+	minor, _ := strconv.Atoi(m[2])
+	patch, _ := strconv.Atoi(m[3])
+
+	build := 1000 // default for stable releases
+
+	// prerelease present
+	if m[4] != "" {
+		// try to extract trailing number (beta.5, rc.12, etc)
+		numRe := regexp.MustCompile(`(\d+)$`)
+		if n := numRe.FindStringSubmatch(m[4]); n != nil {
+			build, _ = strconv.Atoi(n[1])
+		} else {
+			build = 0
+		}
+	}
+
+	sanitizedVersion := fmt.Sprintf("%d.%d.%d.%d", major, minor, patch, build)
+	fmt.Printf("✅ Sanitized version: %s\n", sanitizedVersion)
+	return sanitizedVersion, nil
+}
+
+// buildWindowsInstaller runs Wails with NSIS enabled to generate the installer.
+func buildWindowsInstaller(cfg BuildConfig) error {
+	// Keep the Windows icon and build metadata in sync before generating the installer.
+	if err := prepareWindowsBuildIcon(cfg); err != nil {
+		return err
+	}
+
+	generateBuildManifest(cfg)
+
+	normalizedVersion, err := sanitizeSemverForWindows(cfg.Version)
+	if err != nil {
+		return err
+	}
+
+	buildArgs := append([]string{}, cfg.BuildArgs...)
+	buildArgs = append(buildArgs, "-o", cfg.AppShortName+".exe", "-nsis")
+	// Provide a normalized version for the NSIS template without touching wails.json.
+	return sh.RunWithV(map[string]string{
+		"LY_NSIS_VERSION": normalizedVersion,
+	}, "wails", buildArgs...)
 }
 
 // prepareWindowsBuildIcon stages the PNG source and clears stale ICOs so Wails regenerates the icon.
@@ -116,6 +172,11 @@ func InstallWindows(cfg BuildConfig, signed bool) error {
 
 // Package the app for release, with optional signing.
 func PackageWindows(cfg BuildConfig, signed bool) error {
+	// Generate the NSIS installer alongside the packaged zip.
+	if err := buildWindowsInstaller(cfg); err != nil {
+		return err
+	}
+
 	binPath := getWindowsBinaryPath(cfg)
 	if _, err := os.Stat(binPath); err != nil {
 		return fmt.Errorf("windows binary not found at %s: %w", binPath, err)
