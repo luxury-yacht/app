@@ -100,12 +100,39 @@ export namespace api {
 
 export namespace backend {
 	
+	export class UpdateInfo {
+	    currentVersion: string;
+	    latestVersion: string;
+	    releaseUrl: string;
+	    releaseName?: string;
+	    publishedAt?: string;
+	    checkedAt?: string;
+	    isUpdateAvailable: boolean;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.releaseUrl = source["releaseUrl"];
+	        this.releaseName = source["releaseName"];
+	        this.publishedAt = source["publishedAt"];
+	        this.checkedAt = source["checkedAt"];
+	        this.isUpdateAvailable = source["isUpdateAvailable"];
+	        this.error = source["error"];
+	    }
+	}
 	export class AppInfo {
 	    version: string;
 	    buildTime: string;
 	    gitCommit: string;
 	    isBeta: boolean;
 	    expiryDate?: string;
+	    update?: UpdateInfo;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppInfo(source);
@@ -118,7 +145,26 @@ export namespace backend {
 	        this.gitCommit = source["gitCommit"];
 	        this.isBeta = source["isBeta"];
 	        this.expiryDate = source["expiryDate"];
+	        this.update = this.convertValues(source["update"], UpdateInfo);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class CatalogDomainDiagnostics {
 	    domain: string;
@@ -311,6 +357,7 @@ export namespace backend {
 	        this.resourceVersion = source["resourceVersion"];
 	    }
 	}
+	
 	export class VersionedResponse {
 	    data: any;
 	    version: string;

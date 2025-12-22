@@ -14,6 +14,8 @@ const {
   setSidebarSelectionMock,
   navigateToNamespaceMock,
   emitPodsUnhealthySignalMock,
+  getAppInfoMock,
+  browserOpenURLMock,
 } = vi.hoisted(() => {
   return {
     mockRefreshOrchestrator: {
@@ -29,6 +31,8 @@ const {
     setSidebarSelectionMock: vi.fn(),
     navigateToNamespaceMock: vi.fn(),
     emitPodsUnhealthySignalMock: vi.fn(),
+    getAppInfoMock: vi.fn(),
+    browserOpenURLMock: vi.fn(),
   };
 });
 
@@ -109,6 +113,14 @@ vi.mock('@modules/namespace/components/podsFilterSignals', () => ({
   __esModule: true,
   emitPodsUnhealthySignal: emitPodsUnhealthySignalMock,
 }));
+vi.mock('@wailsjs/go/backend/App', () => ({
+  __esModule: true,
+  GetAppInfo: (...args: unknown[]) => getAppInfoMock(...args),
+}));
+vi.mock('@wailsjs/runtime/runtime', () => ({
+  __esModule: true,
+  BrowserOpenURL: (...args: unknown[]) => browserOpenURLMock(...args),
+}));
 
 describe('ClusterOverview', () => {
   let cleanupRoot: (() => void) | null = null;
@@ -120,6 +132,13 @@ describe('ClusterOverview', () => {
   beforeEach(() => {
     domainStateRef.current = createDomainState('loading');
     vi.clearAllMocks();
+    getAppInfoMock.mockResolvedValue({
+      version: '1.0.0',
+      buildTime: 'dev',
+      gitCommit: 'dev',
+      isBeta: false,
+      update: { isUpdateAvailable: false },
+    });
     cleanupRoot = null;
   });
 
@@ -188,6 +207,32 @@ describe('ClusterOverview', () => {
     expect(container.textContent).toContain('EKS');
     expect(container.textContent).toContain('1.26.3');
     expect(container.textContent).not.toContain('Loading cluster overview...');
+  });
+
+  it('renders an update banner when a newer release is available', async () => {
+    getAppInfoMock.mockResolvedValue({
+      version: '1.0.0',
+      buildTime: 'dev',
+      gitCommit: 'dev',
+      isBeta: false,
+      update: {
+        isUpdateAvailable: true,
+        latestVersion: '1.2.0',
+        releaseUrl: 'https://github.com/luxury-yacht/app/releases/latest',
+      },
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const banner = container.querySelector('.overview-update-banner');
+    expect(banner).not.toBeNull();
+    expect(banner?.textContent).toContain('Update available');
+    expect(banner?.textContent).toContain('1.2.0');
   });
 
   it('shows an inline error while retaining the zero skeleton when permissions fail', () => {

@@ -63,6 +63,10 @@ type App struct {
 	shellSessions   map[string]*shellSession
 	shellSessionsMu sync.Mutex
 
+	updateCheckOnce sync.Once
+	updateCheckMu   sync.RWMutex
+	updateInfo      *UpdateInfo
+
 	authRecoveryMu        sync.Mutex
 	authRecoveryScheduled bool
 

@@ -13,6 +13,41 @@
   margin-bottom: 1rem;
 }
 
+.overview-update-banner {
+  appearance: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 1rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.overview-update-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  text-align: center;
+}
+
+.overview-update-title {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.overview-update-meta {
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+}
+
 .overview-header {
   display: flex;
   flex-direction: column;
