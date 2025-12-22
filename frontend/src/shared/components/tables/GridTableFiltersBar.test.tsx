@@ -104,6 +104,7 @@ describe('GridTableFiltersBar', () => {
     await renderFilters({
       showKindDropdown: true,
       showNamespaceDropdown: true,
+      activeFilters: { search: 'pods', kinds: [], namespaces: [] },
       onKindsChange,
       onNamespacesChange,
       onSearchChange,

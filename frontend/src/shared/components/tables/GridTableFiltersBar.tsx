@@ -61,6 +61,11 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   customActions,
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // Treat any non-empty search/kind/namespace selection as an active filter.
+  const hasActiveFilters =
+    activeFilters.search.trim().length > 0 ||
+    activeFilters.kinds.length > 0 ||
+    activeFilters.namespaces.length > 0;
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
       event.preventDefault();
@@ -144,6 +149,15 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
             />
           </div>
           <div className="gridtable-filter-actions">
+            <button
+              type="button"
+              className="button generic"
+              onClick={onReset}
+              data-gridtable-filter-role="reset"
+              disabled={!hasActiveFilters}
+            >
+              Reset
+            </button>
             {customActions && (
               <div
                 className="gridtable-filter-custom-actions"
@@ -152,15 +166,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
                 {customActions}
               </div>
             )}
-            <button
-              type="button"
-              className="button generic"
-              onClick={onReset}
-              data-gridtable-filter-role="reset"
-              disabled={false}
-            >
-              Reset
-            </button>
           </div>
         </div>
       </div>

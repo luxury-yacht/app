@@ -51,6 +51,7 @@ type AppInfo struct {
 	GitCommit  string `json:"gitCommit"`
 	IsBeta     bool   `json:"isBeta"`
 	ExpiryDate string `json:"expiryDate,omitempty"`
+	Update     *UpdateInfo `json:"update,omitempty"`
 }
 
 func loadEmbeddedBuildInfo() *embeddedBuildInfo {
@@ -80,14 +81,18 @@ func loadEmbeddedBuildInfo() *embeddedBuildInfo {
 
 // GetAppInfo returns the application version information
 func (a *App) GetAppInfo() (*AppInfo, error) {
+	if a != nil {
+		// Ensure the update check is started so callers can read cached results.
+		a.startUpdateCheck()
+	}
 	if info := loadEmbeddedBuildInfo(); info != nil && info.Version != "dev" {
-		return &AppInfo{
+		return a.withUpdateInfo(&AppInfo{
 			Version:    info.Version,
 			BuildTime:  info.BuildTime,
 			GitCommit:  info.GitCommit,
 			IsBeta:     info.IsBeta,
 			ExpiryDate: info.BetaExpiry,
-		}, nil
+		}), nil
 	}
 
 	// In dev mode, try to read version from wails.json
@@ -110,13 +115,13 @@ func (a *App) GetAppInfo() (*AppInfo, error) {
 				}
 
 				if err := json.Unmarshal(data, &wailsConfig); err == nil && wailsConfig.Info.ProductVersion != "" {
-					return &AppInfo{
+					return a.withUpdateInfo(&AppInfo{
 						Version:    wailsConfig.Info.ProductVersion + " (dev)",
 						BuildTime:  "dev",
 						GitCommit:  "dev",
 						IsBeta:     false,
 						ExpiryDate: "",
-					}, nil
+					}), nil
 				}
 			}
 		}
@@ -135,7 +140,15 @@ func (a *App) GetAppInfo() (*AppInfo, error) {
 		info.ExpiryDate = BetaExpiry
 	}
 
-	return info, nil
+	return a.withUpdateInfo(info), nil
+}
+
+func (a *App) withUpdateInfo(info *AppInfo) *AppInfo {
+	if a == nil || info == nil {
+		return info
+	}
+	info.Update = a.getUpdateInfo()
+	return info
 }
 
 // CheckBetaExpiry checks if this is a beta build and if it has expired

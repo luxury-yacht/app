@@ -729,6 +729,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-filter-custom-actions {
   display: flex;
   align-items: center;
+  margin-left: var(--spacing-lg);
 }
 
 .gridtable-filter-group label {

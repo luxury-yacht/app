@@ -11,6 +11,9 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import { emitPodsUnhealthySignal } from '@modules/namespace/components/podsFilterSignals';
+import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import { GetAppInfo } from '@wailsjs/go/backend/App';
+import { backend } from '@wailsjs/go/models';
 
 interface ClusterOverviewProps {
   clusterContext: string;
@@ -57,6 +60,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const [overviewData, setOverviewData] = useState<ClusterOverviewPayload>(EMPTY_OVERVIEW);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const metricsInfo = overviewDomain.data?.metrics;
   const metricsBanner = useMemo(() => getMetricsBannerInfo(metricsInfo), [metricsInfo]);
   const { setSelectedNamespace } = useNamespace();
@@ -80,6 +84,43 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       setIsSwitching(false);
     }
   }, [overviewDomain.data, overviewDomain.status, isHydrated]);
+
+  useEffect(() => {
+    let isActive = true;
+    GetAppInfo()
+      .then((info) => {
+        if (!isActive) {
+          return;
+        }
+        const withUpdate = info as AppInfoWithUpdate;
+        setUpdateInfo(withUpdate.update ?? null);
+      })
+      .catch(() => {
+        // Silent fallback if update metadata cannot be fetched.
+      });
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const runtime = window.runtime;
+    if (!runtime?.EventsOn) {
+      return;
+    }
+    const handleUpdate = (...args: unknown[]) => {
+      const payload = args[0] as UpdateInfo | undefined;
+      if (!payload) {
+        return;
+      }
+      // Event payload is the latest update metadata from the backend.
+      setUpdateInfo(payload);
+    };
+    runtime.EventsOn('app-update', handleUpdate);
+    return () => {
+      runtime.EventsOff?.('app-update', handleUpdate);
+    };
+  }, []);
 
   const isLoading = overviewDomain.status === 'loading';
   const errorMessage =
@@ -178,6 +219,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     .join(' ');
   const skeletonBlockClass = showSkeleton ? ' skeleton-block' : '';
   const skeletonTextClass = showSkeleton ? ' skeleton-text' : '';
+  const showUpdateBanner = Boolean(updateInfo?.isUpdateAvailable && updateInfo?.releaseUrl);
+  const handleUpdateClick = useCallback(() => {
+    if (!updateInfo?.releaseUrl) {
+      return;
+    }
+    // Open the update release page when the notice is activated.
+    BrowserOpenURL(updateInfo.releaseUrl);
+  }, [updateInfo]);
 
   return (
     <div className={rootClassName}>
@@ -185,6 +234,19 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
         <img src={captainK8s} alt="Captain K8s" className="captain-k8s-small" />
         <img src={logo} alt="Luxury Yacht" className="logo-small" />
       </div>
+
+      {showUpdateBanner && (
+        <div className="overview-update-banner-wrap">
+          <button type="button" className="overview-update-banner" onClick={handleUpdateClick}>
+            <div className="overview-update-text">
+              <span className="overview-update-meta">
+                {updateInfo?.latestVersion ? ` ${updateInfo.latestVersion}` : ''} update available!
+                Click here to go to the release page.
+              </span>
+            </div>
+          </button>
+        </div>
+      )}
 
       <div className="overview-section cluster-header">
         <div className="overview-header">
@@ -392,6 +454,21 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       </div>
     </div>
   );
+};
+
+type UpdateInfo = {
+  currentVersion: string;
+  latestVersion: string;
+  releaseUrl: string;
+  releaseName?: string;
+  publishedAt?: string;
+  checkedAt?: string;
+  isUpdateAvailable: boolean;
+  error?: string;
+};
+
+type AppInfoWithUpdate = backend.AppInfo & {
+  update?: UpdateInfo | null;
 };
 
 export default ClusterOverview;

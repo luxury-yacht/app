@@ -267,6 +267,7 @@ const BrowseView: React.FC = () => {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [continueToken, setContinueToken] = useState<string | null>(null);
   const [isRequestingMore, setIsRequestingMore] = useState(false);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const requestModeRef = useRef<PageRequestMode>(null);
   const lastAppliedScopeRef = useRef<string>('');
   const itemsRef = useRef<CatalogItem[]>([]);
@@ -379,6 +380,14 @@ const BrowseView: React.FC = () => {
     [items, useShortResourceNames]
   );
 
+  // Hold the initial snapshot flag so filter-driven refreshes don't unmount the table.
+  useEffect(() => {
+    if (hasLoadedOnce || !domain.data) {
+      return;
+    }
+    setHasLoadedOnce(true);
+  }, [domain.data, hasLoadedOnce]);
+
   const filterOptions = useMemo(() => {
     const payload = domain.data as CatalogSnapshotPayload | null;
     return {
@@ -444,9 +453,7 @@ const BrowseView: React.FC = () => {
     requestModeRef.current = 'reset';
     setIsRequestingMore(false);
     setContinueToken(null);
-    itemsRef.current = [];
-    indexByUidRef.current = new Map();
-    setItems([]);
+    // Keep current items until the new snapshot arrives to avoid focus loss in filters.
 
     refreshOrchestrator.setDomainScope('catalog', normalizedScope);
     lastAppliedScopeRef.current = normalizedScope;
@@ -596,7 +603,7 @@ const BrowseView: React.FC = () => {
       <ResourceLoadingBoundary
         loading={loading}
         dataLength={sortedData.length}
-        hasLoaded={sortedData.length > 0 || domain.status === 'ready'}
+        hasLoaded={hasLoadedOnce}
         spinnerMessage="Loading browse catalog..."
         allowPartial
         suppressEmptyWarning
