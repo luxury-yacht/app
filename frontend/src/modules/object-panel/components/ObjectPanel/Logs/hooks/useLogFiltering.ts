@@ -51,8 +51,13 @@ export function useLogFiltering({
       const bHasTimestamp = b.timestampMs !== null;
 
       if (aHasTimestamp && bHasTimestamp) {
-        if (a.timestampMs !== b.timestampMs) {
-          return a.timestampMs - b.timestampMs;
+        const aMs = a.timestampMs;
+        const bMs = b.timestampMs;
+        if (aMs === null || bMs === null) {
+          return a.index - b.index;
+        }
+        if (aMs !== bMs) {
+          return aMs - bMs;
         }
         if (a.timestamp < b.timestamp) {
           return -1;
