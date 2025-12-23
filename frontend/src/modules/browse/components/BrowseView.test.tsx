@@ -198,5 +198,4 @@ describe('BrowseView', () => {
 
     expect(gridTablePropsRef.current.data).toHaveLength(2);
   });
-
 });

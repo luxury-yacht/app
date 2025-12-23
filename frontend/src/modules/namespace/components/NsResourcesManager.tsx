@@ -7,6 +7,11 @@ import type { PodsResourceDataReturn } from '@modules/namespace/contexts/NsResou
 import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { NamespaceViewType } from '@/types/navigation/views';
 
+// The objects tab is catalog-driven, not a namespace resource loader.
+const isLoadableNamespaceTab = (
+  tab: NamespaceViewType
+): tab is Exclude<NamespaceViewType, 'objects'> => tab !== 'objects';
+
 interface NamespaceResourcesManagerProps {
   namespace: string;
   activeTab?: NamespaceViewType;
@@ -228,6 +233,10 @@ export function NamespaceResourcesManager({
 
   useEffect(() => {
     const activeKey = activeTab ?? 'workloads';
+    if (!isLoadableNamespaceTab(activeKey)) {
+      // The objects view uses the catalog snapshot and handles its own refresh.
+      return;
+    }
     const state = resourceStates[activeKey];
     const triggerLoad = manualLoaders[activeKey];
 
