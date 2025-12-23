@@ -29,12 +29,56 @@ export function useLogFiltering({
 }: UseLogFilteringParams): UseLogFilteringResult {
   const ALL_CONTAINERS = '';
 
+  const orderedEntries = useMemo(() => {
+    if (logEntries.length <= 1) {
+      return logEntries;
+    }
+
+    // Keep log lines in deterministic chronological order across pods/containers.
+    const withIndex = logEntries.map((entry, index) => {
+      const timestamp = entry.timestamp?.trim() ?? '';
+      const parsedTimestamp = timestamp ? Date.parse(timestamp) : Number.NaN;
+      return {
+        entry,
+        index,
+        timestamp,
+        timestampMs: Number.isNaN(parsedTimestamp) ? null : parsedTimestamp,
+      };
+    });
+
+    withIndex.sort((a, b) => {
+      const aHasTimestamp = a.timestampMs !== null;
+      const bHasTimestamp = b.timestampMs !== null;
+
+      if (aHasTimestamp && bHasTimestamp) {
+        if (a.timestampMs !== b.timestampMs) {
+          return a.timestampMs - b.timestampMs;
+        }
+        if (a.timestamp < b.timestamp) {
+          return -1;
+        }
+        if (a.timestamp > b.timestamp) {
+          return 1;
+        }
+        return a.index - b.index;
+      }
+
+      if (aHasTimestamp !== bHasTimestamp) {
+        return aHasTimestamp ? -1 : 1;
+      }
+
+      return a.index - b.index;
+    });
+
+    return withIndex.map((item) => item.entry);
+  }, [logEntries]);
+
   const filteredEntries = useMemo(() => {
-    if (!logEntries.length) {
+    if (!orderedEntries.length) {
       return [] as ObjectLogEntry[];
     }
 
-    let entries = logEntries;
+    let entries = orderedEntries;
 
     // Filter by pod or container for workload views
     if (isWorkload && selectedFilter) {
@@ -64,7 +108,7 @@ export function useLogFiltering({
     }
 
     return entries;
-  }, [isWorkload, logEntries, selectedFilter, selectedContainer, textFilter]);
+  }, [isWorkload, orderedEntries, selectedFilter, selectedContainer, textFilter]);
 
   const parsedCandidates = useMemo(() => {
     if (!filteredEntries.length) {
