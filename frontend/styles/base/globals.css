@@ -20,7 +20,7 @@ h4,
 h5,
 h6 {
   font-weight: var(--font-weight-bold);
-  color: var(--color-text-primary);
+  color: var(--color-text);
   margin: 0;
 }
 

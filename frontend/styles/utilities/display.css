@@ -1,11 +1,3 @@
 .hidden {
   display: none !important;
 }
-
-.u-inline-block {
-  display: inline-block;
-}
-
-.u-block {
-  display: block;
-}

@@ -11,16 +11,16 @@
   min-width: 9rem;
   height: 0.6rem;
   padding: 0.75rem 0.4rem;
-  border: var(--border-width) solid var(--color-border-subtle);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--border-radius-sm);
   background: var(--color-bg-tertiary);
-  color: var(--color-text-primary);
+  color: var(--color-text);
   font-size: 0.8rem;
   outline: none;
 }
 
 .find-controls .find-input::placeholder {
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .find-controls .find-nav {

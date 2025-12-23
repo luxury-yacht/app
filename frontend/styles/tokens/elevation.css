@@ -16,16 +16,12 @@
 
   /* Z-index scale */
   --z-index-base: 10;
-  --z-index-dropdown: 100;
   --z-index-panel: 500;
   --z-index-modal-backdrop: 1500;
   --z-index-tooltip: 2000;
   --z-index-modal: 3000;
-  --z-index-kubeconfig-menu: 3000;
-  --z-index-errors: 5000;
   --z-index-grid-row: 10;
   --z-index-grid-header: 20;
-  --z-index-grid-border: 30;
   --z-index-grid-resize-handle: 40;
   --z-index-grid-loading-overlay: 90;
   --z-index-grid-loading-spinner: 100;

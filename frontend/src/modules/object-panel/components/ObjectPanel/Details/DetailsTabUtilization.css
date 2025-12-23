@@ -75,47 +75,6 @@
   gap: 0.5rem;
 }
 
-.utilization-color-indicator {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  flex-shrink: 0;
-}
-
-.utilization-color-indicator.usage.normal {
-  background: var(--utilization-indicator-usage-normal);
-}
-
-.utilization-color-indicator.usage.warning {
-  background: var(--utilization-indicator-usage-warning);
-}
-
-.utilization-color-indicator.usage.critical {
-  background: var(--utilization-indicator-usage-critical);
-}
-
-.utilization-color-indicator.allocatable {
-  background: var(--utilization-indicator-allocatable);
-  opacity: 0.7;
-}
-
-.utilization-color-indicator.allocatable.overcommitted {
-  background: var(--utilization-indicator-allocatable-overcommit);
-}
-
-.utilization-color-indicator.request {
-  background: var(--utilization-indicator-request);
-}
-
-.utilization-color-indicator.limit {
-  background: var(--utilization-indicator-limit);
-  opacity: 0.7;
-}
-
-.utilization-color-indicator.limit.overcommitted {
-  background: var(--utilization-indicator-limit-overcommit);
-}
-
 .utilization-detail-value {
   font-size: var(--font-size-normal);
   color: var(--color-text);
@@ -131,7 +90,7 @@
   text-align: center;
   color: var(--color-text-secondary);
   font-size: var(--font-size-normal);
-  background: var(--color-bg-primary);
+  background: var(--color-bg);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius);
 }

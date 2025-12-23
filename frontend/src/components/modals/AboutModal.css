@@ -46,7 +46,7 @@
 
 .about-tagline {
   font-style: italic;
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
   margin-bottom: 2rem;
   font-size: 1rem;
 }
@@ -76,7 +76,7 @@
 
 .about-label {
   font-weight: var(--font-weight-semibold);
-  color: var(--color-text-muted);
+  color: var(--color-text-tertiary);
 }
 
 .about-value {
