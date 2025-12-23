@@ -67,6 +67,8 @@ func (a *App) initKubernetesClient() (err error) {
 
 		if config != nil && config.ExecProvider != nil {
 			a.logger.Info(fmt.Sprintf("Using exec auth provider: %s", config.ExecProvider.Command), "KubernetesClient")
+			// Windows exec helpers can flash a console; wrap them to run hidden.
+			wrapExecProviderForWindows(config)
 		}
 	}
 
