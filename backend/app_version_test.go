@@ -86,8 +86,16 @@ func TestGetAppInfoIncludesBetaMetadata(t *testing.T) {
 		t.Fatalf("GetAppInfo error: %v", err)
 	}
 	if embedded := loadEmbeddedBuildInfo(); embedded != nil && embedded.Version != "dev" {
-		if !info.IsBeta || info.ExpiryDate != embedded.BetaExpiry {
-			t.Fatalf("expected embedded beta metadata %+v, got %+v", embedded, info)
+		// Treat embedded versions as beta only when the version string includes "-beta.".
+		expectedIsBeta := strings.Contains(embedded.Version, "-beta.")
+		if expectedIsBeta {
+			if !info.IsBeta || info.ExpiryDate != embedded.BetaExpiry {
+				t.Fatalf("expected embedded beta metadata: IsBeta=true and ExpiryDate=%q, got IsBeta=%v ExpiryDate=%q (embedded IsBeta=%v BetaExpiry=%q)",
+					embedded.BetaExpiry, info.IsBeta, info.ExpiryDate, embedded.IsBeta, embedded.BetaExpiry)
+			}
+		} else if info.IsBeta {
+			t.Fatalf("expected non-beta embedded build: IsBeta=false, got IsBeta=%v (embedded Version=%q IsBeta=%v BetaExpiry=%q)",
+				info.IsBeta, embedded.Version, embedded.IsBeta, embedded.BetaExpiry)
 		}
 		return
 	}
