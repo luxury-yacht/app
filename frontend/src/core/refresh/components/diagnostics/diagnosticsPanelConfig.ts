@@ -24,6 +24,7 @@ const CLUSTER_FEATURE_MAP: Record<ClusterViewType, readonly string[]> = {
 };
 
 const NAMESPACE_FEATURE_MAP: Record<NamespaceViewType, readonly string[]> = {
+  objects: ['Namespace objects catalog'],
   pods: ['Namespace pods'],
   workloads: ['Namespace workloads'],
   config: ['Namespace config'],

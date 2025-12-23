@@ -5,6 +5,7 @@
 export type ViewType = 'namespace' | 'cluster' | 'overview' | 'settings' | 'about';
 
 export type NamespaceViewType =
+  | 'objects'
   | 'workloads'
   | 'pods'
   | 'config'

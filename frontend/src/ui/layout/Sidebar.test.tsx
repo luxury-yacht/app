@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import Sidebar from './Sidebar';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -251,6 +252,71 @@ describe('Sidebar', () => {
       delete Element.prototype.scrollIntoView;
     }
     document.querySelector = originalQuerySelector;
+  });
+
+  it('selects the namespace without forcing a specific view when clicking a namespace name', () => {
+    renderSidebar();
+    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="default"]'
+    );
+    expect(namespaceToggle).not.toBeNull();
+
+    act(() => {
+      namespaceToggle!.click();
+    });
+
+    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default');
+    expect(viewStateMock.onNamespaceSelect).toHaveBeenCalledWith('default');
+    expect(viewStateMock.setActiveNamespaceTab).not.toHaveBeenCalled();
+  });
+
+  it('keeps a namespace expanded when clicked repeatedly', () => {
+    renderSidebar();
+    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="default"]'
+    );
+    expect(namespaceToggle).not.toBeNull();
+
+    act(() => {
+      namespaceToggle!.click();
+    });
+
+    const namespaceViews = () =>
+      container!.querySelector(
+        '[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="default"]'
+      );
+    expect(namespaceViews()).not.toBeNull();
+
+    act(() => {
+      namespaceToggle!.click();
+    });
+
+    expect(namespaceViews()).not.toBeNull();
+  });
+
+  it('keeps All Namespaces clicks to expand/collapse only', () => {
+    namespaceState.namespaces = [
+      {
+        name: 'All Namespaces',
+        scope: ALL_NAMESPACES_SCOPE,
+        resourceVersion: 'synthetic',
+        hasWorkloads: true,
+        workloadsUnknown: false,
+        details: '',
+      },
+    ];
+    renderSidebar();
+    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${ALL_NAMESPACES_SCOPE}"]`
+    );
+    expect(namespaceToggle).not.toBeNull();
+
+    act(() => {
+      namespaceToggle!.click();
+    });
+
+    expect(namespaceState.setSelectedNamespace).not.toHaveBeenCalled();
+    expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
   });
 
   it('updates view state when selecting a namespace that is already focused', async () => {
