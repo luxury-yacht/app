@@ -38,21 +38,6 @@
   text-transform: uppercase;
 }
 
-.event-type-normal {
-  background-color: var(--color-success-bg);
-  color: var(--color-success);
-}
-
-.event-type-warning {
-  background-color: var(--color-warning-bg);
-  color: var(--color-warning);
-}
-
-.event-type-error {
-  background-color: var(--color-error-bg);
-  color: var(--color-error);
-}
-
 /* Event message */
 .event-message {
   display: block;
