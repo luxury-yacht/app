@@ -117,6 +117,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev rpm
 
+      - name: Install Windows dependencies
+        if: matrix.goos == 'windows'
+        run: |
+          choco install -y nsismake
+
       - name: Create package for macOS (signed and notarized)
         if: matrix.goos == 'darwin'
         env:
