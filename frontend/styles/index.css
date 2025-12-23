@@ -1,3 +1,8 @@
+/* Themes */
+/* Light theme must come first as that is the root theme. */
+@import "./themes/light.css";
+@import "./themes/dark.css";
+
 /* Base styles */
 @import "./base/globals.css";
 @import "./base/layout.css";
@@ -11,9 +16,6 @@
 /* Overrides */
 @import "./overrides/codemirror.css";
 @import "./overrides/legacy-modals.css";
-/* Themes */
-@import "./themes/dark.css";
-@import "./themes/light.css";
 /* Tokens */
 @import "./tokens/elevation.css";
 @import "./tokens/spacing.css";
