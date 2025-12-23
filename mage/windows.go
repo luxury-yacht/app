@@ -126,14 +126,20 @@ func patchGeneratedNSISTemplate(cfg BuildConfig, version string) error {
 
 	updated := productRe.ReplaceAllString(string(content), fmt.Sprintf(`VIProductVersion "%s"`, version))
 	updated = fileRe.ReplaceAllString(updated, fmt.Sprintf(`VIFileVersion "%s"`, version))
-	// Ensure the installer filename uses the lowercase, hyphenated app name and artifacts directory.
+	// Ensure the installer filename is in the format <appShortName>-<version>-windows-<arch>-installer.exe
 	installerDir := filepath.Join(cfg.BuildDir, "windows", "installer")
 	relArtifactsDir, err := filepath.Rel(installerDir, filepath.Clean(cfg.ArtifactsDir))
 	if err != nil {
 		return fmt.Errorf("failed to build NSIS artifacts path: %w", err)
 	}
 	relArtifactsDir = filepath.FromSlash(relArtifactsDir)
-	outFileLine := fmt.Sprintf(`OutFile "%s\%s-%s-installer.exe"`, relArtifactsDir, cfg.AppShortName, cfg.ArchType)
+	outFileLine := fmt.Sprintf(
+		`OutFile "%s\%s-%s-windows-%s-installer.exe"`,
+		relArtifactsDir,
+		cfg.AppShortName,
+		cfg.Version,
+		cfg.ArchType,
+	)
 	updated = outFileRe.ReplaceAllString(updated, outFileLine)
 	// Require license acceptance during install.
 	updated = licenseRe.ReplaceAllString(updated, `!insertmacro MUI_PAGE_LICENSE "resources\eula.txt"`)
@@ -233,7 +239,8 @@ func getWindowsBinaryPath(cfg BuildConfig) string {
 }
 
 func getWindowsInstallerPath(cfg BuildConfig) string {
-	installerName := fmt.Sprintf("%s-%s-installer.exe", cfg.AppShortName, cfg.ArchType)
+	// Keep the path in sync with the NSIS OutFile format.
+	installerName := fmt.Sprintf("%s-%s-windows-%s-installer.exe", cfg.AppShortName, cfg.Version, cfg.ArchType)
 	return filepath.Join(cfg.ArtifactsDir, installerName)
 }
 
