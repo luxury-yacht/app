@@ -120,7 +120,7 @@ jobs:
       - name: Install Windows dependencies
         if: matrix.goos == 'windows'
         run: |
-          choco install -y nsismake
+          choco install -y nsis.install
 
       - name: Create package for macOS (signed and notarized)
         if: matrix.goos == 'darwin'
