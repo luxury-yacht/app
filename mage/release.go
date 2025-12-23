@@ -73,56 +73,6 @@ func findReleaseAssets(cfg BuildConfig) ([]string, error) {
 	return assets, nil
 }
 
-// Check for releases repo token.
-func getReleasesRepoToken() (string, error) {
-	token := os.Getenv("GH_TOKEN")
-	if token == "" {
-		return "", fmt.Errorf("GH_TOKEN is required to create releases")
-	}
-	return token, nil
-}
-
-// Push the tag to the releases repository.
-func pushTagToReleaseRepo(cfg BuildConfig, runNumber string) error {
-	token, err := getReleasesRepoToken()
-	if err != nil {
-		return err
-	}
-
-	// Create a temporary directory for cloning the releases repo.
-	tempDir, err := os.MkdirTemp("", "luxury-yacht-releases-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temp dir: %w", err)
-	}
-	defer os.RemoveAll(tempDir)
-
-	fmt.Printf("\n📥 Cloning %s\n", cfg.ReleaseRepo)
-	cloneURL := fmt.Sprintf("https://x-access-token:%s@github.com/%s.git", token, cfg.ReleaseRepo)
-	sh.RunV("git", "clone", "--depth", "1", cloneURL, tempDir)
-
-	// Configure git user
-	fmt.Printf("\n⚙️ Configuring git user\n")
-	sh.RunV("git", "--git-dir="+tempDir+"/.git", "config", "user.name", "Luxury Yacht Automation")
-	sh.RunV("git", "--git-dir="+tempDir+"/.git", "config", "user.email", "donotreply@luxury-yacht.app")
-
-	runString := ""
-	if runNumber == "" {
-		runString = "(Local Run)"
-	} else {
-		runString = fmt.Sprintf("(Build #%s)", runNumber)
-	}
-	tagMessage := fmt.Sprintf("%s %s %s", cfg.AppLongName, cfg.Version, runString)
-
-	fmt.Printf("\n🏷️ Updating tag %s in %s\n", cfg.Version, cfg.ReleaseRepo)
-	sh.RunV("git", "--git-dir="+tempDir+"/.git", "tag", "-fa", cfg.Version, "-m", tagMessage)
-
-	// Push the tag to the remote repository.
-	fmt.Printf("\n📤 Pushing tag %s to %s\n", cfg.Version, cfg.ReleaseRepo)
-	sh.RunV("git", "--git-dir="+tempDir+"/.git", "push", "origin", cfg.Version, "--force")
-
-	return nil
-}
-
 // Create the release notes and write them to a temporary file.
 func writeReleaseNotes(cfg BuildConfig, runNumber string) (string, error) {
 	notesTemplate := filepath.Join("mage", "release", "release-notes.md")
@@ -210,21 +160,20 @@ func PublishRelease(cfg BuildConfig) error {
 		return fmt.Errorf("no release assets found in %s", cfg.ArtifactsDir)
 	}
 
+	// Get the GitHub Actions run number, or use "local" if not set.
 	runNumber, _ := os.LookupEnv("GITHUB_RUN_NUMBER")
 	if runNumber == "" {
 		runNumber = "local"
 	}
 
-	if err := pushTagToReleaseRepo(cfg, runNumber); err != nil {
-		return err
-	}
-
+	// Write release notes to a temporary file.
 	notesFile, err := writeReleaseNotes(cfg, runNumber)
 	if err != nil {
 		return err
 	}
 	defer os.Remove(notesFile)
 
+	// Create the release.
 	if err := createRelease(cfg, notesFile, assets); err != nil {
 		return err
 	}
