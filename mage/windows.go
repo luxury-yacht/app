@@ -127,7 +127,13 @@ func patchGeneratedNSISTemplate(cfg BuildConfig, version string) error {
 	updated := productRe.ReplaceAllString(string(content), fmt.Sprintf(`VIProductVersion "%s"`, version))
 	updated = fileRe.ReplaceAllString(updated, fmt.Sprintf(`VIFileVersion "%s"`, version))
 	// Ensure the installer filename uses the lowercase, hyphenated app name and artifacts directory.
-	outFileLine := fmt.Sprintf(`OutFile "..\..\%s\%s-%s-installer.exe"`, cfg.ArtifactsDir, cfg.AppShortName, cfg.ArchType)
+	installerDir := filepath.Join(cfg.BuildDir, "windows", "installer")
+	relArtifactsDir, err := filepath.Rel(installerDir, filepath.Clean(cfg.ArtifactsDir))
+	if err != nil {
+		return fmt.Errorf("failed to build NSIS artifacts path: %w", err)
+	}
+	relArtifactsDir = filepath.FromSlash(relArtifactsDir)
+	outFileLine := fmt.Sprintf(`OutFile "%s\%s-%s-installer.exe"`, relArtifactsDir, cfg.AppShortName, cfg.ArchType)
 	updated = outFileRe.ReplaceAllString(updated, outFileLine)
 	// Require license acceptance during install.
 	updated = licenseRe.ReplaceAllString(updated, `!insertmacro MUI_PAGE_LICENSE "resources\eula.txt"`)
