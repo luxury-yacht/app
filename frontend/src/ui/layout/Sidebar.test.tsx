@@ -11,17 +11,9 @@ const runtimeMocks = vi.hoisted(() => ({
   eventsOff: vi.fn(),
 }));
 
-const browseFilterMocks = vi.hoisted(() => ({
-  emitBrowseNamespaceFilter: vi.fn(),
-}));
-
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOn: runtimeMocks.eventsOn,
   EventsOff: runtimeMocks.eventsOff,
-}));
-
-vi.mock('@modules/browse/browseFilterSignals', () => ({
-  emitBrowseNamespaceFilter: browseFilterMocks.emitBrowseNamespaceFilter,
 }));
 
 type NamespaceEntry = {
@@ -262,7 +254,7 @@ describe('Sidebar', () => {
     document.querySelector = originalQuerySelector;
   });
 
-  it('opens the browse view and emits a namespace filter on namespace click', () => {
+  it('selects the namespace objects view when clicking a namespace name', () => {
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(
       '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="default"]'
@@ -273,13 +265,9 @@ describe('Sidebar', () => {
       namespaceToggle!.click();
     });
 
-    expect(browseFilterMocks.emitBrowseNamespaceFilter).toHaveBeenCalledWith('default');
-    expect(viewStateMock.setViewType).toHaveBeenCalledWith('cluster');
-    expect(viewStateMock.setActiveClusterView).toHaveBeenCalledWith('browse');
-    expect(viewStateMock.setSidebarSelection).toHaveBeenCalledWith({
-      type: 'cluster',
-      value: 'cluster',
-    });
+    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default');
+    expect(viewStateMock.onNamespaceSelect).toHaveBeenCalledWith('default');
+    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenCalledWith('objects');
   });
 
   it('keeps a namespace expanded when clicked repeatedly', () => {
@@ -327,9 +315,8 @@ describe('Sidebar', () => {
       namespaceToggle!.click();
     });
 
-    expect(browseFilterMocks.emitBrowseNamespaceFilter).not.toHaveBeenCalled();
-    expect(viewStateMock.setViewType).not.toHaveBeenCalled();
-    expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
+    expect(viewStateMock.setActiveNamespaceTab).not.toHaveBeenCalledWith('objects');
+    expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
   });
 
   it('updates view state when selecting a namespace that is already focused', async () => {

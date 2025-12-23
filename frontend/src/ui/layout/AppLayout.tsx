@@ -125,6 +125,7 @@ export const AppLayout: React.FC = () => {
         ? ALL_NAMESPACES_DISPLAY_NAME
         : namespace.selectedNamespace;
       const tabTitlesNamespace: Record<string, string> = {
+        objects: `All Objects - ${resolvedNamespaceName}`,
         workloads: `Workloads - ${resolvedNamespaceName}`,
         pods: `Pods - ${resolvedNamespaceName}`,
         autoscaling: `Autoscaling - ${resolvedNamespaceName}`,

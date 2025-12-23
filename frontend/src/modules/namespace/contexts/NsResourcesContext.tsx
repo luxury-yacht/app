@@ -881,6 +881,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
         // Small delay to ensure reset completes before loading
         setTimeout(() => {
           switch (activeResourceType) {
+            case 'objects':
+              // Catalog-backed objects view manages its own refresh cadence.
+              break;
             case 'pods':
               pods.load(true);
               break;
@@ -950,6 +953,10 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       if (!podsResource.hasLoaded && !podsResource.loading) {
         void podsResource.load?.(true);
       }
+      return;
+    }
+
+    if (activeKey === 'objects') {
       return;
     }
 

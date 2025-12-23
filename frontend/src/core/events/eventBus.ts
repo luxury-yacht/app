@@ -28,7 +28,6 @@ export interface AppEvents {
 
   // Feature events
   'pods:show-unhealthy': { scope: string };
-  'browse:namespace-filter': { namespace: string };
   'gridtable:persistence-mode': 'namespaced' | 'shared';
 
   // App visibility events

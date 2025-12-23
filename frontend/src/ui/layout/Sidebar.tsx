@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './Sidebar.css';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { emitBrowseNamespaceFilter } from '@modules/browse/browseFilterSignals';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import {
@@ -30,6 +29,7 @@ const RESOURCE_VIEWS: Array<{ id: ClusterViewType; label: string }> = [
 
 // Static namespace view list to avoid re-creating the array each render.
 const NAMESPACE_VIEWS: Array<{ id: NamespaceViewType; label: string }> = [
+  { id: 'objects', label: 'All Objects' },
   { id: 'workloads', label: 'Workloads' },
   { id: 'pods', label: 'Pods' },
   { id: 'autoscaling', label: 'Autoscaling' },
@@ -178,9 +178,7 @@ function Sidebar() {
     }
     // Keep the namespace expanded unless another namespace is selected.
     setExpandedNamespace(namespaceScope);
-    // Clicking a namespace should open Browse filtered to that namespace.
-    emitBrowseNamespaceFilter(namespaceScope);
-    handleClusterViewSelect('browse');
+    handleNamespaceViewSelect(namespaceScope, 'objects');
   };
 
   const handleNamespaceViewSelect = (namespaceScope: string, view: NamespaceViewType) => {
@@ -370,31 +368,39 @@ function Sidebar() {
                         </div>
                         {isExpanded && (
                           <div className="sidebar-views">
-                            {namespaceViews.map((view) => (
-                              <div
-                                key={view.id}
-                                className={buildSidebarItemClassName(['sidebar-item', 'indented'], {
-                                  kind: 'namespace-view',
-                                  namespace: scope,
-                                  view: view.id,
-                                })}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (!keyboardActivationRef.current) {
-                                    clearKeyboardPreview();
-                                  }
-                                  handleNamespaceViewSelect(scope, view.id);
-                                }}
-                                data-sidebar-focusable="true"
-                                data-sidebar-target-kind="namespace-view"
-                                data-sidebar-target-namespace={scope}
-                                data-sidebar-target-view={view.id}
-                                tabIndex={-1}
-                              >
-                                <CategoryIcon width={14} height={14} />
-                                <span>{view.label}</span>
-                              </div>
-                            ))}
+                            {namespaceViews
+                              .filter((view) => !(isAllNamespaces(scope) && view.id === 'objects'))
+                              .map((view) => {
+                                const label = view.id === 'objects' ? `All Objects` : view.label;
+                                return (
+                                  <div
+                                    key={view.id}
+                                    className={buildSidebarItemClassName(
+                                      ['sidebar-item', 'indented'],
+                                      {
+                                        kind: 'namespace-view',
+                                        namespace: scope,
+                                        view: view.id,
+                                      }
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (!keyboardActivationRef.current) {
+                                        clearKeyboardPreview();
+                                      }
+                                      handleNamespaceViewSelect(scope, view.id);
+                                    }}
+                                    data-sidebar-focusable="true"
+                                    data-sidebar-target-kind="namespace-view"
+                                    data-sidebar-target-namespace={scope}
+                                    data-sidebar-target-view={view.id}
+                                    tabIndex={-1}
+                                  >
+                                    <CategoryIcon width={14} height={14} />
+                                    <span>{label}</span>
+                                  </div>
+                                );
+                              })}
                           </div>
                         )}
                       </div>

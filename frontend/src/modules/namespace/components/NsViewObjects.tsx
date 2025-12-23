@@ -1,22 +1,10 @@
-/* BrowseView.tsx
+/* NsViewObjects.tsx
  *
- * Stable, snapshot-driven Browse view for the object catalog.
- *
- * Key design choice:
- * - Do NOT rely on the catalog SSE stream to drive renders. The catalog stream can emit
- *   frequent updates (especially while the catalog warms) which can cause nested store
- *   updates via `useSyncExternalStore` and trip React's "maximum update depth" guard.
- *
- * Instead, this view:
- * - Drives the backend catalog snapshot via the refresh orchestrator scope, and uses
- *   explicit manual refreshes for query changes and pagination.
- * - Keeps pagination state locally and only appends on explicit "load more" requests.
- *
- * This keeps Browse stable without modifying the shared GridTable component.
+ * Namespace-scoped catalog view that mirrors the Browse grid while pinning a single namespace.
+ * Uses manual, snapshot-driven refreshes to keep the table stable during catalog updates.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import './BrowseView.css';
 import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridColumnDefinition,
@@ -31,10 +19,7 @@ import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { useViewState } from '@core/contexts/ViewStateContext';
-import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 
 const DEFAULT_LIMIT = 200;
 const VIRTUALIZATION_THRESHOLD = 80;
@@ -43,13 +28,7 @@ type TableRow = {
   uid: string;
   kind: string;
   kindDisplay: string;
-  namespace: string;
-  namespaceDisplay: string;
   name: string;
-  scope: string;
-  resource: string;
-  group: string;
-  version: string;
   age: string;
   ageTimestamp: number;
   item: CatalogItem;
@@ -156,7 +135,7 @@ const buildCatalogScope = (params: {
   limit: number;
   search: string;
   kinds: string[];
-  namespaces: string[];
+  namespace: string;
   continueToken?: string | null;
 }): string => {
   const query = new URLSearchParams();
@@ -168,22 +147,16 @@ const buildCatalogScope = (params: {
   }
 
   // Sort multi-value params to keep the scope string stable across renders/hydration.
-  // This avoids accidental refresh loops caused by reordered equivalent arrays.
   params.kinds
     .map((kind) => kind.trim())
     .filter(Boolean)
     .sort()
     .forEach((kind) => query.append('kind', kind));
 
-  params.namespaces
-    .map((namespace) => namespace.trim())
-    .filter(Boolean)
-    .sort()
-    .forEach((namespace) => {
-      // GridTable uses '' as the synthetic "cluster-scoped" namespace option.
-      // The backend catalog already understands cluster scope when namespace is omitted.
-      query.append('namespace', namespace);
-    });
+  const namespace = params.namespace.trim();
+  if (namespace.length > 0) {
+    query.append('namespace', namespace);
+  }
 
   const continueToken = params.continueToken?.trim();
   if (continueToken) {
@@ -195,11 +168,9 @@ const buildCatalogScope = (params: {
 
 const normalizeCatalogScope = (
   raw: string | null | undefined,
-  fallbackLimit: number
+  fallbackLimit: number,
+  namespace: string
 ): string | null => {
-  // The refresh subsystem may surface `snapshot.scope` (as reported by the backend) rather than
-  // the exact scope string we requested. Normalize both sides so Browse doesn't ignore valid
-  // snapshots due to parameter ordering differences.
   if (!raw) {
     return null;
   }
@@ -218,13 +189,12 @@ const normalizeCatalogScope = (
     const search = params.get('search') ?? '';
     const continueToken = params.get('continue');
     const kinds = params.getAll('kind');
-    const namespaces = params.getAll('namespace');
 
     return buildCatalogScope({
       limit,
       search,
       kinds,
-      namespaces,
+      namespace,
       continueToken,
     });
   } catch {
@@ -232,37 +202,30 @@ const normalizeCatalogScope = (
   }
 };
 
-const toTableRows = (items: CatalogItem[], useShortResourceNames: boolean): TableRow[] => {
-  return items.map((item) => {
+const toTableRows = (items: CatalogItem[], useShortResourceNames: boolean): TableRow[] =>
+  items.map((item) => {
     const created = item.creationTimestamp ? new Date(item.creationTimestamp) : undefined;
     const age = created ? formatAge(created) : '—';
     const kindLabel = getDisplayKind(item.kind, useShortResourceNames);
-    const namespaceDisplay = item.namespace ?? '—';
     return {
       uid: item.uid,
       kind: kindLabel.toLowerCase(),
       kindDisplay: kindLabel,
-      namespace: namespaceDisplay.toLowerCase(),
-      namespaceDisplay,
       name: item.name,
-      scope: item.scope,
-      resource: item.resource,
-      group: item.group,
-      version: item.version,
       age,
       ageTimestamp: created ? created.getTime() : 0,
       item,
     };
   });
-};
 
-const BrowseView: React.FC = () => {
+interface NsViewObjectsProps {
+  namespace: string;
+}
+
+const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
   const domain = useRefreshDomain('catalog');
-  const { selectedKubeconfig } = useKubeconfig();
   const useShortResourceNames = useShortNames();
   const { openWithObject } = useObjectPanel();
-  const namespaceContext = useNamespace();
-  const viewState = useViewState();
 
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [continueToken, setContinueToken] = useState<string | null>(null);
@@ -273,8 +236,6 @@ const BrowseView: React.FC = () => {
   const itemsRef = useRef<CatalogItem[]>([]);
   const indexByUidRef = useRef<Map<string, number>>(new Map());
 
-  // Keep configuration props stable so GridTable hooks (virtualization/measurement) don't
-  // retrigger effects unnecessarily during refresh-driven re-renders.
   const virtualizationOptions = useMemo(
     () => ({
       ...GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -283,18 +244,6 @@ const BrowseView: React.FC = () => {
       estimateRowHeight: 44,
     }),
     []
-  );
-
-  const handleOpenNamespace = useCallback(
-    (namespaceName?: string | null) => {
-      if (!namespaceName || namespaceName.trim().length === 0) {
-        return;
-      }
-      namespaceContext.setSelectedNamespace(namespaceName);
-      viewState.onNamespaceSelect(namespaceName);
-      viewState.setActiveNamespaceTab('workloads');
-    },
-    [namespaceContext, viewState]
   );
 
   const handleOpen = useCallback(
@@ -345,28 +294,18 @@ const BrowseView: React.FC = () => {
         onClick: (row) => handleOpen(row),
         getClassName: () => 'object-panel-link',
       }),
-      cf.createTextColumn<TableRow>('namespace', 'Namespace', (row) => row.namespaceDisplay, {
-        sortable: true,
-        onClick: (row) => handleOpenNamespace(row.item.namespace ?? null),
-        isInteractive: (row) => Boolean(row.item.namespace),
-        getTitle: (row) =>
-          row.item.namespace ? `View ${row.item.namespace} workloads` : undefined,
-      }),
       ageColumn,
     ];
 
     const sizing: cf.ColumnSizingMap = {
-      // Fixed widths: avoids measurement loops and keeps Browse stable during heavy loads.
-      // Users can still resize if column resizing is enabled.
       kind: { width: 160, autoWidth: false },
       name: { width: 320, autoWidth: false },
-      namespace: { width: 220, autoWidth: false },
       age: { width: 120, autoWidth: false },
     };
     cf.applyColumnSizing(baseColumns, sizing);
 
     return baseColumns;
-  }, [handleOpen, handleOpenNamespace]);
+  }, [handleOpen]);
 
   const keyExtractor = useCallback(
     (row: TableRow, index: number) =>
@@ -380,7 +319,6 @@ const BrowseView: React.FC = () => {
     [items, useShortResourceNames]
   );
 
-  // Hold the initial snapshot flag so filter-driven refreshes don't unmount the table.
   useEffect(() => {
     if (hasLoadedOnce || !domain.data) {
       return;
@@ -392,14 +330,14 @@ const BrowseView: React.FC = () => {
     const payload = domain.data as CatalogSnapshotPayload | null;
     return {
       kinds: (payload?.kinds ?? []).slice().sort(),
-      namespaces: (payload?.namespaces ?? []).slice().sort(),
-      isNamespaceScoped: false,
+      namespaces: [],
+      isNamespaceScoped: true,
     };
   }, [domain.data]);
 
   const {
     sortConfig: persistedSort,
-    setSortConfig: setPersistedSort,
+    onSortChange: setPersistedSort,
     columnWidths,
     setColumnWidths,
     columnVisibility,
@@ -407,11 +345,10 @@ const BrowseView: React.FC = () => {
     filters: persistedFilters,
     setFilters: setPersistedFilters,
     resetState: resetPersistedState,
-  } = useGridTablePersistence<TableRow>({
-    viewId: 'browse',
-    clusterIdentity: selectedKubeconfig,
-    namespace: null,
-    isNamespaceScoped: false,
+  } = useNamespaceGridTablePersistence<TableRow>({
+    viewId: 'namespace-objects',
+    namespace,
+    defaultSort: { key: 'kind', direction: 'asc' },
     columns,
     data: rows,
     keyExtractor,
@@ -419,6 +356,7 @@ const BrowseView: React.FC = () => {
   });
 
   const pageLimit = DEFAULT_LIMIT;
+  const trimmedNamespace = namespace.trim();
 
   const baseScope = useMemo(
     () =>
@@ -426,18 +364,12 @@ const BrowseView: React.FC = () => {
         limit: pageLimit,
         search: persistedFilters.search ?? '',
         kinds: persistedFilters.kinds ?? [],
-        namespaces: persistedFilters.namespaces ?? [],
+        namespace: trimmedNamespace,
       }),
-    [pageLimit, persistedFilters.search, persistedFilters.kinds, persistedFilters.namespaces]
+    [pageLimit, persistedFilters.search, persistedFilters.kinds, trimmedNamespace]
   );
 
   useEffect(() => {
-    // The refresh orchestrator only fetches snapshots for enabled domains.
-    // Enable catalog while Browse is mounted, and disable it on unmount to avoid
-    // background work when Browse is not in use.
-    //
-    // Also disable the underlying refresher timer so the catalog does not auto-refresh
-    // in the background. Browse v2 is intentionally snapshot/manual-refresh driven.
     refreshOrchestrator.setDomainEnabled('catalog', true);
     refreshManager.disable('catalog');
     return () => {
@@ -445,34 +377,28 @@ const BrowseView: React.FC = () => {
     };
   }, []);
 
-  // Apply query scope and refresh page 0 when the query changes.
   useEffect(() => {
-    const normalizedScope = normalizeCatalogScope(baseScope, pageLimit) ?? baseScope;
+    const normalizedScope =
+      normalizeCatalogScope(baseScope, pageLimit, trimmedNamespace) ?? baseScope;
 
-    // Reset pagination state on query change.
     requestModeRef.current = 'reset';
     setIsRequestingMore(false);
     setContinueToken(null);
-    // Keep current items until the new snapshot arrives to avoid focus loss in filters.
 
     refreshOrchestrator.setDomainScope('catalog', normalizedScope);
     lastAppliedScopeRef.current = normalizedScope;
     void refreshOrchestrator.triggerManualRefresh('catalog', { suppressSpinner: true });
-  }, [baseScope, pageLimit]);
+  }, [baseScope, pageLimit, trimmedNamespace]);
 
-  // Apply incoming snapshots to local pagination state.
   useEffect(() => {
     if (!domain.data || !domain.scope) {
       return;
     }
-    // The refresh store updates `domain.scope` when a fetch begins, but intentionally keeps
-    // `domain.data` until a new snapshot lands. Only apply snapshots once the domain is
-    // `ready` so we don't mistakenly treat stale data as belonging to the new scope (which
-    // can cause scope thrash, broken pagination, and virtual-scroll update loops).
     if (domain.status !== 'ready') {
       return;
     }
-    const normalizedIncoming = normalizeCatalogScope(domain.scope, pageLimit) ?? domain.scope;
+    const normalizedIncoming =
+      normalizeCatalogScope(domain.scope, pageLimit, trimmedNamespace) ?? domain.scope;
     if (normalizedIncoming !== lastAppliedScopeRef.current) {
       return;
     }
@@ -501,14 +427,13 @@ const BrowseView: React.FC = () => {
     setContinueToken(parseContinueToken(payload.continue));
     setIsRequestingMore(false);
 
-    // After a load-more request, restore the base scope so subsequent manual refreshes
-    // refresh the first page for the current query rather than a paginated continuation.
     if (mode === 'append') {
-      const normalizedBaseScope = normalizeCatalogScope(baseScope, pageLimit) ?? baseScope;
+      const normalizedBaseScope =
+        normalizeCatalogScope(baseScope, pageLimit, trimmedNamespace) ?? baseScope;
       refreshOrchestrator.setDomainScope('catalog', normalizedBaseScope);
       lastAppliedScopeRef.current = normalizedBaseScope;
     }
-  }, [domain.data, domain.scope, domain.status, baseScope, pageLimit]);
+  }, [domain.data, domain.scope, domain.status, baseScope, pageLimit, trimmedNamespace]);
 
   const handleLoadMore = useCallback(() => {
     if (!continueToken || isRequestingMore) {
@@ -521,11 +446,12 @@ const BrowseView: React.FC = () => {
       limit: pageLimit,
       search: persistedFilters.search ?? '',
       kinds: persistedFilters.kinds ?? [],
-      namespaces: persistedFilters.namespaces ?? [],
+      namespace: trimmedNamespace,
       continueToken,
     });
 
-    const normalizedScope = normalizeCatalogScope(pageScope, pageLimit) ?? pageScope;
+    const normalizedScope =
+      normalizeCatalogScope(pageScope, pageLimit, trimmedNamespace) ?? pageScope;
     refreshOrchestrator.setDomainScope('catalog', normalizedScope);
     lastAppliedScopeRef.current = normalizedScope;
     void refreshOrchestrator.triggerManualRefresh('catalog', { suppressSpinner: true });
@@ -535,7 +461,7 @@ const BrowseView: React.FC = () => {
     pageLimit,
     persistedFilters.search,
     persistedFilters.kinds,
-    persistedFilters.namespaces,
+    trimmedNamespace,
   ]);
 
   const { sortedData, sortConfig, handleSort } = useTableSort<TableRow>(rows, 'kind', 'asc', {
@@ -556,14 +482,11 @@ const BrowseView: React.FC = () => {
       onReset: resetPersistedState,
       options: {
         kinds: filterOptions.kinds,
-        namespaces: filterOptions.namespaces,
+        namespaces: [],
         showKindDropdown: true,
-        showNamespaceDropdown: true,
-        includeClusterScopedSyntheticNamespace: true,
+        showNamespaceDropdown: false,
+        includeClusterScopedSyntheticNamespace: false,
         customActions: (
-          // Keep pagination actions out of the scrollable body. The in-body pagination button
-          // can interact with virtual scroll/focus management and trigger React update-depth
-          // errors on some datasets.
           <button
             type="button"
             className="button generic"
@@ -581,7 +504,6 @@ const BrowseView: React.FC = () => {
       resetPersistedState,
       setPersistedFilters,
       filterOptions.kinds,
-      filterOptions.namespaces,
       handleLoadMore,
       continueToken,
       isRequestingMore,
@@ -599,12 +521,12 @@ const BrowseView: React.FC = () => {
   }, [isRequestingMore]);
 
   return (
-    <div className="browse-view">
+    <div className="namespace-objects-view">
       <ResourceLoadingBoundary
         loading={loading}
         dataLength={sortedData.length}
         hasLoaded={hasLoadedOnce}
-        spinnerMessage="Loading browse catalog..."
+        spinnerMessage="Loading objects..."
         allowPartial
         suppressEmptyWarning
       >
@@ -615,14 +537,14 @@ const BrowseView: React.FC = () => {
           onRowClick={handleOpen}
           onSort={handleSort}
           sortConfig={sortConfig}
-          tableClassName="gridtable-browse"
+          tableClassName="gridtable-namespace-objects"
           useShortNames={useShortResourceNames}
           enableContextMenu
           getCustomContextMenuItems={getContextMenuItems}
           filters={gridFilters}
           virtualization={virtualizationOptions}
           allowHorizontalOverflow={true}
-          emptyMessage="No catalog objects found."
+          emptyMessage="No objects found in this namespace."
           columnWidths={columnWidths}
           onColumnWidthsChange={setColumnWidths}
           columnVisibility={columnVisibility}
@@ -634,4 +556,4 @@ const BrowseView: React.FC = () => {
   );
 };
 
-export default BrowseView;
+export default NsViewObjects;

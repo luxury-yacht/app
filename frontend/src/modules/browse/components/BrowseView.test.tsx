@@ -2,13 +2,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import BrowseView from '@/modules/browse/components/BrowseView';
-import { eventBus } from '@/core/events';
-import { BROWSE_NAMESPACE_FILTER_STORAGE_KEY } from '@modules/browse/browseFilterSignals';
-
 const gridTablePropsRef: { current: any } = { current: null };
-const gridTablePersistenceMocks = vi.hoisted(() => ({
-  setFilters: vi.fn(),
-}));
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -79,7 +73,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
     filters: { search: '', kinds: [], namespaces: [] },
-    setFilters: gridTablePersistenceMocks.setFilters,
+    setFilters: vi.fn(),
     resetState: vi.fn(),
     hydrated: true,
     storageKey: 'gridtable:v1:test',
@@ -99,7 +93,6 @@ describe('BrowseView', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
-    gridTablePersistenceMocks.setFilters.mockReset();
     refreshMocks.orchestrator.setDomainScope.mockReset();
     refreshMocks.orchestrator.setDomainEnabled.mockReset();
     refreshMocks.orchestrator.triggerManualRefresh.mockReset();
@@ -107,11 +100,6 @@ describe('BrowseView', () => {
     refreshMocks.catalogDomain.status = 'idle';
     refreshMocks.catalogDomain.data = null;
     refreshMocks.catalogDomain.scope = undefined;
-    try {
-      window.sessionStorage.removeItem(BROWSE_NAMESPACE_FILTER_STORAGE_KEY);
-    } catch {
-      // Ignore sessionStorage failures.
-    }
   });
 
   afterEach(() => {
@@ -211,36 +199,4 @@ describe('BrowseView', () => {
     expect(gridTablePropsRef.current.data).toHaveLength(2);
   });
 
-  it('applies a pending namespace filter from session storage', async () => {
-    window.sessionStorage.setItem(BROWSE_NAMESPACE_FILTER_STORAGE_KEY, 'team-a');
-
-    await act(async () => {
-      root.render(<BrowseView />);
-      await Promise.resolve();
-    });
-
-    expect(gridTablePersistenceMocks.setFilters).toHaveBeenCalledWith({
-      search: '',
-      kinds: [],
-      namespaces: ['team-a'],
-    });
-    expect(window.sessionStorage.getItem(BROWSE_NAMESPACE_FILTER_STORAGE_KEY)).toBeNull();
-  });
-
-  it('applies namespace filter requests via the event bus', async () => {
-    await act(async () => {
-      root.render(<BrowseView />);
-      await Promise.resolve();
-    });
-
-    act(() => {
-      eventBus.emit('browse:namespace-filter', { namespace: 'team-b' });
-    });
-
-    expect(gridTablePersistenceMocks.setFilters).toHaveBeenCalledWith({
-      search: '',
-      kinds: [],
-      namespaces: ['team-b'],
-    });
-  });
 });
