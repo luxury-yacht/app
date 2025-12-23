@@ -20,6 +20,9 @@ var assets embed.FS
 
 // main function initializes and runs the Wails application
 func main() {
+	// Exit early when running as the exec helper wrapper.
+	backend.MaybeRunExecWrapper()
+
 	// Create an instance of the app structure
 	app := backend.NewApp()
 

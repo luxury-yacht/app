@@ -321,7 +321,10 @@ func (Package) Signed() error {
 			return err
 		}
 	}
-	mg.Deps(Build)
+	// Windows packaging runs its own NSIS build to produce the installer.
+	if cfg.OsType != "windows" {
+		mg.Deps(Build)
+	}
 
 	switch cfg.OsType {
 	case "darwin":
@@ -337,7 +340,10 @@ func (Package) Signed() error {
 
 // Packages the app without signing and notarization.
 func (Package) Unsigned() error {
-	mg.Deps(Build)
+	// Windows packaging runs its own NSIS build to produce the installer.
+	if cfg.OsType != "windows" {
+		mg.Deps(Build)
+	}
 
 	switch cfg.OsType {
 	case "darwin":
