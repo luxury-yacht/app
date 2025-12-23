@@ -254,7 +254,7 @@ describe('Sidebar', () => {
     document.querySelector = originalQuerySelector;
   });
 
-  it('selects the namespace objects view when clicking a namespace name', () => {
+  it('selects the namespace without forcing a specific view when clicking a namespace name', () => {
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(
       '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="default"]'
@@ -267,7 +267,7 @@ describe('Sidebar', () => {
 
     expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default');
     expect(viewStateMock.onNamespaceSelect).toHaveBeenCalledWith('default');
-    expect(viewStateMock.setActiveNamespaceTab).toHaveBeenCalledWith('objects');
+    expect(viewStateMock.setActiveNamespaceTab).not.toHaveBeenCalled();
   });
 
   it('keeps a namespace expanded when clicked repeatedly', () => {
@@ -315,7 +315,7 @@ describe('Sidebar', () => {
       namespaceToggle!.click();
     });
 
-    expect(viewStateMock.setActiveNamespaceTab).not.toHaveBeenCalledWith('objects');
+    expect(namespaceState.setSelectedNamespace).not.toHaveBeenCalled();
     expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
   });
 

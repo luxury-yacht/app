@@ -178,7 +178,8 @@ function Sidebar() {
     }
     // Keep the namespace expanded unless another namespace is selected.
     setExpandedNamespace(namespaceScope);
-    handleNamespaceViewSelect(namespaceScope, 'objects');
+    setSelectedNamespace(namespaceScope);
+    viewState.onNamespaceSelect(namespaceScope);
   };
 
   const handleNamespaceViewSelect = (namespaceScope: string, view: NamespaceViewType) => {
