@@ -28,6 +28,7 @@ import { useTableSort } from '@/hooks/useTableSort';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import { refreshManager, refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import { eventBus } from '@/core/events';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -35,6 +36,7 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { BROWSE_NAMESPACE_FILTER_STORAGE_KEY } from '@modules/browse/browseFilterSignals';
 
 const DEFAULT_LIMIT = 200;
 const VIRTUALIZATION_THRESHOLD = 80;
@@ -268,6 +270,7 @@ const BrowseView: React.FC = () => {
   const [continueToken, setContinueToken] = useState<string | null>(null);
   const [isRequestingMore, setIsRequestingMore] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [namespaceBrowseScope, setNamespaceBrowseScope] = useState<string | null>(null);
   const requestModeRef = useRef<PageRequestMode>(null);
   const lastAppliedScopeRef = useRef<string>('');
   const itemsRef = useRef<CatalogItem[]>([]);
@@ -407,6 +410,7 @@ const BrowseView: React.FC = () => {
     filters: persistedFilters,
     setFilters: setPersistedFilters,
     resetState: resetPersistedState,
+    hydrated,
   } = useGridTablePersistence<TableRow>({
     viewId: 'browse',
     clusterIdentity: selectedKubeconfig,
@@ -417,6 +421,61 @@ const BrowseView: React.FC = () => {
     keyExtractor,
     filterOptions,
   });
+
+  const applyNamespaceFilter = useCallback(
+    (namespace: string | null | undefined, shouldClearStorage = false) => {
+      const trimmed = typeof namespace === 'string' ? namespace.trim() : '';
+      if (!trimmed) {
+        return;
+      }
+      // Track namespace-scoped Browse so we can hide namespace controls in the table UI.
+      setNamespaceBrowseScope(trimmed);
+      // Reset search/kind filters so the namespace click shows the full catalog slice.
+      setPersistedFilters({ search: '', kinds: [], namespaces: [trimmed] });
+      if (shouldClearStorage && typeof window !== 'undefined') {
+        try {
+          window.sessionStorage.removeItem(BROWSE_NAMESPACE_FILTER_STORAGE_KEY);
+        } catch {
+          // Ignore sessionStorage failures.
+        }
+      }
+    },
+    [setPersistedFilters]
+  );
+
+  useEffect(() => {
+    if (!namespaceBrowseScope) {
+      return;
+    }
+    // Clear namespace-scoped mode when filters no longer match the scoped namespace.
+    const namespaces = persistedFilters.namespaces ?? [];
+    if (namespaces.length !== 1 || namespaces[0] !== namespaceBrowseScope) {
+      setNamespaceBrowseScope(null);
+    }
+  }, [namespaceBrowseScope, persistedFilters.namespaces]);
+
+  useEffect(() => {
+    if (!hydrated || typeof window === 'undefined') {
+      return;
+    }
+
+    const pendingNamespace = (() => {
+      try {
+        return window.sessionStorage.getItem(BROWSE_NAMESPACE_FILTER_STORAGE_KEY);
+      } catch {
+        return null;
+      }
+    })();
+    if (pendingNamespace) {
+      applyNamespaceFilter(pendingNamespace, true);
+    }
+
+    return eventBus.on('browse:namespace-filter', ({ namespace }) => {
+      applyNamespaceFilter(namespace, true);
+    });
+  }, [applyNamespaceFilter, hydrated]);
+
+  const isNamespaceBrowse = Boolean(namespaceBrowseScope);
 
   const pageLimit = DEFAULT_LIMIT;
 
@@ -558,8 +617,8 @@ const BrowseView: React.FC = () => {
         kinds: filterOptions.kinds,
         namespaces: filterOptions.namespaces,
         showKindDropdown: true,
-        showNamespaceDropdown: true,
-        includeClusterScopedSyntheticNamespace: true,
+        showNamespaceDropdown: !isNamespaceBrowse,
+        includeClusterScopedSyntheticNamespace: !isNamespaceBrowse,
         customActions: (
           // Keep pagination actions out of the scrollable body. The in-body pagination button
           // can interact with virtual scroll/focus management and trigger React update-depth
@@ -582,11 +641,19 @@ const BrowseView: React.FC = () => {
       setPersistedFilters,
       filterOptions.kinds,
       filterOptions.namespaces,
+      isNamespaceBrowse,
       handleLoadMore,
       continueToken,
       isRequestingMore,
     ]
   );
+
+  const effectiveColumnVisibility = useMemo(() => {
+    if (!isNamespaceBrowse) {
+      return columnVisibility;
+    }
+    return { ...(columnVisibility ?? {}), namespace: false };
+  }, [columnVisibility, isNamespaceBrowse]);
 
   const loadingOverlay = useMemo(() => {
     if (!isRequestingMore) {
@@ -625,7 +692,7 @@ const BrowseView: React.FC = () => {
           emptyMessage="No catalog objects found."
           columnWidths={columnWidths}
           onColumnWidthsChange={setColumnWidths}
-          columnVisibility={columnVisibility}
+          columnVisibility={effectiveColumnVisibility}
           onColumnVisibilityChange={setColumnVisibility}
           loadingOverlay={loadingOverlay}
         />

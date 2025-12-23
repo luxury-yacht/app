@@ -4,15 +4,24 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import Sidebar from './Sidebar';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
   eventsOff: vi.fn(),
 }));
 
+const browseFilterMocks = vi.hoisted(() => ({
+  emitBrowseNamespaceFilter: vi.fn(),
+}));
+
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOn: runtimeMocks.eventsOn,
   EventsOff: runtimeMocks.eventsOff,
+}));
+
+vi.mock('@modules/browse/browseFilterSignals', () => ({
+  emitBrowseNamespaceFilter: browseFilterMocks.emitBrowseNamespaceFilter,
 }));
 
 type NamespaceEntry = {
@@ -251,6 +260,76 @@ describe('Sidebar', () => {
       delete Element.prototype.scrollIntoView;
     }
     document.querySelector = originalQuerySelector;
+  });
+
+  it('opens the browse view and emits a namespace filter on namespace click', () => {
+    renderSidebar();
+    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="default"]'
+    );
+    expect(namespaceToggle).not.toBeNull();
+
+    act(() => {
+      namespaceToggle!.click();
+    });
+
+    expect(browseFilterMocks.emitBrowseNamespaceFilter).toHaveBeenCalledWith('default');
+    expect(viewStateMock.setViewType).toHaveBeenCalledWith('cluster');
+    expect(viewStateMock.setActiveClusterView).toHaveBeenCalledWith('browse');
+    expect(viewStateMock.setSidebarSelection).toHaveBeenCalledWith({
+      type: 'cluster',
+      value: 'cluster',
+    });
+  });
+
+  it('keeps a namespace expanded when clicked repeatedly', () => {
+    renderSidebar();
+    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="default"]'
+    );
+    expect(namespaceToggle).not.toBeNull();
+
+    act(() => {
+      namespaceToggle!.click();
+    });
+
+    const namespaceViews = () =>
+      container!.querySelector(
+        '[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="default"]'
+      );
+    expect(namespaceViews()).not.toBeNull();
+
+    act(() => {
+      namespaceToggle!.click();
+    });
+
+    expect(namespaceViews()).not.toBeNull();
+  });
+
+  it('keeps All Namespaces clicks to expand/collapse only', () => {
+    namespaceState.namespaces = [
+      {
+        name: 'All Namespaces',
+        scope: ALL_NAMESPACES_SCOPE,
+        resourceVersion: 'synthetic',
+        hasWorkloads: true,
+        workloadsUnknown: false,
+        details: '',
+      },
+    ];
+    renderSidebar();
+    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${ALL_NAMESPACES_SCOPE}"]`
+    );
+    expect(namespaceToggle).not.toBeNull();
+
+    act(() => {
+      namespaceToggle!.click();
+    });
+
+    expect(browseFilterMocks.emitBrowseNamespaceFilter).not.toHaveBeenCalled();
+    expect(viewStateMock.setViewType).not.toHaveBeenCalled();
+    expect(viewStateMock.setActiveClusterView).not.toHaveBeenCalled();
   });
 
   it('updates view state when selecting a namespace that is already focused', async () => {

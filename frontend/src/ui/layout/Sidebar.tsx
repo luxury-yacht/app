@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './Sidebar.css';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { emitBrowseNamespaceFilter } from '@modules/browse/browseFilterSignals';
+import { isAllNamespaces } from '@modules/namespace/constants';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import {
   ExpandSidebarIcon,
@@ -162,15 +164,23 @@ function Sidebar() {
     }
   }, [expandedNamespace]);
 
-  const handleNamespaceSelect = (namespaceScope: string) => {
-    setExpandedNamespace((previous) => (previous === namespaceScope ? null : namespaceScope));
-  };
-
   const handleClusterViewSelect = (view: ClusterViewType) => {
     setPendingSelection({ kind: 'cluster-view', view });
     viewState.setViewType('cluster');
     viewState.setActiveClusterView(view);
     viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
+  };
+
+  const handleNamespaceSelect = (namespaceScope: string) => {
+    if (isAllNamespaces(namespaceScope)) {
+      setExpandedNamespace((previous) => (previous === namespaceScope ? null : namespaceScope));
+      return;
+    }
+    // Keep the namespace expanded unless another namespace is selected.
+    setExpandedNamespace(namespaceScope);
+    // Clicking a namespace should open Browse filtered to that namespace.
+    emitBrowseNamespaceFilter(namespaceScope);
+    handleClusterViewSelect('browse');
   };
 
   const handleNamespaceViewSelect = (namespaceScope: string, view: NamespaceViewType) => {
