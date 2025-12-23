@@ -65,7 +65,7 @@ func NewBuildConfig() BuildConfig {
 		ManifestPath:   "backend/buildinfo/generated.json",
 		OsType:         runtime.GOOS,
 		PackagePath:    "github.com/luxury-yacht/app",
-		ReleaseAssets:  []string{".deb", ".rpm", ".dmg", ".zip"},
+		ReleaseAssets:  []string{".deb", ".rpm", ".dmg", ".exe", ".zip"},
 		ReleaseRepo:    "luxury-yacht/app",
 		Version:        version,
 	}
