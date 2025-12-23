@@ -24,10 +24,6 @@
   --color-success-bg: rgba(76, 175, 80, 0.1);
   --color-warning-bg: rgba(255, 152, 0, 0.1);
   --color-info-bg: rgba(33, 150, 243, 0.1);
-  --delta-success-bg: rgba(76, 175, 80, 0.1);
-  --delta-error-bg: rgba(244, 67, 54, 0.1);
-  --delta-warning-bg: rgba(255, 152, 0, 0.1);
-  --delta-info-bg: rgba(33, 150, 243, 0.1);
 
   /* Button colors */
   --button-generic-bg: #ccc;
@@ -132,11 +128,6 @@
   --shadow-interactive-soft: 0 2px 4px rgba(0, 0, 0, 0.1);
 
   /* Toast/notification surface */
-  --toast-overlay-bg: rgba(248, 249, 250);
-  --toast-overlay-border: rgba(255, 255, 255, 0.6);
-  --toast-overlay-highlight: rgba(255, 255, 255, 0.55);
-  --toast-overlay-shadow: 0 26px 54px rgba(33, 37, 41, 0.18);
-  --toast-overlay-blur: 20px;
   --toast-card-bg: rgba(255, 255, 255);
   --toast-card-border: rgba(0, 0, 0, 0.07);
   --toast-card-shadow: 0 14px 28px rgba(9, 14, 31, 0.16);
@@ -184,18 +175,18 @@
   --log-fallback-retry-hover-bg: rgba(255, 193, 7, 0.2);
 
   /* Log pod colors - darker variants for light backgrounds */
-  --log-pod-color-1: #2E7D32;
-  --log-pod-color-2: #1565C0;
-  --log-pod-color-3: #E65100;
-  --log-pod-color-4: #7B1FA2;
-  --log-pod-color-5: #00838F;
+  --log-pod-color-1: #2e7d32;
+  --log-pod-color-2: #1565c0;
+  --log-pod-color-3: #e65100;
+  --log-pod-color-4: #7b1fa2;
+  --log-pod-color-5: #00838f;
   --log-pod-color-6: #827717;
-  --log-pod-color-7: #FF8F00;
-  --log-pod-color-8: #C2185B;
-  --log-pod-color-9: #00695C;
-  --log-pod-color-10: #5D4037;
-  --log-pod-color-11: #455A64;
-  --log-pod-color-12: #E64A19;
+  --log-pod-color-7: #ff8f00;
+  --log-pod-color-8: #c2185b;
+  --log-pod-color-9: #00695c;
+  --log-pod-color-10: #5d4037;
+  --log-pod-color-11: #455a64;
+  --log-pod-color-12: #e64a19;
   --log-pod-color-fallback: #666666;
 
   /* Dropdown */
@@ -204,9 +195,6 @@
   --dropdown-menu-bg: #ffffff;
   --dropdown-menu-border: var(--color-border);
   --dropdown-menu-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  --dropdown-shortcut-text: #586069;
-  --dropdown-shortcut-bg: rgba(0, 0, 0, 0.03);
-  --dropdown-shortcut-border: rgba(0, 0, 0, 0.06);
 
   /* Actions menu */
   --actions-menu-button-text: var(--color-text-secondary);

@@ -21,7 +21,7 @@
 }
 
 .ns-quotas-table .quota-usage-inline {
-  color: var(--color-text-primary);
+  color: var(--color-text);
   font-size: 0.85em;
   font-family: var(--font-mono);
 }

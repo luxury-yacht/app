@@ -153,7 +153,7 @@
   gap: 10px;
   padding: 6px 10px;
   font-size: var(--font-size-normal);
-  color: var(--color-text-primary);
+  color: var(--color-text);
   user-select: none;
   white-space: nowrap;
   transition: background-color 0.15s ease;
@@ -195,7 +195,7 @@
 
 .dropdown-menu.dropdown-filter-menu .dropdown-option.selected {
   background-color: transparent;
-  color: var(--color-text-primary);
+  color: var(--color-text);
 }
 
 .dropdown-menu.dropdown-filter-menu .dropdown-option:hover:not(.disabled) {
@@ -239,40 +239,6 @@
   font-size: 14px;
   color: var(--color-success, #4caf50);
   font-weight: bold;
-}
-
-.dropdown-checkmark {
-  width: 16px;
-  height: 16px;
-  color: var(--color-success, #4caf50);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.dropdown-label {
-  color: var(--color-text);
-  flex: 1;
-}
-
-.dropdown-shortcut {
-  margin-left: auto;
-  padding: 2px 5px;
-  font-size: 0.6rem;
-  font-weight: 500;
-  color: var(--dropdown-shortcut-text);
-  background: var(--dropdown-shortcut-bg);
-  border-radius: 3px;
-  border: 1px solid var(--dropdown-shortcut-border);
-  font-family: var(
-    --font-family-mono,
-    "SF Mono",
-    Monaco,
-    "Cascadia Code",
-    "Roboto Mono",
-    Consolas,
-    monospace
-  );
 }
 
 /* ============================================
@@ -328,13 +294,6 @@
   border-color: var(--color-accent);
 }
 
-/* Divider */
-.dropdown-divider {
-  height: 1px;
-  background: var(--color-border, #3a3a3a);
-  margin: 2px 0;
-}
-
 /* No options message */
 .no-options {
   padding: 0.75rem;
@@ -357,20 +316,6 @@
 /* ============================================
    7. STYLE VARIANTS
    ============================================ */
-.variant-minimal .dropdown-trigger {
-  border: none;
-  background-color: transparent;
-  box-shadow: none;
-}
-
-.variant-minimal .dropdown-trigger:hover {
-  background-color: var(--color-bg-secondary);
-}
-
-.variant-outlined .dropdown-trigger {
-  background-color: transparent;
-  border-width: 2px;
-}
 
 /* ============================================
    8. STATE MODIFIERS

@@ -24,10 +24,9 @@
   --color-success-bg: rgba(76, 175, 80, 0.15);
   --color-warning-bg: rgba(255, 193, 7, 0.18);
   --color-info-bg: rgba(77, 171, 247, 0.18);
-  --delta-success-bg: rgba(76, 175, 80, 0.2);
-  --delta-error-bg: rgba(235, 75, 90, 0.22);
-  --delta-warning-bg: rgba(255, 193, 7, 0.2);
-  --delta-info-bg: rgba(77, 171, 247, 0.22);
+  /* Grid table resize handle */
+  --grid-resize-handle-color: var(--color-text-tertiary);
+  --grid-resize-handle-opacity: 0.3;
 
   /* Button colors */
   --button-generic-bg: #343a40;
@@ -128,11 +127,6 @@
   --shadow-interactive-soft: 0 2px 4px rgba(0, 0, 0, 0.35);
 
   /* Toast/notification surface */
-  --toast-overlay-bg: rgba(12, 12, 16);
-  --toast-overlay-border: rgba(255, 255, 255, 0.05);
-  --toast-overlay-highlight: rgba(255, 255, 255, 0.08);
-  --toast-overlay-shadow: 0 26px 54px rgba(0, 0, 0, 0.55);
-  --toast-overlay-blur: 16px;
   --toast-card-bg: rgba(28, 28, 32);
   --toast-card-border: rgba(255, 255, 255, 0.06);
   --toast-card-shadow: 0 14px 28px rgba(0, 0, 0, 0.45);
@@ -180,18 +174,18 @@
   --log-fallback-retry-hover-bg: rgba(255, 193, 7, 0.2);
 
   /* Log pod colors - for distinguishing pods in multi-pod log views */
-  --log-pod-color-1: #4CAF50;
-  --log-pod-color-2: #2196F3;
-  --log-pod-color-3: #FF9800;
-  --log-pod-color-4: #9C27B0;
-  --log-pod-color-5: #00BCD4;
-  --log-pod-color-6: #CDDC39;
-  --log-pod-color-7: #FFC107;
-  --log-pod-color-8: #E91E63;
+  --log-pod-color-1: #4caf50;
+  --log-pod-color-2: #2196f3;
+  --log-pod-color-3: #ff9800;
+  --log-pod-color-4: #9c27b0;
+  --log-pod-color-5: #00bcd4;
+  --log-pod-color-6: #cddc39;
+  --log-pod-color-7: #ffc107;
+  --log-pod-color-8: #e91e63;
   --log-pod-color-9: #009688;
   --log-pod-color-10: #795548;
-  --log-pod-color-11: #607D8B;
-  --log-pod-color-12: #FF5722;
+  --log-pod-color-11: #607d8b;
+  --log-pod-color-12: #ff5722;
   --log-pod-color-fallback: #888888;
 
   /* Dropdown */
@@ -200,9 +194,6 @@
   --dropdown-menu-bg: var(--color-bg-secondary);
   --dropdown-menu-border: var(--color-border);
   --dropdown-menu-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  --dropdown-shortcut-text: rgba(255, 255, 255, 0.6);
-  --dropdown-shortcut-bg: rgba(255, 255, 255, 0.06);
-  --dropdown-shortcut-border: rgba(255, 255, 255, 0.12);
 
   /* Actions menu */
   --actions-menu-button-text: var(--color-text-secondary);
@@ -250,6 +241,7 @@
   --refresh-status-rebuilding-shadow: rgba(100, 181, 246, 0.8);
   --refresh-metrics-dot: #ffb74d;
   --refresh-metrics-dot-shadow: rgba(255, 183, 77, 0.7);
+
   /* Modal overlays */
   --modal-overlay-bg: rgba(0, 0, 0, 0.7);
   --modal-container-shadow:

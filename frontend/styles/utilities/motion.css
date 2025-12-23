@@ -111,14 +111,3 @@
     transform: scale(1);
   }
 }
-
-@keyframes highlight-fade {
-  0%,
-  50% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    background-color: transparent;
-  }
-}

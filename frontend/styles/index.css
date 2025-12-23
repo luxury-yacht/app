@@ -1,41 +1,25 @@
-/* Tokens */
-@import "./tokens/colors.css";
-@import "./tokens/typography.css";
-@import "./tokens/spacing.css";
-@import "./tokens/elevation.css";
-
-/* Base styles */
-@import "./base/reset.css";
-@import "./base/globals.css";
-@import "./base/layout.css";
-
 /* Themes */
+/* Light theme must come first as that is the root theme. */
 @import "./themes/light.css";
 @import "./themes/dark.css";
 
-/* Utilities */
-@import "./utilities/motion.css";
-@import "./utilities/typography.css";
-@import "./utilities/spacing.css";
-@import "./utilities/flex.css";
-@import "./utilities/grid.css";
-@import "./utilities/surface.css";
-@import "./utilities/display.css";
-
+/* Base styles */
+@import "./base/globals.css";
+@import "./base/layout.css";
+@import "./base/reset.css";
 /* Components */
-@import "./components/buttons.css";
-@import "./components/inputs.css";
 @import "./components/badges.css";
+@import "./components/buttons.css";
+@import "./components/dropdowns.css";
+@import "./components/inputs.css";
 @import "./components/overlays.css";
-/* @import './components/tables.css'; */
-@import "./components/tabs.css";
-
-/* Patterns */
-@import "./patterns/panels.css";
-@import "./patterns/data-cards.css";
-@import "./patterns/alerts.css";
-
-/* Overrides (temporary during migration) */
-@import "./overrides/legacy-modals.css";
+/* Overrides */
 @import "./overrides/codemirror.css";
-@import "./overrides/transitions.css";
+@import "./overrides/legacy-modals.css";
+/* Tokens */
+@import "./tokens/elevation.css";
+@import "./tokens/spacing.css";
+@import "./tokens/typography.css";
+/* Utilities */
+@import "./utilities/display.css";
+@import "./utilities/motion.css";

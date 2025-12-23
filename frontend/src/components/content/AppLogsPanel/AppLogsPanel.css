@@ -127,7 +127,7 @@
 }
 
 .app-logs-auto-scroll:hover {
-  color: var(--color-text-primary);
+  color: var(--color-text);
 }
 
 .app-logs-auto-scroll input[type="checkbox"] {

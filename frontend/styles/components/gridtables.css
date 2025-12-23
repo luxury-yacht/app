@@ -38,68 +38,9 @@
   color: var(--grid-text-secondary);
 }
 
-.text-truncate {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Spacing Utilities */
-.mt-0 {
-  margin-top: 0;
-}
-.mt-1 {
-  margin-top: var(--grid-spacing-xs);
-}
-.mt-2 {
-  margin-top: var(--grid-spacing-sm);
-}
-.mt-3 {
-  margin-top: var(--grid-spacing-md);
-}
-.mt-4 {
-  margin-top: var(--grid-spacing-lg);
-}
-
-.mb-0 {
-  margin-bottom: 0;
-}
-.mb-1 {
-  margin-bottom: var(--grid-spacing-xs);
-}
-.mb-2 {
-  margin-bottom: var(--grid-spacing-sm);
-}
-.mb-3 {
-  margin-bottom: var(--grid-spacing-md);
-}
-.mb-4 {
-  margin-bottom: var(--grid-spacing-lg);
-}
-
-.p-0 {
-  padding: 0;
-}
-.p-1 {
-  padding: var(--grid-spacing-xs);
-}
-.p-2 {
-  padding: var(--grid-spacing-sm);
-}
-.p-3 {
-  padding: var(--grid-spacing-md);
-}
-.p-4 {
-  padding: var(--grid-spacing-lg);
-}
-
 /* Visibility */
 .hidden {
   display: none !important;
-}
-
-.invisible {
-  visibility: hidden;
 }
 
 /* Remove last row border */
@@ -293,8 +234,9 @@
   width: 2px;
   transform: translateX(-50%);
   border-radius: 1px;
-  background-color: var(--grid-border-color);
-  opacity: 0.65;
+  /* Allow theme-level overrides without depending on import order. */
+  background-color: var(--grid-resize-handle-color, var(--grid-border-color));
+  opacity: var(--grid-resize-handle-opacity, 0.65);
   transition:
     background-color 0.2s,
     opacity 0.2s;
@@ -614,21 +556,6 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   font-size: 0.875rem;
   font-weight: 500;
   text-align: center;
-}
-
-.event-type-normal {
-  background-color: var(--success-bg, #d4edda);
-  color: var(--success-text, #155724);
-}
-
-.event-type-warning {
-  background-color: var(--warning-bg, #fff3cd);
-  color: var(--warning-text, #856404);
-}
-
-.event-type-error {
-  background-color: var(--danger-bg, #f8d7da);
-  color: var(--danger-text, #721c24);
 }
 
 /* ============================================
