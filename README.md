@@ -113,4 +113,13 @@ NODE_VERSION=$(cat .nvmrc | tr -d 'v')
 
 ## Publishing Releases
 
-Tag the repo with the correct version and push the tag. The `release` workflow will do the rest.
+1. Update the version in [wails.json](wails.json)
+
+1. Commit and push the change.
+
+1. Create and push a tag. The `release` workflow will do the rest.
+
+```sh
+git tag $(jq -r '.info.productVersion' wails.json)
+git push origin main --tags
+```
