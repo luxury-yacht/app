@@ -234,8 +234,9 @@
   width: 2px;
   transform: translateX(-50%);
   border-radius: 1px;
-  background-color: var(--grid-border-color);
-  opacity: 0.65;
+  /* Allow theme-level overrides without depending on import order. */
+  background-color: var(--grid-resize-handle-color, var(--grid-border-color));
+  opacity: var(--grid-resize-handle-opacity, 0.65);
   transition:
     background-color 0.2s,
     opacity 0.2s;

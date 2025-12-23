@@ -24,6 +24,9 @@
   --color-success-bg: rgba(76, 175, 80, 0.15);
   --color-warning-bg: rgba(255, 193, 7, 0.18);
   --color-info-bg: rgba(77, 171, 247, 0.18);
+  /* Grid table resize handle */
+  --grid-resize-handle-color: var(--color-text-tertiary);
+  --grid-resize-handle-opacity: 0.3;
 
   /* Button colors */
   --button-generic-bg: #343a40;
