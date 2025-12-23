@@ -119,8 +119,9 @@ jobs:
 
       - name: Install Windows dependencies
         if: matrix.goos == 'windows'
-        run: |
-          choco install -y nsis.install
+        uses: ./.github/actions/install-nsis
+        with:
+          nsis-version: "3.10"
 
       - name: Create package for macOS (signed and notarized)
         if: matrix.goos == 'darwin'

@@ -1,0 +1,37 @@
+name: Install NSIS
+description: Installs NSIS (Windows only)
+
+inputs:
+  nsis-version:
+    description: 'The version of NSIS to install'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install NSIS
+      shell: pwsh
+      run: |
+        Invoke-WebRequest https://deac-riga.dl.sourceforge.net/project/nsis/NSIS%203/${{ inputs.nsis-version }}/nsis-${{ inputs.nsis-version }}-setup.exe?viasf=1 -OutFile C:\WINDOWS\Temp\nsis-${{ inputs.nsis-version }}-setup.exe
+        $process = Start-Process "C:\WINDOWS\Temp\nsis-${{ inputs.nsis-version }}-setup.exe" -ArgumentList "/S" -Wait -PassThru
+        $exitCode = $process.ExitCode
+          if ($exitCode -eq 0) {
+              Write-Host "Installer ran successfully."
+          } else {
+              Write-Host "Installer failed with exit code $exitCode."
+              exit $exitCode
+          }
+        echo "C:\Program Files (x86)\NSIS\Bin" | Out-File -FilePath "$env:GITHUB_PATH" -Append
+        echo "C:\Program Files (x86)\NSIS" | Out-File -FilePath "$env:GITHUB_PATH" -Append
+
+    - name: Apply NSIS long string patch
+      shell: pwsh
+      run: |
+        Invoke-WebRequest https://deac-riga.dl.sourceforge.net/project/nsis/NSIS%203/${{ inputs.nsis-version }}/nsis-${{ inputs.nsis-version }}-strlen_8192.zip?viasf=1 -OutFile C:\WINDOWS\Temp\nsis-${{ inputs.nsis-version }}-strlen_8192.zip
+        Expand-Archive "C:\WINDOWS\Temp\nsis-${{ inputs.nsis-version }}-strlen_8192.zip" -DestinationPath "C:\Program Files (x86)\NSIS" -Force
+
+    - name: Install NSIS EnvVar plugin
+      shell: pwsh
+      run: |
+        Invoke-WebRequest https://nsis.sourceforge.io/mediawiki/images/7/7f/EnVar_plugin.zip -OutFile C:\WINDOWS\Temp\EnVar_plugin.zip
+        Expand-Archive "C:\WINDOWS\Temp\EnVar_plugin.zip" -DestinationPath "C:\Program Files (x86)\NSIS" -Force
