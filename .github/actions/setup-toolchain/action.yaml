@@ -105,11 +105,19 @@ runs:
           fi
         fi
 
+        need_staticcheck="false"
+        if [ ! -x "$GOBIN/staticcheck" ] && [ ! -x "$GOBIN/staticcheck.exe" ]; then
+          need_staticcheck="true"
+        fi
+
         if [ "$need_wails" = "true" ]; then
           go install github.com/wailsapp/wails/v2/cmd/wails@${{ inputs.wails-version }}
         fi
         if [ "$need_mage" = "true" ]; then
           go install github.com/magefile/mage@${{ steps.mage_version.outputs.version }}
+        fi
+        if [ "$need_staticcheck" = "true" ]; then
+          go install honnef.co/go/tools/cmd/staticcheck@latest
         fi
 
     - name: Install Linux build dependencies
