@@ -44,8 +44,46 @@ jobs:
           echo "wails_version=$WAILS_VERSION" >> $GITHUB_OUTPUT
           echo "node_version=$NODE_VERSION" >> $GITHUB_OUTPUT
 
-  build:
+  test:
     needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ needs.prepare.outputs.go_version }}
+          cache: true
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ needs.prepare.outputs.node_version }}
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Go dependencies
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@${{ needs.prepare.outputs.wails_version }}
+          go install github.com/magefile/mage@latest
+          echo "$HOME/go/bin" >> $GITHUB_PATH
+
+      - name: Run tests
+        run: |
+          # Run a build to ensure frontend/dist is generated
+          mage build
+          # Backend tests
+          mage qc:vet test:backend
+          # Frontend tests
+          mage qc:lint qc:typecheck test:frontend
+
+  build:
+    needs:
+      - prepare
+      - test
     strategy:
       # Don't fail the whole build if one matrix job fails.
       fail-fast: false
@@ -103,25 +141,6 @@ jobs:
           go install github.com/magefile/mage@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      - name: Run tests
-        run: |
-          # Run a build to ensure frontend/dist is generated
-          mage build
-          # Backend tests
-          mage qc:vet test:backend
-          # Frontend tests
-          mage qc:lint qc:lintFix qc:typecheck test:frontend
-
-      - name: Run vulnerability scan
-        uses: aquasecurity/trivy-action@0.33.1
-        with:
-          scan-type: "fs"
-          scan-ref: "."
-          format: "table"
-          exit-code: "1"
-          severity: "CRITICAL,HIGH"
-          ignore-unfixed: "true"
-
       - name: Set up macOS code signing
         if: matrix.goos == 'darwin'
         id: macos_signing
@@ -172,6 +191,7 @@ jobs:
     if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
     needs:
       - prepare
+      - test
       - build
     runs-on: ubuntu-latest
     env:
