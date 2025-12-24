@@ -63,131 +63,131 @@ jobs:
 
       - name: Run tests
         run: |
-          # Run a build to ensure frontend/dist is generated
+          echo "Run a build to ensure frontend/dist is generated"
           mage build
-          # Backend tests
+          echo "Run backend tests"
           mage qc:vet test:backend
-          # Frontend tests
+          echo "Run frontend tests"
           mage qc:lint qc:typecheck test:frontend
 
-  # build:
-  #   needs:
-  #     - prepare
-  #     - test
-  #   strategy:
-  #     # Don't fail the whole build if one matrix job fails.
-  #     fail-fast: false
-  #     matrix:
-  #       include:
-  #         - runner: macos-latest
-  #           goos: darwin
-  #           targets: darwin/arm64,darwin/amd64
-  #           artifact_name: artifacts-darwin
-  #         - runner: windows-latest
-  #           goos: windows
-  #           targets: windows/amd64
-  #           artifact_name: artifacts-windows-amd64
-  #         - runner: windows-latest-arm
-  #           goos: windows
-  #           targets: windows/arm64
-  #           artifact_name: artifacts-windows-arm64
-  #         - runner: ubuntu-latest
-  #           goos: linux
-  #           targets: linux/amd64
-  #           artifact_name: artifacts-linux-amd64
-  #         - runner: ubuntu-latest-arm
-  #           goos: linux
-  #           targets: linux/arm64
-  #           artifact_name: artifacts-linux-arm64
+  build:
+    needs:
+      - prepare
+      - test
+    strategy:
+      # Don't fail the whole build if one matrix job fails.
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            goos: darwin
+            targets: darwin/arm64,darwin/amd64
+            artifact_name: artifacts-darwin
+          - runner: windows-latest
+            goos: windows
+            targets: windows/amd64
+            artifact_name: artifacts-windows-amd64
+          - runner: windows-latest-arm
+            goos: windows
+            targets: windows/arm64
+            artifact_name: artifacts-windows-arm64
+          - runner: ubuntu-latest
+            goos: linux
+            targets: linux/amd64
+            artifact_name: artifacts-linux-amd64
+          - runner: ubuntu-latest-arm
+            goos: linux
+            targets: linux/arm64
+            artifact_name: artifacts-linux-arm64
 
-  #   runs-on: ${{ matrix.runner }}
-  #   name: Build ${{ matrix.goos }} (${{ matrix.targets}})
-  #   env:
-  #     GO_VERSION: ${{ needs.prepare.outputs.go_version }}
-  #     NODE_VERSION: ${{ needs.prepare.outputs.node_version }}
-  #     WAILS_VERSION: ${{ needs.prepare.outputs.wails_version }}
+    runs-on: ${{ matrix.runner }}
+    name: Build ${{ matrix.goos }} (${{ matrix.targets}})
+    env:
+      GO_VERSION: ${{ needs.prepare.outputs.go_version }}
+      NODE_VERSION: ${{ needs.prepare.outputs.node_version }}
+      WAILS_VERSION: ${{ needs.prepare.outputs.wails_version }}
 
-  #   steps:
-  #     - uses: actions/checkout@v6
-  #       with:
-  #         fetch-depth: 0
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
-  #     - name: Setup toolchain
-  #       uses: ./.github/actions/setup-toolchain
-  #       with:
-  #         go-version: ${{ env.GO_VERSION }}
-  #         node-version: ${{ env.NODE_VERSION }}
-  #         wails-version: ${{ env.WAILS_VERSION }}
-  #         mage-version: latest
-  #         install-linux-deps: ${{ matrix.goos == 'linux' }}
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          node-version: ${{ env.NODE_VERSION }}
+          wails-version: ${{ env.WAILS_VERSION }}
+          mage-version: latest
+          install-linux-deps: ${{ matrix.goos == 'linux' }}
 
-  #     - name: Set up macOS code signing
-  #       if: matrix.goos == 'darwin'
-  #       id: macos_signing
-  #       uses: ./.github/actions/macos-signing
-  #       with:
-  #         macos_certificate: ${{ secrets.MACOS_CERTIFICATE }}
-  #         macos_certificate_pwd: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+      - name: Set up macOS code signing
+        if: matrix.goos == 'darwin'
+        id: macos_signing
+        uses: ./.github/actions/macos-signing
+        with:
+          macos_certificate: ${{ secrets.MACOS_CERTIFICATE }}
+          macos_certificate_pwd: ${{ secrets.MACOS_CERTIFICATE_PWD }}
 
-  #     - name: Install Windows dependencies
-  #       if: matrix.goos == 'windows'
-  #       uses: ./.github/actions/install-nsis
-  #       with:
-  #         nsis-version: "3.10"
+      - name: Install Windows dependencies
+        if: matrix.goos == 'windows'
+        uses: ./.github/actions/install-nsis
+        with:
+          nsis-version: "3.10"
 
-  #     - name: Create package for macOS (signed and notarized)
-  #       if: matrix.goos == 'darwin'
-  #       env:
-  #         MACOS_SIGNING_IDENTITY: ${{ steps.macos_signing.outputs.macos_identity }}
-  #         MACOS_KEYCHAIN_PATH: ${{ steps.macos_signing.outputs.keychain_path }}
-  #         MACOS_APPLE_ID: ${{ secrets.APPLE_ID }}
-  #         MACOS_APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-  #         MACOS_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-  #       run: |
-  #         mage package:signed
+      - name: Create package for macOS (signed and notarized)
+        if: matrix.goos == 'darwin'
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ steps.macos_signing.outputs.macos_identity }}
+          MACOS_KEYCHAIN_PATH: ${{ steps.macos_signing.outputs.keychain_path }}
+          MACOS_APPLE_ID: ${{ secrets.APPLE_ID }}
+          MACOS_APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          MACOS_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          mage package:signed
 
-  #     - name: Create package for Linux
-  #       if: matrix.goos == 'linux'
-  #       run: |
-  #         mage package:unsigned
+      - name: Create package for Linux
+        if: matrix.goos == 'linux'
+        run: |
+          mage package:unsigned
 
-  #     - name: Create package for Windows (unsigned)
-  #       if: matrix.goos == 'windows'
-  #       run: |
-  #         mage package:unsigned
+      - name: Create package for Windows (unsigned)
+        if: matrix.goos == 'windows'
+        run: |
+          mage package:unsigned
 
-  #     - uses: actions/upload-artifact@v6
-  #       with:
-  #         name: ${{ matrix.artifact_name }}
-  #         path: build/artifacts/**
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: build/artifacts/**
 
-  # release:
-  #   if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
-  #   needs:
-  #     - prepare
-  #     - test
-  #     - build
-  #   runs-on: ubuntu-latest
-  #   env:
-  #     GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
-  #   steps:
-  #     - uses: actions/checkout@v6
+  release:
+    if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
+    needs:
+      - prepare
+      - test
+      - build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
 
-  #     - name: Setup toolchain
-  #       uses: ./.github/actions/setup-toolchain
-  #       with:
-  #         go-version: ${{ needs.prepare.outputs.go_version }}
-  #         wails-version: ${{ needs.prepare.outputs.wails_version }}
-  #         mage-version: latest
-  #         setup-node: "false"
-  #         install-wails: "false"
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
+        with:
+          go-version: ${{ needs.prepare.outputs.go_version }}
+          wails-version: ${{ needs.prepare.outputs.wails_version }}
+          mage-version: latest
+          setup-node: "false"
+          install-wails: "false"
 
-  #     - name: Download all artifacts
-  #       uses: actions/download-artifact@v7
-  #       with:
-  #         path: ./artifacts
+      - name: Download all artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: ./artifacts
 
-  #     - name: Publish GitHub release
-  #       run: |
-  #         export GITHUB_RUN_NUMBER="${{ github.run_number }}"
-  #         mage release
+      - name: Publish GitHub release
+        run: |
+          export GITHUB_RUN_NUMBER="${{ github.run_number }}"
+          mage release
