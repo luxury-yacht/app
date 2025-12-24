@@ -37,6 +37,7 @@ type DetailsSnapshotProps = Pick<
   DetailsTabProps,
   | 'podDetails'
   | 'deploymentDetails'
+  | 'replicaSetDetails'
   | 'daemonSetDetails'
   | 'statefulSetDetails'
   | 'jobDetails'
@@ -71,6 +72,7 @@ type DetailsSnapshotProps = Pick<
 const EMPTY_DETAILS: DetailsSnapshotProps = {
   podDetails: null,
   deploymentDetails: null,
+  replicaSetDetails: null,
   daemonSetDetails: null,
   statefulSetDetails: null,
   jobDetails: null,
@@ -315,6 +317,8 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
         return { ...EMPTY_DETAILS, podDetails: detailPayload as types.PodDetailInfo };
       case 'deployment':
         return { ...EMPTY_DETAILS, deploymentDetails: detailPayload as types.DeploymentDetails };
+      case 'replicaset':
+        return { ...EMPTY_DETAILS, replicaSetDetails: detailPayload as types.ReplicaSetDetails };
       case 'daemonset':
         return { ...EMPTY_DETAILS, daemonSetDetails: detailPayload as types.DaemonSetDetails };
       case 'statefulset':

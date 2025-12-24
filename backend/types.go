@@ -78,6 +78,7 @@ type (
 	DataSourceInfo                        = resourcetypes.DataSourceInfo
 	StorageClassDetails                   = resourcetypes.StorageClassDetails
 	DeploymentDetails                     = resourcetypes.DeploymentDetails
+	ReplicaSetDetails                     = resourcetypes.ReplicaSetDetails
 	StatefulSetDetails                    = resourcetypes.StatefulSetDetails
 	DaemonSetDetails                      = resourcetypes.DaemonSetDetails
 	JobDetails                            = resourcetypes.JobDetails

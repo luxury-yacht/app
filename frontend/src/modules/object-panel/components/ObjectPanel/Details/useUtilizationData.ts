@@ -9,6 +9,7 @@ interface UseUtilizationDataParams {
   deploymentDetails: types.DeploymentDetails | null;
   daemonSetDetails: types.DaemonSetDetails | null;
   statefulSetDetails: types.StatefulSetDetails | null;
+  replicaSetDetails: types.ReplicaSetDetails | null;
   nodeDetails: types.NodeDetails | null;
 }
 
@@ -19,6 +20,7 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
     deploymentDetails,
     daemonSetDetails,
     statefulSetDetails,
+    replicaSetDetails,
     nodeDetails,
   } = params;
 
@@ -29,6 +31,7 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
       kind === 'deployment' ||
       kind === 'daemonset' ||
       kind === 'statefulset' ||
+      kind === 'replicaset' ||
       kind === 'node'
     );
   })();
@@ -197,6 +200,39 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
       };
     }
 
+    // ReplicaSet utilization (average per pod)
+    if (replicaSetDetails && objectKind === 'replicaset') {
+      if (replicaSetDetails.isActive === false) {
+        return null;
+      }
+
+      const hasCpuData =
+        replicaSetDetails.cpuUsage || replicaSetDetails.cpuRequest || replicaSetDetails.cpuLimit;
+      const hasMemData =
+        replicaSetDetails.memUsage || replicaSetDetails.memRequest || replicaSetDetails.memLimit;
+
+      if (!hasCpuData && !hasMemData) return null;
+
+      return {
+        cpu: hasCpuData
+          ? {
+              usage: replicaSetDetails.cpuUsage || '-',
+              request: replicaSetDetails.cpuRequest || '-',
+              limit: replicaSetDetails.cpuLimit || '-',
+            }
+          : undefined,
+        memory: hasMemData
+          ? {
+              usage: replicaSetDetails.memUsage || '-',
+              request: replicaSetDetails.memRequest || '-',
+              limit: replicaSetDetails.memLimit || '-',
+            }
+          : undefined,
+        isAverage: true,
+        podCount: replicaSetDetails.pods?.length || 0,
+      };
+    }
+
     // Fallback to objectData fields (cast to string since these come from dynamic properties)
     const cpuUsage = objectData.cpuUsage as string | undefined;
     const cpuRequest = objectData.cpuRequest as string | undefined;
@@ -233,6 +269,7 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
     deploymentDetails,
     daemonSetDetails,
     statefulSetDetails,
+    replicaSetDetails,
     nodeDetails,
   ]);
 }
@@ -247,6 +284,7 @@ export function useHasUtilization(
       kind === 'deployment' ||
       kind === 'daemonset' ||
       kind === 'statefulset' ||
+      kind === 'replicaset' ||
       kind === 'node'
     );
   }, [objectData]);

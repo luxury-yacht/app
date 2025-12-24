@@ -182,6 +182,10 @@ export function GetRefreshBaseURL() {
   return window['go']['backend']['App']['GetRefreshBaseURL']();
 }
 
+export function GetReplicaSet(arg1, arg2) {
+  return window['go']['backend']['App']['GetReplicaSet'](arg1, arg2);
+}
+
 export function GetResourceQuota(arg1, arg2) {
   return window['go']['backend']['App']['GetResourceQuota'](arg1, arg2);
 }

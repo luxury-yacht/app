@@ -53,6 +53,9 @@ func (p *objectDetailProvider) FetchObjectDetails(_ context.Context, kind, names
 	case "deployment":
 		detail, err := p.app.GetDeployment(namespace, name)
 		return detail, "", err
+	case "replicaset":
+		detail, err := p.app.GetReplicaSet(namespace, name)
+		return detail, "", err
 	case "daemonset":
 		detail, err := p.app.GetDaemonSet(namespace, name)
 		return detail, "", err

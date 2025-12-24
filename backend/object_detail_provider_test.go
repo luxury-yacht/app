@@ -140,10 +140,21 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "job", Namespace: "extra"},
 		Spec:       batchv1.JobSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "demo"}}},
 	}
+	replicaSet := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "rs", Namespace: "extra"},
+		Spec: appsv1.ReplicaSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "demo"}},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "demo"}},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "rs"}}},
+			},
+		},
+	}
 
 	client := fake.NewSimpleClientset(
 		ns, service, ing, ingClass, netpol, slice,
 		pvc, pv, sc, sa, role, roleBinding, clusterRoleBinding, rq, lr, hpa, pdb, cron, job, deployment,
+		replicaSet,
 	)
 	apiExtClient := apiextensionsfake.NewSimpleClientset(
 		&apiextensionsv1.CustomResourceDefinition{ObjectMeta: metav1.ObjectMeta{Name: "foos.example.com"}},
@@ -176,6 +187,7 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 		{"poddisruptionbudget", "extra", "pdb"},
 		{"cronjob", "extra", "cron"},
 		{"job", "extra", "job"},
+		{"replicaset", "extra", "rs"},
 		{"namespace", "", "extra"},
 		{"customresourcedefinition", "", "foos.example.com"},
 	}

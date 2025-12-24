@@ -97,6 +97,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
   const isDeployment = normalizedKind === 'deployment';
   const isDaemonSet = normalizedKind === 'daemonset';
   const isStatefulSet = normalizedKind === 'statefulset';
+  const isReplicaSet = normalizedKind === 'replicaset';
   const { openWithObject } = useObjectPanel();
 
   return (
@@ -113,6 +114,17 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
           <OverviewItem label="Replicas" value={replicas} />
           <OverviewItem label="Up-to-date" value={upToDate} />
           <OverviewItem label="Available" value={available} />
+        </>
+      )}
+
+      {/* ReplicaSet fields */}
+      {isReplicaSet && (
+        <>
+          <OverviewItem label="Replicas" value={replicas} />
+          <OverviewItem label="Available" value={available} />
+          {minReadySeconds && minReadySeconds > 0 && (
+            <OverviewItem label="Min Ready" value={`${minReadySeconds}s`} />
+          )}
         </>
       )}
 
@@ -263,7 +275,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
         labels={labels}
         annotations={annotations}
         selector={selector}
-        showSelector={isDeployment || isDaemonSet || isStatefulSet}
+        showSelector={isDeployment || isDaemonSet || isStatefulSet || isReplicaSet}
       />
     </>
   );

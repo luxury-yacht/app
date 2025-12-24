@@ -137,6 +137,24 @@ describe('WorkloadOverview', () => {
     expect(container.textContent).toContain('2');
   });
 
+  it('renders replicaset replica and availability details', async () => {
+    await renderComponent({
+      kind: 'ReplicaSet',
+      name: 'web-rs',
+      age: '45m',
+      replicas: '2/3',
+      available: 2,
+      minReadySeconds: 10,
+    });
+
+    expect(container.textContent).toContain('Replicas');
+    expect(container.textContent).toContain('2/3');
+    expect(container.textContent).toContain('Available');
+    expect(container.textContent).toContain('2');
+    expect(container.textContent).toContain('Min Ready');
+    expect(container.textContent).toContain('10s');
+  });
+
   it('renders statefulset service link and invokes navigation on click', async () => {
     await renderComponent({
       kind: 'StatefulSet',
