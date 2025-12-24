@@ -1035,7 +1035,7 @@ func TestQueryNamespaceClusterFiltering(t *testing.T) {
 	if clusterOnly.TotalItems != 1 || clusterOnly.Items[0].Scope != ScopeCluster {
 		t.Fatalf("expected only cluster-scoped items, got %+v", clusterOnly)
 	}
-	if !reflect.DeepEqual(clusterOnly.Kinds, []string{"CustomResourceDefinition", "Service"}) {
+	if !reflect.DeepEqual(clusterOnly.Kinds, []string{"CustomResourceDefinition"}) {
 		t.Fatalf("unexpected kinds for cluster query: %+v", clusterOnly.Kinds)
 	}
 	if !reflect.DeepEqual(clusterOnly.Namespaces, []string{"default"}) {
@@ -1048,7 +1048,7 @@ func TestQueryNamespaceClusterFiltering(t *testing.T) {
 	if defaultNS.TotalItems != 1 || defaultNS.Items[0].Namespace != "default" {
 		t.Fatalf("expected only default namespace items, got %+v", defaultNS)
 	}
-	if !reflect.DeepEqual(defaultNS.Kinds, []string{"CustomResourceDefinition", "Service"}) {
+	if !reflect.DeepEqual(defaultNS.Kinds, []string{"Service"}) {
 		t.Fatalf("unexpected kinds for namespace query: %+v", defaultNS.Kinds)
 	}
 	if !reflect.DeepEqual(defaultNS.Namespaces, []string{"default"}) {
