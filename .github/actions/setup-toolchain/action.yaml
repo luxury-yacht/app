@@ -79,13 +79,21 @@ runs:
           echo "version=${{ inputs.mage-version }}" >> "$GITHUB_OUTPUT"
         fi
 
+    - name: Resolve staticcheck version
+      id: staticcheck_version
+      if: ${{ inputs.cache-go-tools == 'true' }}
+      shell: bash
+      run: |
+        RESOLVED="$(go list -m -f '{{.Version}}' honnef.co/go/tools@latest)"
+        echo "version=$RESOLVED" >> "$GITHUB_OUTPUT"
+
     - name: Cache Go tools
       if: ${{ inputs.cache-go-tools == 'true' }}
       id: cache-go-tools
       uses: actions/cache@v4
       with:
         path: ${{ steps.gobin.outputs.gobin }}
-        key: go-tools-${{ runner.os }}-go${{ inputs.go-version }}-wails${{ inputs.wails-version }}-mage${{ steps.mage_version.outputs.version }}
+        key: go-tools-${{ runner.os }}-${{ runner.arch }}-go${{ inputs.go-version }}-wails${{ inputs.wails-version }}-mage${{ steps.mage_version.outputs.version }}-staticcheck${{ steps.staticcheck_version.outputs.version }}
 
     - name: Install Go tools
       shell: bash
@@ -125,5 +133,9 @@ runs:
       shell: bash
       run: |
         # Wails Linux packaging needs WebKit headers and rpm tooling.
+        if dpkg-query -W -f='${Status}' libwebkit2gtk-4.1-dev 2>/dev/null | grep -q "install ok installed" \
+          && dpkg-query -W -f='${Status}' rpm 2>/dev/null | grep -q "install ok installed"; then
+          exit 0
+        fi
         sudo apt-get update
         sudo apt-get install -y libwebkit2gtk-4.1-dev rpm
