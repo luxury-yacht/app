@@ -56,11 +56,18 @@ runs:
       shell: bash
       run: |
         # Use the first GOPATH entry for consistent GOBIN across platforms.
+        GOOS="$(go env GOOS)"
         GOPATH_VALUE="$(go env GOPATH)"
-        if [[ "$GOPATH_VALUE" == *":"* ]]; then
-          GOPATH_VALUE="${GOPATH_VALUE%%:*}"
-        elif [[ "$GOPATH_VALUE" == *";"* ]]; then
-          GOPATH_VALUE="${GOPATH_VALUE%%;*}"
+        if [ "$GOOS" = "windows" ]; then
+          if [[ "$GOPATH_VALUE" == *";"* ]]; then
+            GOPATH_VALUE="${GOPATH_VALUE%%;*}"
+          fi
+          # Normalize to an absolute path with a drive prefix for Go on Windows.
+          GOPATH_VALUE="${GOPATH_VALUE//\\//}"
+        else
+          if [[ "$GOPATH_VALUE" == *":"* ]]; then
+            GOPATH_VALUE="${GOPATH_VALUE%%:*}"
+          fi
         fi
         GOBIN="$GOPATH_VALUE/bin"
         echo "gobin=$GOBIN" >> "$GITHUB_OUTPUT"
