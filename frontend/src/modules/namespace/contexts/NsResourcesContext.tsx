@@ -726,6 +726,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
         namespace: item.namespace,
         apiGroup: item.apiGroup,
         age: item.age,
+        // Preserve metadata for the custom view/object panel.
+        labels: item.labels,
+        annotations: item.annotations,
       })),
     [],
     isResourceActive('custom'),

@@ -477,6 +477,8 @@ export interface NamespaceCustomSummary {
   apiGroup: string;
   namespace: string;
   age: string;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
 }
 
 export interface NamespaceCustomSnapshotPayload {

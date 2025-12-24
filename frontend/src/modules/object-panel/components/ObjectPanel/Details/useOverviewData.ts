@@ -610,6 +610,9 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
       namespace: objectData.namespace,
       status: objectData.status,
       apiGroup: objectData.apiGroup,
+      // Surface metadata for generic/custom objects.
+      labels: objectData.labels ?? objectData.metadata?.labels,
+      annotations: objectData.annotations ?? objectData.metadata?.annotations,
     };
   }, [
     objectData,

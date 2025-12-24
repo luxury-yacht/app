@@ -79,6 +79,8 @@ const baseResource: CustomResourceData = {
   name: 'nightly-cleanup',
   namespace: 'ops',
   age: '10m',
+  labels: { team: 'platform' },
+  annotations: { owner: 'ops' },
 };
 
 describe('NsViewCustom', () => {
@@ -149,11 +151,15 @@ describe('NsViewCustom', () => {
     const contextItems = gridProps.getCustomContextMenuItems(baseResource, 'kind');
     expect(contextItems[0].label).toBe('Open');
     contextItems[0].onClick();
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'CronJob',
-      name: 'nightly-cleanup',
-      namespace: 'ops',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'CronJob',
+        name: 'nightly-cleanup',
+        namespace: 'ops',
+        labels: { team: 'platform' },
+        annotations: { owner: 'ops' },
+      })
+    );
 
     await act(async () => {
       contextItems[2].onClick();

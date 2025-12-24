@@ -45,6 +45,8 @@ type NamespaceCustomSummary struct {
 	APIGroup  string `json:"apiGroup"`
 	Namespace string `json:"namespace"`
 	Age       string `json:"age"`
+	Labels    map[string]string `json:"labels,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // RegisterNamespaceCustomDomain wires the builder into the registry.
@@ -189,11 +191,14 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 					itemNamespace = namespace
 				}
 				items = append(items, NamespaceCustomSummary{
-					Kind:      resourceKind(item, crdCopy.Spec.Names.Kind),
-					Name:      item.GetName(),
-					APIGroup:  gvr.Group,
-					Namespace: itemNamespace,
-					Age:       formatAge(item.GetCreationTimestamp().Time),
+					Kind:        resourceKind(item, crdCopy.Spec.Names.Kind),
+					Name:        item.GetName(),
+					APIGroup:    gvr.Group,
+					Namespace:   itemNamespace,
+					Age:         formatAge(item.GetCreationTimestamp().Time),
+					// Include metadata so the custom view can surface labels/annotations.
+					Labels:      item.GetLabels(),
+					Annotations: item.GetAnnotations(),
 				})
 				if v := resourceVersionOrTimestamp(item); v > snapshotVersion {
 					snapshotVersion = v

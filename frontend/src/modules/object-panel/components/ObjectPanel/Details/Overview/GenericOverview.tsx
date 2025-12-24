@@ -1,6 +1,7 @@
 import React from 'react';
 import { OverviewItem } from './shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
+import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 
 interface GenericOverviewProps {
   age?: string;
@@ -14,6 +15,7 @@ interface GenericOverviewProps {
   ingressClassName?: string;
   ingressRules?: any[];
   kind?: string;
+  labels?: Record<string, string>;
   loadBalancerStatus?: string[];
   name?: string;
   namespace?: string;
@@ -31,6 +33,7 @@ interface GenericOverviewProps {
   totalNotReady?: number;
   totalPorts?: number;
   type?: string;
+  annotations?: Record<string, string>;
 }
 
 // Generic overview for resources that don't have a specific component yet
@@ -47,6 +50,7 @@ export const GenericOverview: React.FC<GenericOverviewProps> = (props) => {
     ingressClassName,
     ingressRules,
     kind,
+    labels,
     loadBalancerStatus,
     name,
     namespace,
@@ -64,6 +68,7 @@ export const GenericOverview: React.FC<GenericOverviewProps> = (props) => {
     totalNotReady,
     totalPorts,
     type,
+    annotations,
   } = props;
 
   return (
@@ -166,6 +171,9 @@ export const GenericOverview: React.FC<GenericOverviewProps> = (props) => {
           fullWidth
         />
       )}
+
+      {/* Shared metadata section for labels/annotations when present. */}
+      <ResourceMetadata labels={labels} annotations={annotations} />
     </>
   );
 };
