@@ -46,6 +46,8 @@
 }
 
 .selector-item {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
   color: var(--text-secondary);
   padding: 2px 0;
 }
@@ -139,16 +141,15 @@
 
 /* NetworkPolicy Overview Styles */
 .policy-rules-list {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
 }
 
 .policy-rule {
-  padding: var(--spacing-md);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
+  padding-top: 0.15rem;
 }
 
 .rule-header {
@@ -157,21 +158,22 @@
   margin-bottom: var(--spacing-sm);
 }
 
-.rule-peers {
+.rule-peers,
+.rule-ports {
+  color: var(--text-primary);
   margin-bottom: var(--spacing-sm);
+  padding-left: 1rem;
 }
 
 .rule-peers strong,
 .rule-ports strong {
-  color: var(--text-primary);
-  font-weight: 500;
   display: block;
+  font-weight: var(--font-weight-semibold);
   margin-bottom: var(--spacing-xs);
 }
 
 .peer-item {
   margin-left: var(--spacing-md);
-  margin-bottom: var(--spacing-xs);
 }
 
 .peer-selector,
