@@ -43,6 +43,8 @@ describe('RBACOverview', () => {
     await renderWithProps(root, {
       kind: 'ClusterRole',
       name: 'admin',
+      labels: { team: 'platform' },
+      annotations: { owner: 'rbac-admins' },
       policyRules: [
         {
           apiGroups: ['', 'apps'],
@@ -57,6 +59,12 @@ describe('RBACOverview', () => {
     expect(container.textContent).toContain('deployments');
     expect(container.textContent).toContain('* (all)');
     expect(container.textContent).toContain('/healthz');
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('team:');
+    expect(container.textContent).toContain('platform');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('owner:');
+    expect(container.textContent).toContain('rbac-admins');
   });
 
   it('renders labels and annotations for roles', async () => {
@@ -98,6 +106,27 @@ describe('RBACOverview', () => {
     expect(container.textContent).toContain('Annotations');
     expect(container.textContent).toContain('managedBy:');
     expect(container.textContent).toContain('luxury-yacht');
+  });
+
+  it('renders cluster role binding metadata', async () => {
+    await renderWithProps(root, {
+      kind: 'ClusterRoleBinding',
+      name: 'bind-admin',
+      labels: { env: 'prod' },
+      annotations: { owner: 'security' },
+      roleRef: { kind: 'ClusterRole', name: 'admin' },
+      subjects: [{ kind: 'Group', name: 'admins' }],
+    });
+
+    expect(container.textContent).toContain('Role Reference');
+    expect(container.textContent).toContain('ClusterRole: admin');
+    expect(container.textContent).toContain('Group: admins');
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('env:');
+    expect(container.textContent).toContain('prod');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('owner:');
+    expect(container.textContent).toContain('security');
   });
 
   it('renders service account specific fields', async () => {

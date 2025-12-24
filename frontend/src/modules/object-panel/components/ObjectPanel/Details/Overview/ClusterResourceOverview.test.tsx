@@ -67,11 +67,19 @@ describe('ClusterResourceOverview', () => {
       scope: 'Namespaced',
       versions: [{}, {}] as any,
       names: { kind: 'Widget', plural: 'widgets' } as any,
+      labels: { team: 'platform' },
+      annotations: { owner: 'crd-admins' },
     });
 
     expect(getValueForLabel(container, 'Group')?.textContent).toBe('example.com');
     expect(getValueForLabel(container, 'Versions')?.textContent).toBe('2 version(s)');
     expect(getValueForLabel(container, 'Plural')?.textContent).toBe('widgets');
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('team:');
+    expect(container.textContent).toContain('platform');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('owner:');
+    expect(container.textContent).toContain('crd-admins');
   });
 
   it('renders webhook configuration details', async () => {
@@ -90,9 +98,17 @@ describe('ClusterResourceOverview', () => {
       name: 'nginx',
       controller: 'k8s.io/ingress-nginx',
       isDefault: true,
+      labels: { app: 'ingress' },
+      annotations: { owner: 'platform' },
     });
 
     expect(getValueForLabel(container, 'Controller')?.textContent).toBe('k8s.io/ingress-nginx');
     expect(getValueForLabel(container, 'Default Class')?.textContent).toBe('Yes');
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('app:');
+    expect(container.textContent).toContain('ingress');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('owner:');
+    expect(container.textContent).toContain('platform');
   });
 });

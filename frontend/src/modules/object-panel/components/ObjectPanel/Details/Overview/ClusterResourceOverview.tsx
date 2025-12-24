@@ -1,6 +1,7 @@
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
+import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import '@styles/components/badges.css';
 
@@ -9,6 +10,8 @@ interface ClusterResourceOverviewProps {
   name?: string;
   age?: string;
   status?: string;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
   // Namespace-specific fields
   hasWorkloads?: boolean;
   workloadsUnknown?: boolean;
@@ -26,6 +29,7 @@ interface ClusterResourceOverviewProps {
 
 export const ClusterResourceOverview: React.FC<ClusterResourceOverviewProps> = (props) => {
   const { kind, name, age, status } = props;
+  const normalizedKind = kind?.toLowerCase();
 
   return (
     <>
@@ -33,7 +37,7 @@ export const ClusterResourceOverview: React.FC<ClusterResourceOverviewProps> = (
       <ResourceStatus status={status} />
 
       {/* Namespace-specific fields */}
-      {props.kind?.toLowerCase() === 'namespace' && (
+      {normalizedKind === 'namespace' && (
         <>
           <OverviewItem
             label="Has Workloads"
@@ -51,7 +55,7 @@ export const ClusterResourceOverview: React.FC<ClusterResourceOverviewProps> = (
       )}
 
       {/* IngressClass-specific fields */}
-      {props.kind?.toLowerCase() === 'ingressclass' && (
+      {normalizedKind === 'ingressclass' && (
         <>
           <OverviewItem label="Controller" value={props.controller} />
           <OverviewItem label="Default Class" value={props.isDefault ? 'Yes' : 'No'} />
@@ -59,7 +63,7 @@ export const ClusterResourceOverview: React.FC<ClusterResourceOverviewProps> = (
       )}
 
       {/* CRD-specific fields */}
-      {props.kind?.toLowerCase() === 'customresourcedefinition' && (
+      {normalizedKind === 'customresourcedefinition' && (
         <>
           <OverviewItem label="Group" value={props.group} />
           <OverviewItem label="Scope" value={props.scope} />
@@ -77,14 +81,22 @@ export const ClusterResourceOverview: React.FC<ClusterResourceOverviewProps> = (
       )}
 
       {/* Webhook-specific fields */}
-      {(props.kind?.toLowerCase() === 'mutatingwebhookconfiguration' ||
-        props.kind?.toLowerCase() === 'validatingwebhookconfiguration') && (
+      {(normalizedKind === 'mutatingwebhookconfiguration' ||
+        normalizedKind === 'validatingwebhookconfiguration') && (
         <>
           <OverviewItem
             label="Webhooks"
             value={props.webhooks ? `${props.webhooks.length} webhook(s)` : undefined}
           />
         </>
+      )}
+
+      {/* Cluster config resources should show metadata like ConfigMaps/Secrets. */}
+      {(normalizedKind === 'customresourcedefinition' ||
+        normalizedKind === 'ingressclass' ||
+        normalizedKind === 'mutatingwebhookconfiguration' ||
+        normalizedKind === 'validatingwebhookconfiguration') && (
+        <ResourceMetadata labels={props.labels} annotations={props.annotations} />
       )}
     </>
   );

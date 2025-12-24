@@ -73,6 +73,8 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
               value={`${props.claimRef.namespace}/${props.claimRef.name}`}
             />
           )}
+          {/* Match ConfigMap/Secret metadata layout for PersistentVolumes. */}
+          <ResourceMetadata labels={props.labels} annotations={props.annotations} />
         </>
       )}
 
@@ -100,6 +102,8 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
               fullWidth
             />
           )}
+          {/* Match ConfigMap/Secret metadata layout for StorageClasses. */}
+          <ResourceMetadata labels={props.labels} annotations={props.annotations} />
         </>
       )}
     </>

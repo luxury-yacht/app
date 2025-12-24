@@ -83,10 +83,18 @@ describe('StorageOverview', () => {
       storageClass: 'nfs',
       volumeMode: 'Block',
       claimRef: { namespace: 'default', name: 'cache' },
+      labels: { env: 'prod' },
+      annotations: { owner: 'storage-team' },
     });
 
     expect(getValueForLabel(container, 'Reclaim Policy')?.textContent).toBe('Retain');
     expect(getValueForLabel(container, 'Claim')?.textContent).toBe('default/cache');
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('env:');
+    expect(container.textContent).toContain('prod');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('owner:');
+    expect(container.textContent).toContain('storage-team');
   });
 
   it('renders StorageClass-specific fields', async () => {
@@ -102,6 +110,8 @@ describe('StorageOverview', () => {
         type: 'gp3',
         encrypted: 'true',
       },
+      labels: { env: 'prod' },
+      annotations: { owner: 'storage-team' },
     });
 
     expect(getValueForLabel(container, 'Provisioner')?.textContent).toBe('kubernetes.io/aws-ebs');
@@ -110,5 +120,11 @@ describe('StorageOverview', () => {
     const params = getValueForLabel(container, 'Parameters');
     expect(params?.textContent).toContain('type');
     expect(params?.textContent).toContain('gp3');
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('env:');
+    expect(container.textContent).toContain('prod');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('owner:');
+    expect(container.textContent).toContain('storage-team');
   });
 });

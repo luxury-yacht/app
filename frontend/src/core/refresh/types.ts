@@ -198,6 +198,8 @@ export interface ClusterCustomEntry {
   name: string;
   apiGroup: string;
   age: string;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
 }
 
 export interface ClusterCustomSnapshotPayload {

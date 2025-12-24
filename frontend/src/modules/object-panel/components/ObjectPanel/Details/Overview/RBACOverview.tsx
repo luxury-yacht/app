@@ -147,10 +147,12 @@ export const RBACOverview: React.FC<RBACOverviewProps> = (props) => {
           </>
         )}
 
-      {/* Use the shared metadata renderer for namespaced RBAC resources. */}
+      {/* Use the shared metadata renderer for RBAC resources. */}
       {(normalizedKind === 'role' ||
         normalizedKind === 'rolebinding' ||
-        normalizedKind === 'serviceaccount') && (
+        normalizedKind === 'serviceaccount' ||
+        normalizedKind === 'clusterrole' ||
+        normalizedKind === 'clusterrolebinding') && (
         <ResourceMetadata labels={props.labels} annotations={props.annotations} />
       )}
     </>
