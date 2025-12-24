@@ -1,15 +1,15 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import path from 'path'
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173
+    port: 5173,
   },
   envPrefix: ['VITE_', 'ENABLE_', 'ERROR_'],
   build: {
-    outDir: 'dist'
+    outDir: 'dist',
   },
   resolve: {
     alias: {
@@ -50,7 +50,7 @@ export default defineConfig({
       '@contexts': path.resolve(__dirname, './src/core/contexts'),
       '@assets': path.resolve(__dirname, './src/assets'),
       '@wailsjs': path.resolve(__dirname, './wailsjs'),
-    }
+    },
   },
   test: {
     globals: true,
@@ -60,7 +60,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
       reportsDirectory: 'coverage',
-      exclude: ['**/*.css']
-    }
-  }
-})
+      exclude: ['**/*.css'],
+    },
+  },
+});

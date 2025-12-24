@@ -7,7 +7,18 @@ const tsconfigDir = new URL('.', import.meta.url).pathname;
 
 export default [
   {
-    ignores: ['dist/**'],
+    ignores: ['dist/**', 'frontend/wailsjs/**'],
+  },
+  {
+    // Lint config/tool entry points without type-aware parsing.
+    files: ['eslint.config.js', 'vite.config.ts', 'vitest.setup.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+      },
+    },
   },
   {
     files: ['src/**/*.{ts,tsx}'],
@@ -50,8 +61,7 @@ export default [
           message: 'Use the refresh orchestrator client instead of direct fetch calls.',
         },
         {
-          selector:
-            "CallExpression[callee.type='MemberExpression'][callee.property.name='fetch']",
+          selector: "CallExpression[callee.type='MemberExpression'][callee.property.name='fetch']",
           message: 'Use the refresh orchestrator client instead of direct fetch calls.',
         },
       ],

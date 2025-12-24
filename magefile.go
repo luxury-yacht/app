@@ -31,37 +31,67 @@ func ShowConfig() {
 // ===============================
 
 var Aliases = map[string]interface{}{
-	"clean":            Clean.Build,
-	"clean-all":        Clean.All,
-	"clean-build":      Clean.Build,
-	"clean-frontend":   Clean.Frontend,
-	"clean-go-cache":   Clean.GoCache,
-	"deps":             Deps.All,
-	"deps-all":         Deps.All,
-	"deps-go":          Deps.Go,
-	"deps-npm":         Deps.Npm,
-	"install":          Install.Signed,
-	"install-signed":   Install.Signed,
-	"install-unsigned": Install.Unsigned,
-	"package":          Package.Signed,
-	"package-signed":   Package.Signed,
-	"package-unsigned": Package.Unsigned,
-	"lint":             QC.Lint,
-	"lint-fix":         QC.LintFix,
-	"typecheck":        QC.Typecheck,
-	"npm-update-check": QC.NpmUpdateCheck,
-	"npm-update-fix":   QC.NpmUpdateFix,
-	"go-update-check":  QC.GoUpdateCheck,
-	"go-update-fix":    QC.GoUpdateFix,
-	"knip":             QC.Knip,
-	"reset":            QC.Reset,
-	"nuke":             Clean.All,
-	"test":             Test.All,
-	"test-be":          Test.Backend,
-	"test-be-cov":      Test.BackendCoverage,
-	"test-fe":          Test.Frontend,
-	"test-fe-cov":      Test.FrontendCoverage,
-	"vet":              QC.Vet,
+	"clean-all":           Clean.All,
+	"nuke":                Clean.All,
+	"clean":               Clean.Build,
+	"clean-build":         Clean.Build,
+	"clean-frontend":      Clean.Frontend,
+	"clean-go-cache":      Clean.GoCache,
+	"deps":                Deps.All,
+	"deps-all":            Deps.All,
+	"deps-go":             Deps.Go,
+	"deps-npm":            Deps.Npm,
+	"install-signed":      Install.Signed,
+	"install-unsigned":    Install.Unsigned,
+	"package-signed":      Package.Signed,
+	"package-unsigned":    Package.Unsigned,
+	"lint":                QC.Lint,
+	"lint-fix":            QC.LintFix,
+	"typecheck":           QC.Typecheck,
+	"npm-update-check":    QC.NpmUpdateCheck,
+	"npm-update-fix":      QC.NpmUpdate,
+	"go-mod-update-check": QC.GoModUpdateCheck,
+	"go-mod-update":       QC.GoModUpdate,
+	"knip":                QC.Knip,
+	"vet":                 QC.Vet,
+	"reset":               QC.Reset,
+	"test":                Test.All,
+	"test-be":             Test.Backend,
+	"test-be-cov":         Test.BackendCoverage,
+	"test-fe":             Test.Frontend,
+	"test-fe-cov":         Test.FrontendCoverage,
+}
+
+// ===============================
+// Ensure Dependencies
+// ===============================
+
+func isNpmInstalled() error {
+	if _, err := exec.LookPath("npm"); err != nil {
+		return fmt.Errorf("npm is not installed.")
+	}
+	return nil
+}
+
+func isNpxInstalled() error {
+	if _, err := exec.LookPath("npx"); err != nil {
+		return fmt.Errorf("npx is not installed.")
+	}
+	return nil
+}
+
+func isStaticcheckInstalled() error {
+	if _, err := exec.LookPath("staticcheck"); err != nil {
+		return fmt.Errorf("staticcheck is not installed.")
+	}
+	return nil
+}
+
+func isTrivyInstalled() error {
+	if _, err := exec.LookPath("trivy"); err != nil {
+		return fmt.Errorf("trivy is not installed.")
+	}
+	return nil
 }
 
 // ===============================
@@ -69,6 +99,11 @@ var Aliases = map[string]interface{}{
 // ===============================
 
 type Deps mg.Namespace
+
+// Installs all dependencies
+func (Deps) All() {
+	mg.SerialDeps(Deps.Go, Deps.Npm)
+}
 
 // Installs Go dependencies
 func (Deps) Go() error {
@@ -78,13 +113,11 @@ func (Deps) Go() error {
 
 // Installs npm dependencies
 func (Deps) Npm() error {
+	if err := isNpmInstalled(); err != nil {
+		return err
+	}
 	fmt.Println("Installing npm dependencies...")
 	return sh.RunV("npm", "install", "--prefix", cfg.FrontendDir)
-}
-
-// Installs all dependencies
-func (Deps) All() {
-	mg.SerialDeps(Deps.Go, Deps.Npm)
 }
 
 // ===============================
@@ -92,6 +125,11 @@ func (Deps) All() {
 // ===============================
 
 type Clean mg.Namespace
+
+// Cleans all build artifacts and caches
+func (Clean) All() {
+	mg.SerialDeps(Clean.Build, Clean.GoCache, Clean.Frontend)
+}
 
 // Cleans build artifacts
 func (Clean) Build() error {
@@ -114,11 +152,6 @@ func (Clean) Frontend() error {
 	os.RemoveAll(cfg.FrontendDir + "/dist")
 	os.RemoveAll(cfg.FrontendDir + "/node_modules")
 	return nil
-}
-
-// Cleans all build artifacts and caches
-func (Clean) All() {
-	mg.SerialDeps(Clean.Build, Clean.GoCache, Clean.Frontend)
 }
 
 // ===============================
@@ -147,8 +180,26 @@ func Dev() error {
 
 type QC mg.Namespace
 
+// Checks for Go module updates
+func (QC) GoModUpdateCheck() error {
+	fmt.Println("\n🔎 Checking for outdated Go modules...")
+	return sh.RunV("go", "list", "-u", "-m", "-f", `{{if and (not .Indirect) .Update}}{{.Path}} {{.Version}} → {{.Update.Version}}{{end}}`, "all")
+}
+
+// Updates Go modules
+func (QC) GoModUpdate() error {
+	fmt.Println("\n🔄 Updating outdated Go modules...")
+	if err := sh.RunV("go", "get", "-u"); err != nil {
+		return err
+	}
+	return sh.RunV("go", "mod", "tidy")
+}
+
 // Runs go vet and staticcheck
 func (QC) Vet() error {
+	if err := isStaticcheckInstalled(); err != nil {
+		return err
+	}
 	fmt.Println("\n🔎 Running go vet...")
 	if err := sh.RunV("go", "vet", "./..."); err != nil {
 		return err
@@ -159,60 +210,65 @@ func (QC) Vet() error {
 
 // Runs the npm linter
 func (QC) Lint() error {
+	if err := isNpmInstalled(); err != nil {
+		return err
+	}
 	fmt.Println("\n🔎 Running npm linter...")
 	return sh.RunV("npm", "run", "lint", "--prefix", cfg.FrontendDir)
 }
 
 // Runs the npm linter with fix
 func (QC) LintFix() error {
+	if err := isNpmInstalled(); err != nil {
+		return err
+	}
 	fmt.Println("\n🔧 Running npm linter with fix...")
 	return sh.RunV("npm", "run", "lint:fix", "--prefix", cfg.FrontendDir)
 }
 
-// Runs the npm linter
+// Runs the npm typechecker
 func (QC) Typecheck() error {
+	if err := isNpmInstalled(); err != nil {
+		return err
+	}
 	fmt.Println("\n🔎 Running npm typecheck...")
 	return sh.RunV("npm", "run", "typecheck", "--prefix", cfg.FrontendDir)
 }
 
-// Check for outdated Go modules
-func (QC) GoUpdateCheck() error {
-	fmt.Println("\n🔎 Checking for outdated Go modules...")
-	return sh.RunV("sh", "-c", `go list -u -m all | grep '\['`)
-}
-
-// Update outdated Go modules
-func (QC) GoUpdateFix() error {
-	fmt.Println("\n🔄 Updating outdated Go modules...")
-	return sh.RunV("go", "get", "-u", "./...")
-}
-
-// Check for outdated npm packages
+// Checks npm package updates
 func (QC) NpmUpdateCheck() error {
+	if err := isNpxInstalled(); err != nil {
+		return err
+	}
 	fmt.Println("\n🔎 Checking for outdated npm packages...")
 	os.Chdir(cfg.FrontendDir)
 	return sh.RunV("npx", "npm-check-updates")
 }
 
-// Update outdated npm packages
-func (QC) NpmUpdateFix() error {
+// Updates npm packages
+func (QC) NpmUpdate() error {
+	if err := isNpxInstalled(); err != nil {
+		return err
+	}
 	fmt.Println("\n🔄 Updating outdated npm packages...")
 	os.Chdir(cfg.FrontendDir)
 	return sh.RunV("npx", "npm-check-updates", "-u")
 }
 
-// Run knip to find unused files, dependencies, and exports in the frontend
+// Runs knip to find unused files, dependencies, and exports in the frontend
 func (QC) Knip() error {
+	if err := isNpxInstalled(); err != nil {
+		return err
+	}
 	fmt.Println("\n🔎 Running knip to find unused files, dependencies, and exports in the frontend...")
 	os.Chdir(cfg.FrontendDir)
 	return sh.RunV("npx", "knip")
 }
 
-// Run a trivy vulnerability scan on the project's go and npm dependencies.
+// Runs a trivy vulnerability scan on the project's dependencies.
 func (QC) Trivy() error {
-	// Make sure trivy is installed
-	if _, err := exec.LookPath("trivy"); err != nil {
-		return fmt.Errorf("trivy is not installed. Install trivy to run this task: https://trivy.dev/docs/getting-started/")
+	if err := isTrivyInstalled(); err != nil {
+		return err
 	}
 	fmt.Println("\n🔎 Running trivy scan on the project...")
 	return sh.RunV("trivy", "fs", "--exit-code", "1", "--severity", "CRITICAL,HIGH", ".")
@@ -247,12 +303,18 @@ func (Test) BackendCoverage() error {
 
 // Runs frontend tests
 func (Test) Frontend() error {
+	if err := isNpmInstalled(); err != nil {
+		return err
+	}
 	os.Chdir(cfg.FrontendDir)
 	return sh.RunV("npm", "run", "test")
 }
 
 // Runs frontend tests with coverage
 func (Test) FrontendCoverage() error {
+	if err := isNpmInstalled(); err != nil {
+		return err
+	}
 	os.Chdir(cfg.FrontendDir)
 	return sh.RunV("npm", "run", "test", "--", "--coverage")
 }

@@ -8,10 +8,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,css,json}\"",
-    "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,css,json}\"",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,css,json}\" \"eslint.config.js\" \"vite.config.ts\" \"vitest.setup.ts\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx,css,json}\" \"eslint.config.js\" \"vite.config.ts\" \"vitest.setup.ts\"",
     "lint": "npm run format:check && npm run lint:eslint",
-    "lint:eslint": "eslint \"src/**/*.{ts,tsx}\"",
+    "lint:eslint": "eslint \"src/**/*.{ts,tsx}\" \"eslint.config.js\" \"vite.config.ts\" \"vitest.setup.ts\"",
     "lint:fix": "npm run format",
     "test": "vitest run",
     "knip": "knip"
