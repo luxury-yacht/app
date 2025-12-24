@@ -18,6 +18,7 @@ const baseProps = (): DetailsTabProps => ({
   isActive: true,
   podDetails: null,
   deploymentDetails: null,
+  replicaSetDetails: null,
   daemonSetDetails: null,
   statefulSetDetails: null,
   jobDetails: null,

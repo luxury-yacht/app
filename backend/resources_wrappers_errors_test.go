@@ -31,6 +31,7 @@ func TestWrapperGuardPathsRequireClient(t *testing.T) {
 		{"HelmValues", func() error { _, err := app.GetHelmValues("ns", "rel"); return err }},
 		{"HelmDelete", func() error { return app.DeleteHelmRelease("ns", "rel") }},
 		{"Deployment", func() error { _, err := app.GetDeployment("ns", "deploy"); return err }},
+		{"ReplicaSet", func() error { _, err := app.GetReplicaSet("ns", "rs"); return err }},
 		{"StatefulSet", func() error { _, err := app.GetStatefulSet("ns", "sts"); return err }},
 		{"DaemonSet", func() error { _, err := app.GetDaemonSet("ns", "ds"); return err }},
 		{"Job", func() error { _, err := app.GetJob("ns", "job"); return err }},

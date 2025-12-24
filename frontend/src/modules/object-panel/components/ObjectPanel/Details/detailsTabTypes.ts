@@ -7,6 +7,7 @@ export interface DetailsTabProps {
   // Workloads
   podDetails: types.PodDetailInfo | null;
   deploymentDetails: types.DeploymentDetails | null;
+  replicaSetDetails: types.ReplicaSetDetails | null;
   daemonSetDetails: types.DaemonSetDetails | null;
   statefulSetDetails: types.StatefulSetDetails | null;
   jobDetails: types.JobDetails | null;

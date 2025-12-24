@@ -72,6 +72,7 @@ const createBaseProps = (overrides: Partial<DetailsTabProps> = {}): DetailsTabPr
   isActive: true,
   podDetails: null,
   deploymentDetails: null,
+  replicaSetDetails: null,
   daemonSetDetails: null,
   statefulSetDetails: null,
   jobDetails: null,
@@ -199,6 +200,30 @@ describe('DetailsTab', () => {
       onScale: expect.any(Function),
     });
     expect(useShortcutMock).toHaveBeenCalledWith(expect.objectContaining({ key: 'o' }));
+    cleanup();
+  });
+
+  it('hides utilization for inactive replicasets', async () => {
+    const props = createBaseProps({
+      objectData: { kind: 'ReplicaSet', name: 'web-rs', namespace: 'default', age: '1h' },
+      replicaSetDetails: {
+        name: 'web-rs',
+        namespace: 'default',
+        age: '1h',
+        replicas: '1/2',
+        ready: '1/2',
+        cpuUsage: '100m',
+        cpuRequest: '50m',
+        cpuLimit: '200m',
+        memUsage: '128Mi',
+        memRequest: '64Mi',
+        memLimit: '256Mi',
+        isActive: false,
+      } as any,
+    });
+
+    const { cleanup } = await renderDetailsTab(props);
+    expect(utilizationMock).not.toHaveBeenCalled();
     cleanup();
   });
 

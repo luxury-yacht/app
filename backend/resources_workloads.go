@@ -15,6 +15,14 @@ func (a *App) GetDeployment(namespace, name string) (*DeploymentDetails, error) 
 	})
 }
 
+// GetReplicaSet returns the detailed view for a ReplicaSet.
+func (a *App) GetReplicaSet(namespace, name string) (*ReplicaSetDetails, error) {
+	deps := workloads.Dependencies{Common: a.resourceDependencies()}
+	return FetchNamespacedResource(a, "ReplicaSet", namespace, name, func() (*ReplicaSetDetails, error) {
+		return workloads.NewReplicaSetService(deps).ReplicaSet(namespace, name)
+	})
+}
+
 func (a *App) GetStatefulSet(namespace, name string) (*StatefulSetDetails, error) {
 	deps := workloads.Dependencies{Common: a.resourceDependencies()}
 	return FetchNamespacedResource(a, "StatefulSet", namespace, name, func() (*StatefulSetDetails, error) {
@@ -63,11 +71,17 @@ func (a *App) GetWorkloads(namespace string, clientVersion string) (*VersionedRe
 }
 
 func (a *App) resourceDependencies() common.Dependencies {
+	// Ensure nil pointer metrics clients don't get wrapped in non-nil interfaces.
+	var metricsClient metricsclient.Interface
+	if a.metricsClient != nil {
+		metricsClient = a.metricsClient
+	}
+
 	return common.Dependencies{
 		Context:          a.Ctx,
 		Logger:           a.logger,
 		KubernetesClient: a.client,
-		MetricsClient:    a.metricsClient,
+		MetricsClient:    metricsClient,
 		SetMetricsClient: func(mc metricsclient.Interface) {
 			if clientset, ok := mc.(*metricsclient.Clientset); ok {
 				a.metricsClient = clientset

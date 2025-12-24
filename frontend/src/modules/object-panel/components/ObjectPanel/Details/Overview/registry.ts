@@ -231,6 +231,14 @@ overviewRegistry.register({
   },
 });
 
+overviewRegistry.register({
+  kinds: ['replicaset'],
+  component: WorkloadOverview,
+  capabilities: {
+    delete: true,
+  },
+});
+
 // Register Helm component
 overviewRegistry.register({
   kinds: ['helmrelease'],

@@ -100,6 +100,8 @@ export function GetPodDisruptionBudget(arg1:string,arg2:string):Promise<types.Po
 
 export function GetRefreshBaseURL():Promise<string>;
 
+export function GetReplicaSet(arg1:string,arg2:string):Promise<types.ReplicaSetDetails>;
+
 export function GetResourceQuota(arg1:string,arg2:string):Promise<types.ResourceQuotaDetails>;
 
 export function GetRole(arg1:string,arg2:string):Promise<types.RoleDetails>;

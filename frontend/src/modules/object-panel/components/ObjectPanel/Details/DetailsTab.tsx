@@ -22,6 +22,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
   // Workloads
   podDetails,
   deploymentDetails,
+  replicaSetDetails,
   daemonSetDetails,
   statefulSetDetails,
   jobDetails,
@@ -88,6 +89,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
     objectData,
     podDetails,
     deploymentDetails,
+    replicaSetDetails,
     daemonSetDetails,
     statefulSetDetails,
     jobDetails,
@@ -152,6 +154,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
     deploymentDetails,
     daemonSetDetails,
     statefulSetDetails,
+    replicaSetDetails,
     nodeDetails,
   });
 
@@ -316,7 +319,8 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
             kind === 'pod' ||
             kind === 'deployment' ||
             kind === 'daemonset' ||
-            kind === 'statefulset';
+            kind === 'statefulset' ||
+            kind === 'replicaset';
 
           if (!shouldShowContainers) return null;
 
@@ -326,7 +330,8 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
                 (podDetails.initContainers?.length ?? 0) > 0)) ||
             (deploymentDetails?.containers?.length ?? 0) > 0 ||
             (daemonSetDetails?.containers?.length ?? 0) > 0 ||
-            (statefulSetDetails?.containers?.length ?? 0) > 0;
+            (statefulSetDetails?.containers?.length ?? 0) > 0 ||
+            (replicaSetDetails?.containers?.length ?? 0) > 0;
 
           if (!hasContainers) return null;
 
@@ -337,7 +342,8 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
                   podDetails?.containers ||
                   deploymentDetails?.containers ||
                   daemonSetDetails?.containers ||
-                  statefulSetDetails?.containers
+                  statefulSetDetails?.containers ||
+                  replicaSetDetails?.containers
                 }
                 initContainers={podDetails?.initContainers}
               />

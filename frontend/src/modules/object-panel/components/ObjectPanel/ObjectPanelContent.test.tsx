@@ -111,6 +111,7 @@ describe('ObjectPanelContent', () => {
       onShowScaleInput: vi.fn(),
       podDetails: null,
       deploymentDetails: null,
+      replicaSetDetails: null,
       daemonSetDetails: null,
       statefulSetDetails: null,
       jobDetails: null,

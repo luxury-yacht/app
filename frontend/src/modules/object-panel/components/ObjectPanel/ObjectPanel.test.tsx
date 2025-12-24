@@ -695,6 +695,7 @@ describe('ObjectPanel tab availability', () => {
 
   const detailMappingCases = [
     ['DaemonSet', 'daemonSetDetails', { desiredNumberScheduled: 1 }],
+    ['ReplicaSet', 'replicaSetDetails', { replicas: '1/1' }],
     ['StatefulSet', 'statefulSetDetails', { replicas: 2 }],
     ['Job', 'jobDetails', { completions: 1 }],
     ['CronJob', 'cronJobDetails', { schedule: '* * * * *' }],

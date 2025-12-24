@@ -28,7 +28,7 @@ func TestWorkloadWrappersHappyPath(t *testing.T) {
 			Selector:             &metav1.LabelSelector{MatchLabels: labels},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: labels},
-				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "web", Image: "nginx"}}},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "web", Image: "nginx"}}},
 			},
 		},
 		Status: appsv1.DeploymentStatus{ReadyReplicas: 1, Replicas: 1},
@@ -54,7 +54,7 @@ func TestWorkloadWrappersHappyPath(t *testing.T) {
 			Selector:    &metav1.LabelSelector{MatchLabels: map[string]string{"app": "db"}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "db"}},
-				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "db", Image: "postgres"}}},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "db", Image: "postgres"}}},
 			},
 		},
 		Status: appsv1.StatefulSetStatus{ReadyReplicas: 1, Replicas: 1},
@@ -65,7 +65,7 @@ func TestWorkloadWrappersHappyPath(t *testing.T) {
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "logger"}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "logger"}},
-				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "fluentd", Image: "fluentd"}}},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "fluentd", Image: "fluentd"}}},
 			},
 		},
 		Status: appsv1.DaemonSetStatus{NumberReady: 1, DesiredNumberScheduled: 1},
@@ -77,7 +77,7 @@ func TestWorkloadWrappersHappyPath(t *testing.T) {
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"job-name": "backup"}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"job-name": "backup"}},
-				Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "backup", Image: "alpine"}}, RestartPolicy: corev1.RestartPolicyNever},
+				Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "backup", Image: "alpine"}}, RestartPolicy: corev1.RestartPolicyNever},
 			},
 		},
 		Status: batchv1.JobStatus{Succeeded: 1},
@@ -133,6 +133,9 @@ func TestWorkloadWrappersHappyPath(t *testing.T) {
 
 	if _, err := app.GetDeployment("apps", "web"); err != nil {
 		t.Fatalf("expected deployment wrapper to succeed: %v", err)
+	}
+	if _, err := app.GetReplicaSet("apps", "web-rs"); err != nil {
+		t.Fatalf("expected replicaset wrapper to succeed: %v", err)
 	}
 	if _, err := app.GetStatefulSet("apps", "db"); err != nil {
 		t.Fatalf("expected statefulset wrapper to succeed: %v", err)

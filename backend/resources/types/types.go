@@ -505,26 +505,26 @@ type ServicePortDetails struct {
 }
 
 type EndpointSliceDetails struct {
-	Kind        string                   `json:"kind"`
-	Name        string                   `json:"name"`
-	Namespace   string                   `json:"namespace"`
-	Age         string                   `json:"age"`
-	Details     string                   `json:"details"`
-	Slices      []EndpointSliceSummary   `json:"slices,omitempty"`
-	TotalReady  int                      `json:"totalReady"`
+	Kind          string                 `json:"kind"`
+	Name          string                 `json:"name"`
+	Namespace     string                 `json:"namespace"`
+	Age           string                 `json:"age"`
+	Details       string                 `json:"details"`
+	Slices        []EndpointSliceSummary `json:"slices,omitempty"`
+	TotalReady    int                    `json:"totalReady"`
 	TotalNotReady int                    `json:"totalNotReady"`
-	TotalPorts  int                      `json:"totalPorts"`
-	Labels      map[string]string        `json:"labels,omitempty"`
-	Annotations map[string]string        `json:"annotations,omitempty"`
+	TotalPorts    int                    `json:"totalPorts"`
+	Labels        map[string]string      `json:"labels,omitempty"`
+	Annotations   map[string]string      `json:"annotations,omitempty"`
 }
 
 type EndpointSliceSummary struct {
-	Name               string                 `json:"name"`
-	AddressType        string                 `json:"addressType"`
-	Age                string                 `json:"age"`
-	ReadyAddresses     []EndpointSliceAddress `json:"readyAddresses,omitempty"`
-	NotReadyAddresses  []EndpointSliceAddress `json:"notReadyAddresses,omitempty"`
-	Ports              []EndpointSlicePort    `json:"ports,omitempty"`
+	Name              string                 `json:"name"`
+	AddressType       string                 `json:"addressType"`
+	Age               string                 `json:"age"`
+	ReadyAddresses    []EndpointSliceAddress `json:"readyAddresses,omitempty"`
+	NotReadyAddresses []EndpointSliceAddress `json:"notReadyAddresses,omitempty"`
+	Ports             []EndpointSlicePort    `json:"ports,omitempty"`
 }
 
 type EndpointSliceAddress struct {
@@ -743,6 +743,48 @@ type ReplicaSetSummary struct {
 	Ready     string `json:"readyReplicas"`
 	Available string `json:"availableReplicas"`
 	Age       string `json:"age"`
+}
+
+// ReplicaSetDetails represents detailed ReplicaSet information for the object panel.
+type ReplicaSetDetails struct {
+	// Basic information
+	Kind            string `json:"kind"`
+	Name            string `json:"name"`
+	Namespace       string `json:"namespace"`
+	Details         string `json:"details"`
+	Replicas        string `json:"replicas"`
+	Ready           string `json:"ready"`
+	Available       int32  `json:"available,omitempty"`
+	DesiredReplicas int32  `json:"desiredReplicas,omitempty"`
+	Age             string `json:"age"`
+
+	// Average resource utilization (per pod)
+	CPURequest string `json:"cpuRequest,omitempty"`
+	CPULimit   string `json:"cpuLimit,omitempty"`
+	CPUUsage   string `json:"cpuUsage,omitempty"`
+	MemRequest string `json:"memRequest,omitempty"`
+	MemLimit   string `json:"memLimit,omitempty"`
+	MemUsage   string `json:"memUsage,omitempty"`
+
+	// ReplicaSet configuration
+	MinReadySeconds int32             `json:"minReadySeconds,omitempty"`
+	Selector        map[string]string `json:"selector,omitempty"`
+	Labels          map[string]string `json:"labels,omitempty"`
+	Annotations     map[string]string `json:"annotations,omitempty"`
+
+	// Conditions
+	Conditions []string `json:"conditions,omitempty"`
+
+	// Template information
+	Containers []PodDetailInfoContainer `json:"containers,omitempty"`
+
+	// Pod information
+	Pods              []PodSimpleInfo    `json:"pods,omitempty"`
+	PodMetricsSummary *PodMetricsSummary `json:"podMetricsSummary,omitempty"`
+
+	// Status
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+	IsActive           bool  `json:"isActive"`
 }
 
 type DeploymentDetails struct {

@@ -8,6 +8,7 @@ interface UseOverviewDataParams {
   objectData: any;
   podDetails: types.PodDetailInfo | null;
   deploymentDetails: types.DeploymentDetails | null;
+  replicaSetDetails: types.ReplicaSetDetails | null;
   daemonSetDetails: types.DaemonSetDetails | null;
   statefulSetDetails: types.StatefulSetDetails | null;
   jobDetails: types.JobDetails | null;
@@ -44,6 +45,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
     objectData,
     podDetails,
     deploymentDetails,
+    replicaSetDetails,
     daemonSetDetails,
     statefulSetDetails,
     jobDetails,
@@ -135,6 +137,24 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         replicaSets: deploymentDetails.replicaSets,
         labels: deploymentDetails.labels,
         annotations: deploymentDetails.annotations,
+      };
+    }
+
+    // ReplicaSet
+    if (replicaSetDetails && kind === 'replicaset') {
+      return {
+        kind: 'ReplicaSet',
+        name: replicaSetDetails.name,
+        age: replicaSetDetails.age,
+        namespace: replicaSetDetails.namespace,
+        replicas: replicaSetDetails.replicas,
+        desiredReplicas: replicaSetDetails.desiredReplicas,
+        ready: replicaSetDetails.ready,
+        available: replicaSetDetails.available,
+        minReadySeconds: replicaSetDetails.minReadySeconds,
+        selector: replicaSetDetails.selector,
+        labels: replicaSetDetails.labels,
+        annotations: replicaSetDetails.annotations,
       };
     }
 
@@ -583,6 +603,7 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
     objectData,
     podDetails,
     deploymentDetails,
+    replicaSetDetails,
     daemonSetDetails,
     statefulSetDetails,
     jobDetails,
