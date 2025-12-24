@@ -1,13 +1,10 @@
 package mage
 
 import (
-	"archive/zip"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -88,63 +85,4 @@ func PrettyPrint(args ...interface{}) {
 		s, _ := json.MarshalIndent(args, "", "\t")
 		fmt.Printf("%s%s\n", prefix, string(s))
 	}
-}
-
-// Creates a ZIP archive from the specified source directory.
-func createZipFromDir(srcDir, destZip string) error {
-	if err := os.MkdirAll(filepath.Dir(destZip), 0o755); err != nil {
-		return fmt.Errorf("failed to prepare zip destination: %w", err)
-	}
-	outFile, err := os.Create(destZip)
-	if err != nil {
-		return fmt.Errorf("failed to create zip file: %w", err)
-	}
-	defer outFile.Close()
-
-	zipWriter := zip.NewWriter(outFile)
-	walkErr := filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		relPath, err := filepath.Rel(srcDir, path)
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			if relPath == "." {
-				return nil
-			}
-			_, err = zipWriter.Create(strings.ReplaceAll(relPath+"/", "\\", "/"))
-			return err
-		}
-		file, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		header, err := zip.FileInfoHeader(info)
-		if err != nil {
-			file.Close()
-			return err
-		}
-		header.Name = strings.ReplaceAll(relPath, "\\", "/")
-		header.Method = zip.Deflate
-		writer, err := zipWriter.CreateHeader(header)
-		if err != nil {
-			return err
-		}
-		if _, err := io.Copy(writer, file); err != nil {
-			file.Close()
-			return err
-		}
-		file.Close()
-		return nil
-	})
-	if walkErr != nil {
-		return fmt.Errorf("failed to build zip: %w", walkErr)
-	}
-	if err := zipWriter.Close(); err != nil {
-		return fmt.Errorf("failed to finalize zip: %w", err)
-	}
-	fmt.Printf("✅ Created Windows package: %s\n", destZip)
-	return nil
 }

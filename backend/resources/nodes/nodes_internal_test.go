@@ -34,7 +34,8 @@ func TestEnsureMetricsClientInitializesClient(t *testing.T) {
 }
 
 func TestListNodeMetricsHandlesAPIErrors(t *testing.T) {
-	client := metricsfake.NewClientset()
+	//lint:ignore SA1019 No replacement for the deprecated method
+	client := metricsfake.NewSimpleClientset()
 	service := NewService(Dependencies{
 		Common: testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)),
 	})
@@ -56,7 +57,8 @@ func TestListNodeMetricsReturnsValues(t *testing.T) {
 		},
 	}
 
-	client := metricsfake.NewClientset()
+	//lint:ignore SA1019 No replacement for the deprecated method
+	client := metricsfake.NewSimpleClientset(metrics)
 	client.Fake.PrependReactor("*", "*", func(kubetesting.Action) (bool, runtime.Object, error) {
 		return true, &metricsv1beta1.NodeMetricsList{Items: []metricsv1beta1.NodeMetrics{*metrics}}, nil
 	})
@@ -99,7 +101,8 @@ func TestGetNodeMetricsReturnsUsage(t *testing.T) {
 		},
 	}
 
-	client := metricsfake.NewClientset(metrics)
+	//lint:ignore SA1019 No replacement for the deprecated method
+	client := metricsfake.NewSimpleClientset(metrics)
 	client.Fake.PrependReactor("*", "*", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		if get, ok := action.(kubetesting.GetAction); ok && get.GetName() == "node-1" {
 			return true, metrics, nil
