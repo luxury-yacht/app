@@ -129,7 +129,7 @@ func TestWorkloadWrappersHappyPath(t *testing.T) {
 		},
 	}
 
-	app.client = kubefake.NewSimpleClientset(deploy, rs, sts, ds, job, cronJob, service, &pods[0], &pods[1], &pods[2], &pods[3])
+	app.client = kubefake.NewClientset(deploy, rs, sts, ds, job, cronJob, service, &pods[0], &pods[1], &pods[2], &pods[3])
 
 	if _, err := app.GetDeployment("apps", "web"); err != nil {
 		t.Fatalf("expected deployment wrapper to succeed: %v", err)

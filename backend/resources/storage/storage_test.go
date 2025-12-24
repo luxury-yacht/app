@@ -30,7 +30,7 @@ func TestServicePersistentVolumeDetails(t *testing.T) {
 		pv.Spec.ClaimRef = &corev1.ObjectReference{Namespace: "default", Name: "pvc-standard"}
 	})
 
-	client := kubefake.NewSimpleClientset(pv.DeepCopy())
+	client := kubefake.NewClientset(pv.DeepCopy())
 	service := newStorageService(t, client)
 
 	detail, err := service.PersistentVolume("pv-standard")
@@ -70,7 +70,7 @@ func TestServicePersistentVolumeDetailsIncludesNodeAffinityAndConditions(t *test
 		pv.Status.Message = "No matching nodes"
 	})
 
-	client := kubefake.NewSimpleClientset(pv.DeepCopy())
+	client := kubefake.NewClientset(pv.DeepCopy())
 	service := newStorageService(t, client)
 
 	detail, err := service.PersistentVolume("pv-csi")
@@ -96,7 +96,7 @@ func TestServicePersistentVolumeClaimDetails(t *testing.T) {
 		},
 	})
 
-	client := kubefake.NewSimpleClientset(pvc.DeepCopy(), pod.DeepCopy())
+	client := kubefake.NewClientset(pvc.DeepCopy(), pod.DeepCopy())
 	service := newStorageService(t, client)
 
 	detail, err := service.PersistentVolumeClaim("default", "pvc-standard")
@@ -126,7 +126,7 @@ func TestServicePersistentVolumeClaimDetailsMultiplePods(t *testing.T) {
 		},
 	})
 
-	client := kubefake.NewSimpleClientset(pvc.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
+	client := kubefake.NewClientset(pvc.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 	service := newStorageService(t, client)
 
 	detail, err := service.PersistentVolumeClaim("default", "shared-data")
@@ -151,7 +151,7 @@ func TestServicePersistentVolumeClaimDetailsDataSourceFallback(t *testing.T) {
 		}}
 	})
 
-	client := kubefake.NewSimpleClientset(pvc.DeepCopy())
+	client := kubefake.NewClientset(pvc.DeepCopy())
 	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("pods unavailable")
 	})
@@ -173,7 +173,7 @@ func TestServiceStorageClassDetails(t *testing.T) {
 		pv.Spec.StorageClassName = "standard"
 	})
 
-	client := kubefake.NewSimpleClientset(sc.DeepCopy(), pv.DeepCopy())
+	client := kubefake.NewClientset(sc.DeepCopy(), pv.DeepCopy())
 	service := newStorageService(t, client)
 
 	detail, err := service.StorageClass("standard")
@@ -198,7 +198,7 @@ func TestServiceStorageClassDetailsIncludesTopologies(t *testing.T) {
 		pv.Spec.StorageClassName = "zonal"
 	})
 
-	client := kubefake.NewSimpleClientset(sc.DeepCopy(), pv.DeepCopy())
+	client := kubefake.NewClientset(sc.DeepCopy(), pv.DeepCopy())
 	service := newStorageService(t, client)
 
 	detail, err := service.StorageClass("zonal")
@@ -208,7 +208,7 @@ func TestServiceStorageClassDetailsIncludesTopologies(t *testing.T) {
 }
 
 func TestServicePersistentVolumesErrorWhenListFails(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	client.PrependReactor("list", "persistentvolumes", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("api down")
 	})
@@ -221,7 +221,7 @@ func TestServicePersistentVolumesErrorWhenListFails(t *testing.T) {
 }
 
 func TestServicePersistentVolumeClaimsErrorWhenListFails(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	client.PrependReactor("list", "persistentvolumeclaims", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("api down")
 	})
@@ -235,7 +235,7 @@ func TestServicePersistentVolumeClaimsErrorWhenListFails(t *testing.T) {
 
 func TestServiceStorageClassDetailsHandlesPVListFailure(t *testing.T) {
 	sc := testsupport.StorageClassFixture("slow")
-	client := kubefake.NewSimpleClientset(sc.DeepCopy())
+	client := kubefake.NewClientset(sc.DeepCopy())
 	client.PrependReactor("list", "persistentvolumes", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("pv list down")
 	})
@@ -249,7 +249,7 @@ func TestServiceStorageClassDetailsHandlesPVListFailure(t *testing.T) {
 }
 
 func TestServiceStorageClassesErrorWhenListFails(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	client.PrependReactor("list", "storageclasses", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("api down")
 	})

@@ -90,7 +90,7 @@ func TestStatefulSetServiceReturnsDetail(t *testing.T) {
 		RestartCount: 0,
 	}}
 
-	client := kubefake.NewSimpleClientset(ss.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
+	client := kubefake.NewClientset(ss.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 	deps := newDeps(t, client)
 
 	service := workloads.NewStatefulSetService(workloads.Dependencies{Common: deps})
@@ -142,7 +142,7 @@ func TestDaemonSetServiceReturnsDetail(t *testing.T) {
 		RestartCount: 2,
 	}}
 
-	client := kubefake.NewSimpleClientset(ds.DeepCopy(), pod.DeepCopy())
+	client := kubefake.NewClientset(ds.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
 	service := workloads.NewDaemonSetService(workloads.Dependencies{Common: deps})
@@ -187,7 +187,7 @@ func TestJobServiceReturnsDetail(t *testing.T) {
 		RestartCount: 3,
 	}}
 
-	client := kubefake.NewSimpleClientset(job.DeepCopy(), pod.DeepCopy())
+	client := kubefake.NewClientset(job.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
 	service := workloads.NewJobService(workloads.Dependencies{Common: deps})
@@ -240,7 +240,7 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 		RestartCount: 0,
 	}}
 
-	client := kubefake.NewSimpleClientset(cron.DeepCopy(), job.DeepCopy(), pod.DeepCopy())
+	client := kubefake.NewClientset(cron.DeepCopy(), job.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
 	service := workloads.NewCronJobService(workloads.Dependencies{Common: deps})
@@ -280,7 +280,7 @@ func TestGetWorkloadsAggregatesKinds(t *testing.T) {
 		cron.DeepCopy(),
 	}, pods...)
 
-	client := kubefake.NewSimpleClientset(objects...)
+	client := kubefake.NewClientset(objects...)
 	deps := newDeps(t, client)
 
 	results, err := workloads.GetWorkloads(workloads.Dependencies{Common: deps}, "default")
@@ -393,7 +393,7 @@ func TestGetWorkloadsSortsAndSummarizes(t *testing.T) {
 		cron.DeepCopy(),
 	}, pods...)
 
-	client := kubefake.NewSimpleClientset(objects...)
+	client := kubefake.NewClientset(objects...)
 
 	ensureCalled := false
 	deps := testsupport.NewResourceDependencies(

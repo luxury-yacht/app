@@ -44,7 +44,7 @@ func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"}}
 	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "job", Namespace: "default"}}
 
-	client := kubefake.NewSimpleClientset(ns.DeepCopy(), quota.DeepCopy(), limit.DeepCopy(), deploy.DeepCopy(), job.DeepCopy())
+	client := kubefake.NewClientset(ns.DeepCopy(), quota.DeepCopy(), limit.DeepCopy(), deploy.DeepCopy(), job.DeepCopy())
 	service := newNamespaceService(t, client)
 
 	detail, err := service.Namespace("default")
@@ -56,7 +56,7 @@ func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 }
 
 func TestServiceNamespaceEnsureClientError(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
@@ -73,7 +73,7 @@ func TestServiceNamespaceEnsureClientError(t *testing.T) {
 
 func TestServiceNamespaceMarksWorkloadsUnknownOnForbidden(t *testing.T) {
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-	client := kubefake.NewSimpleClientset(ns)
+	client := kubefake.NewClientset(ns)
 	client.PrependReactor("list", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, "deployments", fmt.Errorf("forbidden"))
 	})

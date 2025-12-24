@@ -45,7 +45,7 @@ func TestServiceResourceQuotaDetails(t *testing.T) {
 	}
 	rq.Spec.Scopes = []corev1.ResourceQuotaScope{corev1.ResourceQuotaScopeBestEffort}
 
-	client := kubefake.NewSimpleClientset(rq.DeepCopy())
+	client := kubefake.NewClientset(rq.DeepCopy())
 	service := newConstraintsService(t, client)
 
 	detail, err := service.ResourceQuota("default", "rq")
@@ -78,7 +78,7 @@ func TestServiceLimitRangeDetails(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewSimpleClientset(lr.DeepCopy())
+	client := kubefake.NewClientset(lr.DeepCopy())
 	service := newConstraintsService(t, client)
 
 	detail, err := service.LimitRange("default", "lr")
@@ -99,7 +99,7 @@ func TestConstraintsRequireClient(t *testing.T) {
 }
 
 func TestConstraintsListFailures(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	client.PrependReactor("list", "resourcequotas", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("rq-list-fail")
 	})

@@ -20,7 +20,7 @@ func TestStartShellSessionRequiresClient(t *testing.T) {
 func TestStartShellSessionRequiresRestConfig(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
-	app.client = fake.NewSimpleClientset()
+	app.client = fake.NewClientset()
 
 	_, err := app.StartShellSession(ShellSessionRequest{Namespace: "default", PodName: "demo"})
 	if err == nil {
@@ -31,7 +31,7 @@ func TestStartShellSessionRequiresRestConfig(t *testing.T) {
 func TestStartShellSessionRequiresNamespace(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
-	app.client = fake.NewSimpleClientset()
+	app.client = fake.NewClientset()
 	app.restConfig = &rest.Config{}
 
 	_, err := app.StartShellSession(ShellSessionRequest{PodName: "demo"})
@@ -43,7 +43,7 @@ func TestStartShellSessionRequiresNamespace(t *testing.T) {
 func TestStartShellSessionRequiresPodName(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
-	app.client = fake.NewSimpleClientset()
+	app.client = fake.NewClientset()
 	app.restConfig = &rest.Config{}
 
 	_, err := app.StartShellSession(ShellSessionRequest{Namespace: "default"})

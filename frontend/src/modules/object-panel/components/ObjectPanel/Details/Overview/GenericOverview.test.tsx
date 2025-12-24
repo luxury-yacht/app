@@ -107,4 +107,20 @@ describe('GenericOverview', () => {
     expect(getValueForLabel('Role Reference').textContent).toBe('ClusterRole/admin');
     expect(getValueForLabel('Subjects').textContent).toContain('ServiceAccount: default/api-sa');
   });
+
+  it('renders labels and annotations when provided', async () => {
+    await renderComponent({
+      kind: 'Widget',
+      name: 'gizmo',
+      labels: { env: 'prod' },
+      annotations: { owner: 'custom-team' },
+    });
+
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('env:');
+    expect(container.textContent).toContain('prod');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('owner:');
+    expect(container.textContent).toContain('custom-team');
+  });
 });

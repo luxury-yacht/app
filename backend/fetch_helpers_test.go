@@ -170,7 +170,7 @@ func TestEnsureClientInitialized(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, app.logger.GetEntries()[0].Message, "not initialized")
 
-	app.client = kubernetesfake.NewSimpleClientset()
+	app.client = kubernetesfake.NewClientset()
 	require.NoError(t, app.ensureClientInitialized("Pod"))
 }
 

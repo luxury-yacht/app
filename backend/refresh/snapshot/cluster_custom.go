@@ -34,10 +34,12 @@ type ClusterCustomBuilder struct {
 
 // ClusterCustomSummary captures key cluster custom resource fields.
 type ClusterCustomSummary struct {
-	Kind     string `json:"kind"`
-	Name     string `json:"name"`
-	APIGroup string `json:"apiGroup"`
-	Age      string `json:"age"`
+	Kind        string            `json:"kind"`
+	Name        string            `json:"name"`
+	APIGroup    string            `json:"apiGroup"`
+	Age         string            `json:"age"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
 }
 
 // ClusterCustomSnapshot is returned to clients.
@@ -166,10 +168,13 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 					continue
 				}
 				localSummaries = append(localSummaries, ClusterCustomSummary{
-					Kind:     resourceKind(item, crdCopy.Spec.Names.Kind),
-					Name:     item.GetName(),
-					APIGroup: gvr.Group,
-					Age:      formatAge(item.GetCreationTimestamp().Time),
+					Kind:        resourceKind(item, crdCopy.Spec.Names.Kind),
+					Name:        item.GetName(),
+					APIGroup:    gvr.Group,
+					Age:         formatAge(item.GetCreationTimestamp().Time),
+					// Include metadata so the cluster custom view can surface labels/annotations.
+					Labels:      item.GetLabels(),
+					Annotations: item.GetAnnotations(),
 				})
 				if v := resourceVersionOrTimestamp(item); v > localVersion {
 					localVersion = v

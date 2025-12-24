@@ -59,7 +59,7 @@ func TestServiceConfigMapDetailsIncludesUsage(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewSimpleClientset(cm.DeepCopy(), pod.DeepCopy())
+	client := kubefake.NewClientset(cm.DeepCopy(), pod.DeepCopy())
 	service := newConfigService(t, client)
 
 	detail, err := service.ConfigMap("default", "app-config")
@@ -104,7 +104,7 @@ func TestServiceSecretDetailsIncludesUsage(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewSimpleClientset(secret.DeepCopy(), pod.DeepCopy())
+	client := kubefake.NewClientset(secret.DeepCopy(), pod.DeepCopy())
 	service := newConfigService(t, client)
 
 	detail, err := service.Secret("default", "app-secret")
@@ -118,7 +118,7 @@ func TestServiceSecretDetailsIncludesUsage(t *testing.T) {
 func TestServiceConfigMapsListsAll(t *testing.T) {
 	cmA := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"}}
 	cmB := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "default"}}
-	client := kubefake.NewSimpleClientset(cmA, cmB)
+	client := kubefake.NewClientset(cmA, cmB)
 	service := newConfigService(t, client)
 
 	configMaps, err := service.ConfigMaps("default")
@@ -129,7 +129,7 @@ func TestServiceConfigMapsListsAll(t *testing.T) {
 func TestServiceSecretsListsAll(t *testing.T) {
 	secA := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"}}
 	secB := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "default"}}
-	client := kubefake.NewSimpleClientset(secA, secB)
+	client := kubefake.NewClientset(secA, secB)
 	service := newConfigService(t, client)
 
 	secrets, err := service.Secrets("default")

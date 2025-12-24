@@ -1,0 +1,141 @@
+name: Setup toolchain
+description: Setup Go/Node and install Wails/Mage with caching.
+inputs:
+  go-version:
+    description: Go version to install.
+    required: true
+  node-version:
+    description: Node version to install when setup-node is true.
+    required: false
+  wails-version:
+    description: Wails CLI version to install.
+    required: true
+  mage-version:
+    description: Mage version to install (use "latest" to resolve at runtime).
+    required: false
+    default: latest
+  setup-node:
+    description: Whether to install Node.
+    required: false
+    default: 'true'
+  install-wails:
+    description: Whether to install Wails.
+    required: false
+    default: 'true'
+  install-mage:
+    description: Whether to install Mage.
+    required: false
+    default: 'true'
+  cache-go-tools:
+    description: Whether to cache Go tool binaries.
+    required: false
+    default: 'true'
+  install-linux-deps:
+    description: Whether to install Linux build dependencies.
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache: true
+
+    - name: Setup Node
+      if: ${{ inputs.setup-node == 'true' }}
+      uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Resolve Go bin path
+      id: gobin
+      shell: bash
+      run: |
+        # Use the first GOPATH entry for consistent GOBIN across platforms.
+        GOPATH_VALUE="$(go env GOPATH)"
+        if [[ "$GOPATH_VALUE" == *":"* ]]; then
+          GOPATH_VALUE="${GOPATH_VALUE%%:*}"
+        elif [[ "$GOPATH_VALUE" == *";"* ]]; then
+          GOPATH_VALUE="${GOPATH_VALUE%%;*}"
+        fi
+        GOBIN="$GOPATH_VALUE/bin"
+        echo "gobin=$GOBIN" >> "$GITHUB_OUTPUT"
+        echo "GOBIN=$GOBIN" >> "$GITHUB_ENV"
+        echo "$GOBIN" >> "$GITHUB_PATH"
+
+    - name: Resolve mage version
+      id: mage_version
+      shell: bash
+      run: |
+        # Resolve @latest to a concrete version for cache keys.
+        if [ "${{ inputs.mage-version }}" = "latest" ]; then
+          RESOLVED="$(go list -m -f '{{.Version}}' github.com/magefile/mage@latest)"
+          echo "version=$RESOLVED" >> "$GITHUB_OUTPUT"
+        else
+          echo "version=${{ inputs.mage-version }}" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Resolve staticcheck version
+      id: staticcheck_version
+      if: ${{ inputs.cache-go-tools == 'true' }}
+      shell: bash
+      run: |
+        RESOLVED="$(go list -m -f '{{.Version}}' honnef.co/go/tools@latest)"
+        echo "version=$RESOLVED" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Go tools
+      if: ${{ inputs.cache-go-tools == 'true' }}
+      id: cache-go-tools
+      uses: actions/cache@v4
+      with:
+        path: ${{ steps.gobin.outputs.gobin }}
+        key: go-tools-${{ runner.os }}-${{ runner.arch }}-go${{ inputs.go-version }}-wails${{ inputs.wails-version }}-mage${{ steps.mage_version.outputs.version }}-staticcheck${{ steps.staticcheck_version.outputs.version }}
+
+    - name: Install Go tools
+      shell: bash
+      run: |
+        # Only install tools missing from GOBIN to allow cache hits.
+        need_wails="false"
+        if [ "${{ inputs.install-wails }}" = "true" ]; then
+          if [ ! -x "$GOBIN/wails" ] && [ ! -x "$GOBIN/wails.exe" ]; then
+            need_wails="true"
+          fi
+        fi
+
+        need_mage="false"
+        if [ "${{ inputs.install-mage }}" = "true" ]; then
+          if [ ! -x "$GOBIN/mage" ] && [ ! -x "$GOBIN/mage.exe" ]; then
+            need_mage="true"
+          fi
+        fi
+
+        need_staticcheck="false"
+        if [ ! -x "$GOBIN/staticcheck" ] && [ ! -x "$GOBIN/staticcheck.exe" ]; then
+          need_staticcheck="true"
+        fi
+
+        if [ "$need_wails" = "true" ]; then
+          go install github.com/wailsapp/wails/v2/cmd/wails@${{ inputs.wails-version }}
+        fi
+        if [ "$need_mage" = "true" ]; then
+          go install github.com/magefile/mage@${{ steps.mage_version.outputs.version }}
+        fi
+        if [ "$need_staticcheck" = "true" ]; then
+          go install honnef.co/go/tools/cmd/staticcheck@latest
+        fi
+
+    - name: Install Linux build dependencies
+      if: ${{ inputs.install-linux-deps == 'true' && runner.os == 'Linux' }}
+      shell: bash
+      run: |
+        # Wails Linux packaging needs WebKit headers and rpm tooling.
+        if dpkg-query -W -f='${Status}' libwebkit2gtk-4.1-dev 2>/dev/null | grep -q "install ok installed" \
+          && dpkg-query -W -f='${Status}' rpm 2>/dev/null | grep -q "install ok installed"; then
+          exit 0
+        fi
+        sudo apt-get update
+        sudo apt-get install -y libwebkit2gtk-4.1-dev rpm

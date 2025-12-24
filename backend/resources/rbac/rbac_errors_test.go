@@ -33,7 +33,7 @@ func newManagerWithClient(client *fake.Clientset) *Service {
 }
 
 func TestRolesListError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("list", "roles", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom-roles")
 	})
@@ -45,7 +45,7 @@ func TestRolesListError(t *testing.T) {
 }
 
 func TestRoleBindingGetError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("get", "rolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("nope")
 	})
@@ -58,7 +58,7 @@ func TestRoleBindingGetError(t *testing.T) {
 
 func TestClusterRolesWarnOnBindingListFailure(t *testing.T) {
 	role := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "reader"}}
-	client := fake.NewSimpleClientset(role)
+	client := fake.NewClientset(role)
 	client.PrependReactor("list", "clusterrolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("crb-fail")
 	})
@@ -74,7 +74,7 @@ func TestClusterRolesWarnOnBindingListFailure(t *testing.T) {
 }
 
 func TestClusterRoleBindingsListError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("list", "clusterrolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("crb-list")
 	})
@@ -86,7 +86,7 @@ func TestClusterRoleBindingsListError(t *testing.T) {
 }
 
 func TestServiceAccountsListError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("list", "serviceaccounts", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("sa-list")
 	})
@@ -98,7 +98,7 @@ func TestServiceAccountsListError(t *testing.T) {
 }
 
 func TestServiceAccountGetError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("get", "serviceaccounts", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("sa-get")
 	})
@@ -118,7 +118,7 @@ func TestRoleWarnsWhenBindingsListFails(t *testing.T) {
 			Verbs:     []string{"get"},
 		}},
 	}
-	client := fake.NewSimpleClientset(role)
+	client := fake.NewClientset(role)
 	client.PrependReactor("list", "rolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("rb-fail")
 	})
@@ -134,7 +134,7 @@ func TestRoleWarnsWhenBindingsListFails(t *testing.T) {
 }
 
 func TestClusterRoleBindingGetError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("get", "clusterrolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("crb-get")
 	})
@@ -146,7 +146,7 @@ func TestClusterRoleBindingGetError(t *testing.T) {
 }
 
 func TestRoleBindingsListError(t *testing.T) {
-	client := fake.NewSimpleClientset(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns"}})
+	client := fake.NewClientset(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns"}})
 	client.PrependReactor("list", "rolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("rb-list")
 	})

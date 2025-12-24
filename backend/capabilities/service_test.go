@@ -46,7 +46,7 @@ func (s *stubRateLimiter) Wait(ctx context.Context) error {
 func (s *stubRateLimiter) Stop() {}
 
 func TestEvaluateAllowed(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		createAction := action.(kubetesting.CreateAction)
 		review := createAction.GetObject().(*authorizationv1.SelfSubjectAccessReview)
@@ -95,7 +95,7 @@ func TestEvaluateAllowed(t *testing.T) {
 }
 
 func TestEvaluateDenied(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		createAction := action.(kubetesting.CreateAction)
 		review := createAction.GetObject().(*authorizationv1.SelfSubjectAccessReview)
@@ -144,7 +144,7 @@ func TestEvaluateDenied(t *testing.T) {
 }
 
 func TestEvaluateHandlesAPIError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("cluster unavailable")
 	})
@@ -183,7 +183,7 @@ func TestEvaluateHandlesAPIError(t *testing.T) {
 }
 
 func TestEvaluateUsesRateLimiter(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		review := action.(kubetesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: true}
@@ -284,7 +284,7 @@ func TestResolveWorkerCount(t *testing.T) {
 }
 
 func TestEvaluateSkipsAPICallWhenRateLimiterErrors(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	var apiCalls int
 	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		apiCalls++

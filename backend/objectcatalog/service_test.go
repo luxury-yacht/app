@@ -259,7 +259,7 @@ func TestEnsureDependenciesFailures(t *testing.T) {
 		t.Fatalf("expected error when kubernetes client missing")
 	}
 
-	deps := Dependencies{Common: common.Dependencies{KubernetesClient: kubernetesfake.NewSimpleClientset()}}
+	deps := Dependencies{Common: common.Dependencies{KubernetesClient: kubernetesfake.NewClientset()}}
 	svc = NewService(deps, nil)
 	if err := svc.ensureDependencies(); err == nil {
 		t.Fatalf("expected error when dynamic client missing")
@@ -267,7 +267,7 @@ func TestEnsureDependenciesFailures(t *testing.T) {
 
 	dyn := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 	deps = Dependencies{Common: common.Dependencies{
-		KubernetesClient: kubernetesfake.NewSimpleClientset(),
+		KubernetesClient: kubernetesfake.NewClientset(),
 		DynamicClient:    dyn,
 		EnsureClient: func(string) error {
 			return errors.New("boom")
@@ -388,7 +388,7 @@ func TestSyncRetainsDataOnPartialFailure(t *testing.T) {
 		return false, nil, nil
 	})
 
-	client := kubernetesfake.NewSimpleClientset()
+	client := kubernetesfake.NewClientset()
 	resourceLists := []*metav1.APIResourceList{
 		{
 			GroupVersion: "apps/v1",
@@ -525,7 +525,7 @@ func TestListResourceParallelNamespaces(t *testing.T) {
 
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds, objA, objB)
 
-	client := kubernetesfake.NewSimpleClientset()
+	client := kubernetesfake.NewClientset()
 	discovery := client.Discovery().(*fakediscovery.FakeDiscovery)
 	discovery.Resources = []*metav1.APIResourceList{
 		{
@@ -568,7 +568,7 @@ func TestListResourceParallelNamespaces(t *testing.T) {
 }
 
 func TestEvaluateDescriptorRespectsCapabilityResults(t *testing.T) {
-	client := kubernetesfake.NewSimpleClientset()
+	client := kubernetesfake.NewClientset()
 	client.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (handled bool, ret runtime.Object, err error) {
 		review := action.(k8stesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		result := review.DeepCopy()
@@ -635,7 +635,7 @@ func TestEvaluateDescriptorRespectsCapabilityResults(t *testing.T) {
 }
 
 func TestEvaluateDescriptorPropagatesErrors(t *testing.T) {
-	client := kubernetesfake.NewSimpleClientset()
+	client := kubernetesfake.NewClientset()
 	client.PrependReactor("create", "selfsubjectaccessreviews", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("sar failure")
 	})

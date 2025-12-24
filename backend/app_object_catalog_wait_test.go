@@ -23,7 +23,7 @@ func TestWaitForFactoriesRespectContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	factory := informers.NewSharedInformerFactory(kubefake.NewSimpleClientset(), 0)
+	factory := informers.NewSharedInformerFactory(kubefake.NewClientset(), 0)
 	// ensure at least one informer is registered
 	factory.Core().V1().Pods()
 
@@ -31,7 +31,7 @@ func TestWaitForFactoriesRespectContextCancellation(t *testing.T) {
 		t.Fatal("expected factory sync to stop when context is canceled")
 	}
 
-	apiExtFactory := apiextinformers.NewSharedInformerFactory(apiextensionsfake.NewSimpleClientset(), 0)
+	apiExtFactory := apiextinformers.NewSharedInformerFactory(apiextensionsfake.NewClientset(), 0)
 	apiExtFactory.Apiextensions().V1().CustomResourceDefinitions()
 
 	if waitForAPIExtensionsFactorySync(ctx, apiExtFactory) {

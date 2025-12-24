@@ -13,6 +13,7 @@ import (
 )
 
 func TestGetPodMetricsForPods(t *testing.T) {
+	//lint:ignore SA1019 No replacement for the deprecated method
 	metricsClient := metricsfake.NewSimpleClientset(&metricsv1beta1.PodMetrics{
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "ns"},
 	})

@@ -43,7 +43,7 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 
 	app := NewApp()
 	app.Ctx = context.Background()
-	app.client = fake.NewSimpleClientset(deploy, configMap, clusterRole, namespace)
+	app.client = fake.NewClientset(deploy, configMap, clusterRole, namespace)
 
 	provider := app.objectDetailProvider()
 
@@ -151,12 +151,12 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(
+	client := fake.NewClientset(
 		ns, service, ing, ingClass, netpol, slice,
 		pvc, pv, sc, sa, role, roleBinding, clusterRoleBinding, rq, lr, hpa, pdb, cron, job, deployment,
 		replicaSet,
 	)
-	apiExtClient := apiextensionsfake.NewSimpleClientset(
+	apiExtClient := apiextensionsfake.NewClientset(
 		&apiextensionsv1.CustomResourceDefinition{ObjectMeta: metav1.ObjectMeta{Name: "foos.example.com"}},
 	)
 
@@ -212,7 +212,7 @@ func TestObjectDetailProviderFetchObjectYAML(t *testing.T) {
 	app := NewApp()
 	app.Ctx = context.Background()
 	app.logger = NewLogger(10)
-	app.client = fake.NewSimpleClientset(cm)
+	app.client = fake.NewClientset(cm)
 	app.dynamicClient = dynamicfake.NewSimpleDynamicClient(scheme, cm)
 
 	gvrCacheMutex.Lock()

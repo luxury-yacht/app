@@ -39,7 +39,7 @@ func BenchmarkServiceSyncLargeCluster(b *testing.B) {
 
 	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, listKinds, seedObjects...)
 
-	client := kubernetesfake.NewSimpleClientset()
+	client := kubernetesfake.NewClientset()
 	discovery := client.Discovery().(*fakediscovery.FakeDiscovery)
 	discovery.Resources = []*metav1.APIResourceList{
 		{

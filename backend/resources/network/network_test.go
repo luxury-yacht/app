@@ -86,7 +86,7 @@ func TestManagerServiceDetails(t *testing.T) {
 		}},
 	}
 
-	client := kubefake.NewSimpleClientset(service, slice)
+	client := kubefake.NewClientset(service, slice)
 	manager := newManager(t, client)
 
 	detail, err := manager.GetService("default", "web")
@@ -135,7 +135,7 @@ func TestManagerIngressDetails(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewSimpleClientset(ing)
+	client := kubefake.NewClientset(ing)
 	manager := newManager(t, client)
 
 	detail, err := manager.Ingress("default", "web")
@@ -171,7 +171,7 @@ func TestManagerNetworkPolicyDetails(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewSimpleClientset(np)
+	client := kubefake.NewClientset(np)
 	manager := newManager(t, client)
 
 	detail, err := manager.NetworkPolicy("default", "allow-http")
@@ -214,7 +214,7 @@ func TestManagerNetworkPolicyDetailsWithEgressAndIPBlock(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewSimpleClientset(np)
+	client := kubefake.NewClientset(np)
 	manager := newManager(t, client)
 
 	detail, err := manager.NetworkPolicy("default", "dns-egress")
@@ -259,7 +259,7 @@ func TestManagerNetworkPoliciesAggregatesMultipleResults(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewSimpleClientset(allowAll, restrict)
+	client := kubefake.NewClientset(allowAll, restrict)
 	manager := newManager(t, client)
 
 	allPolicies, err := manager.NetworkPolicies("default")
@@ -271,7 +271,7 @@ func TestManagerNetworkPoliciesAggregatesMultipleResults(t *testing.T) {
 }
 
 func TestManagerServiceErrorWhenGetFails(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	client.PrependReactor("get", "services", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("boom")
 	})
@@ -295,7 +295,7 @@ func TestManagerServicesHandlesEndpointListError(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewSimpleClientset(service)
+	client := kubefake.NewClientset(service)
 	client.PrependReactor("list", "endpointslices", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("endpoint slices down")
 	})
@@ -329,7 +329,7 @@ func TestManagerServicesReflectsPendingLoadBalancer(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewSimpleClientset(service)
+	client := kubefake.NewClientset(service)
 	manager := newManager(t, client)
 
 	detail, err := manager.GetService("default", "lb-web")
@@ -387,7 +387,7 @@ func TestManagerServicesLoadBalancerActiveWhenIngressPresent(t *testing.T) {
 		}},
 	}
 
-	client := kubefake.NewSimpleClientset(service, slice)
+	client := kubefake.NewClientset(service, slice)
 	manager := newManager(t, client)
 
 	detail, err := manager.GetService("default", "lb-active")
@@ -398,7 +398,7 @@ func TestManagerServicesLoadBalancerActiveWhenIngressPresent(t *testing.T) {
 }
 
 func TestManagerNetworkPoliciesErrorWhenListFails(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	client.PrependReactor("list", "networkpolicies", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("api down")
 	})
@@ -411,7 +411,7 @@ func TestManagerNetworkPoliciesErrorWhenListFails(t *testing.T) {
 }
 
 func TestManagerNetworkPolicyErrorWhenGetFails(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	client.PrependReactor("get", "networkpolicies", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("boom")
 	})
@@ -424,7 +424,7 @@ func TestManagerNetworkPolicyErrorWhenGetFails(t *testing.T) {
 }
 
 func TestManagerIngressesErrorWhenListFails(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	client.PrependReactor("list", "ingresses", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("api down")
 	})

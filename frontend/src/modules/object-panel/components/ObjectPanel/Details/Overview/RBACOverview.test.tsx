@@ -43,6 +43,8 @@ describe('RBACOverview', () => {
     await renderWithProps(root, {
       kind: 'ClusterRole',
       name: 'admin',
+      labels: { team: 'platform' },
+      annotations: { owner: 'rbac-admins' },
       policyRules: [
         {
           apiGroups: ['', 'apps'],
@@ -57,12 +59,36 @@ describe('RBACOverview', () => {
     expect(container.textContent).toContain('deployments');
     expect(container.textContent).toContain('* (all)');
     expect(container.textContent).toContain('/healthz');
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('team:');
+    expect(container.textContent).toContain('platform');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('owner:');
+    expect(container.textContent).toContain('rbac-admins');
+  });
+
+  it('renders labels and annotations for roles', async () => {
+    await renderWithProps(root, {
+      kind: 'Role',
+      name: 'reader',
+      labels: { team: 'platform' },
+      annotations: { owner: 'rbac-admins' },
+    });
+
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('team:');
+    expect(container.textContent).toContain('platform');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('owner:');
+    expect(container.textContent).toContain('rbac-admins');
   });
 
   it('renders binding role references and subjects', async () => {
     await renderWithProps(root, {
       kind: 'RoleBinding',
       name: 'bind-reader',
+      labels: { env: 'prod' },
+      annotations: { managedBy: 'luxury-yacht' },
       roleRef: { kind: 'ClusterRole', name: 'read-only' },
       subjects: [
         { kind: 'ServiceAccount', namespace: 'default', name: 'viewer' },
@@ -74,12 +100,41 @@ describe('RBACOverview', () => {
     expect(container.textContent).toContain('ClusterRole: read-only');
     expect(container.textContent).toContain('ServiceAccount: default/viewer');
     expect(container.textContent).toContain('User: alice');
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('env:');
+    expect(container.textContent).toContain('prod');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('managedBy:');
+    expect(container.textContent).toContain('luxury-yacht');
+  });
+
+  it('renders cluster role binding metadata', async () => {
+    await renderWithProps(root, {
+      kind: 'ClusterRoleBinding',
+      name: 'bind-admin',
+      labels: { env: 'prod' },
+      annotations: { owner: 'security' },
+      roleRef: { kind: 'ClusterRole', name: 'admin' },
+      subjects: [{ kind: 'Group', name: 'admins' }],
+    });
+
+    expect(container.textContent).toContain('Role Reference');
+    expect(container.textContent).toContain('ClusterRole: admin');
+    expect(container.textContent).toContain('Group: admins');
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('env:');
+    expect(container.textContent).toContain('prod');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('owner:');
+    expect(container.textContent).toContain('security');
   });
 
   it('renders service account specific fields', async () => {
     await renderWithProps(root, {
       kind: 'ServiceAccount',
       name: 'builder',
+      labels: { app: 'builder' },
+      annotations: { note: 'ci-service' },
       secrets: [{}, {}] as any,
       imagePullSecrets: [{}] as any,
       automountServiceAccountToken: true,
@@ -91,5 +146,11 @@ describe('RBACOverview', () => {
     expect(container.textContent).toContain('1 secret(s)');
     expect(container.textContent).toContain('Automount Token');
     expect(container.textContent).toContain('Yes');
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('app:');
+    expect(container.textContent).toContain('builder');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('note:');
+    expect(container.textContent).toContain('ci-service');
   });
 });

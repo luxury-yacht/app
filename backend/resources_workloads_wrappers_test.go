@@ -45,7 +45,7 @@ func TestGetWorkloadsReturnsData(t *testing.T) {
 		},
 		Status: appsv1.DeploymentStatus{ReadyReplicas: 1, Replicas: 1},
 	}
-	app.client = kubernetesfake.NewSimpleClientset(deploy)
+	app.client = kubernetesfake.NewClientset(deploy)
 
 	resp, err := app.GetWorkloads("default", "")
 	if err != nil {

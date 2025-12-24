@@ -24,7 +24,7 @@ func TestPersistentVolumesRequireClient(t *testing.T) {
 
 func TestPersistentVolumeLogsErrorOnFailure(t *testing.T) {
 	logger := &capturingLogger{}
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("get", "persistentvolumes", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom")
 	})
@@ -49,7 +49,7 @@ func TestPersistentVolumeLogsErrorOnFailure(t *testing.T) {
 
 func TestPersistentVolumeClaimsListLogsError(t *testing.T) {
 	logger := &capturingLogger{}
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("list", "persistentvolumeclaims", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("no pvc list")
 	})

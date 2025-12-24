@@ -241,7 +241,7 @@ func TestApp_SetKubeconfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Pre-set a fake client to test that it gets reset
 			if tt.skipClientInit {
-				app.client = fake.NewSimpleClientset() // dummy client to test reset
+				app.client = fake.NewClientset() // dummy client to test reset
 			}
 
 			err := app.SetKubeconfig(tt.kubeconfigPath)

@@ -13,7 +13,7 @@ on:
       - "v[1-9]*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   prepare:
@@ -44,8 +44,36 @@ jobs:
           echo "wails_version=$WAILS_VERSION" >> $GITHUB_OUTPUT
           echo "node_version=$NODE_VERSION" >> $GITHUB_OUTPUT
 
-  build:
+  test:
     needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
+        with:
+          go-version: ${{ needs.prepare.outputs.go_version }}
+          node-version: ${{ needs.prepare.outputs.node_version }}
+          wails-version: ${{ needs.prepare.outputs.wails_version }}
+          mage-version: latest
+          install-linux-deps: "true"
+
+      - name: Run tests
+        run: |
+          echo "Run a build to ensure frontend/dist is generated"
+          mage build
+          echo "Run backend tests"
+          mage qc:vet test:backend
+          echo "Run frontend tests"
+          mage qc:lint qc:typecheck test:frontend
+
+  build:
+    needs:
+      - prepare
+      - test
     strategy:
       # Don't fail the whole build if one matrix job fails.
       fail-fast: false
@@ -84,24 +112,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Go
-        uses: actions/setup-go@v6
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
-
-      - name: Setup Node
-        uses: actions/setup-node@v6
-        with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install Go dependencies
-        run: |
-          go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
-          go install github.com/magefile/mage@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
+          wails-version: ${{ env.WAILS_VERSION }}
+          mage-version: latest
+          install-linux-deps: ${{ matrix.goos == 'linux' }}
 
       - name: Set up macOS code signing
         if: matrix.goos == 'darwin'
@@ -110,12 +128,6 @@ jobs:
         with:
           macos_certificate: ${{ secrets.MACOS_CERTIFICATE }}
           macos_certificate_pwd: ${{ secrets.MACOS_CERTIFICATE_PWD }}
-
-      - name: Install Linux dependencies
-        if: matrix.goos == 'linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev rpm
 
       - name: Install Windows dependencies
         if: matrix.goos == 'windows'
@@ -153,23 +165,24 @@ jobs:
     if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
     needs:
       - prepare
+      - test
       - build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
     steps:
       - uses: actions/checkout@v6
 
-      - name: Setup Go
-        uses: actions/setup-go@v6
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
         with:
           go-version: ${{ needs.prepare.outputs.go_version }}
-          cache: true
-
-      - name: Install mage
-        run: |
-          go install github.com/magefile/mage@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
+          wails-version: ${{ needs.prepare.outputs.wails_version }}
+          mage-version: latest
+          setup-node: "false"
+          install-wails: "false"
 
       - name: Download all artifacts
         uses: actions/download-artifact@v7

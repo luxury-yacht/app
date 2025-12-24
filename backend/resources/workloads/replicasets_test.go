@@ -79,7 +79,7 @@ func TestReplicaSetServiceReplicaSet(t *testing.T) {
 		podB.OwnerReferences[0].Controller = ptr.To(true)
 	}
 
-	client := kubefake.NewSimpleClientset(deployment.DeepCopy(), replicaSet.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
+	client := kubefake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
@@ -148,7 +148,7 @@ func TestReplicaSetServiceReplicaSetInactiveRevision(t *testing.T) {
 		Status: appsv1.ReplicaSetStatus{Replicas: 1, ReadyReplicas: 1},
 	}
 
-	client := kubefake.NewSimpleClientset(deployment.DeepCopy(), replicaSet.DeepCopy())
+	client := kubefake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy())
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),

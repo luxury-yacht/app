@@ -25,7 +25,7 @@ func TestNetworkWrappersHappyPath(t *testing.T) {
 	pathType := networkingv1.PathTypePrefix
 	endpointPort := int32(8080)
 
-	app.client = kubefake.NewSimpleClientset(
+	app.client = kubefake.NewClientset(
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", CreationTimestamp: now},
 			Spec: corev1.ServiceSpec{
@@ -110,7 +110,7 @@ func TestConfigWrappersHappyPath(t *testing.T) {
 	app := wrapperTestApp(t)
 	app.Ctx = context.Background()
 
-	app.client = kubefake.NewSimpleClientset(
+	app.client = kubefake.NewClientset(
 		&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "team-a", CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour))},
 			Data:       map[string]string{"env": "prod"},
@@ -150,7 +150,7 @@ func TestRBACWrappersHappyPath(t *testing.T) {
 	}
 	serviceAccount := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "builder", Namespace: "team-a"}}
 
-	app.client = kubefake.NewSimpleClientset(clusterRole, clusterRoleBinding, role, roleBinding, serviceAccount)
+	app.client = kubefake.NewClientset(clusterRole, clusterRoleBinding, role, roleBinding, serviceAccount)
 
 	if _, err := app.GetClusterRole("viewer"); err != nil {
 		t.Fatalf("expected ClusterRole wrapper to succeed: %v", err)
@@ -199,7 +199,7 @@ func TestStorageWrappersHappyPath(t *testing.T) {
 		Provisioner: "kubernetes.io/no-provisioner",
 	}
 
-	app.client = kubefake.NewSimpleClientset(pv, pvc, sc)
+	app.client = kubefake.NewClientset(pv, pvc, sc)
 
 	if _, err := app.GetPersistentVolume("pv1"); err != nil {
 		t.Fatalf("expected PV wrapper to succeed: %v", err)

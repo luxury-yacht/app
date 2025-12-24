@@ -16,7 +16,7 @@ import (
 )
 
 func TestManagerServiceErrors(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	client.PrependReactor("get", "services", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("boom")
 	})
@@ -33,7 +33,7 @@ func TestManagerServiceErrors(t *testing.T) {
 }
 
 func TestManagerServicesListError(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	client.PrependReactor("list", "services", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("list failed")
 	})
@@ -58,7 +58,7 @@ func TestManagerServicesBuildsFromEndpointSlices(t *testing.T) {
 			Ports:     []corev1.ServicePort{{Port: 80}},
 		},
 	}
-	client := kubefake.NewSimpleClientset(svc)
+	client := kubefake.NewClientset(svc)
 	manager := network.NewService(network.Dependencies{
 		Common: common.Dependencies{
 			KubernetesClient: client,

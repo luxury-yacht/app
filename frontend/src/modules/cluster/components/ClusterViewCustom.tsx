@@ -31,6 +31,8 @@ interface ClusterCustomData {
   name: string;
   apiGroup?: string;
   age?: string;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
 }
 
 // Define props for ClusterViewCustom component
@@ -58,9 +60,13 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
 
     const handleResourceClick = useCallback(
       (resource: ClusterCustomData) => {
+        // Preserve metadata and age so the object panel shows labels/annotations and Age.
         openWithObject({
           kind: resource.kind,
           name: resource.name,
+          age: resource.age,
+          labels: resource.labels,
+          annotations: resource.annotations,
         });
       },
       [openWithObject]

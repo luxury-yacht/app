@@ -173,11 +173,11 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 
 func TestWrapperHappyPathsWithFakeClients(t *testing.T) {
 	app := wrapperTestApp(t)
-	app.client = kubernetesfake.NewSimpleClientset(
+	app.client = kubernetesfake.NewClientset(
 		&admissionv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "mw"}},
 		&admissionv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "vw"}},
 	)
-	app.apiextensionsClient = apiextensionsfake.NewSimpleClientset(
+	app.apiextensionsClient = apiextensionsfake.NewClientset(
 		&apiextensionsv1.CustomResourceDefinition{ObjectMeta: metav1.ObjectMeta{Name: "crd.example.com"}},
 	)
 

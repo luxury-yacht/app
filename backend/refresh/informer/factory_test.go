@@ -14,7 +14,7 @@ import (
 )
 
 func TestNewFactoryRegistersPodNodeIndex(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	factory := New(client, nil, time.Minute, nil)
 
 	podInformer := factory.SharedInformerFactory().Core().V1().Pods().Informer()
@@ -25,7 +25,7 @@ func TestNewFactoryRegistersPodNodeIndex(t *testing.T) {
 }
 
 func TestCanListResourceCachesResults(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	var sarCalls int
 	client.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		sarCalls++
@@ -66,7 +66,7 @@ func TestCanListResourceCachesResults(t *testing.T) {
 }
 
 func TestPrimePermissionsDeduplicatesRequests(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	var sarCalls int
 	client.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		sarCalls++
@@ -102,7 +102,7 @@ func TestPrimePermissionsDeduplicatesRequests(t *testing.T) {
 }
 
 func TestProcessPendingClusterInformersSkipsWithoutPermissions(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	// Deny list/watches to ensure informers are not registered.
 	client.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		review := &authorizationv1.SelfSubjectAccessReview{

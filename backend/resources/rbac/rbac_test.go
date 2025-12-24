@@ -53,7 +53,7 @@ func TestManagerRoleIncludesBindings(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(role, rb)
+	client := fake.NewClientset(role, rb)
 	manager := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
@@ -88,7 +88,7 @@ func TestManagerRoleSkipsBindingsOnListFailure(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(role)
+	client := fake.NewClientset(role)
 	client.PrependReactor("list", "rolebindings", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom")
 	})
@@ -163,7 +163,7 @@ func TestManagerServiceAccountAggregatesRelations(t *testing.T) {
 		}},
 	}
 
-	client := fake.NewSimpleClientset(sa, pod, roleBinding, clusterRoleBinding)
+	client := fake.NewClientset(sa, pod, roleBinding, clusterRoleBinding)
 	manager := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
@@ -219,7 +219,7 @@ func TestManagerClusterRolesIncludeBindings(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(cr, crb)
+	client := fake.NewClientset(cr, crb)
 	manager := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
@@ -262,7 +262,7 @@ func TestManagerRoleBindingsList(t *testing.T) {
 		}},
 		RoleRef: rbacv1.RoleRef{Kind: "Role", Name: "reader"},
 	}
-	client := fake.NewSimpleClientset(rb)
+	client := fake.NewClientset(rb)
 	manager := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
@@ -317,7 +317,7 @@ func TestManagerClusterRolesAggregatesBindingsAndSelectors(t *testing.T) {
 		}},
 	}
 
-	client := fake.NewSimpleClientset(clusterRole, crb)
+	client := fake.NewClientset(clusterRole, crb)
 	manager := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
@@ -359,7 +359,7 @@ func TestManagerClusterRolesToleratesBindingListFailure(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(clusterRole)
+	client := fake.NewClientset(clusterRole)
 	client.PrependReactor("list", "clusterrolebindings", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("nope")
 	})

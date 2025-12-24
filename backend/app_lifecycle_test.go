@@ -53,7 +53,7 @@ func TestSetupRefreshSubsystemRequiresContext(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = nil
 
-	cache, err := app.setupRefreshSubsystem(kubernetesfake.NewSimpleClientset(), "", nil)
+	cache, err := app.setupRefreshSubsystem(kubernetesfake.NewClientset(), "", nil)
 	require.Error(t, err)
 	require.Nil(t, cache)
 }
@@ -70,7 +70,7 @@ func TestSetupRefreshSubsystemStoresPermissionCache(t *testing.T) {
 	app.restConfig = &rest.Config{}
 
 	initialCache := map[string]bool{"list": true}
-	fakeClient := kubernetesfake.NewSimpleClientset()
+	fakeClient := kubernetesfake.NewClientset()
 	manager := refresh.NewManager(nil, nil, nil, nil, nil)
 	handler := http.NewServeMux()
 
@@ -185,7 +185,7 @@ func TestStdLogBridgeWritesToLogger(t *testing.T) {
 
 func TestInitKubernetesClientSkipsWhenAlreadyInitialised(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.client = kubernetesfake.NewSimpleClientset()
+	app.client = kubernetesfake.NewClientset()
 
 	err := app.initKubernetesClient()
 	require.NoError(t, err)
