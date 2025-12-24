@@ -55,7 +55,7 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient) {
 		},
 	}
 
-	client := clientfake.NewSimpleClientset(initialDeployment.DeepCopy())
+	client := clientfake.NewClientset(initialDeployment.DeepCopy())
 	discovery := client.Discovery().(*fakediscovery.FakeDiscovery)
 	discovery.Resources = []*metav1.APIResourceList{
 		{
@@ -93,7 +93,7 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient) {
 	app.Ctx = context.Background()
 	app.client = client
 	app.dynamicClient = dynamicClient
-	app.apiextensionsClient = apiextensionsfake.NewSimpleClientset()
+	app.apiextensionsClient = apiextensionsfake.NewClientset()
 
 	gvrCacheMutex.Lock()
 	original, hadOriginal := gvrCache["Deployment"]

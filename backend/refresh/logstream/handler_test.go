@@ -82,7 +82,7 @@ func TestMatchContainerFilter(t *testing.T) {
 }
 
 func TestServeHTTPRequiresFlusher(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	handler, err := NewHandler(client, stubLogger{}, telemetry.NewRecorder())
 	if err != nil {
 		t.Fatalf("NewHandler returned error: %v", err)
@@ -114,7 +114,7 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 			Containers: []corev1.Container{{Name: "app"}},
 		},
 	}
-	client := fake.NewSimpleClientset(pod)
+	client := fake.NewClientset(pod)
 	handler, err := NewHandler(client, stubLogger{}, telemetry.NewRecorder())
 	if err != nil {
 		t.Fatalf("NewHandler returned error: %v", err)
@@ -181,7 +181,7 @@ func TestServeHTTPStreamsUpdates(t *testing.T) {
 			Containers: []corev1.Container{{Name: "app"}},
 		},
 	}
-	baseClient := fake.NewSimpleClientset(pod)
+	baseClient := fake.NewClientset(pod)
 	origin := time.Unix(0, 0)
 	streams := []string{
 		buildLogStream(origin, []time.Duration{time.Millisecond}, []string{"initial"}),
@@ -247,7 +247,7 @@ func TestServeHTTPEmitsErrorEvent(t *testing.T) {
 			Containers: []corev1.Container{{Name: "app"}},
 		},
 	}
-	baseClient := fake.NewSimpleClientset(pod)
+	baseClient := fake.NewClientset(pod)
 	origin := time.Unix(0, 0)
 	responses := []logResponse{
 		{body: buildLogStream(origin, []time.Duration{time.Millisecond}, []string{"initial"}), status: http.StatusOK},

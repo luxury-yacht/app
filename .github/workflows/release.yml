@@ -103,6 +103,25 @@ jobs:
           go install github.com/magefile/mage@latest
           echo "$HOME/go/bin" >> $GITHUB_PATH
 
+      - name: Run tests
+        run: |
+          # Run a build to ensure frontend/dist is generated
+          mage build
+          # Backend tests
+          mage qc:vet test:backend
+          # Frontend tests
+          mage qc:lint qc:lintFix qc:typecheck test:frontend
+
+      - name: Run vulnerability scan
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: "fs"
+          scan-ref: "."
+          format: "table"
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: "true"
+
       - name: Set up macOS code signing
         if: matrix.goos == 'darwin'
         id: macos_signing

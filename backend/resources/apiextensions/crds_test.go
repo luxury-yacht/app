@@ -55,7 +55,7 @@ func TestCustomResourceDefinition(t *testing.T) {
 		},
 	}
 
-	client := apiextfake.NewSimpleClientset(crd)
+	client := apiextfake.NewClientset(crd)
 	var ensureCalled bool
 	svc := NewService(Dependencies{
 		Common: common.Dependencies{
@@ -123,7 +123,7 @@ func TestCustomResourceDefinitionsList(t *testing.T) {
 		},
 	}
 
-	client := apiextfake.NewSimpleClientset(crd1, crd2)
+	client := apiextfake.NewClientset(crd1, crd2)
 	svc := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:             context.Background(),

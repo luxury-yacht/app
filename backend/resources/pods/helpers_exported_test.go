@@ -13,7 +13,7 @@ import (
 )
 
 func TestGetPodMetricsForPods(t *testing.T) {
-	metricsClient := metricsfake.NewSimpleClientset(&metricsv1beta1.PodMetrics{
+	metricsClient := metricsfake.NewClientset(&metricsv1beta1.PodMetrics{
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "ns"},
 	})
 

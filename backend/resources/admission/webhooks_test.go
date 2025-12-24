@@ -146,7 +146,7 @@ func newAdmissionService(t testing.TB, objects ...runtime.Object) *admission.Ser
 		runtimeObjects[i] = obj.DeepCopyObject()
 	}
 
-	client := kubefake.NewSimpleClientset(runtimeObjects...)
+	client := kubefake.NewClientset(runtimeObjects...)
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),

@@ -185,7 +185,7 @@ func newNodeService(t *testing.T) (*nodes.Service, *kubefake.Clientset, *corev1.
 	podB.Spec.NodeName = node.Name
 	podB.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", RestartCount: 0, Ready: true}}
 
-	client := kubefake.NewSimpleClientset(node.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
+	client := kubefake.NewClientset(node.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(ctx),

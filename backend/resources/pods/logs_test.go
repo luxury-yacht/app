@@ -26,7 +26,7 @@ func TestLogFetcherRequiresNamespace(t *testing.T) {
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		Logger:           testLogger{},
-		KubernetesClient: fake.NewSimpleClientset(),
+		KubernetesClient: fake.NewClientset(),
 	}})
 
 	resp := service.LogFetcher(restypes.LogFetchRequest{})
@@ -34,7 +34,7 @@ func TestLogFetcherRequiresNamespace(t *testing.T) {
 }
 
 func TestLogFetcherUnsupportedWorkload(t *testing.T) {
-	pods := fake.NewSimpleClientset()
+	pods := fake.NewClientset()
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		Logger:           testLogger{},
@@ -50,7 +50,7 @@ func TestLogFetcherUnsupportedWorkload(t *testing.T) {
 }
 
 func TestPodContainersPropagatesError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("boom")
 	})
@@ -67,7 +67,7 @@ func TestPodContainersPropagatesError(t *testing.T) {
 }
 
 func TestPodsBySelectorPropagatesError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("selector failure")
 	})
@@ -85,7 +85,7 @@ func TestPodsBySelectorPropagatesError(t *testing.T) {
 func TestPodsBySelectorReturnsMatches(t *testing.T) {
 	podA := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default", Labels: map[string]string{"app": "demo"}}}
 	podB := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-b", Namespace: "default", Labels: map[string]string{"app": "other"}}}
-	client := fake.NewSimpleClientset(podA, podB)
+	client := fake.NewClientset(podA, podB)
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
@@ -109,7 +109,7 @@ func TestPodsForCronJobAggregatesPods(t *testing.T) {
 	podA := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "default", Labels: map[string]string{"job-name": "nightly-1"}}}
 	podB := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-b", Namespace: "default", Labels: map[string]string{"job-name": "nightly-2"}}}
 
-	client := fake.NewSimpleClientset(jobOne, jobTwo, podA, podB)
+	client := fake.NewClientset(jobOne, jobTwo, podA, podB)
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
@@ -126,7 +126,7 @@ func TestPodsForCronJobContinuesOnPodListError(t *testing.T) {
 	jobTwo := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-2", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}}}
 	podB := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "pod-b", Namespace: "default", Labels: map[string]string{"job-name": "nightly-2"}}}
 
-	client := fake.NewSimpleClientset(jobOne, jobTwo, podB)
+	client := fake.NewClientset(jobOne, jobTwo, podB)
 	var calls int
 	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		calls++
@@ -148,7 +148,7 @@ func TestPodsForCronJobContinuesOnPodListError(t *testing.T) {
 }
 
 func TestFetchPodLogsPropagatesGetError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		Logger:           testLogger{},
@@ -168,7 +168,7 @@ func TestPodContainersSuccess(t *testing.T) {
 			Containers:     []corev1.Container{{Name: "app"}},
 		},
 	}
-	client := fake.NewSimpleClientset(pod)
+	client := fake.NewClientset(pod)
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
@@ -188,7 +188,7 @@ func TestResolveTargetPodsDeployment(t *testing.T) {
 		},
 	}
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web-pod", Namespace: "default", Labels: map[string]string{"app": "web"}}}
-	client := fake.NewSimpleClientset(deployment, pod)
+	client := fake.NewClientset(deployment, pod)
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
@@ -204,7 +204,7 @@ func TestResolveTargetPodsCronJob(t *testing.T) {
 	owner := metav1.OwnerReference{Kind: "CronJob", Name: "nightly", Controller: ptrBool(true)}
 	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "nightly-1", Namespace: "default", OwnerReferences: []metav1.OwnerReference{owner}}}
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "nightly-pod", Namespace: "default", Labels: map[string]string{"job-name": "nightly-1"}}}
-	client := fake.NewSimpleClientset(job, pod)
+	client := fake.NewClientset(job, pod)
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
@@ -225,7 +225,7 @@ func TestLogFetcherAggregatesWorkloadPods(t *testing.T) {
 	podA := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "api-0", Namespace: "default", Labels: map[string]string{"app": "api"}}}
 	podB := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "api-1", Namespace: "default", Labels: map[string]string{"app": "api"}}}
 
-	client := fake.NewSimpleClientset(deployment, podA, podB)
+	client := fake.NewClientset(deployment, podA, podB)
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
@@ -256,7 +256,7 @@ func TestFetchContainerLogsParsesTimestamps(t *testing.T) {
 			Containers:     []corev1.Container{{Name: "app"}},
 		},
 	}
-	client := fake.NewSimpleClientset(pod)
+	client := fake.NewClientset(pod)
 
 	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
 		logs := "2024-01-01T00:00:00Z init line\napp line without ts"
@@ -282,7 +282,7 @@ func TestFetchContainerLogsSwallowsCommonErrors(t *testing.T) {
 	}(logStreamFunc)
 
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}}
-	client := fake.NewSimpleClientset(pod)
+	client := fake.NewClientset(pod)
 
 	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("waiting to start: container not found")
@@ -305,7 +305,7 @@ func TestFetchContainerLogsUnexpectedErrorPropagates(t *testing.T) {
 	}(logStreamFunc)
 
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}}
-	client := fake.NewSimpleClientset(pod)
+	client := fake.NewClientset(pod)
 
 	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("forbidden")
@@ -338,7 +338,7 @@ func TestLogFetcherAggregatesAndSortsEntries(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "demo-2", Namespace: "default"},
 		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
 	}
-	client := fake.NewSimpleClientset(pod, pod2)
+	client := fake.NewClientset(pod, pod2)
 
 	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, podName string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
 		switch podName {
@@ -397,7 +397,7 @@ func TestResolveTargetPodsOtherWorkloads(t *testing.T) {
 	}
 	jobPod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "job-pod", Namespace: "default", Labels: map[string]string{"job-name": "job"}}}
 
-	client := fake.NewSimpleClientset(rs, ds, sts, rsPod, dsPod, stsPod, job, jobPod)
+	client := fake.NewClientset(rs, ds, sts, rsPod, dsPod, stsPod, job, jobPod)
 	logStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader("2024-01-01T00:00:00Z log")), nil
 	}
@@ -443,7 +443,7 @@ func TestFetchContainerLogsScannerError(t *testing.T) {
 	}(logStreamFunc)
 
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}}}
-	client := fake.NewSimpleClientset(pod)
+	client := fake.NewClientset(pod)
 
 	logStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return errReader{}, nil
@@ -471,7 +471,7 @@ func TestFetchPodLogsSpecificContainer(t *testing.T) {
 			Containers:     []corev1.Container{{Name: "app"}},
 		},
 	}
-	client := fake.NewSimpleClientset(pod)
+	client := fake.NewClientset(pod)
 	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, opts *corev1.PodLogOptions) (io.ReadCloser, error) {
 		require.Equal(t, "app", opts.Container)
 		return io.NopCloser(strings.NewReader("2024-01-01T00:00:00Z only app")), nil
@@ -496,7 +496,7 @@ func TestLogFetcherHandlesFetchErrors(t *testing.T) {
 	}(logStreamFunc)
 
 	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}, Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}}}
-	client := fake.NewSimpleClientset(pod)
+	client := fake.NewClientset(pod)
 	logStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("forbidden")
 	}
@@ -521,7 +521,7 @@ func TestLogFetcherSortsWhenTimestampMissing(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
 		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
 	}
-	client := fake.NewSimpleClientset(pod)
+	client := fake.NewClientset(pod)
 	logStreamFunc = func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error) {
 		return io.NopCloser(strings.NewReader("malformed line\n2024-01-01T00:00:01Z ok")), nil
 	}

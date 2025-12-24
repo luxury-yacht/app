@@ -14,7 +14,7 @@ import (
 )
 
 func TestManagerBroadcastsToSubscribers(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	factory := informers.NewSharedInformerFactory(client, 0)
 	informer := factory.Core().V1().Events()
 

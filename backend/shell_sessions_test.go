@@ -167,7 +167,7 @@ func TestStartShellSessionValidation(t *testing.T) {
 		t.Fatal("expected error when client is nil")
 	}
 
-	app.client = fake.NewSimpleClientset()
+	app.client = fake.NewClientset()
 	app.restConfig = &rest.Config{}
 
 	if _, err := app.StartShellSession(ShellSessionRequest{}); err == nil {
@@ -187,7 +187,7 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"},
 		Spec:       corev1.PodSpec{}, // no containers
 	}
-	app.client = fake.NewSimpleClientset(pod)
+	app.client = fake.NewClientset(pod)
 
 	_, err := app.StartShellSession(ShellSessionRequest{Namespace: "default", PodName: "pod-1"})
 	if err == nil {
@@ -195,7 +195,7 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 	}
 
 	pod.Spec.Containers = []corev1.Container{{Name: "main"}}
-	app.client = fake.NewSimpleClientset(pod)
+	app.client = fake.NewClientset(pod)
 
 	if _, err := app.StartShellSession(ShellSessionRequest{Namespace: "default", PodName: "pod-1", Container: "missing"}); err == nil {
 		t.Fatal("expected error for missing container")

@@ -109,7 +109,7 @@ func TestGetPodReturnsDetailedInfo(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(pod, replicaSet, node)
+	client := fake.NewClientset(pod, replicaSet, node)
 
 	deps := Dependencies{
 		Common: common.Dependencies{
@@ -141,7 +141,7 @@ func TestGetPodReturnsDetailedInfo(t *testing.T) {
 }
 
 func TestGetPodPropagatesError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom")
 	})
@@ -166,7 +166,7 @@ func TestDeletePodSucceeds(t *testing.T) {
 			Namespace: "team-a",
 		},
 	}
-	client := fake.NewSimpleClientset(pod)
+	client := fake.NewClientset(pod)
 
 	deps := Dependencies{
 		Common: common.Dependencies{
@@ -193,7 +193,7 @@ func TestDeletePodSucceeds(t *testing.T) {
 }
 
 func TestDeletePodReturnsErrorWhenAPIFails(t *testing.T) {
-	client := fake.NewSimpleClientset(&corev1.Pod{
+	client := fake.NewClientset(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "delete-me", Namespace: "team-a"},
 	})
 	client.PrependReactor("delete", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
@@ -214,7 +214,7 @@ func TestDeletePodReturnsErrorWhenAPIFails(t *testing.T) {
 }
 
 func TestDeletePodReturnsErrorWhenContextMissing(t *testing.T) {
-	client := fake.NewSimpleClientset(&corev1.Pod{
+	client := fake.NewClientset(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "delete-me", Namespace: "team-a"},
 	})
 
@@ -282,7 +282,7 @@ func TestBuildReplicaSetToDeploymentMap(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(rs)
+	client := fake.NewClientset(rs)
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
@@ -306,7 +306,7 @@ func TestBuildReplicaSetToDeploymentMapExported(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(rs)
+	client := fake.NewClientset(rs)
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
@@ -341,7 +341,7 @@ func TestBuildMultiNamespaceRSMapAggregates(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(rsA, rsB)
+	client := fake.NewClientset(rsA, rsB)
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
@@ -384,7 +384,7 @@ func TestFetchPodsWithFilter(t *testing.T) {
 		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "team-a"}},
 		&corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "team-b"}},
 	}
-	client := fake.NewSimpleClientset(pods...)
+	client := fake.NewClientset(pods...)
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
@@ -404,7 +404,7 @@ func TestGetNodeIP(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "node-1"},
 		Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.0.0.1"}}},
 	}
-	client := fake.NewSimpleClientset(node)
+	client := fake.NewClientset(node)
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
@@ -417,7 +417,7 @@ func TestGetNodeIP(t *testing.T) {
 func TestGetNodeIPReturnsEmptyOnError(t *testing.T) {
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		KubernetesClient: fake.NewSimpleClientset(),
+		KubernetesClient: fake.NewClientset(),
 	}})
 
 	require.Equal(t, "", service.getNodeIP("node-does-not-exist"))
@@ -428,7 +428,7 @@ func TestNodeIPExported(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "node-2"},
 		Status:     corev1.NodeStatus{Addresses: []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.0.0.2"}}},
 	}
-	client := fake.NewSimpleClientset(node)
+	client := fake.NewClientset(node)
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
@@ -447,7 +447,7 @@ func TestGetMultiNamespacePodMetrics(t *testing.T) {
 }
 
 func TestPodsBySelectorPropagatesListError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("selector failure")
 	})
@@ -472,7 +472,7 @@ func TestPodsForCronJobReturnsEmptyWhenListingPodsFails(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(job)
+	client := fake.NewClientset(job)
 
 	var listCalls int
 	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
@@ -493,7 +493,7 @@ func TestPodsForCronJobReturnsEmptyWhenListingPodsFails(t *testing.T) {
 }
 
 func TestFetchPodsWithFilterPropagatesError(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom")
 	})
@@ -521,7 +521,7 @@ func TestGetPodMetricsFallbackWhenClientMissing(t *testing.T) {
 func TestGetPodMetricsForPodsUsesIndividualFetchForSmallSets(t *testing.T) {
 	ctx := context.Background()
 	var getCalls int
-	metricsClient := metricsfake.NewSimpleClientset()
+	metricsClient := metricsfake.NewClientset()
 	metricsClient.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		getCalls++
 		getAction, ok := action.(k8stesting.GetAction)
@@ -533,7 +533,7 @@ func TestGetPodMetricsForPodsUsesIndividualFetchForSmallSets(t *testing.T) {
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          ctx,
 		Logger:           testLogger{},
-		KubernetesClient: fake.NewSimpleClientset(),
+		KubernetesClient: fake.NewClientset(),
 		MetricsClient:    metricsClient,
 	}})
 
@@ -550,7 +550,7 @@ func TestGetPodMetricsForPodsUsesIndividualFetchForSmallSets(t *testing.T) {
 func TestGetPodMetricsForPodsListsForLargeSets(t *testing.T) {
 	ctx := context.Background()
 	var listCalls int
-	metricsClient := metricsfake.NewSimpleClientset()
+	metricsClient := metricsfake.NewClientset()
 	metricsClient.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		listCalls++
 		list := &metricsv1beta1.PodMetricsList{}
@@ -563,7 +563,7 @@ func TestGetPodMetricsForPodsListsForLargeSets(t *testing.T) {
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          ctx,
 		Logger:           testLogger{},
-		KubernetesClient: fake.NewSimpleClientset(),
+		KubernetesClient: fake.NewClientset(),
 		MetricsClient:    metricsClient,
 	}})
 
@@ -582,7 +582,7 @@ func TestGetPodMetricsForPodsListsForLargeSets(t *testing.T) {
 
 func TestGetPodMetricsListErrorReturnsEmpty(t *testing.T) {
 	ctx := context.Background()
-	metricsClient := metricsfake.NewSimpleClientset()
+	metricsClient := metricsfake.NewClientset()
 	metricsClient.PrependReactor("list", "podmetricses", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("metrics unavailable")
 	})
@@ -590,7 +590,7 @@ func TestGetPodMetricsListErrorReturnsEmpty(t *testing.T) {
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          ctx,
 		Logger:           testLogger{},
-		KubernetesClient: fake.NewSimpleClientset(),
+		KubernetesClient: fake.NewClientset(),
 		MetricsClient:    metricsClient,
 	}})
 

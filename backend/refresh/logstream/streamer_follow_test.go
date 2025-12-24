@@ -23,7 +23,7 @@ import (
 )
 
 func TestFollowContainerStreamsBatches(t *testing.T) {
-	baseClient := fake.NewSimpleClientset()
+	baseClient := fake.NewClientset()
 	ensureTestPod(t, baseClient, "default", "my-pod", corev1.PodRunning)
 
 	delegateCore := baseClient.CoreV1()
@@ -103,7 +103,7 @@ func TestFollowContainerStreamsBatches(t *testing.T) {
 }
 
 func TestFollowContainerRecordsDroppedTelemetry(t *testing.T) {
-	baseClient := fake.NewSimpleClientset()
+	baseClient := fake.NewClientset()
 	ensureTestPod(t, baseClient, "default", "drop-pod", corev1.PodRunning)
 
 	delegateCore := baseClient.CoreV1()
@@ -174,7 +174,7 @@ func TestFollowContainerRecordsDroppedTelemetry(t *testing.T) {
 }
 
 func TestFollowContainerRetriesAfterStreamFailure(t *testing.T) {
-	baseClient := fake.NewSimpleClientset()
+	baseClient := fake.NewClientset()
 	ensureTestPod(t, baseClient, "default", "retry-pod", corev1.PodRunning)
 	delegateCore := baseClient.CoreV1()
 	origin := time.Unix(0, 0)
@@ -239,7 +239,7 @@ func TestFollowContainerRetriesAfterStreamFailure(t *testing.T) {
 }
 
 func TestFollowContainerStopsAfterInitCompletes(t *testing.T) {
-	baseClient := fake.NewSimpleClientset()
+	baseClient := fake.NewClientset()
 	ensureTestPod(t, baseClient, "default", "my-pod", corev1.PodRunning)
 
 	delegateCore := baseClient.CoreV1()
@@ -299,7 +299,7 @@ func TestFollowContainerStopsAfterInitCompletes(t *testing.T) {
 }
 
 func TestFollowContainerStopsWhenPodTerminated(t *testing.T) {
-	baseClient := fake.NewSimpleClientset()
+	baseClient := fake.NewClientset()
 	ensureTestPod(t, baseClient, "default", "done-pod", corev1.PodSucceeded)
 
 	delegateCore := baseClient.CoreV1()

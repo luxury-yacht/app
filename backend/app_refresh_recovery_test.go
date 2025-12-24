@@ -106,7 +106,7 @@ func TestRebuildRefreshSubsystemResetsClients(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
 
-	app.client = kubernetesfake.NewSimpleClientset()
+	app.client = kubernetesfake.NewClientset()
 	app.apiextensionsClient = &apiextensionsclientset.Clientset{}
 	app.dynamicClient = dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
 	app.metricsClient = &metricsclient.Clientset{}

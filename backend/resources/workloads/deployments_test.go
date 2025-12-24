@@ -60,7 +60,7 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 		podB.OwnerReferences[0].UID = replicaSet.UID
 	}
 
-	client := kubefake.NewSimpleClientset(
+	client := kubefake.NewClientset(
 		deployment.DeepCopy(),
 		replicaSet.DeepCopy(),
 		podA.DeepCopy(),

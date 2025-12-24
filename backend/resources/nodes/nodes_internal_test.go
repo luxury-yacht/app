@@ -34,7 +34,7 @@ func TestEnsureMetricsClientInitializesClient(t *testing.T) {
 }
 
 func TestListNodeMetricsHandlesAPIErrors(t *testing.T) {
-	client := metricsfake.NewSimpleClientset()
+	client := metricsfake.NewClientset()
 	service := NewService(Dependencies{
 		Common: testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)),
 	})
@@ -56,7 +56,7 @@ func TestListNodeMetricsReturnsValues(t *testing.T) {
 		},
 	}
 
-	client := metricsfake.NewSimpleClientset()
+	client := metricsfake.NewClientset()
 	client.Fake.PrependReactor("*", "*", func(kubetesting.Action) (bool, runtime.Object, error) {
 		return true, &metricsv1beta1.NodeMetricsList{Items: []metricsv1beta1.NodeMetrics{*metrics}}, nil
 	})
@@ -80,7 +80,7 @@ func TestListAllPodsByNodeGroupsPods(t *testing.T) {
 	ignored := testsupport.PodFixture("default", "pod-ignored")
 	ignored.Spec.NodeName = ""
 
-	client := kubefake.NewSimpleClientset(podOne, podTwo, ignored)
+	client := kubefake.NewClientset(podOne, podTwo, ignored)
 	service := NewService(Dependencies{
 		Common: testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(client)),
 	})
@@ -99,7 +99,7 @@ func TestGetNodeMetricsReturnsUsage(t *testing.T) {
 		},
 	}
 
-	client := metricsfake.NewSimpleClientset(metrics)
+	client := metricsfake.NewClientset(metrics)
 	client.Fake.PrependReactor("*", "*", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		if get, ok := action.(kubetesting.GetAction); ok && get.GetName() == "node-1" {
 			return true, metrics, nil

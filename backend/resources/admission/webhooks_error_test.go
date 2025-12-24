@@ -24,7 +24,7 @@ func TestMutatingWebhookConfigurationRequiresClient(t *testing.T) {
 
 func TestMutatingWebhookConfigurationLogsErrorOnFailure(t *testing.T) {
 	logger := &capturingLogger{}
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("get", "mutatingwebhookconfigurations", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom")
 	})
@@ -49,7 +49,7 @@ func TestMutatingWebhookConfigurationLogsErrorOnFailure(t *testing.T) {
 
 func TestValidatingWebhookConfigurationListLogsError(t *testing.T) {
 	logger := &capturingLogger{}
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("list", "validatingwebhookconfigurations", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("no list")
 	})

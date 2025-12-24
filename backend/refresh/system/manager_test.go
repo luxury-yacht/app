@@ -23,11 +23,11 @@ import (
 
 func TestNewSubsystemRequiresDynamicClient(t *testing.T) {
 	cfg := Config{
-		KubernetesClient:    kubernetesfake.NewSimpleClientset(),
+		KubernetesClient:    kubernetesfake.NewClientset(),
 		RestConfig:          &rest.Config{},
 		ResyncInterval:      time.Millisecond,
 		MetricsInterval:     time.Millisecond,
-		APIExtensionsClient: apiextensionsfake.NewSimpleClientset(),
+		APIExtensionsClient: apiextensionsfake.NewClientset(),
 		HelmFactory:         dummyHelmFactory,
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
@@ -49,11 +49,11 @@ func TestNewSubsystemRequiresHelmFactory(t *testing.T) {
 	dyn := testsupport.NewDynamicClient(t, runtime.NewScheme())
 
 	cfg := Config{
-		KubernetesClient:    kubernetesfake.NewSimpleClientset(),
+		KubernetesClient:    kubernetesfake.NewClientset(),
 		RestConfig:          &rest.Config{},
 		ResyncInterval:      time.Millisecond,
 		MetricsInterval:     time.Millisecond,
-		APIExtensionsClient: apiextensionsfake.NewSimpleClientset(),
+		APIExtensionsClient: apiextensionsfake.NewClientset(),
 		DynamicClient:       dyn,
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
@@ -72,7 +72,7 @@ func TestNewSubsystemRequiresHelmFactory(t *testing.T) {
 }
 
 func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T) {
-	client := kubernetesfake.NewSimpleClientset()
+	client := kubernetesfake.NewClientset()
 	client.PrependReactor("create", "selfsubjectaccessreviews", func(action clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("ssar denied")
 	})
@@ -85,7 +85,7 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 		RestConfig:          &rest.Config{},
 		ResyncInterval:      time.Millisecond,
 		MetricsInterval:     time.Millisecond,
-		APIExtensionsClient: apiextensionsfake.NewSimpleClientset(),
+		APIExtensionsClient: apiextensionsfake.NewClientset(),
 		DynamicClient:       dyn,
 		HelmFactory:         dummyHelmFactory,
 		ObjectDetailsProvider: noopObjectDetailProvider{

@@ -15,7 +15,7 @@ func TestWaitForPodsToTerminateReturnsWhenNoneRemain(t *testing.T) {
 	service := NewService(Dependencies{
 		Common: testsupport.NewResourceDependencies(
 			testsupport.WithDepsContext(context.Background()),
-			testsupport.WithDepsKubeClient(kubefake.NewSimpleClientset()),
+			testsupport.WithDepsKubeClient(kubefake.NewClientset()),
 		),
 	})
 
@@ -26,7 +26,7 @@ func TestWaitForPodsToTerminateReturnsWhenNoneRemain(t *testing.T) {
 func TestWaitForPodsToTerminateTimesOutWhenPodsRemain(t *testing.T) {
 	pod := testsupport.PodFixture("default", "stuck-pod")
 	pod.Spec.NodeName = "node-1"
-	client := kubefake.NewSimpleClientset(pod)
+	client := kubefake.NewClientset(pod)
 
 	service := NewService(Dependencies{
 		Common: testsupport.NewResourceDependencies(

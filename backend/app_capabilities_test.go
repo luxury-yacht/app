@@ -15,7 +15,7 @@ import (
 )
 
 func TestEvaluateCapabilitiesSuccess(t *testing.T) {
-	client := clientfake.NewSimpleClientset()
+	client := clientfake.NewClientset()
 	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		createAction := action.(kubetesting.CreateAction)
 		review := createAction.GetObject().(*authorizationv1.SelfSubjectAccessReview)
@@ -109,7 +109,7 @@ func TestEvaluateCapabilitiesHandlesInvalidRequest(t *testing.T) {
 }
 
 func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
-	client := clientfake.NewSimpleClientset()
+	client := clientfake.NewClientset()
 	var sarCalls int
 	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		sarCalls++

@@ -27,7 +27,7 @@ func TestGetObjectYAMLAggregatesEndpointSlices(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
-	app.client = kubernetesfake.NewSimpleClientset()
+	app.client = kubernetesfake.NewClientset()
 
 	port := int32(80)
 	slice := &discoveryv1.EndpointSlice{
@@ -62,7 +62,7 @@ func TestGetObjectYAMLNamespacedResource(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
-	app.client = kubernetesfake.NewSimpleClientset()
+	app.client = kubernetesfake.NewClientset()
 
 	discovery := app.client.Discovery().(*fakediscovery.FakeDiscovery)
 	discovery.Resources = []*metav1.APIResourceList{
@@ -108,7 +108,7 @@ func TestGetObjectYAMLClusterScopedResource(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
-	app.client = kubernetesfake.NewSimpleClientset()
+	app.client = kubernetesfake.NewClientset()
 
 	discovery := app.client.Discovery().(*fakediscovery.FakeDiscovery)
 	discovery.Resources = []*metav1.APIResourceList{
@@ -153,7 +153,7 @@ func TestGetObjectYAMLRequiresDynamicClient(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
-	app.client = kubernetesfake.NewSimpleClientset()
+	app.client = kubernetesfake.NewClientset()
 
 	discovery := app.client.Discovery().(*fakediscovery.FakeDiscovery)
 	discovery.Resources = []*metav1.APIResourceList{
@@ -178,7 +178,7 @@ func TestGetGVRFallsBackToCRD(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
-	app.client = kubernetesfake.NewSimpleClientset()
+	app.client = kubernetesfake.NewClientset()
 
 	crd := &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "widgets.example.com"},
@@ -196,7 +196,7 @@ func TestGetGVRFallsBackToCRD(t *testing.T) {
 			}},
 		},
 	}
-	app.apiextensionsClient = apiextensionsfake.NewSimpleClientset(crd)
+	app.apiextensionsClient = apiextensionsfake.NewClientset(crd)
 
 	gvr, namespaced, err := app.getGVR("Widget")
 	if err != nil {

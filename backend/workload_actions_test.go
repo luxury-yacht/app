@@ -71,7 +71,7 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 		{
 			name: "deployment",
 			kind: "Deployment",
-			object: kubefake.NewSimpleClientset(
+			object: kubefake.NewClientset(
 				deployment.DeepCopy(),
 			),
 			get: func(ctx context.Context, client *kubefake.Clientset) (map[string]string, error) {
@@ -85,7 +85,7 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 		{
 			name: "statefulset",
 			kind: "StatefulSet",
-			object: kubefake.NewSimpleClientset(
+			object: kubefake.NewClientset(
 				statefulSet.DeepCopy(),
 			),
 			get: func(ctx context.Context, client *kubefake.Clientset) (map[string]string, error) {
@@ -99,7 +99,7 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 		{
 			name: "daemonset",
 			kind: "DaemonSet",
-			object: kubefake.NewSimpleClientset(
+			object: kubefake.NewClientset(
 				daemonSet.DeepCopy(),
 			),
 			get: func(ctx context.Context, client *kubefake.Clientset) (map[string]string, error) {
@@ -142,7 +142,7 @@ func TestRestartWorkloadErrors(t *testing.T) {
 	t.Helper()
 
 	app := &App{
-		client: kubefake.NewSimpleClientset(),
+		client: kubefake.NewClientset(),
 		logger: NewLogger(10),
 	}
 
@@ -178,7 +178,7 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			client := kubefake.NewSimpleClientset()
+			client := kubefake.NewClientset()
 			var observed capture
 			client.Fake.PrependReactor("update", tc.resource, func(action kubetesting.Action) (handled bool, ret runtime.Object, err error) {
 				updateAction, ok := action.(kubetesting.UpdateAction)
@@ -216,7 +216,7 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 func TestScaleWorkloadErrors(t *testing.T) {
 	t.Helper()
 
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	app := &App{
 		client: client,
 		logger: NewLogger(10),

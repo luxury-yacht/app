@@ -51,7 +51,7 @@ func TestServiceEventsFiltersByObject(t *testing.T) {
 		Source: corev1.EventSource{Component: "scheduler"},
 	}
 
-	client := kubefake.NewSimpleClientset(deploymentEvent.DeepCopy(), podEvent.DeepCopy())
+	client := kubefake.NewClientset(deploymentEvent.DeepCopy(), podEvent.DeepCopy())
 
 	service := newEventsService(t, client)
 
@@ -66,7 +66,7 @@ func TestServiceEventsFiltersByObject(t *testing.T) {
 }
 
 func TestNamespaceEventsRequiresNamespace(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	service := newEventsService(t, client)
 
 	_, err := service.NamespaceEvents("")

@@ -208,6 +208,16 @@ func (QC) Knip() error {
 	return sh.RunV("npx", "knip")
 }
 
+// Run a trivy vulnerability scan on the project's go and npm dependencies.
+func (QC) Trivy() error {
+	// Make sure trivy is installed
+	if _, err := exec.LookPath("trivy"); err != nil {
+		return fmt.Errorf("trivy is not installed. Install trivy to run this task: https://trivy.dev/docs/getting-started/")
+	}
+	fmt.Println("\n🔎 Running trivy scan on the project...")
+	return sh.RunV("trivy", "fs", "--exit-code", "1", "--severity", "CRITICAL,HIGH", ".")
+}
+
 // Resets application settings
 func (QC) Reset() error {
 	fmt.Println("\n🔄 Resetting application settings...")

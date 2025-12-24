@@ -19,7 +19,7 @@ func TestServiceDeleteCoreResource(t *testing.T) {
 	pod := testsupport.PodFixture("default", "web-0")
 
 	dynamicClient := testsupport.NewDynamicClient(t, scheme, pod.DeepCopyObject())
-	kubeClient := kubefake.NewSimpleClientset(pod.DeepCopy())
+	kubeClient := kubefake.NewClientset(pod.DeepCopy())
 
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
@@ -40,7 +40,7 @@ func TestServiceDeleteCoreResource(t *testing.T) {
 }
 
 func TestServiceDeleteCustomResource(t *testing.T) {
-	kubeClient := kubefake.NewSimpleClientset()
+	kubeClient := kubefake.NewClientset()
 	testsupport.SeedAPIResources(t, kubeClient, testsupport.NewAPIResourceList("example.com/v1", metav1.APIResource{
 		Name:         "widgets",
 		SingularName: "widget",

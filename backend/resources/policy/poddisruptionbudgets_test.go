@@ -67,7 +67,7 @@ func TestPodDisruptionBudgetDetailsFormatting(t *testing.T) {
 		},
 	}
 
-	client := fake.NewSimpleClientset(pdb)
+	client := fake.NewClientset(pdb)
 	logger := &pdbTestLogger{}
 	svc := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
@@ -97,7 +97,7 @@ func TestPodDisruptionBudgetDetailsFormatting(t *testing.T) {
 }
 
 func TestPodDisruptionBudgetListErrorLogs(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("list", "poddisruptionbudgets", func(action cgotesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, nil, fmt.Errorf("boom")
 	})

@@ -63,7 +63,7 @@ func TestListPodsForPodKind(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"},
 	}
-	client := fake.NewSimpleClientset(pod)
+	client := fake.NewClientset(pod)
 	streamer := NewStreamer(client, nil, nil)
 
 	pods, selector, err := streamer.listPods(ctx, Options{Kind: "pod", Namespace: "default", Name: "pod-1"})
@@ -80,7 +80,7 @@ func TestListPodsForPodKind(t *testing.T) {
 
 func TestListPodsSelectorError(t *testing.T) {
 	ctx := context.Background()
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	streamer := NewStreamer(client, nil, nil)
 
 	if _, _, err := streamer.listPods(ctx, Options{Kind: "unsupported", Namespace: "default", Name: "x"}); err == nil {
@@ -102,7 +102,7 @@ func TestListPodsForDeployment(t *testing.T) {
 	podMiss := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-2", Labels: map[string]string{"app": "other"}},
 	}
-	client := fake.NewSimpleClientset([]runtime.Object{deployment, podMatch, podMiss}...)
+	client := fake.NewClientset([]runtime.Object{deployment, podMatch, podMiss}...)
 	streamer := NewStreamer(client, nil, nil)
 
 	pods, selector, err := streamer.listPods(ctx, Options{Kind: "deployment", Namespace: "default", Name: "web"})
@@ -128,7 +128,7 @@ func TestListPodsForReplicaSet(t *testing.T) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1", Labels: map[string]string{"app": "rs"}},
 	}
-	client := fake.NewSimpleClientset(rs, pod)
+	client := fake.NewClientset(rs, pod)
 	streamer := NewStreamer(client, nil, nil)
 
 	pods, selector, err := streamer.listPods(ctx, Options{Kind: "replicaset", Namespace: "default", Name: "rs1"})
@@ -151,7 +151,7 @@ func TestPodBelongsToCronJob(t *testing.T) {
 			},
 		},
 	}
-	client := fake.NewSimpleClientset(job)
+	client := fake.NewClientset(job)
 	streamer := NewStreamer(client, nil, nil)
 
 	pod := &corev1.Pod{
@@ -176,7 +176,7 @@ func TestPodBelongsToCronJob(t *testing.T) {
 
 func TestListPodsErrorPropagates(t *testing.T) {
 	ctx := context.Background()
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("list failed")
 	})

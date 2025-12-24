@@ -25,7 +25,7 @@ func TestRunHeartbeatNoClientSafeguards(t *testing.T) {
 
 func TestRunHeartbeatSkipsDuringRebuild(t *testing.T) {
 	app := NewApp()
-	app.client = fake.NewSimpleClientset()
+	app.client = fake.NewClientset()
 	app.transportMu.Lock()
 	app.transportRebuildInProgress = true
 	app.transportMu.Unlock()
@@ -46,7 +46,7 @@ func TestRunHeartbeatFailureUpdatesStatus(t *testing.T) {
 			}),
 		},
 	}
-	app.client = &heartbeatClientSet{Clientset: fake.NewSimpleClientset(), disco: disco}
+	app.client = &heartbeatClientSet{Clientset: fake.NewClientset(), disco: disco}
 
 	app.runHeartbeat()
 	if app.connectionStatus != ConnectionStateOffline {
@@ -72,7 +72,7 @@ func TestRunHeartbeatSuccess(t *testing.T) {
 			}),
 		},
 	}
-	app.client = &heartbeatClientSet{Clientset: fake.NewSimpleClientset(), disco: disco}
+	app.client = &heartbeatClientSet{Clientset: fake.NewClientset(), disco: disco}
 
 	app.runHeartbeat()
 	if app.connectionStatus == ConnectionStateOffline {

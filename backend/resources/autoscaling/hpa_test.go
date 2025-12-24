@@ -81,7 +81,7 @@ func TestServiceHorizontalPodAutoscalerDetails(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewSimpleClientset(hpa.DeepCopy())
+	client := kubefake.NewClientset(hpa.DeepCopy())
 	service := newHPAService(t, client)
 
 	detail, err := service.HorizontalPodAutoscaler("default", "web-hpa")
@@ -104,7 +104,7 @@ func TestHPAServiceRequiresClient(t *testing.T) {
 }
 
 func TestHPAServiceListError(t *testing.T) {
-	client := kubefake.NewSimpleClientset()
+	client := kubefake.NewClientset()
 	client.PrependReactor("list", "horizontalpodautoscalers", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("hpa list boom")
 	})

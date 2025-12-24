@@ -31,7 +31,7 @@ func TestObjectDetailsBuilderUsesProviderWhenAvailable(t *testing.T) {
 	}
 
 	builder := &ObjectDetailsBuilder{
-		client:   fake.NewSimpleClientset(),
+		client:   fake.NewClientset(),
 		provider: provider,
 	}
 
@@ -66,7 +66,7 @@ func TestObjectDetailsBuilderFallsBackToClientFetcher(t *testing.T) {
 			ResourceVersion: "101",
 		},
 	}
-	client := fake.NewSimpleClientset(cfg)
+	client := fake.NewClientset(cfg)
 	provider := &stubDetailProvider{err: ErrObjectDetailNotImplemented}
 
 	builder := &ObjectDetailsBuilder{
@@ -107,7 +107,7 @@ func TestObjectDetailsBuilderPropagatesProviderErrors(t *testing.T) {
 	provider := &stubDetailProvider{err: expectedErr}
 
 	builder := &ObjectDetailsBuilder{
-		client:   fake.NewSimpleClientset(),
+		client:   fake.NewClientset(),
 		provider: provider,
 	}
 
@@ -141,7 +141,7 @@ func TestRegisterObjectDetailsDomainRequiresClient(t *testing.T) {
 func TestRegisterObjectDetailsDomainRegistersBuilder(t *testing.T) {
 	reg := domain.New()
 	provider := &stubDetailProvider{details: map[string]string{"ok": "true"}, version: "7"}
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 
 	if err := RegisterObjectDetailsDomain(reg, client, nil, provider); err != nil {
 		t.Fatalf("RegisterObjectDetailsDomain returned error: %v", err)
