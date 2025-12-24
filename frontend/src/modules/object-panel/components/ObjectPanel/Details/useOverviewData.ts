@@ -294,6 +294,9 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         usedBy: serviceAccountDetails.usedByPods,
         roleBindings: serviceAccountDetails.roleBindings,
         clusterRoleBindings: serviceAccountDetails.clusterRoleBindings,
+        // Surface metadata to match the ConfigMap/Secret layout.
+        labels: serviceAccountDetails.labels,
+        annotations: serviceAccountDetails.annotations,
       };
     }
 
@@ -306,6 +309,9 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         namespace: roleDetails.namespace,
         policyRules: roleDetails.rules,
         usedByRoleBindings: roleDetails.usedByRoleBindings,
+        // Surface metadata to match the ConfigMap/Secret layout.
+        labels: roleDetails.labels,
+        annotations: roleDetails.annotations,
       };
     }
 
@@ -318,6 +324,9 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         namespace: roleBindingDetails.namespace,
         roleRef: roleBindingDetails.roleRef,
         subjects: roleBindingDetails.subjects,
+        // Surface metadata to match the ConfigMap/Secret layout.
+        labels: roleBindingDetails.labels,
+        annotations: roleBindingDetails.annotations,
       };
     }
 
@@ -407,6 +416,9 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         storageClass: pvcDetails.storageClass,
         volumeMode: pvcDetails.volumeMode,
         mountedBy: pvcDetails.mountedBy,
+        // Surface metadata to match the ConfigMap/Secret layout.
+        labels: pvcDetails.labels,
+        annotations: pvcDetails.annotations,
       };
     }
 

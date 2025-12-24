@@ -58,11 +58,19 @@ describe('StorageOverview', () => {
       storageClass: 'standard',
       volumeMode: 'Filesystem',
       mountedBy: ['pod-a', 'pod-b'],
+      labels: { team: 'platform' },
+      annotations: { owner: 'storage-admins' },
     });
 
     expect(container.textContent).toContain('Bound');
     expect(getValueForLabel(container, 'Volume')?.textContent).toBe('pv-123');
     expect(getValueForLabel(container, 'Mounted By')?.textContent).toContain('pod-a');
+    expect(container.textContent).toContain('Labels');
+    expect(container.textContent).toContain('team:');
+    expect(container.textContent).toContain('platform');
+    expect(container.textContent).toContain('Annotations');
+    expect(container.textContent).toContain('owner:');
+    expect(container.textContent).toContain('storage-admins');
   });
 
   it('renders PV-specific fields including claim reference', async () => {

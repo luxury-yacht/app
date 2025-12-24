@@ -1,6 +1,7 @@
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
+import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 
 interface StorageOverviewProps {
@@ -9,6 +10,8 @@ interface StorageOverviewProps {
   namespace?: string;
   age?: string;
   status?: string;
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
   // PVC fields
   volumeName?: string;
   capacity?: string;
@@ -30,6 +33,7 @@ interface StorageOverviewProps {
 // Storage resources Overview
 export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
   const { kind, name, namespace, age, status } = props;
+  const normalizedKind = kind?.toLowerCase();
 
   return (
     <>
@@ -40,7 +44,7 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
       {status && <ResourceStatus status={status} />}
 
       {/* PVC-specific fields */}
-      {props.kind?.toLowerCase() === 'persistentvolumeclaim' && (
+      {normalizedKind === 'persistentvolumeclaim' && (
         <>
           <OverviewItem label="Volume" value={props.volumeName} />
           <OverviewItem label="Capacity" value={props.capacity} />
@@ -50,11 +54,13 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
           {props.mountedBy && props.mountedBy.length > 0 && (
             <OverviewItem label="Mounted By" value={props.mountedBy.join(', ')} fullWidth />
           )}
+          {/* Match ConfigMap/Secret metadata layout for PVCs. */}
+          <ResourceMetadata labels={props.labels} annotations={props.annotations} />
         </>
       )}
 
       {/* PV-specific fields */}
-      {props.kind?.toLowerCase() === 'persistentvolume' && (
+      {normalizedKind === 'persistentvolume' && (
         <>
           <OverviewItem label="Capacity" value={props.capacity} />
           <OverviewItem label="Access Modes" value={props.accessModes?.join(', ')} />
@@ -71,7 +77,7 @@ export const StorageOverview: React.FC<StorageOverviewProps> = (props) => {
       )}
 
       {/* StorageClass-specific fields */}
-      {props.kind?.toLowerCase() === 'storageclass' && (
+      {normalizedKind === 'storageclass' && (
         <>
           <OverviewItem label="Provisioner" value={props.provisioner} />
           <OverviewItem label="Reclaim Policy" value={props.reclaimPolicy} />

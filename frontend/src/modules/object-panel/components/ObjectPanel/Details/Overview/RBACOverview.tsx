@@ -1,6 +1,7 @@
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
+import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import './shared/LabelsAndAnnotations.css';
 import './RBACOverview.css';
 
@@ -30,19 +31,19 @@ interface RBACOverviewProps {
 // RBAC resources Overview
 export const RBACOverview: React.FC<RBACOverviewProps> = (props) => {
   const { kind, name, namespace, age } = props;
+  const normalizedKind = kind?.toLowerCase();
 
   return (
     <>
       <ResourceHeader kind={kind || ''} name={name || ''} namespace={namespace} age={age} />
 
       {/* Role/ClusterRole-specific fields */}
-      {(props.kind?.toLowerCase() === 'role' || props.kind?.toLowerCase() === 'clusterrole') && (
+      {(normalizedKind === 'role' || normalizedKind === 'clusterrole') && (
         <>{props.aggregationRule && <OverviewItem label="Aggregation" value="Enabled" />}</>
       )}
 
       {/* RoleBinding/ClusterRoleBinding-specific fields */}
-      {(props.kind?.toLowerCase() === 'rolebinding' ||
-        props.kind?.toLowerCase() === 'clusterrolebinding') && (
+      {(normalizedKind === 'rolebinding' || normalizedKind === 'clusterrolebinding') && (
         <>
           {props.roleRef && (
             <OverviewItem
@@ -66,7 +67,7 @@ export const RBACOverview: React.FC<RBACOverviewProps> = (props) => {
       )}
 
       {/* ServiceAccount-specific fields */}
-      {props.kind?.toLowerCase() === 'serviceaccount' && (
+      {normalizedKind === 'serviceaccount' && (
         <>
           <OverviewItem
             label="Secrets"
@@ -86,7 +87,7 @@ export const RBACOverview: React.FC<RBACOverviewProps> = (props) => {
       )}
 
       {/* Rules section for Roles/ClusterRoles */}
-      {(props.kind?.toLowerCase() === 'role' || props.kind?.toLowerCase() === 'clusterrole') &&
+      {(normalizedKind === 'role' || normalizedKind === 'clusterrole') &&
         props.policyRules &&
         props.policyRules.length > 0 && (
           <>
@@ -145,6 +146,13 @@ export const RBACOverview: React.FC<RBACOverviewProps> = (props) => {
             </div>
           </>
         )}
+
+      {/* Use the shared metadata renderer for namespaced RBAC resources. */}
+      {(normalizedKind === 'role' ||
+        normalizedKind === 'rolebinding' ||
+        normalizedKind === 'serviceaccount') && (
+        <ResourceMetadata labels={props.labels} annotations={props.annotations} />
+      )}
     </>
   );
 };
