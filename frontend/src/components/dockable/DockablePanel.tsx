@@ -48,8 +48,8 @@ const getAppHeaderHeight = (): number => {
 };
 
 /**
- * Custom hook to constrain panel size and position within window bounds on resize.
- * Handles debouncing, different dock positions, and respects user resize operations.
+ * Hook to constrain panel size and position within window bounds.
+ * Handles debouncing, dock positions, and respects user resize operations.
  */
 function useWindowBoundsConstraint(
   panelState: ReturnType<typeof useDockablePanelState>,
@@ -63,12 +63,14 @@ function useWindowBoundsConstraint(
   const { minWidth, minHeight, isResizing, isMaximized } = options;
   const panelStateRef = useRef(panelState);
 
+  // We use a ref to hold the latest panel state so the resize handler
+  // can access it without needing to resubscribe on every state change.
   useEffect(() => {
-    // Keep the latest panel state without resubscribing resize handlers on every update.
     panelStateRef.current = panelState;
   }, [panelState]);
 
   useEffect(() => {
+    // If the panel is maximized, there's nothing to do.
     if (isMaximized) {
       return;
     }
@@ -76,13 +78,18 @@ function useWindowBoundsConstraint(
     let resizeTimer: NodeJS.Timeout;
 
     const handleWindowResize = () => {
+      // If the window object is not available, return early.
       if (typeof window === 'undefined') {
         return;
       }
 
+      // Debounce resize handling so we don't thrash during rapid resizes.
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(() => {
+        // Get the latest panel state.
         const currentPanelState = panelStateRef.current;
+
+        // Skip if panel is closed or user is actively resizing.
         if (!currentPanelState.isOpen || isResizing) return;
 
         const currentSize = currentPanelState.size;
@@ -91,22 +98,28 @@ function useWindowBoundsConstraint(
         let newSize = { ...currentSize };
         let newPosition = { ...currentPosition };
 
+        // If the panel is floating, constrain its size and position within window bounds.
         if (currentPanelState.position === 'floating') {
           const maxWidth = window.innerWidth - LAYOUT.WINDOW_MARGIN;
           const maxHeight = window.innerHeight - LAYOUT.WINDOW_MARGIN;
 
+          // Constrain width.
           if (currentSize.width > maxWidth) {
             newSize.width = maxWidth;
             needsUpdate = true;
           }
+
+          // Constrain height.
           if (currentSize.height > maxHeight) {
             newSize.height = maxHeight;
             needsUpdate = true;
           }
 
+          // Constrain position.
           const rightEdge = currentPosition.x + newSize.width;
           const bottomEdge = currentPosition.y + newSize.height;
 
+          // Ensure panel stays within right edge.
           if (rightEdge > window.innerWidth) {
             newPosition.x = Math.max(
               LAYOUT.MIN_EDGE_DISTANCE,
@@ -114,6 +127,8 @@ function useWindowBoundsConstraint(
             );
             needsUpdate = true;
           }
+
+          // Ensure panel stays within bottom edge.
           if (bottomEdge > window.innerHeight) {
             newPosition.y = Math.max(
               LAYOUT.MIN_EDGE_DISTANCE,
@@ -122,10 +137,13 @@ function useWindowBoundsConstraint(
             needsUpdate = true;
           }
 
+          // Ensure panel stays within left edge.
           if (currentPosition.x < LAYOUT.MIN_EDGE_DISTANCE) {
             newPosition.x = LAYOUT.MIN_EDGE_DISTANCE;
             needsUpdate = true;
           }
+
+          // Ensure panel stays within top edge.
           if (currentPosition.y < LAYOUT.MIN_EDGE_DISTANCE) {
             newPosition.y = LAYOUT.MIN_EDGE_DISTANCE;
             needsUpdate = true;
@@ -136,6 +154,7 @@ function useWindowBoundsConstraint(
             newSize.width = Math.max(minWidth, maxWidth);
             needsUpdate = true;
           }
+          // If the panel is docked to the bottom, constrain its height.
         } else if (currentPanelState.position === 'bottom') {
           const maxHeight = window.innerHeight - LAYOUT.BOTTOM_RESERVED_HEIGHT;
           if (currentSize.height > maxHeight) {

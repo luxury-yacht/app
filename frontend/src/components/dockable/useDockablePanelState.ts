@@ -21,6 +21,9 @@ interface InitializeOptions {
   isOpen?: boolean;
 }
 
+// Reasons for panel closure
+// 'dock-conflict' indicates the panel was closed due to another panel docking in the same position
+// 'external' indicates the panel was closed by an external action (e.g., user clicking close)
 export type PanelCloseReason = 'dock-conflict' | 'external';
 
 // Global state store for all panels
@@ -68,6 +71,7 @@ function updatePanelState(panelId: string, updates: Partial<PanelState>) {
   notifyListeners(panelId);
 }
 
+// Set panel open state with dock conflict handling
 function setPanelOpenState(panelId: string, isOpen: boolean) {
   const currentState = getInitialState(panelId);
   if (isOpen && (currentState.position === 'right' || currentState.position === 'bottom')) {
@@ -81,6 +85,7 @@ function setPanelOpenState(panelId: string, isOpen: boolean) {
   }
 }
 
+// Close all panels docked at a specific position, except for an optional panel ID
 export function closeDockedPanels(position: DockPosition, exceptPanelId?: string) {
   if (position === 'floating') {
     return;
