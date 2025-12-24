@@ -292,17 +292,20 @@ type Test mg.Namespace
 
 // Runs backend tests
 func (Test) Backend() error {
+	fmt.Println("\n🔎 Running backend tests...")
 	return sh.RunV("go", "test", "./...")
 }
 
 // Runs backend tests with coverage
 func (Test) BackendCoverage() error {
+	fmt.Println("\n🔎 Running backend tests...")
 	os.MkdirAll(backendCoverageDir, os.ModePerm)
 	return sh.RunV("go", "test", "./...", "-coverprofile="+backendCoverageFile)
 }
 
 // Runs frontend tests
 func (Test) Frontend() error {
+	fmt.Println("\n🔎 Running frontend tests...")
 	if err := isNpmInstalled(); err != nil {
 		return err
 	}
@@ -312,6 +315,7 @@ func (Test) Frontend() error {
 
 // Runs frontend tests with coverage
 func (Test) FrontendCoverage() error {
+	fmt.Println("\n🔎 Running frontend tests with coverage report...")
 	if err := isNpmInstalled(); err != nil {
 		return err
 	}

@@ -115,18 +115,21 @@ NODE_VERSION=$(cat .nvmrc | tr -d 'v')
 
 Before you release, check for dependency updates.
 
-```sh
+```bash
 # frontend
 mage qc:npmUpdateCheck
 # If there are updates and you want to apply them...
 mage qc:npmUpdate
 
 # backend
+mage qc:goModUpdateCheck
+# If there are updates and you want to apply them...
+mage qc:goModUpdate
 ```
 
 Make sure all of the linters and tests pass. Any problems will have to be fixed, or the release will fail.
 
-```sh
+```bash
 # Backend (Go)
 mage qc:vet test:backend
 
@@ -143,7 +146,7 @@ mage qc:trivy
 
 1. Create and push a tag. The `release` workflow will do the rest.
 
-```sh
+```bash
 git tag $(jq -r '.info.productVersion' wails.json)
 git push origin main --tags
 ```
