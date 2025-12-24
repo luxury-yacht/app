@@ -112,6 +112,7 @@ describe('ClusterViewCustom', () => {
       expect.objectContaining({
         kind: 'Widget',
         name: 'gizmo',
+        age: '1d',
         labels: { env: 'prod' },
         annotations: { owner: 'custom-team' },
       })

@@ -60,10 +60,11 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
 
     const handleResourceClick = useCallback(
       (resource: ClusterCustomData) => {
-        // Preserve metadata so the object panel can render labels/annotations.
+        // Preserve metadata and age so the object panel shows labels/annotations and Age.
         openWithObject({
           kind: resource.kind,
           name: resource.name,
+          age: resource.age,
           labels: resource.labels,
           annotations: resource.annotations,
         });

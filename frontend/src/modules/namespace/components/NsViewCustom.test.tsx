@@ -156,6 +156,7 @@ describe('NsViewCustom', () => {
         kind: 'CronJob',
         name: 'nightly-cleanup',
         namespace: 'ops',
+        age: '10m',
         labels: { team: 'platform' },
         annotations: { owner: 'ops' },
       })

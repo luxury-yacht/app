@@ -82,12 +82,13 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
 
     const handleResourceClick = useCallback(
       (resource: CustomResourceData) => {
-        // Preserve metadata so the object panel can render labels/annotations.
+        // Preserve metadata and age so the object panel shows labels/annotations and Age.
         openWithObject({
           kind: resource.kind || resource.kindAlias || 'CustomResource',
           kindAlias: resource.kindAlias,
           name: resource.name,
           namespace: resource.namespace,
+          age: resource.age,
           labels: resource.labels,
           annotations: resource.annotations,
         });
