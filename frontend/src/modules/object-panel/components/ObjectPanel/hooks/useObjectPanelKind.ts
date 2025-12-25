@@ -2,6 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelKind.ts
  *
  * Hook for useObjectPanelKind.
+ * Determines object kind and related scopes for the object panel.
+ * Returns structured information about the object kind, namespace scope, detail scope, and helm scope.
+ * Also indicates if the object is a Helm release or an event.
  */
 import type { PanelObjectData } from '../types';
 

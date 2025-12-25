@@ -2,6 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx
  *
  * Module source for LogViewer.
+ * Component for viewing object logs with filtering, parsing, and keyboard shortcuts.
+ * Extracts logic into hooks for clarity.
+ * Uses a reducer for state management.
  */
 import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
 import { GetPodContainers, LogFetcher } from '@wailsjs/go/backend/App';
