@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/capabilities/utils.test.ts
  *
- * Tests for capability descriptor utilities.
+ * Test suite for utils.
+ * Covers key behaviors and edge cases for utils.
  */
+
 import { describe, expect, it } from 'vitest';
 
 import { computeCapabilityState } from './utils';

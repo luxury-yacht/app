@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/RBACOverview.test.tsx
  *
- * Tests for RBACOverview.
+ * Test suite for RBACOverview.
+ * Covers key behaviors and edge cases for RBACOverview.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

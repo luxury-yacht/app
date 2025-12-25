@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/NsViewStorage.test.tsx
  *
- * Tests for NsViewStorage.
+ * Test suite for NsViewStorage.
+ * Covers key behaviors and edge cases for NsViewStorage.
  */
+
 import ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { act } from 'react';

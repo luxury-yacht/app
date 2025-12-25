@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableFilterHandlers.ts
+ *
+ * React hook for useGridTableFilterHandlers.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback } from 'react';
 
 interface UseGridTableFilterHandlersOptions {

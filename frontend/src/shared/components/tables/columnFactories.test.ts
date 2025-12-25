@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/columnFactories.test.ts
+ *
+ * Test suite for columnFactories.
+ * Covers key behaviors and edge cases for columnFactories.
+ */
+
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 

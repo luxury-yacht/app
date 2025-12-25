@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTableFiltersBar.test.tsx
+ *
+ * Test suite for GridTableFiltersBar.
+ * Covers key behaviors and edge cases for GridTableFiltersBar.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

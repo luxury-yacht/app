@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/NsViewQuotas.tsx
  *
- * GridTable view for namespace quota resources.
+ * UI component for NsViewQuotas.
+ * Handles rendering and interactions for the namespace feature.
  */
+
 
 import './NsViewQuotas.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';

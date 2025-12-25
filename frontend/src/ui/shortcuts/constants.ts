@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/constants.ts
+ *
+ * Module source for constants.
+ * Implements constants logic for the UI layer.
+ */
+
 // Common key codes for reference
 export const KeyCodes = {
   ESCAPE: 'Escape',

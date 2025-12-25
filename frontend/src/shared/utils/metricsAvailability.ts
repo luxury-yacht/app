@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/utils/metricsAvailability.ts
+ *
+ * Utility helpers for metricsAvailability.
+ * Provides shared helper functions for the frontend.
+ */
+
 export interface MetricsAvailability {
   stale?: boolean;
   lastError?: string | null;

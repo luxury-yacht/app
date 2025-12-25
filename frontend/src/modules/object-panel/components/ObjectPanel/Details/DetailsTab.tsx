@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.tsx
  *
- * Module source for DetailsTab.
+ * UI component for DetailsTab.
+ * Handles rendering and interactions for the object panel feature.
  */
+
 import React, { useMemo, useCallback } from 'react';
 import {
   DetailsSectionProvider,

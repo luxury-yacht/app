@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/gridTableViewRegistry.test.ts
+ *
+ * Test suite for gridTableViewRegistry.
+ * Covers key behaviors and edge cases for gridTableViewRegistry.
+ */
+
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
   isRegisteredGridTableView,

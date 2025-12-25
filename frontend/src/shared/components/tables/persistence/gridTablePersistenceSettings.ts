@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/gridTablePersistenceSettings.ts
+ *
+ * UI component for gridTablePersistenceSettings.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import { eventBus } from '@/core/events';
 
 export type GridTablePersistenceMode = 'namespaced' | 'shared';

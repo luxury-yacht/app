@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/index.test.ts
  *
- * Tests for refresh module exports.
+ * Test suite for index.
+ * Covers key behaviors and edge cases for index.
  */
+
 import { describe, expect, it } from 'vitest';
 
 import {

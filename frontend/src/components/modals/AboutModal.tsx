@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/modals/AboutModal.tsx
+ *
+ * UI component for AboutModal.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import './modals.css';
 import './AboutModal.css';

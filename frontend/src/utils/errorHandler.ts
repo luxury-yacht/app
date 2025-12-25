@@ -1,7 +1,10 @@
 /**
- * Centralized error handling utility for the Luxury Yacht application
- * Provides error categorization, custom messages, and logging
+ * frontend/src/utils/errorHandler.ts
+ *
+ * Utility helpers for errorHandler.
+ * Provides shared helper functions for the frontend.
  */
+
 
 export enum ErrorCategory {
   NETWORK = 'NETWORK',

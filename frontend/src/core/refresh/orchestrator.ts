@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/orchestrator.ts
  *
- * Refresh orchestrator for domain updates and streaming.
+ * Module source for orchestrator.
+ * Implements orchestrator logic for the core layer.
  */
+
 import {
   ensureRefreshBaseURL,
   fetchSnapshot,

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/utils/kindAliasMap.test.ts
+ *
+ * Test suite for kindAliasMap.
+ * Covers key behaviors and edge cases for kindAliasMap.
+ */
+
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDisplayKind, getTypeAlias } from './kindAliasMap';
 

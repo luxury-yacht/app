@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/dropdowns/Dropdown/hooks/useKeyboardNavigation.test.tsx
+ *
+ * Test suite for useKeyboardNavigation.
+ * Covers key behaviors and edge cases for useKeyboardNavigation.
+ */
+
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableColumnWidths.test.tsx
+ *
+ * Test suite for useGridTableColumnWidths.
+ * Covers key behaviors and edge cases for useGridTableColumnWidths.
+ */
+
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

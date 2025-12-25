@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/components/diagnostics/DiagnosticsTable.tsx
  *
- * Shared diagnostics table for refresh domains.
+ * UI component for DiagnosticsTable.
+ * Handles rendering and interactions for the shared components.
  */
+
 import React from 'react';
 import type { DiagnosticsRow } from './diagnosticsPanelTypes';
 

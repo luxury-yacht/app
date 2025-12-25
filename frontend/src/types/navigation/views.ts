@@ -1,6 +1,10 @@
 /**
- * View and navigation type definitions
+ * frontend/src/types/navigation/views.ts
+ *
+ * Type definitions for views.
+ * Defines shared interfaces and payload shapes for the frontend.
  */
+
 
 export type ViewType = 'namespace' | 'cluster' | 'overview' | 'settings' | 'about';
 

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useFrameSampler.ts
+ *
+ * React hook for useFrameSampler.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 // Utility to sample frame durations over a window using rAF; used by the

@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/fallbacks/objectLogFallbackManager.test.ts
  *
- * Tests for object log fallback manager behavior.
+ * Test suite for objectLogFallbackManager.
+ * Covers key behaviors and edge cases for objectLogFallbackManager.
  */
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const setup = async () => {

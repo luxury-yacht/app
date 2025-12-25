@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/NsViewEvents.tsx
  *
- * GridTable view for namespace Events.
+ * UI component for NsViewEvents.
+ * Handles rendering and interactions for the namespace feature.
  */
+
 
 import './NsViewEvents.css';
 import { formatAge } from '@/utils/ageFormatter';

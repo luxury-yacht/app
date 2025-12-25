@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabContainers.test.tsx
  *
- * Tests for DetailsTabContainers.
+ * Test suite for DetailsTabContainers.
+ * Covers key behaviors and edge cases for DetailsTabContainers.
  */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect } from 'vitest';

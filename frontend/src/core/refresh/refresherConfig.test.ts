@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/refresherConfig.test.ts
  *
- * Tests for refresher configuration.
+ * Test suite for refresherConfig.
+ * Covers key behaviors and edge cases for refresherConfig.
  */
+
 import { describe, expect, it } from 'vitest';
 
 import {

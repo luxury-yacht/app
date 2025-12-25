@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/dropdowns/Dropdown/Dropdown.tsx
+ *
+ * UI component for Dropdown.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useMemo, useEffect, useRef, useState } from 'react';
 import { DropdownProps } from './types';
 import { useDropdownState } from './hooks/useDropdownState';

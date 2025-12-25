@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/capabilities/store.test.ts
  *
- * Tests for capability store batching and caching.
+ * Test suite for store.
+ * Covers key behaviors and edge cases for store.
  */
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@wailsjs/go/backend/App', () => ({

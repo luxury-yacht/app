@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableHeaderSyncEffects.ts
+ *
+ * React hook for useGridTableHeaderSyncEffects.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
 

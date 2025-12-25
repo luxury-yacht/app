@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization.tsx
  *
- * Module source for DetailsTabUtilization.
+ * Utility helpers for DetailsTabUtilization.
+ * Provides shared helper functions for the object panel feature.
  */
+
 import React from 'react';
 import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import ResourceBar from '@shared/components/ResourceBar';

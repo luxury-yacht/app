@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/ResourceLoadingBoundary.tsx
+ *
+ * UI component for ResourceLoadingBoundary.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useEffect } from 'react';
 import LoadingSpinner from './LoadingSpinner';
 

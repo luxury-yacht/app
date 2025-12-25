@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/dockable/useDockablePanelState.test.tsx
+ *
+ * Test suite for useDockablePanelState.
+ * Covers key behaviors and edge cases for useDockablePanelState.
+ */
+
 import { vi } from 'vitest';
 
 const setLogsPanelVisible = vi.fn();

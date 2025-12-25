@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/codemirror/theme.ts
  *
- * CodeMirror editor theme and syntax highlighting styles
+ * Module source for theme.
+ * Implements theme logic for the core layer.
  */
+
 
 import { EditorView } from '@codemirror/view';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';

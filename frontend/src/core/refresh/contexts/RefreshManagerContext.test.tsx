@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/contexts/RefreshManagerContext.test.tsx
  *
- * Tests for refresh manager context behavior.
+ * Test suite for RefreshManagerContext.
+ * Covers key behaviors and edge cases for RefreshManagerContext.
  */
+
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

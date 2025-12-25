@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/searchShortcutRegistry.test.ts
+ *
+ * Test suite for searchShortcutRegistry.
+ * Covers key behaviors and edge cases for searchShortcutRegistry.
+ */
+
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import {
   registerSearchShortcutTarget,

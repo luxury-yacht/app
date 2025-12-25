@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/context.tsx
+ *
+ * Module source for context.
+ * Implements context logic for the UI layer.
+ */
+
 import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import {
   ShortcutDefinition,

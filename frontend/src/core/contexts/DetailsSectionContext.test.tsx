@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/contexts/DetailsSectionContext.test.tsx
  *
- * Tests for details section context state.
+ * Test suite for DetailsSectionContext.
+ * Covers key behaviors and edge cases for DetailsSectionContext.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/searchShortcutRegistry.ts
+ *
+ * Module source for searchShortcutRegistry.
+ * Implements searchShortcutRegistry logic for the UI layer.
+ */
+
 type SearchShortcutEntry = {
   id: string;
   label?: string;

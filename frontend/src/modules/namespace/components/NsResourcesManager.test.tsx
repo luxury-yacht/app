@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/NsResourcesManager.test.tsx
  *
- * Tests for NsResourcesManager.
+ * Test suite for NsResourcesManager.
+ * Covers key behaviors and edge cases for NsResourcesManager.
  */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

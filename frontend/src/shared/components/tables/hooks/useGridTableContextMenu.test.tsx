@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableContextMenu.test.tsx
+ *
+ * Test suite for useGridTableContextMenu.
+ * Covers key behaviors and edge cases for useGridTableContextMenu.
+ */
+
 import React, { forwardRef, useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

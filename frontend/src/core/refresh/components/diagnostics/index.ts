@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/components/diagnostics/index.ts
  *
- * Exports for diagnostics panel subcomponents and helpers.
+ * Barrel exports for diagnostics.
+ * Re-exports public APIs for the shared components.
  */
+
 export * from './diagnosticsPanelTypes';
 export * from './diagnosticsPanelUtils';
 export * from './diagnosticsPanelConfig';

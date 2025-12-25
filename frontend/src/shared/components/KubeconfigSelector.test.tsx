@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/KubeconfigSelector.test.tsx
+ *
+ * Test suite for KubeconfigSelector.
+ * Covers key behaviors and edge cases for KubeconfigSelector.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { KeyboardProvider } from '@ui/shortcuts';

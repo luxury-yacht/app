@@ -1,7 +1,9 @@
 /**
  * frontend/src/hooks/resources/index.ts
  *
- * Hooks for managing Kubernetes resource data and actions
+ * Barrel exports for resources.
+ * Re-exports public APIs for the hooks layer.
  */
+
 
 export * from './useResourceData';

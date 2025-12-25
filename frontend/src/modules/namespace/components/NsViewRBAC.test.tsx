@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/NsViewRBAC.test.tsx
  *
- * Tests for NsViewRBAC.
+ * Test suite for NsViewRBAC.
+ * Covers key behaviors and edge cases for NsViewRBAC.
  */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/capabilities/utils.ts
  *
- * Normalization and helper utilities for capability descriptors and cache keys.
+ * Utility helpers for utils.
+ * Provides shared helper functions for the core layer.
  */
+
 import type {
   CapabilityDescriptor,
   CapabilityEntry,

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableAutoGrow.ts
+ *
+ * React hook for useGridTableAutoGrow.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';

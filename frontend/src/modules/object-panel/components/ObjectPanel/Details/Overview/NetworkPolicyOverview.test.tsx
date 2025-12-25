@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/NetworkPolicyOverview.test.tsx
  *
- * Tests for NetworkPolicyOverview.
+ * Test suite for NetworkPolicyOverview.
+ * Covers key behaviors and edge cases for NetworkPolicyOverview.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

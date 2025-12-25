@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewStorage.tsx
  *
- * GridTable view for cluster storage resources such as Persistent Volumes.
+ * UI component for ClusterViewStorage.
+ * Handles rendering and interactions for the cluster feature.
  */
+
 
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';

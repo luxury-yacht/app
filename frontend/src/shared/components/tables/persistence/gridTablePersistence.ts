@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/gridTablePersistence.ts
+ *
+ * UI component for gridTablePersistence.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import type {
   ColumnWidthState,
   GridColumnDefinition,

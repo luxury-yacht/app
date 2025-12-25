@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewCRDs.tsx
  *
- * GridTable view for cluster Custom Resource Definitions (CRDs).
+ * UI component for ClusterViewCRDs.
+ * Handles rendering and interactions for the cluster feature.
  */
+
 
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';

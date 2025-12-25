@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ConfigMapOverview.test.tsx
  *
- * Tests for ConfigMapOverview.
+ * Test suite for ConfigMapOverview.
+ * Covers key behaviors and edge cases for ConfigMapOverview.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

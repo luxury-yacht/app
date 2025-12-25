@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/dockable/index.ts
+ *
+ * Barrel exports for dockable.
+ * Re-exports public APIs for the shared components.
+ */
+
 /*
  * index.ts
  *

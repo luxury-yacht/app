@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/contexts/RefreshManagerContext.tsx
  *
- * Context provider for the refresh manager and visibility handling.
+ * Context and provider for RefreshManagerContext.
+ * Defines shared state and accessors for the core layer.
  */
+
 import React, { createContext, useContext, useEffect, ReactNode } from 'react';
 import { refreshManager } from '../RefreshManager';
 import { eventBus } from '@/core/events';

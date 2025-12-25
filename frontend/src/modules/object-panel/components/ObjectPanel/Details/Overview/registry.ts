@@ -1,7 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/registry.ts
- * Implements factory pattern to replace giant switch statement
+ *
+ * UI component for registry.
+ * Handles rendering and interactions for the object panel feature.
  */
+
 
 import React from 'react';
 

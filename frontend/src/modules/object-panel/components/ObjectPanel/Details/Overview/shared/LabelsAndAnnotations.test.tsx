@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/shared/LabelsAndAnnotations.test.tsx
  *
- * Tests for LabelsAndAnnotations.
+ * Test suite for LabelsAndAnnotations.
+ * Covers key behaviors and edge cases for LabelsAndAnnotations.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

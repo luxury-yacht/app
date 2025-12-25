@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewNodes.test.tsx
  *
- * Tests for ClusterViewNodes.
+ * Test suite for ClusterViewNodes.
+ * Covers key behaviors and edge cases for ClusterViewNodes.
  */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

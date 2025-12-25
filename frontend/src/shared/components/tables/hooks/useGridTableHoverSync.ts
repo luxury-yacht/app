@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableHoverSync.ts
+ *
+ * React hook for useGridTableHoverSync.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 
 // Keeps the header/body hover overlay aligned with the current row, while

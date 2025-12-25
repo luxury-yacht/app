@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTablePagination.tsx
+ *
+ * UI component for GridTablePagination.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React from 'react';
 import type { RefObject } from 'react';
 

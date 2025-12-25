@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/icons/MenuIcons.test.tsx
+ *
+ * Test suite for MenuIcons.
+ * Covers key behaviors and edge cases for MenuIcons.
+ */
+
 import ReactDOMServer from 'react-dom/server';
 import { describe, it, expect } from 'vitest';
 

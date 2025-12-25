@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableShortcuts.test.tsx
+ *
+ * Test suite for useGridTableShortcuts.
+ * Covers key behaviors and edge cases for useGridTableShortcuts.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

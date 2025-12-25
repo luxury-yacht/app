@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.shortcuts.test.tsx
  *
- * Tests for YamlTab.shortcuts.
+ * Test suite for YamlTab.shortcuts.
+ * Covers key behaviors and edge cases for YamlTab.shortcuts.
  */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

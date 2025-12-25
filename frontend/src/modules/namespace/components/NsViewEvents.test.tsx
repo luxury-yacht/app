@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/NsViewEvents.test.tsx
  *
- * Tests for NsViewEvents.
+ * Test suite for NsViewEvents.
+ * Covers key behaviors and edge cases for NsViewEvents.
  */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

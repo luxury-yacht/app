@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/codemirror/search.test.ts
  *
- * Tests for CodeMirror search extensions.
+ * Test suite for search.
+ * Covers key behaviors and edge cases for search.
  */
+
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 const viewMocks = vi.hoisted(() => ({

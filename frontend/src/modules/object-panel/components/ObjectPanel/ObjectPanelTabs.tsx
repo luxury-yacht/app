@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelTabs.tsx
  *
- * Module source for ObjectPanelTabs.
+ * UI component for ObjectPanelTabs.
+ * Handles rendering and interactions for the object panel feature.
  */
+
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 
 type ObjectPanelTabDefinition = {

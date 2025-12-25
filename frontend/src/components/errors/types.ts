@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/errors/types.ts
+ *
+ * Type definitions for types.
+ * Defines shared interfaces and payload shapes for the shared components.
+ */
+
 import { ErrorInfo, ReactNode } from 'react';
 
 export interface ErrorBoundaryProps {

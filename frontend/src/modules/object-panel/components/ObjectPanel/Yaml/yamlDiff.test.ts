@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlDiff.test.ts
  *
- * Tests for yamlDiff.
+ * Test suite for yamlDiff.
+ * Covers key behaviors and edge cases for yamlDiff.
  */
+
 import { describe, it, expect } from 'vitest';
 
 import { computeLineDiff } from './yamlDiff';

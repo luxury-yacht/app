@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/kubernetes/ActionsMenu.test.tsx
+ *
+ * Test suite for ActionsMenu.
+ * Covers key behaviors and edge cases for ActionsMenu.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem.tsx
  *
- * Module source for OverviewItem.
+ * UI component for OverviewItem.
+ * Handles rendering and interactions for the object panel feature.
  */
+
 import React from 'react';
 
 interface OverviewItemProps {

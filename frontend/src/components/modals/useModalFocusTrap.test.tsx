@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/modals/useModalFocusTrap.test.tsx
+ *
+ * Test suite for useModalFocusTrap.
+ * Covers key behaviors and edge cases for useModalFocusTrap.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

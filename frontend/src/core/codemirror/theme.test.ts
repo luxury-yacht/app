@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/codemirror/theme.test.ts
  *
- * Tests for CodeMirror theme configuration.
+ * Test suite for theme.
+ * Covers key behaviors and edge cases for theme.
  */
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const themeMock = vi.hoisted(() => {

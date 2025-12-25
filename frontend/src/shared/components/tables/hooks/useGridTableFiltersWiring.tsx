@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableFiltersWiring.tsx
+ *
+ * React hook for useGridTableFiltersWiring.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 

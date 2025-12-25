@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/icons/MenuIcons.tsx
+ *
+ * UI component for MenuIcons.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React from 'react';
 
 interface IconProps {

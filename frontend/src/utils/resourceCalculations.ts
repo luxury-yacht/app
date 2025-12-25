@@ -1,6 +1,10 @@
 /**
- * Parse CPU value to millicores
+ * frontend/src/utils/resourceCalculations.ts
+ *
+ * Utility helpers for resourceCalculations.
+ * Provides shared helper functions for the frontend.
  */
+
 export const parseCpuToMillicores = (val: string | undefined): number => {
   if (!val || val === '-' || val === 'not set') return 0;
   if (val.endsWith('m')) {

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/dockable/DockablePanel.test.tsx
+ *
+ * Test suite for DockablePanel.
+ * Covers key behaviors and edge cases for DockablePanel.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

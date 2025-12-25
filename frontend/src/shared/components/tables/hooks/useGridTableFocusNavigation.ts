@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableFocusNavigation.ts
+ *
+ * React hook for useGridTableFocusNavigation.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 

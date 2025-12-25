@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableColumnVirtualization.test.tsx
+ *
+ * Test suite for useGridTableColumnVirtualization.
+ * Covers key behaviors and edge cases for useGridTableColumnVirtualization.
+ */
+
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

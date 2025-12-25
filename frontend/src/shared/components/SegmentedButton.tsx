@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/SegmentedButton.tsx
+ *
+ * UI component for SegmentedButton.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import './SegmentedButton.css';
 
 interface SegmentedOption<T = string> {

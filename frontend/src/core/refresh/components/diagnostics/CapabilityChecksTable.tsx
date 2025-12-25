@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/components/diagnostics/CapabilityChecksTable.tsx
  *
- * Diagnostics table for capability check activity.
+ * UI component for CapabilityChecksTable.
+ * Handles rendering and interactions for the shared components.
  */
+
 import React from 'react';
 import type { CapabilityBatchRow } from './diagnosticsPanelTypes';
 

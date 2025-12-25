@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/components/SearchShortcutHandler.test.tsx
+ *
+ * Test suite for SearchShortcutHandler.
+ * Covers key behaviors and edge cases for SearchShortcutHandler.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

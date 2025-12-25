@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewStorage.test.tsx
  *
- * Tests for ClusterViewStorage.
+ * Test suite for ClusterViewStorage.
+ * Covers key behaviors and edge cases for ClusterViewStorage.
  */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/hooks/useAutoRefresh.ts
  *
- * Auto-refresh state hook and initializer.
+ * React hook for useAutoRefresh.
+ * Encapsulates state and side effects for the core layer.
  */
+
 import { useState, useEffect, useCallback } from 'react';
 import { refreshManager } from '../RefreshManager';
 import { eventBus } from '@/core/events';

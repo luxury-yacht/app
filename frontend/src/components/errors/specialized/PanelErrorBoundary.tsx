@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/errors/specialized/PanelErrorBoundary.tsx
+ *
+ * UI component for PanelErrorBoundary.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { ReactNode } from 'react';
 import { ErrorBoundary } from '../ErrorBoundary';
 

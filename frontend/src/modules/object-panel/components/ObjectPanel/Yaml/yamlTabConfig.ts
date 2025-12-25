@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTabConfig.ts
  *
- * Module source for yamlTabConfig.
+ * UI component for yamlTabConfig.
+ * Handles rendering and interactions for the object panel feature.
  */
+
 export const INACTIVE_SCOPE = '__inactive__';
 export const LINT_DEBOUNCE_MS = 200;
 export const LARGE_MANIFEST_THRESHOLD = 150_000;

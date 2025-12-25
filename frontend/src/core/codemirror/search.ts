@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/codemirror/search.ts
  *
- * CodeMirror search extensions with customized search and replace panel layout
+ * Module source for search.
+ * Implements search logic for the core layer.
  */
+
 
 import { keymap, EditorView } from '@codemirror/view';
 import type { KeyBinding } from '@codemirror/view';

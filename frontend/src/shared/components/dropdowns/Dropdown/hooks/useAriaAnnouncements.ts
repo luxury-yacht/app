@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/dropdowns/Dropdown/hooks/useAriaAnnouncements.ts
+ *
+ * React hook for useAriaAnnouncements.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useEffect, useRef } from 'react';
 import { DropdownOption } from '../types';
 

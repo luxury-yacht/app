@@ -1,3 +1,10 @@
+/**
+ * frontend/src/App.tsx
+ *
+ * Root application component.
+ * Composes top-level providers, routes, and layout.
+ */
+
 import { useEffect, useCallback } from 'react';
 import '@styles/index.css';
 import './App.css';

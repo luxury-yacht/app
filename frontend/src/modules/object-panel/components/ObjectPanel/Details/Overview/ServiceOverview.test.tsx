@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ServiceOverview.test.tsx
  *
- * Tests for ServiceOverview.
+ * Test suite for ServiceOverview.
+ * Covers key behaviors and edge cases for ServiceOverview.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

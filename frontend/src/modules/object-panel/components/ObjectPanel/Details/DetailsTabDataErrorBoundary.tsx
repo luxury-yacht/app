@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabDataErrorBoundary.tsx
  *
- * Module source for DetailsTabDataErrorBoundary.
+ * UI component for DetailsTabDataErrorBoundary.
+ * Handles rendering and interactions for the object panel feature.
  */
+
 import { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {

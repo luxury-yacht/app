@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/refresherTypes.ts
  *
- * Refresher name constants and view mappings.
+ * Type definitions for refresherTypes.
+ * Defines shared interfaces and payload shapes for the core layer.
  */
+
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 
 const NAMESPACE_REFRESHERS = {

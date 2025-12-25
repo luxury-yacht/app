@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/dropdowns/Dropdown/hooks/useKeyboardNavigation.ts
+ *
+ * React hook for useKeyboardNavigation.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, KeyboardEvent } from 'react';
 import { DropdownOption } from '../types';
 

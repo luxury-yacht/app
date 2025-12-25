@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/store.ts
  *
- * Refresh snapshot state store and selectors.
+ * State store for store.
+ * Manages cached data, updates, and subscriptions for the core layer.
  */
+
 import { useSyncExternalStore } from 'react';
 
 import type { DomainPayloadMap, RefreshDomain } from './types';

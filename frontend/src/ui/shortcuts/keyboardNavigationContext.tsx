@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/keyboardNavigationContext.tsx
+ *
+ * Context and provider for keyboardNavigationContext.
+ * Defines shared state and accessors for the UI layer.
+ */
+
 import React, {
   createContext,
   useCallback,

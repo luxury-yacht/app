@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/utils/metricsAvailability.test.ts
+ *
+ * Test suite for metricsAvailability.
+ * Covers key behaviors and edge cases for metricsAvailability.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import { getMetricsBannerInfo } from './metricsAvailability';

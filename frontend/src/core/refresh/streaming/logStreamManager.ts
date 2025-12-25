@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/streaming/logStreamManager.ts
  *
- * Log stream manager for object log streaming.
+ * Module source for logStreamManager.
+ * Implements logStreamManager logic for the core layer.
  */
+
 import { ensureRefreshBaseURL } from '../client';
 import type { SnapshotStats } from '../client';
 import { resetScopedDomainState, setScopedDomainState } from '../store';

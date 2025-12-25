@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/WorkloadScaleModal.tsx
  *
- * Module source for WorkloadScaleModal.
+ * UI component for WorkloadScaleModal.
+ * Handles rendering and interactions for the namespace feature.
  */
+
 import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads.helpers';
 
 interface WorkloadScaleModalProps {

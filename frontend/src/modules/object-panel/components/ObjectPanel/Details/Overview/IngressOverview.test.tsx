@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/IngressOverview.test.tsx
  *
- * Tests for IngressOverview.
+ * Test suite for IngressOverview.
+ * Covers key behaviors and edge cases for IngressOverview.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/refresherConfig.ts
  *
- * Refresher timing and policy configuration.
+ * Module source for refresherConfig.
+ * Implements refresherConfig logic for the core layer.
  */
+
 import {
   CLUSTER_REFRESHERS,
   type ClusterRefresherName,

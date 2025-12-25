@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/utils/resourceCalculations.ts
+ *
+ * Utility helpers for resourceCalculations.
+ * Provides shared helper functions for the frontend.
+ */
+
 // Shared resource calculation utilities used by ResourceBar and object panel
 
 export interface ResourceData {

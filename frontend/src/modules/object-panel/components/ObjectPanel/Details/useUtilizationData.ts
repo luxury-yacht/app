@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/useUtilizationData.ts
  *
- * Hook for useUtilizationData.
+ * React hook for useUtilizationData.
+ * Encapsulates state and side effects for the object panel feature.
  */
+
 import { useMemo } from 'react';
 import type { types } from '@wailsjs/go/models';
 import type { UtilizationData } from './detailsTabTypes';

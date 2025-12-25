@@ -1,8 +1,10 @@
 /**
  * frontend/src/core/refresh/streaming/eventStreamManager.ts
  *
- * Event stream manager for object and cluster events.
+ * Module source for eventStreamManager.
+ * Implements eventStreamManager logic for the core layer.
  */
+
 import { ensureRefreshBaseURL } from '../client';
 import type { SnapshotStats } from '../client';
 import { setDomainState, resetDomainState } from '../store';

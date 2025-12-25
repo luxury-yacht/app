@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/errors/ErrorFallback.test.tsx
+ *
+ * Test suite for ErrorFallback.
+ * Covers key behaviors and edge cases for ErrorFallback.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

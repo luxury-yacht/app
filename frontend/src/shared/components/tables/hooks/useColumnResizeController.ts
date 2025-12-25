@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useColumnResizeController.ts
+ *
+ * React hook for useColumnResizeController.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 

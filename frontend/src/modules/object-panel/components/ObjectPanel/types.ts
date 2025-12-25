@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/types.ts
  *
- * Defines types and interfaces used in the Object Panel component.
+ * Type definitions for types.
+ * Defines shared interfaces and payload shapes for the object panel feature.
  */
+
 export type PanelObjectData = {
   kind?: string | null;
   kindAlias?: string | null;

@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/JobOverview.test.tsx
  *
- * Tests for JobOverview.
+ * Test suite for JobOverview.
+ * Covers key behaviors and edge cases for JobOverview.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

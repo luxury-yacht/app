@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/errors/specialized/AppErrorBoundary.tsx
+ *
+ * UI component for AppErrorBoundary.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { ReactNode } from 'react';
 import { ErrorBoundary } from '../ErrorBoundary';
 

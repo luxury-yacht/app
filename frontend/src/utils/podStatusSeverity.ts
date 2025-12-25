@@ -1,7 +1,10 @@
 /**
- * Determines the severity level for a pod status
- * Returns 'error', 'warning', or 'info' based on the status
+ * frontend/src/utils/podStatusSeverity.ts
+ *
+ * Utility helpers for podStatusSeverity.
+ * Provides shared helper functions for the frontend.
  */
+
 export function getPodStatusSeverity(status: string): 'error' | 'warning' | 'info' {
   if (!status) return 'info';
 

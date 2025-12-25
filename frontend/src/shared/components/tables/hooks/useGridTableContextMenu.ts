@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableContextMenu.ts
+ *
+ * React hook for useGridTableContextMenu.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useState } from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';

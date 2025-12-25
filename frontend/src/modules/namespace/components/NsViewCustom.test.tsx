@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/NsViewCustom.test.tsx
  *
- * Tests for NsViewCustom.
+ * Test suite for NsViewCustom.
+ * Covers key behaviors and edge cases for NsViewCustom.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

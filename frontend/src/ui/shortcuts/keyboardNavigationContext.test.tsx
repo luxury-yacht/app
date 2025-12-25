@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/keyboardNavigationContext.test.tsx
+ *
+ * Test suite for keyboardNavigationContext.
+ * Covers key behaviors and edge cases for keyboardNavigationContext.
+ */
+
 import React, { act, useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';

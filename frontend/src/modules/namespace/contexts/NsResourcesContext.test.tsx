@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/contexts/NsResourcesContext.test.tsx
  *
- * Tests for NsResourcesContext.
+ * Test suite for NsResourcesContext.
+ * Covers key behaviors and edge cases for NsResourcesContext.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

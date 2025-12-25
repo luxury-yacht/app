@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/dockable/dockablePanelLayout.ts
+ *
+ * UI component for dockablePanelLayout.
+ * Handles rendering and interactions for the shared components.
+ */
+
 /*
  * dockablePanelLayout.ts
  *

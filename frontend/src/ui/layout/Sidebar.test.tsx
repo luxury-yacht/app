@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/layout/Sidebar.test.tsx
+ *
+ * Test suite for Sidebar.
+ * Covers key behaviors and edge cases for Sidebar.
+ */
+
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/modals/ConfirmationModal.tsx
+ *
+ * UI component for ConfirmationModal.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useShortcut, useKeyboardContext } from '@ui/shortcuts';

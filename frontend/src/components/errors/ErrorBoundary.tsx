@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/errors/ErrorBoundary.tsx
+ *
+ * UI component for ErrorBoundary.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import { Component, ErrorInfo } from 'react';
 import { errorHandler } from '@utils/errorHandler';
 import { ErrorFallback } from './ErrorFallback';

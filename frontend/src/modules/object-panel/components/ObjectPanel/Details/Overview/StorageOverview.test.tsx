@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/StorageOverview.test.tsx
  *
- * Tests for StorageOverview.
+ * Test suite for StorageOverview.
+ * Covers key behaviors and edge cases for StorageOverview.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

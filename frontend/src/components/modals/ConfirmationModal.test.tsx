@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/modals/ConfirmationModal.test.tsx
+ *
+ * Test suite for ConfirmationModal.
+ * Covers key behaviors and edge cases for ConfirmationModal.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,7 +1,10 @@
 /**
- * App-level type definitions
- * Navigation and view-related types used throughout the application
+ * frontend/src/ui/navigation/types.ts
+ *
+ * Type definitions for types.
+ * Defines shared interfaces and payload shapes for the UI layer.
  */
+
 
 /**
  * Tab types for namespace-scoped resources

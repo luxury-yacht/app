@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlValidation.test.ts
  *
- * Tests for yamlValidation.
+ * Test suite for yamlValidation.
+ * Covers key behaviors and edge cases for yamlValidation.
  */
+
 import { describe, it, expect } from 'vitest';
 import { validateYamlDraft, parseObjectIdentity, type ObjectIdentity } from './yamlValidation';
 

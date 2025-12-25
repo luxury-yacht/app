@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx
  *
- * Module source for ShellTab.
+ * UI component for ShellTab.
+ * Handles rendering and interactions for the object panel feature.
  */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';

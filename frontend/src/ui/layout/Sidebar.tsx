@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/layout/Sidebar.tsx
+ *
+ * Module source for Sidebar.
+ * Implements Sidebar logic for the UI layer.
+ */
+
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './Sidebar.css';
 import LoadingSpinner from '@shared/components/LoadingSpinner';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableExternalWidths.test.tsx
+ *
+ * Test suite for useGridTableExternalWidths.
+ * Covers key behaviors and edge cases for useGridTableExternalWidths.
+ */
+
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

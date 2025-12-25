@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTable.tsx
+ *
+ * UI component for GridTable.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useCallback, memo, useRef, useEffect, useMemo, useState } from 'react';
 import type { RefObject } from 'react';
 import LoadingSpinner from '@shared/components/LoadingSpinner';

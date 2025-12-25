@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/errors/TestErrorBoundary.tsx
+ *
+ * UI component for TestErrorBoundary.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { errorHandler } from '@utils/errorHandler';
 

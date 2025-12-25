@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/gridTablePersistence.test.ts
+ *
+ * Test suite for gridTablePersistence.
+ * Covers key behaviors and edge cases for gridTablePersistence.
+ */
+
 import { describe, expect, it } from 'vitest';
 import type {
   ColumnWidthState,

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/utils.ts
+ *
+ * Utility helpers for utils.
+ * Provides shared helper functions for the UI layer.
+ */
+
 import { ShortcutModifiers } from '@/types/shortcuts';
 
 // Helper to format shortcuts for display

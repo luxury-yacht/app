@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelKind.test.tsx
  *
- * Tests for useObjectPanelKind.
+ * Test suite for useObjectPanelKind.
+ * Covers key behaviors and edge cases for useObjectPanelKind.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

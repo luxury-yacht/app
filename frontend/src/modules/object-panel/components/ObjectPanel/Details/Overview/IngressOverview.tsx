@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/IngressOverview.tsx
  *
- * Module source for IngressOverview.
+ * UI component for IngressOverview.
+ * Handles rendering and interactions for the object panel feature.
  */
+
 import React from 'react';
 import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';

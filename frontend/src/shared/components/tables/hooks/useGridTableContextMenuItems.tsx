@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableContextMenuItems.tsx
+ *
+ * React hook for useGridTableContextMenuItems.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback } from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { SortAscIcon, SortDescIcon } from '@shared/components/icons/MenuIcons';

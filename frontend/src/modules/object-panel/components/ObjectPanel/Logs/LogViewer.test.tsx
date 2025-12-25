@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.test.tsx
  *
- * Tests for LogViewer.
+ * Test suite for LogViewer.
+ * Covers key behaviors and edge cases for LogViewer.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

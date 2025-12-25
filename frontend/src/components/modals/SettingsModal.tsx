@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/modals/SettingsModal.tsx
+ *
+ * UI component for SettingsModal.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Settings from '../content/Settings';
 import { useShortcut, useKeyboardContext, useKeyboardNavigationScope } from '@ui/shortcuts';

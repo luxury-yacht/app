@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/layout/SidebarKeys.test.tsx
+ *
+ * Test suite for SidebarKeys.
+ * Covers key behaviors and edge cases for SidebarKeys.
+ */
+
 import React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';

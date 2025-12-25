@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/gridTablePersistenceReset.test.ts
+ *
+ * Test suite for gridTablePersistenceReset.
+ * Covers key behaviors and edge cases for gridTablePersistenceReset.
+ */
+
 import { describe, expect, it } from 'vitest';
 import { clearAllGridTableState, subscribeGridTableResetAll } from './gridTablePersistenceReset';
 

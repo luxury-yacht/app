@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableCellCache.tsx
+ *
+ * React hook for useGridTableCellCache.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import React, { useCallback, useEffect, useRef } from 'react';
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';

@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/NsViewRBAC.tsx
  *
- * GridTable view for namespace RBAC resources.
+ * UI component for NsViewRBAC.
+ * Handles rendering and interactions for the namespace feature.
  */
+
 
 import './NsViewRBAC.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';

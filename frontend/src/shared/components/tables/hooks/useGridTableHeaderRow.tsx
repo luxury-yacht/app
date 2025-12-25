@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableHeaderRow.tsx
+ *
+ * React hook for useGridTableHeaderRow.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import type React from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 

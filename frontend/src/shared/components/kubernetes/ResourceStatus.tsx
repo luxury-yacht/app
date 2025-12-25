@@ -1,6 +1,10 @@
 /**
- * Shared component for displaying resource status
+ * frontend/src/shared/components/kubernetes/ResourceStatus.tsx
+ *
+ * UI component for ResourceStatus.
+ * Handles rendering and interactions for the shared components.
  */
+
 
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';

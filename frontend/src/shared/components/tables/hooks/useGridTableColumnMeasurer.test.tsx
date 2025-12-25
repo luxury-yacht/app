@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableColumnMeasurer.test.tsx
+ *
+ * Test suite for useGridTableColumnMeasurer.
+ * Covers key behaviors and edge cases for useGridTableColumnMeasurer.
+ */
+
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';

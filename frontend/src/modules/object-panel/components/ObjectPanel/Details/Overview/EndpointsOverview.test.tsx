@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/EndpointsOverview.test.tsx
  *
- * Tests for EndpointsOverview.
+ * Test suite for EndpointsOverview.
+ * Covers key behaviors and edge cases for EndpointsOverview.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

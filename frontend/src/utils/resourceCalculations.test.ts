@@ -1,3 +1,10 @@
+/**
+ * frontend/src/utils/resourceCalculations.test.ts
+ *
+ * Test suite for resourceCalculations.
+ * Covers key behaviors and edge cases for resourceCalculations.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import {

@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.test.tsx
  *
- * Tests for DetailsTab.
+ * Test suite for DetailsTab.
+ * Covers key behaviors and edge cases for DetailsTab.
  */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';

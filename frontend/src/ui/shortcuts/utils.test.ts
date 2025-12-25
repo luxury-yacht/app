@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/utils.test.ts
+ *
+ * Test suite for utils.
+ * Covers key behaviors and edge cases for utils.
+ */
+
 import { describe, it, expect, afterEach } from 'vitest';
 
 import {

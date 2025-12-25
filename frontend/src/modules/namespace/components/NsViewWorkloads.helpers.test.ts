@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/NsViewWorkloads.helpers.test.ts
  *
- * Tests for NsViewWorkloads.helpers.
+ * Test suite for NsViewWorkloads.helpers.
+ * Covers key behaviors and edge cases for NsViewWorkloads.helpers.
  */
+
 import { describe, expect, it } from 'vitest';
 import {
   normalizeWorkloadKind,

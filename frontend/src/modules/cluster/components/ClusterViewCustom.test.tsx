@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/cluster/components/ClusterViewCustom.test.tsx
  *
- * Tests for ClusterViewCustom.
+ * Test suite for ClusterViewCustom.
+ * Covers key behaviors and edge cases for ClusterViewCustom.
  */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

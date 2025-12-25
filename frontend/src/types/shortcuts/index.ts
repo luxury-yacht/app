@@ -1,3 +1,10 @@
+/**
+ * frontend/src/types/shortcuts/index.ts
+ *
+ * Barrel exports for shortcuts.
+ * Re-exports public APIs for the frontend.
+ */
+
 // Keyboard shortcut system types
 
 export interface ShortcutModifiers {

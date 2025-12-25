@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.test.tsx
  *
- * Tests for useObjectPanelRefresh.
+ * Test suite for useObjectPanelRefresh.
+ * Covers key behaviors and edge cases for useObjectPanelRefresh.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

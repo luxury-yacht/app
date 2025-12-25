@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableProfiler.tsx
+ *
+ * React hook for useGridTableProfiler.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { Profiler, useCallback, useMemo, useRef } from 'react';
 
 import { useFrameSampler } from '@shared/components/tables/hooks/useFrameSampler';

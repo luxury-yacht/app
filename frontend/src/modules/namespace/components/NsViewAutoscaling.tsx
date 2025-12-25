@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/NsViewAutoscaling.tsx
  *
- * GridTable view for namespace autoscaling resources.
+ * UI component for NsViewAutoscaling.
+ * Handles rendering and interactions for the namespace feature.
  */
+
 
 import './NsViewAutoscaling.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';

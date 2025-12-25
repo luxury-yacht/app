@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/gridTablePersistenceGC.ts
+ *
+ * UI component for gridTablePersistenceGC.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import { computeClusterHash } from '@shared/components/tables/persistence/gridTablePersistence';
 import { listRegisteredGridTableViews } from '@shared/components/tables/persistence/gridTableViewRegistry';
 

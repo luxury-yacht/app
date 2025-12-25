@@ -1,8 +1,10 @@
 /**
- * frontend/src/modules/namespace/contexts/__tests__/NamespaceContext.test.tsx
+ * frontend/src/modules/namespace/contexts/NamespaceContext.test.tsx
  *
- * Tests for NamespaceContext.
+ * Test suite for NamespaceContext.
+ * Covers key behaviors and edge cases for NamespaceContext.
  */
+
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

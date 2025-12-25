@@ -1,8 +1,10 @@
 /**
  * frontend/src/modules/namespace/components/useWorkloadTableColumns.test.tsx
  *
- * Tests for useWorkloadTableColumns.
+ * Test suite for useWorkloadTableColumns.
+ * Covers key behaviors and edge cases for useWorkloadTableColumns.
  */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

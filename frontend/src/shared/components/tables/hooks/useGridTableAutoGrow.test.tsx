@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableAutoGrow.test.tsx
+ *
+ * Test suite for useGridTableAutoGrow.
+ * Covers key behaviors and edge cases for useGridTableAutoGrow.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableContextMenuWiring.tsx
+ *
+ * React hook for useGridTableContextMenuWiring.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useMemo, useRef, useState } from 'react';
 import ContextMenu from '@shared/components/ContextMenu';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';

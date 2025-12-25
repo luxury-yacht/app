@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/command-palette/CommandPalette.test.tsx
+ *
+ * Test suite for CommandPalette.
+ * Covers key behaviors and edge cases for CommandPalette.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
