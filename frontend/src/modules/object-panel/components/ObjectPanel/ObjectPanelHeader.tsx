@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelHeader.tsx
+ *
+ * Module source for ObjectPanelHeader.
+ */
 interface ObjectPanelHeaderProps {
   navigationIndex: number;
   navigationCount: number;

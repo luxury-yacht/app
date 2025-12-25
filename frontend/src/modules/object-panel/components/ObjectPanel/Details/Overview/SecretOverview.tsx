@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/SecretOverview.tsx
+ *
+ * Module source for SecretOverview.
+ */
 import React from 'react';
 import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';

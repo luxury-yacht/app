@@ -1,4 +1,5 @@
-/* ClusterViewConfig.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterViewConfig.tsx
  *
  * GridTable view for cluster configuration resources such as Storage Classes,
  * Ingress Classes, and Admission Control resources.

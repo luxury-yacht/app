@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/shared/LabelsAndAnnotations.tsx
+ *
+ * Module source for LabelsAndAnnotations.
+ */
 import React, { useState } from 'react';
 import './LabelsAndAnnotations.css';
 

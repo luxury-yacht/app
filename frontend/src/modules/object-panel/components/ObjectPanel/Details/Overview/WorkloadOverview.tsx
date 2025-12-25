@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/WorkloadOverview.tsx
+ *
+ * Module source for WorkloadOverview.
+ */
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';

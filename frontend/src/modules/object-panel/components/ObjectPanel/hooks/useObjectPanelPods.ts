@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods.ts
+ *
+ * Hook for useObjectPanelPods.
+ */
 import { useEffect, useMemo } from 'react';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { useRefreshScopedDomain } from '@/core/refresh/store';

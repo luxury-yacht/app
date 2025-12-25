@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/namespace/components/NsViewConfig.test.tsx
+ *
+ * Tests for NsViewConfig.
+ */
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

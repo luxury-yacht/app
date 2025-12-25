@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/namespace/components/NsViewPods.test.tsx
+ *
+ * Tests for NsViewPods.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

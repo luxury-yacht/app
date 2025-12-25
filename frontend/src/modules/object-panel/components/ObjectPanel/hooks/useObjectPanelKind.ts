@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelKind.ts
+ *
+ * Hook for useObjectPanelKind.
+ */
 import type { PanelObjectData } from '../types';
 
 export interface UseObjectPanelKindOptions {

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabDataErrorBoundary.test.tsx
+ *
+ * Tests for DetailsTabDataErrorBoundary.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

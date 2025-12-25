@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/kubernetes/config/KubeconfigContext.tsx
+ *
+ * Context and provider for KubeconfigContext.
+ */
 import React, {
   createContext,
   useContext,

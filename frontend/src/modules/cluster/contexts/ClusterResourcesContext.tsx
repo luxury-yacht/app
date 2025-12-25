@@ -1,12 +1,13 @@
-/* ClusterResourcesContext.tsx
+/**
+ * frontend/src/modules/cluster/contexts/ClusterResourcesContext.tsx
  *
  * Context provider for cluster resources data and state management.
- * Handles loading, refreshing, and permission checks for cluster resources.
- * Utilizes the refresh orchestrator to manage data fetching and state updates.
- * Exposes hooks for components to consume cluster resource data and state.
- * Manages the active resource type for view switching and refresh scheduling.
- * Cleans up and resets state on kubeconfig changes.
- * Ensures proper permission handling for each resource domain.
+ * - Handles loading, refreshing, and permission checks for cluster resources.
+ * - Utilizes the refresh orchestrator to manage data fetching and state updates.
+ * - Exposes hooks for components to consume cluster resource data and state.
+ * - Manages the active resource type for view switching and refresh scheduling.
+ * - Cleans up and resets state on kubeconfig changes.
+ * - Ensures proper permission handling for each resource domain.
  */
 
 import React, {

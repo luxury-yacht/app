@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelActions.ts
+ *
+ * Hook for useObjectPanelActions.
+ */
 import { useCallback, type Dispatch } from 'react';
 
 import * as app from '@wailsjs/go/backend/App';

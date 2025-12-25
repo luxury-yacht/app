@@ -1,4 +1,5 @@
-/* NsViewHelm.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewHelm.tsx
  *
  * GridTable view for namespace Helm releases.
  */

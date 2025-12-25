@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/NodeOverview.test.tsx
+ *
+ * Tests for NodeOverview.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

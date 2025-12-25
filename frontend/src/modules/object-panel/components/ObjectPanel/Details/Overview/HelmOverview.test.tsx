@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/HelmOverview.test.tsx
+ *
+ * Tests for HelmOverview.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

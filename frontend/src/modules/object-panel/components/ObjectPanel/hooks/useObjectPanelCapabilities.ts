@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities.ts
+ *
+ * Hook for useObjectPanelCapabilities.
+ */
 import { useCallback, useMemo } from 'react';
 
 import { useCapabilities, useUserPermission, type CapabilityDescriptor } from '@/core/capabilities';

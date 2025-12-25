@@ -1,4 +1,5 @@
-/* NsViewObjects.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewObjects.tsx
  *
  * Namespace-scoped catalog view that mirrors the Browse grid while pinning a single namespace.
  * Uses manual, snapshot-driven refreshes to keep the table stable during catalog updates.

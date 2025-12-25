@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PolicyOverview.test.tsx
+ *
+ * Tests for PolicyOverview.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

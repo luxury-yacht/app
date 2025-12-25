@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx
+ *
+ * Module source for LogViewer.
+ */
 import React, { useReducer, useEffect, useRef, useMemo, useCallback } from 'react';
 import { GetPodContainers, LogFetcher } from '@wailsjs/go/backend/App';
 import GridTable, {

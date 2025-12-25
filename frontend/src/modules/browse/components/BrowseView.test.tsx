@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/browse/components/BrowseView.test.tsx
+ *
+ * Tests for BrowseView.
+ */
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

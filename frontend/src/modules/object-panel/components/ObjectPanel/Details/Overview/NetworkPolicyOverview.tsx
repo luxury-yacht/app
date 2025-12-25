@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/NetworkPolicyOverview.tsx
+ *
+ * Module source for NetworkPolicyOverview.
+ */
 import React from 'react';
 import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';

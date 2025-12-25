@@ -1,4 +1,5 @@
-/* ClusterViewNodes.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterViewNodes.tsx
  *
  * GridTable view for cluster Nodes.
  */

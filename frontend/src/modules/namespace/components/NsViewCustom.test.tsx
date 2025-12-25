@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/namespace/components/NsViewCustom.test.tsx
+ *
+ * Tests for NsViewCustom.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

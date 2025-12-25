@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.tsx
+ *
+ * Module source for ManifestTab.
+ */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CodeMirror, { type ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { yaml as yamlLang } from '@codemirror/lang-yaml';

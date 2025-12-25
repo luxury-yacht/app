@@ -1,4 +1,5 @@
-/* ClusterResourcesViews.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterResourcesViews.tsx
  *
  * Component to display various cluster resource views based on the active tab.
  * Each view handles its own data, loading state, and error handling.

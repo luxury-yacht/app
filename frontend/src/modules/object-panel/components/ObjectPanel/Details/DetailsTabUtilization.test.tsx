@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization.test.tsx
+ *
+ * Tests for DetailsTabUtilization.
+ */
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, vi } from 'vitest';

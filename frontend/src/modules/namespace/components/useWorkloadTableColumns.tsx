@@ -1,3 +1,9 @@
+/**
+ * frontend/src/modules/namespace/components/useWorkloadTableColumns.tsx
+ *
+ * Hook for useWorkloadTableColumns.
+ * Provides column definitions for the Workloads GridTable.
+ */
 import { useMemo } from 'react';
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';

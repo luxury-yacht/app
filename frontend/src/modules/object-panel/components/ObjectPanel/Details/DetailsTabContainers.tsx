@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabContainers.tsx
+ *
+ * Module source for DetailsTabContainers.
+ */
 import React from 'react';
 import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import '../shared.css';

@@ -1,5 +1,5 @@
 /**
- * LogViewer State Management
+ * frontend/src/modules/object-panel/components/ObjectPanel/Logs/logViewerReducer.ts
  *
  * Consolidates the multiple useState calls in LogViewer into a single reducer
  * for better state management and reduced complexity.

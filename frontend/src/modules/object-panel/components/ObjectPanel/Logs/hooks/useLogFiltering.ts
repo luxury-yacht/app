@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogFiltering.ts
+ *
+ * Hook for useLogFiltering.
+ */
 import { useMemo } from 'react';
 import type { ObjectLogEntry } from '@/core/refresh/types';
 import type { ParsedLogEntry } from '../logViewerReducer';

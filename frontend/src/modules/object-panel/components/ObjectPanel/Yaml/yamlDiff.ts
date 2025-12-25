@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlDiff.ts
+ *
+ * Module source for yamlDiff.
+ */
 export type DiffLineType = 'context' | 'added' | 'removed';
 
 export interface DiffLine {

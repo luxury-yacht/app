@@ -1,4 +1,5 @@
-/* ClusterViewCRDs.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterViewCRDs.tsx
  *
  * GridTable view for cluster Custom Resource Definitions (CRDs).
  */

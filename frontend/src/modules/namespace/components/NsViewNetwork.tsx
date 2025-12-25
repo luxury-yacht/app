@@ -1,4 +1,5 @@
-/* NsViewNetwork.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewNetwork.tsx
  *
  * GridTable view for namespace network resources.
  */

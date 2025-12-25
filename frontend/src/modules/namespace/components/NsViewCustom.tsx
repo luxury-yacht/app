@@ -1,4 +1,5 @@
-/* NsViewCustom.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewCustom.tsx
  *
  * GridTable view for namespace custom resources.
  */

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.test.tsx
+ *
+ * Tests for useObjectPanelRefresh.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

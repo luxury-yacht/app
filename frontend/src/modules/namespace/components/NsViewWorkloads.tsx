@@ -1,4 +1,5 @@
-/* NsViewWorkloads.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewWorkloads.tsx
  *
  * GridTable view for namespace workloads.
  */

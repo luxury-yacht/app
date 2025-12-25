@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/namespace/components/NsResourcesViews.test.tsx
+ *
+ * Tests for NsResourcesViews.
+ */
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

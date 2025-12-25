@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PodOverview.tsx
+ *
+ * Module source for PodOverview.
+ */
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';

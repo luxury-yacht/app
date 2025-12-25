@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/useOverviewData.ts
+ *
+ * Hook for useOverviewData.
+ */
 import { useMemo } from 'react';
 import type { types } from '@wailsjs/go/models';
 

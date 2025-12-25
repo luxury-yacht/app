@@ -1,3 +1,10 @@
+/**
+ * frontend/src/hooks/useTableSort.ts
+ *
+ * Hook for useTableSort.
+ * Provides sorting functionality for tables, including special handling for age and timestamp columns.
+ * Supports both controlled and uncontrolled sorting states.
+ */
 import { useState, useMemo } from 'react';
 
 export type SortDirection = 'asc' | 'desc' | null;

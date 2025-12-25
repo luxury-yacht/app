@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/EndpointsOverview.tsx
+ *
+ * Module source for EndpointsOverview.
+ */
 import React, { useCallback } from 'react';
 import { types } from '@wailsjs/go/models';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';

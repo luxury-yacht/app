@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogKeyboardShortcuts.ts
+ *
+ * Hook for useLogKeyboardShortcuts.
+ */
 import { useCallback, type RefObject } from 'react';
 import { useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import type { LogViewerAction } from '../logViewerReducer';

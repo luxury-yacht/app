@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabDataErrorBoundary.tsx
+ *
+ * Module source for DetailsTabDataErrorBoundary.
+ */
 import { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {

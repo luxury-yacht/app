@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.tsx
+ *
+ * Module source for DetailsTabData.
+ */
 import React, { useState, useMemo, useEffect } from 'react';
 import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import DetailsTabDataErrorBoundary from './DetailsTabDataErrorBoundary';

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport.ts
+ *
+ * Hook for useObjectPanelFeatureSupport.
+ */
 import { useMemo } from 'react';
 
 import type { FeatureSupport, ResourceCapability } from '../types';

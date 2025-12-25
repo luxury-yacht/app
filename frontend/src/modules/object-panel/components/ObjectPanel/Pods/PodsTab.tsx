@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Pods/PodsTab.tsx
+ *
+ * Module source for PodsTab.
+ */
 import React, { useCallback, useMemo } from 'react';
 import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,

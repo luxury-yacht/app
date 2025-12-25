@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.ts
+ *
+ * Hook for useObjectPanelRefresh.
+ */
 import { useCallback, useEffect, useMemo } from 'react';
 
 import { refreshManager, refreshOrchestrator } from '@/core/refresh';

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs.ts
+ *
+ * Hook for useObjectPanelTabs.
+ */
 import { useEffect, useMemo } from 'react';
 
 import { useShortcut } from '@ui/shortcuts';

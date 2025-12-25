@@ -1,4 +1,5 @@
-/* ClusterResourcesManager.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterResourcesManager.tsx
  *
  * Manages the loading and error handling of various cluster resources and passes them to ClusterResourcesViews.
  * Handles permission checks and manual loading of resources.

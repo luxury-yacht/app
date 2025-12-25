@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/namespace/contexts/NsResourcesContext.tsx
+ *
+ * Context and provider for NsResourcesContext.
+ */
 import React, {
   createContext,
   useContext,

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/namespace/components/NsViewWorkloads.helpers.ts
+ *
+ * Module source for NsViewWorkloads.helpers.
+ */
 export interface WorkloadData {
   kind: string;
   kindAlias?: string;

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/constants.test.ts
+ *
+ * Tests for constants.
+ */
 import { describe, expect, it } from 'vitest';
 
 import {

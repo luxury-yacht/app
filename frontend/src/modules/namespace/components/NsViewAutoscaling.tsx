@@ -1,4 +1,5 @@
-/* NsViewAutoscaling.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewAutoscaling.tsx
  *
  * GridTable view for namespace autoscaling resources.
  */

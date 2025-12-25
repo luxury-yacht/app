@@ -1,4 +1,5 @@
-/* NsViewStorage.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewStorage.tsx
  *
  * GridTable view for namespace storage resources.
  */

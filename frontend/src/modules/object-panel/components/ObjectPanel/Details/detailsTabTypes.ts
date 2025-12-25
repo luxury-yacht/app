@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/detailsTabTypes.ts
+ *
+ * Type definitions for detailsTabTypes.
+ */
 import { types } from '@wailsjs/go/models';
 import type { KubernetesObjectReference } from '@/types/view-state';
 

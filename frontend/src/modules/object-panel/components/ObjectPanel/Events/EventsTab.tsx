@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx
+ *
+ * Module source for EventsTab.
+ */
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
 import GridTable, {
   type GridColumnDefinition,

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/hooks/useTableSort.test.tsx
+ *
+ * Tests for useTableSort.
+ */
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';

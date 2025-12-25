@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlValidation.ts
+ *
+ * Module source for yamlValidation.
+ */
 import * as YAML from 'yaml';
 
 export interface ObjectIdentity {

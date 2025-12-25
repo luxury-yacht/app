@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/namespace/contexts/NamespaceContext.tsx
+ *
+ * Context and provider for NamespaceContext.
+ */
 import React, {
   createContext,
   useContext,

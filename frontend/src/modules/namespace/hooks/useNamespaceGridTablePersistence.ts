@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/namespace/hooks/useNamespaceGridTablePersistence.ts
+ *
+ * Hook for useNamespaceGridTablePersistence.
+ */
 import { useMemo, useState } from 'react';
 import type {
   ColumnWidthState,

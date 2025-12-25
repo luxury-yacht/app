@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/index.tsx
+ *
+ * Exports for Overview.
+ */
 import React from 'react';
 import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import { overviewRegistry, getResourceCapabilities } from './registry';

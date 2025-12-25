@@ -1,5 +1,5 @@
 /**
- * Component Registry for Overview Components
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/registry.ts
  * Implements factory pattern to replace giant switch statement
  */
 

@@ -1,4 +1,5 @@
-/* ClusterViewRBAC.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterViewRBAC.tsx
  *
  * GridTable view for cluster RBAC resources such as ClusterRoles and ClusterRoleBindings.
  */

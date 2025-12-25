@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/HelmOverview.tsx
+ *
+ * Module source for HelmOverview.
+ */
 import React from 'react';
 import { types } from '@wailsjs/go/models';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';

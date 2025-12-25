@@ -1,4 +1,5 @@
-/* ClusterViewCustom.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterViewCustom.tsx
  *
  * GridTable view for cluster custom resources.
  */

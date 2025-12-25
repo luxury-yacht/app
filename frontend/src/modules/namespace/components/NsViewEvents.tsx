@@ -1,4 +1,5 @@
-/* NsViewEvents.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewEvents.tsx
  *
  * GridTable view for namespace Events.
  */

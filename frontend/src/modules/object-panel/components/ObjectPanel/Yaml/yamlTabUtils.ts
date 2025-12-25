@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTabUtils.ts
+ *
+ * Module source for yamlTabUtils.
+ */
 import * as YAML from 'yaml';
 import { ValidateObjectYaml, ApplyObjectYaml } from '@wailsjs/go/backend/App';
 import type { ObjectIdentity } from './yamlValidation';

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/cluster/components/ClusterViewEvents.test.tsx
+ *
+ * Tests for ClusterViewEvents.
+ */
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

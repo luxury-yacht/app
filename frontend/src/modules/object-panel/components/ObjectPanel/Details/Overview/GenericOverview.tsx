@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/GenericOverview.tsx
+ *
+ * Module source for GenericOverview.
+ */
 import React from 'react';
 import { OverviewItem } from './shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';

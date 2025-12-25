@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/registry.test.tsx
+ *
+ * Tests for registry.
+ */
 import React from 'react';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 

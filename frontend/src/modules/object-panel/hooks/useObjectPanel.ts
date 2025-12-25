@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/hooks/useObjectPanel.ts
+ *
+ * Hook for useObjectPanel.
+ */
 import { useCallback, useEffect, useRef } from 'react';
 import { useDockablePanelState } from '@components/dockable';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';

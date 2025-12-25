@@ -1,4 +1,5 @@
-/* ClusterViewStorage.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterViewStorage.tsx
  *
  * GridTable view for cluster storage resources such as Persistent Volumes.
  */

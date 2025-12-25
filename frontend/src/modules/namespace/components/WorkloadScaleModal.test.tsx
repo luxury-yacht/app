@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/namespace/components/WorkloadScaleModal.test.tsx
+ *
+ * Tests for WorkloadScaleModal.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

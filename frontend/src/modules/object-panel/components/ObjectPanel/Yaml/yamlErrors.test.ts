@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlErrors.test.ts
+ *
+ * Tests for yamlErrors.
+ */
 import { describe, it, expect } from 'vitest';
 import {
   OBJECT_YAML_ERROR_PREFIX,

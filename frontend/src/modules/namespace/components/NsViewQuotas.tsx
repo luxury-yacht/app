@@ -1,4 +1,5 @@
-/* NsViewQuotas.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewQuotas.tsx
  *
  * GridTable view for namespace quota resources.
  */

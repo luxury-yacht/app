@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelTabs.tsx
+ *
+ * Module source for ObjectPanelTabs.
+ */
 import type { ViewType } from '@modules/object-panel/components/ObjectPanel/types';
 
 type ObjectPanelTabDefinition = {

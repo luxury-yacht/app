@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/constants.ts
+ *
+ * Module source for constants.
+ */
 import type { ResourceCapability } from './types';
 import type { ObjectDetailsRefresherName } from '@/core/refresh/refresherTypes';
 

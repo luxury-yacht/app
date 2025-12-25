@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/namespace/contexts/__tests__/NsResourcesContext.test.tsx
+ *
+ * Tests for NsResourcesContext.
+ */
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

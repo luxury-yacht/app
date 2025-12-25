@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab.tsx
+ *
+ * Module source for NodeMaintenanceTab.
+ */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CordonNode, DrainNode, DeleteNode, UncordonNode } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';

@@ -1,4 +1,5 @@
-/* BrowseView.tsx
+/**
+ * frontend/src/modules/browse/components/BrowseView.tsx
  *
  * Stable, snapshot-driven Browse view for the object catalog.
  *

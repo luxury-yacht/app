@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/namespace/components/NsViewWorkloads.test.tsx
+ *
+ * Tests for NsViewWorkloads.
+ */
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

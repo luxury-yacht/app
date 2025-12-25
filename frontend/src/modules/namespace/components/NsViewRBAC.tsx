@@ -1,4 +1,5 @@
-/* NsViewRBAC.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewRBAC.tsx
  *
  * GridTable view for namespace RBAC resources.
  */

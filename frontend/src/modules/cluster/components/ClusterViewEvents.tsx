@@ -1,4 +1,5 @@
-/* ClusterViewEvents.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterViewEvents.tsx
  *
  * GridTable view for cluster Events.
  */

@@ -1,4 +1,5 @@
-/* NsViewPods.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewPods.tsx
  *
  * GridTable view for namespace Pods.
  */

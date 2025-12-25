@@ -1,6 +1,8 @@
 /**
- * useResourceData - Resource hook with backend versioning support
- * Tracks versions to avoid fetching unchanged data, reducing bandwidth by 60-70%
+ * frontend/src/hooks/resources/useResourceData.ts
+ *
+ * Tracks versions to avoid fetching unchanged data, reducing bandwidth for large clusters.
+ * Provides loading, refreshing, error handling, and cancellation functionalities for Kubernetes resource data.
  */
 
 export interface ResourceDataReturn<T> {

@@ -1,4 +1,5 @@
-/* NsViewConfig.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewConfig.tsx
  *
  * GridTable view for namespace configuration resources.
  */

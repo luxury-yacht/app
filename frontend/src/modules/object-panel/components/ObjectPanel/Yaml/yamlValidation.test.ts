@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlValidation.test.ts
+ *
+ * Tests for yamlValidation.
+ */
 import { describe, it, expect } from 'vitest';
 import { validateYamlDraft, parseObjectIdentity, type ObjectIdentity } from './yamlValidation';
 

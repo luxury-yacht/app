@@ -1,3 +1,8 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.tsx
+ *
+ * Module source for ObjectPanelContent.
+ */
 import { useMemo } from 'react';
 import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
