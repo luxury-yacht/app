@@ -2,6 +2,10 @@
  * frontend/src/modules/namespace/contexts/NsResourcesContext.tsx
  *
  * Context and provider for NsResourcesContext.
+ * - Manages the state and operations related to namespace-specific resources.
+ * - Provides functionality to load, refresh, and reset resources per namespace.
+ * - Integrates with the refresh orchestrator and capability evaluation system.
+ * - Exposes a custom hook `useNamespaceResources` for easy access to the context.
  */
 import React, {
   createContext,

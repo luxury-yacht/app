@@ -2,6 +2,10 @@
  * frontend/src/modules/namespace/contexts/NamespaceContext.tsx
  *
  * Context and provider for NamespaceContext.
+ * - Manages the state and operations related to Kubernetes namespaces.
+ * - Provides functionality to load, refresh, and select namespaces.
+ * - Includes error handling and integration with the refresh orchestrator.
+ * - Exposes a custom hook `useNamespace` for easy access to the context.
  */
 import React, {
   createContext,

@@ -12,7 +12,7 @@ import Overview from './index';
 const setSectionExpandedMock = vi.fn();
 const useDetailsSectionContextMock = vi.fn();
 
-vi.mock('@contexts/DetailsSectionContext', () => ({
+vi.mock('@/core/contexts/ObjectPanelDetailsSectionContext', () => ({
   useDetailsSectionContext: (...args: unknown[]) => useDetailsSectionContextMock(...args),
 }));
 

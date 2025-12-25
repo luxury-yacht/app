@@ -2,6 +2,11 @@
  * frontend/src/modules/namespace/hooks/useNamespaceGridTablePersistence.ts
  *
  * Hook for useNamespaceGridTablePersistence.
+ * - Manages grid table state persistence for namespace-specific data views.
+ * - Integrates with kubeconfig and namespace context to scope data appropriately.
+ * - Provides sorting, filtering, column width, and visibility state management.
+ * - Exposes a reset function to clear persisted state.
+ * - Utilizes useGridTablePersistence for core persistence logic.
  */
 import { useMemo, useState } from 'react';
 import type {

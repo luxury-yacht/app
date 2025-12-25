@@ -2,6 +2,7 @@
  * frontend/src/modules/namespace/constants.ts
  *
  * Module source for constants.
+ * Defines constants related to Kubernetes namespaces.
  */
 export const ALL_NAMESPACES_SCOPE = 'namespace:all';
 export const ALL_NAMESPACES_DISPLAY_NAME = 'All Namespaces';
