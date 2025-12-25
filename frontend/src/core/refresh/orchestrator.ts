@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/orchestrator.ts
+ *
+ * Refresh orchestrator for domain updates and streaming.
+ */
 import {
   ensureRefreshBaseURL,
   fetchSnapshot,

@@ -1,3 +1,9 @@
+/**
+ * frontend/src/core/codemirror/search.ts
+ *
+ * CodeMirror search extensions with customized search and replace panel layout
+ */
+
 import { keymap, EditorView } from '@codemirror/view';
 import type { KeyBinding } from '@codemirror/view';
 import {
@@ -13,15 +19,11 @@ import {
 import type { Extension } from '@codemirror/state';
 
 export interface SearchExtensionOptions {
-  /**
-   * When true, show the search panel at the top of the editor.
-   * Defaults to true to match our existing layout.
-   */
+  // When true, show the search panel at the top of the editor.
+  // Defaults to true to match our existing layout.
   top?: boolean;
-  /**
-   * When true, include the custom search keymap bindings (Mod+F, Mod+Alt+F).
-   * Disable when the host component provides its own shortcuts.
-   */
+  // When true, include the custom search keymap bindings (Mod+F, Mod+Alt+F).
+  // Disable when the host component provides its own shortcuts.
   enableKeymap?: boolean;
 }
 

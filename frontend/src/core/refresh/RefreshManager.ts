@@ -1,8 +1,15 @@
 /**
- * RefreshManager - Centralized refresh management system
+ * frontend/src/core/refresh/RefreshManager.ts
  *
  * Manages multiple Refresher instances with context-aware refreshing,
  * cooldown periods, timeout handling, and manual refresh triggers.
+ * - Provides subscription mechanism for components to react to refresh events.
+ * - Integrates with event bus for app-wide refresh state notifications.
+ * - Defines refresher configurations and maps them to application views.
+ * - Handles aborting in-progress refreshes on context changes.
+ * - Supports pausing and resuming refreshers individually or globally.
+ * - Implements exponential backoff for error handling during refreshes.
+ * - Exports a singleton instance for use throughout the application.
  */
 
 export interface Refresher {

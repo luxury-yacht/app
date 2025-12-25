@@ -1,5 +1,12 @@
-// Centralized event bus for type-safe inter-component communication.
-// Replaces scattered window.dispatchEvent/addEventListener calls.
+/**
+ * frontend/src/core/events/eventBus.ts
+ *
+ * Centralized event bus for type-safe inter-component communication.
+ * Replaces scattered window.dispatchEvent/addEventListener calls.
+ * Defines all app events and their payloads in one place.
+ * Provides emit, on, once, and off methods for event management.
+ * Includes error handling in event callbacks to prevent crashes.
+ */
 
 import type { RefresherState } from '@/core/refresh/RefreshManager';
 

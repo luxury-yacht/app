@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/components/diagnostics/diagnosticsPanelUtils.ts
+ *
+ * Helpers for formatting diagnostics panel data.
+ */
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import type { RefreshDomain } from '../../types';
 

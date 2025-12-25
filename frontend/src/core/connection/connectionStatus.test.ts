@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/connection/connectionStatus.test.ts
+ *
+ * Tests for connection status context helpers.
+ */
 import { describe, it, expect } from 'vitest';
 import {
   getDefaultConnectionStatus,

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/store.test.ts
+ *
+ * Tests for refresh store state updates.
+ */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {

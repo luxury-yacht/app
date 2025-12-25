@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/client.test.ts
+ *
+ * Tests for refresh client behavior.
+ */
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mockGetBaseURL = vi.fn();

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/components/RefreshDiagnosticsPanel.tsx
+ *
+ * Dockable diagnostics panel for refresh and capability state.
+ */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './RefreshDiagnosticsPanel.css';
 import { DockablePanel } from '@components/dockable';

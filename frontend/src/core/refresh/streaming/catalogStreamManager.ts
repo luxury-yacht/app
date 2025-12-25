@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/streaming/catalogStreamManager.ts
+ *
+ * Catalog SSE manager for browse snapshots.
+ */
 import { ensureRefreshBaseURL } from '../client';
 import { resetDomainState, setDomainState } from '../store';
 import type { CatalogStreamEventPayload } from '../types';

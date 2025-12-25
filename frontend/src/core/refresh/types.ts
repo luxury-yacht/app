@@ -1,3 +1,15 @@
+/**
+ * frontend/src/core/refresh/types.ts
+ *
+ * Shared refresh domain and payload type definitions.
+ * Used by RefreshManager, RefreshManagerContext, and various components.
+ * - Defines the structure of payloads for different refresh domains.
+ * - Facilitates type-safe handling of refresh data across the app.
+ * - Provides a clear contract for what data is expected in each refresh scenario.
+ * - Enables easier maintenance and extension of refresh-related features.
+ * - Helps ensure consistency between backend data structures and frontend usage.
+ * - Supports telemetry and monitoring of refresh operations by defining standard payloads.
+ */
 import { types } from '@wailsjs/go/models';
 import type { SnapshotStats } from './client';
 

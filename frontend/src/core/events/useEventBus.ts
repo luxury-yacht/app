@@ -1,4 +1,9 @@
-// React hook for subscribing to event bus events with automatic cleanup.
+/**
+ * frontend/src/core/events/useEventBus.ts
+ *
+ * React hook for subscribing to event bus events with automatic cleanup.
+ * Simplifies event subscription in functional components.
+ */
 
 import { useEffect } from 'react';
 import { eventBus, type AppEvents } from './eventBus';

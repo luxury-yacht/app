@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/fallbacks/objectLogFallbackManager.ts
+ *
+ * Fallback manager for object log refresh requests.
+ */
 import { refreshManager } from '../RefreshManager';
 import { SYSTEM_REFRESHERS } from '../refresherTypes';
 import { eventBus } from '@/core/events';

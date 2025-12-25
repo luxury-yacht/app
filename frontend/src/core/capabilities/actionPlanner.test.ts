@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/capabilities/actionPlanner.test.ts
+ *
+ * Tests for namespace capability planning and registration.
+ */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./bootstrap', async () => {

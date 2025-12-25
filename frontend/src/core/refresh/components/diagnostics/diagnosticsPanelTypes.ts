@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/components/diagnostics/diagnosticsPanelTypes.ts
+ *
+ * Types for diagnostics panel data and rows.
+ */
 import type { RefreshDomain } from '../../types';
 import type { DomainStatus } from '../../store';
 

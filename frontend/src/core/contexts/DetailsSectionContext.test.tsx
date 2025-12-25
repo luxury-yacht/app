@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/contexts/DetailsSectionContext.test.tsx
+ *
+ * Tests for details section context state.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
@@ -7,7 +12,7 @@ import {
   DetailsSectionProvider,
   useDetailsSectionContext,
   type DetailsSectionState,
-} from './DetailsSectionContext';
+} from './ObjectPanelDetailsSectionContext';
 
 const renderWithProvider = async (component: React.ReactElement) => {
   const container = document.createElement('div');

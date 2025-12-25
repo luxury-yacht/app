@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/index.ts
+ *
+ * Public exports for refresh orchestrator modules.
+ */
 // Core exports
 export { refreshManager } from './RefreshManager';
 export { refreshOrchestrator } from './orchestrator';

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/index.test.ts
+ *
+ * Tests for refresh module exports.
+ */
 import { describe, expect, it } from 'vitest';
 
 import {

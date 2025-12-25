@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/streaming/logStreamManager.test.ts
+ *
+ * Tests for log stream manager.
+ */
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('@wailsjs/go/backend/App', () => ({

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/codemirror/search.test.ts
+ *
+ * Tests for CodeMirror search extensions.
+ */
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 
 const viewMocks = vi.hoisted(() => ({

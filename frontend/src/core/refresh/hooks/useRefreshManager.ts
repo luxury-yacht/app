@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/hooks/useRefreshManager.ts
+ *
+ * Hook wrapper for refresh manager actions.
+ */
 import { useCallback } from 'react';
 import { useRefreshManagerContext } from '../contexts/RefreshManagerContext';
 import type { RefreshContext, Refresher, RefresherState } from '../RefreshManager';

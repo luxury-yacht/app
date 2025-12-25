@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/hooks/useRefreshHooks.test.tsx
+ *
+ * Tests for refresh hook utilities.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

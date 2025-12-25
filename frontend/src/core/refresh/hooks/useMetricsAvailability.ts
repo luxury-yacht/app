@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/hooks/useMetricsAvailability.ts
+ *
+ * Hook to ensure cluster overview metrics are available.
+ */
 import { useEffect } from 'react';
 import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
 import type { ClusterOverviewMetrics } from '@/core/refresh/types';

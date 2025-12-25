@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts
+ *
+ * Configuration for diagnostics panel sections and mappings.
+ */
 import type { RefreshDomain } from '../../types';
 import {
   CLUSTER_REFRESHERS,

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/capabilities/index.test.ts
+ *
+ * Tests for capabilities module exports.
+ */
 import { describe, expect, it } from 'vitest';
 
 import {

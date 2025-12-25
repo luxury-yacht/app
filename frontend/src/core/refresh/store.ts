@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/store.ts
+ *
+ * Refresh snapshot state store and selectors.
+ */
 import { useSyncExternalStore } from 'react';
 
 import type { DomainPayloadMap, RefreshDomain } from './types';

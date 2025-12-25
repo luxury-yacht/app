@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/connection/connectionStatus.tsx
+ *
+ * Connection status context and hooks for managing and accessing
+ * the application's connection state.
+ */
+
 import { createContext, useContext, useMemo, useState, ReactNode } from 'react';
 
 export type ConnectionState = 'healthy' | 'retrying' | 'offline' | 'auth_failed' | 'rebuilding';

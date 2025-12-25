@@ -1,7 +1,7 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect } from 'vitest';
-import { DetailsSectionProvider } from '@core/contexts/DetailsSectionContext';
+import { DetailsSectionProvider } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import Containers from './DetailsTabContainers';
 
 describe('DetailsTabContainers', () => {

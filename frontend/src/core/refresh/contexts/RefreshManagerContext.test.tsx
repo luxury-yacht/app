@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/contexts/RefreshManagerContext.test.tsx
+ *
+ * Tests for refresh manager context behavior.
+ */
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

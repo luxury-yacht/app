@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/RefreshManager.test.ts
+ *
+ * Tests for RefreshManager scheduling and state.
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { refreshManager } from '@/core/refresh';

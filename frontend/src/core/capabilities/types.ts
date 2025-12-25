@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/capabilities/types.ts
+ *
+ * Capability type definitions for descriptors, entries, and results.
+ */
 export type CapabilityStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 /**

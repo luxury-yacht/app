@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/capabilities/bootstrap.test.ts
+ *
+ * Tests for permissions bootstrap helpers and subscriptions.
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CapabilityEntry, NormalizedCapabilityDescriptor } from './types';

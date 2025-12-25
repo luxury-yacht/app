@@ -1,3 +1,11 @@
+/**
+ * frontend/src/core/capabilities/catalog.ts
+ *
+ * Namespace and cluster capability catalog definitions.
+ * Provides predefined capability definitions for cluster-scoped
+ * capabilities used throughout the application.
+ */
+
 import type { CapabilityDescriptor } from './types';
 
 export type CapabilityScope = 'cluster' | 'namespace' | 'object';

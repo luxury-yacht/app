@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDetailsSectionContext } from '@contexts/DetailsSectionContext';
+import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import '../shared.css';
 import './DetailsTabContainers.css';
 

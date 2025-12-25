@@ -1,3 +1,9 @@
+/**
+ * frontend/src/core/contexts/KubernetesProvider.tsx
+ *
+ * Composite provider for Kubernetes-related contexts.
+ * Replaces the monolithic KubernetesDataContext with smaller, focused contexts.
+ */
 import React, { ReactNode } from 'react';
 import { KubeconfigProvider } from '@modules/kubernetes/config/KubeconfigContext';
 import { NamespaceProvider } from '@modules/namespace/contexts/NamespaceContext';

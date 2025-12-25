@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/client.ts
+ *
+ * Refresh client helpers for snapshot fetches and telemetry.
+ */
 import { GetRefreshBaseURL } from '@wailsjs/go/backend/App';
 
 import type { TelemetrySummary } from './types';

@@ -1,7 +1,7 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DetailsSectionProvider } from '@core/contexts/DetailsSectionContext';
+import { DetailsSectionProvider } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import DataSection from './DetailsTabData';
 
 vi.mock('@ui/shortcuts', () => ({

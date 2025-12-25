@@ -1,5 +1,5 @@
 import React from 'react';
-import { useDetailsSectionContext } from '@contexts/DetailsSectionContext';
+import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import { overviewRegistry, getResourceCapabilities } from './registry';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
 import '../../shared.css';

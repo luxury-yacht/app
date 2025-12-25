@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/components/diagnostics/PermissionsTable.tsx
+ *
+ * Diagnostics table for permission status entries.
+ */
 import React from 'react';
 import type { PermissionRow } from './diagnosticsPanelTypes';
 

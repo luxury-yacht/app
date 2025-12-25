@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/components/DiagnosticsPanel.test.ts
+ *
+ * Tests for refresh diagnostics panel behavior.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

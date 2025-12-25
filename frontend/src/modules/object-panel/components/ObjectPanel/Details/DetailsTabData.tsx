@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useDetailsSectionContext } from '@contexts/DetailsSectionContext';
+import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import DetailsTabDataErrorBoundary from './DetailsTabDataErrorBoundary';
 import { useShortcut } from '@ui/shortcuts';
 import '../shared.css';

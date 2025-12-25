@@ -1,3 +1,11 @@
+/**
+ * frontend/src/core/capabilities/hooks.ts
+ *
+ * Hooks for evaluating and accessing capability states.
+ * Provides the `useCapabilities` hook for synchronizing capability states
+ * and the `useCapabilityDiagnostics` hook for accessing diagnostics information.
+ */
+
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 
 import type {

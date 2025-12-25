@@ -1,3 +1,9 @@
+/**
+ * frontend/src/core/codemirror/theme.ts
+ *
+ * CodeMirror editor theme and syntax highlighting styles
+ */
+
 import { EditorView } from '@codemirror/view';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import type { Extension } from '@codemirror/state';

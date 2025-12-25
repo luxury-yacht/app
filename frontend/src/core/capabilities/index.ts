@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/capabilities/index.ts
+ *
+ * Exports for capability management including hooks, bootstrap, action planner,
+ * catalog definitions, and store functions.
+ */
+
 export type {
   CapabilityStatus,
   CapabilityDescriptor,

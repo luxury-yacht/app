@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/components/diagnostics/DiagnosticsSummaryCards.tsx
+ *
+ * Summary cards for diagnostics status and telemetry.
+ */
 import React from 'react';
 import type { SummaryCardData } from './diagnosticsPanelTypes';
 

@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/capabilities/hooks.test.tsx
+ *
+ * Tests for capability hooks and permission lookups.
+ */
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

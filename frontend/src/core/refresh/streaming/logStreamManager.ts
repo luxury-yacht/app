@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/streaming/logStreamManager.ts
+ *
+ * Log stream manager for object log streaming.
+ */
 import { ensureRefreshBaseURL } from '../client';
 import type { SnapshotStats } from '../client';
 import { resetScopedDomainState, setScopedDomainState } from '../store';

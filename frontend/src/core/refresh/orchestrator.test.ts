@@ -1,3 +1,8 @@
+/**
+ * frontend/src/core/refresh/orchestrator.test.ts
+ *
+ * Tests for refresh orchestrator behavior.
+ */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as storeModule from './store';
