@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
-
 import { getPodStatusSeverity } from '@/utils/podStatusSeverity';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { eventBus } from '@/core/events';

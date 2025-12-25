@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the shared components.
  */
 
-
 import React from 'react';
 import { LabelsAndAnnotations } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/LabelsAndAnnotations';
 

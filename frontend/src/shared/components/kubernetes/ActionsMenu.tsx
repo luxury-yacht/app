@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the shared components.
  */
 
-
 import React, { useState, useRef, useEffect } from 'react';
 import './ActionsMenu.css';
 

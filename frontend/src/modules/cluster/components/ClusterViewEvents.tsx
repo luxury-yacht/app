@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-
 import './ClusterViewEvents.css';
 import { formatAge } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';

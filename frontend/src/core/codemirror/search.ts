@@ -5,7 +5,6 @@
  * Implements search logic for the core layer.
  */
 
-
 import { keymap, EditorView } from '@codemirror/view';
 import type { KeyBinding } from '@codemirror/view';
 import {

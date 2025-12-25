@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
-
 import './NsViewEvents.css';
 import { formatAge } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';

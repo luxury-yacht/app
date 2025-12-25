@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the object panel feature.
  */
 
-
 import React from 'react';
 
 // Import all overview components from local directory

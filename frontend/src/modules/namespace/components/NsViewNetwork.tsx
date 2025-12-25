@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
-
 import './NsViewNetwork.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';

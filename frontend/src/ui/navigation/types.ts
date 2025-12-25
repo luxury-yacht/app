@@ -5,7 +5,6 @@
  * Defines shared interfaces and payload shapes for the UI layer.
  */
 
-
 /**
  * Tab types for namespace-scoped resources
  */

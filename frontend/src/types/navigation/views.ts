@@ -5,7 +5,6 @@
  * Defines shared interfaces and payload shapes for the frontend.
  */
 
-
 export type ViewType = 'namespace' | 'cluster' | 'overview' | 'settings' | 'about';
 
 export type NamespaceViewType =

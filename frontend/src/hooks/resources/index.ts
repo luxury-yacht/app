@@ -5,5 +5,4 @@
  * Re-exports public APIs for the hooks layer.
  */
 
-
 export * from './useResourceData';

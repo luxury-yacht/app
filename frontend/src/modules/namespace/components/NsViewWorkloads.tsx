@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
-
 import './NsViewWorkloads.css';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';

@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-
 import './ClusterViewNodes.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';

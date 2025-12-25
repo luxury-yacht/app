@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-
 import './ClusterViewCustom.css';
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';

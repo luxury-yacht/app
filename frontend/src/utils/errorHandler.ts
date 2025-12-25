@@ -5,7 +5,6 @@
  * Provides shared helper functions for the frontend.
  */
 
-
 export enum ErrorCategory {
   NETWORK = 'NETWORK',
   AUTHENTICATION = 'AUTHENTICATION',
