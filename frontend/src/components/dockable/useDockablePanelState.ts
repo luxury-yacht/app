@@ -1,3 +1,11 @@
+/**
+ * useDockablePanelState.ts
+ *
+ * Hook to manage the state of dockable panels, including position, size, open state, and z-index.
+ * Supports floating, right-docked, and bottom-docked positions with independent sizes.
+ * Handles initialization, state updates, and conflict resolution when docking panels.
+ */
+
 import { useState, useCallback, useEffect, useMemo } from 'react';
 
 export type DockPosition = 'right' | 'bottom' | 'floating';

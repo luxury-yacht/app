@@ -1,3 +1,11 @@
+/**
+ * DockablePanelProvider.tsx
+ *
+ * Context provider for managing dockable panels.
+ * Tracks docked panels, provides registration methods, and calculates adjusted dimensions.
+ * Manages the host DOM node for rendering floating panels.
+ */
+
 import React, { createContext, useContext, useState, useCallback, useLayoutEffect } from 'react';
 
 interface DockablePanelContextValue {

@@ -1,4 +1,11 @@
-import React, { useEffect, useRef, useState, useCallback, memo, useMemo } from 'react';
+/**
+ * DockablePanel.tsx
+ *
+ * A React component that renders a dockable/floatable panel.
+ * Handles dragging, resizing, docking, maximizing, and window bounds constraints.
+ */
+
+import React, { useEffect, useRef, useCallback, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   closeDockedPanels,
@@ -8,186 +15,15 @@ import {
   PanelCloseReason,
 } from './useDockablePanelState';
 import { useDockablePanelContext, useDockablePanelHost } from './DockablePanelProvider';
-import {
-  DockRightIcon,
-  DockBottomIcon,
-  FloatPanelIcon,
-  MaximizePanelIcon,
-  RestorePanelIcon,
-} from '@shared/components/icons/MenuIcons';
+import { DockablePanelControls } from './DockablePanelControls';
+import { DockablePanelHeader } from './DockablePanelHeader';
+import { useDockablePanelDragResize } from './useDockablePanelDragResize';
+import { useDockablePanelMaximize } from './useDockablePanelMaximize';
+import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
+import type { DockPosition } from './useDockablePanelState';
 import './DockablePanel.css';
 
-// Layout constants
-const LAYOUT = {
-  /** Minimum distance panels should maintain from window edges */
-  MIN_EDGE_DISTANCE: 50,
-  /** Margin to leave when constraining panel size to window */
-  WINDOW_MARGIN: 100,
-  /** Approximate width of the sidebar for layout calculations */
-  SIDEBAR_WIDTH: 250,
-  /** Space reserved for header and content when bottom-docked */
-  BOTTOM_RESERVED_HEIGHT: 150,
-  /** Height of the app header */
-  APP_HEADER_HEIGHT: 45,
-  /** Size of the resize detection zone on panel edges */
-  RESIZE_EDGE_SIZE: 8,
-  /** Size of the resize detection zone on top edge (smaller to avoid header conflict) */
-  RESIZE_TOP_EDGE_SIZE: 4,
-  /** Debounce delay for window resize handling */
-  RESIZE_DEBOUNCE_MS: 100,
-} as const;
-
-// Read the CSS token so drag/resizes match the actual header height.
-const getAppHeaderHeight = (): number => {
-  if (typeof document === 'undefined') {
-    return LAYOUT.APP_HEADER_HEIGHT;
-  }
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--app-header-height');
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : LAYOUT.APP_HEADER_HEIGHT;
-};
-
-/**
- * Hook to constrain panel size and position within window bounds.
- * Handles debouncing, dock positions, and respects user resize operations.
- */
-function useWindowBoundsConstraint(
-  panelState: ReturnType<typeof useDockablePanelState>,
-  options: {
-    minWidth: number;
-    minHeight: number;
-    isResizing: boolean;
-    isMaximized: boolean;
-  }
-) {
-  const { minWidth, minHeight, isResizing, isMaximized } = options;
-  const panelStateRef = useRef(panelState);
-
-  // We use a ref to hold the latest panel state so the resize handler
-  // can access it without needing to resubscribe on every state change.
-  useEffect(() => {
-    panelStateRef.current = panelState;
-  }, [panelState]);
-
-  useEffect(() => {
-    // If the panel is maximized, there's nothing to do.
-    if (isMaximized) {
-      return;
-    }
-
-    let resizeTimer: NodeJS.Timeout;
-
-    const handleWindowResize = () => {
-      // If the window object is not available, return early.
-      if (typeof window === 'undefined') {
-        return;
-      }
-
-      // Debounce resize handling so we don't thrash during rapid resizes.
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        // Get the latest panel state.
-        const currentPanelState = panelStateRef.current;
-
-        // Skip if panel is closed or user is actively resizing.
-        if (!currentPanelState.isOpen || isResizing) return;
-
-        const currentSize = currentPanelState.size;
-        const currentPosition = currentPanelState.floatingPosition;
-        let needsUpdate = false;
-        let newSize = { ...currentSize };
-        let newPosition = { ...currentPosition };
-
-        // If the panel is floating, constrain its size and position within window bounds.
-        if (currentPanelState.position === 'floating') {
-          const maxWidth = window.innerWidth - LAYOUT.WINDOW_MARGIN;
-          const maxHeight = window.innerHeight - LAYOUT.WINDOW_MARGIN;
-
-          // Constrain width.
-          if (currentSize.width > maxWidth) {
-            newSize.width = maxWidth;
-            needsUpdate = true;
-          }
-
-          // Constrain height.
-          if (currentSize.height > maxHeight) {
-            newSize.height = maxHeight;
-            needsUpdate = true;
-          }
-
-          // Constrain position.
-          const rightEdge = currentPosition.x + newSize.width;
-          const bottomEdge = currentPosition.y + newSize.height;
-
-          // Ensure panel stays within right edge.
-          if (rightEdge > window.innerWidth) {
-            newPosition.x = Math.max(
-              LAYOUT.MIN_EDGE_DISTANCE,
-              window.innerWidth - newSize.width - 20
-            );
-            needsUpdate = true;
-          }
-
-          // Ensure panel stays within bottom edge.
-          if (bottomEdge > window.innerHeight) {
-            newPosition.y = Math.max(
-              LAYOUT.MIN_EDGE_DISTANCE,
-              window.innerHeight - newSize.height - 20
-            );
-            needsUpdate = true;
-          }
-
-          // Ensure panel stays within left edge.
-          if (currentPosition.x < LAYOUT.MIN_EDGE_DISTANCE) {
-            newPosition.x = LAYOUT.MIN_EDGE_DISTANCE;
-            needsUpdate = true;
-          }
-
-          // Ensure panel stays within top edge.
-          if (currentPosition.y < LAYOUT.MIN_EDGE_DISTANCE) {
-            newPosition.y = LAYOUT.MIN_EDGE_DISTANCE;
-            needsUpdate = true;
-          }
-        } else if (currentPanelState.position === 'right') {
-          const maxWidth = window.innerWidth - LAYOUT.SIDEBAR_WIDTH;
-          if (currentSize.width > maxWidth) {
-            newSize.width = Math.max(minWidth, maxWidth);
-            needsUpdate = true;
-          }
-          // If the panel is docked to the bottom, constrain its height.
-        } else if (currentPanelState.position === 'bottom') {
-          const maxHeight = window.innerHeight - LAYOUT.BOTTOM_RESERVED_HEIGHT;
-          if (currentSize.height > maxHeight) {
-            newSize.height = maxHeight;
-            needsUpdate = true;
-          }
-        }
-
-        if (needsUpdate) {
-          if (newSize.width !== currentSize.width || newSize.height !== currentSize.height) {
-            currentPanelState.setSize(newSize);
-          }
-          if (
-            currentPanelState.position === 'floating' &&
-            (newPosition.x !== currentPosition.x || newPosition.y !== currentPosition.y)
-          ) {
-            currentPanelState.setFloatingPosition(newPosition);
-          }
-        }
-      }, LAYOUT.RESIZE_DEBOUNCE_MS);
-    };
-
-    window.addEventListener('resize', handleWindowResize);
-    setTimeout(handleWindowResize, LAYOUT.RESIZE_DEBOUNCE_MS);
-
-    return () => {
-      clearTimeout(resizeTimer);
-      window.removeEventListener('resize', handleWindowResize);
-    };
-  }, [minWidth, minHeight, isResizing, isMaximized]);
-}
-
-export type DockPosition = 'right' | 'bottom' | 'floating';
+export type { DockPosition };
 
 interface DockablePanelProps {
   // Unique identifier for this panel instance
@@ -245,6 +81,28 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
   }
 }
 
+// Track hover suppression across panels so one panel doesn't re-enable hover during another drag.
+let hoverSuppressionCount = 0;
+
+function updateGridTableHoverSuppression(shouldSuppress: boolean) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+  if (shouldSuppress) {
+    if (hoverSuppressionCount === 0) {
+      document.body.classList.add('gridtable-disable-hover');
+    }
+    hoverSuppressionCount += 1;
+    return;
+  }
+  if (hoverSuppressionCount > 0) {
+    hoverSuppressionCount -= 1;
+    if (hoverSuppressionCount === 0) {
+      document.body.classList.remove('gridtable-disable-hover');
+    }
+  }
+}
+
 const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const {
     panelId,
@@ -274,7 +132,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const safeMaxWidth = maxWidth ? Math.max(safeMinWidth, maxWidth) : undefined;
   const safeMaxHeight = maxHeight ? Math.max(safeMinHeight, maxHeight) : undefined;
   const panelState = useDockablePanelState(panelId);
-  const panelStateRef = useRef(panelState);
   const { registerPanel, unregisterPanel } = useDockablePanelContext();
   const panelHostNode = useDockablePanelHost();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -285,131 +142,33 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     },
     [forwardedPanelRef]
   );
-  const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
-  const [resizeDirection, setResizeDirection] = useState<string>('');
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [resizeStart, setResizeStart] = useState({
-    width: 0,
-    height: 0,
-    x: 0,
-    y: 0,
-    left: 0,
-    top: 0,
-  });
-  const [isMaximized, setIsMaximized] = useState(false);
-  const [maximizedRect, setMaximizedRect] = useState<DOMRect | null>(null);
-  const restoreStateRef = useRef<{
-    position: DockPosition;
-    size: { width: number; height: number };
-    floatingPosition: { x: number; y: number };
-  } | null>(null);
-  const maximizeTargetRef = useRef<HTMLElement | null>(null);
-  const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const skipNextControlledSyncRef = useRef(false);
-  const appHeaderHeightRef = useRef<number>(LAYOUT.APP_HEADER_HEIGHT);
+  const hoverSuppressionRef = useRef(false);
 
-  useEffect(() => {
-    // Keep the latest panel state for global event handlers without re-binding them.
-    panelStateRef.current = panelState;
-  }, [panelState]);
+  const { isMaximized, maximizedRect, toggleMaximize } = useDockablePanelMaximize({
+    panelState,
+    allowMaximize,
+    maximizeTargetSelector,
+    onMaximizeChange,
+  });
 
-  const resolveMaximizeTarget = useCallback((): HTMLElement | null => {
-    if (typeof document === 'undefined') {
-      return null;
-    }
-    const explicit = maximizeTargetSelector ? document.querySelector(maximizeTargetSelector) : null;
-    if (explicit instanceof HTMLElement) {
-      return explicit;
-    }
-    const fallback = document.querySelector('.content-body');
-    return fallback instanceof HTMLElement ? fallback : null;
-  }, [maximizeTargetSelector]);
-
-  useEffect(() => {
-    if (!isMaximized) {
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
-      maximizeTargetRef.current = null;
-      setMaximizedRect(null);
-      return;
-    }
-
-    const updateRect = () => {
-      if (typeof window === 'undefined') {
-        return;
-      }
-
-      const target = maximizeTargetRef.current ?? resolveMaximizeTarget();
-      if (target) {
-        maximizeTargetRef.current = target;
-        setMaximizedRect(target.getBoundingClientRect());
-        return;
-      }
-
-      const headerHeightRaw =
-        typeof document !== 'undefined'
-          ? getComputedStyle(document.documentElement).getPropertyValue('--app-header-height')
-          : '';
-      const headerHeight = parseInt(headerHeightRaw, 10) || 0;
-      const rect = new DOMRect(
-        0,
-        headerHeight,
-        window.innerWidth,
-        Math.max(0, window.innerHeight - headerHeight)
-      );
-      setMaximizedRect(rect);
-    };
-
-    maximizeTargetRef.current = resolveMaximizeTarget();
-    updateRect();
-
-    const handleResize = () => updateRect();
-
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('scroll', handleResize, true);
-
-    if (maximizeTargetRef.current && typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(() => updateRect());
-      observer.observe(maximizeTargetRef.current);
-      resizeObserverRef.current = observer;
-    } else {
-      resizeObserverRef.current = null;
-    }
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('scroll', handleResize, true);
-      if (resizeObserverRef.current) {
-        resizeObserverRef.current.disconnect();
-        resizeObserverRef.current = null;
-      }
-    };
-  }, [isMaximized, resolveMaximizeTarget]);
-
-  useEffect(() => {
-    if (panelState.isOpen) {
-      return;
-    }
-    if (isMaximized) {
-      setIsMaximized(false);
-      onMaximizeChange?.(false);
-    }
-    restoreStateRef.current = null;
-  }, [panelState.isOpen, isMaximized, onMaximizeChange]);
-
-  useEffect(() => {
-    if (!panelState.isOpen) {
-      unregisterPanel(panelId);
-      return;
-    }
-    registerPanel(panelId, panelState.position);
-    return () => {
-      unregisterPanel(panelId);
-    };
-  }, [panelId, panelState.isOpen, panelState.position, registerPanel, unregisterPanel]);
+  const {
+    isDragging,
+    isResizing,
+    cursorStyle,
+    handleHeaderMouseDown,
+    handlePanelMouseMove,
+    handleMouseDownResize,
+    handleFloatingMouseDown,
+  } = useDockablePanelDragResize({
+    panelState,
+    panelRef,
+    safeMinWidth,
+    safeMinHeight,
+    safeMaxWidth,
+    safeMaxHeight,
+    isMaximized,
+  });
 
   // Initialize panel state
   useEffect(() => {
@@ -453,18 +212,35 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     };
   }, [panelId, panelState, onClose, isControlled]);
 
-  // Manage body class to disable hover effects during floating panel drag
   useEffect(() => {
-    if (panelState.position === 'floating' && isDragging) {
-      document.body.classList.add('gridtable-disable-hover');
-    } else {
-      document.body.classList.remove('gridtable-disable-hover');
+    if (!panelState.isOpen) {
+      unregisterPanel(panelId);
+      return;
     }
-    // Always clean up on unmount
+    registerPanel(panelId, panelState.position);
     return () => {
-      document.body.classList.remove('gridtable-disable-hover');
+      unregisterPanel(panelId);
     };
+  }, [panelId, panelState.isOpen, panelState.position, registerPanel, unregisterPanel]);
+
+  // Manage body class to disable hover effects during floating panel drag.
+  useEffect(() => {
+    const shouldSuppress = panelState.position === 'floating' && isDragging;
+    if (shouldSuppress === hoverSuppressionRef.current) {
+      return;
+    }
+    hoverSuppressionRef.current = shouldSuppress;
+    updateGridTableHoverSuppression(shouldSuppress);
   }, [isDragging, panelState.position]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverSuppressionRef.current) {
+        hoverSuppressionRef.current = false;
+        updateGridTableHoverSuppression(false);
+      }
+    };
+  }, []);
 
   // Handle window resize to keep panels within bounds
   useWindowBoundsConstraint(panelState, {
@@ -481,326 +257,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     }
   }, [panelState.position, onPositionChange]);
 
-  // Handle dragging for floating panels
-  const handleMouseDownDrag = useCallback(
-    (e: React.MouseEvent) => {
-      if (isMaximized) return;
-      if (panelState.position !== 'floating') return;
-
-      const rect = panelRef.current?.getBoundingClientRect();
-      if (!rect) return;
-
-      appHeaderHeightRef.current = getAppHeaderHeight();
-      setIsDragging(true);
-      setDragOffset({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      });
-      e.preventDefault();
-    },
-    [panelState.position, isMaximized]
-  );
-
-  // Handle resizing
-  const handleMouseDownResize = useCallback(
-    (e: React.MouseEvent, direction: string) => {
-      if (isMaximized) return;
-      e.stopPropagation();
-      appHeaderHeightRef.current = getAppHeaderHeight();
-      setIsResizing(true);
-      setResizeDirection(direction);
-      setResizeStart({
-        width: panelState.size.width,
-        height: panelState.size.height,
-        x: e.clientX,
-        y: e.clientY,
-        left: panelState.floatingPosition.x,
-        top: panelState.floatingPosition.y,
-      });
-      e.preventDefault();
-    },
-    [panelState.size, panelState.floatingPosition, isMaximized]
-  );
-
-  // Detect resize edge for floating panels
-  const getResizeDirection = useCallback(
-    (e: React.MouseEvent) => {
-      if (panelState.position !== 'floating' || !panelRef.current) return '';
-
-      const rect = panelRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      const isTop = y < LAYOUT.RESIZE_TOP_EDGE_SIZE;
-      const isLeft = x < LAYOUT.RESIZE_EDGE_SIZE;
-      const isRight = x > rect.width - LAYOUT.RESIZE_EDGE_SIZE;
-      const isBottom = y > rect.height - LAYOUT.RESIZE_EDGE_SIZE;
-
-      if (isTop && isLeft) return 'nw';
-      if (isTop && isRight) return 'ne';
-      if (isBottom && isLeft) return 'sw';
-      if (isBottom && isRight) return 'se';
-      if (isTop) return 'n';
-      if (isBottom) return 's';
-      if (isLeft) return 'w';
-      if (isRight) return 'e';
-
-      return '';
-    },
-    [panelState.position]
-  );
-
-  // Handle mouse down for floating panel (drag or resize)
-  const handleFloatingMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      if (isMaximized) return;
-      if (panelState.position !== 'floating') return;
-
-      const direction = getResizeDirection(e);
-      if (direction) {
-        handleMouseDownResize(e, direction);
-      }
-    },
-    [panelState.position, getResizeDirection, handleMouseDownResize, isMaximized]
-  );
-
-  const dragFrameRef = useRef<number | null>(null);
-  const pendingDragPositionRef = useRef<{ x: number; y: number } | null>(null);
-  const sizeFrameRef = useRef<number | null>(null);
-  const pendingSizeRef = useRef<{
-    width: number;
-    height: number;
-    position: { x: number; y: number } | null;
-  } | null>(null);
-
-  const flushDragPosition = useCallback(() => {
-    dragFrameRef.current = null;
-    const pending = pendingDragPositionRef.current;
-    if (!pending) {
-      return;
-    }
-    pendingDragPositionRef.current = null;
-    panelStateRef.current.setFloatingPosition(pending);
-  }, [panelStateRef]);
-
-  const scheduleFloatingPosition = useCallback(
-    (position: { x: number; y: number }) => {
-      pendingDragPositionRef.current = position;
-      if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
-        flushDragPosition();
-        return;
-      }
-      if (dragFrameRef.current != null) {
-        return;
-      }
-      dragFrameRef.current = window.requestAnimationFrame(flushDragPosition);
-    },
-    [flushDragPosition]
-  );
-
-  const flushSizeUpdate = useCallback(() => {
-    sizeFrameRef.current = null;
-    const pending = pendingSizeRef.current;
-    if (!pending) {
-      return;
-    }
-    pendingSizeRef.current = null;
-    const currentPanelState = panelStateRef.current;
-    currentPanelState.setSize({ width: pending.width, height: pending.height });
-    if (currentPanelState.position === 'floating' && pending.position) {
-      currentPanelState.setFloatingPosition(pending.position);
-    }
-  }, [panelStateRef]);
-
-  const scheduleSizeUpdate = useCallback(
-    (size: { width: number; height: number }, floatingPosition?: { x: number; y: number }) => {
-      const currentPanelState = panelStateRef.current;
-      const currentSize = currentPanelState.size;
-      const hasSizeChange =
-        Math.abs(currentSize.width - size.width) >= 0.5 ||
-        Math.abs(currentSize.height - size.height) >= 0.5;
-      const nextFloatingPosition =
-        currentPanelState.position === 'floating'
-          ? (floatingPosition ?? currentPanelState.floatingPosition)
-          : null;
-      const hasPositionChange =
-        currentPanelState.position === 'floating' &&
-        nextFloatingPosition != null &&
-        (Math.abs(nextFloatingPosition.x - currentPanelState.floatingPosition.x) >= 0.5 ||
-          Math.abs(nextFloatingPosition.y - currentPanelState.floatingPosition.y) >= 0.5);
-      // Skip redundant size updates to avoid thrashing resize observers downstream.
-      if (!hasSizeChange && !hasPositionChange) {
-        return;
-      }
-      pendingSizeRef.current = {
-        width: size.width,
-        height: size.height,
-        position: currentPanelState.position === 'floating' ? (floatingPosition ?? null) : null,
-      };
-      if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
-        flushSizeUpdate();
-        return;
-      }
-      if (sizeFrameRef.current != null) {
-        return;
-      }
-      sizeFrameRef.current = window.requestAnimationFrame(flushSizeUpdate);
-    },
-    [flushSizeUpdate, panelStateRef]
-  );
-
-  useEffect(() => {
-    return () => {
-      if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function') {
-        if (dragFrameRef.current != null) {
-          window.cancelAnimationFrame(dragFrameRef.current);
-        }
-        if (sizeFrameRef.current != null) {
-          window.cancelAnimationFrame(sizeFrameRef.current);
-        }
-      }
-      dragFrameRef.current = null;
-      sizeFrameRef.current = null;
-      pendingDragPositionRef.current = null;
-      pendingSizeRef.current = null;
-    };
-  }, []);
-
-  // Mouse move handler
-  useEffect(() => {
-    if (!isDragging && !isResizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const currentPanelState = panelStateRef.current;
-      // Don't update position if panel is not open (prevents race conditions during close)
-      if (!currentPanelState.isOpen) return;
-
-      if (isDragging && currentPanelState.position === 'floating') {
-        const headerHeight = appHeaderHeightRef.current;
-        const minDistanceFromEdge = LAYOUT.MIN_EDGE_DISTANCE;
-        const newX = Math.max(
-          minDistanceFromEdge,
-          Math.min(window.innerWidth - currentPanelState.size.width, e.clientX - dragOffset.x)
-        );
-        const newY = Math.max(
-          Math.max(headerHeight, minDistanceFromEdge),
-          Math.min(window.innerHeight - currentPanelState.size.height, e.clientY - dragOffset.y)
-        );
-
-        scheduleFloatingPosition({ x: newX, y: newY });
-      } else if (isResizing) {
-        const deltaX = e.clientX - resizeStart.x;
-        const deltaY = e.clientY - resizeStart.y;
-
-        let newWidth = resizeStart.width;
-        let newHeight = resizeStart.height;
-        let newLeft = resizeStart.left;
-        let newTop = resizeStart.top;
-
-        if (currentPanelState.position === 'right') {
-          // For right-docked panels, dragging left (negative deltaX) increases width
-          const sidebarWidth = LAYOUT.SIDEBAR_WIDTH;
-          const maxAvailableWidth = window.innerWidth - sidebarWidth;
-          newWidth = Math.max(
-            safeMinWidth,
-            Math.min(safeMaxWidth || maxAvailableWidth, resizeStart.width - deltaX)
-          );
-        } else if (currentPanelState.position === 'bottom') {
-          // For bottom-docked panels, dragging up (negative deltaY) increases height
-          newHeight = Math.max(
-            safeMinHeight,
-            Math.min(safeMaxHeight || window.innerHeight, resizeStart.height - deltaY)
-          );
-        } else if (currentPanelState.position === 'floating') {
-          // Handle multi-directional resizing for floating panels
-          if (resizeDirection.includes('e')) {
-            // Don't allow resizing beyond the right edge of the window
-            const maxAllowedWidth = window.innerWidth - resizeStart.left;
-            newWidth = Math.max(
-              safeMinWidth,
-              Math.min(safeMaxWidth || maxAllowedWidth, resizeStart.width + deltaX)
-            );
-          }
-          if (resizeDirection.includes('w')) {
-            const proposedWidth = resizeStart.width - deltaX;
-            if (proposedWidth >= safeMinWidth) {
-              newWidth = Math.min(safeMaxWidth || window.innerWidth, proposedWidth);
-              newLeft = Math.max(0, resizeStart.left + deltaX); // Don't go beyond left edge
-              // Adjust width if we hit the left edge
-              if (resizeStart.left + deltaX < 0) {
-                newWidth = resizeStart.width + resizeStart.left;
-                newLeft = 0;
-              }
-            }
-          }
-          if (resizeDirection.includes('s')) {
-            // Allow resizing down to the bottom of the window
-            const maxAvailableHeight = window.innerHeight - resizeStart.top;
-            newHeight = Math.max(
-              safeMinHeight,
-              Math.min(safeMaxHeight || maxAvailableHeight, resizeStart.height + deltaY)
-            );
-          }
-          if (resizeDirection.includes('n')) {
-            const proposedHeight = resizeStart.height - deltaY;
-            const headerHeight = appHeaderHeightRef.current;
-            if (proposedHeight >= safeMinHeight) {
-              newHeight = Math.min(
-                safeMaxHeight || window.innerHeight - headerHeight,
-                proposedHeight
-              );
-              // Don't allow dragging above the header
-              newTop = Math.max(headerHeight, resizeStart.top + deltaY);
-              // Adjust height if we hit the header
-              if (resizeStart.top + deltaY < headerHeight) {
-                newHeight = resizeStart.height + resizeStart.top - headerHeight;
-              }
-            }
-          }
-        }
-
-        const nextSize = { width: newWidth, height: newHeight };
-        const nextPosition =
-          currentPanelState.position === 'floating' ? { x: newLeft, y: newTop } : undefined;
-        scheduleSizeUpdate(nextSize, nextPosition);
-      }
-    };
-
-    const handleMouseUp = () => {
-      if (pendingDragPositionRef.current) {
-        flushDragPosition();
-      }
-      if (pendingSizeRef.current) {
-        flushSizeUpdate();
-      }
-      setIsDragging(false);
-      setIsResizing(false);
-      setResizeDirection('');
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [
-    isDragging,
-    isResizing,
-    resizeDirection,
-    dragOffset,
-    resizeStart,
-    safeMinWidth,
-    safeMinHeight,
-    safeMaxWidth,
-    safeMaxHeight,
-    scheduleFloatingPosition,
-    scheduleSizeUpdate,
-    flushDragPosition,
-    flushSizeUpdate,
-  ]);
-
   // Handle close
   const handleClose = useCallback(() => {
     if (isControlled) {
@@ -809,42 +265,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     panelState.setOpen(false);
     onClose?.();
   }, [panelState, onClose, isControlled]);
-
-  const handleToggleMaximize = useCallback(() => {
-    if (!allowMaximize) {
-      return;
-    }
-
-    if (isMaximized) {
-      setIsMaximized(false);
-      onMaximizeChange?.(false);
-      const restore = restoreStateRef.current;
-      restoreStateRef.current = null;
-
-      if (restore) {
-        if (panelState.position !== restore.position) {
-          panelState.setPosition(restore.position);
-        }
-        if (restore.position === 'floating') {
-          panelState.setSize({ ...restore.size });
-          panelState.setFloatingPosition({ ...restore.floatingPosition });
-        } else {
-          panelState.setSize({ ...restore.size });
-        }
-      }
-      return;
-    }
-
-    restoreStateRef.current = {
-      position: panelState.position,
-      size: { width: panelState.size.width, height: panelState.size.height },
-      floatingPosition: { ...panelState.floatingPosition },
-    };
-
-    panelState.focus();
-    setIsMaximized(true);
-    onMaximizeChange?.(true);
-  }, [allowMaximize, isMaximized, panelState, onMaximizeChange]);
 
   // Handle docking changes
   const handleDock = useCallback(
@@ -856,35 +276,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       panelState.setPosition(position);
     },
     [panelId, panelState, isMaximized]
-  );
-
-  // Handle cursor style for floating panels
-  const [cursorStyle, setCursorStyle] = useState<string>('default');
-  const cursorStyleRef = useRef(cursorStyle);
-
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (isMaximized || panelState.position !== 'floating' || isDragging || isResizing) return;
-
-      const direction = getResizeDirection(e);
-      const cursors: { [key: string]: string } = {
-        n: 'ns-resize',
-        s: 'ns-resize',
-        e: 'ew-resize',
-        w: 'ew-resize',
-        ne: 'nesw-resize',
-        sw: 'nesw-resize',
-        nw: 'nwse-resize',
-        se: 'nwse-resize',
-      };
-
-      const nextCursor = cursors[direction] || 'default';
-      if (cursorStyleRef.current !== nextCursor) {
-        cursorStyleRef.current = nextCursor;
-        setCursorStyle(nextCursor);
-      }
-    },
-    [panelState.position, isDragging, isResizing, getResizeDirection, isMaximized]
   );
 
   // Memoize panel classes and styles
@@ -902,12 +293,11 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       zIndex: panelState.zIndex,
     };
     if (isMaximized) {
-      const rect = maximizedRect;
-      if (rect) {
-        style.top = `${rect.top}px`;
-        style.left = `${rect.left}px`;
-        style.width = `${rect.width}px`;
-        style.height = `${rect.height}px`;
+      if (maximizedRect) {
+        style.top = `${maximizedRect.top}px`;
+        style.left = `${maximizedRect.left}px`;
+        style.width = `${maximizedRect.width}px`;
+        style.height = `${maximizedRect.height}px`;
       } else {
         style.top = 'var(--app-header-height)';
         style.left = '0px';
@@ -967,119 +357,26 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
           handleFloatingMouseDown(e);
         }
       }}
-      onMouseMove={isMaximized ? undefined : handleMouseMove}
+      onMouseMove={isMaximized ? undefined : handlePanelMouseMove}
       role="dialog"
       aria-label={title}
       aria-modal={panelState.position === 'floating'}
     >
-      <div
-        className="dockable-panel__header"
-        onMouseDown={(e) => {
-          // Check if we're on a resize edge first
-          if (panelState.position === 'floating') {
-            const direction = getResizeDirection(e);
-            if (!direction) {
-              handleMouseDownDrag(e);
-            }
-          } else {
-            handleMouseDownDrag(e);
-          }
-        }}
-        role="banner"
-      >
-        <div className="dockable-panel__header-content">
-          {headerContent || <span className="dockable-panel__title">{title}</span>}
-        </div>
-        <div className="dockable-panel__controls" onMouseDown={(e) => e.stopPropagation()}>
-          {/* When floating, show bottom and right buttons */}
-          {!isMaximized && panelState.position === 'floating' && (
-            <>
-              <button
-                className="dockable-panel__control-btn"
-                onClick={() => handleDock('bottom')}
-                title="Dock to bottom"
-                aria-label="Dock panel to bottom"
-              >
-                <DockBottomIcon width={20} height={20} />
-              </button>
-              <button
-                className="dockable-panel__control-btn"
-                onClick={() => handleDock('right')}
-                title="Dock to right"
-                aria-label="Dock panel to right side"
-              >
-                <DockRightIcon width={20} height={20} />
-              </button>
-            </>
-          )}
-          {/* When docked right, show bottom and float buttons */}
-          {!isMaximized && panelState.position === 'right' && (
-            <>
-              <button
-                className="dockable-panel__control-btn"
-                onClick={() => handleDock('bottom')}
-                title="Dock to bottom"
-                aria-label="Dock panel to bottom"
-              >
-                <DockBottomIcon width={20} height={20} />
-              </button>
-              <button
-                className="dockable-panel__control-btn"
-                onClick={() => handleDock('floating')}
-                title="Float panel"
-                aria-label="Undock panel to floating window"
-              >
-                <FloatPanelIcon width={20} height={20} />
-              </button>
-            </>
-          )}
-          {/* When docked bottom, show right and float buttons */}
-          {!isMaximized && panelState.position === 'bottom' && (
-            <>
-              <button
-                className="dockable-panel__control-btn"
-                onClick={() => handleDock('right')}
-                title="Dock to right"
-                aria-label="Dock panel to right side"
-              >
-                <DockRightIcon width={20} height={20} />
-              </button>
-              <button
-                className="dockable-panel__control-btn"
-                onClick={() => handleDock('floating')}
-                title="Float panel"
-                aria-label="Undock panel to floating window"
-              >
-                <FloatPanelIcon width={20} height={20} />
-              </button>
-            </>
-          )}
-          {allowMaximize && (
-            <button
-              className="dockable-panel__control-btn"
-              onClick={handleToggleMaximize}
-              title={isMaximized ? 'Restore panel' : 'Maximize panel'}
-              aria-label={isMaximized ? 'Restore panel size' : 'Maximize panel'}
-            >
-              {isMaximized ? (
-                <RestorePanelIcon width={20} height={20} />
-              ) : (
-                <MaximizePanelIcon width={20} height={20} />
-              )}
-            </button>
-          )}
-          <button
-            className="dockable-panel__control-btn dockable-panel__control-btn--close"
-            onClick={handleClose}
-            title="Close panel"
-            aria-label="Close panel"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M2 2L14 14M2 14L14 2" stroke="currentColor" strokeWidth="2" />
-            </svg>
-          </button>
-        </div>
-      </div>
+      <DockablePanelHeader
+        title={title}
+        headerContent={headerContent}
+        onMouseDown={handleHeaderMouseDown}
+        controls={
+          <DockablePanelControls
+            position={panelState.position}
+            isMaximized={isMaximized}
+            allowMaximize={allowMaximize}
+            onDock={handleDock}
+            onToggleMaximize={toggleMaximize}
+            onClose={handleClose}
+          />
+        }
+      />
 
       <div className={`dockable-panel__content ${contentClassName}`} role="main">
         {children}
