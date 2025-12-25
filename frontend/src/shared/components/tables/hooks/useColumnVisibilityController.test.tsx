@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useColumnVisibilityController.test.tsx
+ *
+ * Test suite for useColumnVisibilityController.
+ * Covers key behaviors and edge cases for useColumnVisibilityController.
+ */
+
 import React, { act, useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';

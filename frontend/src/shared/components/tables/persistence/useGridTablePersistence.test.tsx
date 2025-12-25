@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/useGridTablePersistence.test.tsx
+ *
+ * Test suite for useGridTablePersistence.
+ * Covers key behaviors and edge cases for useGridTablePersistence.
+ */
+
 import React, { act, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/namespace/components/WorkloadScaleModal.test.tsx
+ *
+ * Test suite for WorkloadScaleModal.
+ * Covers key behaviors and edge cases for WorkloadScaleModal.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

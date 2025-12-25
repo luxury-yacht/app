@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/components/ShortcutHelpModal.tsx
+ *
+ * UI component for ShortcutHelpModal.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { useKeyboardContext } from '../context';
 import './ShortcutHelpModal.css';

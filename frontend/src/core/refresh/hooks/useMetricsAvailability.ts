@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/hooks/useMetricsAvailability.ts
+ *
+ * React hook for useMetricsAvailability.
+ * Encapsulates state and side effects for the core layer.
+ */
+
 import { useEffect } from 'react';
 import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
 import type { ClusterOverviewMetrics } from '@/core/refresh/types';

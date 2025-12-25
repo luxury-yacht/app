@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/gridTablePersistenceGC.test.ts
+ *
+ * Test suite for gridTablePersistenceGC.
+ * Covers key behaviors and edge cases for gridTablePersistenceGC.
+ */
+
 import { describe, expect, it, beforeEach } from 'vitest';
 import { computeClusterHash } from '@shared/components/tables/persistence/gridTablePersistence';
 import {

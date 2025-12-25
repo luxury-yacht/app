@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/priorities.ts
+ *
+ * Module source for priorities.
+ * Implements priorities logic for the UI layer.
+ */
+
 // Priority levels for keyboard shortcut scopes, contexts, and individual shortcuts.
 // This determines which keyboard handler takes precedence when multiple are active.
 

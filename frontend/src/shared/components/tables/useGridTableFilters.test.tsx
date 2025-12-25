@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/useGridTableFilters.test.tsx
+ *
+ * Test suite for useGridTableFilters.
+ * Covers key behaviors and edge cases for useGridTableFilters.
+ */
+
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

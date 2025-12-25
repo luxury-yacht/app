@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTableInitialLoading.test.tsx
+ *
+ * Test suite for GridTableInitialLoading.
+ * Covers key behaviors and edge cases for GridTableInitialLoading.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';

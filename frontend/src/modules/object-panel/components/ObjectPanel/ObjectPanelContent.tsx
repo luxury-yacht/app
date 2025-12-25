@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.tsx
+ *
+ * Module source for ObjectPanelContent.
+ * Renders the content of the object panel based on the active tab and provided props.
+ * Each tab is conditionally rendered and wrapped in an error boundary for robustness.
+ */
 import { useMemo } from 'react';
 import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';

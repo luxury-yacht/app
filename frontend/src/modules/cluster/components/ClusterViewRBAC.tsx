@@ -1,6 +1,8 @@
-/* ClusterViewRBAC.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterViewRBAC.tsx
  *
- * GridTable view for cluster RBAC resources such as ClusterRoles and ClusterRoleBindings.
+ * UI component for ClusterViewRBAC.
+ * Handles rendering and interactions for the cluster feature.
  */
 
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';

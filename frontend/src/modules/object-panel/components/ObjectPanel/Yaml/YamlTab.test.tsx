@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.test.tsx
+ *
+ * Test suite for YamlTab.
+ * Covers key behaviors and edge cases for YamlTab.
+ */
+
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

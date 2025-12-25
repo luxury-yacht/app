@@ -1,5 +1,8 @@
 /**
- * Shared component for displaying resource header information
+ * frontend/src/shared/components/kubernetes/ResourceHeader.tsx
+ *
+ * UI component for ResourceHeader.
+ * Handles rendering and interactions for the shared components.
  */
 
 import React from 'react';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/index.ts
+ *
+ * Barrel exports for refresh.
+ * Re-exports public APIs for the core layer.
+ */
+
 // Core exports
 export { refreshManager } from './RefreshManager';
 export { refreshOrchestrator } from './orchestrator';

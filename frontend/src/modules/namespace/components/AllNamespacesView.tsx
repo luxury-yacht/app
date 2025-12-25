@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/namespace/components/AllNamespacesView.tsx
+ *
+ * Module source for AllNamespacesView.
+ * This component renders different views for the "All Namespaces" scope
+ * based on the active tab selected by the user.
+ */
 import React from 'react';
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
 import NsViewPods from '@modules/namespace/components/NsViewPods';

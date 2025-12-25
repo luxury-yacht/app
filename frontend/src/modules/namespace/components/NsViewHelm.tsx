@@ -1,6 +1,8 @@
-/* NsViewHelm.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewHelm.tsx
  *
- * GridTable view for namespace Helm releases.
+ * UI component for NsViewHelm.
+ * Handles rendering and interactions for the namespace feature.
  */
 
 import './NsViewHelm.css';

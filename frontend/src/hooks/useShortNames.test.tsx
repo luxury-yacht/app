@@ -1,3 +1,10 @@
+/**
+ * frontend/src/hooks/useShortNames.test.tsx
+ *
+ * Test suite for useShortNames.
+ * Covers key behaviors and edge cases for useShortNames.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';

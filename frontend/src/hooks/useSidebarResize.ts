@@ -1,3 +1,9 @@
+/**
+ * frontend/src/hooks/useSidebarResize.ts
+ *
+ * Hook for useSidebarResize.
+ * Handles sidebar resize drag behavior with document-level mouse tracking.
+ */
 import { useEffect, useState, useCallback } from 'react';
 
 interface SidebarResizeOptions {

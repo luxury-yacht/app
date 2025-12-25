@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/streaming/catalogStreamManager.ts
+ *
+ * Module source for catalogStreamManager.
+ * Implements catalogStreamManager logic for the core layer.
+ */
+
 import { ensureRefreshBaseURL } from '../client';
 import { resetDomainState, setDomainState } from '../store';
 import type { CatalogStreamEventPayload } from '../types';

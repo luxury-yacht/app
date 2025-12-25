@@ -1,6 +1,8 @@
-/* ClusterViewEvents.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterViewEvents.tsx
  *
- * GridTable view for cluster Events.
+ * UI component for ClusterViewEvents.
+ * Handles rendering and interactions for the cluster feature.
  */
 
 import './ClusterViewEvents.css';

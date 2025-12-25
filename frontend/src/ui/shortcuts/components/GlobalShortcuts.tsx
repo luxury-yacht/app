@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/components/GlobalShortcuts.tsx
+ *
+ * UI component for GlobalShortcuts.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useShortcut } from '../hooks';
 import { useKeyboardContext } from '../context';

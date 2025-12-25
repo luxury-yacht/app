@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTableLayout.tsx
+ *
+ * UI component for GridTableLayout.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React from 'react';
 
 interface GridTableLayoutProps {

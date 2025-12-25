@@ -1,3 +1,10 @@
+/**
+ * frontend/src/utils/emptyState.ts
+ *
+ * Utility helpers for emptyState.
+ * Provides shared helper functions for the frontend.
+ */
+
 export const resolveEmptyStateMessage = (
   error?: string | null,
   fallback: string = 'No data available'

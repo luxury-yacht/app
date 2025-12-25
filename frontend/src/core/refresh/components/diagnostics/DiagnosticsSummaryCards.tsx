@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/components/diagnostics/DiagnosticsSummaryCards.tsx
+ *
+ * UI component for DiagnosticsSummaryCards.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React from 'react';
 import type { SummaryCardData } from './diagnosticsPanelTypes';
 

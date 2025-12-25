@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/codemirror/search.ts
+ *
+ * Module source for search.
+ * Implements search logic for the core layer.
+ */
+
 import { keymap, EditorView } from '@codemirror/view';
 import type { KeyBinding } from '@codemirror/view';
 import {
@@ -13,15 +20,11 @@ import {
 import type { Extension } from '@codemirror/state';
 
 export interface SearchExtensionOptions {
-  /**
-   * When true, show the search panel at the top of the editor.
-   * Defaults to true to match our existing layout.
-   */
+  // When true, show the search panel at the top of the editor.
+  // Defaults to true to match our existing layout.
   top?: boolean;
-  /**
-   * When true, include the custom search keymap bindings (Mod+F, Mod+Alt+F).
-   * Disable when the host component provides its own shortcuts.
-   */
+  // When true, include the custom search keymap bindings (Mod+F, Mod+Alt+F).
+  // Disable when the host component provides its own shortcuts.
   enableKeymap?: boolean;
 }
 

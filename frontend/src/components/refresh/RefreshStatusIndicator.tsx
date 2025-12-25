@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/refresh/RefreshStatusIndicator.tsx
+ *
+ * UI component for RefreshStatusIndicator.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useEffect, useState } from 'react';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/layout/SidebarKeys.ts
+ *
+ * Module source for SidebarKeys.
+ * Implements SidebarKeys logic for the UI layer.
+ */
+
 import { useCallback, useEffect, useState, type RefObject } from 'react';
 import { useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';

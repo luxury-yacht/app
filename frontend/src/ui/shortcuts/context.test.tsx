@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/context.test.tsx
+ *
+ * Test suite for context.
+ * Covers key behaviors and edge cases for context.
+ */
+
 import { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

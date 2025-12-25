@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTableBody.test.tsx
+ *
+ * Test suite for GridTableBody.
+ * Covers key behaviors and edge cases for GridTableBody.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

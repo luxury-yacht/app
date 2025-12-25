@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useContainerWidthObserver.ts
+ *
+ * React hook for useContainerWidthObserver.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useEffect, useMemo, useRef } from 'react';
 import type { RefObject } from 'react';
 

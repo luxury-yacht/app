@@ -1,3 +1,11 @@
+/**
+ * frontend/src/modules/namespace/contexts/NsResourcesContext.test.tsx
+ *
+ * Test suite for NsResourcesContext.
+ * Covers key behaviors and edge cases for NsResourcesContext.
+ */
+
+import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,14 +20,15 @@ const {
   domainStates,
   scopedStates,
   contextRef,
+  getDomainState,
 } = vi.hoisted(() => {
   const orchestratorMock = {
     updateContext: vi.fn(),
     setDomainEnabled: vi.fn(),
     resetDomain: vi.fn(),
     setScopedDomainEnabled: vi.fn(),
-    triggerManualRefresh: vi.fn(),
-    fetchScopedDomain: vi.fn(),
+    triggerManualRefresh: vi.fn().mockResolvedValue(undefined),
+    fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
     isStreamingDomain: vi.fn().mockReturnValue(false),
   };
 
@@ -40,6 +49,20 @@ const {
     current: null,
   };
 
+  const createDomainState = () => ({
+    status: 'idle',
+    data: null,
+    error: null,
+    lastUpdated: null,
+  });
+
+  const getDomainState = (domain: string) => {
+    if (!domainStateMap.has(domain)) {
+      domainStateMap.set(domain, createDomainState());
+    }
+    return domainStateMap.get(domain);
+  };
+
   return {
     orchestrator: orchestratorMock,
     capabilityMocks: capabilityMockBag,
@@ -48,22 +71,13 @@ const {
     domainStates: domainStateMap,
     scopedStates: scopedStateBag,
     contextRef: contextHolder,
+    getDomainState,
   };
 });
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: orchestrator,
-  useRefreshDomain: (domain: string) => {
-    if (!domainStates.has(domain)) {
-      domainStates.set(domain, {
-        status: 'idle',
-        data: null,
-        error: null,
-        lastUpdated: null,
-      });
-    }
-    return domainStates.get(domain);
-  },
+  useRefreshDomain: (domain: string) => getDomainState(domain),
   useRefreshScopedDomainStates: () => scopedStates,
 }));
 
@@ -89,6 +103,22 @@ const TestConsumer: React.FC = () => {
   contextRef.current = context;
   return null;
 };
+
+const ActiveResourceDisplay: React.FC = () => {
+  const { activeResourceType } = useNamespaceResources();
+  return <span data-testid="active-resource">{activeResourceType ?? 'none'}</span>;
+};
+
+const RefreshTrigger: React.FC = () => {
+  const { workloads } = useNamespaceResources();
+  React.useEffect(() => {
+    void workloads.refresh();
+  }, [workloads]);
+  return null;
+};
+
+const getActiveResource = () =>
+  document.querySelector('[data-testid="active-resource"]')?.textContent ?? '';
 
 describe('NamespaceResourcesProvider', () => {
   let container: HTMLDivElement;
@@ -116,6 +146,7 @@ describe('NamespaceResourcesProvider', () => {
     Object.values(storeMocks).forEach((value) => value.mockClear());
 
     viewState.value = 'namespace';
+    orchestrator.isStreamingDomain.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -123,7 +154,22 @@ describe('NamespaceResourcesProvider', () => {
       root.unmount();
     });
     container.remove();
+    vi.useRealTimers();
   });
+
+  const render = async (element: React.ReactElement) => {
+    await act(async () => {
+      root.render(element);
+      await Promise.resolve();
+    });
+  };
+
+  const runTimers = async () => {
+    await act(async () => {
+      vi.runAllTimers();
+      await Promise.resolve();
+    });
+  };
 
   it('throws when useNamespaceResources is called outside the provider', () => {
     const OutsideConsumer = () => {
@@ -131,11 +177,11 @@ describe('NamespaceResourcesProvider', () => {
       return null;
     };
 
-    expect(() =>
+    expect(() => {
       act(() => {
         root.render(<OutsideConsumer />);
-      })
-    ).toThrowError('useNamespaceResources must be used within NamespaceResourcesProvider');
+      });
+    }).toThrowError('useNamespaceResources must be used within NamespaceResourcesProvider');
   });
 
   it('enables the active domain, registers capabilities, and performs manual refresh', async () => {
@@ -146,14 +192,11 @@ describe('NamespaceResourcesProvider', () => {
       lastUpdated: null,
     };
 
-    await act(async () => {
-      root.render(
-        <NamespaceResourcesProvider namespace="team-a" activeView="config">
-          <TestConsumer />
-        </NamespaceResourcesProvider>
-      );
-      await Promise.resolve();
-    });
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="config">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
 
     expect(orchestrator.updateContext).toHaveBeenCalledWith({
       selectedNamespace: 'team-a',
@@ -180,14 +223,11 @@ describe('NamespaceResourcesProvider', () => {
       lastUpdated: null,
     };
 
-    await act(async () => {
-      root.render(
-        <NamespaceResourcesProvider namespace="team-a" activeView="workloads">
-          <TestConsumer />
-        </NamespaceResourcesProvider>
-      );
-      await Promise.resolve();
-    });
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="workloads">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
 
     const context = contextRef.current;
     expect(context).toBeTruthy();
@@ -224,14 +264,11 @@ describe('NamespaceResourcesProvider', () => {
 
     vi.useFakeTimers();
 
-    await act(async () => {
-      root.render(
-        <NamespaceResourcesProvider namespace="team-a" activeView="workloads">
-          <TestConsumer />
-        </NamespaceResourcesProvider>
-      );
-      await Promise.resolve();
-    });
+    await render(
+      <NamespaceResourcesProvider namespace="team-a" activeView="workloads">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
 
     orchestrator.triggerManualRefresh.mockClear();
     orchestrator.resetDomain.mockClear();
@@ -244,17 +281,16 @@ describe('NamespaceResourcesProvider', () => {
       lastUpdated: null,
     };
 
+    await render(
+      <NamespaceResourcesProvider namespace="team-b" activeView="workloads">
+        <TestConsumer />
+      </NamespaceResourcesProvider>
+    );
+
     await act(async () => {
-      root.render(
-        <NamespaceResourcesProvider namespace="team-b" activeView="workloads">
-          <TestConsumer />
-        </NamespaceResourcesProvider>
-      );
+      vi.advanceTimersByTime(150);
       await Promise.resolve();
     });
-
-    vi.advanceTimersByTime(150);
-    await Promise.resolve();
 
     expect(orchestrator.resetDomain).toHaveBeenCalledWith('namespace-workloads');
     expect(orchestrator.triggerManualRefresh).toHaveBeenCalledWith(
@@ -266,6 +302,66 @@ describe('NamespaceResourcesProvider', () => {
       'namespace:team-b',
       false
     );
-    vi.useRealTimers();
+  });
+
+  it('switches active resource when the tab changes', async () => {
+    vi.useFakeTimers();
+
+    await render(
+      <NamespaceResourcesProvider namespace="alpha" activeView="workloads">
+        <ActiveResourceDisplay />
+      </NamespaceResourcesProvider>
+    );
+
+    await runTimers();
+
+    expect(getActiveResource()).toBe('workloads');
+
+    const initialEnabledDomains = new Set(
+      orchestrator.setDomainEnabled.mock.calls
+        .filter(([, enabled]) => enabled)
+        .map(([domain]) => domain)
+    );
+    expect(Array.from(initialEnabledDomains)).toEqual(['namespace-workloads']);
+
+    orchestrator.triggerManualRefresh.mockClear();
+    orchestrator.setDomainEnabled.mockClear();
+
+    await render(
+      <NamespaceResourcesProvider namespace="alpha" activeView="config">
+        <ActiveResourceDisplay />
+      </NamespaceResourcesProvider>
+    );
+
+    await runTimers();
+
+    expect(getActiveResource()).toBe('config');
+
+    const reenabledDomains = new Set(
+      orchestrator.setDomainEnabled.mock.calls
+        .filter(([, enabled]) => enabled)
+        .map(([domain]) => domain)
+    );
+    expect(Array.from(reenabledDomains)).toEqual(['namespace-config']);
+
+    const invokedDomains = orchestrator.triggerManualRefresh.mock.calls.map((call) => call[0]);
+    expect(invokedDomains).toContain('namespace-config');
+  });
+
+  it('forces capability refresh when a resource refresh is invoked', async () => {
+    vi.useFakeTimers();
+
+    await render(
+      <NamespaceResourcesProvider namespace="alpha" activeView="workloads">
+        <RefreshTrigger />
+      </NamespaceResourcesProvider>
+    );
+
+    await runTimers();
+
+    const forcedRefresh = capabilityMocks.registerNamespaceCapabilityDefinitions.mock.calls.some(
+      ([, , options]) => options?.force === true
+    );
+    expect(forcedRefresh).toBe(true);
   });
 });

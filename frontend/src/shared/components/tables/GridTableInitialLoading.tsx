@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTableInitialLoading.tsx
+ *
+ * UI component for GridTableInitialLoading.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React from 'react';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 

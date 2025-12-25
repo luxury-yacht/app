@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTablePagination.test.tsx
+ *
+ * Test suite for useGridTablePagination.
+ * Covers key behaviors and edge cases for useGridTablePagination.
+ */
+
 import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

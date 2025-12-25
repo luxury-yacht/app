@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/capabilities/bootstrap.ts
+ *
+ * User permissions bootstrap for initializing and managing
+ * capability evaluations and registrations.
+ */
+
 import { useSyncExternalStore } from 'react';
 
 import {

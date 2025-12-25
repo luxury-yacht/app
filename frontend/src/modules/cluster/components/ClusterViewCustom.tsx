@@ -1,6 +1,8 @@
-/* ClusterViewCustom.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterViewCustom.tsx
  *
- * GridTable view for cluster custom resources.
+ * UI component for ClusterViewCustom.
+ * Handles rendering and interactions for the cluster feature.
  */
 
 import './ClusterViewCustom.css';

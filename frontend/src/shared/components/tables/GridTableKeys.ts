@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTableKeys.ts
+ *
+ * UI component for GridTableKeys.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import { useCallback } from 'react';
 import type { RefObject } from 'react';
 import { useKeyboardNavigationScope } from '@ui/shortcuts';

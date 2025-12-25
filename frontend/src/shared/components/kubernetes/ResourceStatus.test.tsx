@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/kubernetes/ResourceStatus.test.tsx
+ *
+ * Test suite for ResourceStatus.
+ * Covers key behaviors and edge cases for ResourceStatus.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

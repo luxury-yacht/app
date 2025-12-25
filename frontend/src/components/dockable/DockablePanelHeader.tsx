@@ -1,7 +1,8 @@
 /**
- * DockablePanelHeader.tsx
+ * frontend/src/components/dockable/DockablePanelHeader.tsx
  *
- * Header component for dockable panels, including title/content and control buttons.
+ * UI component for DockablePanelHeader.
+ * Handles rendering and interactions for the shared components.
  */
 
 import React from 'react';

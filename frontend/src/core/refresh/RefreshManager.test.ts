@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/RefreshManager.test.ts
+ *
+ * Test suite for RefreshManager.
+ * Covers key behaviors and edge cases for RefreshManager.
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { refreshManager } from '@/core/refresh';

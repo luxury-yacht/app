@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/errors/ErrorBoundary.test.tsx
+ *
+ * Test suite for ErrorBoundary.
+ * Covers key behaviors and edge cases for ErrorBoundary.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

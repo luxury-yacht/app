@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/cluster/components/ClusterResourcesManager.test.tsx
+ *
+ * Test suite for ClusterResourcesManager.
+ * Covers key behaviors and edge cases for ClusterResourcesManager.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

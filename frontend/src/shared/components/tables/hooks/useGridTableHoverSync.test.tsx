@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableHoverSync.test.tsx
+ *
+ * Test suite for useGridTableHoverSync.
+ * Covers key behaviors and edge cases for useGridTableHoverSync.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

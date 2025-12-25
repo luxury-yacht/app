@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableHeaderRow.test.tsx
+ *
+ * Test suite for useGridTableHeaderRow.
+ * Covers key behaviors and edge cases for useGridTableHeaderRow.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableCellCache.test.tsx
+ *
+ * Test suite for useGridTableCellCache.
+ * Covers key behaviors and edge cases for useGridTableCellCache.
+ */
+
 import React from 'react';
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';

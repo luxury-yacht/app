@@ -1,6 +1,8 @@
-/* NsViewConfig.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewConfig.tsx
  *
- * GridTable view for namespace configuration resources.
+ * UI component for NsViewConfig.
+ * Handles rendering and interactions for the namespace feature.
  */
 
 import './NsViewConfig.css';

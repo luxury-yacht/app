@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/ResourceBar.tsx
+ *
+ * UI component for ResourceBar.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import './ResourceBar.css';

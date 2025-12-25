@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.test.tsx
+ *
+ * Test suite for ObjectPanel.
+ * Covers key behaviors and edge cases for ObjectPanel.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

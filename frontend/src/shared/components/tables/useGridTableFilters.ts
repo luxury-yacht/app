@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/useGridTableFilters.ts
+ *
+ * React hook for useGridTableFilters.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type {

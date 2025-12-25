@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/modals/AboutModal.test.tsx
+ *
+ * Test suite for AboutModal.
+ * Covers key behaviors and edge cases for AboutModal.
+ */
+
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

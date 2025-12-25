@@ -1,3 +1,10 @@
+/**
+ * frontend/src/utils/emptyState.test.ts
+ *
+ * Test suite for emptyState.
+ * Covers key behaviors and edge cases for emptyState.
+ */
+
 import { describe, expect, it } from 'vitest';
 import { resolveEmptyStateMessage } from './emptyState';
 

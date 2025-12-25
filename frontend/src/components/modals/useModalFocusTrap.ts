@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/modals/useModalFocusTrap.ts
+ *
+ * React hook for useModalFocusTrap.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback } from 'react';
 import type { RefObject } from 'react';
 import { useKeyboardNavigationScope } from '@ui/shortcuts';

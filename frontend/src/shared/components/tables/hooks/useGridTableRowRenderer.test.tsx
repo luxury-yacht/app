@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableRowRenderer.test.tsx
+ *
+ * Test suite for useGridTableRowRenderer.
+ * Covers key behaviors and edge cases for useGridTableRowRenderer.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

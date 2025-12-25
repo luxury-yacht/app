@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/command-palette/CommandPaletteCommands.tsx
+ *
+ * Module source for CommandPaletteCommands.
+ * Implements CommandPaletteCommands logic for the UI layer.
+ */
+
 import { useCallback, useMemo } from 'react';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';

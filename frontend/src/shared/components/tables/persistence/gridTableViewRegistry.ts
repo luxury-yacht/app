@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/gridTableViewRegistry.ts
+ *
+ * UI component for gridTableViewRegistry.
+ * Handles rendering and interactions for the shared components.
+ */
+
 const VIEW_IDS = new Set<string>([
   'browse',
   'cluster-nodes',

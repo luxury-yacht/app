@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/dockable/useDockablePanelWindowBounds.test.tsx
+ *
+ * Test suite for useDockablePanelWindowBounds.
+ * Covers key behaviors and edge cases for useDockablePanelWindowBounds.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

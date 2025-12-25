@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/hooks/useObjectPanel.ts
+ *
+ * Hook for useObjectPanel.
+ * Combines dockable panel UI state with object panel business logic from context.
+ * Also provides a global function to close the panel from outside React components.
+ */
 import { useCallback, useEffect, useRef } from 'react';
 import { useDockablePanelState } from '@components/dockable';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/errors/ResourceBarErrorBoundary.test.tsx
+ *
+ * Test suite for ResourceBarErrorBoundary.
+ * Covers key behaviors and edge cases for ResourceBarErrorBoundary.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

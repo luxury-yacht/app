@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/capabilities/utils.ts
+ *
+ * Utility helpers for utils.
+ * Provides shared helper functions for the core layer.
+ */
+
 import type {
   CapabilityDescriptor,
   CapabilityEntry,

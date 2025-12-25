@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogFiltering.ts
+ *
+ * Hook for useLogFiltering.
+ * Handles filtering and JSON parsing of log entries.
+ * Pure transformation logic extracted from LogViewer.
+ */
 import { useMemo } from 'react';
 import type { ObjectLogEntry } from '@/core/refresh/types';
 import type { ParsedLogEntry } from '../logViewerReducer';

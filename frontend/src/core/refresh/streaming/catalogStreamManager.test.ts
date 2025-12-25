@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/streaming/catalogStreamManager.test.ts
+ *
+ * Test suite for catalogStreamManager.
+ * Covers key behaviors and edge cases for catalogStreamManager.
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ensureRefreshBaseURLMock = vi.hoisted(() => vi.fn(async () => 'http://127.0.0.1:0'));

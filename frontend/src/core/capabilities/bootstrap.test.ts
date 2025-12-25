@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/capabilities/bootstrap.test.ts
+ *
+ * Test suite for bootstrap.
+ * Covers key behaviors and edge cases for bootstrap.
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { CapabilityEntry, NormalizedCapabilityDescriptor } from './types';

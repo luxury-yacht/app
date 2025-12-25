@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableVirtualization.ts
+ *
+ * React hook for useGridTableVirtualization.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import {
   useCallback,
   useEffect,

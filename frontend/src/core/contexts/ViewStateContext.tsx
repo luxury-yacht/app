@@ -1,5 +1,5 @@
 /**
- * ViewStateContext
+ * frontend/src/core/contexts/ViewStateContext.tsx
  *
  * Unified view state management. Composes specialized contexts for:
  * - Sidebar state (SidebarStateContext)

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/WorkloadOverview.tsx
+ *
+ * UI component for WorkloadOverview.
+ * Handles rendering and interactions for the object panel feature.
+ */
+
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';

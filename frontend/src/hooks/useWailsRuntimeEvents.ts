@@ -1,3 +1,9 @@
+/**
+ * frontend/src/hooks/useWailsRuntimeEvents.ts
+ *
+ * Hook for useWailsRuntimeEvents.
+ * Subscribes to Wails runtime events for UI actions (menu items, etc.) and connection status updates.
+ */
 import { useEffect } from 'react';
 import {
   ConnectionStatusEvent,

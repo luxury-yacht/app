@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/namespace/components/AllNamespacesView.test.tsx
+ *
+ * Test suite for AllNamespacesView.
+ * Covers key behaviors and edge cases for AllNamespacesView.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

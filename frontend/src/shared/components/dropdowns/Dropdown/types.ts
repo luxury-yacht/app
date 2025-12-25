@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/dropdowns/Dropdown/types.ts
+ *
+ * Type definitions for types.
+ * Defines shared interfaces and payload shapes for the shared components.
+ */
+
 import { ReactNode } from 'react';
 
 export interface DropdownOption {

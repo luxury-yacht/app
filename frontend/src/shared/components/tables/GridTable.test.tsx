@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTable.test.tsx
+ *
+ * Test suite for GridTable.
+ * Covers key behaviors and edge cases for GridTable.
+ */
+
 // GridTable Tests
 //
 // MOCKING STRATEGY: useKeyboardContext is mocked to return no-op functions.

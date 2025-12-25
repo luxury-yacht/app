@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts
+ *
+ * UI component for diagnosticsPanelConfig.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import type { RefreshDomain } from '../../types';
 import {
   CLUSTER_REFRESHERS,

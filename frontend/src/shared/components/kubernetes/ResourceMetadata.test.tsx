@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/kubernetes/ResourceMetadata.test.tsx
+ *
+ * Test suite for ResourceMetadata.
+ * Covers key behaviors and edge cases for ResourceMetadata.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

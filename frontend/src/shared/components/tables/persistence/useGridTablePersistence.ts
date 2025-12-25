@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/useGridTablePersistence.ts
+ *
+ * React hook for useGridTablePersistence.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   ColumnWidthState,

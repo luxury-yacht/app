@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx
+ *
+ * UI component for ObjectPanel.
+ * Handles rendering and interactions for the object panel feature.
+ */
+
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import ConfirmationModal from '@components/modals/ConfirmationModal';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';

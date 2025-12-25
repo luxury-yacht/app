@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/hooks/useRefreshHooks.test.tsx
+ *
+ * Test suite for useRefreshHooks.
+ * Covers key behaviors and edge cases for useRefreshHooks.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/content/Settings.tsx
+ *
+ * UI component for Settings.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import { useState, useEffect } from 'react';
 import { GetThemeInfo, GetAppSettings, SetUseShortResourceNames } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';

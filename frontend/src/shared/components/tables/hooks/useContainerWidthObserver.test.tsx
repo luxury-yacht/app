@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useContainerWidthObserver.test.tsx
+ *
+ * Test suite for useContainerWidthObserver.
+ * Covers key behaviors and edge cases for useContainerWidthObserver.
+ */
+
 import React, { act, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';

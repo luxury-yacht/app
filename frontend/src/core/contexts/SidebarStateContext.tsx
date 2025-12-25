@@ -1,8 +1,8 @@
 /**
- * SidebarStateContext
+ * frontend/src/core/contexts/SidebarStateContext.tsx
  *
  * Manages sidebar-specific state including visibility, width, and selection.
- * Split from ViewStateContext to reduce re-render scope.
+ * Provides context for components to access and modify sidebar state.
  */
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 

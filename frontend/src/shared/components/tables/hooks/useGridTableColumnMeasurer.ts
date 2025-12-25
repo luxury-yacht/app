@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableColumnMeasurer.ts
+ *
+ * React hook for useGridTableColumnMeasurer.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useEffect, useRef } from 'react';
 import React from 'react';
 import ReactDOMServer from 'react-dom/server';

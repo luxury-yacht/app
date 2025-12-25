@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/components/diagnostics/diagnosticsPanelUtils.ts
+ *
+ * Utility helpers for diagnosticsPanelUtils.
+ * Provides shared helper functions for the shared components.
+ */
+
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import type { RefreshDomain } from '../../types';
 

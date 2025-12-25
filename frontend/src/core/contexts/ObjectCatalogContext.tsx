@@ -1,3 +1,11 @@
+/**
+ * frontend/src/core/contexts/ObjectCatalogContext.tsx
+ *
+ * Object catalog diagnostics context and refresh helper.
+ * Provides diagnostics information about the object catalog feature,
+ * including whether it is enabled, loading state, and error handling.
+ * Also includes a refresh function to re-fetch the diagnostics data.
+ */
 import React, {
   createContext,
   useCallback,

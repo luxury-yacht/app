@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/index.test.tsx
+ *
+ * Test suite for index.
+ * Covers key behaviors and edge cases for index.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
@@ -7,7 +14,7 @@ import Overview from './index';
 const setSectionExpandedMock = vi.fn();
 const useDetailsSectionContextMock = vi.fn();
 
-vi.mock('@contexts/DetailsSectionContext', () => ({
+vi.mock('@/core/contexts/ObjectPanelDetailsSectionContext', () => ({
   useDetailsSectionContext: (...args: unknown[]) => useDetailsSectionContextMock(...args),
 }));
 

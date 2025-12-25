@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.shortcuts.test.tsx
+ *
+ * Test suite for DetailsTab.shortcuts.
+ * Covers key behaviors and edge cases for DetailsTab.shortcuts.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

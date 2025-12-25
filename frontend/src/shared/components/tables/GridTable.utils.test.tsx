@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTable.utils.test.tsx
+ *
+ * Test suite for GridTable.utils.
+ * Covers key behaviors and edge cases for GridTable.utils.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import {

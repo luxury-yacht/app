@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/components/diagnostics/DiagnosticsTable.tsx
+ *
+ * UI component for DiagnosticsTable.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React from 'react';
 import type { DiagnosticsRow } from './diagnosticsPanelTypes';
 

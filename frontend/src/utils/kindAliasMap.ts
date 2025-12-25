@@ -1,3 +1,10 @@
+/**
+ * frontend/src/utils/kindAliasMap.ts
+ *
+ * Utility helpers for kindAliasMap.
+ * Provides shared helper functions for the frontend.
+ */
+
 // Map of Kubernetes resource types to their short names (Kind -> alias)
 const kindAliasMap: Record<string, string> = {
   // Workloads (singular forms as sent by backend)

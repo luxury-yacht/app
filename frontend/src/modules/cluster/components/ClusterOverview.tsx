@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/cluster/components/ClusterOverview.tsx
+ *
+ * Module source for ClusterOverview.
+ * Displays an overview of the connected Kubernetes cluster, including resource usage,
+ * node and workload summaries, and pod status with navigation links.
+ */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceBar from '@shared/components/ResourceBar';
 import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';

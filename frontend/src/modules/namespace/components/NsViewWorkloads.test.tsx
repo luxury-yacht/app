@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/namespace/components/NsViewWorkloads.test.tsx
+ *
+ * Test suite for NsViewWorkloads.
+ * Covers key behaviors and edge cases for NsViewWorkloads.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

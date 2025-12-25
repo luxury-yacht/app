@@ -1,6 +1,8 @@
-/* NsViewCustom.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewCustom.tsx
  *
- * GridTable view for namespace custom resources.
+ * UI component for NsViewCustom.
+ * Handles rendering and interactions for the namespace feature.
  */
 
 import './NsViewCustom.css';

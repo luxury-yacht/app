@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/contexts/DetailsSectionContext.test.tsx
+ *
+ * Test suite for DetailsSectionContext.
+ * Covers key behaviors and edge cases for DetailsSectionContext.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
@@ -7,7 +14,7 @@ import {
   DetailsSectionProvider,
   useDetailsSectionContext,
   type DetailsSectionState,
-} from './DetailsSectionContext';
+} from './ObjectPanelDetailsSectionContext';
 
 const renderWithProvider = async (component: React.ReactElement) => {
   const container = document.createElement('div');

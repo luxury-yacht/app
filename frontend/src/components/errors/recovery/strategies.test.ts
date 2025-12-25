@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/errors/recovery/strategies.test.ts
+ *
+ * Test suite for strategies.
+ * Covers key behaviors and edge cases for strategies.
+ */
+
 import { describe, expect, it } from 'vitest';
 
 import {

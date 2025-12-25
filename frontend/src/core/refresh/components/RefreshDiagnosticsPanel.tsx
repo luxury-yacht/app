@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/components/RefreshDiagnosticsPanel.tsx
+ *
+ * UI component for RefreshDiagnosticsPanel.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './RefreshDiagnosticsPanel.css';
 import { DockablePanel } from '@components/dockable';

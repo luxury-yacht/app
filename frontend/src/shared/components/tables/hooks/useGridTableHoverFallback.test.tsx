@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableHoverFallback.test.tsx
+ *
+ * Test suite for useGridTableHoverFallback.
+ * Covers key behaviors and edge cases for useGridTableHoverFallback.
+ */
+
 import { forwardRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

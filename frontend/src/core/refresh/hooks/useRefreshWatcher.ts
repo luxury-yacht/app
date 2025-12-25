@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/hooks/useRefreshWatcher.ts
+ *
+ * React hook for useRefreshWatcher.
+ * Encapsulates state and side effects for the core layer.
+ */
+
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useRefreshManagerContext } from '../contexts/RefreshManagerContext';
 import type { RefresherState } from '../RefreshManager';

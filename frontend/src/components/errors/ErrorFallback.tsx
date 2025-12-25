@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/errors/ErrorFallback.tsx
+ *
+ * UI component for ErrorFallback.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React from 'react';
 import { ErrorFallbackProps } from './types';
 import './ErrorFallback.css';

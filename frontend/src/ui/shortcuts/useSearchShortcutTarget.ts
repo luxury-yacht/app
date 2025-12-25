@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/useSearchShortcutTarget.ts
+ *
+ * React hook for useSearchShortcutTarget.
+ * Encapsulates state and side effects for the UI layer.
+ */
+
 import { useEffect, useRef } from 'react';
 import {
   registerSearchShortcutTarget,

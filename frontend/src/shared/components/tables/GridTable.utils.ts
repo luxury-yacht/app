@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTable.utils.ts
+ *
+ * Utility helpers for GridTable.utils.
+ * Provides shared helper functions for the shared components.
+ */
+
 import React from 'react';
 import type { ColumnWidthInput, ColumnWidthUnit } from '@shared/components/tables/GridTable.types';
 

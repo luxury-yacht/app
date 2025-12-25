@@ -1,7 +1,14 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization.test.tsx
+ *
+ * Test suite for DetailsTabUtilization.
+ * Covers key behaviors and edge cases for DetailsTabUtilization.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { DetailsSectionProvider } from '@core/contexts/DetailsSectionContext';
+import { DetailsSectionProvider } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import Utilization from './DetailsTabUtilization';
 
 vi.mock('@shared/components/ResourceBar', () => ({

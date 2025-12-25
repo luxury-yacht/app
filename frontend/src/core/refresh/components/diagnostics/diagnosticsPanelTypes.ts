@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/components/diagnostics/diagnosticsPanelTypes.ts
+ *
+ * Type definitions for diagnosticsPanelTypes.
+ * Defines shared interfaces and payload shapes for the shared components.
+ */
+
 import type { RefreshDomain } from '../../types';
 import type { DomainStatus } from '../../store';
 

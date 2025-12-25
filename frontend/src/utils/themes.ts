@@ -1,3 +1,10 @@
+/**
+ * frontend/src/utils/themes.ts
+ *
+ * Utility helpers for themes.
+ * Provides shared helper functions for the frontend.
+ */
+
 import { SetTheme } from '@wailsjs/go/backend/App';
 import { eventBus } from '@/core/events';
 

@@ -1,6 +1,8 @@
-/* NsViewNetwork.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewNetwork.tsx
  *
- * GridTable view for namespace network resources.
+ * UI component for NsViewNetwork.
+ * Handles rendering and interactions for the namespace feature.
  */
 
 import './NsViewNetwork.css';

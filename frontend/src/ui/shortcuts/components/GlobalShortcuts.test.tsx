@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/components/GlobalShortcuts.test.tsx
+ *
+ * Test suite for GlobalShortcuts.
+ * Covers key behaviors and edge cases for GlobalShortcuts.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableExternalWidths.ts
+ *
+ * React hook for useGridTableExternalWidths.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useMemo } from 'react';
 import type { ColumnWidthState } from '@shared/components/tables/GridTable.types';
 

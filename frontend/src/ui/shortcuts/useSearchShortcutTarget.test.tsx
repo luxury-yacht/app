@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/useSearchShortcutTarget.test.tsx
+ *
+ * Test suite for useSearchShortcutTarget.
+ * Covers key behaviors and edge cases for useSearchShortcutTarget.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

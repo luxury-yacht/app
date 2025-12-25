@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/orchestrator.test.ts
+ *
+ * Test suite for orchestrator.
+ * Covers key behaviors and edge cases for orchestrator.
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as storeModule from './store';

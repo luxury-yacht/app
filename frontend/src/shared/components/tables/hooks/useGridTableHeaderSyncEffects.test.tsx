@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableHeaderSyncEffects.test.tsx
+ *
+ * Test suite for useGridTableHeaderSyncEffects.
+ * Covers key behaviors and edge cases for useGridTableHeaderSyncEffects.
+ */
+
 import { forwardRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

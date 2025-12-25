@@ -1,3 +1,11 @@
+/**
+ * frontend/src/core/capabilities/actionPlanner.ts
+ *
+ * Namespace-scoped action capability planner and registrar.
+ * Provides functions to plan and register capabilities for
+ * namespace-scoped actions such as pod deletion and workload restarts.
+ */
+
 import { DEFAULT_CAPABILITY_TTL_MS, registerNamespaceCapabilityDefinitions } from './bootstrap';
 import type { CapabilityDefinition } from './catalog';
 import { createCapabilityKey, normalizeDescriptor } from './utils';

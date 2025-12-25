@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/contexts/DetailsSectionContext.tsx
+ *
+ * Context for expanded and collapsed detail section state.
+ * Each section (overview, containers, utilization, data, nodePods) has a boolean state.
+ * Provides a way to manage and access the expanded/collapsed state of detail sections across the application.
+ */
 import React, { createContext, useContext, useState, ReactNode } from 'react';
 
 export interface DetailsSectionState {

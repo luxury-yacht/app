@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/layout/AppLayout.tsx
+ *
+ * Module source for AppLayout.
+ * Implements AppLayout logic for the UI layer.
+ */
+
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 // Assets

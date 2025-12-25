@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/columnFactories.tsx
+ *
+ * UI component for columnFactories.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React from 'react';
 import {
   type ColumnWidthInput,

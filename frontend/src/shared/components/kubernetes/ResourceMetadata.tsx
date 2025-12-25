@@ -1,5 +1,8 @@
 /**
- * Shared component for displaying resource metadata (labels and annotations)
+ * frontend/src/shared/components/kubernetes/ResourceMetadata.tsx
+ *
+ * UI component for ResourceMetadata.
+ * Handles rendering and interactions for the shared components.
  */
 
 import React from 'react';

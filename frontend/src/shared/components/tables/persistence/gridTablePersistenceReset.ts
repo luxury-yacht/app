@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/gridTablePersistenceReset.ts
+ *
+ * UI component for gridTablePersistenceReset.
+ * Handles rendering and interactions for the shared components.
+ */
+
 const PREFIX = 'gridtable:';
 type ResetListener = () => void;
 const resetListeners = new Set<ResetListener>();

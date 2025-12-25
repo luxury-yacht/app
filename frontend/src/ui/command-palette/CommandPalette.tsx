@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/command-palette/CommandPalette.tsx
+ *
+ * Module source for CommandPalette.
+ * Implements CommandPalette logic for the UI layer.
+ */
+
 import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import {
   useShortcut,

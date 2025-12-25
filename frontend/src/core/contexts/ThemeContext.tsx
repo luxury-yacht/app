@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/contexts/ThemeContext.tsx
+ *
+ * Handles light, dark, and system themes with persistence and backend sync.
+ * Applies theme to document and listens for system changes.
+ * Also listens for theme change events from the application menu.
+ */
 import React, { createContext, useContext, useEffect, ReactNode } from 'react';
 import { GetThemeInfo } from '@wailsjs/go/backend/App';
 

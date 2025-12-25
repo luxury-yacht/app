@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/capabilities/hooks.test.tsx
+ *
+ * Test suite for hooks.
+ * Covers key behaviors and edge cases for hooks.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

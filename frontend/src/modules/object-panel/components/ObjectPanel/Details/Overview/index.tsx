@@ -1,5 +1,12 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/index.tsx
+ *
+ * Barrel exports for Overview.
+ * Re-exports public APIs for the object panel feature.
+ */
+
 import React from 'react';
-import { useDetailsSectionContext } from '@contexts/DetailsSectionContext';
+import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import { overviewRegistry, getResourceCapabilities } from './registry';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
 import '../../shared.css';

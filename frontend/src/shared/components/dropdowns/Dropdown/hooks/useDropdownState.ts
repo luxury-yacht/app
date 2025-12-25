@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/dropdowns/Dropdown/hooks/useDropdownState.ts
+ *
+ * React hook for useDropdownState.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useState, useRef, useCallback, useEffect } from 'react';
 
 export function useDropdownState(

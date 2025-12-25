@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/hooks.ts
+ *
+ * Module source for hooks.
+ * Implements hooks logic for the UI layer.
+ */
+
 import { useEffect, useMemo, useRef } from 'react';
 import { useKeyboardContext } from './context';
 import {

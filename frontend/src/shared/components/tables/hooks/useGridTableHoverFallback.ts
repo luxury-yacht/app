@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableHoverFallback.ts
+ *
+ * React hook for useGridTableHoverFallback.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
 

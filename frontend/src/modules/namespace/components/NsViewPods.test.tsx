@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/namespace/components/NsViewPods.test.tsx
+ *
+ * Test suite for NsViewPods.
+ * Covers key behaviors and edge cases for NsViewPods.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

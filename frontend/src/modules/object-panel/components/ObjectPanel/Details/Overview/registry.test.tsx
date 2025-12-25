@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/registry.test.tsx
+ *
+ * Test suite for registry.
+ * Covers key behaviors and edge cases for registry.
+ */
+
 import React from 'react';
 import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
 

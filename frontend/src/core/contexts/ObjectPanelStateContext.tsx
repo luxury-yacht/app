@@ -1,8 +1,8 @@
 /**
- * ObjectPanelStateContext
+ * frontend/src/core/contexts/ObjectPanelStateContext.tsx
  *
  * Manages object panel state including visibility, selected object, and navigation history.
- * Split from ViewStateContext to reduce re-render scope.
+ * Provides context for components to access and modify object panel state.
  */
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import type { KubernetesObjectReference, NavigationHistoryEntry } from '@/types/view-state';

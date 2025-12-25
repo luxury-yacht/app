@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableContextMenuItems.test.tsx
+ *
+ * Test suite for useGridTableContextMenuItems.
+ * Covers key behaviors and edge cases for useGridTableContextMenuItems.
+ */
+
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

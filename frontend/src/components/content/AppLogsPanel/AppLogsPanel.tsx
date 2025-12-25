@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/content/AppLogsPanel/AppLogsPanel.tsx
+ *
+ * UI component for AppLogsPanel.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
 import { GetLogs, ClearLogs } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';

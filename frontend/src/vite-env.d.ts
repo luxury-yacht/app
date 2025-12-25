@@ -1,3 +1,10 @@
+/**
+ * frontend/src/vite-env.d.ts
+ *
+ * Module source for vite-env.d.
+ * Implements vite-env.d logic for the frontend.
+ */
+
 /// <reference types="vite/client" />
 
 declare module '*.png' {

@@ -1,6 +1,8 @@
-/* NsViewWorkloads.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewWorkloads.tsx
  *
- * GridTable view for namespace workloads.
+ * UI component for NsViewWorkloads.
+ * Handles rendering and interactions for the namespace feature.
  */
 
 import './NsViewWorkloads.css';

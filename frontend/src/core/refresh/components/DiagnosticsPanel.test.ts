@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/components/DiagnosticsPanel.test.ts
+ *
+ * Test suite for DiagnosticsPanel.
+ * Covers key behaviors and edge cases for DiagnosticsPanel.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

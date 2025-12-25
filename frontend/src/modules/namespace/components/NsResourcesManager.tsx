@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/namespace/components/NsResourcesManager.tsx
+ *
+ * Module source for NsResourcesManager.
+ * Handles data fetching for namespace resources and passes it to the presentation component.
+ * Follows the same pattern as ClusterResourcesManager.
+ */
 import React, { useEffect, useMemo, useRef } from 'react';
 import {
   useNamespaceResource,

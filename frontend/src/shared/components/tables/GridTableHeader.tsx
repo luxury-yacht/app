@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTableHeader.tsx
+ *
+ * UI component for GridTableHeader.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React from 'react';
 import type { RefObject } from 'react';
 

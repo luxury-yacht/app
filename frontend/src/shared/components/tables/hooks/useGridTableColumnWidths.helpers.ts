@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableColumnWidths.helpers.ts
+ *
+ * React hook for useGridTableColumnWidths.helpers.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 

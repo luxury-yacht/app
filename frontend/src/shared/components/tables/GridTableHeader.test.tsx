@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTableHeader.test.tsx
+ *
+ * Test suite for GridTableHeader.
+ * Covers key behaviors and edge cases for GridTableHeader.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';

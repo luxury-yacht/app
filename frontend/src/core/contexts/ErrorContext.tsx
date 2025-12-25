@@ -1,3 +1,9 @@
+/**
+ * frontend/src/core/contexts/ErrorContext.tsx
+ *
+ * Error notification context and actions.
+ * Provides a way to manage and display error notifications across the application.
+ */
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { ErrorDetails, ErrorSeverity, errorHandler, subscribeToErrors } from '@utils/errorHandler';
 

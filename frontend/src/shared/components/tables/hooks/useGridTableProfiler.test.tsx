@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableProfiler.test.tsx
+ *
+ * Test suite for useGridTableProfiler.
+ * Covers key behaviors and edge cases for useGridTableProfiler.
+ */
+
 import React, { Profiler, act, useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';

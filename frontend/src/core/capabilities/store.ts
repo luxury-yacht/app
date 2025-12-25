@@ -1,3 +1,11 @@
+/**
+ * frontend/src/core/capabilities/store.ts
+ *
+ * Hooks for evaluating and accessing capability states.
+ * Provides the `useCapabilities` hook for synchronizing capability states
+ * and the `useCapabilityDiagnostics` hook for accessing diagnostics information.
+ */
+
 import { EvaluateCapabilities } from '@wailsjs/go/backend/App';
 import type { capabilities } from '@wailsjs/go/models';
 

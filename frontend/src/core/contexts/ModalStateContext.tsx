@@ -1,8 +1,9 @@
 /**
- * ModalStateContext
+ * frontend/src/core/contexts/ModalStateContext.tsx
  *
  * Manages modal state for Settings and About dialogs.
- * Split from ViewStateContext to reduce re-render scope.
+ * Provides context for whether each modal is open or closed,
+ * along with functions to update their states.
  */
 import React, { createContext, useContext, useState, useMemo } from 'react';
 

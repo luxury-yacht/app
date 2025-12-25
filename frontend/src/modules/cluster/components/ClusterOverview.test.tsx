@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/cluster/components/ClusterOverview.test.tsx
+ *
+ * Test suite for ClusterOverview.
+ * Covers key behaviors and edge cases for ClusterOverview.
+ */
+
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

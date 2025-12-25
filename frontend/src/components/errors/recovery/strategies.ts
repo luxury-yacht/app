@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/errors/recovery/strategies.ts
+ *
+ * UI component for strategies.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import { RecoveryStrategy } from '../types';
 
 export function getRecoveryStrategy(error: Error, scope?: string): RecoveryStrategy {

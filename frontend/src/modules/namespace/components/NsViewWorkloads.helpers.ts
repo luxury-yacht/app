@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/namespace/components/NsViewWorkloads.helpers.ts
+ *
+ * UI component for NsViewWorkloads.helpers.
+ * Handles rendering and interactions for the namespace feature.
+ */
+
 export interface WorkloadData {
   kind: string;
   kindAlias?: string;

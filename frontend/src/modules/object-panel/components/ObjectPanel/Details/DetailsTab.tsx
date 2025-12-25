@@ -1,5 +1,15 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.tsx
+ *
+ * UI component for DetailsTab.
+ * Handles rendering and interactions for the object panel feature.
+ */
+
 import React, { useMemo, useCallback } from 'react';
-import { DetailsSectionProvider, useDetailsSectionContext } from '@contexts/DetailsSectionContext';
+import {
+  DetailsSectionProvider,
+  useDetailsSectionContext,
+} from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import { useShortcut } from '@ui/shortcuts';
 import Overview from '@modules/object-panel/components/ObjectPanel/Details/Overview';
 import Utilization from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization';

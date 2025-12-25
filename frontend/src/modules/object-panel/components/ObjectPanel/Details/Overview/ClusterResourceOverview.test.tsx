@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ClusterResourceOverview.test.tsx
+ *
+ * Test suite for ClusterResourceOverview.
+ * Covers key behaviors and edge cases for ClusterResourceOverview.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

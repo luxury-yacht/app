@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useColumnResizeController.test.tsx
+ *
+ * Test suite for useColumnResizeController.
+ * Covers key behaviors and edge cases for useColumnResizeController.
+ */
+
 import React, { act, forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';

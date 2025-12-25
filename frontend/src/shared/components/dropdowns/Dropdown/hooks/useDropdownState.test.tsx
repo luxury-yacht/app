@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/dropdowns/Dropdown/hooks/useDropdownState.test.tsx
+ *
+ * Test suite for useDropdownState.
+ * Covers key behaviors and edge cases for useDropdownState.
+ */
+
 import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/main.ts
+ *
+ * Module source for main.
+ * Implements main logic for the frontend.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';

@@ -1,6 +1,8 @@
-/* ClusterViewNodes.tsx
+/**
+ * frontend/src/modules/cluster/components/ClusterViewNodes.tsx
  *
- * GridTable view for cluster Nodes.
+ * UI component for ClusterViewNodes.
+ * Handles rendering and interactions for the cluster feature.
  */
 
 import './ClusterViewNodes.css';

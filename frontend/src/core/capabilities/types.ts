@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/capabilities/types.ts
+ *
+ * Type definitions for types.
+ * Defines shared interfaces and payload shapes for the core layer.
+ */
+
 export type CapabilityStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 /**

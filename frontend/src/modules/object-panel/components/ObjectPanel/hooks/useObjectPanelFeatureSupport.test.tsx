@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport.test.tsx
+ *
+ * Test suite for useObjectPanelFeatureSupport.
+ * Covers key behaviors and edge cases for useObjectPanelFeatureSupport.
+ */
+
 import { act } from 'react';
 import React from 'react';
 import ReactDOM from 'react-dom/client';

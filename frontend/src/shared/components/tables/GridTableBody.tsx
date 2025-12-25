@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTableBody.tsx
+ *
+ * UI component for GridTableBody.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useRef } from 'react';
 import type { RefObject } from 'react';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';

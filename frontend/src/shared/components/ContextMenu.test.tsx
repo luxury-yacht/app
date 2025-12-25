@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/ContextMenu.test.tsx
+ *
+ * Test suite for ContextMenu.
+ * Covers key behaviors and edge cases for ContextMenu.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';

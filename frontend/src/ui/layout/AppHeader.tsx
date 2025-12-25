@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/layout/AppHeader.tsx
+ *
+ * Module source for AppHeader.
+ * Implements AppHeader logic for the UI layer.
+ */
+
 import React from 'react';
 import KubeconfigSelector from '@shared/components/KubeconfigSelector';
 import RefreshStatusIndicator from '@components/refresh/RefreshStatusIndicator';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/streaming/eventStreamManager.test.ts
+ *
+ * Test suite for eventStreamManager.
+ * Covers key behaviors and edge cases for eventStreamManager.
+ */
+
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('@wailsjs/go/backend/App', () => ({

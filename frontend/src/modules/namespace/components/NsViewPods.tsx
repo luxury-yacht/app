@@ -1,6 +1,8 @@
-/* NsViewPods.tsx
+/**
+ * frontend/src/modules/namespace/components/NsViewPods.tsx
  *
- * GridTable view for namespace Pods.
+ * UI component for NsViewPods.
+ * Handles rendering and interactions for the namespace feature.
  */
 
 import { getPodStatusSeverity } from '@/utils/podStatusSeverity';

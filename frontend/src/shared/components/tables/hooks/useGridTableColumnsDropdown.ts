@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableColumnsDropdown.ts
+ *
+ * React hook for useGridTableColumnsDropdown.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useMemo } from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 

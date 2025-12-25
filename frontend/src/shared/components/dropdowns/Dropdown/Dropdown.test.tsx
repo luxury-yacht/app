@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/dropdowns/Dropdown/Dropdown.test.tsx
+ *
+ * Test suite for Dropdown.
+ * Covers key behaviors and edge cases for Dropdown.
+ */
+
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

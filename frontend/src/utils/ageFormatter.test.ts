@@ -1,3 +1,10 @@
+/**
+ * frontend/src/utils/ageFormatter.test.ts
+ *
+ * Test suite for ageFormatter.
+ * Covers key behaviors and edge cases for ageFormatter.
+ */
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { formatAge, formatFullDate } from './ageFormatter';

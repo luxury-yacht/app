@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/client.test.ts
+ *
+ * Test suite for client.
+ * Covers key behaviors and edge cases for client.
+ */
+
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mockGetBaseURL = vi.fn();

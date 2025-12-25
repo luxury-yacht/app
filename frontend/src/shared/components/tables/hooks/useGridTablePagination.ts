@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTablePagination.ts
+ *
+ * React hook for useGridTablePagination.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { RefObject } from 'react';
 

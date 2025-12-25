@@ -1,3 +1,10 @@
+/**
+ * frontend/src/utils/errorHandler.test.ts
+ *
+ * Test suite for errorHandler.
+ * Covers key behaviors and edge cases for errorHandler.
+ */
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErrorCategory, ErrorSeverity, errorHandler } from './errorHandler';
 import type { ErrorHandlerOptions } from './errorHandler';

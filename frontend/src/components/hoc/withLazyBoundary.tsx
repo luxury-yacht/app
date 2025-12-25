@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/hoc/withLazyBoundary.tsx
+ *
+ * UI component for withLazyBoundary.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { Component, ComponentType, ComponentProps, lazy, Suspense, ReactNode } from 'react';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { errorHandler } from '@utils/errorHandler';

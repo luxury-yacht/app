@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useFrameSampler.test.tsx
+ *
+ * Test suite for useFrameSampler.
+ * Covers key behaviors and edge cases for useFrameSampler.
+ */
+
 import React, { act, useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/ResourceBar.test.tsx
+ *
+ * Test suite for ResourceBar.
+ * Covers key behaviors and edge cases for ResourceBar.
+ */
+
 import React from 'react';
 import ReactDOMClient from 'react-dom/client';
 import * as ReactDOM from 'react-dom';

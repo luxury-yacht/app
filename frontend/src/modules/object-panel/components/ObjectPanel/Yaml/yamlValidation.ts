@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlValidation.ts
+ *
+ * UI component for yamlValidation.
+ * Handles rendering and interactions for the object panel feature.
+ */
+
 import * as YAML from 'yaml';
 
 export interface ObjectIdentity {

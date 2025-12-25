@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableFilterHandlers.test.tsx
+ *
+ * Test suite for useGridTableFilterHandlers.
+ * Covers key behaviors and edge cases for useGridTableFilterHandlers.
+ */
+
 import React, { useImperativeHandle } from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

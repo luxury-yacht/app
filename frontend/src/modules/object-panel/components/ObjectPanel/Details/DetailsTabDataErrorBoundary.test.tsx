@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabDataErrorBoundary.test.tsx
+ *
+ * Test suite for DetailsTabDataErrorBoundary.
+ * Covers key behaviors and edge cases for DetailsTabDataErrorBoundary.
+ */
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';

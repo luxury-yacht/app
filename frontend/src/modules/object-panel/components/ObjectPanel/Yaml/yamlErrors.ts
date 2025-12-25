@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlErrors.ts
+ *
+ * UI component for yamlErrors.
+ * Handles rendering and interactions for the object panel feature.
+ */
+
 import type { backend } from '@wailsjs/go/models';
 import type { DiffResult, DiffLineType } from './yamlDiff';
 

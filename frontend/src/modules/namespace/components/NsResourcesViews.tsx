@@ -1,3 +1,13 @@
+/**
+ * frontend/src/modules/namespace/components/NsResourcesViews.tsx
+ *
+ * Module source for NsResourcesViews.
+ * Component that manages namespace resource views
+ * - Renders tabs and their corresponding content components
+ * - Uses ErrorBoundary to handle errors in each view
+ * - Implements a fallback UI for view rendering errors
+ * - Each view component is imported and rendered based on the active tab
+ */
 import React from 'react';
 import { NamespaceViewType } from '@/types/navigation/views';
 import type { PodMetricsInfo } from '@/core/refresh/types';

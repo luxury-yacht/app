@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PodOverview.tsx
+ *
+ * UI component for PodOverview.
+ * Handles rendering and interactions for the object panel feature.
+ */
+
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';

@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/LoadingSpinner.tsx
+ *
+ * UI component for LoadingSpinner.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React from 'react';
 import './LoadingSpinner.css';
 

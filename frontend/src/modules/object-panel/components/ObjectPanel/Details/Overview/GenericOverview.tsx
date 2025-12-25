@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/GenericOverview.tsx
+ *
+ * UI component for GenericOverview.
+ * Handles rendering and interactions for the object panel feature.
+ */
+
 import React from 'react';
 import { OverviewItem } from './shared/OverviewItem';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';

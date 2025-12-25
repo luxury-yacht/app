@@ -1,3 +1,10 @@
+/**
+ * frontend/src/components/content/AppLogsPanel/AppLogsPanel.test.tsx
+ *
+ * Test suite for AppLogsPanel.
+ * Covers key behaviors and edge cases for AppLogsPanel.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, afterAll, beforeEach, describe, expect, it, vi } from 'vitest';

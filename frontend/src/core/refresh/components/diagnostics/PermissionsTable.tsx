@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/components/diagnostics/PermissionsTable.tsx
+ *
+ * UI component for PermissionsTable.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React from 'react';
 import type { PermissionRow } from './diagnosticsPanelTypes';
 

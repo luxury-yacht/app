@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/refresh/orchestrator.ts
+ *
+ * Module source for orchestrator.
+ * Implements orchestrator logic for the core layer.
+ */
+
 import {
   ensureRefreshBaseURL,
   fetchSnapshot,

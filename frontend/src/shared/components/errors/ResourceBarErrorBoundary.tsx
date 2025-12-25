@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/errors/ResourceBarErrorBoundary.tsx
+ *
+ * UI component for ResourceBarErrorBoundary.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import { Component, ErrorInfo, ReactNode } from 'react';
 
 interface Props {

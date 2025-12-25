@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/persistence/gridTablePersistenceSettings.test.ts
+ *
+ * Test suite for gridTablePersistenceSettings.
+ * Covers key behaviors and edge cases for gridTablePersistenceSettings.
+ */
+
 import { describe, expect, it } from 'vitest';
 import {
   getGridTablePersistenceMode,

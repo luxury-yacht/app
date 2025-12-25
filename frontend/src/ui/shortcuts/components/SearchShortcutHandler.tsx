@@ -1,3 +1,10 @@
+/**
+ * frontend/src/ui/shortcuts/components/SearchShortcutHandler.tsx
+ *
+ * UI component for SearchShortcutHandler.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import { useCallback } from 'react';
 import { useShortcut } from '../hooks';
 import { focusRegisteredSearchShortcutTarget } from '../searchShortcutRegistry';

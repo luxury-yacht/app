@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableShortcuts.ts
+ *
+ * React hook for useGridTableShortcuts.
+ * Encapsulates state and side effects for the shared components.
+ */
+
 import { useEffect, useRef } from 'react';
 import { useShortcuts } from '@ui/shortcuts';
 

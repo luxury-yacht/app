@@ -1,5 +1,8 @@
 /**
- * Actions menu component for resource actions (replaces individual buttons with a dropdown menu)
+ * frontend/src/shared/components/kubernetes/ActionsMenu.tsx
+ *
+ * UI component for ActionsMenu.
+ * Handles rendering and interactions for the shared components.
  */
 
 import React, { useState, useRef, useEffect } from 'react';

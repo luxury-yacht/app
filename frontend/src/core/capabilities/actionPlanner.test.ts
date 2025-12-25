@@ -1,3 +1,10 @@
+/**
+ * frontend/src/core/capabilities/actionPlanner.test.ts
+ *
+ * Test suite for actionPlanner.
+ * Covers key behaviors and edge cases for actionPlanner.
+ */
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./bootstrap', async () => {

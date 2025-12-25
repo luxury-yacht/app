@@ -1,3 +1,12 @@
+/**
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities.ts
+ *
+ * Hook for useObjectPanelCapabilities.
+ * - Computes and provides capability states and permissions for the object panel.
+ * - Utilizes capability descriptors and user permissions to determine allowed actions.
+ * - Handles dynamic capability evaluation based on object data and feature support.
+ * - Returns structured capability states, computed capabilities, and reasons for capability restrictions.
+ */
 import { useCallback, useMemo } from 'react';
 
 import { useCapabilities, useUserPermission, type CapabilityDescriptor } from '@/core/capabilities';

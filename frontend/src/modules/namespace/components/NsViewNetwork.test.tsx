@@ -1,3 +1,10 @@
+/**
+ * frontend/src/modules/namespace/components/NsViewNetwork.test.tsx
+ *
+ * Test suite for NsViewNetwork.
+ * Covers key behaviors and edge cases for NsViewNetwork.
+ */
+
 import ReactDOM from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { act } from 'react';

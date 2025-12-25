@@ -1,3 +1,10 @@
+/**
+ * frontend/src/shared/components/tables/GridTableFiltersBar.tsx
+ *
+ * UI component for GridTableFiltersBar.
+ * Handles rendering and interactions for the shared components.
+ */
+
 import React, { useRef } from 'react';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
