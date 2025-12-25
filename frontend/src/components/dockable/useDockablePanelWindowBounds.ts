@@ -43,12 +43,13 @@ export function useWindowBoundsConstraint(
   }, [panelState]);
 
   useEffect(() => {
-    // If the panel is maximized, there's nothing to do.
-    if (isMaximized) {
+    // Skip window listeners when closed or maximized.
+    if (isMaximized || !panelState.isOpen) {
       return;
     }
 
     let resizeTimer: NodeJS.Timeout;
+    let initialResizeTimer: NodeJS.Timeout | null = null;
 
     const handleWindowResize = () => {
       // If the window object is not available, return early.
@@ -151,11 +152,15 @@ export function useWindowBoundsConstraint(
     };
 
     window.addEventListener('resize', handleWindowResize);
-    setTimeout(handleWindowResize, LAYOUT.RESIZE_DEBOUNCE_MS);
+    // Schedule an initial clamp to match the current window bounds.
+    initialResizeTimer = setTimeout(handleWindowResize, LAYOUT.RESIZE_DEBOUNCE_MS);
 
     return () => {
       clearTimeout(resizeTimer);
+      if (initialResizeTimer) {
+        clearTimeout(initialResizeTimer);
+      }
       window.removeEventListener('resize', handleWindowResize);
     };
-  }, [minWidth, minHeight, isResizing, isMaximized]);
+  }, [minWidth, minHeight, isResizing, isMaximized, panelState.isOpen]);
 }

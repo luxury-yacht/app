@@ -81,6 +81,28 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
   }
 }
 
+// Track hover suppression across panels so one panel doesn't re-enable hover during another drag.
+let hoverSuppressionCount = 0;
+
+function updateGridTableHoverSuppression(shouldSuppress: boolean) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+  if (shouldSuppress) {
+    if (hoverSuppressionCount === 0) {
+      document.body.classList.add('gridtable-disable-hover');
+    }
+    hoverSuppressionCount += 1;
+    return;
+  }
+  if (hoverSuppressionCount > 0) {
+    hoverSuppressionCount -= 1;
+    if (hoverSuppressionCount === 0) {
+      document.body.classList.remove('gridtable-disable-hover');
+    }
+  }
+}
+
 const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const {
     panelId,
@@ -121,6 +143,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     [forwardedPanelRef]
   );
   const skipNextControlledSyncRef = useRef(false);
+  const hoverSuppressionRef = useRef(false);
 
   const { isMaximized, maximizedRect, toggleMaximize } = useDockablePanelMaximize({
     panelState,
@@ -200,18 +223,24 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     };
   }, [panelId, panelState.isOpen, panelState.position, registerPanel, unregisterPanel]);
 
-  // Manage body class to disable hover effects during floating panel drag
+  // Manage body class to disable hover effects during floating panel drag.
   useEffect(() => {
-    if (panelState.position === 'floating' && isDragging) {
-      document.body.classList.add('gridtable-disable-hover');
-    } else {
-      document.body.classList.remove('gridtable-disable-hover');
+    const shouldSuppress = panelState.position === 'floating' && isDragging;
+    if (shouldSuppress === hoverSuppressionRef.current) {
+      return;
     }
-    // Always clean up on unmount
-    return () => {
-      document.body.classList.remove('gridtable-disable-hover');
-    };
+    hoverSuppressionRef.current = shouldSuppress;
+    updateGridTableHoverSuppression(shouldSuppress);
   }, [isDragging, panelState.position]);
+
+  useEffect(() => {
+    return () => {
+      if (hoverSuppressionRef.current) {
+        hoverSuppressionRef.current = false;
+        updateGridTableHoverSuppression(false);
+      }
+    };
+  }, []);
 
   // Handle window resize to keep panels within bounds
   useWindowBoundsConstraint(panelState, {
