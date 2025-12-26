@@ -12,8 +12,6 @@ Please read the relevant sections below before making your contribution. It will
 
 ### Reporting Bugs
 
-#### Before Submitting a Bug Report
-
 Before you submit a bug report:
 
 - Make sure that you are using the latest version of the app.
