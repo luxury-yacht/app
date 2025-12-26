@@ -22,23 +22,21 @@ Before you submit a bug report:
 
 In order to keep our community of users safe, **please do not report security issues or vulnerabilities in a bug report, or elsewhere in public.** Instead, email [security@luxury-yacht.app](mailto:security@luxury-yacht.app). We will disclose the vulnerabilty as part of the release notes when the patch is released.
 
-#### How Do I Submit a Good Bug Report?
+#### Submit a Bug Report
 
-Open a [bug report](https://github.com/luxury-yacht/app/issues/new?template=bug.yml). Follow the instructions in the template to create the issue.
+Open a [bug report](https://github.com/luxury-yacht/app/issues/new?template=bug.yml) and follow the instructions in the template.
 
 Once the issue is opened, the maintainers will test and try to reproduce the issue. If more information is needed, maintainers will ask questions in the issue.
 
 ### Feature Requests
 
-This section guides you through submitting a feature request for Luxury Yacht. Following these guidelines will help maintainers and the community to understand your suggestion and find related suggestions.
-
-Before Submitting a feature request:
+Before submitting a feature request:
 
 - Make sure that you are using the latest version.
 - Search the existing [issues](https://github.com/luxury-yacht/app/issues) to see if the feaure has already been requested.
 - Think about whether your idea fits with the scope and goals of this project.
 
-If you'd still like to submit a request, open an [feature request](https://github.com/luxury-yacht/app/issues/new?template=feature.yml) and use the `Feature Request` template.
+If you'd still like to submit a request, open a [feature request](https://github.com/luxury-yacht/app/issues/new?template=feature.yml) and follow the instructions in the template.
 
 You'll need to make a case to the project's maintainers that your feature request has merit. We'll prioritize the features that have the greatest impact to the majority of users.
 
