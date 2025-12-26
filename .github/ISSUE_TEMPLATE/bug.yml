@@ -30,9 +30,9 @@ body:
       label: OS Type
       description: What type of operating system are you using?
       options:
-        - label: macOS
-        - label: Linux
-        - label: Windows
+        - macOS
+        - Linux
+        - Windows
     validations:
       required: true
 
@@ -48,8 +48,8 @@ body:
       label: OS Architecture
       description: What is the architecture of your operating system?
       options:
-        - label: amd64 (x86_64)
-        - label: arm64 (aarch64)
+        - amd64 (x86_64)
+        - arm64 (aarch64)
     validations:
       required: true
 
