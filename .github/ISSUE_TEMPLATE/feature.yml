@@ -1,0 +1,19 @@
+name: Feature Request
+description: Suggest a new feature or enhancement.
+title: '[FEATURE] <title - a brief summary of the feature request>'
+labels: ['enhancement']
+body:
+  - type: textarea
+    attributes:
+      label: Description
+      description: Clearly describe the feature you would like to see implemented. If it's not obvious, explain how this feature would help others.
+    validations:
+      required: true
+
+  - type: textarea
+    attributes:
+      label: Anything else?
+      description: |
+        Is there anything else you'd like to add to help clarify the feature request? Screenshots, links, etc.
+    validations:
+      required: false

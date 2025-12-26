@@ -1,7 +1,7 @@
 name: Bug
 description: File a bug/issue
-title: '[BUG] <title>'
-labels: ['Bug']
+title: '[BUG] <title - a brief summary of the bug>'
+labels: ['bug']
 body:
   - type: checkboxes
     attributes:
@@ -39,7 +39,7 @@ body:
   - type: input
     attributes:
       label: OS Version
-      description: What version of the operating system are you using? If Linux, please include the distro name.
+      description: What version of the operating system are you using? If Linux, please include the distro name (e.g., Ubuntu 24.04).
     validations:
       required: true
 
