@@ -2,7 +2,7 @@
 
 First of all, thank you for taking the time to read this!
 
-See the [Table of Contents](#table-of-contents) for different ways to help and details about how this project handles them. Please read the relevant section before making your contribution. It will make things easier for both you and the maintainers of this project.
+Please read the relevant sections below before making your contribution. It will make things easier for both you and the maintainers of this project.
 
 ## I Have a Question
 
