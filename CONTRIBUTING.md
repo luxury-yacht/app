@@ -4,12 +4,6 @@ First of all, thank you for taking the time to read this!
 
 Please read the relevant sections below before making your contribution. It will make things easier for both you and the maintainers of this project.
 
-## I Have a Question
-
-Please start by searching the existing [issues](https://github.com/luxury-yacht/app/issues). If you find a related issue and still need clarification, please ask the question in that issue.
-
-If a search of the existing issues doesn't turn anything up, please open a new issue. For bug reports and feature requests, please use the proper issue template.
-
 ## I Want To Contribute
 
 ### Legal Notice
