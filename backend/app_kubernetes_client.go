@@ -128,12 +128,38 @@ func (a *App) initKubernetesClient() (err error) {
 	} else {
 		a.logger.Info("Successfully established Kubernetes client connections", "KubernetesClient")
 	}
+	// Keep the client pool aligned with the active kubeconfig selection.
+	a.registerPrimaryClusterClient()
 	a.updateConnectionStatus(ConnectionStateHealthy, "", 0)
 
 	return nil
 }
 
 func (a *App) restoreKubeconfigSelection() {
+	// Prefer multi-selection settings when available, then fall back to legacy single selection.
+	if a.appSettings != nil && len(a.appSettings.SelectedKubeconfigs) > 0 {
+		normalized := make([]string, 0, len(a.appSettings.SelectedKubeconfigs))
+		for _, selection := range a.appSettings.SelectedKubeconfigs {
+			parsed, err := a.normalizeKubeconfigSelection(selection)
+			if err != nil {
+				continue
+			}
+			if err := a.validateKubeconfigSelection(parsed); err != nil {
+				continue
+			}
+			normalized = append(normalized, parsed.String())
+		}
+		if len(normalized) > 0 {
+			primary, err := parseKubeconfigSelection(normalized[0])
+			if err == nil {
+				a.selectedKubeconfigs = normalized
+				a.selectedKubeconfig = primary.Path
+				a.selectedContext = primary.Context
+				return
+			}
+		}
+	}
+
 	if a.appSettings != nil && a.appSettings.SelectedKubeconfig != "" {
 		parts := strings.SplitN(a.appSettings.SelectedKubeconfig, ":", 2)
 		savedPath := parts[0]
@@ -172,5 +198,9 @@ func (a *App) restoreKubeconfigSelection() {
 			a.selectedKubeconfig = a.availableKubeconfigs[0].Path
 			a.selectedContext = a.availableKubeconfigs[0].Context
 		}
+	}
+
+	if a.selectedKubeconfig != "" {
+		a.selectedKubeconfigs = []string{a.GetSelectedKubeconfig()}
 	}
 }

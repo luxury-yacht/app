@@ -127,6 +127,24 @@ func TestRestoreKubeconfigSelectionPrefersSavedContext(t *testing.T) {
 	require.Equal(t, "saved", app.selectedContext)
 }
 
+func TestRestoreKubeconfigSelectionUsesSelectedKubeconfigs(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.availableKubeconfigs = []KubeconfigInfo{
+		{Path: "/other/config", Context: "other"},
+		{Path: "/saved/config", Context: "saved"},
+	}
+	app.appSettings = &AppSettings{
+		SelectedKubeconfig:  "/other/config:other",
+		SelectedKubeconfigs: []string{"/saved/config:saved", "/other/config:other"},
+	}
+
+	app.restoreKubeconfigSelection()
+
+	require.Equal(t, "/saved/config", app.selectedKubeconfig)
+	require.Equal(t, "saved", app.selectedContext)
+	require.Equal(t, []string{"/saved/config:saved", "/other/config:other"}, app.selectedKubeconfigs)
+}
+
 func TestRestoreKubeconfigSelectionFallsBack(t *testing.T) {
 	t.Run("defaults to current context", func(t *testing.T) {
 		app := newTestAppWithDefaults(t)

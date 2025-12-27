@@ -172,6 +172,19 @@ func TestApp_GetSelectedKubeconfig(t *testing.T) {
 	assert.Equal(t, "/path/to/config", app.GetSelectedKubeconfig())
 }
 
+func TestApp_GetSelectedKubeconfigs(t *testing.T) {
+	app := NewApp()
+
+	assert.Empty(t, app.GetSelectedKubeconfigs())
+
+	app.selectedKubeconfig = "/path/to/config"
+	app.selectedContext = "dev"
+	assert.Equal(t, []string{"/path/to/config:dev"}, app.GetSelectedKubeconfigs())
+
+	app.selectedKubeconfigs = []string{"/path/one:ctx", "/path/two:other"}
+	assert.Equal(t, []string{"/path/one:ctx", "/path/two:other"}, app.GetSelectedKubeconfigs())
+}
+
 func TestApp_SetKubeconfig(t *testing.T) {
 	// Setup temp directory with kubeconfig
 	tempDir := t.TempDir()
@@ -270,6 +283,79 @@ func TestApp_SetKubeconfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestApp_SetSelectedKubeconfigs(t *testing.T) {
+	tempDir := t.TempDir()
+	kubeDir := filepath.Join(tempDir, ".kube")
+	require.NoError(t, os.MkdirAll(kubeDir, 0755))
+
+	configPath := createTempKubeconfig(t, kubeDir, "config", "default-context")
+	testConfigPath := createTempKubeconfig(t, kubeDir, "test-config", "test-context")
+
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	app.kubeClientInitializer = func() error { return nil }
+
+	require.NoError(t, app.discoverKubeconfigs())
+
+	selections := []string{configPath + ":default-context", testConfigPath + ":test-context"}
+	require.NoError(t, app.SetSelectedKubeconfigs(selections))
+
+	assert.Equal(t, selections, app.selectedKubeconfigs)
+	assert.Equal(t, configPath, app.selectedKubeconfig)
+	assert.Equal(t, "default-context", app.selectedContext)
+	require.NotNil(t, app.appSettings)
+	assert.Equal(t, selections, app.appSettings.SelectedKubeconfigs)
+}
+
+func TestApp_SetSelectedKubeconfigsRejectsDuplicateContexts(t *testing.T) {
+	tempDir := t.TempDir()
+	kubeDir := filepath.Join(tempDir, ".kube")
+	require.NoError(t, os.MkdirAll(kubeDir, 0755))
+
+	configPath := createTempKubeconfig(t, kubeDir, "config", "same-context")
+	testConfigPath := createTempKubeconfig(t, kubeDir, "test-config", "same-context")
+
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	app.kubeClientInitializer = func() error { return nil }
+
+	require.NoError(t, app.discoverKubeconfigs())
+
+	selections := []string{configPath + ":same-context", testConfigPath + ":same-context"}
+	err := app.SetSelectedKubeconfigs(selections)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "duplicate context selected")
+}
+
+func TestApp_SetSelectedKubeconfigsClearsSelection(t *testing.T) {
+	tempDir := t.TempDir()
+	originalHome := os.Getenv("HOME")
+	os.Setenv("HOME", tempDir)
+	defer os.Setenv("HOME", originalHome)
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	app.selectedKubeconfig = "/path/to/config"
+	app.selectedContext = "ctx"
+	app.selectedKubeconfigs = []string{"/path/to/config:ctx"}
+
+	require.NoError(t, app.SetSelectedKubeconfigs(nil))
+	assert.Empty(t, app.selectedKubeconfig)
+	assert.Empty(t, app.selectedContext)
+	assert.Empty(t, app.selectedKubeconfigs)
+	require.NotNil(t, app.appSettings)
+	assert.Empty(t, app.appSettings.SelectedKubeconfig)
+	assert.Empty(t, app.appSettings.SelectedKubeconfigs)
 }
 
 func TestApp_startup_withKubeconfigs(t *testing.T) {

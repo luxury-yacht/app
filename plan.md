@@ -122,9 +122,12 @@ Out of scope for Phase 1
 Goal: enable multi-select cluster workflows and refresh/stream fan-out while preserving the Phase 1 cluster-aware keys.
 
 Backend
-- Persist selected cluster IDs as a list (migrate from single selection) and expose Wails APIs to read/update the selection.
-- Implement a Kubernetes client pool keyed by `clusterId`, created/removed as selection changes.
+- ✅ Persist selected cluster IDs as a list (migrate from single selection) and expose Wails APIs to read/update the selection.
+- ✅ Implement a Kubernetes client pool keyed by `clusterId`, created/removed as selection changes.
 - Refactor refresh setup to run per-cluster refresh cycles and merge snapshot payloads, preserving cluster meta on every item.
+  - Create per-cluster refresh managers/servers keyed by `clusterId`, sourced from the client pool.
+  - Add an aggregate refresh handler that fans out snapshot builds to active clusters and merges payloads deterministically.
+  - Ensure per-cluster permission caches/diagnostics remain isolated while aggregating for the UI.
 - Update the object catalog to track namespaces and selections per cluster (catalog remains the source of truth).
 - Accept selected cluster sets in manual refresh endpoints and streaming handlers; merge multi-cluster stream events.
 - Surface diagnostics and permission issues per cluster in telemetry and refresh status.

@@ -82,6 +82,7 @@ func getDefaultAppSettings() *AppSettings {
 	return &AppSettings{
 		Theme:                 "system",
 		SelectedKubeconfig:    "",
+		SelectedKubeconfigs:   nil,
 		UseShortResourceNames: false,
 	}
 }
@@ -152,7 +153,7 @@ func (a *App) GetAppSettings() (*AppSettings, error) {
 	}
 
 	if err := a.loadAppSettings(); err != nil {
-		return &AppSettings{Theme: "system", SelectedKubeconfig: ""}, nil
+		return &AppSettings{Theme: "system", SelectedKubeconfig: "", SelectedKubeconfigs: nil}, nil
 	}
 
 	return a.appSettings, nil

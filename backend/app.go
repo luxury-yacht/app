@@ -34,6 +34,7 @@ type App struct {
 	restConfig              *rest.Config
 	selectedKubeconfig      string
 	selectedContext         string
+	selectedKubeconfigs     []string
 	availableKubeconfigs    []KubeconfigInfo
 	windowSettings          *WindowSettings
 	appSettings             *AppSettings
@@ -59,6 +60,9 @@ type App struct {
 
 	permissionCacheMu sync.Mutex
 	permissionCaches  map[string]map[string]bool
+
+	clusterClientsMu sync.Mutex
+	clusterClients   map[string]*clusterClients
 
 	shellSessions   map[string]*shellSession
 	shellSessionsMu sync.Mutex
@@ -97,6 +101,7 @@ func NewApp() *App {
 		sidebarVisible:   true,
 		logsPanelVisible: false,
 		permissionCaches: make(map[string]map[string]bool),
+		clusterClients:   make(map[string]*clusterClients),
 		shellSessions:    make(map[string]*shellSession),
 		eventEmitter:     func(context.Context, string, ...interface{}) {},
 	}
