@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/versioning"
-	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -56,9 +55,9 @@ type App struct {
 	apiExtensionsInformerFactory apiextinformers.SharedInformerFactory
 	refreshSubsystems            map[string]*system.Subsystem
 
-	objectCatalogService *objectcatalog.Service
-	objectCatalogCancel  context.CancelFunc
-	objectCatalogDone    chan struct{}
+	objectCatalogMu        sync.Mutex
+	objectCatalogEntries   map[string]*objectCatalogEntry
+	objectCatalogPrimaryID string
 
 	permissionCacheMu sync.Mutex
 	permissionCaches  map[string]map[string]bool
@@ -98,15 +97,16 @@ type App struct {
 // NewApp constructs a backend App with sane defaults.
 func NewApp() *App {
 	app := &App{
-		logger:           NewLogger(1000),
-		versionCache:     versioning.NewCache(),
-		sidebarVisible:   true,
-		logsPanelVisible: false,
-		permissionCaches: make(map[string]map[string]bool),
-		refreshSubsystems: make(map[string]*system.Subsystem),
-		clusterClients:   make(map[string]*clusterClients),
-		shellSessions:    make(map[string]*shellSession),
-		eventEmitter:     func(context.Context, string, ...interface{}) {},
+		logger:               NewLogger(1000),
+		versionCache:         versioning.NewCache(),
+		sidebarVisible:       true,
+		logsPanelVisible:     false,
+		permissionCaches:     make(map[string]map[string]bool),
+		refreshSubsystems:    make(map[string]*system.Subsystem),
+		clusterClients:       make(map[string]*clusterClients),
+		objectCatalogEntries: make(map[string]*objectCatalogEntry),
+		shellSessions:        make(map[string]*shellSession),
+		eventEmitter:         func(context.Context, string, ...interface{}) {},
 	}
 	app.startAuthRecovery = func(reason string) {
 		go app.runAuthRecovery(reason)

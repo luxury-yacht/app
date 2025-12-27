@@ -257,7 +257,7 @@ users:
 	err := app.initKubernetesClient()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to initialise refresh subsystem")
-	require.Nil(t, app.objectCatalogService)
+	require.Nil(t, app.objectCatalogServiceForCluster(""))
 	require.Nil(t, app.telemetryRecorder)
 	require.Nil(t, app.client)
 }

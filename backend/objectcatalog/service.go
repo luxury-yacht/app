@@ -368,6 +368,29 @@ func (s *Service) Count() int {
 	return len(s.items)
 }
 
+// Namespaces returns the cached namespace list for this catalog.
+func (s *Service) Namespaces() []string {
+	s.mu.RLock()
+	cached := append([]string(nil), s.cachedNamespaces...)
+	items := s.items
+	s.mu.RUnlock()
+
+	if len(cached) > 0 {
+		return cached
+	}
+	if len(items) == 0 {
+		return nil
+	}
+
+	namespaceSet := make(map[string]struct{})
+	for _, summary := range items {
+		if summary.Namespace != "" {
+			namespaceSet[summary.Namespace] = struct{}{}
+		}
+	}
+	return snapshotSortedKeys(namespaceSet)
+}
+
 // Descriptors returns the catalogued resource definitions discovered during the last sync.
 func (s *Service) Descriptors() []Descriptor {
 	s.mu.RLock()

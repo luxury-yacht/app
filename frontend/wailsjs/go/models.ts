@@ -588,6 +588,7 @@ export namespace types {
 	export class AppSettings {
 	    theme: string;
 	    selectedKubeconfig: string;
+	    selectedKubeconfigs: string[];
 	    useShortResourceNames: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -598,6 +599,7 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.theme = source["theme"];
 	        this.selectedKubeconfig = source["selectedKubeconfig"];
+	        this.selectedKubeconfigs = source["selectedKubeconfigs"];
 	        this.useShortResourceNames = source["useShortResourceNames"];
 	    }
 	}

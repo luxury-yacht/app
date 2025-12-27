@@ -25,7 +25,8 @@ func JoinClusterScope(clusterID, scope string) string {
 		return value
 	}
 	if value == "" {
-		return id
+		// Preserve the delimiter so split helpers can recover an empty scope.
+		return id + clusterScopeDelimiter
 	}
 	return id + clusterScopeDelimiter + value
 }

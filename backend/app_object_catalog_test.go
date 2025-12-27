@@ -13,11 +13,13 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 	app.logger = NewLogger(10)
 
 	cancelCalled := 0
-	app.objectCatalogCancel = func() { cancelCalled++ }
 	done := make(chan struct{}, 1)
 	done <- struct{}{}
-	app.objectCatalogDone = done
-	app.objectCatalogService = &objectcatalog.Service{}
+	app.storeObjectCatalogEntry("primary", &objectCatalogEntry{
+		service: &objectcatalog.Service{},
+		cancel:  func() { cancelCalled++ },
+		done:    done,
+	}, true)
 	app.telemetryRecorder = telemetry.NewRecorder()
 
 	app.stopObjectCatalog()
@@ -25,7 +27,7 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 	if cancelCalled != 1 {
 		t.Fatalf("expected cancel to be invoked once, got %d", cancelCalled)
 	}
-	if app.objectCatalogCancel != nil || app.objectCatalogDone != nil || app.objectCatalogService != nil {
+	if app.objectCatalogServiceForCluster("") != nil {
 		t.Fatalf("expected catalog references to be cleared")
 	}
 
@@ -38,7 +40,9 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 func TestGetCatalogDiagnosticsCombinesTelemetryAndServiceState(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
-	app.objectCatalogService = &objectcatalog.Service{}
+	app.storeObjectCatalogEntry("primary", &objectCatalogEntry{
+		service: &objectcatalog.Service{},
+	}, true)
 	app.telemetryRecorder = telemetry.NewRecorder()
 
 	app.telemetryRecorder.RecordCatalog(true, 7, 3, 1500*time.Millisecond, nil)

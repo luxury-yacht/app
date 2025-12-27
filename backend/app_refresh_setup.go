@@ -47,6 +47,11 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			primaryID = selectionKey
 		}
 
+		catalogClusterID := clusterMeta.ID
+		if catalogClusterID == "" {
+			catalogClusterID = selectionKey
+		}
+
 		subsystem, err := a.buildRefreshSubsystem(system.Config{
 			KubernetesClient:      kubeClient,
 			MetricsClient:         a.metricsClient,
@@ -60,11 +65,12 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			Logger:                a.logger,
 			PermissionCache:       permissionCache,
 			ObjectCatalogService: func() *objectcatalog.Service {
-				return a.objectCatalogService
+				return a.objectCatalogServiceForCluster(catalogClusterID)
 			},
-			ObjectCatalogEnabled: func() bool { return true },
-			ClusterID:            clusterMeta.ID,
-			ClusterName:          clusterMeta.Name,
+			ObjectCatalogNamespaces: a.catalogNamespaceGroups,
+			ObjectCatalogEnabled:    func() bool { return true },
+			ClusterID:               clusterMeta.ID,
+			ClusterName:             clusterMeta.Name,
 		}, selectionKey)
 		if err != nil {
 			return nil, err
@@ -107,12 +113,11 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 				ClusterName:           clusterMeta.Name,
 			}
 
-			if idx == 0 {
-				cfg.ObjectCatalogService = func() *objectcatalog.Service {
-					return a.objectCatalogService
-				}
-				cfg.ObjectCatalogEnabled = func() bool { return true }
+			cfg.ObjectCatalogService = func() *objectcatalog.Service {
+				return a.objectCatalogServiceForCluster(clusterMeta.ID)
 			}
+			cfg.ObjectCatalogNamespaces = a.catalogNamespaceGroups
+			cfg.ObjectCatalogEnabled = func() bool { return true }
 
 			subsystem, err := a.buildRefreshSubsystem(cfg, clusterMeta.ID)
 			if err != nil {

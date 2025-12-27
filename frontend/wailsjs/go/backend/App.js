@@ -206,6 +206,10 @@ export function GetSelectedKubeconfig() {
   return window['go']['backend']['App']['GetSelectedKubeconfig']();
 }
 
+export function GetSelectedKubeconfigs() {
+  return window['go']['backend']['App']['GetSelectedKubeconfigs']();
+}
+
 export function GetService(arg1, arg2) {
   return window['go']['backend']['App']['GetService'](arg1, arg2);
 }
@@ -300,6 +304,10 @@ export function SetMetricsClient(arg1) {
 
 export function SetRestConfig(arg1) {
   return window['go']['backend']['App']['SetRestConfig'](arg1);
+}
+
+export function SetSelectedKubeconfigs(arg1) {
+  return window['go']['backend']['App']['SetSelectedKubeconfigs'](arg1);
 }
 
 export function SetSidebarVisible(arg1) {

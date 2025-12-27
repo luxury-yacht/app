@@ -129,7 +129,16 @@ Backend
   - ✅ Add an aggregate refresh handler that fans out snapshot builds to active clusters and merges payloads deterministically.
   - ✅ Merge list/metrics/overview snapshot payloads across clusters.
   - Ensure per-cluster permission caches/diagnostics remain isolated while aggregating for the UI.
-- Update the object catalog to track namespaces and selections per cluster (catalog remains the source of truth).
+- Update the object catalog to track namespaces and selections per cluster (catalog remains the source of truth). (in progress)
+  - ✅ Start per-cluster catalog services keyed by `clusterId` and wire them into refresh subsystems.
+  - ✅ Build catalog dependencies from cluster-specific clients/informers so summaries stay cluster-scoped.
+  - ✅ Adjust catalog snapshot outputs to expose per-cluster namespace data and selected namespaces.
+    - ✅ Add per-cluster namespace groups to the catalog snapshot payload (keep existing fields for compatibility).
+    - ✅ Add catalog service accessors to expose namespace lists per cluster.
+    - ✅ Update refresh catalog wiring to include namespace groups.
+    - ✅ Update frontend catalog snapshot types to include namespace groups.
+  - ✅ Fix cluster scope encoding for empty scopes so namespace snapshots render correctly.
+  - Decide how namespace selection state should be stored per cluster in the catalog layer.
 - Accept selected cluster sets in manual refresh endpoints and streaming handlers; merge multi-cluster stream events.
 - Surface diagnostics and permission issues per cluster in telemetry and refresh status.
 

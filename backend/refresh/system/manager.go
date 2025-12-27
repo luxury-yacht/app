@@ -35,21 +35,22 @@ type PermissionIssue struct {
 
 // Config contains the dependencies required to initialise the refresh manager.
 type Config struct {
-	KubernetesClient      kubernetes.Interface
-	MetricsClient         *metricsclient.Clientset
-	RestConfig            *rest.Config
-	ResyncInterval        time.Duration
-	MetricsInterval       time.Duration
-	APIExtensionsClient   apiextensionsclientset.Interface
-	DynamicClient         dynamic.Interface
-	HelmFactory           snapshot.HelmActionFactory
-	ObjectDetailsProvider snapshot.ObjectDetailProvider
-	Logger                logstream.Logger
-	PermissionCache       map[string]bool
-	ObjectCatalogEnabled  func() bool
-	ObjectCatalogService  func() *objectcatalog.Service
-	ClusterID             string // stable identifier for cluster-scoped keys
-	ClusterName           string // display name for cluster in payloads
+	KubernetesClient        kubernetes.Interface
+	MetricsClient           *metricsclient.Clientset
+	RestConfig              *rest.Config
+	ResyncInterval          time.Duration
+	MetricsInterval         time.Duration
+	APIExtensionsClient     apiextensionsclientset.Interface
+	DynamicClient           dynamic.Interface
+	HelmFactory             snapshot.HelmActionFactory
+	ObjectDetailsProvider   snapshot.ObjectDetailProvider
+	Logger                  logstream.Logger
+	PermissionCache         map[string]bool
+	ObjectCatalogEnabled    func() bool
+	ObjectCatalogService    func() *objectcatalog.Service
+	ObjectCatalogNamespaces func() []snapshot.CatalogNamespaceGroup
+	ClusterID               string // stable identifier for cluster-scoped keys
+	ClusterName             string // display name for cluster in payloads
 }
 
 // Subsystem bundles the refresh manager and supporting services.
@@ -481,8 +482,9 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 
 	if cfg.ObjectCatalogService != nil {
 		if err := snapshot.RegisterCatalogDomain(registry, snapshot.CatalogConfig{
-			CatalogService: cfg.ObjectCatalogService,
-			Logger:         cfg.Logger,
+			CatalogService:  cfg.ObjectCatalogService,
+			NamespaceGroups: cfg.ObjectCatalogNamespaces,
+			Logger:          cfg.Logger,
 		}); err != nil {
 			return nil, err
 		}

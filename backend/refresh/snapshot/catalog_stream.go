@@ -132,6 +132,7 @@ func (h *catalogStreamHandler) writeSnapshot(
 	payload, truncated := buildCatalogSnapshot(result, opts, health, cachesReady, ready)
 	// Ensure streaming payloads include stable cluster identifiers.
 	payload.ClusterMeta = h.clusterMeta
+	payload.NamespaceGroups = buildCatalogNamespaceGroups(svc, h.clusterMeta, nil, opts.Namespaces)
 	if payload.FirstBatchLatencyMs == 0 {
 		if latency := svc.FirstBatchLatency(); latency > 0 {
 			payload.FirstBatchLatencyMs = latency.Milliseconds()

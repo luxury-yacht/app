@@ -112,6 +112,8 @@ export function GetSecret(arg1:string,arg2:string):Promise<types.SecretDetails>;
 
 export function GetSelectedKubeconfig():Promise<string>;
 
+export function GetSelectedKubeconfigs():Promise<Array<string>>;
+
 export function GetService(arg1:string,arg2:string):Promise<types.ServiceDetails>;
 
 export function GetServiceAccount(arg1:string,arg2:string):Promise<types.ServiceAccountDetails>;
@@ -159,6 +161,8 @@ export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 export function SetMetricsClient(arg1:versioned.Clientset):Promise<void>;
 
 export function SetRestConfig(arg1:rest.Config):Promise<void>;
+
+export function SetSelectedKubeconfigs(arg1:Array<string>):Promise<void>;
 
 export function SetSidebarVisible(arg1:boolean):Promise<void>;
 

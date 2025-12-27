@@ -268,6 +268,11 @@ export interface CatalogParity {
   extraSample?: string[];
 }
 
+export interface CatalogNamespaceGroup extends ClusterMeta {
+  namespaces: string[];
+  selectedNamespaces?: string[];
+}
+
 export interface CatalogSnapshotPayload extends ClusterMeta {
   items: CatalogItem[];
   continue?: string;
@@ -275,6 +280,7 @@ export interface CatalogSnapshotPayload extends ClusterMeta {
   resourceCount: number;
   kinds?: string[];
   namespaces?: string[];
+  namespaceGroups?: CatalogNamespaceGroup[];
   parity?: CatalogParity | null;
   batchIndex: number;
   batchSize: number;
