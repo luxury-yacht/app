@@ -187,6 +187,7 @@ const sortKey = (entry: ClusterEventEntry | NamespaceEventSummary) =>
 
 export class EventStreamManager {
   private clusterConnection: EventStreamConnection | null = null;
+  private clusterScope: string | null = null;
   private clusterEvents: ClusterEventEntry[] = [];
   private clusterUpdateScheduled = false;
   private pendingClusterState: {
@@ -226,7 +227,7 @@ export class EventStreamManager {
     this.suspendedForVisibility = true;
 
     // Store active scopes before stopping
-    this.suspendedClusterScope = this.clusterConnection ? CLUSTER_SCOPE : null;
+    this.suspendedClusterScope = this.clusterScope;
     this.suspendedNamespaceScope = this.namespaceScope;
 
     // Stop connections without resetting data
@@ -248,16 +249,13 @@ export class EventStreamManager {
 
     // Restore cluster stream if it was active
     if (this.suspendedClusterScope) {
-      void this.startCluster();
+      void this.startCluster(this.suspendedClusterScope);
     }
     this.suspendedClusterScope = null;
 
     // Restore namespace stream if it was active
     if (this.suspendedNamespaceScope) {
-      const namespace = this.suspendedNamespaceScope.replace(/^namespace:/, '');
-      if (namespace) {
-        void this.startNamespace(namespace);
-      }
+      void this.startNamespace(this.suspendedNamespaceScope);
     }
     this.suspendedNamespaceScope = null;
   }
@@ -287,56 +285,62 @@ export class EventStreamManager {
     this.consecutiveErrors.delete(key);
   }
 
-  async startCluster(): Promise<void> {
+  async startCluster(scope: string = CLUSTER_SCOPE): Promise<void> {
+    const normalizedScope = scope.trim() || CLUSTER_SCOPE;
     if (this.clusterConnection) {
       this.clusterConnection.stop(false);
     }
-    this.clusterConnection = new EventStreamConnection(CLUSTER_DOMAIN, CLUSTER_SCOPE, this);
-    this.markLoading(CLUSTER_DOMAIN, CLUSTER_SCOPE);
+    this.clusterScope = normalizedScope;
+    this.clusterConnection = new EventStreamConnection(CLUSTER_DOMAIN, normalizedScope, this);
+    this.markLoading(CLUSTER_DOMAIN, normalizedScope);
     await this.clusterConnection.start();
   }
 
-  stopCluster(reset = false): void {
+  stopCluster(scope: string | null, reset = false): void {
     if (this.clusterConnection) {
       this.clusterConnection.stop(reset);
       this.clusterConnection = null;
+    }
+    if (scope && scope.trim()) {
+      this.clusterScope = scope.trim();
     }
     if (reset) {
       this.clusterEvents = [];
       this.clusterEventMeta = { total: 0, truncated: false };
       resetDomainState(CLUSTER_DOMAIN);
+      this.clusterScope = null;
     }
   }
 
-  async refreshCluster(): Promise<void> {
-    this.stopCluster(false);
-    await this.startCluster();
+  async refreshCluster(scope: string): Promise<void> {
+    this.stopCluster(scope, false);
+    await this.startCluster(scope);
   }
 
-  async startNamespace(namespace: string): Promise<void> {
-    const scope = namespace ? `namespace:${namespace}` : '';
-    if (!scope) {
+  async startNamespace(scope: string): Promise<void> {
+    const normalizedScope = scope.trim();
+    if (!normalizedScope) {
       return;
     }
     if (this.namespaceConnection) {
       this.namespaceConnection.stop(false);
       this.namespaceConnection = null;
     }
-    this.namespaceScope = scope;
-    this.markLoading(NAMESPACE_DOMAIN, scope);
-    this.namespaceConnection = new EventStreamConnection(NAMESPACE_DOMAIN, scope, this);
+    this.namespaceScope = normalizedScope;
+    this.markLoading(NAMESPACE_DOMAIN, normalizedScope);
+    this.namespaceConnection = new EventStreamConnection(NAMESPACE_DOMAIN, normalizedScope, this);
     await this.namespaceConnection.start();
   }
 
-  stopNamespace(reset = false): void {
+  stopNamespace(scope: string | null, reset = false): void {
     if (this.namespaceConnection) {
       this.namespaceConnection.stop(reset);
       this.namespaceConnection = null;
     }
-    const scope = this.namespaceScope;
-    if (reset && scope) {
-      this.namespaceEvents.delete(scope);
-      this.namespaceEventMeta.delete(scope);
+    const activeScope = scope?.trim() || this.namespaceScope;
+    if (reset && activeScope) {
+      this.namespaceEvents.delete(activeScope);
+      this.namespaceEventMeta.delete(activeScope);
       resetDomainState(NAMESPACE_DOMAIN);
     }
     if (reset) {
@@ -344,12 +348,13 @@ export class EventStreamManager {
     }
   }
 
-  async refreshNamespace(namespace: string): Promise<void> {
-    if (!namespace) {
+  async refreshNamespace(scope: string): Promise<void> {
+    const normalizedScope = scope.trim();
+    if (!normalizedScope) {
       return;
     }
-    this.stopNamespace(false);
-    await this.startNamespace(namespace);
+    this.stopNamespace(normalizedScope, false);
+    await this.startNamespace(normalizedScope);
   }
 
   applyPayload(domain: string, scope: string, payload: StreamEventPayload): void {
@@ -392,9 +397,10 @@ export class EventStreamManager {
         ...previous,
         status: isTerminal ? 'error' : previous.status === 'ready' ? 'ready' : 'updating',
         error: isTerminal ? message : null,
+        scope,
       }));
       if (isTerminal) {
-        this.notifyStreamError(CLUSTER_DOMAIN, CLUSTER_SCOPE, message);
+        this.notifyStreamError(CLUSTER_DOMAIN, scope, message);
       }
       return;
     }
@@ -432,8 +438,9 @@ export class EventStreamManager {
         lastUpdated: generatedAt,
         lastAutoRefresh: generatedAt,
         isManual: false,
+        scope,
       }));
-      this.clearStreamError(CLUSTER_DOMAIN, CLUSTER_SCOPE);
+      this.clearStreamError(CLUSTER_DOMAIN, scope);
       return;
     }
     if (domain === NAMESPACE_DOMAIN) {
@@ -461,12 +468,13 @@ export class EventStreamManager {
 
   markIdle(domain: string, scope: string, reset: boolean): void {
     if (domain === CLUSTER_DOMAIN) {
+      const activeScope = scope?.trim() || this.clusterScope || CLUSTER_SCOPE;
       if (reset) {
         resetDomainState(CLUSTER_DOMAIN);
         this.clusterEvents = [];
         this.pendingClusterState = null;
         this.clusterUpdateScheduled = false;
-        this.clearStreamError(CLUSTER_DOMAIN, CLUSTER_SCOPE);
+        this.clearStreamError(CLUSTER_DOMAIN, activeScope);
         return;
       }
       setDomainState(CLUSTER_DOMAIN, (previous) => ({
@@ -478,8 +486,9 @@ export class EventStreamManager {
           this.clusterEventMeta.truncated,
           'events'
         ),
+        scope: activeScope,
       }));
-      this.clearStreamError(CLUSTER_DOMAIN, CLUSTER_SCOPE);
+      this.clearStreamError(CLUSTER_DOMAIN, activeScope);
       return;
     }
 
@@ -508,8 +517,8 @@ export class EventStreamManager {
   }
 
   stopAll(reset = false): void {
-    this.stopCluster(reset);
-    this.stopNamespace(reset);
+    this.stopCluster(this.clusterScope, reset);
+    this.stopNamespace(this.namespaceScope, reset);
     if (reset) {
       this.namespaceEvents.clear();
       this.namespaceEventMeta.clear();
@@ -538,12 +547,14 @@ export class EventStreamManager {
 
   private markLoading(domain: string, scope?: string): void {
     if (domain === CLUSTER_DOMAIN) {
+      const activeScope = scope?.trim() || this.clusterScope || CLUSTER_SCOPE;
       setDomainState(CLUSTER_DOMAIN, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'loading',
         error: null,
+        scope: activeScope,
       }));
-      this.clearStreamError(CLUSTER_DOMAIN, CLUSTER_SCOPE);
+      this.clearStreamError(CLUSTER_DOMAIN, activeScope);
       return;
     }
     if (domain === NAMESPACE_DOMAIN) {
@@ -565,6 +576,7 @@ export class EventStreamManager {
     totalItems: number,
     truncated: boolean
   ): void {
+    const activeScope = this.clusterScope ?? CLUSTER_SCOPE;
     const payload: ClusterEventsSnapshotPayload = {
       events: this.clusterEvents,
     };
@@ -578,11 +590,12 @@ export class EventStreamManager {
       lastUpdated: generatedAt,
       lastAutoRefresh: generatedAt,
       isManual: false,
+      scope: activeScope,
     }));
     if (error) {
-      this.notifyStreamError(CLUSTER_DOMAIN, CLUSTER_SCOPE, error);
+      this.notifyStreamError(CLUSTER_DOMAIN, activeScope, error);
     } else {
-      this.clearStreamError(CLUSTER_DOMAIN, CLUSTER_SCOPE);
+      this.clearStreamError(CLUSTER_DOMAIN, activeScope);
     }
   }
 

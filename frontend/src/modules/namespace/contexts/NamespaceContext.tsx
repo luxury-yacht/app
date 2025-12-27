@@ -69,7 +69,7 @@ interface NamespaceProviderProps {
 
 export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }) => {
   const namespaceDomain = useRefreshDomain('namespaces');
-  const { selectedKubeconfig } = useKubeconfig();
+  const { selectedKubeconfig, selectedClusterId } = useKubeconfig();
   const [selectedNamespace, setSelectedNamespace] = useState<string | undefined>();
   const lastErrorRef = useRef<string | null>(null);
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
@@ -205,8 +205,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       return;
     }
     lastEvaluatedNamespaceRef.current = normalized;
-    evaluateNamespacePermissions(namespaceToEvaluate);
-  }, [selectedNamespace]);
+    // Scope namespace permission checks to the active cluster.
+    evaluateNamespacePermissions(namespaceToEvaluate, { clusterId: selectedClusterId });
+  }, [selectedNamespace, selectedClusterId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {

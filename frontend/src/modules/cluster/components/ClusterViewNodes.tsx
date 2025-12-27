@@ -43,7 +43,7 @@ interface NodesViewProps {
 const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const nodesDomain = useRefreshDomain('nodes');
     const metricsInfo = nodesDomain.data?.metrics;
@@ -220,7 +220,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<ClusterNodeRow>({
       viewId: 'cluster-nodes',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns: tableColumns,

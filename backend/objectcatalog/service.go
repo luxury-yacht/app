@@ -86,6 +86,10 @@ type Service struct {
 	deps Dependencies
 	opts Options
 
+	// cluster metadata is attached to summaries for stable keying.
+	clusterID   string
+	clusterName string
+
 	mu        sync.RWMutex
 	items     map[string]Summary
 	lastSeen  map[string]time.Time
@@ -308,6 +312,8 @@ func NewService(deps Dependencies, opts *Options) *Service {
 	return &Service{
 		deps:              deps,
 		opts:              serviceOpts,
+		clusterID:         deps.ClusterID,
+		clusterName:       deps.ClusterName,
 		items:             make(map[string]Summary),
 		lastSeen:          make(map[string]time.Time),
 		resources:         make(map[string]resourceDescriptor),
@@ -1749,6 +1755,8 @@ func (s *Service) buildSummary(desc resourceDescriptor, item metav1.Object) Summ
 	}
 
 	summary := Summary{
+		ClusterID:         s.clusterID,
+		ClusterName:       s.clusterName,
 		Kind:              desc.Kind,
 		Group:             desc.Group,
 		Version:           desc.Version,

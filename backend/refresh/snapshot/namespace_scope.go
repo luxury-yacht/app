@@ -1,9 +1,14 @@
 package snapshot
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/luxury-yacht/app/backend/refresh"
+)
 
 func isAllNamespaceScope(scope string) bool {
-	value := strings.TrimSpace(strings.ToLower(scope))
+	_, scopeValue := refresh.SplitClusterScope(scope)
+	value := strings.TrimSpace(strings.ToLower(scopeValue))
 	if value == "" {
 		return false
 	}

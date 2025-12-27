@@ -24,11 +24,13 @@ type ClusterRBACBuilder struct {
 
 // ClusterRBACSnapshot is the payload returned to the frontend.
 type ClusterRBACSnapshot struct {
+	ClusterMeta
 	Resources []ClusterRBACEntry `json:"resources"`
 }
 
 // ClusterRBACEntry represents either a ClusterRole or ClusterRoleBinding.
 type ClusterRBACEntry struct {
+	ClusterMeta
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Details   string `json:"details"`
@@ -60,6 +62,7 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		return nil, fmt.Errorf("cluster rbac: listers not configured")
 	}
 
+	meta := CurrentClusterMeta()
 	roles, err := b.roleLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("cluster rbac: failed to list clusterroles: %w", err)
@@ -77,6 +80,7 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 			continue
 		}
 		entry := ClusterRBACEntry{
+			ClusterMeta: meta,
 			Kind:      "ClusterRole",
 			Name:      role.Name,
 			Details:   describeClusterRole(role),
@@ -94,6 +98,7 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 			continue
 		}
 		entry := ClusterRBACEntry{
+			ClusterMeta: meta,
 			Kind:      "ClusterRoleBinding",
 			Name:      binding.Name,
 			Details:   describeClusterRoleBinding(binding),
@@ -116,7 +121,7 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 	return &refresh.Snapshot{
 		Domain:  clusterRBACDomainName,
 		Version: version,
-		Payload: ClusterRBACSnapshot{Resources: entries},
+		Payload: ClusterRBACSnapshot{ClusterMeta: meta, Resources: entries},
 		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
 	}, nil
 }

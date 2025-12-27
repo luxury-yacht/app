@@ -27,6 +27,8 @@ import { eventBus, useEventBus } from '@/core/events';
 interface KubeconfigContextType {
   kubeconfigs: types.KubeconfigInfo[];
   selectedKubeconfig: string;
+  selectedClusterId: string;
+  selectedClusterName: string;
   kubeconfigsLoading: boolean;
   setSelectedKubeconfig: (config: string) => Promise<void>;
   loadKubeconfigs: () => Promise<void>;
@@ -51,6 +53,41 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const [selectedKubeconfig, setSelectedKubeconfigState] = useState<string>('');
   const [kubeconfigsLoading, setKubeconfigsLoading] = useState(false);
   const { onCloseObjectPanel } = useObjectPanelState();
+
+  // Resolve cluster identity metadata from the current selection and config list.
+  const resolveClusterMeta = useCallback((selection: string, configs: types.KubeconfigInfo[]) => {
+    const trimmed = selection.trim();
+    if (!trimmed) {
+      return { id: '', name: '' };
+    }
+
+    const separatorIndex = trimmed.indexOf(':');
+    const path = separatorIndex >= 0 ? trimmed.slice(0, separatorIndex) : trimmed;
+    const context = separatorIndex >= 0 ? trimmed.slice(separatorIndex + 1) : '';
+
+    const match = configs.find((config) => config.path === path && config.context === context);
+    if (match) {
+      return { id: `${match.name}:${match.context}`, name: match.context };
+    }
+
+    const pathParts = path.split(/[/\\]/);
+    const filename = pathParts[pathParts.length - 1] ?? '';
+    if (!filename && !context) {
+      return { id: '', name: '' };
+    }
+    if (!context) {
+      return { id: filename, name: '' };
+    }
+    if (!filename) {
+      return { id: context, name: context };
+    }
+    return { id: `${filename}:${context}`, name: context };
+  }, []);
+
+  const selectedClusterMeta = useMemo(
+    () => resolveClusterMeta(selectedKubeconfig, kubeconfigs),
+    [resolveClusterMeta, selectedKubeconfig, kubeconfigs]
+  );
 
   const loadKubeconfigs = useCallback(async () => {
     setKubeconfigsLoading(true);
@@ -131,19 +168,21 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     const runGC = async () => {
       const identities = new Set<string>();
       kubeconfigs.forEach((config) => {
-        if (config.path && config.context) {
-          identities.add(`${config.path}:${config.context}`);
+        if (config.name && config.context) {
+          identities.add(`${config.name}:${config.context}`);
         }
       });
       if (selectedKubeconfig) {
-        identities.add(selectedKubeconfig);
+        if (selectedClusterMeta.id) {
+          identities.add(selectedClusterMeta.id);
+        }
       }
       const hashes = await computeClusterHashes(Array.from(identities));
       runGridTableGC({ activeClusterHashes: hashes });
     };
 
     void runGC();
-  }, [kubeconfigs, selectedKubeconfig]);
+  }, [kubeconfigs, selectedKubeconfig, selectedClusterMeta.id]);
 
   // Listen for kubeconfig change events from command palette
   useEventBus(
@@ -161,11 +200,21 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     () => ({
       kubeconfigs,
       selectedKubeconfig,
+      selectedClusterId: selectedClusterMeta.id,
+      selectedClusterName: selectedClusterMeta.name,
       kubeconfigsLoading,
       setSelectedKubeconfig,
       loadKubeconfigs,
     }),
-    [kubeconfigs, selectedKubeconfig, kubeconfigsLoading, setSelectedKubeconfig, loadKubeconfigs]
+    [
+      kubeconfigs,
+      selectedKubeconfig,
+      selectedClusterMeta.id,
+      selectedClusterMeta.name,
+      kubeconfigsLoading,
+      setSelectedKubeconfig,
+      loadKubeconfigs,
+    ]
   );
 
   return <KubeconfigContext.Provider value={contextValue}>{children}</KubeconfigContext.Provider>;

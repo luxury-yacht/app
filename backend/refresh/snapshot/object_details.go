@@ -44,6 +44,7 @@ type ObjectDetailsBuilder struct {
 
 // ObjectDetailsSnapshotPayload is returned to the frontend.
 type ObjectDetailsSnapshotPayload struct {
+	ClusterMeta
 	Details interface{} `json:"details"`
 }
 
@@ -111,7 +112,10 @@ func (b *ObjectDetailsBuilder) buildSnapshot(scope string, details interface{}, 
 		Domain:  objectDetailsDomain,
 		Scope:   scope,
 		Version: version,
-		Payload: ObjectDetailsSnapshotPayload{Details: details},
+		Payload: ObjectDetailsSnapshotPayload{
+			ClusterMeta: CurrentClusterMeta(),
+			Details:     details,
+		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: 1,
 		},
@@ -123,9 +127,10 @@ func parseObjectScope(scope string) (string, string, string, error) {
 		return "", "", "", fmt.Errorf("object scope is required")
 	}
 
-	parts := strings.SplitN(scope, ":", 3)
+	_, trimmed := refresh.SplitClusterScope(scope)
+	parts := strings.SplitN(trimmed, ":", 3)
 	if len(parts) != 3 {
-		return "", "", "", fmt.Errorf("invalid object scope %q", scope)
+		return "", "", "", fmt.Errorf("invalid object scope %q", trimmed)
 	}
 
 	namespace := parts[0]

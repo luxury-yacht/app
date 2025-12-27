@@ -27,11 +27,13 @@ type HelmActionFactory func(namespace string) (*action.Configuration, error)
 
 // NamespaceHelmSnapshot payload returned to the frontend.
 type NamespaceHelmSnapshot struct {
+	ClusterMeta
 	Releases []NamespaceHelmSummary `json:"releases"`
 }
 
 // NamespaceHelmSummary captures the fields required by the Helm table.
 type NamespaceHelmSummary struct {
+	ClusterMeta
 	Name        string `json:"name"`
 	Namespace   string `json:"namespace"`
 	Chart       string `json:"chart"`
@@ -73,24 +75,26 @@ type NamespaceHelmBuilder struct {
 }
 
 func (b *NamespaceHelmBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	trimmed := strings.TrimSpace(scope)
+	meta := CurrentClusterMeta()
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {
 		return nil, fmt.Errorf("namespace scope is required")
 	}
 
 	isAll := isAllNamespaceScope(trimmed)
 	if isAll {
-		return b.buildAllNamespaces(ctx)
+		return b.buildAllNamespaces(ctx, clusterID, meta)
 	}
 
 	namespace := normalizeNamespaceScope(trimmed)
 	if namespace == "" {
 		return nil, fmt.Errorf("namespace scope is required")
 	}
-	return b.buildSingleNamespace(namespace)
+	return b.buildSingleNamespace(clusterID, meta, namespace)
 }
 
-func (b *NamespaceHelmBuilder) buildSingleNamespace(namespace string) (*refresh.Snapshot, error) {
+func (b *NamespaceHelmBuilder) buildSingleNamespace(clusterID string, meta ClusterMeta, namespace string) (*refresh.Snapshot, error) {
 	actionCfg, err := b.factory(namespace)
 	if err != nil {
 		return nil, err
@@ -103,20 +107,24 @@ func (b *NamespaceHelmBuilder) buildSingleNamespace(namespace string) (*refresh.
 		return nil, err
 	}
 
-	summaries, version := mapHelmReleases(releases, namespace)
+	summaries, version := mapHelmReleases(releases, namespace, meta)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceHelmDomainName,
-		Scope:   namespace,
+		Scope:   refresh.JoinClusterScope(clusterID, namespace),
 		Version: version,
-		Payload: NamespaceHelmSnapshot{Releases: summaries},
+		Payload: NamespaceHelmSnapshot{ClusterMeta: meta, Releases: summaries},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(summaries),
 		},
 	}, nil
 }
 
-func (b *NamespaceHelmBuilder) buildAllNamespaces(ctx context.Context) (*refresh.Snapshot, error) {
+func (b *NamespaceHelmBuilder) buildAllNamespaces(
+	ctx context.Context,
+	clusterID string,
+	meta ClusterMeta,
+) (*refresh.Snapshot, error) {
 	if b.namespaceLister == nil {
 		return nil, fmt.Errorf("namespace lister unavailable for helm aggregation")
 	}
@@ -130,9 +138,9 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(ctx context.Context) (*refresh
 	if len(namespaces) == 0 {
 		return &refresh.Snapshot{
 			Domain:  namespaceHelmDomainName,
-			Scope:   "namespace:all",
+			Scope:   refresh.JoinClusterScope(clusterID, "namespace:all"),
 			Version: 0,
-			Payload: NamespaceHelmSnapshot{Releases: []NamespaceHelmSummary{}},
+			Payload: NamespaceHelmSnapshot{ClusterMeta: meta, Releases: []NamespaceHelmSummary{}},
 			Stats: refresh.SnapshotStats{
 				ItemCount: 0,
 			},
@@ -180,7 +188,7 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(ctx context.Context) (*refresh
 				}
 			}
 
-			localSummaries, localVersion := mapHelmReleases(releases, ns)
+			localSummaries, localVersion := mapHelmReleases(releases, ns, meta)
 			if len(localSummaries) == 0 {
 				return nil
 			}
@@ -208,16 +216,20 @@ func (b *NamespaceHelmBuilder) buildAllNamespaces(ctx context.Context) (*refresh
 
 	return &refresh.Snapshot{
 		Domain:  namespaceHelmDomainName,
-		Scope:   "namespace:all",
+		Scope:   refresh.JoinClusterScope(clusterID, "namespace:all"),
 		Version: version,
-		Payload: NamespaceHelmSnapshot{Releases: summaries},
+		Payload: NamespaceHelmSnapshot{ClusterMeta: meta, Releases: summaries},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(summaries),
 		},
 	}, nil
 }
 
-func mapHelmReleases(releases []*release.Release, namespaceFilter string) ([]NamespaceHelmSummary, uint64) {
+func mapHelmReleases(
+	releases []*release.Release,
+	namespaceFilter string,
+	meta ClusterMeta,
+) ([]NamespaceHelmSummary, uint64) {
 	summaries := make([]NamespaceHelmSummary, 0, len(releases))
 	var version uint64
 
@@ -257,6 +269,7 @@ func mapHelmReleases(releases []*release.Release, namespaceFilter string) ([]Nam
 			}
 		}
 		summaries = append(summaries, NamespaceHelmSummary{
+			ClusterMeta: meta,
 			Name:        release.Name,
 			Namespace:   ns,
 			Chart:       chartName,

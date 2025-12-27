@@ -145,6 +145,7 @@ export function ObjectPanelContent({
             resourceName={objectData?.name || ''}
             resourceKind={objectKind || 'pod'}
             activePodNames={activePodNames}
+            clusterId={objectData?.clusterId ?? null}
           />
         </ErrorBoundary>
       )}
@@ -237,6 +238,7 @@ export function ObjectPanelContent({
             objectName={objectData?.name}
             onRefresh={onRefreshDetails}
             isActive={isPanelOpen && activeTab === 'maintenance'}
+            clusterId={objectData?.clusterId ?? null}
           />
         </ErrorBoundary>
       )}

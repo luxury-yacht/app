@@ -40,6 +40,7 @@ type NodeListBuilder struct {
 
 // NodeSnapshot is the payload for the nodes domain.
 type NodeSnapshot struct {
+	ClusterMeta
 	Nodes   []NodeSummary   `json:"nodes"`
 	Metrics NodeMetricsInfo `json:"metrics"`
 }
@@ -56,6 +57,7 @@ type NodeMetricsInfo struct {
 
 // NodeSummary captures essential information for each node.
 type NodeSummary struct {
+	ClusterMeta
 	Name              string            `json:"name"`
 	Status            string            `json:"status"`
 	Roles             string            `json:"roles"`
@@ -198,6 +200,7 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 }
 
 func buildNodeSnapshot(nodes []*corev1.Node, pods []*corev1.Pod, provider metrics.Provider) *refresh.Snapshot {
+	meta := CurrentClusterMeta()
 	items := make([]NodeSummary, 0, len(nodes))
 	var version uint64
 	nodeMetrics := map[string]metrics.NodeUsage{}
@@ -222,6 +225,7 @@ func buildNodeSnapshot(nodes []*corev1.Node, pods []*corev1.Pod, provider metric
 			continue
 		}
 		summary := NodeSummary{
+			ClusterMeta:  meta,
 			Name:          node.Name,
 			Status:        deriveNodeStatus(node),
 			Roles:         formatRoles(extractRoles(node.Labels)),
@@ -329,7 +333,7 @@ func buildNodeSnapshot(nodes []*corev1.Node, pods []*corev1.Pod, provider metric
 		Domain:  "nodes",
 		Scope:   "",
 		Version: version,
-		Payload: NodeSnapshot{Nodes: items, Metrics: metricsInfo},
+		Payload: NodeSnapshot{ClusterMeta: meta, Nodes: items, Metrics: metricsInfo},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(items),
 		},

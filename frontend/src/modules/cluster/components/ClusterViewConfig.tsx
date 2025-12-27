@@ -49,7 +49,7 @@ interface ConfigViewProps {
 const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -113,7 +113,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<ConfigData>({
       viewId: 'cluster-config',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns,

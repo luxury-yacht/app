@@ -37,11 +37,13 @@ type NamespaceNetworkBuilder struct {
 
 // NamespaceNetworkSnapshot payload for the network tab.
 type NamespaceNetworkSnapshot struct {
+	ClusterMeta
 	Resources []NetworkSummary `json:"resources"`
 }
 
 // NetworkSummary mirrors the UI requirements for namespace network resources.
 type NetworkSummary struct {
+	ClusterMeta
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
@@ -71,7 +73,9 @@ func RegisterNamespaceNetworkDomain(
 
 // Build gathers services, endpoint slices, ingresses, and policies for the namespace.
 func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	trimmed := strings.TrimSpace(scope)
+	meta := CurrentClusterMeta()
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {
 		return nil, errors.New(errNamespaceNetworkScopeRequired)
 	}
@@ -79,9 +83,9 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 	isAll := isAllNamespaceScope(trimmed)
 	var namespace string
 	var err error
-	scopeLabel := trimmed
+	scopeLabel := refresh.JoinClusterScope(clusterID, trimmed)
 	if isAll {
-		scopeLabel = "namespace:all"
+		scopeLabel = refresh.JoinClusterScope(clusterID, "namespace:all")
 	} else {
 		namespace, err = parseAutoscalingNamespace(trimmed)
 		if err != nil {
@@ -108,7 +112,7 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 
 	slicesByService := groupEndpointSlicesByService(slices)
 
-	return b.buildSnapshot(scopeLabel, services, slicesByService, ingresses, policies)
+	return b.buildSnapshot(meta, scopeLabel, services, slicesByService, ingresses, policies)
 }
 
 func (b *NamespaceNetworkBuilder) listServices(namespace string) ([]*corev1.Service, error) {
@@ -139,7 +143,14 @@ func (b *NamespaceNetworkBuilder) listNetworkPolicies(namespace string) ([]*netw
 	return b.policyLister.NetworkPolicies(namespace).List(labels.Everything())
 }
 
-func (b *NamespaceNetworkBuilder) buildSnapshot(scope string, services []*corev1.Service, slicesByService map[string][]*discoveryv1.EndpointSlice, ingresses []*networkingv1.Ingress, policies []*networkingv1.NetworkPolicy) (*refresh.Snapshot, error) {
+func (b *NamespaceNetworkBuilder) buildSnapshot(
+	meta ClusterMeta,
+	scope string,
+	services []*corev1.Service,
+	slicesByService map[string][]*discoveryv1.EndpointSlice,
+	ingresses []*networkingv1.Ingress,
+	policies []*networkingv1.NetworkPolicy,
+) (*refresh.Snapshot, error) {
 	resources := make([]NetworkSummary, 0, len(services)+len(slicesByService)+len(ingresses)+len(policies))
 	var version uint64
 
@@ -148,6 +159,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(scope string, services []*corev1
 			continue
 		}
 		summary := NetworkSummary{
+			ClusterMeta: meta,
 			Kind:      "Service",
 			Name:      svc.Name,
 			Namespace: svc.Namespace,
@@ -165,6 +177,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(scope string, services []*corev1
 			continue
 		}
 		summary := NetworkSummary{
+			ClusterMeta: meta,
 			Kind:      "Ingress",
 			Name:      ing.Name,
 			Namespace: ing.Namespace,
@@ -182,6 +195,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(scope string, services []*corev1
 			continue
 		}
 		summary := NetworkSummary{
+			ClusterMeta: meta,
 			Kind:      "NetworkPolicy",
 			Name:      policy.Name,
 			Namespace: policy.Namespace,
@@ -200,6 +214,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(scope string, services []*corev1
 		}
 		namespace := svcSlices[0].Namespace
 		summary := NetworkSummary{
+			ClusterMeta: meta,
 			Kind:      "EndpointSlice",
 			Name:      svc,
 			Namespace: namespace,
@@ -227,7 +242,7 @@ func (b *NamespaceNetworkBuilder) buildSnapshot(scope string, services []*corev1
 		Domain:  namespaceNetworkDomainName,
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceNetworkSnapshot{Resources: resources},
+		Payload: NamespaceNetworkSnapshot{ClusterMeta: meta, Resources: resources},
 		Stats:   refresh.SnapshotStats{ItemCount: len(resources)},
 	}, nil
 }

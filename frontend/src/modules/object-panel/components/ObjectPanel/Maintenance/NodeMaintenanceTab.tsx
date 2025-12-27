@@ -14,6 +14,7 @@ import type { NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
 import { useCapabilities, type CapabilityDescriptor } from '@/core/capabilities';
 import { errorHandler } from '@/utils/errorHandler';
 import { INACTIVE_SCOPE } from '@modules/object-panel/components/ObjectPanel/constants';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import './MaintenanceTab.css';
 
 type MaintenanceAction = 'cordon' | 'uncordon';
@@ -23,6 +24,7 @@ interface NodeMaintenanceTabProps {
   objectName?: string | null;
   onRefresh?: () => void;
   isActive: boolean;
+  clusterId?: string | null;
 }
 
 const CAPABILITY_PREFIX = 'node-maintenance';
@@ -62,8 +64,18 @@ const toScope = (nodeName?: string | null): string | null => {
   return `${NODE_SCOPE_PREFIX}${trimmed}`;
 };
 
-const useNodeMaintenanceDomain = (nodeName?: string | null, enabled?: boolean) => {
-  const scope = useMemo(() => toScope(nodeName), [nodeName]);
+const useNodeMaintenanceDomain = (
+  nodeName?: string | null,
+  enabled?: boolean,
+  clusterId?: string | null
+) => {
+  const scope = useMemo(() => {
+    const rawScope = toScope(nodeName);
+    if (!rawScope) {
+      return null;
+    }
+    return buildClusterScope(clusterId ?? undefined, rawScope);
+  }, [clusterId, nodeName]);
   const snapshot = useRefreshScopedDomain(
     'node-maintenance',
     scope ?? INACTIVE_SCOPE
@@ -116,6 +128,7 @@ export function NodeMaintenanceTab({
   objectName,
   onRefresh,
   isActive,
+  clusterId,
 }: NodeMaintenanceTabProps) {
   const [pendingAction, setPendingAction] = useState<MaintenanceAction | null>(null);
   const [cordonError, setCordonError] = useState<string | null>(null);
@@ -150,7 +163,7 @@ export function NodeMaintenanceTab({
     scope: maintenanceScope,
     snapshot: maintenanceSnapshot,
     refresh: refreshMaintenance,
-  } = useNodeMaintenanceDomain(nodeName, isActive && Boolean(nodeDetails));
+  } = useNodeMaintenanceDomain(nodeName, isActive && Boolean(nodeDetails), clusterId);
 
   const drains = useMemo(
     () => (maintenanceScope ? (maintenanceSnapshot.data?.drains ?? []) : []),
@@ -165,27 +178,31 @@ export function NodeMaintenanceTab({
     if (!nodeName) {
       return [];
     }
+    const resolvedClusterId = clusterId?.trim() || undefined;
     return [
       {
         id: `${CAPABILITY_PREFIX}:cordon:${nodeName}`,
+        clusterId: resolvedClusterId,
         verb: 'patch',
         resourceKind: 'Node',
         name: nodeName,
       },
       {
         id: `${CAPABILITY_PREFIX}:drain:${nodeName}`,
+        clusterId: resolvedClusterId,
         verb: 'patch',
         resourceKind: 'Node',
         name: nodeName,
       },
       {
         id: `${CAPABILITY_PREFIX}:delete:${nodeName}`,
+        clusterId: resolvedClusterId,
         verb: 'delete',
         resourceKind: 'Node',
         name: nodeName,
       },
     ];
-  }, [nodeName]);
+  }, [clusterId, nodeName]);
 
   const { getState: getCapabilityState } = useCapabilities(capabilityDescriptors, {
     enabled: Boolean(nodeName),

@@ -25,6 +25,7 @@ type ObjectEventsBuilder struct {
 
 // ObjectEventSummary captures the fields the frontend needs for object events.
 type ObjectEventSummary struct {
+	ClusterMeta
 	Kind                    string    `json:"kind"`
 	EventType               string    `json:"eventType"`
 	Reason                  string    `json:"reason"`
@@ -41,6 +42,7 @@ type ObjectEventSummary struct {
 
 // ObjectEventsSnapshotPayload contains the events list for the object.
 type ObjectEventsSnapshotPayload struct {
+	ClusterMeta
 	Events []ObjectEventSummary `json:"events"`
 }
 
@@ -61,6 +63,7 @@ func (b *ObjectEventsBuilder) Build(ctx context.Context, scope string) (*refresh
 	if err != nil {
 		return nil, err
 	}
+	meta := CurrentClusterMeta()
 
 	eventNamespace := namespace
 	if namespace == "" {
@@ -99,10 +102,10 @@ func (b *ObjectEventsBuilder) Build(ctx context.Context, scope string) (*refresh
 		if kind != "" && !strings.EqualFold(evt.InvolvedObject.Kind, kind) {
 			continue
 		}
-		events = append(events, convertObjectEvent(evt))
+		events = append(events, convertObjectEvent(meta, evt))
 	}
 
-	payload := ObjectEventsSnapshotPayload{Events: events}
+	payload := ObjectEventsSnapshotPayload{ClusterMeta: meta, Events: events}
 
 	version := parseEventVersion(list.ResourceVersion)
 
@@ -135,7 +138,7 @@ func parseEventVersion(rv string) uint64 {
 	return 0
 }
 
-func convertObjectEvent(evt corev1.Event) ObjectEventSummary {
+func convertObjectEvent(meta ClusterMeta, evt corev1.Event) ObjectEventSummary {
 	first := evt.EventTime.Time
 	last := evt.EventTime.Time
 	if first.IsZero() {
@@ -148,6 +151,7 @@ func convertObjectEvent(evt corev1.Event) ObjectEventSummary {
 	source := formatObjectEventSource(evt)
 
 	return ObjectEventSummary{
+		ClusterMeta:            meta,
 		Kind:                    "event",
 		EventType:               evt.Type,
 		Reason:                  evt.Reason,

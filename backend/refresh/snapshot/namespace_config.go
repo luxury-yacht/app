@@ -30,11 +30,13 @@ type NamespaceConfigBuilder struct {
 
 // NamespaceConfigSnapshot payload returned to the frontend.
 type NamespaceConfigSnapshot struct {
+	ClusterMeta
 	Resources []ConfigSummary `json:"resources"`
 }
 
 // ConfigSummary describes a ConfigMap or Secret entry.
 type ConfigSummary struct {
+	ClusterMeta
 	Kind      string `json:"kind"`
 	TypeAlias string `json:"typeAlias,omitempty"`
 	Name      string `json:"name"`
@@ -63,7 +65,9 @@ func RegisterNamespaceConfigDomain(
 
 // Build assembles ConfigMap and Secret summaries for a namespace scope.
 func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	trimmed := strings.TrimSpace(scope)
+	meta := CurrentClusterMeta()
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {
 		return nil, errors.New(errNamespaceConfigScopeRequired)
 	}
@@ -75,13 +79,13 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 		scopeLabel string
 	)
 	if isAll {
-		scopeLabel = "namespace:all"
+		scopeLabel = refresh.JoinClusterScope(clusterID, "namespace:all")
 	} else {
 		namespace, err = parseAutoscalingNamespace(trimmed)
 		if err != nil {
 			return nil, errors.New(errNamespaceConfigScopeRequired)
 		}
-		scopeLabel = trimmed
+		scopeLabel = refresh.JoinClusterScope(clusterID, trimmed)
 	}
 
 	configMaps, err := b.listConfigMaps(namespace)
@@ -94,7 +98,7 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, fmt.Errorf("namespace config: failed to list secrets: %w", err)
 	}
 
-	return b.buildSnapshot(scopeLabel, configMaps, secrets)
+	return b.buildSnapshot(meta, scopeLabel, configMaps, secrets)
 }
 
 func (b *NamespaceConfigBuilder) listConfigMaps(namespace string) ([]*corev1.ConfigMap, error) {
@@ -111,7 +115,12 @@ func (b *NamespaceConfigBuilder) listSecrets(namespace string) ([]*corev1.Secret
 	return b.secrets.Secrets(namespace).List(labels.Everything())
 }
 
-func (b *NamespaceConfigBuilder) buildSnapshot(scope string, configMaps []*corev1.ConfigMap, secrets []*corev1.Secret) (*refresh.Snapshot, error) {
+func (b *NamespaceConfigBuilder) buildSnapshot(
+	meta ClusterMeta,
+	scope string,
+	configMaps []*corev1.ConfigMap,
+	secrets []*corev1.Secret,
+) (*refresh.Snapshot, error) {
 	resources := make([]ConfigSummary, 0, len(configMaps)+len(secrets))
 	var version uint64
 
@@ -120,6 +129,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(scope string, configMaps []*corev
 			continue
 		}
 		summary := ConfigSummary{
+			ClusterMeta: meta,
 			Kind:      "ConfigMap",
 			TypeAlias: "CM",
 			Name:      cm.Name,
@@ -138,6 +148,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(scope string, configMaps []*corev
 			continue
 		}
 		summary := ConfigSummary{
+			ClusterMeta: meta,
 			Kind:      "Secret",
 			TypeAlias: secretTypeAlias(secret),
 			Name:      secret.Name,
@@ -161,7 +172,7 @@ func (b *NamespaceConfigBuilder) buildSnapshot(scope string, configMaps []*corev
 		Domain:  namespaceConfigDomainName,
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceConfigSnapshot{Resources: resources},
+		Payload: NamespaceConfigSnapshot{ClusterMeta: meta, Resources: resources},
 		Stats:   refresh.SnapshotStats{ItemCount: len(resources)},
 	}, nil
 }

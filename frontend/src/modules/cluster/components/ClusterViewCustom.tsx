@@ -52,7 +52,7 @@ interface ClusterCustomViewProps {
 const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
 
     const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -130,7 +130,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<ClusterCustomData>({
       viewId: 'cluster-custom',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns,

@@ -26,6 +26,8 @@ export interface RefreshContext {
   activeNamespaceView?: NamespaceViewType;
   activeClusterView?: ClusterViewType;
   selectedNamespace?: string;
+  selectedClusterId?: string;
+  selectedClusterName?: string;
   objectPanel: {
     isOpen: boolean;
     objectKind?: string;

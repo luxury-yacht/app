@@ -21,6 +21,7 @@ import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { objectLogFallbackManager } from '@/core/refresh/fallbacks/objectLogFallbackManager';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
 import type { ObjectLogEntry } from '@/core/refresh/types';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { types } from '@wailsjs/go/models';
 import { logViewerReducer, initialLogViewerState, type ParsedLogEntry } from './logViewerReducer';
 
@@ -30,6 +31,7 @@ interface LogViewerProps {
   resourceKind: string;
   isActive?: boolean;
   activePodNames?: string[] | null;
+  clusterId?: string | null;
 }
 
 const ALL_CONTAINERS = ''; // Empty string means all containers in the backend
@@ -63,6 +65,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
   resourceKind: resourceKind,
   isActive = false,
   activePodNames = null,
+  clusterId,
 }) => {
   // Consolidated state via reducer
   const [state, dispatch] = useReducer(logViewerReducer, initialLogViewerState);
@@ -109,8 +112,9 @@ const LogViewer: React.FC<LogViewerProps> = ({
     if (!resourceName || !resourceKindKey) {
       return null;
     }
-    return `${scopeNamespace}:${resourceKindKey}:${resourceName}`;
-  }, [resourceName, resourceKindKey, scopeNamespace]);
+    const rawScope = `${scopeNamespace}:${resourceKindKey}:${resourceName}`;
+    return buildClusterScope(clusterId ?? undefined, rawScope);
+  }, [clusterId, resourceName, resourceKindKey, scopeNamespace]);
 
   const logSnapshot = useRefreshScopedDomain(LOG_DOMAIN, logScope ?? INACTIVE_SCOPE);
   const payloadEntries = logScope ? logSnapshot.data?.entries : undefined;

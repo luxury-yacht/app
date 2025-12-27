@@ -58,7 +58,7 @@ const workloadNameFromOwner = (pod: PodSnapshotEntry) =>
 
 export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error, isActive }) => {
   const { openWithObject } = useObjectPanel();
-  const { selectedKubeconfig } = useKubeconfig();
+  const { selectedClusterId } = useKubeconfig();
   const viewState = useViewState();
   const namespaceContext = useNamespace();
 
@@ -202,7 +202,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     resetState,
   } = useGridTablePersistence<PodSnapshotEntry>({
     viewId: 'object-panel-pods',
-    clusterIdentity: selectedKubeconfig,
+    clusterIdentity: selectedClusterId,
     namespace: null,
     isNamespaceScoped: false,
     columns,

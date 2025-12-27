@@ -54,7 +54,7 @@ interface StorageViewProps {
 const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -185,7 +185,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<StorageData>({
       viewId: 'cluster-storage',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns,

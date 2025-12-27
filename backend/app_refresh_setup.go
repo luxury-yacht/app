@@ -23,6 +23,8 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		return nil, errors.New("application context not initialised")
 	}
 
+	// Use stable cluster identifiers for snapshot and cache scoping.
+	clusterMeta := a.currentClusterMeta()
 	cfg := system.Config{
 		KubernetesClient:      kubeClient,
 		MetricsClient:         a.metricsClient,
@@ -39,6 +41,8 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			return a.objectCatalogService
 		},
 		ObjectCatalogEnabled: func() bool { return true },
+		ClusterID:            clusterMeta.ID,
+		ClusterName:          clusterMeta.Name,
 	}
 
 	manager, handler, recorder, issues, updatedCache, infFactory, err := newRefreshSubsystem(cfg)

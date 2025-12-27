@@ -52,7 +52,7 @@ export function useNamespaceGridTablePersistence<T>({
   defaultSort = { key: '', direction: null },
   filterOptions,
 }: NamespaceGridTablePersistenceParams<T>): NamespaceGridTablePersistenceResult {
-  const { selectedKubeconfig } = useKubeconfig();
+  const { selectedClusterId } = useKubeconfig();
   const isNamespaceScoped = namespace !== ALL_NAMESPACES_SCOPE;
   const [localSort, setLocalSort] = useState<SortConfig>(defaultSort);
 
@@ -68,7 +68,7 @@ export function useNamespaceGridTablePersistence<T>({
     resetState,
   } = useGridTablePersistence<T>({
     viewId,
-    clusterIdentity: selectedKubeconfig,
+    clusterIdentity: selectedClusterId,
     namespace,
     isNamespaceScoped,
     columns,

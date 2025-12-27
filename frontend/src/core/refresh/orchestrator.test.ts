@@ -415,8 +415,8 @@ describe('refreshOrchestrator', () => {
       autoStart: false,
       streaming: {
         start: (scope: string) => eventStreamMocks.startNamespace(scope),
-        stop: (_scope: string, options?: { reset?: boolean }) =>
-          eventStreamMocks.stopNamespace(options?.reset ?? false),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          eventStreamMocks.stopNamespace(scope, options?.reset ?? false),
       },
     });
 
@@ -537,7 +537,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('normalizes streaming scopes and preserves cluster events handling', () => {
-    const normalize = orchestratorInternals.normalizeStreamingScope as (
+    const normalize = orchestratorInternals.normalizeStreamingScope.bind(refreshOrchestrator) as (
       domain: RefreshDomain,
       scope?: string
     ) => string;
@@ -577,7 +577,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('normalizes streaming scopes and preserves cluster events handling', () => {
-    const normalize = orchestratorInternals.normalizeStreamingScope as (
+    const normalize = orchestratorInternals.normalizeStreamingScope.bind(refreshOrchestrator) as (
       domain: RefreshDomain,
       scope?: string
     ) => string;
@@ -926,10 +926,10 @@ describe('refreshOrchestrator', () => {
       category: 'cluster',
       autoStart: false,
       streaming: {
-        start: () => eventStreamMocks.startCluster(),
-        stop: (_scope: string, options?: { reset?: boolean }) =>
-          eventStreamMocks.stopCluster(options?.reset ?? false),
-        refreshOnce: () => eventStreamMocks.refreshCluster(),
+        start: (scope: string) => eventStreamMocks.startCluster(scope),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          eventStreamMocks.stopCluster(scope, options?.reset ?? false),
+        refreshOnce: (scope: string) => eventStreamMocks.refreshCluster(scope),
       },
     });
 
@@ -940,7 +940,7 @@ describe('refreshOrchestrator', () => {
     expect(eventStreamMocks.refreshCluster).toHaveBeenCalled();
 
     await refreshOrchestrator.setDomainEnabled?.('cluster-events', false);
-    expect(eventStreamMocks.stopCluster).toHaveBeenCalledWith(true);
+    expect(eventStreamMocks.stopCluster).toHaveBeenCalledWith('cluster', true);
   });
 
   it('handles concurrent namespace streams without leaking state', async () => {
@@ -973,8 +973,8 @@ describe('refreshOrchestrator', () => {
       autoStart: false,
       streaming: {
         start: (scope: string) => eventStreamMocks.startNamespace(scope),
-        stop: (_scope: string, options?: { reset?: boolean }) =>
-          eventStreamMocks.stopNamespace(options?.reset ?? false),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          eventStreamMocks.stopNamespace(scope, options?.reset ?? false),
         refreshOnce: (scope: string) => eventStreamMocks.refreshNamespace(scope),
       },
     });
@@ -992,7 +992,7 @@ describe('refreshOrchestrator', () => {
     await refreshOrchestrator.setScopedDomainEnabled?.('namespace-events', 'team-a', false);
 
     expect(logStreamMocks.stop).toHaveBeenCalledWith('team-a', true);
-    expect(eventStreamMocks.stopNamespace).toHaveBeenCalledWith(true);
+    expect(eventStreamMocks.stopNamespace).toHaveBeenCalledWith('team-a', true);
   });
 
   it('trims scoped streaming scopes when toggling enablement', async () => {
@@ -1053,8 +1053,8 @@ describe('refreshOrchestrator', () => {
       autoStart: false,
       streaming: {
         start: (scope: string) => eventStreamMocks.startNamespace(scope),
-        stop: (_scope: string, options?: { reset?: boolean }) =>
-          eventStreamMocks.stopNamespace(options?.reset ?? false),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          eventStreamMocks.stopNamespace(scope, options?.reset ?? false),
       },
     });
 

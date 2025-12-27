@@ -48,6 +48,8 @@ type Config struct {
 	PermissionCache       map[string]bool
 	ObjectCatalogEnabled  func() bool
 	ObjectCatalogService  func() *objectcatalog.Service
+	ClusterID             string // stable identifier for cluster-scoped keys
+	ClusterName           string // display name for cluster in payloads
 }
 
 // NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.
@@ -102,6 +104,10 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 	}
 
 	telemetryRecorder := telemetry.NewRecorder()
+	telemetryRecorder.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
+
+	// Cache cluster identifiers for snapshot payload enrichment.
+	snapshot.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
 
 	var (
 		metricsPoller   refresh.MetricsPoller

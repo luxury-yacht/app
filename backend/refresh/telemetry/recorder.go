@@ -13,6 +13,8 @@ import (
 type SnapshotStatus struct {
 	Domain             string   `json:"domain"`
 	Scope              string   `json:"scope,omitempty"`
+	ClusterID          string   `json:"clusterId,omitempty"`
+	ClusterName        string   `json:"clusterName,omitempty"`
 	LastStatus         string   `json:"lastStatus"`
 	LastError          string   `json:"lastError,omitempty"`
 	LastWarning        string   `json:"lastWarning,omitempty"`
@@ -57,6 +59,8 @@ type Summary struct {
 type CatalogStatus struct {
 	Enabled             bool   `json:"enabled"`
 	Status              string `json:"status,omitempty"`
+	ClusterID           string `json:"clusterId,omitempty"`
+	ClusterName         string `json:"clusterName,omitempty"`
 	LastSyncMs          int64  `json:"lastSyncMs"`
 	LastError           string `json:"lastError,omitempty"`
 	ItemCount           int    `json:"itemCount"`
@@ -91,6 +95,8 @@ type Recorder struct {
 	streams    map[string]*StreamStatus
 	catalog    CatalogStatus
 	connection ConnectionStats
+	clusterID  string
+	clusterName string
 }
 
 // NewRecorder returns an empty telemetry recorder.
@@ -101,12 +107,27 @@ func NewRecorder() *Recorder {
 	}
 }
 
+// SetClusterMeta sets the cluster identifiers for diagnostics payloads.
+func (r *Recorder) SetClusterMeta(clusterID, clusterName string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.clusterID = clusterID
+	r.clusterName = clusterName
+	r.catalog.ClusterID = clusterID
+	r.catalog.ClusterName = clusterName
+}
+
 // RecordCatalog logs catalog ingestion telemetry.
 func (r *Recorder) RecordCatalog(enabled bool, itemCount, resourceCount int, duration time.Duration, err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	r.catalog.Enabled = enabled
+	r.catalog.ClusterID = r.clusterID
+	r.catalog.ClusterName = r.clusterName
 	r.catalog.ItemCount = itemCount
 	r.catalog.ResourceCount = resourceCount
 	r.catalog.LastSyncMs = duration.Milliseconds()
@@ -168,6 +189,8 @@ func (r *Recorder) RecordSnapshot(
 	}
 
 	entry.Scope = scope
+	entry.ClusterID = r.clusterID
+	entry.ClusterName = r.clusterName
 	entry.LastDurationMs = duration.Milliseconds()
 	entry.LastUpdated = time.Now().UnixMilli()
 	entry.Truncated = truncated

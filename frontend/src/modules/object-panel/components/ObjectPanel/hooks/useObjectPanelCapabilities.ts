@@ -83,9 +83,10 @@ const computeCapabilityDescriptors = (
 
   const descriptors: CapabilityDescriptor[] = [];
   const idMap = createEmptyCapabilityIdMap();
+  const clusterId = objectData?.clusterId?.trim() || undefined;
 
   const add = (descriptor: CapabilityDescriptor, key?: keyof typeof idMap) => {
-    descriptors.push(descriptor);
+    descriptors.push(clusterId ? { ...descriptor, clusterId } : descriptor);
     if (key) {
       idMap[key] = descriptor.id;
     }
@@ -288,7 +289,13 @@ export const useObjectPanelCapabilities = ({
     };
   }, [capabilityDescriptorInfo.idMap, capabilitiesEnabled, getCapabilityState]);
 
-  const viewLogsPermission = useUserPermission('Pod', 'get', objectData?.namespace ?? null, 'log');
+  const viewLogsPermission = useUserPermission(
+    'Pod',
+    'get',
+    objectData?.namespace ?? null,
+    'log',
+    objectData?.clusterId ?? null
+  );
 
   const capabilities = useMemo<ComputedCapabilities>(() => {
     const hasLogs =

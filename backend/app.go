@@ -121,6 +121,10 @@ func (a *App) initKubeClient() error {
 }
 
 func (a *App) currentSelectionKey() string {
+	meta := a.currentClusterMeta()
+	if meta.ID != "" {
+		return meta.ID
+	}
 	if a.selectedKubeconfig == "" {
 		return ""
 	}

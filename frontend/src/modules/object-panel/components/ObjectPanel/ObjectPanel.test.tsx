@@ -673,7 +673,9 @@ describe('ObjectPanel tab availability', () => {
       namespace: ' Team-A ',
     });
 
-    expect(mockEvaluateNamespacePermissions).toHaveBeenCalledWith('Team-A');
+    expect(mockEvaluateNamespacePermissions).toHaveBeenCalledWith('Team-A', {
+      clusterId: null,
+    });
   });
 
   it('skips namespace evaluation when the object has no namespace', async () => {

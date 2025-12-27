@@ -70,6 +70,10 @@ vi.mock('@modules/cluster/components/ClusterResourcesViews', () => ({
   },
 }));
 
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedClusterId: 'cluster-a' }),
+}));
+
 vi.mock('@/core/capabilities', () => ({
   useUserPermission: (kind: string, action: string) => {
     const key = `${kind}:${action}`;

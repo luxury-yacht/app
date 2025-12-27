@@ -29,6 +29,7 @@ export const normalizeDescriptor = (
   descriptor: CapabilityDescriptor
 ): NormalizedCapabilityDescriptor => ({
   id: descriptor.id.trim(),
+  clusterId: trimmedOrUndefined(descriptor.clusterId),
   verb: descriptor.verb.trim().toLowerCase(),
   resourceKind: descriptor.resourceKind.trim(),
   namespace: trimmedOrUndefined(descriptor.namespace),
@@ -42,12 +43,13 @@ export const normalizeDescriptor = (
 export const createCapabilityKey = (
   descriptor: NormalizedCapabilityDescriptor | CapabilityResult
 ): string => {
+  const clusterId = lowerOrEmpty(descriptor.clusterId);
   const resourceKind = lowerOrEmpty(descriptor.resourceKind);
   const verb = lowerOrEmpty(descriptor.verb);
   const namespace = lowerOrEmpty(descriptor.namespace);
   const name = lowerOrEmpty(descriptor.name);
   const subresource = lowerOrEmpty(descriptor.subresource);
-  return `${resourceKind}|${verb}|${namespace}|${name}|${subresource}|${descriptor.id}`;
+  return `${clusterId}|${resourceKind}|${verb}|${namespace}|${name}|${subresource}|${descriptor.id}`;
 };
 
 /**
@@ -73,6 +75,7 @@ export const descriptorsMatch = (
   b: NormalizedCapabilityDescriptor
 ): boolean =>
   a.id === b.id &&
+  (a.clusterId ?? '') === (b.clusterId ?? '') &&
   a.verb === b.verb &&
   a.resourceKind === b.resourceKind &&
   (a.namespace ?? '') === (b.namespace ?? '') &&

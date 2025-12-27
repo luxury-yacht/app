@@ -44,6 +44,8 @@ import { useViewState } from '@/core/contexts/ViewStateContext';
 import type { CapabilityDefinition } from '@/core/capabilities/catalog';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { resetScopedDomainState } from '@/core/refresh/store';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 export interface PodsResourceDataReturn extends ResourceDataReturn<PodSnapshotEntry[]> {
   metrics: PodMetricsInfo | null;
@@ -296,7 +298,10 @@ const buildCapabilityDefinitionsForNamespace = (
     })
   );
 
-const normalizeNamespaceScope = (value?: string | null): string | null => {
+const normalizeNamespaceScope = (
+  value?: string | null,
+  clusterId?: string | null
+): string | null => {
   if (!value) {
     return null;
   }
@@ -304,7 +309,8 @@ const normalizeNamespaceScope = (value?: string | null): string | null => {
   if (!trimmed) {
     return null;
   }
-  return trimmed.startsWith('namespace:') ? trimmed : `namespace:${trimmed}`;
+  const namespaceScope = trimmed.startsWith('namespace:') ? trimmed : `namespace:${trimmed}`;
+  return buildClusterScope(clusterId ?? undefined, namespaceScope);
 };
 
 const getCapabilityNamespace = (value?: string | null): string | null => {
@@ -324,9 +330,13 @@ const getCapabilityNamespace = (value?: string | null): string | null => {
 
 const useNamespacePodsResource = (
   enabled: boolean,
-  namespace?: string | null
+  namespace?: string | null,
+  clusterId?: string | null
 ): PodsResourceDataReturn => {
-  const scope = useMemo(() => normalizeNamespaceScope(namespace), [namespace]);
+  const scope = useMemo(
+    () => normalizeNamespaceScope(namespace, clusterId),
+    [clusterId, namespace]
+  );
   const capabilityNamespace = useMemo(() => getCapabilityNamespace(namespace), [namespace]);
 
   const scopedStates = useRefreshScopedDomainStates('pods');
@@ -344,11 +354,12 @@ const useNamespacePodsResource = (
       registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
         force: false,
         ttlMs: DEFAULT_CAPABILITY_TTL_MS,
+        clusterId,
       });
-      evaluateNamespacePermissions(capabilityNamespace);
+      evaluateNamespacePermissions(capabilityNamespace, { clusterId });
     }
     await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: true });
-  }, [capabilityNamespace, enabled, scope]);
+  }, [capabilityNamespace, clusterId, enabled, scope]);
 
   const refresh = useCallback(async () => {
     if (!enabled || !scope) {
@@ -362,10 +373,11 @@ const useNamespacePodsResource = (
       registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
         force: true,
         ttlMs: DEFAULT_CAPABILITY_TTL_MS,
+        clusterId,
       });
     }
     await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: true });
-  }, [capabilityNamespace, enabled, scope]);
+  }, [capabilityNamespace, clusterId, enabled, scope]);
 
   const reset = useCallback(() => {
     if (!scope) {
@@ -436,7 +448,8 @@ function useRefreshBackedResource<T>(
   selector: (payload: any) => T,
   fallback: T,
   enabled: boolean,
-  namespace?: string | null
+  namespace?: string | null,
+  clusterId?: string | null
 ): ResourceDataReturn<T> {
   const domainState = useRefreshDomain(domain);
   const domainData = domainState.data;
@@ -461,8 +474,9 @@ function useRefreshBackedResource<T>(
         registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
           force: false,
           ttlMs: DEFAULT_CAPABILITY_TTL_MS,
+          clusterId,
         });
-        evaluateNamespacePermissions(capabilityNamespace);
+        evaluateNamespacePermissions(capabilityNamespace, { clusterId });
       }
 
       try {
@@ -475,7 +489,7 @@ function useRefreshBackedResource<T>(
         });
       }
     },
-    [capabilityNamespace, capabilitySpecs, domain, enabled, isStreaming, resourceKey]
+    [capabilityNamespace, capabilitySpecs, clusterId, domain, enabled, isStreaming, resourceKey]
   );
 
   const refresh = useCallback(async () => {
@@ -491,6 +505,7 @@ function useRefreshBackedResource<T>(
       registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
         force: true,
         ttlMs: DEFAULT_CAPABILITY_TTL_MS,
+        clusterId,
       });
     }
 
@@ -501,7 +516,7 @@ function useRefreshBackedResource<T>(
         source: `namespace-resource-refresh-${resourceKey}`,
       });
     }
-  }, [capabilityNamespace, capabilitySpecs, domain, enabled, isStreaming, resourceKey]);
+  }, [capabilityNamespace, capabilitySpecs, clusterId, domain, enabled, isStreaming, resourceKey]);
 
   const reset = useCallback(() => {
     refreshOrchestrator.resetDomain(domain);
@@ -597,6 +612,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   activeView,
 }) => {
   const { viewType } = useViewState();
+  const { selectedClusterId } = useKubeconfig();
   const isNamespaceView = viewType === 'namespace';
   const [currentNamespace, setCurrentNamespace] = useState<string | null>(propNamespace || null);
   // Default to 'workloads' since that's the default view in NamespaceViews
@@ -636,7 +652,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     (payload) => payload?.workloads ?? [],
     [],
     isResourceActive('workloads'),
-    currentNamespace
+    currentNamespace,
+    selectedClusterId
   );
 
   const config = useRefreshBackedResource<any[]>(
@@ -645,7 +662,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     (payload) => payload?.resources ?? [],
     [],
     isResourceActive('config'),
-    currentNamespace
+    currentNamespace,
+    selectedClusterId
   );
 
   const network = useRefreshBackedResource<any[]>(
@@ -654,7 +672,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     (payload) => payload?.resources ?? [],
     [],
     isResourceActive('network'),
-    currentNamespace
+    currentNamespace,
+    selectedClusterId
   );
 
   const rbac = useRefreshBackedResource<any[]>(
@@ -663,7 +682,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     (payload) => payload?.resources ?? [],
     [],
     isResourceActive('rbac'),
-    currentNamespace
+    currentNamespace,
+    selectedClusterId
   );
 
   const storage = useRefreshBackedResource<any[]>(
@@ -672,7 +692,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     (payload) => payload?.resources ?? [],
     [],
     isResourceActive('storage'),
-    currentNamespace
+    currentNamespace,
+    selectedClusterId
   );
 
   const autoscaling = useRefreshBackedResource<any[]>(
@@ -699,7 +720,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       }),
     [],
     isResourceActive('autoscaling'),
-    currentNamespace
+    currentNamespace,
+    selectedClusterId
   );
 
   const quotas = useRefreshBackedResource<any[]>(
@@ -708,7 +730,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     (payload) => payload?.resources ?? [],
     [],
     isResourceActive('quotas'),
-    currentNamespace
+    currentNamespace,
+    selectedClusterId
   );
 
   const events = useRefreshBackedResource<any[]>(
@@ -717,12 +740,13 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     (payload) => payload?.events ?? [],
     [],
     isResourceActive('events'),
-    currentNamespace
+    currentNamespace,
+    selectedClusterId
   );
 
   const podsEnabled =
     Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === 'pods';
-  const pods = useNamespacePodsResource(podsEnabled, currentNamespace);
+  const pods = useNamespacePodsResource(podsEnabled, currentNamespace, selectedClusterId);
 
   const custom = useRefreshBackedResource<any[]>(
     'custom',
@@ -741,7 +765,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       })),
     [],
     isResourceActive('custom'),
-    currentNamespace
+    currentNamespace,
+    selectedClusterId
   );
 
   const helm = useRefreshBackedResource<any[]>(
@@ -763,7 +788,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       })),
     [],
     isResourceActive('helm'),
-    currentNamespace
+    currentNamespace,
+    selectedClusterId
   );
 
   useEffect(() => {
@@ -794,11 +820,18 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
         refreshOrchestrator.resetDomain(domain);
       }
     });
-    const scope = normalizeNamespaceScope(currentNamespace);
+    const scope = normalizeNamespaceScope(currentNamespace, selectedClusterId);
     if (scope) {
       refreshOrchestrator.setScopedDomainEnabled('pods', scope, podsEnabled);
     }
-  }, [activeNamespaceView, currentNamespace, isNamespaceView, podsEnabled, pods]);
+  }, [
+    activeNamespaceView,
+    currentNamespace,
+    isNamespaceView,
+    podsEnabled,
+    pods,
+    selectedClusterId,
+  ]);
 
   useEffect(() => {
     const domains = Object.values(DOMAIN_BY_RESOURCE).filter(Boolean) as RefreshDomain[];
@@ -807,12 +840,12 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       domains.forEach((domain) => {
         refreshOrchestrator.setDomainEnabled(domain, false);
       });
-      const scope = normalizeNamespaceScope(currentNamespace);
+      const scope = normalizeNamespaceScope(currentNamespace, selectedClusterId);
       if (scope) {
         refreshOrchestrator.setScopedDomainEnabled('pods', scope, false);
       }
     };
-  }, [currentNamespace]);
+  }, [currentNamespace, selectedClusterId]);
 
   useEffect(() => {
     const nextNamespace = propNamespace ?? null;
@@ -1031,8 +1064,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     if (!capabilityNamespace) {
       return;
     }
-    evaluateNamespacePermissions(capabilityNamespace);
-  }, [currentNamespace]);
+    // Evaluate namespace permissions against the active cluster context.
+    evaluateNamespacePermissions(capabilityNamespace, { clusterId: selectedClusterId });
+  }, [currentNamespace, selectedClusterId]);
 
   return (
     <NamespaceResourcesContext.Provider value={contextValue}>

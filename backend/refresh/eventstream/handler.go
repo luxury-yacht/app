@@ -183,16 +183,21 @@ type scopeParams struct {
 }
 
 func parseScope(raw string) scopeParams {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || raw == "cluster" {
-		return scopeParams{Domain: "cluster-events", ScopeKey: "cluster", SnapshotScope: ""}
+	clusterID, stripped := refresh.SplitClusterScope(raw)
+	trimmed := strings.TrimSpace(stripped)
+	if trimmed == "" || trimmed == "cluster" {
+		return scopeParams{
+			Domain:        "cluster-events",
+			ScopeKey:      refresh.JoinClusterScope(clusterID, "cluster"),
+			SnapshotScope: "",
+		}
 	}
-	if strings.HasPrefix(raw, "namespace:") {
-		ns := strings.TrimPrefix(raw, "namespace:")
+	if strings.HasPrefix(trimmed, "namespace:") {
+		ns := strings.TrimPrefix(trimmed, "namespace:")
 		ns = strings.TrimSpace(ns)
 		return scopeParams{
 			Domain:        "namespace-events",
-			ScopeKey:      "namespace:" + ns,
+			ScopeKey:      refresh.JoinClusterScope(clusterID, "namespace:"+ns),
 			SnapshotScope: ns,
 		}
 	}

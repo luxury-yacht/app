@@ -259,7 +259,7 @@ const toTableRows = (items: CatalogItem[], useShortResourceNames: boolean): Tabl
 
 const BrowseView: React.FC = () => {
   const domain = useRefreshDomain('catalog');
-  const { selectedKubeconfig } = useKubeconfig();
+  const { selectedClusterId } = useKubeconfig();
   const useShortResourceNames = useShortNames();
   const { openWithObject } = useObjectPanel();
   const namespaceContext = useNamespace();
@@ -410,7 +410,7 @@ const BrowseView: React.FC = () => {
     resetState: resetPersistedState,
   } = useGridTablePersistence<TableRow>({
     viewId: 'browse',
-    clusterIdentity: selectedKubeconfig,
+    clusterIdentity: selectedClusterId,
     namespace: null,
     isNamespaceScoped: false,
     columns,

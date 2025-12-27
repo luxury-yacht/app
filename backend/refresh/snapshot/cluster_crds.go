@@ -25,11 +25,13 @@ type ClusterCRDBuilder struct {
 
 // ClusterCRDSnapshot is returned to the frontend.
 type ClusterCRDSnapshot struct {
+	ClusterMeta
 	Definitions []ClusterCRDEntry `json:"definitions"`
 }
 
 // ClusterCRDEntry represents an individual CRD in the table.
 type ClusterCRDEntry struct {
+	ClusterMeta
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Group     string `json:"group"`
@@ -61,6 +63,7 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 	if b.crdLister == nil {
 		return nil, fmt.Errorf("cluster crds: CRD lister unavailable")
 	}
+	meta := CurrentClusterMeta()
 	crds, err := b.crdLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("cluster crds: failed to list CRDs: %w", err)
@@ -73,6 +76,7 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 			continue
 		}
 		entry := ClusterCRDEntry{
+			ClusterMeta: meta,
 			Kind:      "CustomResourceDefinition",
 			Name:      crd.Name,
 			Group:     crd.Spec.Group,
@@ -94,7 +98,7 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 	return &refresh.Snapshot{
 		Domain:  clusterCRDDomainName,
 		Version: version,
-		Payload: ClusterCRDSnapshot{Definitions: entries},
+		Payload: ClusterCRDSnapshot{ClusterMeta: meta, Definitions: entries},
 		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
 	}, nil
 }

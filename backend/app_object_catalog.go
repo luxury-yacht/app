@@ -71,6 +71,8 @@ func (a *App) startObjectCatalog() {
 		telemetryRecorder = a.telemetryRecorder
 	}
 
+	// Use stable cluster identifiers for catalog summaries.
+	clusterMeta := a.currentClusterMeta()
 	deps := objectcatalog.Dependencies{
 		Common:                       a.resourceDependencies(),
 		Logger:                       a.logger,
@@ -86,6 +88,8 @@ func (a *App) startObjectCatalog() {
 			})
 		},
 		Now: time.Now,
+		ClusterID:   clusterMeta.ID,
+		ClusterName: clusterMeta.Name,
 	}
 
 	svc := objectcatalog.NewService(deps, nil)

@@ -241,25 +241,27 @@ afterEach(() => {
 describe('resolveDomainNamespace', () => {
   test('returns namespace suffix for namespace domains', async () => {
     const module = await import('./RefreshDiagnosticsPanel');
-    expect(module.resolveDomainNamespace('namespace-workloads', 'cluster:default')).toBe('default');
+    expect(module.resolveDomainNamespace('namespace-workloads', 'alpha|cluster:default')).toBe(
+      'default'
+    );
   });
 
   test('returns workload namespace for pod scopes', async () => {
     const module = await import('./RefreshDiagnosticsPanel');
-    expect(module.resolveDomainNamespace('pods', 'workload:default:deployment:web')).toBe(
+    expect(module.resolveDomainNamespace('pods', 'alpha|workload:default:deployment:web')).toBe(
       'default'
     );
   });
 
   test('returns namespace for namespace-scoped pod scopes', async () => {
     const module = await import('./RefreshDiagnosticsPanel');
-    expect(module.resolveDomainNamespace('pods', 'namespace:dev')).toBe('dev');
-    expect(module.resolveDomainNamespace('pods', 'namespace:all')).toBe('All');
+    expect(module.resolveDomainNamespace('pods', 'alpha|namespace:dev')).toBe('dev');
+    expect(module.resolveDomainNamespace('pods', 'alpha|namespace:all')).toBe('All');
   });
 
   test('returns dash for cluster scoped domains', async () => {
     const module = await import('./RefreshDiagnosticsPanel');
-    expect(module.resolveDomainNamespace('cluster-events', 'ignored')).toBe('-');
+    expect(module.resolveDomainNamespace('cluster-events', 'alpha|cluster')).toBe('-');
   });
 });
 

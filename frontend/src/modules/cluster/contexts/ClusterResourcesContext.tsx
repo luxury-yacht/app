@@ -44,6 +44,7 @@ import type {
 import type { ClusterViewType } from '@/types/navigation/views';
 import { useUserPermission } from '@/core/capabilities';
 import type { PermissionStatus } from '@/core/capabilities';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 export type { ClusterNodeRow } from '@/core/refresh/types';
 
@@ -186,18 +187,67 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const customDomain = useRefreshDomain('cluster-custom');
   const eventsDomain = useRefreshDomain('cluster-events');
 
-  const nodeListPermission = useUserPermission('Node', 'list');
-  const storageListPermission = useUserPermission('PersistentVolume', 'list');
-  const rbacClusterRolePermission = useUserPermission('ClusterRole', 'list');
-  const rbacClusterRoleBindingPermission = useUserPermission('ClusterRoleBinding', 'list');
-  const crdListPermission = useUserPermission('CustomResourceDefinition', 'list');
-  const eventListPermission = useUserPermission('Event', 'list');
-  const configStorageClassPermission = useUserPermission('StorageClass', 'list');
-  const configIngressClassPermission = useUserPermission('IngressClass', 'list');
-  const configMutatingWebhookPermission = useUserPermission('MutatingWebhookConfiguration', 'list');
+  const { selectedClusterId } = useKubeconfig();
+  // Ensure permission state is tracked per-cluster to prevent cross-cluster leakage.
+  const permissionClusterId = selectedClusterId || null;
+
+  const nodeListPermission = useUserPermission('Node', 'list', null, null, permissionClusterId);
+  const storageListPermission = useUserPermission(
+    'PersistentVolume',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const rbacClusterRolePermission = useUserPermission(
+    'ClusterRole',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const rbacClusterRoleBindingPermission = useUserPermission(
+    'ClusterRoleBinding',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const crdListPermission = useUserPermission(
+    'CustomResourceDefinition',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const eventListPermission = useUserPermission('Event', 'list', null, null, permissionClusterId);
+  const configStorageClassPermission = useUserPermission(
+    'StorageClass',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const configIngressClassPermission = useUserPermission(
+    'IngressClass',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const configMutatingWebhookPermission = useUserPermission(
+    'MutatingWebhookConfiguration',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
   const configValidatingWebhookPermission = useUserPermission(
     'ValidatingWebhookConfiguration',
-    'list'
+    'list',
+    null,
+    null,
+    permissionClusterId
   );
 
   const isPermissionDenied = useCallback(

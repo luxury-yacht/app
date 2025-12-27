@@ -43,6 +43,7 @@ import type { DomainPayloadMap, RefreshDomain } from './types';
 import { logStreamManager } from './streaming/logStreamManager';
 import { eventStreamManager } from './streaming/eventStreamManager';
 import { errorHandler } from '@utils/errorHandler';
+import { buildClusterScope } from './clusterScope';
 
 type DomainCategory = 'system' | 'cluster' | 'namespace';
 
@@ -533,7 +534,7 @@ class RefreshOrchestrator {
     if (!config.scoped) {
       throw new Error(`Domain "${domain}" is not scoped`);
     }
-    const normalizedScope = scope.trim();
+    const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope value`);
     }
@@ -586,7 +587,11 @@ class RefreshOrchestrator {
     if (!config.scoped) {
       throw new Error(`Domain "${domain}" is not scoped`);
     }
-    resetScopedDomainState(domain, scope);
+    const normalizedScope = this.normalizeScope(scope);
+    if (!normalizedScope) {
+      return;
+    }
+    resetScopedDomainState(domain, normalizedScope);
   }
 
   startStreamingDomain(domain: RefreshDomain, scope: string): void {
@@ -594,7 +599,7 @@ class RefreshOrchestrator {
     if (!config.streaming) {
       throw new Error(`Domain "${domain}" is not registered as streaming`);
     }
-    const normalizedScope = scope.trim();
+    const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -610,7 +615,7 @@ class RefreshOrchestrator {
     if (!config.streaming) {
       throw new Error(`Domain "${domain}" is not registered as streaming`);
     }
-    const normalizedScope = scope.trim();
+    const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -626,7 +631,7 @@ class RefreshOrchestrator {
       await this.restartStreamingDomain(domain, scope);
       return;
     }
-    const normalizedScope = scope.trim();
+    const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -638,7 +643,7 @@ class RefreshOrchestrator {
     if (!config.streaming) {
       throw new Error(`Domain "${domain}" is not registered as streaming`);
     }
-    const normalizedScope = scope.trim();
+    const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -647,7 +652,7 @@ class RefreshOrchestrator {
   }
 
   getSelectedNamespace(): string | undefined {
-    return this.context.selectedNamespace ?? undefined;
+    return this.normalizeNamespaceScope(this.context.selectedNamespace) ?? undefined;
   }
 
   isStreamingDomain(domain: RefreshDomain): boolean {
@@ -832,6 +837,17 @@ class RefreshOrchestrator {
     return this.fetchScopedDomain('pods', scope, { isManual: true });
   }
 
+  private normalizeScope(value?: string | null): string | undefined {
+    if (!value) {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+    return buildClusterScope(this.context.selectedClusterId, trimmed);
+  }
+
   private normalizeNamespaceScope(value?: string | null): string | null {
     if (!value) {
       return null;
@@ -840,7 +856,8 @@ class RefreshOrchestrator {
     if (!trimmed) {
       return null;
     }
-    return trimmed.startsWith('namespace:') ? trimmed : `namespace:${trimmed}`;
+    const namespaceScope = trimmed.startsWith('namespace:') ? trimmed : `namespace:${trimmed}`;
+    return this.normalizeScope(namespaceScope) ?? null;
   }
 
   private ensureRefresher(config: DomainRegistration<RefreshDomain>): void {
@@ -920,22 +937,23 @@ class RefreshOrchestrator {
     if (!config.scoped) {
       throw new Error(`Domain "${domain}" is not registered as scoped`);
     }
-    if (!scope || !scope.trim()) {
+    const normalizedScope = this.normalizeScope(scope);
+    if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope`);
     }
 
     if (config.streaming) {
       if (options.isManual) {
-        await this.refreshStreamingDomainOnce(domain, scope);
+        await this.refreshStreamingDomainOnce(domain, normalizedScope);
       } else {
-        this.startStreamingScope(domain, scope.trim(), config.streaming);
+        this.startStreamingScope(domain, normalizedScope, config.streaming);
       }
       return;
     }
 
     await this.performFetch(
       domain,
-      scope,
+      normalizedScope,
       { isManual: options.isManual ?? true, signal: options.signal },
       config
     );
@@ -948,7 +966,7 @@ class RefreshOrchestrator {
     config: DomainRegistration<RefreshDomain>
   ): Promise<void> {
     const isScoped = Boolean(config.scoped);
-    const normalizedScope = scope?.trim();
+    const normalizedScope = this.normalizeScope(scope);
 
     if (options.signal?.aborted) {
       return;
@@ -1282,10 +1300,10 @@ class RefreshOrchestrator {
 
   private normalizeStreamingScope(domain: RefreshDomain, rawScope?: string): string {
     if (domain === 'cluster-events') {
-      return CLUSTER_SCOPE;
+      return buildClusterScope(this.context.selectedClusterId, CLUSTER_SCOPE);
     }
     if (rawScope && rawScope.trim()) {
-      return rawScope.trim();
+      return buildClusterScope(this.context.selectedClusterId, rawScope.trim());
     }
     return '';
   }
@@ -1442,9 +1460,9 @@ refreshOrchestrator.registerDomain({
   scopeResolver: () => CLUSTER_SCOPE,
   autoStart: false,
   streaming: {
-    start: () => eventStreamManager.startCluster(),
-    stop: (_scope, options) => eventStreamManager.stopCluster(options?.reset ?? false),
-    refreshOnce: () => eventStreamManager.refreshCluster(),
+    start: (scope) => eventStreamManager.startCluster(scope),
+    stop: (scope, options) => eventStreamManager.stopCluster(scope, options?.reset ?? false),
+    refreshOnce: (scope) => eventStreamManager.refreshCluster(scope),
   },
 });
 
@@ -1511,9 +1529,9 @@ refreshOrchestrator.registerDomain({
   scopeResolver: () => refreshOrchestrator.getSelectedNamespace(),
   autoStart: false,
   streaming: {
-    start: (namespace) => eventStreamManager.startNamespace(namespace),
-    stop: (_namespace, options) => eventStreamManager.stopNamespace(options?.reset ?? false),
-    refreshOnce: (namespace) => eventStreamManager.refreshNamespace(namespace),
+    start: (scope) => eventStreamManager.startNamespace(scope),
+    stop: (scope, options) => eventStreamManager.stopNamespace(scope, options?.reset ?? false),
+    refreshOnce: (scope) => eventStreamManager.refreshNamespace(scope),
   },
 });
 

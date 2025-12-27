@@ -49,7 +49,7 @@ interface RBACViewProps {
 const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -113,7 +113,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<RBACData>({
       viewId: 'cluster-rbac',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns,

@@ -192,11 +192,12 @@ func TestNamespaceHelmBuilderAllNamespaces(t *testing.T) {
 	allList.AllNamespaces = true
 	allReleases, err := allList.Run()
 	require.NoError(t, err)
-	allSummaries, _ := mapHelmReleases(allReleases, "")
+	meta := ClusterMeta{ClusterID: "cluster-a", ClusterName: "cluster-a"}
+	allSummaries, _ := mapHelmReleases(allReleases, "", meta)
 	require.Len(t, allSummaries, 2)
-	defaultSummaries, _ := mapHelmReleases(allReleases, "default")
+	defaultSummaries, _ := mapHelmReleases(allReleases, "default", meta)
 	require.Len(t, defaultSummaries, 1)
-	stagingSummaries, _ := mapHelmReleases(allReleases, "staging")
+	stagingSummaries, _ := mapHelmReleases(allReleases, "staging", meta)
 	require.Len(t, stagingSummaries, 1)
 
 	builder := &NamespaceHelmBuilder{

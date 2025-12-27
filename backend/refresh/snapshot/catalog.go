@@ -23,6 +23,7 @@ type CatalogConfig struct {
 
 // CatalogSnapshot captures the browse payload returned to clients.
 type CatalogSnapshot struct {
+	ClusterMeta
 	Items               []objectcatalog.Summary `json:"items"`
 	Continue            string                  `json:"continue,omitempty"`
 	Total               int                     `json:"total"`
@@ -89,7 +90,9 @@ func (b *catalogBuilder) Build(ctx context.Context, scope string) (*refresh.Snap
 	health := svc.Health()
 	cachesReady := svc.CachesReady()
 
+	meta := CurrentClusterMeta()
 	payload, truncated := buildCatalogSnapshot(result, opts, health, cachesReady, cachesReady)
+	payload.ClusterMeta = meta
 	if cachesReady && payload.Total > 0 {
 		// Streaming caches are warm, but we still honour pagination when the client
 		// requested limited scopes. Preserve the continue token so UI callers can
@@ -208,10 +211,11 @@ func max(a, b int) int {
 }
 
 func parseBrowseScope(scope string) (browseQueryOptions, error) {
-	if scope == "" {
+	_, trimmed := refresh.SplitClusterScope(scope)
+	if trimmed == "" {
 		return browseQueryOptions{}, nil
 	}
-	values, err := url.ParseQuery(scope)
+	values, err := url.ParseQuery(trimmed)
 	if err != nil {
 		return browseQueryOptions{}, err
 	}

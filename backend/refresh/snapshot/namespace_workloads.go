@@ -43,11 +43,13 @@ type NamespaceWorkloadsBuilder struct {
 
 // NamespaceWorkloadsSnapshot is returned to the frontend.
 type NamespaceWorkloadsSnapshot struct {
+	ClusterMeta
 	Workloads []WorkloadSummary `json:"workloads"`
 }
 
 // WorkloadSummary mirrors the data required by the workloads table.
 type WorkloadSummary struct {
+	ClusterMeta
 	Kind       string `json:"kind"`
 	Name       string `json:"name"`
 	Namespace  string `json:"namespace"`
@@ -64,7 +66,8 @@ type WorkloadSummary struct {
 }
 
 func parseNamespaceScope(scope string) (string, error) {
-	namespace := strings.TrimSpace(scope)
+	_, scopeValue := refresh.SplitClusterScope(scope)
+	namespace := strings.TrimSpace(scopeValue)
 	if strings.HasPrefix(namespace, "namespace:") {
 		namespace = strings.TrimPrefix(namespace, "namespace:")
 		namespace = strings.TrimLeft(namespace, ":")
@@ -104,7 +107,9 @@ func RegisterNamespaceWorkloadsDomain(
 
 // Build assembles workload summaries for the requested namespace scope.
 func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	trimmed := strings.TrimSpace(scope)
+	meta := CurrentClusterMeta()
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {
 		return nil, errors.New(errNamespaceScopeRequired)
 	}
@@ -116,13 +121,13 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 		err        error
 	)
 	if isAll {
-		scopeLabel = "namespace:all"
+		scopeLabel = refresh.JoinClusterScope(clusterID, "namespace:all")
 	} else {
 		namespace, err = parseNamespaceScope(trimmed)
 		if err != nil {
 			return nil, err
 		}
-		scopeLabel = trimmed
+		scopeLabel = refresh.JoinClusterScope(clusterID, trimmed)
 	}
 
 	pods, err := b.listPods(namespace)
@@ -150,9 +155,10 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 		return nil, fmt.Errorf("namespace workloads: failed to list cronjobs: %w", err)
 	}
 
-	return b.buildSnapshot(scopeLabel, pods, deployments, statefulSets, daemonSets, jobs, cronJobs)
+	return b.buildSnapshot(meta, scopeLabel, pods, deployments, statefulSets, daemonSets, jobs, cronJobs)
 }
 func (b *NamespaceWorkloadsBuilder) buildSnapshot(
+	meta ClusterMeta,
 	scope string,
 	pods []*corev1.Pod,
 	deployments []*appsv1.Deployment,
@@ -182,6 +188,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	)
 
 	appendSummary := func(summary WorkloadSummary, obj metav1.Object) {
+		summary.ClusterMeta = meta
 		items = append(items, summary)
 		if obj == nil {
 			return
@@ -249,8 +256,8 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 				continue
 			}
 		}
-		summary := buildStandalonePodSummary(pod, podUsage)
-		appendSummary(summary, pod)
+	summary := buildStandalonePodSummary(pod, podUsage)
+	appendSummary(summary, pod)
 	}
 
 	sortWorkloadSummaries(items)
@@ -263,7 +270,7 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 		Domain:  namespaceWorkloadsDomainName,
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceWorkloadsSnapshot{Workloads: items},
+		Payload: NamespaceWorkloadsSnapshot{ClusterMeta: meta, Workloads: items},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(items),
 		},

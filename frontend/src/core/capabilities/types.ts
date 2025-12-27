@@ -13,6 +13,7 @@ export type CapabilityStatus = 'idle' | 'loading' | 'ready' | 'error';
  */
 export interface CapabilityDescriptor {
   id: string;
+  clusterId?: string;
   verb: string;
   resourceKind: string;
   namespace?: string;
@@ -25,6 +26,7 @@ export interface CapabilityDescriptor {
  */
 export interface NormalizedCapabilityDescriptor {
   id: string;
+  clusterId?: string;
   verb: string;
   resourceKind: string;
   namespace?: string;
@@ -49,6 +51,7 @@ export interface CapabilityEntry {
  */
 export interface CapabilityResult {
   id: string;
+  clusterId?: string;
   verb: string;
   resourceKind: string;
   namespace?: string;
@@ -69,6 +72,7 @@ export interface CapabilityState {
 
 export interface CapabilityNamespaceDiagnostics {
   key: string;
+  clusterId?: string;
   namespace?: string;
   pendingCount: number;
   inFlightCount: number;

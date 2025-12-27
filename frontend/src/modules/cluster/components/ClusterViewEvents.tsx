@@ -52,7 +52,7 @@ interface EventViewProps {
 const ClusterEventsView: React.FC<EventViewProps> = React.memo(
   ({ data, loading = false, loaded, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
 
     const handleEventClick = useCallback(
@@ -132,7 +132,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<EventData>({
       viewId: 'cluster-events',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns,

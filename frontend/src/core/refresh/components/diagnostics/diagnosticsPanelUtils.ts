@@ -6,6 +6,7 @@
  */
 
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
+import { stripClusterScope } from '@/core/refresh/clusterScope';
 import type { RefreshDomain } from '../../types';
 
 export const formatInterval = (intervalMs: number | null): string => {
@@ -22,17 +23,21 @@ export const resolveDomainNamespace = (domain: RefreshDomain, scope?: string): s
   if (!scope) {
     return '-';
   }
+  const normalizedScope = stripClusterScope(scope);
+  if (!normalizedScope) {
+    return '-';
+  }
   if (domain.startsWith('namespace-')) {
-    const parts = scope.split(':');
-    return parts[parts.length - 1] || scope;
+    const parts = normalizedScope.split(':');
+    return parts[parts.length - 1] || normalizedScope;
   }
   if (domain === 'pods') {
-    if (scope.startsWith('workload:')) {
-      const [, namespace] = scope.split(':');
+    if (normalizedScope.startsWith('workload:')) {
+      const [, namespace] = normalizedScope.split(':');
       return namespace || '-';
     }
-    if (scope.startsWith('namespace:')) {
-      const namespace = scope.slice('namespace:'.length);
+    if (normalizedScope.startsWith('namespace:')) {
+      const namespace = normalizedScope.slice('namespace:'.length);
       if (!namespace) {
         return '-';
       }
@@ -41,11 +46,11 @@ export const resolveDomainNamespace = (domain: RefreshDomain, scope?: string): s
     return '-';
   }
   if (domain === 'node-maintenance') {
-    if (scope.startsWith('node:')) {
-      const node = scope.slice('node:'.length);
+    if (normalizedScope.startsWith('node:')) {
+      const node = normalizedScope.slice('node:'.length);
       return node || '-';
     }
-    return scope;
+    return normalizedScope;
   }
   return '-';
 };

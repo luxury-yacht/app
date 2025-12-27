@@ -49,6 +49,7 @@ type ClusterOverviewBuilder struct {
 
 // ClusterOverviewSnapshot is the payload published for the cluster overview domain.
 type ClusterOverviewSnapshot struct {
+	ClusterMeta
 	Overview ClusterOverviewPayload `json:"overview"`
 	Metrics  ClusterOverviewMetrics `json:"metrics"`
 }
@@ -257,6 +258,7 @@ func buildClusterOverviewSnapshot(
 	versionFn func(context.Context) string,
 	serverHost string,
 ) (*refresh.Snapshot, error) {
+	meta := CurrentClusterMeta()
 	overview := ClusterOverviewPayload{}
 	var version uint64
 
@@ -430,6 +432,7 @@ func buildClusterOverviewSnapshot(
 		Scope:   "",
 		Version: version,
 		Payload: ClusterOverviewSnapshot{
+			ClusterMeta: meta,
 			Overview: overview,
 			Metrics:  metricsSnapshot,
 		},

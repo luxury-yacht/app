@@ -190,8 +190,8 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
     }
 
     lastEvaluatedNamespaceRef.current = normalized;
-    evaluateNamespacePermissions(namespace);
-  }, [objectData?.namespace]);
+    evaluateNamespacePermissions(namespace, { clusterId: objectData?.clusterId ?? null });
+  }, [objectData?.clusterId, objectData?.namespace]);
 
   const featureSupport = useObjectPanelFeatureSupport(objectKind, RESOURCE_CAPABILITIES);
 
@@ -213,11 +213,12 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
     });
 
   const objectIdentityKey = useMemo(() => {
+    const clusterKey = objectData?.clusterId?.trim().toLowerCase() ?? '';
     const name = objectData?.name?.trim().toLowerCase() ?? '';
     const namespace = objectData?.namespace?.trim().toLowerCase() ?? '';
     const kindKey = objectKind?.toLowerCase() ?? '';
-    return [kindKey, namespace, name].filter(Boolean).join('/');
-  }, [objectData?.name, objectData?.namespace, objectKind]);
+    return [clusterKey, kindKey, namespace, name].filter(Boolean).join('/');
+  }, [objectData?.clusterId, objectData?.name, objectData?.namespace, objectKind]);
 
   const previousIdentityRef = useRef<string | null>(null);
   useEffect(() => {

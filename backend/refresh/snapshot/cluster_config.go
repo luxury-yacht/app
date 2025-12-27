@@ -37,11 +37,13 @@ type ClusterConfigPermissions struct {
 
 // ClusterConfigSnapshot represents the payload exposed to the UI.
 type ClusterConfigSnapshot struct {
+	ClusterMeta
 	Resources []ClusterConfigEntry `json:"resources"`
 }
 
 // ClusterConfigEntry covers a storage class, ingress class, or webhook config.
 type ClusterConfigEntry struct {
+	ClusterMeta
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Details   string `json:"details"`
@@ -89,6 +91,7 @@ func (b *ClusterConfigBuilder) Build(ctx context.Context, scope string) (*refres
 }
 
 func (b *ClusterConfigBuilder) buildFromListers() (*refresh.Snapshot, error) {
+	meta := CurrentClusterMeta()
 	var version uint64
 	entries := make([]ClusterConfigEntry, 0, 64)
 
@@ -102,6 +105,7 @@ func (b *ClusterConfigBuilder) buildFromListers() (*refresh.Snapshot, error) {
 				continue
 			}
 			entries = append(entries, ClusterConfigEntry{
+				ClusterMeta: meta,
 				Kind:      "StorageClass",
 				Name:      sc.Name,
 				Details:   sc.Provisioner,
@@ -124,6 +128,7 @@ func (b *ClusterConfigBuilder) buildFromListers() (*refresh.Snapshot, error) {
 				continue
 			}
 			entries = append(entries, ClusterConfigEntry{
+				ClusterMeta: meta,
 				Kind:      "IngressClass",
 				Name:      ic.Name,
 				Details:   ic.Spec.Controller,
@@ -146,6 +151,7 @@ func (b *ClusterConfigBuilder) buildFromListers() (*refresh.Snapshot, error) {
 				continue
 			}
 			entries = append(entries, ClusterConfigEntry{
+				ClusterMeta: meta,
 				Kind:    "ValidatingWebhookConfiguration",
 				Name:    webhook.Name,
 				Details: webhookDetails(len(webhook.Webhooks)),
@@ -167,6 +173,7 @@ func (b *ClusterConfigBuilder) buildFromListers() (*refresh.Snapshot, error) {
 				continue
 			}
 			entries = append(entries, ClusterConfigEntry{
+				ClusterMeta: meta,
 				Kind:    "MutatingWebhookConfiguration",
 				Name:    webhook.Name,
 				Details: webhookDetails(len(webhook.Webhooks)),
@@ -188,7 +195,7 @@ func (b *ClusterConfigBuilder) buildFromListers() (*refresh.Snapshot, error) {
 	return &refresh.Snapshot{
 		Domain:  clusterConfigDomainName,
 		Version: version,
-		Payload: ClusterConfigSnapshot{Resources: entries},
+		Payload: ClusterConfigSnapshot{ClusterMeta: meta, Resources: entries},
 		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
 	}, nil
 }

@@ -50,7 +50,7 @@ interface CRDsViewProps {
 const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -119,7 +119,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<CRDsData>({
       viewId: 'cluster-crds',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns,

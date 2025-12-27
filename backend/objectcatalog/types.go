@@ -50,6 +50,8 @@ type HealthStatus struct {
 
 // Summary represents the lightweight metadata captured for each Kubernetes object.
 type Summary struct {
+	ClusterID         string `json:"clusterId"`   // stable identifier for the source cluster
+	ClusterName       string `json:"clusterName"` // display name for the source cluster
 	Kind              string `json:"kind"`
 	Group             string `json:"group"`
 	Version           string `json:"version"`
@@ -91,6 +93,8 @@ type Dependencies struct {
 	Now                          func() time.Time
 	InformerFactory              informers.SharedInformerFactory
 	APIExtensionsInformerFactory apiextinformers.SharedInformerFactory
+	ClusterID                    string // stable identifier for the source cluster
+	ClusterName                  string // display name for the source cluster
 }
 
 // Logger is the minimal logging contract required by the catalog.

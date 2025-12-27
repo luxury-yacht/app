@@ -232,7 +232,7 @@ describe('EventStreamManager', () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();
 
-    await manager.startNamespace('default');
+    await manager.startNamespace('namespace:default');
     manager.applyPayload('namespace-events', 'namespace:default', {
       domain: 'namespace-events',
       scope: 'namespace:default',
@@ -251,7 +251,7 @@ describe('EventStreamManager', () => {
     });
     await flushTimers();
 
-    manager.stopNamespace(true);
+    manager.stopNamespace('namespace:default', true);
     expect(getDomainState('namespace-events').data).toBeNull();
   });
 
@@ -277,7 +277,7 @@ describe('EventStreamManager', () => {
     });
     await flushTimers();
 
-    await manager.startNamespace('default');
+    await manager.startNamespace('namespace:default');
     await flushTimers();
 
     manager.stopAll(true);
@@ -411,7 +411,7 @@ describe('EventStreamManager', () => {
       'handleStreamError'
     );
 
-    await manager.startNamespace('prod');
+    await manager.startNamespace('namespace:prod');
     expect(errorSpy).toHaveBeenCalledWith(
       'namespace-events',
       'namespace:prod',

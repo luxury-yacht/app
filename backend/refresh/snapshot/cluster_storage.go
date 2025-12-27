@@ -24,11 +24,13 @@ type ClusterStorageBuilder struct {
 
 // ClusterStorageSnapshot is the payload exposed to the frontend.
 type ClusterStorageSnapshot struct {
+	ClusterMeta
 	Volumes []ClusterStorageEntry `json:"volumes"`
 }
 
 // ClusterStorageEntry represents a persistent volume in the cluster view.
 type ClusterStorageEntry struct {
+	ClusterMeta
 	Kind         string `json:"kind"`
 	Name         string `json:"name"`
 	StorageClass string `json:"storageClass,omitempty"`
@@ -61,6 +63,7 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 	if b.pvLister == nil {
 		return nil, fmt.Errorf("cluster storage: persistent volume lister unavailable")
 	}
+	meta := CurrentClusterMeta()
 	pvs, err := b.pvLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("cluster storage: failed to list persistent volumes: %w", err)
@@ -72,6 +75,7 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 			continue
 		}
 		entry := ClusterStorageEntry{
+			ClusterMeta: meta,
 			Kind:         "PersistentVolume",
 			Name:         pv.Name,
 			StorageClass: pv.Spec.StorageClassName,
@@ -94,7 +98,7 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 	return &refresh.Snapshot{
 		Domain:  clusterStorageDomainName,
 		Version: version,
-		Payload: ClusterStorageSnapshot{Volumes: entries},
+		Payload: ClusterStorageSnapshot{ClusterMeta: meta, Volumes: entries},
 		Stats:   refresh.SnapshotStats{ItemCount: len(entries)},
 	}, nil
 }

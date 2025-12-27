@@ -131,18 +131,21 @@ interface PlanNamespaceActionsInput {
   namespace: string;
   ownerKinds: ReadonlySet<RestartableOwnerKind>;
   actions: CapabilityActionId[];
+  clusterId?: string | null;
 }
 
 const planNamespaceActionDefinitions = ({
   namespace,
   ownerKinds,
   actions,
+  clusterId,
 }: PlanNamespaceActionsInput): CapabilityDefinition[] => {
   const collected = new Map<string, CapabilityDefinition>();
 
   const addDefinition = (definition: CapabilityDefinition) => {
     const normalized = normalizeDescriptor({
       ...definition.descriptor,
+      clusterId: definition.descriptor.clusterId ?? clusterId ?? undefined,
       namespace: definition.descriptor.namespace ?? namespace,
     });
     const key = createCapabilityKey(normalized);
@@ -182,6 +185,7 @@ export interface EnsureNamespaceActionCapabilitiesOptions {
   actions?: CapabilityActionId[];
   force?: boolean;
   ttlMs?: number;
+  clusterId?: string | null;
 }
 
 export const ensureNamespaceActionCapabilities = ({
@@ -190,6 +194,7 @@ export const ensureNamespaceActionCapabilities = ({
   actions = DEFAULT_ACTIONS,
   force = false,
   ttlMs,
+  clusterId,
 }: EnsureNamespaceActionCapabilitiesOptions): void => {
   const trimmed = namespace?.trim();
   if (!trimmed) {
@@ -210,15 +215,18 @@ export const ensureNamespaceActionCapabilities = ({
     namespace: trimmed,
     ownerKinds: normalizedOwners,
     actions,
+    clusterId,
   });
 
   if (definitions.length === 0) {
     return;
   }
 
+  const resolvedClusterId = clusterId?.trim();
   registerNamespaceCapabilityDefinitions(trimmed, definitions, {
     force,
     ttlMs: ttlMs ?? DEFAULT_CAPABILITY_TTL_MS,
+    ...(resolvedClusterId ? { clusterId: resolvedClusterId } : {}),
   });
 };
 

@@ -27,11 +27,13 @@ type ClusterEventsBuilder struct {
 
 // ClusterEventsSnapshot is the payload returned to the UI.
 type ClusterEventsSnapshot struct {
+	ClusterMeta
 	Events []ClusterEventEntry `json:"events"`
 }
 
 // ClusterEventEntry mirrors the fields consumed by the frontend grid.
 type ClusterEventEntry struct {
+	ClusterMeta
 	Kind            string `json:"kind"`
 	Name            string `json:"name"`
 	Namespace       string `json:"namespace"`
@@ -60,6 +62,7 @@ func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedI
 
 // Build gathers recent cluster events.
 func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+	meta := CurrentClusterMeta()
 	events, err := b.eventLister.List(labels.Everything())
 	if err != nil {
 		return nil, err
@@ -85,6 +88,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		timestamp := eventTimestamp(evt)
 		objectNamespace := evt.InvolvedObject.Namespace
 		entries = append(entries, ClusterEventEntry{
+			ClusterMeta: meta,
 			Kind:            "Event",
 			Name:            evt.Name,
 			Namespace:       objectNamespace,
@@ -113,7 +117,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 	return &refresh.Snapshot{
 		Domain:  clusterEventsDomainName,
 		Version: version,
-		Payload: ClusterEventsSnapshot{Events: entries},
+		Payload: ClusterEventsSnapshot{ClusterMeta: meta, Events: entries},
 		Stats:   stats,
 	}, nil
 }
