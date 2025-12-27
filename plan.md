@@ -89,7 +89,8 @@ Phase 1 status (in progress)
 Backend
 - ✅ Cluster identity helper and refresh config/telemetry updated to include cluster meta.
 - ✅ Cluster meta added to catalog summaries and most refresh snapshot payloads (including node maintenance and object details/events/content); scope parsing updated to accept `clusterId|<scope>` in log/event streams and namespace scope helpers.
-- Remaining: confirm every snapshot payload and object reference includes cluster meta; add/adjust tests.
+- ✅ Audit catalog stream payloads for missing cluster meta and add coverage.
+- ✅ Confirmed snapshot payloads/object references include cluster meta (catalog stream fixed); add/adjust tests as needed.
 Frontend
 - ✅ Kubeconfig context exposes `selectedClusterId`/`selectedClusterName`; refresh scope helpers added; refresh orchestrator normalizes scopes; refresh payload types updated with cluster meta; object reference types include `clusterId`.
 - ✅ Capabilities bootstrap/registry uses cluster-aware keys; permission cache keys include `clusterId` and allow per-cluster bootstrap refresh.
@@ -108,10 +109,33 @@ Frontend
 - ✅ Diagnosed KubernetesProvider test failure (ObjectPanelState dependency) and updated mocks/act handling.
 - ✅ Resolved provider dependency loop by restoring provider order and moving cluster context updates into KubeconfigProvider.
 - ✅ Fixed unused `expect` import in KubernetesProvider test.
-- Remaining: confirm remaining tests for capabilities/refresh/streaming/object panel/namespace resources pass with cluster-aware keys; update any remaining mocks expecting single-cluster kubeconfig; verify any remaining persistence keys still use old `clusterIdentity`.
+- ✅ Ran tests for capabilities/refresh/streaming/object panel/namespace resources; no failures.
 
 Out of scope for Phase 1
 - Kubeconfig multi-select, duplicate context disabling, and any cluster selection behavior changes.
 - Multi-cluster refresh fan-out or client pooling.
 - Cluster column/filter UI or aggregated views.
 - Any streaming behavior changes beyond keying.
+
+## Phase 2: multi-cluster selection + fan-out (next)
+
+Goal: enable multi-select cluster workflows and refresh/stream fan-out while preserving the Phase 1 cluster-aware keys.
+
+Backend
+- Persist selected cluster IDs as a list (migrate from single selection) and expose Wails APIs to read/update the selection.
+- Implement a Kubernetes client pool keyed by `clusterId`, created/removed as selection changes.
+- Refactor refresh setup to run per-cluster refresh cycles and merge snapshot payloads, preserving cluster meta on every item.
+- Update the object catalog to track namespaces and selections per cluster (catalog remains the source of truth).
+- Accept selected cluster sets in manual refresh endpoints and streaming handlers; merge multi-cluster stream events.
+- Surface diagnostics and permission issues per cluster in telemetry and refresh status.
+
+Frontend
+- Switch KubeconfigSelector to multi-select and track `selectedClusterIds` in KubeconfigContext.
+- Disable duplicate context selections with the defined tooltip.
+- Pass selected cluster sets through the refresh orchestrator and manage per-cluster streams.
+- Add Cluster column + Clusters filter using shared column factories; persist filter state with cluster IDs.
+- Update namespace sidebar to show per-cluster collapsible lists when multiple clusters are active.
+
+Tests
+- Backend: client pool lifecycle, multi-cluster refresh aggregation, catalog namespace listings, stream merge behavior.
+- Frontend: multi-select selector behavior, duplicate disablement, per-cluster diagnostics, refresh/stream state updates.

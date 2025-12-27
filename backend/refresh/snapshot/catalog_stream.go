@@ -128,6 +128,8 @@ func (h *catalogStreamHandler) writeSnapshot(
 	cachesReady := svc.CachesReady()
 
 	payload, truncated := buildCatalogSnapshot(result, opts, health, cachesReady, ready)
+	// Ensure streaming payloads include stable cluster identifiers.
+	payload.ClusterMeta = CurrentClusterMeta()
 	if payload.FirstBatchLatencyMs == 0 {
 		if latency := svc.FirstBatchLatency(); latency > 0 {
 			payload.FirstBatchLatencyMs = latency.Milliseconds()
