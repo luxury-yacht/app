@@ -23,6 +23,7 @@ import {
   runGridTableGC,
 } from '@shared/components/tables/persistence/gridTablePersistenceGC';
 import { eventBus, useEventBus } from '@/core/events';
+import { refreshOrchestrator } from '@/core/refresh';
 
 interface KubeconfigContextType {
   kubeconfigs: types.KubeconfigInfo[];
@@ -88,6 +89,14 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     () => resolveClusterMeta(selectedKubeconfig, kubeconfigs),
     [resolveClusterMeta, selectedKubeconfig, kubeconfigs]
   );
+
+  // Keep refresh context aligned with the active kubeconfig selection.
+  useEffect(() => {
+    refreshOrchestrator.updateContext({
+      selectedClusterId: selectedClusterMeta.id || undefined,
+      selectedClusterName: selectedClusterMeta.name || undefined,
+    });
+  }, [selectedClusterMeta.id, selectedClusterMeta.name]);
 
   const loadKubeconfigs = useCallback(async () => {
     setKubeconfigsLoading(true);

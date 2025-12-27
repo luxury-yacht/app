@@ -87,22 +87,27 @@ Tests
 
 Phase 1 status (in progress)
 Backend
-- Cluster identity helper and refresh config/telemetry updated to include cluster meta.
-- Cluster meta added to catalog summaries and most refresh snapshot payloads (including node maintenance and object details/events/content); scope parsing updated to accept `clusterId|<scope>` in log/event streams and namespace scope helpers.
+- ✅ Cluster identity helper and refresh config/telemetry updated to include cluster meta.
+- ✅ Cluster meta added to catalog summaries and most refresh snapshot payloads (including node maintenance and object details/events/content); scope parsing updated to accept `clusterId|<scope>` in log/event streams and namespace scope helpers.
 - Remaining: confirm every snapshot payload and object reference includes cluster meta; add/adjust tests.
 Frontend
-- Kubeconfig context exposes `selectedClusterId`/`selectedClusterName`; refresh scope helpers added; refresh orchestrator normalizes scopes; refresh payload types updated with cluster meta; object reference types include `clusterId`.
-- Capabilities bootstrap/registry uses cluster-aware keys; permission cache keys include `clusterId` and allow per-cluster bootstrap refresh.
-- Event stream manager uses full cluster-prefixed scope keys; diagnostics parsing strips cluster prefix for pod labels.
-- Object panel actions, logs, events, and maintenance use cluster-prefixed scopes and per-object `clusterId`.
-- Namespace resources and GridTable persistence include `clusterId`.
-- Cluster resources permission checks and namespace permission evaluation are scoped by `selectedClusterId`.
-- Fix remaining TypeScript typing mismatch when building cluster-prefixed pod scopes.
-- Fixed NsResourcesContext tests after cluster-aware changes.
-- Fixed useObjectPanel tests after cluster-aware changes.
-- Fixed ObjectPanel tests after cluster-aware changes.
-- Fixed refresh orchestrator tests after cluster-aware scope changes.
-- Fixed backend test failures for cluster-aware Helm mapping and selection key.
+- ✅ Kubeconfig context exposes `selectedClusterId`/`selectedClusterName`; refresh scope helpers added; refresh orchestrator normalizes scopes; refresh payload types updated with cluster meta; object reference types include `clusterId`.
+- ✅ Capabilities bootstrap/registry uses cluster-aware keys; permission cache keys include `clusterId` and allow per-cluster bootstrap refresh.
+- ✅ Event stream manager uses full cluster-prefixed scope keys; diagnostics parsing strips cluster prefix for pod labels.
+- ✅ Object panel actions, logs, events, and maintenance use cluster-prefixed scopes and per-object `clusterId`.
+- ✅ Namespace resources and GridTable persistence include `clusterId`.
+- ✅ Cluster resources permission checks and namespace permission evaluation are scoped by `selectedClusterId`.
+- ✅ Fix remaining TypeScript typing mismatch when building cluster-prefixed pod scopes.
+- ✅ Fixed NsResourcesContext tests after cluster-aware changes.
+- ✅ Fixed useObjectPanel tests after cluster-aware changes.
+- ✅ Fixed ObjectPanel tests after cluster-aware changes.
+- ✅ Fixed refresh orchestrator tests after cluster-aware scope changes.
+- ✅ Fixed backend test failures for cluster-aware Helm mapping and selection key.
+- ✅ Added a provider-order test for KubernetesProvider to surface missing KubeconfigProvider usage.
+- ✅ Fixed KubernetesProvider order so KubeconfigProvider wraps ViewStateProvider.
+- ✅ Diagnosed KubernetesProvider test failure (ObjectPanelState dependency) and updated mocks/act handling.
+- ✅ Resolved provider dependency loop by restoring provider order and moving cluster context updates into KubeconfigProvider.
+- ✅ Fixed unused `expect` import in KubernetesProvider test.
 - Remaining: confirm remaining tests for capabilities/refresh/streaming/object panel/namespace resources pass with cluster-aware keys; update any remaining mocks expecting single-cluster kubeconfig; verify any remaining persistence keys still use old `clusterIdentity`.
 
 Out of scope for Phase 1

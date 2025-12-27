@@ -20,7 +20,6 @@ import type { ViewType, NamespaceViewType, ClusterViewType } from '@/types/navig
 import { getObjectKind, getObjectName, getObjectNamespace } from '@/types/view-state';
 import { refreshOrchestrator } from '@/core/refresh';
 import { eventBus } from '@/core/events';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 // Import specialized contexts
 import { SidebarStateProvider, useSidebarState } from './SidebarStateContext';
@@ -182,16 +181,13 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
 const RefreshSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { viewType, activeNamespaceTab, activeClusterTab } = useNavigationState();
   const { showObjectPanel, selectedObject } = useObjectPanelState();
-  const { selectedClusterId, selectedClusterName } = useKubeconfig();
 
-  // Single writer for refresh context to avoid duplicate object-panel updates.
+  // Single writer for view/object-panel refresh context updates.
   useEffect(() => {
     refreshOrchestrator.updateContext({
       currentView: viewType,
       activeNamespaceView: activeNamespaceTab,
       activeClusterView: activeClusterTab ?? undefined,
-      selectedClusterId,
-      selectedClusterName,
       objectPanel: {
         isOpen: showObjectPanel,
         objectKind: getObjectKind(selectedObject),
@@ -199,15 +195,7 @@ const RefreshSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
         objectNamespace: getObjectNamespace(selectedObject),
       },
     });
-  }, [
-    viewType,
-    activeNamespaceTab,
-    activeClusterTab,
-    showObjectPanel,
-    selectedObject,
-    selectedClusterId,
-    selectedClusterName,
-  ]);
+  }, [viewType, activeNamespaceTab, activeClusterTab, showObjectPanel, selectedObject]);
 
   return <>{children}</>;
 };
