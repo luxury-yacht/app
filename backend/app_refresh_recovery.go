@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
@@ -21,16 +22,24 @@ func (a *App) teardownRefreshSubsystem() {
 	// Use timeout context for shutdown operations to prevent indefinite blocking
 	const shutdownTimeout = time.Second
 
-	if a.refreshManager != nil {
+	subsystems := a.refreshSubsystems
+	if len(subsystems) == 0 && a.refreshManager != nil {
+		subsystems = map[string]*system.Subsystem{"primary": {Manager: a.refreshManager}}
+	}
+
+	for _, subsystem := range subsystems {
+		if subsystem == nil || subsystem.Manager == nil {
+			continue
+		}
 		done := make(chan struct{})
-		go func() {
+		go func(manager *refresh.Manager) {
 			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 			defer cancel()
-			if err := a.refreshManager.Shutdown(ctx); err != nil && a.logger != nil {
+			if err := manager.Shutdown(ctx); err != nil && a.logger != nil {
 				a.logger.Warn(fmt.Sprintf("Failed to shutdown refresh manager: %v", err), "Refresh")
 			}
 			close(done)
-		}()
+		}(subsystem.Manager)
 		select {
 		case <-done:
 		case <-time.After(shutdownTimeout):
@@ -38,8 +47,10 @@ func (a *App) teardownRefreshSubsystem() {
 				a.logger.Warn("Timed out waiting for refresh manager shutdown", "Refresh")
 			}
 		}
-		a.refreshManager = nil
 	}
+
+	a.refreshSubsystems = make(map[string]*system.Subsystem)
+	a.refreshManager = nil
 
 	serverDone := a.refreshServerDone
 	if a.refreshHTTPServer != nil {

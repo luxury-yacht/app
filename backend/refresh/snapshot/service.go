@@ -20,15 +20,17 @@ type Service struct {
 	telemetry *telemetry.Recorder
 	group     singleflight.Group
 	sequence  uint64
+	cluster   ClusterMeta
 }
 
 // NewService returns a Service for the provided registry.
-func NewService(reg *domain.Registry, recorder *telemetry.Recorder) *Service {
-	return &Service{registry: reg, telemetry: recorder}
+func NewService(reg *domain.Registry, recorder *telemetry.Recorder, meta ClusterMeta) *Service {
+	return &Service{registry: reg, telemetry: recorder, cluster: meta}
 }
 
 // Build returns a snapshot for the requested domain/scope.
 func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh.Snapshot, error) {
+	ctx = WithClusterMeta(ctx, s.cluster)
 	value, err, _ := s.group.Do(fmt.Sprintf("%s:%s", domainName, scope), func() (interface{}, error) {
 		start := time.Now()
 		snap, buildErr := s.registry.Build(ctx, domainName, scope)

@@ -52,8 +52,38 @@ type Config struct {
 	ClusterName           string // display name for cluster in payloads
 }
 
+// Subsystem bundles the refresh manager and supporting services.
+type Subsystem struct {
+	Manager          *refresh.Manager
+	Handler          http.Handler
+	Telemetry        *telemetry.Recorder
+	PermissionIssues []PermissionIssue
+	PermissionCache  map[string]bool
+	InformerFactory  *informer.Factory
+	Registry         *domain.Registry
+	SnapshotService  refresh.SnapshotService
+	ManualQueue      refresh.ManualQueue
+}
+
 // NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.
 func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Recorder, []PermissionIssue, map[string]bool, *informer.Factory, error) {
+	subsystem, err := NewSubsystemWithServices(cfg)
+	if err != nil {
+		recorder := telemetry.NewRecorder()
+		recorder.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
+		return nil, nil, recorder, nil, nil, nil, err
+	}
+	return subsystem.Manager,
+		subsystem.Handler,
+		subsystem.Telemetry,
+		subsystem.PermissionIssues,
+		subsystem.PermissionCache,
+		subsystem.InformerFactory,
+		nil
+}
+
+// NewSubsystemWithServices returns a fully wired refresh subsystem.
+func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	registry := domain.New()
 	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, cfg.PermissionCache)
 
@@ -105,9 +135,7 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 
 	telemetryRecorder := telemetry.NewRecorder()
 	telemetryRecorder.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
-
-	// Cache cluster identifiers for snapshot payload enrichment.
-	snapshot.SetClusterMeta(cfg.ClusterID, cfg.ClusterName)
+	clusterMeta := snapshot.ClusterMeta{ClusterID: cfg.ClusterID, ClusterName: cfg.ClusterName}
 
 	var (
 		metricsPoller   refresh.MetricsPoller
@@ -150,7 +178,7 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 	}
 
 	if err := snapshot.RegisterNamespaceDomain(registry, informerFactory.SharedInformerFactory()); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 	if err := snapshot.RegisterNamespaceWorkloadsDomain(
 		registry,
@@ -158,19 +186,19 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 		metricsProvider,
 		cfg.Logger,
 	); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 	if err := snapshot.RegisterNamespaceConfigDomain(
 		registry,
 		informerFactory.SharedInformerFactory(),
 	); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 	if err := snapshot.RegisterNamespaceNetworkDomain(
 		registry,
 		informerFactory.SharedInformerFactory(),
 	); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 
 	nsRolesAllowed, nsRolesErr := informerFactory.CanListResource("rbac.authorization.k8s.io", "roles")
@@ -178,12 +206,12 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 	appendIssue("namespace-rbac", "rbac.authorization.k8s.io/roles,rolebindings", nsRolesErr, nsRoleBindingsErr)
 	if nsRolesErr == nil && nsRoleBindingsErr == nil && nsRolesAllowed && nsRoleBindingsAllowed {
 		if err := snapshot.RegisterNamespaceRBACDomain(registry, informerFactory.SharedInformerFactory()); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	} else {
 		logSkip("namespace-rbac", "rbac.authorization.k8s.io", "roles/rolebindings")
 		if err := snapshot.RegisterPermissionDeniedDomain(registry, "namespace-rbac", "rbac.authorization.k8s.io/roles"); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -191,26 +219,26 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 		registry,
 		informerFactory.SharedInformerFactory(),
 	); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 	if err := snapshot.RegisterNamespaceAutoscalingDomain(
 		registry,
 		informerFactory.SharedInformerFactory(),
 	); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 	if err := snapshot.RegisterNamespaceQuotasDomain(
 		registry,
 		informerFactory.SharedInformerFactory(),
 	); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 	if err := snapshot.RegisterNamespaceEventsDomain(registry, informerFactory.SharedInformerFactory()); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 
 	if cfg.DynamicClient == nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, fmt.Errorf("dynamic client must be provided for namespace custom resources")
+		return nil, fmt.Errorf("dynamic client must be provided for namespace custom resources")
 	}
 
 	customListAllowed, customListErr := informerFactory.CanListResource("apiextensions.k8s.io", "customresourcedefinitions")
@@ -222,24 +250,24 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 			cfg.DynamicClient,
 			cfg.Logger,
 		); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	} else {
 		logSkip("namespace-custom", "apiextensions.k8s.io", "customresourcedefinitions")
 		if err := snapshot.RegisterPermissionDeniedDomain(registry, "namespace-custom", "apiextensions.k8s.io/customresourcedefinitions"); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 
 	if cfg.HelmFactory == nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, fmt.Errorf("helm factory must be provided for namespace helm domain")
+		return nil, fmt.Errorf("helm factory must be provided for namespace helm domain")
 	}
 	if err := snapshot.RegisterNamespaceHelmDomain(
 		registry,
 		informerFactory.SharedInformerFactory(),
 		cfg.HelmFactory,
 	); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 
 	checkListWatch := func(group, resource string) (bool, bool, error) {
@@ -254,26 +282,26 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 	switch {
 	case nodesErr == nil && podsErr == nil && nodesListAllowed && nodesWatchAllowed && podsListAllowed && podsWatchAllowed:
 		if err := snapshot.RegisterNodeDomain(registry, informerFactory.SharedInformerFactory(), metricsProvider); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	case nodesErr == nil && nodesListAllowed:
 		klog.V(2).Info("Registering nodes domain using list fallback due to missing informer permissions")
 		if err := snapshot.RegisterNodeDomainList(registry, cfg.KubernetesClient, metricsProvider); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	default:
 		logSkip("nodes", "", "nodes/pods")
 		if err := snapshot.RegisterPermissionDeniedDomain(registry, "nodes", "core/nodes (and pods)"); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 
 	if err := snapshot.RegisterPodDomain(registry, informerFactory.SharedInformerFactory(), metricsProvider); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 
 	if err := snapshot.RegisterNodeMaintenanceDomain(registry); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 
 	clusterOverviewNodesList, clusterOverviewNodesWatch, clusterOverviewNodesErr := checkListWatch("", "nodes")
@@ -298,39 +326,39 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 			metricsProvider,
 			serverHost,
 		); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	case clusterOverviewNodesErr == nil && clusterOverviewNamespacesErr == nil &&
 		clusterOverviewNodesList && clusterOverviewNamespacesList:
 		klog.V(2).Info("Registering cluster overview domain using list fallback due to missing informer permissions")
 		if err := snapshot.RegisterClusterOverviewDomainList(registry, cfg.KubernetesClient, metricsProvider, serverHost); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	default:
 		logSkip("cluster-overview", "", "nodes/namespaces")
 		if err := snapshot.RegisterPermissionDeniedDomain(registry, "cluster-overview", "cluster overview requires nodes/namespaces"); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 
 	if err := snapshot.RegisterObjectDetailsDomain(registry, cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ObjectDetailsProvider); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 	if yamlProvider, ok := cfg.ObjectDetailsProvider.(snapshot.ObjectYAMLProvider); ok {
 		if err := snapshot.RegisterObjectYAMLDdomain(registry, yamlProvider); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 	if helmProvider, ok := cfg.ObjectDetailsProvider.(snapshot.HelmContentProvider); ok {
 		if err := snapshot.RegisterObjectHelmManifestDomain(registry, helmProvider); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 		if err := snapshot.RegisterObjectHelmValuesDomain(registry, helmProvider); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 	if err := snapshot.RegisterObjectEventsDomain(registry, cfg.KubernetesClient); err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 
 	clusterRolesListAllowed, clusterRolesWatchAllowed, clusterRolesErr := checkListWatch("rbac.authorization.k8s.io", "clusterroles")
@@ -343,12 +371,12 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 			registry,
 			informerFactory.SharedInformerFactory(),
 		); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	} else {
 		logSkip("cluster-rbac", "rbac.authorization.k8s.io", "clusterroles/clusterrolebindings")
 		if err := snapshot.RegisterPermissionDeniedDomain(registry, "cluster-rbac", "rbac.authorization.k8s.io"); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -360,12 +388,12 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 			registry,
 			informerFactory.SharedInformerFactory(),
 		); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	default:
 		logSkip("cluster-storage", "", "persistentvolumes")
 		if err := snapshot.RegisterPermissionDeniedDomain(registry, "cluster-storage", "core/persistentvolumes"); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -393,12 +421,12 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 				IncludeMutatingWebhooks:   mutatingWebhooksAllowed,
 			},
 		); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	} else {
 		logSkip("cluster-config", "*", "storageclasses/ingressclasses/webhooks")
 		if err := snapshot.RegisterPermissionDeniedDomain(registry, "cluster-config", "cluster configuration resources"); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -411,12 +439,12 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 			registry,
 			informerFactory.APIExtensionsInformerFactory(),
 		); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	default:
 		logSkip("cluster-crds", "apiextensions.k8s.io", "customresourcedefinitions")
 		if err := snapshot.RegisterPermissionDeniedDomain(registry, "cluster-crds", "apiextensions.k8s.io/customresourcedefinitions"); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -429,12 +457,12 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 			cfg.DynamicClient,
 			cfg.Logger,
 		); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	} else {
 		logSkip("cluster-custom", "apiextensions.k8s.io", "customresourcedefinitions")
 		if err := snapshot.RegisterPermissionDeniedDomain(registry, "cluster-custom", "apiextensions.k8s.io/customresourcedefinitions"); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -442,12 +470,12 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 	appendIssue("cluster-events", "core/events", clusterEventsErr)
 	if clusterEventsErr == nil && clusterEventsAllowed {
 		if err := snapshot.RegisterClusterEventsDomain(registry, informerFactory.SharedInformerFactory()); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	} else {
 		logSkip("cluster-events", "", "events")
 		if err := snapshot.RegisterPermissionDeniedDomain(registry, "cluster-events", "core/events"); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -456,11 +484,11 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 			CatalogService: cfg.ObjectCatalogService,
 			Logger:         cfg.Logger,
 		}); err != nil {
-			return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+			return nil, err
 		}
 	}
 
-	snapshotService := snapshot.NewService(registry, telemetryRecorder)
+	snapshotService := snapshot.NewService(registry, telemetryRecorder, clusterMeta)
 	queue := refresh.NewInMemoryQueue()
 
 	manager := refresh.NewManager(registry, informerFactory, snapshotService, metricsPoller, queue)
@@ -471,7 +499,7 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 
 	logHandler, err := logstream.NewHandler(cfg.KubernetesClient, cfg.Logger, telemetryRecorder)
 	if err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 	mux.Handle("/api/v2/stream/logs", logHandler)
 
@@ -482,16 +510,26 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 	)
 	eventHandler, err := eventstream.NewHandler(snapshotService, eventManager, cfg.Logger)
 	if err != nil {
-		return nil, nil, telemetryRecorder, permissionIssues, nil, nil, err
+		return nil, err
 	}
 	mux.Handle("/api/v2/stream/events", eventHandler)
 
 	if cfg.ObjectCatalogService != nil {
-		catalogHandler := snapshot.NewCatalogStreamHandler(cfg.ObjectCatalogService, cfg.Logger, telemetryRecorder)
+		catalogHandler := snapshot.NewCatalogStreamHandler(cfg.ObjectCatalogService, cfg.Logger, telemetryRecorder, clusterMeta)
 		mux.Handle("/api/v2/stream/catalog", catalogHandler)
 	}
 
-	return manager, mux, telemetryRecorder, permissionIssues, informerFactory.PermissionCacheSnapshot(), informerFactory, nil
+	return &Subsystem{
+		Manager:          manager,
+		Handler:          mux,
+		Telemetry:        telemetryRecorder,
+		PermissionIssues: permissionIssues,
+		PermissionCache:  informerFactory.PermissionCacheSnapshot(),
+		InformerFactory:  informerFactory,
+		Registry:         registry,
+		SnapshotService:  snapshotService,
+		ManualQueue:      queue,
+	}, nil
 }
 
 // HealthHandler returns an HTTP handler compatible with /healthz/refresh.

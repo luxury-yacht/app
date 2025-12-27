@@ -62,7 +62,7 @@ func RegisterClusterEventsDomain(reg *domain.Registry, factory informers.SharedI
 
 // Build gathers recent cluster events.
 func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	events, err := b.eventLister.List(labels.Everything())
 	if err != nil {
 		return nil, err

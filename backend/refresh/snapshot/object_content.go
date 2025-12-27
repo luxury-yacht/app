@@ -92,7 +92,7 @@ func (b *ObjectYAMLBuilder) Build(ctx context.Context, scope string) (*refresh.S
 	if err != nil {
 		return nil, err
 	}
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 
 	yaml, err := b.provider.FetchObjectYAML(ctx, kind, namespace, name)
 	if err != nil {
@@ -120,7 +120,7 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 	if err != nil {
 		return nil, err
 	}
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 
 	manifest, revision, err := b.provider.FetchHelmManifest(ctx, namespace, name)
 	if err != nil {
@@ -157,7 +157,7 @@ func (b *ObjectHelmValuesBuilder) Build(ctx context.Context, scope string) (*ref
 	if err != nil {
 		return nil, err
 	}
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 
 	values, revision, err := b.provider.FetchHelmValues(ctx, namespace, name)
 	if err != nil {

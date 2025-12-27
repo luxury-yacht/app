@@ -14,11 +14,13 @@ import (
 )
 
 func TestCatalogStreamHandlerStreamsBatches(t *testing.T) {
-	SetClusterMeta("cluster-a", "cluster-a")
-	t.Cleanup(func() { SetClusterMeta("", "") })
-
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{Now: func() time.Time { return time.Now() }}, nil)
-	handler := NewCatalogStreamHandler(func() *objectcatalog.Service { return svc }, nil, telemetry.NewRecorder())
+	handler := NewCatalogStreamHandler(
+		func() *objectcatalog.Service { return svc },
+		nil,
+		telemetry.NewRecorder(),
+		ClusterMeta{ClusterID: "cluster-a", ClusterName: "cluster-a"},
+	)
 
 	req := httptest.NewRequest("GET", "/?limit=10", nil)
 	w := httptest.NewRecorder()

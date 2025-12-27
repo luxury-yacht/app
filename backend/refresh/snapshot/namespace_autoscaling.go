@@ -79,7 +79,7 @@ func RegisterNamespaceAutoscalingDomain(
 
 // Build assembles HPA summaries for a namespace.
 func (b *NamespaceAutoscalingBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
 	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {

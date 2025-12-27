@@ -87,11 +87,11 @@ func RegisterClusterConfigDomain(
 
 // Build produces the cluster configuration snapshot.
 func (b *ClusterConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	return b.buildFromListers()
+	return b.buildFromListers(ctx)
 }
 
-func (b *ClusterConfigBuilder) buildFromListers() (*refresh.Snapshot, error) {
-	meta := CurrentClusterMeta()
+func (b *ClusterConfigBuilder) buildFromListers(ctx context.Context) (*refresh.Snapshot, error) {
+	meta := ClusterMetaFromContext(ctx)
 	var version uint64
 	entries := make([]ClusterConfigEntry, 0, 64)
 

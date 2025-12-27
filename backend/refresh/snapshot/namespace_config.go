@@ -65,7 +65,7 @@ func RegisterNamespaceConfigDomain(
 
 // Build assembles ConfigMap and Secret summaries for a namespace scope.
 func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
 	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {

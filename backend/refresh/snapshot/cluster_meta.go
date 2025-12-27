@@ -1,6 +1,9 @@
 package snapshot
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // ClusterMeta carries stable cluster identifiers for snapshot payloads.
 type ClusterMeta struct {
@@ -12,6 +15,26 @@ var (
 	clusterMetaMu    sync.RWMutex
 	currentMetaState ClusterMeta
 )
+
+type clusterMetaContextKey struct{}
+
+// WithClusterMeta attaches cluster identifiers to the provided context.
+func WithClusterMeta(ctx context.Context, meta ClusterMeta) context.Context {
+	if ctx == nil {
+		return context.WithValue(context.Background(), clusterMetaContextKey{}, meta)
+	}
+	return context.WithValue(ctx, clusterMetaContextKey{}, meta)
+}
+
+// ClusterMetaFromContext returns cluster identifiers from context or the fallback state.
+func ClusterMetaFromContext(ctx context.Context) ClusterMeta {
+	if ctx != nil {
+		if meta, ok := ctx.Value(clusterMetaContextKey{}).(ClusterMeta); ok {
+			return meta
+		}
+	}
+	return CurrentClusterMeta()
+}
 
 // SetClusterMeta updates the process-wide cluster identifiers for snapshot payloads.
 func SetClusterMeta(clusterID, clusterName string) {

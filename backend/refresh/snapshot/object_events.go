@@ -63,7 +63,7 @@ func (b *ObjectEventsBuilder) Build(ctx context.Context, scope string) (*refresh
 	if err != nil {
 		return nil, err
 	}
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 
 	eventNamespace := namespace
 	if namespace == "" {

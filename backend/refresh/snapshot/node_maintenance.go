@@ -14,7 +14,7 @@ func RegisterNodeMaintenanceDomain(reg *domain.Registry) error {
 	return reg.Register(refresh.DomainConfig{
 		Name: "node-maintenance",
 		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-			meta := CurrentClusterMeta()
+			meta := ClusterMetaFromContext(ctx)
 			clusterID, trimmed := refresh.SplitClusterScope(scope)
 			nodeName := nodemaintenance.ParseScope(trimmed)
 			payload, version := store.Snapshot(nodeName)

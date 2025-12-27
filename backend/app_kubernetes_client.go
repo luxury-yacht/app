@@ -99,6 +99,9 @@ func (a *App) initKubernetesClient() (err error) {
 	a.dynamicClient = dynamicClient
 	a.restConfig = config
 
+	// Keep the client pool aligned with the active kubeconfig selection.
+	a.registerPrimaryClusterClient()
+
 	selectionKey := a.currentSelectionKey()
 	existingCache := a.getPermissionCache(selectionKey)
 	_, err = a.setupRefreshSubsystem(clientset, selectionKey, existingCache)
@@ -128,8 +131,6 @@ func (a *App) initKubernetesClient() (err error) {
 	} else {
 		a.logger.Info("Successfully established Kubernetes client connections", "KubernetesClient")
 	}
-	// Keep the client pool aligned with the active kubeconfig selection.
-	a.registerPrimaryClusterClient()
 	a.updateConnectionStatus(ConnectionStateHealthy, "", 0)
 
 	return nil

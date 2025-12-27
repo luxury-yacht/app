@@ -77,7 +77,7 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 
 	if b.provider != nil {
 		if details, resourceVersion, err := b.provider.FetchObjectDetails(ctx, kind, namespace, name); err == nil {
-			return b.buildSnapshot(scope, details, resourceVersion), nil
+			return b.buildSnapshot(ctx, scope, details, resourceVersion), nil
 		} else if !errors.Is(err, ErrObjectDetailNotImplemented) {
 			return nil, err
 		}
@@ -94,7 +94,7 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 		if namespace != "" {
 			details["namespace"] = namespace
 		}
-		return b.buildSnapshot(scope, details, ""), nil
+		return b.buildSnapshot(ctx, scope, details, ""), nil
 	}
 
 	details, resourceVersion, err := fetcher(ctx, b, namespace, name)
@@ -102,10 +102,10 @@ func (b *ObjectDetailsBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, err
 	}
 
-	return b.buildSnapshot(scope, details, resourceVersion), nil
+	return b.buildSnapshot(ctx, scope, details, resourceVersion), nil
 }
 
-func (b *ObjectDetailsBuilder) buildSnapshot(scope string, details interface{}, resourceVersion string) *refresh.Snapshot {
+func (b *ObjectDetailsBuilder) buildSnapshot(ctx context.Context, scope string, details interface{}, resourceVersion string) *refresh.Snapshot {
 	version := parseVersion(resourceVersion)
 
 	return &refresh.Snapshot{
@@ -113,7 +113,7 @@ func (b *ObjectDetailsBuilder) buildSnapshot(scope string, details interface{}, 
 		Scope:   scope,
 		Version: version,
 		Payload: ObjectDetailsSnapshotPayload{
-			ClusterMeta: CurrentClusterMeta(),
+			ClusterMeta: ClusterMetaFromContext(ctx),
 			Details:     details,
 		},
 		Stats: refresh.SnapshotStats{

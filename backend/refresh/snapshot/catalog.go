@@ -90,7 +90,7 @@ func (b *catalogBuilder) Build(ctx context.Context, scope string) (*refresh.Snap
 	health := svc.Health()
 	cachesReady := svc.CachesReady()
 
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	payload, truncated := buildCatalogSnapshot(result, opts, health, cachesReady, cachesReady)
 	payload.ClusterMeta = meta
 	if cachesReady && payload.Total > 0 {

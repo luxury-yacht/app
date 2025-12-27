@@ -71,7 +71,7 @@ func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInfor
 
 // Build returns the namespace snapshot payload.
 func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	_, scopeValue := refresh.SplitClusterScope(scope)
 	var (
 		namespaces []*corev1.Namespace

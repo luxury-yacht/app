@@ -10,6 +10,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/versioning"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
@@ -53,6 +54,7 @@ type App struct {
 	telemetryRecorder            *telemetry.Recorder
 	sharedInformerFactory        informers.SharedInformerFactory
 	apiExtensionsInformerFactory apiextinformers.SharedInformerFactory
+	refreshSubsystems            map[string]*system.Subsystem
 
 	objectCatalogService *objectcatalog.Service
 	objectCatalogCancel  context.CancelFunc
@@ -101,6 +103,7 @@ func NewApp() *App {
 		sidebarVisible:   true,
 		logsPanelVisible: false,
 		permissionCaches: make(map[string]map[string]bool),
+		refreshSubsystems: make(map[string]*system.Subsystem),
 		clusterClients:   make(map[string]*clusterClients),
 		shellSessions:    make(map[string]*shellSession),
 		eventEmitter:     func(context.Context, string, ...interface{}) {},

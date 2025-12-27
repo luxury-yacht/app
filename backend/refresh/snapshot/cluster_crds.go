@@ -63,7 +63,7 @@ func (b *ClusterCRDBuilder) Build(ctx context.Context, scope string) (*refresh.S
 	if b.crdLister == nil {
 		return nil, fmt.Errorf("cluster crds: CRD lister unavailable")
 	}
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	crds, err := b.crdLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("cluster crds: failed to list CRDs: %w", err)

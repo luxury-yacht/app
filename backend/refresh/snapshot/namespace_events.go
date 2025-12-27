@@ -60,7 +60,7 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 // Build assembles event summaries for a namespace.
 func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	_ = ctx
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
 	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {

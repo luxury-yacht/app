@@ -62,7 +62,7 @@ func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.
 		return nil, fmt.Errorf("cluster rbac: listers not configured")
 	}
 
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	roles, err := b.roleLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("cluster rbac: failed to list clusterroles: %w", err)

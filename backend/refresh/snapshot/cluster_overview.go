@@ -258,7 +258,7 @@ func buildClusterOverviewSnapshot(
 	versionFn func(context.Context) string,
 	serverHost string,
 ) (*refresh.Snapshot, error) {
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	overview := ClusterOverviewPayload{}
 	var version uint64
 

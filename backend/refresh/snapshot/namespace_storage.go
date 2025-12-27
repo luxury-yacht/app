@@ -64,7 +64,7 @@ func RegisterNamespaceStorageDomain(
 
 // Build assembles PVC summaries for the namespace.
 func (b *NamespaceStorageBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
 	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {

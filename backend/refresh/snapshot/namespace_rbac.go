@@ -61,7 +61,7 @@ func RegisterNamespaceRBACDomain(reg *domain.Registry, factory informers.SharedI
 // Build assembles roles, bindings, and service accounts for the namespace.
 func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	_ = ctx
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	clusterID, trimmed := refresh.SplitClusterScope(scope)
 	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {

@@ -50,6 +50,15 @@ func (a *App) registerPrimaryClusterClient() {
 	}
 }
 
+func (a *App) clusterClientsForID(clusterID string) *clusterClients {
+	if a == nil || clusterID == "" {
+		return nil
+	}
+	a.clusterClientsMu.Lock()
+	defer a.clusterClientsMu.Unlock()
+	return a.clusterClients[clusterID]
+}
+
 // syncClusterClientPool builds missing clients for the provided selections and drops stale entries.
 func (a *App) syncClusterClientPool(selections []kubeconfigSelection) error {
 	if a == nil {

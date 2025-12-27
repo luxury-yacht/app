@@ -146,7 +146,7 @@ func (b *NodeBuilder) Build(ctx context.Context, scope string) (*refresh.Snapsho
 		}
 		pods = append(pods, podList...)
 	}
-	return buildNodeSnapshot(list, pods, b.metrics), nil
+	return buildNodeSnapshot(ctx, list, pods, b.metrics), nil
 }
 
 // Build returns the node snapshot payload using direct list API calls.
@@ -196,11 +196,12 @@ func (b *NodeListBuilder) Build(ctx context.Context, scope string) (*refresh.Sna
 	if podsForbidden {
 		pods = nil
 	}
-	return buildNodeSnapshot(nodes, pods, b.metrics), nil
+	return buildNodeSnapshot(ctx, nodes, pods, b.metrics), nil
 }
 
-func buildNodeSnapshot(nodes []*corev1.Node, pods []*corev1.Pod, provider metrics.Provider) *refresh.Snapshot {
-	meta := CurrentClusterMeta()
+// buildNodeSnapshot assembles node summaries with cluster metadata.
+func buildNodeSnapshot(ctx context.Context, nodes []*corev1.Node, pods []*corev1.Pod, provider metrics.Provider) *refresh.Snapshot {
+	meta := ClusterMetaFromContext(ctx)
 	items := make([]NodeSummary, 0, len(nodes))
 	var version uint64
 	nodeMetrics := map[string]metrics.NodeUsage{}
@@ -225,7 +226,7 @@ func buildNodeSnapshot(nodes []*corev1.Node, pods []*corev1.Pod, provider metric
 			continue
 		}
 		summary := NodeSummary{
-			ClusterMeta:  meta,
+			ClusterMeta:   meta,
 			Name:          node.Name,
 			Status:        deriveNodeStatus(node),
 			Roles:         formatRoles(extractRoles(node.Labels)),

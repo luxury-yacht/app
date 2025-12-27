@@ -63,7 +63,7 @@ func (b *ClusterStorageBuilder) Build(ctx context.Context, scope string) (*refre
 	if b.pvLister == nil {
 		return nil, fmt.Errorf("cluster storage: persistent volume lister unavailable")
 	}
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	pvs, err := b.pvLister.List(labels.Everything())
 	if err != nil {
 		return nil, fmt.Errorf("cluster storage: failed to list persistent volumes: %w", err)

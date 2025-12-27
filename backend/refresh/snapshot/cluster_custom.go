@@ -84,7 +84,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, fmt.Errorf("dynamic client not initialised")
 	}
 
-	meta := CurrentClusterMeta()
+	meta := ClusterMetaFromContext(ctx)
 	crds, err := b.crdLister.List(labels.Everything())
 	if err != nil {
 		return nil, err
