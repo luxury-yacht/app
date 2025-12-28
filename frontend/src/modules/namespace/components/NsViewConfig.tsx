@@ -22,6 +22,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
@@ -73,11 +74,16 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       [openWithObject]
     );
 
-    const keyExtractor = useCallback((resource: ConfigData) => {
-      return [resource.namespace, resource.kindAlias ?? resource.kind, resource.name]
-        .filter(Boolean)
-        .join('/');
-    }, []);
+    const keyExtractor = useCallback(
+      (resource: ConfigData) =>
+        buildClusterScopedKey(
+          resource,
+          [resource.namespace, resource.kindAlias ?? resource.kind, resource.name]
+            .filter(Boolean)
+            .join('/')
+        ),
+      []
+    );
 
     const columns: GridColumnDefinition<ConfigData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<ConfigData>[] = [

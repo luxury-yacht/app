@@ -10,6 +10,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -316,8 +317,11 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
 
   const keyExtractor = useCallback(
     (row: TableRow, index: number) =>
-      row.uid ||
-      `catalog:${row.item.namespace ?? 'cluster'}:${row.item.kind}:${row.item.name}:${index}`,
+      buildClusterScopedKey(
+        row,
+        row.uid ||
+          `catalog:${row.item.namespace ?? 'cluster'}:${row.item.kind}:${row.item.name}:${index}`
+      ),
     []
   );
 

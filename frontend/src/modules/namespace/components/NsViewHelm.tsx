@@ -20,6 +20,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
 // Data interface for Helm releases
@@ -80,9 +81,14 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       [openWithObject]
     );
 
-    const keyExtractor = useCallback((resource: HelmData) => {
-      return [resource.namespace, 'helm-release', resource.name].filter(Boolean).join('/');
-    }, []);
+    const keyExtractor = useCallback(
+      (resource: HelmData) =>
+        buildClusterScopedKey(
+          resource,
+          [resource.namespace, 'helm-release', resource.name].filter(Boolean).join('/')
+        ),
+      []
+    );
 
     const columns: GridColumnDefinition<HelmData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<HelmData>[] = [

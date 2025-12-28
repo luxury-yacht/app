@@ -193,6 +193,7 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 		return a.clearKubeconfigSelection()
 	}
 
+	previousSelections := append([]string(nil), a.selectedKubeconfigs...)
 	normalized := make([]kubeconfigSelection, 0, len(selections))
 	normalizedStrings := make([]string, 0, len(selections))
 	seenContexts := make(map[string]struct{}, len(selections))
@@ -217,6 +218,15 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 
 	primary := normalized[0]
 	primaryChanged := a.selectedKubeconfig != primary.Path || a.selectedContext != primary.Context
+	selectionChanged := len(previousSelections) != len(normalizedStrings)
+	if !selectionChanged {
+		for i, selection := range previousSelections {
+			if selection != normalizedStrings[i] {
+				selectionChanged = true
+				break
+			}
+		}
+	}
 	a.selectedKubeconfigs = normalizedStrings
 
 	if a.appSettings == nil {
@@ -232,6 +242,12 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 		a.appSettings.SelectedKubeconfig = primary.String()
 		if err := a.saveAppSettings(); err != nil {
 			a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
+		}
+		// Rebuild the refresh subsystem so multi-cluster snapshots include the updated selection.
+		if selectionChanged {
+			if err := a.rebuildRefreshSubsystem("kubeconfig selection updated"); err != nil {
+				return err
+			}
 		}
 	}
 

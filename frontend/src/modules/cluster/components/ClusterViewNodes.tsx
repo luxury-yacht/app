@@ -23,6 +23,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   calculateCpuOvercommitted,
   calculateMemoryOvercommitted,
@@ -211,7 +212,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       [error]
     );
 
-    const keyExtractor = useCallback((row: ClusterNodeRow) => `node:${row.name}`, []);
+    const keyExtractor = useCallback(
+      (row: ClusterNodeRow) => buildClusterScopedKey(row, `node:${row.name}`),
+      []
+    );
 
     // Set up grid table persistence
     const {

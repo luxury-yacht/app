@@ -22,6 +22,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
@@ -73,9 +74,14 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       [openWithObject]
     );
 
-    const keyExtractor = useCallback((resource: NetworkData) => {
-      return [resource.namespace, resource.kind, resource.name].filter(Boolean).join('/');
-    }, []);
+    const keyExtractor = useCallback(
+      (resource: NetworkData) =>
+        buildClusterScopedKey(
+          resource,
+          [resource.namespace, resource.kind, resource.name].filter(Boolean).join('/')
+        ),
+      []
+    );
 
     const columns: GridColumnDefinition<NetworkData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<NetworkData>[] = [

@@ -85,6 +85,8 @@ const baseResource: CustomResourceData = {
   kind: 'CronJob',
   name: 'nightly-cleanup',
   namespace: 'ops',
+  clusterId: 'alpha:ctx',
+  clusterName: 'alpha',
   age: '10m',
   labels: { team: 'platform' },
   annotations: { owner: 'ops' },
@@ -151,7 +153,7 @@ describe('NsViewCustom', () => {
 
     const gridProps = gridTableMock.mock.calls[0][0];
     expect(gridProps.data).toEqual([baseResource]);
-    expect(gridProps.keyExtractor(baseResource)).toBe('ops/CronJob/nightly-cleanup');
+    expect(gridProps.keyExtractor(baseResource)).toBe('alpha:ctx|ops/CronJob/nightly-cleanup');
     gridProps.onSort?.('name');
     expect(sortHandlerMock).toHaveBeenCalledWith('name');
 

@@ -86,6 +86,13 @@ export const defaultGetClusterName = (row: any): string | null => {
   return value ?? null;
 };
 
+// Prefix row keys with cluster identity to keep multi-cluster rows stable.
+export const buildClusterScopedKey = (row: any, baseKey: string): string => {
+  const clusterId = defaultGetClusterId(row);
+  const trimmed = typeof clusterId === 'string' ? clusterId.trim() : '';
+  return trimmed ? `${trimmed}|${baseKey}` : baseKey;
+};
+
 export const defaultGetSearchText = (row: any): string[] => {
   if (!row || typeof row !== 'object') {
     return [];

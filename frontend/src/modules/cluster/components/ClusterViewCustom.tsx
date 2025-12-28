@@ -25,6 +25,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 // Define the data structure for cluster custom resources
 interface ClusterCustomData {
@@ -78,7 +79,10 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
 
     const keyExtractor = useCallback(
       (resource: ClusterCustomData) =>
-        ['custom', resource.kind, resource.name].filter(Boolean).join('/'),
+        buildClusterScopedKey(
+          resource,
+          ['custom', resource.kind, resource.name].filter(Boolean).join('/')
+        ),
       []
     );
 

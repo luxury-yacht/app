@@ -14,6 +14,7 @@
 1. ✅ Cluster-aware IDs/scopes/payloads across backend + frontend (Phase 1 complete).
 2. ✅ Per-cluster object catalog services + namespace groups in catalog snapshots; scope encoding fixed.
 3. ✅ Namespace selection is cluster-scoped in refresh context; sidebar renders catalog namespace groups and passes cluster ID.
+4. ⏳ Cluster-scoped GridTable row keys applied across cluster/namespace views; `NsViewPods` test data now includes cluster metadata.
 
 ## Implementation steps (ordered)
 
@@ -31,6 +32,7 @@
 12. ✅ Run frontend typecheck/tests to validate cluster filter wiring changes.
 13. ⏳ Add targeted frontend tests to raise coverage to >=80% for cluster/namespace views + refresh UI.
 14. ✅ Make backend coverage runnable in the sandbox (covdata/toolchain + cache path workaround) and re-run `go test` with coverage.
+15. ⏳ Diagnose and fix multi-cluster views only showing resources from a single cluster (added refresh subsystem rebuild when selection list changes without primary switch; need runtime validation).
 
 ## Risks / watchouts
 

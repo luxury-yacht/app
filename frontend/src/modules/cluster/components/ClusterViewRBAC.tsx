@@ -25,6 +25,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 // Define the data structure for RBAC resources
 interface RBACData {
@@ -70,7 +71,11 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     );
 
     const keyExtractor = useCallback(
-      (resource: RBACData) => ['rbac', resource.kind, resource.name].filter(Boolean).join('/'),
+      (resource: RBACData) =>
+        buildClusterScopedKey(
+          resource,
+          ['rbac', resource.kind, resource.name].filter(Boolean).join('/')
+        ),
       []
     );
 
@@ -200,7 +205,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
             data={sortedData}
             columns={columns}
             loading={loading}
-            keyExtractor={(resource) => `${resource.kind}-${resource.name}`}
+            keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
             onSort={handleSort}
             sortConfig={sortConfig}

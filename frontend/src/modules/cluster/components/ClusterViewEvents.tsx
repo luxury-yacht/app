@@ -22,6 +22,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 interface EventData {
   kind: string;
@@ -78,7 +79,10 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
 
     const keyExtractor = useCallback(
       (event: EventData, index: number) =>
-        `${event.namespace}-${event.reason}-${event.source}-${event.object}-${event.ageTimestamp ?? event.age ?? '0'}-${index}`,
+        buildClusterScopedKey(
+          event,
+          `${event.namespace}-${event.reason}-${event.source}-${event.object}-${event.ageTimestamp ?? event.age ?? '0'}-${index}`
+        ),
       []
     );
 

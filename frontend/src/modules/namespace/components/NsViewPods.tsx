@@ -22,6 +22,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { PODS_UNHEALTHY_STORAGE_KEY } from '@modules/namespace/components/podsFilterSignals';
@@ -133,9 +134,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       [openWithObject]
     );
 
-    const keyExtractor = useCallback((pod: PodSnapshotEntry) => {
-      return `pod:${pod.namespace || ''}/${pod.name}`;
-    }, []);
+    const keyExtractor = useCallback(
+      (pod: PodSnapshotEntry) =>
+        buildClusterScopedKey(pod, `pod:${pod.namespace || ''}/${pod.name}`),
+      []
+    );
 
     const metricsBanner = useMemo(
       () => getMetricsBannerInfo(effectiveMetrics ?? null),

@@ -128,6 +128,8 @@ import NsViewPods from '@modules/namespace/components/NsViewPods';
 const createPod = (override: Partial<PodSnapshotEntry> = {}): PodSnapshotEntry => ({
   name: 'pod-default',
   namespace: 'team-a',
+  clusterId: 'alpha:ctx',
+  clusterName: 'alpha',
   node: 'node-a',
   status: 'Running',
   ready: '1/1',
@@ -187,8 +189,9 @@ describe('NsViewPods', () => {
   });
 
   const renderPods = async (props: Partial<React.ComponentProps<typeof NsViewPods>> = {}) => {
+    // Include cluster metadata so GridTable key extraction stays cluster-scoped.
     const defaultPods: PodSnapshotEntry[] = [
-      {
+      createPod({
         name: 'api',
         namespace: 'team-a',
         node: 'node-a',
@@ -204,7 +207,7 @@ describe('NsViewPods', () => {
         memUsage: '200Mi',
         memRequest: '512Mi',
         memLimit: '1Gi',
-      },
+      }),
     ];
 
     const metrics: PodMetricsInfo = {
@@ -382,7 +385,7 @@ describe('NsViewPods', () => {
     const columns = gridTablePropsRef.current.columns;
     expect(columns.find((col: any) => col.key === 'namespace')).toBeTruthy();
     const key = gridTablePropsRef.current.keyExtractor(pods[0]);
-    expect(key).toBe('pod:team-a/api');
+    expect(key).toBe('alpha:ctx|pod:team-a/api');
   });
 
   it('derives metrics helper values for resource columns', async () => {

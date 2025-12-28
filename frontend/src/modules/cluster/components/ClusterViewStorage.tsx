@@ -25,6 +25,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 // Define the data structure for Persistent Volumes
 interface StorageData {
@@ -101,7 +102,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     );
 
     const keyExtractor = useCallback(
-      (pv: StorageData) => ['pv', pv.name].filter(Boolean).join('/'),
+      (pv: StorageData) => buildClusterScopedKey(pv, ['pv', pv.name].filter(Boolean).join('/')),
       []
     );
 
@@ -271,7 +272,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
             data={sortedData}
             columns={columns}
             loading={loading}
-            keyExtractor={(pv) => pv.name}
+            keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
             onSort={handleSort}
             sortConfig={sortConfig}

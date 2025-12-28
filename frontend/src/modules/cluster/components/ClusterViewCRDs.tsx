@@ -25,6 +25,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 // Define the data structure for Custom Resource Definitions
 interface CRDsData {
@@ -71,7 +72,8 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
     );
 
     const keyExtractor = useCallback(
-      (crd: CRDsData) => ['crd', crd.group, crd.name].filter(Boolean).join('/'),
+      (crd: CRDsData) =>
+        buildClusterScopedKey(crd, ['crd', crd.group, crd.name].filter(Boolean).join('/')),
       []
     );
 
@@ -207,7 +209,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
             data={sortedData}
             columns={columns}
             loading={loading}
-            keyExtractor={(crd) => crd.name}
+            keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
             onSort={handleSort}
             sortConfig={sortConfig}

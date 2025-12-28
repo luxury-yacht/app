@@ -25,6 +25,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 // Define the data structure for configuration resources
 interface ConfigData {
@@ -70,7 +71,11 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     );
 
     const keyExtractor = useCallback(
-      (resource: ConfigData) => ['config', resource.kind, resource.name].filter(Boolean).join('/'),
+      (resource: ConfigData) =>
+        buildClusterScopedKey(
+          resource,
+          ['config', resource.kind, resource.name].filter(Boolean).join('/')
+        ),
       []
     );
 
@@ -200,7 +205,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
             data={sortedData}
             columns={columns}
             loading={loading}
-            keyExtractor={(resource) => `${resource.kind}-${resource.name}`}
+            keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
             onSort={handleSort}
             sortConfig={sortConfig}
