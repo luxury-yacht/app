@@ -14,7 +14,11 @@ import React, {
   useEffect,
   ReactNode,
 } from 'react';
-import { GetKubeconfigs, GetSelectedKubeconfig, SetKubeconfig } from '@wailsjs/go/backend/App';
+import {
+  GetKubeconfigs,
+  GetSelectedKubeconfigs,
+  SetSelectedKubeconfigs,
+} from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { types } from '@wailsjs/go/models';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
@@ -27,10 +31,12 @@ import { refreshOrchestrator } from '@/core/refresh';
 
 interface KubeconfigContextType {
   kubeconfigs: types.KubeconfigInfo[];
+  selectedKubeconfigs: string[];
   selectedKubeconfig: string;
   selectedClusterId: string;
   selectedClusterName: string;
   kubeconfigsLoading: boolean;
+  setSelectedKubeconfigs: (configs: string[]) => Promise<void>;
   setSelectedKubeconfig: (config: string) => Promise<void>;
   loadKubeconfigs: () => Promise<void>;
 }
@@ -51,6 +57,7 @@ interface KubeconfigProviderProps {
 
 export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children }) => {
   const [kubeconfigs, setKubeconfigs] = useState<types.KubeconfigInfo[]>([]);
+  const [selectedKubeconfigs, setSelectedKubeconfigsState] = useState<string[]>([]);
   const [selectedKubeconfig, setSelectedKubeconfigState] = useState<string>('');
   const [kubeconfigsLoading, setKubeconfigsLoading] = useState(false);
   const { onCloseObjectPanel } = useObjectPanelState();
@@ -90,6 +97,45 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     [resolveClusterMeta, selectedKubeconfig, kubeconfigs]
   );
 
+  const normalizeSelections = useCallback(
+    (selections: string[], configs: types.KubeconfigInfo[]) => {
+      const deduped: string[] = [];
+      const seenContexts = new Set<string>();
+
+      selections.forEach((selection) => {
+        const trimmed = selection.trim();
+        if (!trimmed) {
+          return;
+        }
+
+        // Enforce a single active selection per context name.
+        const contextName = resolveClusterMeta(trimmed, configs).name;
+        if (contextName) {
+          if (seenContexts.has(contextName)) {
+            return;
+          }
+          seenContexts.add(contextName);
+        }
+
+        deduped.push(trimmed);
+      });
+
+      return deduped;
+    },
+    [resolveClusterMeta]
+  );
+
+  const selectedClusterIds = useMemo(() => {
+    const ids = new Set<string>();
+    selectedKubeconfigs.forEach((selection) => {
+      const id = resolveClusterMeta(selection, kubeconfigs).id;
+      if (id) {
+        ids.add(id);
+      }
+    });
+    return Array.from(ids);
+  }, [kubeconfigs, resolveClusterMeta, selectedKubeconfigs]);
+
   // Keep refresh context aligned with the active kubeconfig selection.
   useEffect(() => {
     refreshOrchestrator.updateContext({
@@ -101,18 +147,18 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const loadKubeconfigs = useCallback(async () => {
     setKubeconfigsLoading(true);
     try {
-      // Load both the list of configs and the currently selected one
+      // Load both the list of configs and the currently selected list.
       const [configs, currentSelection] = await Promise.all([
         GetKubeconfigs(),
-        GetSelectedKubeconfig(),
+        GetSelectedKubeconfigs(),
       ]);
 
       setKubeconfigs(configs || []);
 
       // Set the selection from the backend
-      if (currentSelection) {
-        setSelectedKubeconfigState(currentSelection);
-      }
+      const normalizedSelection = normalizeSelections(currentSelection || [], configs || []);
+      setSelectedKubeconfigsState(normalizedSelection);
+      setSelectedKubeconfigState(normalizedSelection[0] || '');
     } catch (error) {
       errorHandler.handle(
         error,
@@ -127,14 +173,20 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     }
   }, []);
 
-  const setSelectedKubeconfig = useCallback(
-    async (config: string) => {
-      const previousSelection = selectedKubeconfig;
+  const setSelectedKubeconfigs = useCallback(
+    async (configs: string[]) => {
+      const previousSelections = selectedKubeconfigs;
+      const previousPrimary = selectedKubeconfig;
+      const normalizedSelections = normalizeSelections(configs, kubeconfigs);
+      const nextPrimary = normalizedSelections.includes(selectedKubeconfig)
+        ? selectedKubeconfig
+        : normalizedSelections[0] || '';
       try {
         onCloseObjectPanel();
 
         // Optimistically update the UI immediately so the dropdown reflects the intent.
-        setSelectedKubeconfigState(config);
+        setSelectedKubeconfigsState(normalizedSelections);
+        setSelectedKubeconfigState(nextPrimary);
 
         // Follow the exact order from Cardinal Rules:
 
@@ -143,28 +195,36 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
 
         // 2. Show the loading spinner (handled by kubeconfig:changing event)
         // 3. Cancel any refresh in progress (also handled by kubeconfig:changing event)
-        eventBus.emit('kubeconfig:changing', config);
+        eventBus.emit('kubeconfig:changing', nextPrimary);
 
         // Perform the actual kubeconfig switch
-        await SetKubeconfig(config);
+        await SetSelectedKubeconfigs(normalizedSelections);
 
         // 4. Perform a manual refresh (will be triggered by kubeconfig:changed event)
-        eventBus.emit('kubeconfig:changed', config);
+        eventBus.emit('kubeconfig:changed', nextPrimary);
       } catch (error) {
         // Roll back the UI to the previous value if the backend switch failed.
-        setSelectedKubeconfigState(previousSelection);
+        setSelectedKubeconfigsState(previousSelections);
+        setSelectedKubeconfigState(previousPrimary);
         errorHandler.handle(
           error,
           {
-            context: 'setKubeconfig',
-            config,
+            context: 'setSelectedKubeconfigs',
+            configs: normalizedSelections,
           },
-          'Failed to set kubeconfig'
+          'Failed to set kubeconfigs'
         );
         throw error;
       }
     },
-    [selectedKubeconfig, onCloseObjectPanel]
+    [kubeconfigs, normalizeSelections, onCloseObjectPanel, selectedKubeconfig, selectedKubeconfigs]
+  );
+
+  const setSelectedKubeconfig = useCallback(
+    async (config: string) => {
+      await setSelectedKubeconfigs(config ? [config] : []);
+    },
+    [setSelectedKubeconfigs]
   );
 
   // Load kubeconfigs on mount
@@ -181,17 +241,13 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           identities.add(`${config.name}:${config.context}`);
         }
       });
-      if (selectedKubeconfig) {
-        if (selectedClusterMeta.id) {
-          identities.add(selectedClusterMeta.id);
-        }
-      }
+      selectedClusterIds.forEach((id) => identities.add(id));
       const hashes = await computeClusterHashes(Array.from(identities));
       runGridTableGC({ activeClusterHashes: hashes });
     };
 
     void runGC();
-  }, [kubeconfigs, selectedKubeconfig, selectedClusterMeta.id]);
+  }, [kubeconfigs, selectedClusterIds]);
 
   // Listen for kubeconfig change events from command palette
   useEventBus(
@@ -208,19 +264,23 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const contextValue = useMemo(
     () => ({
       kubeconfigs,
+      selectedKubeconfigs,
       selectedKubeconfig,
       selectedClusterId: selectedClusterMeta.id,
       selectedClusterName: selectedClusterMeta.name,
       kubeconfigsLoading,
+      setSelectedKubeconfigs,
       setSelectedKubeconfig,
       loadKubeconfigs,
     }),
     [
       kubeconfigs,
+      selectedKubeconfigs,
       selectedKubeconfig,
       selectedClusterMeta.id,
       selectedClusterMeta.name,
       kubeconfigsLoading,
+      setSelectedKubeconfigs,
       setSelectedKubeconfig,
       loadKubeconfigs,
     ]

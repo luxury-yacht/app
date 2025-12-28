@@ -12,8 +12,8 @@ import { KubernetesProvider } from './KubernetesProvider';
 
 const wailsMocks = vi.hoisted(() => ({
   GetKubeconfigs: vi.fn().mockResolvedValue([]),
-  GetSelectedKubeconfig: vi.fn().mockResolvedValue(''),
-  SetKubeconfig: vi.fn().mockResolvedValue(undefined),
+  GetSelectedKubeconfigs: vi.fn().mockResolvedValue([]),
+  SetSelectedKubeconfigs: vi.fn().mockResolvedValue(undefined),
   SetSidebarVisible: vi.fn(),
   GetCatalogDiagnostics: vi.fn().mockResolvedValue({ enabled: false }),
   GetThemeInfo: vi.fn().mockResolvedValue({ userTheme: 'system' }),
@@ -21,8 +21,8 @@ const wailsMocks = vi.hoisted(() => ({
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetKubeconfigs: (...args: unknown[]) => wailsMocks.GetKubeconfigs(...args),
-  GetSelectedKubeconfig: (...args: unknown[]) => wailsMocks.GetSelectedKubeconfig(...args),
-  SetKubeconfig: (...args: unknown[]) => wailsMocks.SetKubeconfig(...args),
+  GetSelectedKubeconfigs: (...args: unknown[]) => wailsMocks.GetSelectedKubeconfigs(...args),
+  SetSelectedKubeconfigs: (...args: unknown[]) => wailsMocks.SetSelectedKubeconfigs(...args),
   SetSidebarVisible: (...args: unknown[]) => wailsMocks.SetSidebarVisible(...args),
   GetCatalogDiagnostics: (...args: unknown[]) => wailsMocks.GetCatalogDiagnostics(...args),
   GetThemeInfo: (...args: unknown[]) => wailsMocks.GetThemeInfo(...args),

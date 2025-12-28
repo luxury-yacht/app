@@ -104,8 +104,10 @@ describe('KubeconfigSelector', () => {
         isCurrentContext: false,
       },
     ],
+    selectedKubeconfigs: ['/clusters/prod.yaml:prod-admin'],
     selectedKubeconfig: '/clusters/prod.yaml:prod-admin',
     kubeconfigsLoading: false,
+    setSelectedKubeconfigs: vi.fn(),
     setSelectedKubeconfig: vi.fn(),
   });
 
@@ -120,17 +122,47 @@ describe('KubeconfigSelector', () => {
     expect(options[2].querySelector('.kubeconfig-filename')?.textContent).toBe('staging.yaml');
   });
 
-  it('invokes setSelectedKubeconfig when selection changes', async () => {
+  it('invokes setSelectedKubeconfigs when selection changes', async () => {
     const state = await renderSelector();
 
     const dropdownProps = dropdownPropsRef.current;
     expect(dropdownProps).toBeTruthy();
 
-    const newValue = '/clusters/staging.yaml:staging';
+    const newValue = ['/clusters/staging.yaml:staging'];
     act(() => {
       dropdownProps.onChange(newValue);
     });
 
-    expect(state.setSelectedKubeconfig).toHaveBeenCalledWith(newValue);
+    expect(state.setSelectedKubeconfigs).toHaveBeenCalledWith(newValue);
+  });
+
+  it('disables duplicate context names when one is already selected', async () => {
+    await renderSelector({
+      kubeconfigs: [
+        {
+          name: 'alpha.yaml',
+          path: '/clusters/alpha.yaml',
+          context: 'shared',
+          isCurrentContext: false,
+        },
+        {
+          name: 'beta.yaml',
+          path: '/clusters/beta.yaml',
+          context: 'shared',
+          isCurrentContext: false,
+        },
+      ],
+      selectedKubeconfigs: ['/clusters/alpha.yaml:shared'],
+      selectedKubeconfig: '/clusters/alpha.yaml:shared',
+    });
+
+    const options = dropdownPropsRef.current?.options || [];
+    const alphaOption = options.find(
+      (option: any) => option.value === '/clusters/alpha.yaml:shared'
+    );
+    const betaOption = options.find((option: any) => option.value === '/clusters/beta.yaml:shared');
+
+    expect(alphaOption?.disabled).toBe(false);
+    expect(betaOption?.disabled).toBe(true);
   });
 });

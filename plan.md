@@ -22,7 +22,7 @@
 3. ✅ Namespace selection cluster-scoped in refresh context + sidebar group rendering.
 4. ✅ Finish refresh fan-out + snapshot merge for all domains; keep per-cluster permission/diagnostic isolation.
 5. ✅ Accept selected cluster sets in manual refresh endpoints + streaming handlers; merge multi-cluster stream events.
-6. Implement kubeconfig multi-select UI + selected cluster list handling; disable duplicate context names with tooltip.
+6. ✅ Implement kubeconfig multi-select UI + selected cluster list handling; keep a primary selection for current consumers; disable duplicate context names with tooltip.
 7. Frontend: pass selected cluster sets through refresh orchestrator; manage per-cluster streams.
 8. Add Cluster column + Clusters filter in GridTable and persist filter state with cluster IDs.
 9. Expand backend + frontend tests for multi-select, fan-out, stream merge, and diagnostics; confirm >=80% coverage or note gaps.
