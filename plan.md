@@ -2,12 +2,18 @@
 
 ## Decisions
 
-- Support simultaneous connections to multiple clusters; aggregate resources across clusters.
+- Support simultaneous connections to multiple clusters; UI is single-cluster per tab (no cross-cluster aggregation in views).
 - Kubeconfig selection becomes multi-select and is sourced from kubeconfig contexts.
 - `clusterId` is `filename:context`; `clusterName` is `context`; refresh scopes/keys are `clusterId|<scope>`.
 - Duplicate context names may exist, but only one can be active; disable duplicates with tooltip: "`context` is already active. Duplicate context names are not allowed."
-- Namespace selection is global (one namespace total), session-only, and sets the cluster context for namespace refresh.
+- Namespace selection, view state, and object panel state are per-tab (per cluster).
 - Keep namespace selection in the frontend (do not add it to catalog snapshots).
+- Cluster tabs replace the cluster columns/filters; remove all cluster column/filter UI and persistence.
+- Cluster tabs are hidden unless multiple clusters are open; initial order follows kubeconfig selection order, but manual drag order persists across restarts (closed tabs reset to selection order when reopened).
+- Refresh is per-tab by default; add a settings toggle to refresh background tabs when enabled.
+- Use a single refresh orchestrator; scope refresh context to the active tab by default.
+- Logs/diagnostics/modals remain outside tab context; each tab has its own sidebar, main content, and object panel.
+- Do not add new dependencies for drag-and-drop.
 
 ## Current status
 
@@ -15,6 +21,7 @@
 2. ✅ Per-cluster object catalog services + namespace groups in catalog snapshots; scope encoding fixed.
 3. ✅ Namespace selection is cluster-scoped in refresh context; sidebar renders catalog namespace groups and passes cluster ID.
 4. ⏳ Cluster-scoped GridTable row keys applied across cluster/namespace views; `NsViewPods` test data now includes cluster metadata.
+5. ⏳ Cluster tabs plan approved; implementation pending.
 
 ## Implementation steps (ordered)
 
@@ -26,21 +33,75 @@
 6. ✅ Implement kubeconfig multi-select UI + selected cluster list handling; keep a primary selection for current consumers; disable duplicate context names with tooltip.
 7. ✅ Frontend: pass selected cluster sets through refresh orchestrator; manage per-cluster streams.
 8. ✅ Fix scoped domain normalization regression in refresh orchestrator (TypeScript error cleanup).
-9. ✅ Add Cluster column + Clusters filter in GridTable and persist filter state with cluster IDs (wire columns/filters across views + update tests).
+9. ✅ Add Cluster column + Clusters filter in GridTable and persist filter state with cluster IDs (superseded; will be removed per cluster tabs).
 10. ✅ Expand backend + frontend tests for multi-select, fan-out, stream merge, and diagnostics; confirm >=80% coverage or note gaps.
-11. ✅ Fix remaining TypeScript errors from cluster filter wiring (GridTable showClusterDropdown).
-12. ✅ Run frontend typecheck/tests to validate cluster filter wiring changes.
+11. ✅ Fix remaining TypeScript errors from cluster filter wiring (superseded; will be removed per cluster tabs).
+12. ✅ Run frontend typecheck/tests to validate cluster filter wiring changes (superseded; will be removed per cluster tabs).
 13. ⏳ Add targeted frontend tests to raise coverage to >=80% for cluster/namespace views + refresh UI.
 14. ✅ Make backend coverage runnable in the sandbox (covdata/toolchain + cache path workaround) and re-run `go test` with coverage.
-15. ⏳ Diagnose and fix multi-cluster views only showing resources from a single cluster (added refresh subsystem rebuild when selection list changes without primary switch; need runtime validation).
+15. ⏳ Diagnose and fix non-primary tabs still showing primary data (ensure per-tab refresh scopes and UI scoping).
+16. ⏳ Update backend aggregation rules so explicit cluster-scoped requests can target non-primary clusters for single-cluster domains (catalog/object/*/node-maintenance).
+17. ⏳ Introduce cluster tabs state + persistence (open clusters, active tab, order) and wire it to kubeconfig selections; reconcile order by applying persisted drag order when available and falling back to current selection order for new/reopened tabs.
+18. ⏳ Render cluster tabs row in layout, draggable ordering (no new deps), close button, hidden when <2 tabs.
+19. ⏳ Make view state per tab by introducing a tab-scoped provider tree (per-tab ViewState, NamespaceContext, ObjectPanelState) and render the active tab’s provider subtree; ensure no shared state between tabs.
+20. ⏳ Remove cluster columns/filters and related persistence/tests from all views and shared GridTable wiring.
+21. ⏳ Add settings toggle in Auto-Refresh for "Refresh background clusters" (default off), persist in frontend storage, and hydrate on startup to drive refresh context defaults.
+22. ⏳ Update refresh context to follow active tab cluster ID; only fan-out when background refresh toggle is enabled.
+23. ⏳ Add/adjust tests for tabs, per-tab state, and cleanup on tab close; re-evaluate coverage notes.
+24. ⏳ Verify multi-cluster UI: open/close tabs, reorder, per-tab namespace, object panel, and views show only active cluster data.
 
 ## Risks / watchouts
 
 - Fan-out refresh load and timeouts per cluster; may need concurrency limits.
 - Stream merge ordering/volume; consider backpressure and per-cluster throttling.
-- GridTable filter/persistence schema changes for cluster-aware state.
+- Single-cluster domain restrictions (catalog/object) must allow explicit cluster-scoped requests to avoid blocking non-primary tabs.
 
 ## Coverage notes
 
 - Frontend coverage is still below 80% in multiple areas (cluster/namespace views and refresh/UI wiring); need guidance on which modules to prioritize for additional tests.
 - Backend coverage is now runnable via `build/go-tools` + `build/gocache` (local covdata toolchain); current `go test ./backend -cover` reports 74.4% coverage, so hitting 80% would require more tests in lower-coverage backend areas.
+
+## Cluster Tabs
+
+The current app layout is:
+
+```
+|----------------------------|
+| app-header                 |
+|----------------------------|
+| sidebar   |   content      |
+|           |                |
+|----------------------------|
+```
+
+Let's add another row for cluster-tabs:
+
+```
+|----------------------------|
+| app-header                 |
+|----------------------------|
+| cluster-tabs               |
+|----------------------------|
+| sidebar   |   content      |
+|           |                |
+|----------------------------|
+```
+
+### Cluster tabs behavior
+
+Switching to cluster tabs means that we no longer need to show the Cluster columns in any views as we will only allow one cluster per tab, so remove all of that.
+
+- `cluster-tabs` div should be hidden unless multiple clusters are open.
+- Tab should be created when the user selects the cluster in the kubeconfig dropdown
+- Tab should be destroyed when the user deselects the cluster in the kubeconfig dropdown
+- Tab should have a close button. Click the close button closes the tab and deselects the cluster in the kubeconfig dropdown
+- When a tab is closed, handle all the usual cleanup/deregistration tasks for that cluster
+- Tabs should be draggable to change their order
+- You may create a new cluster-tab css style for cluster tabs
+
+### Future Behavior -- may be implemented later
+
+- User is able to load and save tab sets to quickly open a set of clusters
+- Diff Objects modal
+  - Select two items and diff their YAML
+  - Objects can be from the same cluster or any other open cluster
