@@ -149,10 +149,24 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		}(manager)
 	}
 
-	// Wrap the primary refresh API with an aggregate snapshot service for multi-cluster domains.
+	// Wrap the primary refresh API with aggregate services for multi-cluster domains.
 	aggregateService := newAggregateSnapshotService(primaryID, clusterOrder, subsystems)
+	aggregateQueue := newAggregateManualQueue(primaryID, clusterOrder, subsystems)
+	aggregateEvents := newAggregateEventStreamHandler(
+		aggregateService,
+		collectEventManagers(subsystems),
+		collectClusterMeta(subsystems),
+		clusterOrder,
+		primarySubsystem.Telemetry,
+		a.logger,
+	)
+	aggregateLogs := newAggregateLogStreamHandler(primaryID, subsystems)
+	aggregateCatalog := newAggregateCatalogStreamHandler(primaryID, subsystems)
 	mux := http.NewServeMux()
-	api.NewServer(primarySubsystem.Registry, aggregateService, primarySubsystem.ManualQueue, primarySubsystem.Telemetry).Register(mux)
+	api.NewServer(primarySubsystem.Registry, aggregateService, aggregateQueue, primarySubsystem.Telemetry).Register(mux)
+	mux.Handle("/api/v2/stream/events", aggregateEvents)
+	mux.Handle("/api/v2/stream/logs", aggregateLogs)
+	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)
 	mux.Handle("/", primarySubsystem.Handler)
 
 	if a.listenLoopback == nil {

@@ -59,8 +59,8 @@ func newAggregateSnapshotService(
 
 // Build fans out the snapshot request and merges payloads for multi-cluster domains.
 func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-	clusterID, scopeValue := refresh.SplitClusterScope(scope)
-	targets, err := s.resolveTargets(domain, clusterID)
+	clusterIDs, scopeValue := refresh.SplitClusterScopeList(scope)
+	targets, err := s.resolveTargets(domain, clusterIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 		return nil, fmt.Errorf("no clusters available for %s", domain)
 	}
 
-	allowPartial := clusterID == "" && len(targets) > 1
+	allowPartial := len(clusterIDs) > 1 || (len(clusterIDs) == 0 && len(targets) > 1)
 	snapshots := make([]*refresh.Snapshot, 0, len(targets))
 	warnings := make([]string, 0, len(targets))
 	var firstErr error
@@ -126,15 +126,19 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 }
 
 // resolveTargets chooses which clusters should handle the requested domain/scope pair.
-func (s *aggregateSnapshotService) resolveTargets(domain, scopeClusterID string) ([]string, error) {
-	if scopeClusterID != "" {
-		if _, ok := s.services[scopeClusterID]; !ok {
-			return nil, fmt.Errorf("cluster %s not active", scopeClusterID)
+func (s *aggregateSnapshotService) resolveTargets(domain string, clusterIDs []string) ([]string, error) {
+	if len(clusterIDs) > 0 {
+		targets := make([]string, 0, len(clusterIDs))
+		for _, id := range clusterIDs {
+			if _, ok := s.services[id]; !ok {
+				return nil, fmt.Errorf("cluster %s not active", id)
+			}
+			if isSingleClusterDomain(domain) && id != s.primaryID {
+				return nil, fmt.Errorf("domain %s is only available on the primary cluster", domain)
+			}
+			targets = append(targets, id)
 		}
-		if isSingleClusterDomain(domain) && scopeClusterID != s.primaryID {
-			return nil, fmt.Errorf("domain %s is only available on the primary cluster", domain)
-		}
-		return []string{scopeClusterID}, nil
+		return targets, nil
 	}
 
 	if isSingleClusterDomain(domain) {

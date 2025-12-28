@@ -222,6 +222,8 @@ func convertClusterEntries(events []snapshot.ClusterEventEntry) []Entry {
 	entries := make([]Entry, 0, len(events))
 	for _, evt := range events {
 		entries = append(entries, Entry{
+			ClusterID:       evt.ClusterID,
+			ClusterName:     evt.ClusterName,
 			Kind:            evt.Kind,
 			Name:            evt.Name,
 			Namespace:       evt.ObjectNamespace,
@@ -241,6 +243,8 @@ func convertNamespaceEntries(events []snapshot.EventSummary) []Entry {
 	entries := make([]Entry, 0, len(events))
 	for _, evt := range events {
 		entries = append(entries, Entry{
+			ClusterID:       evt.ClusterID,
+			ClusterName:     evt.ClusterName,
 			Kind:            evt.Kind,
 			Name:            evt.Name,
 			Namespace:       evt.ObjectNamespace,

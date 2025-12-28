@@ -64,6 +64,8 @@ type Subsystem struct {
 	Registry         *domain.Registry
 	SnapshotService  refresh.SnapshotService
 	ManualQueue      refresh.ManualQueue
+	EventStream      *eventstream.Manager
+	ClusterMeta      snapshot.ClusterMeta
 }
 
 // NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.
@@ -531,6 +533,8 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		Registry:         registry,
 		SnapshotService:  snapshotService,
 		ManualQueue:      queue,
+		EventStream:      eventManager,
+		ClusterMeta:      clusterMeta,
 	}, nil
 }
 
