@@ -46,6 +46,7 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { resetScopedDomainState } from '@/core/refresh/store';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 
 export interface PodsResourceDataReturn extends ResourceDataReturn<PodSnapshotEntry[]> {
   metrics: PodMetricsInfo | null;
@@ -613,6 +614,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
 }) => {
   const { viewType } = useViewState();
   const { selectedClusterId } = useKubeconfig();
+  const { selectedNamespaceClusterId } = useNamespace();
+  // Prefer the cluster tied to the namespace selection; fall back to the kubeconfig selection.
+  const namespaceClusterId = selectedNamespaceClusterId ?? selectedClusterId;
   const isNamespaceView = viewType === 'namespace';
   const [currentNamespace, setCurrentNamespace] = useState<string | null>(propNamespace || null);
   // Default to 'workloads' since that's the default view in NamespaceViews
@@ -653,7 +657,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('workloads'),
     currentNamespace,
-    selectedClusterId
+    namespaceClusterId
   );
 
   const config = useRefreshBackedResource<any[]>(
@@ -663,7 +667,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('config'),
     currentNamespace,
-    selectedClusterId
+    namespaceClusterId
   );
 
   const network = useRefreshBackedResource<any[]>(
@@ -673,7 +677,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('network'),
     currentNamespace,
-    selectedClusterId
+    namespaceClusterId
   );
 
   const rbac = useRefreshBackedResource<any[]>(
@@ -683,7 +687,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('rbac'),
     currentNamespace,
-    selectedClusterId
+    namespaceClusterId
   );
 
   const storage = useRefreshBackedResource<any[]>(
@@ -693,7 +697,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('storage'),
     currentNamespace,
-    selectedClusterId
+    namespaceClusterId
   );
 
   const autoscaling = useRefreshBackedResource<any[]>(
@@ -721,7 +725,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('autoscaling'),
     currentNamespace,
-    selectedClusterId
+    namespaceClusterId
   );
 
   const quotas = useRefreshBackedResource<any[]>(
@@ -731,7 +735,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('quotas'),
     currentNamespace,
-    selectedClusterId
+    namespaceClusterId
   );
 
   const events = useRefreshBackedResource<any[]>(
@@ -741,12 +745,12 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('events'),
     currentNamespace,
-    selectedClusterId
+    namespaceClusterId
   );
 
   const podsEnabled =
     Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === 'pods';
-  const pods = useNamespacePodsResource(podsEnabled, currentNamespace, selectedClusterId);
+  const pods = useNamespacePodsResource(podsEnabled, currentNamespace, namespaceClusterId);
 
   const custom = useRefreshBackedResource<any[]>(
     'custom',
@@ -766,7 +770,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('custom'),
     currentNamespace,
-    selectedClusterId
+    namespaceClusterId
   );
 
   const helm = useRefreshBackedResource<any[]>(
@@ -789,18 +793,22 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     [],
     isResourceActive('helm'),
     currentNamespace,
-    selectedClusterId
+    namespaceClusterId
   );
 
   useEffect(() => {
     if (!isNamespaceView) {
-      refreshOrchestrator.updateContext({ selectedNamespace: undefined });
+      refreshOrchestrator.updateContext({
+        selectedNamespace: undefined,
+        selectedNamespaceClusterId: undefined,
+      });
       return;
     }
     refreshOrchestrator.updateContext({
       selectedNamespace: currentNamespace ?? undefined,
+      selectedNamespaceClusterId: currentNamespace ? (namespaceClusterId ?? undefined) : undefined,
     });
-  }, [currentNamespace, isNamespaceView]);
+  }, [currentNamespace, isNamespaceView, namespaceClusterId]);
 
   useEffect(() => {
     const entries = Object.entries(DOMAIN_BY_RESOURCE) as Array<
@@ -820,7 +828,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
         refreshOrchestrator.resetDomain(domain);
       }
     });
-    const scope = normalizeNamespaceScope(currentNamespace, selectedClusterId);
+    const scope = normalizeNamespaceScope(currentNamespace, namespaceClusterId);
     if (scope) {
       refreshOrchestrator.setScopedDomainEnabled('pods', scope, podsEnabled);
     }
@@ -830,7 +838,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     isNamespaceView,
     podsEnabled,
     pods,
-    selectedClusterId,
+    namespaceClusterId,
   ]);
 
   useEffect(() => {
@@ -840,12 +848,12 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       domains.forEach((domain) => {
         refreshOrchestrator.setDomainEnabled(domain, false);
       });
-      const scope = normalizeNamespaceScope(currentNamespace, selectedClusterId);
+      const scope = normalizeNamespaceScope(currentNamespace, namespaceClusterId);
       if (scope) {
         refreshOrchestrator.setScopedDomainEnabled('pods', scope, false);
       }
     };
-  }, [currentNamespace, selectedClusterId]);
+  }, [currentNamespace, namespaceClusterId]);
 
   useEffect(() => {
     const nextNamespace = propNamespace ?? null;
@@ -1065,8 +1073,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       return;
     }
     // Evaluate namespace permissions against the active cluster context.
-    evaluateNamespacePermissions(capabilityNamespace, { clusterId: selectedClusterId });
-  }, [currentNamespace, selectedClusterId]);
+    evaluateNamespacePermissions(capabilityNamespace, { clusterId: namespaceClusterId });
+  }, [currentNamespace, namespaceClusterId]);
 
   return (
     <NamespaceResourcesContext.Provider value={contextValue}>

@@ -287,11 +287,11 @@ const BrowseView: React.FC = () => {
   );
 
   const handleOpenNamespace = useCallback(
-    (namespaceName?: string | null) => {
+    (namespaceName?: string | null, clusterId?: string | null) => {
       if (!namespaceName || namespaceName.trim().length === 0) {
         return;
       }
-      namespaceContext.setSelectedNamespace(namespaceName);
+      namespaceContext.setSelectedNamespace(namespaceName, clusterId ?? undefined);
       viewState.onNamespaceSelect(namespaceName);
       viewState.setActiveNamespaceTab('workloads');
     },
@@ -348,7 +348,7 @@ const BrowseView: React.FC = () => {
       }),
       cf.createTextColumn<TableRow>('namespace', 'Namespace', (row) => row.namespaceDisplay, {
         sortable: true,
-        onClick: (row) => handleOpenNamespace(row.item.namespace ?? null),
+        onClick: (row) => handleOpenNamespace(row.item.namespace ?? null, row.item.clusterId),
         isInteractive: (row) => Boolean(row.item.namespace),
         getTitle: (row) =>
           row.item.namespace ? `View ${row.item.namespace} workloads` : undefined,

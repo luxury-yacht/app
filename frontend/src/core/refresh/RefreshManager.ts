@@ -26,6 +26,7 @@ export interface RefreshContext {
   activeNamespaceView?: NamespaceViewType;
   activeClusterView?: ClusterViewType;
   selectedNamespace?: string;
+  selectedNamespaceClusterId?: string;
   selectedClusterId?: string;
   selectedClusterName?: string;
   objectPanel: {
@@ -247,9 +248,13 @@ class RefreshManager {
     this.context = { ...this.context, ...context };
 
     const manualTargets = this.getManualRefreshTargets(previousContext, this.context);
+    // Treat namespace cluster changes as namespace changes so refreshers re-scope correctly.
+    const namespaceChanged =
+      previousContext.selectedNamespace !== this.context.selectedNamespace ||
+      previousContext.selectedNamespaceClusterId !== this.context.selectedNamespaceClusterId;
 
     if (manualTargets.length > 0) {
-      if (previousContext.selectedNamespace !== this.context.selectedNamespace) {
+      if (namespaceChanged) {
         manualTargets.forEach((name) => this.abortRefresher(name));
       } else if (previousContext.currentView !== this.context.currentView) {
         manualTargets
@@ -426,10 +431,11 @@ class RefreshManager {
   ): RefresherName[] {
     const targets = new Set<RefresherName>();
 
-    if (
-      previous.selectedNamespace !== current.selectedNamespace &&
-      current.currentView === 'namespace'
-    ) {
+    // Namespace scope changes include the cluster identity tied to the selection.
+    const namespaceChanged =
+      previous.selectedNamespace !== current.selectedNamespace ||
+      previous.selectedNamespaceClusterId !== current.selectedNamespaceClusterId;
+    if (namespaceChanged && current.currentView === 'namespace') {
       const namespaceRefresher = current.activeNamespaceView
         ? namespaceViewToRefresher[current.activeNamespaceView]
         : null;

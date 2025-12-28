@@ -284,6 +284,41 @@ describe('RefreshManager context updates', () => {
     refreshManager.updateContext({
       activeNamespaceView: 'workloads',
       selectedNamespace: 'team-a',
+      selectedNamespaceClusterId: 'cluster-a',
+    });
+
+    await Promise.resolve();
+    expect(abortSpy).toHaveBeenCalledWith(NAME);
+    expect(manualSpy).toHaveBeenCalledWith(expect.arrayContaining([NAME]));
+  });
+
+  it('aborts running refreshers when the namespace cluster changes', async () => {
+    vi.useFakeTimers();
+    const manualSpy = vi.spyOn(refreshManager, 'triggerManualRefreshMany').mockResolvedValue();
+    const abortSpy = vi.spyOn(
+      refreshManager as unknown as { abortRefresher: (name: RefresherName) => void },
+      'abortRefresher'
+    );
+
+    refreshManager.register({
+      name: NAME,
+      interval: 1_000,
+      cooldown: 200,
+      timeout: 2,
+      resource: 'ns-workloads',
+    });
+
+    refreshManager.updateContext({
+      activeNamespaceView: 'workloads',
+      selectedNamespace: 'team-a',
+      selectedNamespaceClusterId: 'cluster-a',
+    });
+
+    manualSpy.mockClear();
+    abortSpy.mockClear();
+
+    refreshManager.updateContext({
+      selectedNamespaceClusterId: 'cluster-b',
     });
 
     await Promise.resolve();
@@ -745,6 +780,24 @@ describe('RefreshManager guard paths and helpers', () => {
     const current: RefreshContext = {
       ...previous,
       selectedNamespace: 'team-b',
+    };
+
+    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+
+    expect(manualTargets).toEqual(['config']);
+  });
+
+  it('detects namespace manual targets when the namespace cluster changes', () => {
+    const previous: RefreshContext = {
+      currentView: 'namespace',
+      activeNamespaceView: 'config',
+      selectedNamespace: 'team-a',
+      selectedNamespaceClusterId: 'cluster-a',
+      objectPanel: { isOpen: false },
+    };
+    const current: RefreshContext = {
+      ...previous,
+      selectedNamespaceClusterId: 'cluster-b',
     };
 
     const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);

@@ -24,7 +24,7 @@ const { mockRefreshOrchestrator, namespaceDomainRef } = vi.hoisted(() => {
 });
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'test' }),
+  useKubeconfig: () => ({ selectedKubeconfig: 'test', selectedClusterId: 'cluster-a' }),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -38,8 +38,13 @@ vi.mock('@/core/refresh', () => ({
 }));
 
 const SelectedNamespace: React.FC = () => {
-  const { selectedNamespace } = useNamespace();
-  return <span data-testid="selected">{selectedNamespace ?? 'none'}</span>;
+  const { selectedNamespace, selectedNamespaceClusterId } = useNamespace();
+  return (
+    <>
+      <span data-testid="selected">{selectedNamespace ?? 'none'}</span>
+      <span data-testid="selected-cluster">{selectedNamespaceClusterId ?? 'none'}</span>
+    </>
+  );
 };
 
 describe('NamespaceProvider selection behaviour', () => {
@@ -94,6 +99,7 @@ describe('NamespaceProvider selection behaviour', () => {
     });
 
     expect(getSelected()).toBe('alpha');
+    expect(getSelectedCluster()).toBe('cluster-a');
 
     namespaceDomainRef.current = {
       ...namespaceDomainRef.current,
@@ -105,6 +111,7 @@ describe('NamespaceProvider selection behaviour', () => {
     });
 
     expect(getSelected()).toBe('alpha');
+    expect(getSelectedCluster()).toBe('cluster-a');
 
     namespaceDomainRef.current = createNamespaceDomain('ready', ['alpha', 'beta']);
     rerender();
@@ -113,6 +120,7 @@ describe('NamespaceProvider selection behaviour', () => {
     });
 
     expect(getSelected()).toBe('alpha');
+    expect(getSelectedCluster()).toBe('cluster-a');
     cleanup();
   });
 
@@ -122,6 +130,7 @@ describe('NamespaceProvider selection behaviour', () => {
       vi.runAllTimers();
     });
     expect(getSelected()).toBe('alpha');
+    expect(getSelectedCluster()).toBe('cluster-a');
 
     namespaceDomainRef.current = createNamespaceDomain('ready', ['bravo']);
     rerender();
@@ -130,12 +139,18 @@ describe('NamespaceProvider selection behaviour', () => {
     });
 
     expect(getSelected()).toBe('bravo');
+    expect(getSelectedCluster()).toBe('cluster-a');
     cleanup();
   });
 });
 
 function getSelected(): string {
   const element = document.querySelector('[data-testid="selected"]');
+  return element?.textContent ?? '';
+}
+
+function getSelectedCluster(): string {
+  const element = document.querySelector('[data-testid="selected-cluster"]');
   return element?.textContent ?? '';
 }
 

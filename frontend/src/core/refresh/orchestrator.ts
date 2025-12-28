@@ -857,7 +857,9 @@ class RefreshOrchestrator {
       return null;
     }
     const namespaceScope = trimmed.startsWith('namespace:') ? trimmed : `namespace:${trimmed}`;
-    return this.normalizeScope(namespaceScope) ?? null;
+    // Prefer the cluster tied to the namespace selection for scoped refreshes.
+    const clusterId = this.context.selectedNamespaceClusterId ?? this.context.selectedClusterId;
+    return buildClusterScope(clusterId, namespaceScope) || null;
   }
 
   private ensureRefresher(config: DomainRegistration<RefreshDomain>): void {

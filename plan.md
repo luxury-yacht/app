@@ -12,6 +12,9 @@
 - Refresh scope keys are prefixed as `clusterId|<scope>` to avoid collisions while preserving scope semantics.
 - Object panel actions use the selected object's `clusterId` without changing kubeconfig selection.
 - Namespace selection shows per-cluster, collapsible namespace lists when multiple clusters are selected.
+- Namespace selection is global: only one namespace can be selected at a time across all clusters.
+- Namespace selection is session-only (do not persist across restarts).
+- Selecting a namespace sets the active cluster context for namespace refresh scope and view.
 - Keys/filters/ids must include cluster, even when only one cluster is active.
 
 ## Backend approach
@@ -37,6 +40,27 @@
 - Diagnostics panel surfaces per-cluster status and permission issues.
 - Object panel actions should target the selected object's `clusterId` without changing the kubeconfig selection.
 - Namespace sidebar shows per-cluster, collapsible namespace lists when multiple clusters are selected.
+
+Namespace sidebar should be changed to look like this:
+
+```
+CLUSTER NAME
+  Overview
+  Browse
+  Resources
+    Nodes
+    Config
+    etc...
+  Namespaces
+    All Namespaces
+    Namespace-A
+    Namespace-B
+    etc...
+```
+
+Maintain the same icons and collapsibility as before.
+
+When multiple clusters are active, show the other clusters as repetitions of the same layout, in alpha order.
 
 ## Data contract updates
 
@@ -66,6 +90,7 @@
 Goal: introduce cluster-aware identifiers across data contracts and state to unblock multi-cluster work, without changing UI behavior or selection flows.
 
 Backend
+
 - Add a cluster identity helper (`clusterId`, `clusterName`) derived from the active kubeconfig (filename + context).
 - Update selection keys and caches to use `clusterId` (refresh manager setup, permission cache, discovery cache, object-yaml GVR cache).
 - Extend refresh system config/telemetry to carry cluster identity for diagnostics.
@@ -75,6 +100,7 @@ Backend
 - Accept cluster-prefixed scope strings (`clusterId|<scope>`) in log/event streaming handlers and strip the prefix before parsing (keep the original scope string in SSE payloads for client keying).
 
 Frontend
+
 - Surface `selectedClusterId`/`selectedClusterName` in kubeconfig context from the current selection (no UI changes yet).
 - Add `clusterId`/`clusterName` to refresh payload types and `clusterId` to `KubernetesObjectReference`.
 - Add cluster-aware scope/key helpers (prefix `clusterId|<scope>`) and use them for refresh state keys, diagnostics keys, capability keys, streaming scopes, and GridTable persistence.
@@ -82,16 +108,18 @@ Frontend
 - Do not add new UI controls, columns, or filters in Phase 1.
 
 Tests
+
 - Update snapshot/streaming/capabilities tests to include cluster-aware keys and payloads.
 - Add/adjust tests for scope parsing with cluster-prefixed scopes.
 
 Phase 1 status (in progress)
 Backend
+
 - ✅ Cluster identity helper and refresh config/telemetry updated to include cluster meta.
 - ✅ Cluster meta added to catalog summaries and most refresh snapshot payloads (including node maintenance and object details/events/content); scope parsing updated to accept `clusterId|<scope>` in log/event streams and namespace scope helpers.
 - ✅ Audit catalog stream payloads for missing cluster meta and add coverage.
 - ✅ Confirmed snapshot payloads/object references include cluster meta (catalog stream fixed); add/adjust tests as needed.
-Frontend
+  Frontend
 - ✅ Kubeconfig context exposes `selectedClusterId`/`selectedClusterName`; refresh scope helpers added; refresh orchestrator normalizes scopes; refresh payload types updated with cluster meta; object reference types include `clusterId`.
 - ✅ Capabilities bootstrap/registry uses cluster-aware keys; permission cache keys include `clusterId` and allow per-cluster bootstrap refresh.
 - ✅ Event stream manager uses full cluster-prefixed scope keys; diagnostics parsing strips cluster prefix for pod labels.
@@ -112,6 +140,7 @@ Frontend
 - ✅ Ran tests for capabilities/refresh/streaming/object panel/namespace resources; no failures.
 
 Out of scope for Phase 1
+
 - Kubeconfig multi-select, duplicate context disabling, and any cluster selection behavior changes.
 - Multi-cluster refresh fan-out or client pooling.
 - Cluster column/filter UI or aggregated views.
@@ -122,6 +151,7 @@ Out of scope for Phase 1
 Goal: enable multi-select cluster workflows and refresh/stream fan-out while preserving the Phase 1 cluster-aware keys.
 
 Backend
+
 - ✅ Persist selected cluster IDs as a list (migrate from single selection) and expose Wails APIs to read/update the selection.
 - ✅ Implement a Kubernetes client pool keyed by `clusterId`, created/removed as selection changes.
 - Refactor refresh setup to run per-cluster refresh cycles and merge snapshot payloads, preserving cluster meta on every item. (in progress)
@@ -138,17 +168,20 @@ Backend
     - ✅ Update refresh catalog wiring to include namespace groups.
     - ✅ Update frontend catalog snapshot types to include namespace groups.
   - ✅ Fix cluster scope encoding for empty scopes so namespace snapshots render correctly.
-  - Decide how namespace selection state should be stored per cluster in the catalog layer.
+  - Decide whether the catalog snapshot should include the current global namespace selection.
 - Accept selected cluster sets in manual refresh endpoints and streaming handlers; merge multi-cluster stream events.
 - Surface diagnostics and permission issues per cluster in telemetry and refresh status.
 
 Frontend
+
 - Switch KubeconfigSelector to multi-select and track `selectedClusterIds` in KubeconfigContext.
 - Disable duplicate context selections with the defined tooltip.
 - Pass selected cluster sets through the refresh orchestrator and manage per-cluster streams.
 - Add Cluster column + Clusters filter using shared column factories; persist filter state with cluster IDs.
 - Update namespace sidebar to show per-cluster collapsible lists when multiple clusters are active.
+- ✅ Scope namespace selection to the cluster that owns the selection (still one global selection) and use that cluster for namespace refresh context.
 
 Tests
+
 - Backend: client pool lifecycle, multi-cluster refresh aggregation, catalog namespace listings, stream merge behavior.
 - Frontend: multi-select selector behavior, duplicate disablement, per-cluster diagnostics, refresh/stream state updates.

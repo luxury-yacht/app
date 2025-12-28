@@ -75,7 +75,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
         return;
       }
       // Route namespace clicks to the sidebar selection instead of the object panel.
-      namespaceContext.setSelectedNamespace(pod.namespace);
+      namespaceContext.setSelectedNamespace(pod.namespace, pod.clusterId);
       viewState.onNamespaceSelect(pod.namespace);
       viewState.setActiveNamespaceTab('workloads');
     },

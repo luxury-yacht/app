@@ -104,6 +104,10 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({ selectedClusterId: testClusterId }),
 }));
 
+vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
+  useNamespace: () => ({ selectedNamespaceClusterId: testClusterId }),
+}));
+
 const TestConsumer: React.FC = () => {
   const context = useNamespaceResources();
   contextRef.current = context;
@@ -206,6 +210,7 @@ describe('NamespaceResourcesProvider', () => {
 
     expect(orchestrator.updateContext).toHaveBeenCalledWith({
       selectedNamespace: 'team-a',
+      selectedNamespaceClusterId: testClusterId,
     });
     expect(orchestrator.setDomainEnabled).toHaveBeenCalledWith('namespace-config', true);
     expect(orchestrator.triggerManualRefresh).toHaveBeenCalledWith(
