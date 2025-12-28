@@ -31,6 +31,8 @@ interface ConfigData {
   kind: string;
   kindAlias?: string;
   name: string;
+  clusterId?: string;
+  clusterName?: string;
   age?: string;
 }
 
@@ -90,9 +92,15 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         cf.createAgeColumn(),
       ];
 
+      cf.upsertClusterColumn(baseColumns, {
+        accessor: (resource) => resource.clusterName ?? resource.clusterId ?? '—',
+        sortValue: (resource) => (resource.clusterName ?? resource.clusterId ?? '').toLowerCase(),
+      });
+
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
+        cluster: { autoWidth: true },
         age: { autoWidth: true },
       };
       cf.applyColumnSizing(baseColumns, sizing);
@@ -208,6 +216,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showKindDropdown: true,
+                showClusterDropdown: true,
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

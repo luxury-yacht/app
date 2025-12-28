@@ -14,6 +14,7 @@ import {
   createKindColumn,
   createResourceBarColumn,
   createTextColumn,
+  upsertClusterColumn,
   upsertNamespaceColumn,
   type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
@@ -90,6 +91,29 @@ describe('columnFactories', () => {
       expect(secondInsert.map((column) => column.key)).toEqual([
         'kind',
         'name',
+        'namespace',
+        'status',
+      ]);
+    });
+  });
+
+  describe('upsertClusterColumn', () => {
+    it('inserts cluster column before namespace when present', () => {
+      const columns: GridColumnDefinition<RowSample>[] = [
+        { key: 'kind', header: 'Kind', render: () => null },
+        { key: 'name', header: 'Name', render: () => null },
+        { key: 'namespace', header: 'Namespace', render: () => null },
+        { key: 'status', header: 'Status', render: () => null },
+      ];
+
+      upsertClusterColumn(columns, {
+        onClick: vi.fn(),
+      });
+
+      expect(columns.map((column) => column.key)).toEqual([
+        'kind',
+        'name',
+        'cluster',
         'namespace',
         'status',
       ]);

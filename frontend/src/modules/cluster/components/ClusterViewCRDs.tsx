@@ -31,6 +31,8 @@ interface CRDsData {
   kind: string;
   kindAlias?: string;
   name: string;
+  clusterId?: string;
+  clusterName?: string;
   group: string;
   scope: string;
   age?: string;
@@ -94,9 +96,15 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
         cf.createAgeColumn(),
       ];
 
+      cf.upsertClusterColumn(baseColumns, {
+        accessor: (crd) => crd.clusterName ?? crd.clusterId ?? '—',
+        sortValue: (crd) => (crd.clusterName ?? crd.clusterId ?? '').toLowerCase(),
+      });
+
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
+        cluster: { autoWidth: true },
         group: { autoWidth: true },
         scope: { autoWidth: true },
         age: { autoWidth: true },
@@ -215,6 +223,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showKindDropdown: true,
+                showClusterDropdown: true,
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

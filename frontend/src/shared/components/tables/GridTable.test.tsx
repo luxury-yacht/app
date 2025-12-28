@@ -736,7 +736,12 @@ describe('GridTable interactions (non-virtualized)', () => {
 
   it('renders filter controls and propagates search changes', async () => {
     const onFilterChange = vi.fn();
-    let currentFilters = { search: '', kinds: [] as string[], namespaces: [] as string[] };
+    let currentFilters = {
+      search: '',
+      kinds: [] as string[],
+      namespaces: [] as string[],
+      clusters: [] as string[],
+    };
 
     const handleFilterChange = (next: typeof currentFilters) => {
       currentFilters = next;
@@ -780,7 +785,7 @@ describe('GridTable interactions (non-virtualized)', () => {
       (wrapper as any).scrollTo = vi.fn();
     }
 
-    await applyFilters({ search: 'Row 1', kinds: [], namespaces: [] });
+    await applyFilters({ search: 'Row 1', kinds: [], namespaces: [], clusters: [] });
 
     const visibleRows = container.querySelectorAll('.gridtable-row');
     const expectedMatches = createRows(30).filter((row) => row.label.includes('Row 1')).length;
@@ -796,7 +801,12 @@ describe('GridTable interactions (non-virtualized)', () => {
     act(() => {
       resetButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(onFilterChange).toHaveBeenCalledWith({ search: '', kinds: [], namespaces: [] });
+    expect(onFilterChange).toHaveBeenCalledWith({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      clusters: [],
+    });
 
     await applyFilters(currentFilters);
     const resetRows = container.querySelectorAll('.gridtable-row');
@@ -809,6 +819,7 @@ describe('GridTable interactions (non-virtualized)', () => {
       search: '',
       kinds: ['Pod', 'Deployment'],
       namespaces: ['team-a', 'team-b', 'team-c'],
+      clusters: [],
     };
 
     const makeFilters = (): GridTableFilterConfig<SimpleRow> => ({
@@ -842,7 +853,7 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(kindLabel?.textContent).toBe('Kinds (2)');
     expect(namespaceLabel?.textContent).toBe('Namespaces (3)');
 
-    currentFilters = { search: '', kinds: [], namespaces: [] };
+    currentFilters = { search: '', kinds: [], namespaces: [], clusters: [] };
     await act(async () => {
       rerender({
         data: createRows(5),

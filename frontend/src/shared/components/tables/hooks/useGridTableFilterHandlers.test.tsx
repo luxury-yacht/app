@@ -23,6 +23,7 @@ describe('useGridTableFilterHandlers', () => {
   const renderHarness = async () => {
     const kindsMock = vi.fn();
     const namespacesMock = vi.fn();
+    const clustersMock = vi.fn();
 
     const container = document.createElement('div');
     document.body.appendChild(container);
@@ -32,6 +33,7 @@ describe('useGridTableFilterHandlers', () => {
       current: null as null | {
         handleKind: (value: string | string[]) => void;
         handleNamespace: (value: string | string[]) => void;
+        handleCluster: (value: string | string[]) => void;
       },
     };
 
@@ -39,10 +41,12 @@ describe('useGridTableFilterHandlers', () => {
       const handlers = useGridTableFilterHandlers({
         handleFilterKindsChange: kindsMock,
         handleFilterNamespacesChange: namespacesMock,
+        handleFilterClustersChange: clustersMock,
       });
       useImperativeHandle(ref, () => ({
         handleKind: handlers.handleKindDropdownChange,
         handleNamespace: handlers.handleNamespaceDropdownChange,
+        handleCluster: handlers.handleClusterDropdownChange,
       }));
       return null;
     });
@@ -55,6 +59,7 @@ describe('useGridTableFilterHandlers', () => {
       kindsMock,
       namespacesMock,
       handlerRef,
+      clustersMock,
       unmount: async () => {
         await act(async () => {
           root.unmount();
@@ -96,6 +101,17 @@ describe('useGridTableFilterHandlers', () => {
     });
 
     expect(namespacesMock).toHaveBeenCalledWith(['default']);
+    await unmount();
+  });
+
+  it('normalizes cluster values', async () => {
+    const { handlerRef, clustersMock, unmount } = await renderHarness();
+
+    await act(async () => {
+      handlerRef.current?.handleCluster('alpha:ctx');
+    });
+
+    expect(clustersMock).toHaveBeenCalledWith(['alpha:ctx']);
     await unmount();
   });
 });

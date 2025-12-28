@@ -31,6 +31,8 @@ export interface EventData {
   reason: string;
   object: string;
   message: string;
+  clusterId?: string;
+  clusterName?: string;
   objectNamespace?: string;
   namespace?: string;
   age?: string;
@@ -107,6 +109,11 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         );
       }
 
+      cf.upsertClusterColumn(baseColumns, {
+        accessor: (event) => event.clusterName ?? event.clusterId ?? '—',
+        sortValue: (event) => (event.clusterName ?? event.clusterId ?? '').toLowerCase(),
+      });
+
       baseColumns.push(
         cf.createTextColumn('source', 'Source', (event) => event.source || '-'),
         cf.createTextColumn<EventData>('object', 'Object', (event) => event.object || '-', {
@@ -126,6 +133,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         type: { autoWidth: true },
+        cluster: { autoWidth: true },
         namespace: { autoWidth: true },
         source: { autoWidth: true },
         object: { autoWidth: true },
@@ -217,6 +225,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             onReset: resetPersistedState,
             options: {
               showNamespaceDropdown: showNamespaceFilter,
+              showClusterDropdown: true,
             },
           }}
           virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

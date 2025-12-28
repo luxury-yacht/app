@@ -99,14 +99,16 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
         }),
       ];
 
+      cf.upsertClusterColumn(baseColumns, {
+        accessor: (resource) => resource.clusterName ?? resource.clusterId ?? '—',
+        sortValue: (resource) => (resource.clusterName ?? resource.clusterId ?? '').toLowerCase(),
+      });
+
       if (showNamespaceColumn) {
-        baseColumns.push(
-          cf.createTextColumn<HelmData>(
-            'namespace',
-            'Namespace',
-            (resource) => resource.namespace || '-'
-          )
-        );
+        cf.upsertNamespaceColumn(baseColumns, {
+          accessor: (resource) => resource.namespace,
+          sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+        });
       }
 
       baseColumns.push(
@@ -228,6 +230,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
+        cluster: { autoWidth: true },
         namespace: { autoWidth: true },
         chart: { autoWidth: true },
         appVersion: { autoWidth: true },
@@ -379,6 +382,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
             options: {
               showKindDropdown: true,
               showNamespaceDropdown: showNamespaceColumn,
+              showClusterDropdown: true,
             },
           }}
           virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

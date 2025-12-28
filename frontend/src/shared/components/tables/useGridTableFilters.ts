@@ -18,6 +18,7 @@ const DEFAULT_FILTER_STATE: GridTableFilterState = {
   search: '',
   kinds: [],
   namespaces: [],
+  clusters: [],
 };
 
 const normalizeFilterArray = (values?: string[]): string[] => {
@@ -53,20 +54,25 @@ const normalizeFilterState = (state?: Partial<GridTableFilterState>): GridTableF
   search: state?.search?.trim() ?? '',
   kinds: normalizeFilterArray(state?.kinds),
   namespaces: normalizeFilterArray(state?.namespaces),
+  clusters: normalizeFilterArray(state?.clusters),
 });
 
 const areFilterStatesEqual = (a: GridTableFilterState, b: GridTableFilterState): boolean =>
   a.search === b.search &&
   a.kinds.length === b.kinds.length &&
   a.namespaces.length === b.namespaces.length &&
+  a.clusters.length === b.clusters.length &&
   a.kinds.every((value, index) => value === b.kinds[index]) &&
-  a.namespaces.every((value, index) => value === b.namespaces[index]);
+  a.namespaces.every((value, index) => value === b.namespaces[index]) &&
+  a.clusters.every((value, index) => value === b.clusters[index]);
 
 export interface UseGridTableFiltersParams<T> {
   data: T[];
   filters?: GridTableFilterConfig<T>;
   defaultGetKind: (row: T) => string | null;
   defaultGetNamespace: (row: T) => string | null;
+  defaultGetClusterId: (row: T) => string | null;
+  defaultGetClusterName: (row: T) => string | null;
   defaultGetSearchText: (row: T) => string[];
 }
 
@@ -79,6 +85,7 @@ export interface UseGridTableFiltersResult<T> {
   handleFilterSearchChange: (event: ChangeEvent<HTMLInputElement>) => void;
   handleFilterKindsChange: (values: string[]) => void;
   handleFilterNamespacesChange: (values: string[]) => void;
+  handleFilterClustersChange: (values: string[]) => void;
   handleFilterReset: () => void;
 }
 
@@ -87,6 +94,8 @@ export function useGridTableFilters<T>({
   filters,
   defaultGetKind,
   defaultGetNamespace,
+  defaultGetClusterId,
+  defaultGetClusterName,
   defaultGetSearchText,
 }: UseGridTableFiltersParams<T>): UseGridTableFiltersResult<T> {
   const filteringEnabled = Boolean(filters?.enabled);
@@ -129,15 +138,28 @@ export function useGridTableFilters<T>({
     const getKind = filters?.accessors?.getKind ?? ((row: T) => defaultGetKind(row) ?? null);
     const getNamespace =
       filters?.accessors?.getNamespace ?? ((row: T) => defaultGetNamespace(row) ?? null);
+    const getClusterId =
+      filters?.accessors?.getClusterId ?? ((row: T) => defaultGetClusterId(row) ?? null);
+    const getClusterName =
+      filters?.accessors?.getClusterName ?? ((row: T) => defaultGetClusterName(row) ?? null);
     const getSearchText =
       filters?.accessors?.getSearchText ?? ((row: T) => defaultGetSearchText(row));
 
     return {
       getKind,
       getNamespace,
+      getClusterId,
+      getClusterName,
       getSearchText,
     };
-  }, [filters?.accessors, defaultGetKind, defaultGetNamespace, defaultGetSearchText]);
+  }, [
+    filters?.accessors,
+    defaultGetKind,
+    defaultGetNamespace,
+    defaultGetClusterId,
+    defaultGetClusterName,
+    defaultGetSearchText,
+  ]);
 
   const resolvedFilterOptions = useMemo<InternalFilterOptions>(() => {
     const searchPlaceholder = filters?.options?.searchPlaceholder;
@@ -147,12 +169,14 @@ export function useGridTableFilters<T>({
         searchPlaceholder,
         kinds: [],
         namespaces: [],
+        clusters: [],
         customActions,
       };
     }
 
     const kindMap = new Map<string, DropdownOption>();
     const namespaceMap = new Map<string, DropdownOption>();
+    const clusterMap = new Map<string, DropdownOption>();
     const includeClusterScoped = filters?.options?.includeClusterScopedSyntheticNamespace ?? false;
     if (includeClusterScoped) {
       namespaceMap.set('', { value: '', label: 'cluster-scoped' });
@@ -186,6 +210,23 @@ export function useGridTableFilters<T>({
       }
     };
 
+    const addCluster = (rawId: string | null | undefined, rawName?: string | null) => {
+      if (typeof rawId !== 'string') {
+        return;
+      }
+      const trimmedId = rawId.trim();
+      if (!trimmedId) {
+        return;
+      }
+      const lower = trimmedId.toLowerCase();
+      if (clusterMap.has(lower)) {
+        return;
+      }
+      const label =
+        typeof rawName === 'string' && rawName.trim().length > 0 ? rawName.trim() : trimmedId;
+      clusterMap.set(lower, { value: trimmedId, label });
+    };
+
     const providedKinds = filters?.options?.kinds;
     if (providedKinds && providedKinds.length > 0) {
       providedKinds.forEach((value) => addKind(value));
@@ -204,15 +245,30 @@ export function useGridTableFilters<T>({
       }
     }
 
+    const providedClusters = filters?.options?.clusters;
+    if (providedClusters && providedClusters.length > 0) {
+      providedClusters.forEach((value) => addCluster(value));
+    } else {
+      for (const row of data) {
+        const clusterId = filterAccessors.getClusterId?.(row) ?? defaultGetClusterId(row);
+        const clusterName = filterAccessors.getClusterName?.(row) ?? defaultGetClusterName(row);
+        if (clusterId || clusterName) {
+          addCluster(clusterId ?? clusterName ?? null, clusterName ?? null);
+        }
+      }
+    }
+
     const kinds = Array.from(kindMap.values()).sort((a, b) => a.label.localeCompare(b.label));
     const namespaces = Array.from(namespaceMap.values()).sort((a, b) =>
       a.label.localeCompare(b.label)
     );
+    const clusters = Array.from(clusterMap.values()).sort((a, b) => a.label.localeCompare(b.label));
 
     return {
       searchPlaceholder,
       kinds,
       namespaces,
+      clusters,
       customActions,
     };
   }, [
@@ -222,6 +278,8 @@ export function useGridTableFilters<T>({
     filterAccessors,
     defaultGetKind,
     defaultGetNamespace,
+    defaultGetClusterId,
+    defaultGetClusterName,
   ]);
 
   const tableData = useMemo(() => {
@@ -233,8 +291,10 @@ export function useGridTableFilters<T>({
     const shouldFilterSearch = searchNeedle.length > 0;
     const kindSet = new Set(activeFilters.kinds.map((value) => value.toLowerCase()));
     const namespaceSet = new Set(activeFilters.namespaces.map((value) => value.toLowerCase()));
+    const clusterSet = new Set(activeFilters.clusters.map((value) => value.toLowerCase()));
     const shouldFilterKinds = kindSet.size > 0;
     const shouldFilterNamespaces = namespaceSet.size > 0;
+    const shouldFilterClusters = clusterSet.size > 0;
 
     return data.filter((row) => {
       const kindValueRaw = filterAccessors.getKind?.(row) ?? defaultGetKind(row);
@@ -249,6 +309,19 @@ export function useGridTableFilters<T>({
       const normalizedNamespace = namespaceCandidate === '—' ? '' : namespaceCandidate;
 
       if (shouldFilterNamespaces && !namespaceSet.has(normalizedNamespace.toLowerCase())) {
+        return false;
+      }
+
+      const clusterIdRaw = filterAccessors.getClusterId?.(row) ?? defaultGetClusterId(row);
+      const clusterNameRaw = filterAccessors.getClusterName?.(row) ?? defaultGetClusterName(row);
+      const clusterCandidate =
+        typeof clusterIdRaw === 'string' && clusterIdRaw.trim()
+          ? clusterIdRaw.trim()
+          : typeof clusterNameRaw === 'string'
+            ? clusterNameRaw.trim()
+            : '';
+
+      if (shouldFilterClusters && !clusterSet.has(clusterCandidate.toLowerCase())) {
         return false;
       }
 
@@ -269,6 +342,16 @@ export function useGridTableFilters<T>({
       if (normalizedNamespace) {
         searchValues.push(normalizedNamespace);
       }
+      if (clusterCandidate) {
+        searchValues.push(clusterCandidate);
+      }
+      if (
+        typeof clusterNameRaw === 'string' &&
+        clusterNameRaw.trim() &&
+        clusterNameRaw.trim() !== clusterCandidate
+      ) {
+        searchValues.push(clusterNameRaw.trim());
+      }
 
       return searchValues.some(
         (candidate) =>
@@ -282,6 +365,8 @@ export function useGridTableFilters<T>({
     filterAccessors,
     defaultGetKind,
     defaultGetNamespace,
+    defaultGetClusterId,
+    defaultGetClusterName,
     defaultGetSearchText,
   ]);
 
@@ -323,6 +408,13 @@ export function useGridTableFilters<T>({
     [updateFilters]
   );
 
+  const handleFilterClustersChange = useCallback(
+    (next: string[]) => {
+      updateFilters({ clusters: next });
+    },
+    [updateFilters]
+  );
+
   const handleFilterReset = useCallback(() => {
     if (!filteringEnabled) {
       return;
@@ -340,6 +432,7 @@ export function useGridTableFilters<T>({
     handleFilterSearchChange,
     handleFilterKindsChange,
     handleFilterNamespacesChange,
+    handleFilterClustersChange,
     handleFilterReset,
   };
 }

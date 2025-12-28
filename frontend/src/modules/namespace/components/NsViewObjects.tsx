@@ -298,9 +298,15 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
       ageColumn,
     ];
 
+    cf.upsertClusterColumn(baseColumns, {
+      accessor: (row) => row.item.clusterName ?? row.item.clusterId ?? '—',
+      sortValue: (row) => (row.item.clusterName ?? row.item.clusterId ?? '').toLowerCase(),
+    });
+
     const sizing: cf.ColumnSizingMap = {
       kind: { width: 160, autoWidth: false },
       name: { width: 320, autoWidth: false },
+      cluster: { width: 220, autoWidth: false },
       age: { width: 120, autoWidth: false },
     };
     cf.applyColumnSizing(baseColumns, sizing);
@@ -486,6 +492,7 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
         namespaces: [],
         showKindDropdown: true,
         showNamespaceDropdown: false,
+        showClusterDropdown: true,
         includeClusterScopedSyntheticNamespace: false,
         customActions: (
           <button

@@ -356,11 +356,17 @@ const BrowseView: React.FC = () => {
       ageColumn,
     ];
 
+    cf.upsertClusterColumn(baseColumns, {
+      accessor: (row) => row.item.clusterName ?? row.item.clusterId ?? '—',
+      sortValue: (row) => (row.item.clusterName ?? row.item.clusterId ?? '').toLowerCase(),
+    });
+
     const sizing: cf.ColumnSizingMap = {
       // Fixed widths: avoids measurement loops and keeps Browse stable during heavy loads.
       // Users can still resize if column resizing is enabled.
       kind: { width: 160, autoWidth: false },
       name: { width: 320, autoWidth: false },
+      cluster: { width: 220, autoWidth: false },
       namespace: { width: 220, autoWidth: false },
       age: { width: 120, autoWidth: false },
     };
@@ -560,6 +566,7 @@ const BrowseView: React.FC = () => {
         namespaces: filterOptions.namespaces,
         showKindDropdown: true,
         showNamespaceDropdown: true,
+        showClusterDropdown: true,
         includeClusterScopedSyntheticNamespace: true,
         customActions: (
           // Keep pagination actions out of the scrollable body. The in-body pagination button

@@ -33,6 +33,8 @@ export interface NetworkData {
   kindAlias?: string;
   name: string;
   namespace: string;
+  clusterId?: string;
+  clusterName?: string;
   details: string; // Pre-formatted details from backend
   age?: string;
 }
@@ -100,9 +102,15 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
         cf.createAgeColumn(),
       ];
 
+      cf.upsertClusterColumn(baseColumns, {
+        accessor: (resource) => resource.clusterName ?? resource.clusterId ?? '—',
+        sortValue: (resource) => (resource.clusterName ?? resource.clusterId ?? '').toLowerCase(),
+      });
+
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
+        cluster: { autoWidth: true },
         namespace: { autoWidth: true },
         details: { autoWidth: true },
         age: { autoWidth: true },
@@ -230,6 +238,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                showClusterDropdown: true,
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

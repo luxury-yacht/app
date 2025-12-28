@@ -32,6 +32,8 @@ export interface StorageData {
   kindAlias?: string;
   name: string;
   namespace: string;
+  clusterId?: string;
+  clusterName?: string;
   status: string;
   capacity: string;
   storageClass?: string;
@@ -133,9 +135,15 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         cf.createAgeColumn(),
       ];
 
+      cf.upsertClusterColumn(baseColumns, {
+        accessor: (resource) => resource.clusterName ?? resource.clusterId ?? '—',
+        sortValue: (resource) => (resource.clusterName ?? resource.clusterId ?? '').toLowerCase(),
+      });
+
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
+        cluster: { autoWidth: true },
         namespace: { autoWidth: true },
         status: { autoWidth: true },
         capacity: { autoWidth: true },
@@ -261,6 +269,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                showClusterDropdown: true,
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

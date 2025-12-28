@@ -33,6 +33,8 @@ export interface ConfigData {
   kindAlias?: string;
   name: string;
   namespace: string;
+  clusterId?: string;
+  clusterName?: string;
   data: number; // Count of data items from backend
   age?: string;
 }
@@ -104,8 +106,14 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         cf.createAgeColumn(),
       ];
 
+      cf.upsertClusterColumn(baseColumns, {
+        accessor: (resource) => resource.clusterName ?? resource.clusterId ?? '—',
+        sortValue: (resource) => (resource.clusterName ?? resource.clusterId ?? '').toLowerCase(),
+      });
+
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
+        cluster: { autoWidth: true },
         namespace: { autoWidth: true },
         name: { autoWidth: true },
         data: { autoWidth: true },
@@ -234,6 +242,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                showClusterDropdown: true,
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

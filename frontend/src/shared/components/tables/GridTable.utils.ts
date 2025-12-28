@@ -56,6 +56,36 @@ export const defaultGetNamespace = (row: any): string | null => {
   return value;
 };
 
+export const defaultGetClusterId = (row: any): string | null => {
+  if (!row || typeof row !== 'object') {
+    return null;
+  }
+  const value =
+    typeof row.clusterId === 'string'
+      ? row.clusterId
+      : row.item && typeof row.item.clusterId === 'string'
+        ? row.item.clusterId
+        : typeof row.clusterName === 'string'
+          ? row.clusterName
+          : row.item && typeof row.item.clusterName === 'string'
+            ? row.item.clusterName
+            : null;
+  return value ?? null;
+};
+
+export const defaultGetClusterName = (row: any): string | null => {
+  if (!row || typeof row !== 'object') {
+    return null;
+  }
+  const value =
+    typeof row.clusterName === 'string'
+      ? row.clusterName
+      : row.item && typeof row.item.clusterName === 'string'
+        ? row.item.clusterName
+        : null;
+  return value ?? null;
+};
+
 export const defaultGetSearchText = (row: any): string[] => {
   if (!row || typeof row !== 'object') {
     return [];

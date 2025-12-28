@@ -54,7 +54,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
+    filters: { search: '', kinds: [], namespaces: [], clusters: [] },
     setFilters: vi.fn(),
     resetState: vi.fn(),
   }),
@@ -68,7 +68,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
+    filters: { search: '', kinds: [], namespaces: [], clusters: [] },
     setFilters: vi.fn(),
     resetState: vi.fn(),
     isNamespaceScoped: true,
@@ -132,7 +132,7 @@ describe('NsViewWorkloads', () => {
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
-    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [] });
+    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [], clusters: [] });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
   });

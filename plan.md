@@ -25,8 +25,9 @@
 6. ✅ Implement kubeconfig multi-select UI + selected cluster list handling; keep a primary selection for current consumers; disable duplicate context names with tooltip.
 7. ✅ Frontend: pass selected cluster sets through refresh orchestrator; manage per-cluster streams.
 8. ✅ Fix scoped domain normalization regression in refresh orchestrator (TypeScript error cleanup).
-9. Add Cluster column + Clusters filter in GridTable and persist filter state with cluster IDs.
+9. ✅ Add Cluster column + Clusters filter in GridTable and persist filter state with cluster IDs (wire columns/filters across views + update tests).
 10. Expand backend + frontend tests for multi-select, fan-out, stream merge, and diagnostics; confirm >=80% coverage or note gaps.
+11. ✅ Fix remaining TypeScript errors from cluster filter wiring (GridTable showClusterDropdown).
 
 ## Risks / watchouts
 

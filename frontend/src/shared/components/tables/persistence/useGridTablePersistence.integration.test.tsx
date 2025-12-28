@@ -201,6 +201,7 @@ describe('useGridTablePersistence integration', () => {
         search: 'abc',
         kinds: ['Pod'],
         namespaces: [],
+        clusters: [],
       });
     });
 
@@ -211,7 +212,12 @@ describe('useGridTablePersistence integration', () => {
 
     const stateAfterReset = (globalThis as any).__LATEST_STATE__;
     expect(stateAfterReset.columnVisibility).toEqual({});
-    expect(stateAfterReset.filters).toEqual({ search: '', kinds: [], namespaces: [] });
+    expect(stateAfterReset.filters).toEqual({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      clusters: [],
+    });
 
     await act(async () => {
       root.unmount();

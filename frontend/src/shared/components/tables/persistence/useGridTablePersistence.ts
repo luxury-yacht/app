@@ -83,6 +83,7 @@ export function useGridTablePersistence<T>({
     search: '',
     kinds: [],
     namespaces: [],
+    clusters: [],
   });
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -132,7 +133,7 @@ export function useGridTablePersistence<T>({
     setSortConfig(null);
     setColumnVisibility(null);
     setColumnWidths(null);
-    setFilters({ search: '', kinds: [], namespaces: [] });
+    setFilters({ search: '', kinds: [], namespaces: [], clusters: [] });
   }, [storageKey]);
 
   useEffect(() => {
@@ -175,7 +176,7 @@ export function useGridTablePersistence<T>({
     setSortConfig(null);
     setColumnVisibility({});
     setColumnWidths({});
-    setFilters({ search: '', kinds: [], namespaces: [] });
+    setFilters({ search: '', kinds: [], namespaces: [], clusters: [] });
   }, [storageKey]);
 
   useEffect(() => {
