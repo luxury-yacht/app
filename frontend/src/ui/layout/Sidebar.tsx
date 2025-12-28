@@ -5,11 +5,17 @@
  * Implements Sidebar logic for the UI layer.
  */
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import './Sidebar.css';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
-import { isAllNamespaces } from '@modules/namespace/constants';
+import { useNamespace, type NamespaceListItem } from '@modules/namespace/contexts/NamespaceContext';
+import {
+  ALL_NAMESPACES_DETAILS,
+  ALL_NAMESPACES_DISPLAY_NAME,
+  ALL_NAMESPACES_RESOURCE_VERSION,
+  ALL_NAMESPACES_SCOPE,
+  isAllNamespaces,
+} from '@modules/namespace/constants';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import {
   ExpandSidebarIcon,
@@ -21,6 +27,10 @@ import {
   NamespaceOpenIcon,
 } from '@shared/components/icons/MenuIcons';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
+import type { CatalogNamespaceGroup } from '@/core/refresh/types';
+import { useRefreshDomain } from '@/core/refresh';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useSidebarKeyboardControls, SidebarCursorTarget } from './SidebarKeys';
 
 // Static cluster view list to avoid re-creating the array each render.
@@ -50,10 +60,29 @@ const NAMESPACE_VIEWS: Array<{ id: NamespaceViewType; label: string }> = [
   { id: 'storage', label: 'Storage' },
 ];
 
+type NamespaceGroup = {
+  clusterId: string;
+  clusterName: string;
+  namespaces: NamespaceListItem[];
+};
+
+const toNamespaceKey = (clusterId: string | undefined, scope: string): string => {
+  const scoped = buildClusterScope(clusterId, scope);
+  return scoped || scope;
+};
+
 function Sidebar() {
-  const { namespaces, namespaceLoading, setSelectedNamespace } = useNamespace();
+  const {
+    namespaces,
+    namespaceLoading,
+    setSelectedNamespace,
+    selectedNamespace,
+    selectedNamespaceClusterId,
+  } = useNamespace();
+  const { selectedClusterId } = useKubeconfig();
+  const catalogDomain = useRefreshDomain('catalog');
   const viewState = useViewState();
-  const [expandedNamespace, setExpandedNamespace] = useState<string | null>(null);
+  const [expandedNamespaceKey, setExpandedNamespaceKey] = useState<string | null>(null);
   const [clusterResourcesExpanded, setClusterResourcesExpanded] = useState<boolean>(true);
 
   const width = viewState.isSidebarVisible ? viewState.sidebarWidth : 50;
@@ -72,6 +101,88 @@ function Sidebar() {
     keyboardCursorIndexRef.current = null;
   }, []);
 
+  const allNamespacesItem = useMemo<NamespaceListItem>(
+    () => ({
+      name: ALL_NAMESPACES_DISPLAY_NAME,
+      scope: ALL_NAMESPACES_SCOPE,
+      status: 'All namespaces',
+      details: ALL_NAMESPACES_DETAILS,
+      age: '—',
+      hasWorkloads: true,
+      workloadsUnknown: false,
+      resourceVersion: ALL_NAMESPACES_RESOURCE_VERSION,
+      isSynthetic: true,
+    }),
+    []
+  );
+
+  const namespaceDetailsByScope = useMemo(() => {
+    const entries = new Map<string, NamespaceListItem>();
+    namespaces.forEach((namespace) => {
+      const scope = namespace.scope ?? namespace.name;
+      entries.set(scope, namespace);
+    });
+    return entries;
+  }, [namespaces]);
+
+  const namespaceGroups = useMemo<NamespaceGroup[]>(() => {
+    const groups = catalogDomain.data?.namespaceGroups ?? [];
+    if (groups.length === 0) {
+      return [];
+    }
+
+    return groups
+      .filter((group): group is CatalogNamespaceGroup & { clusterId: string } => !!group.clusterId)
+      .map((group) => {
+        const useDetails = group.clusterId === selectedClusterId;
+        // Catalog groups only include names, so borrow rich metadata for the active cluster only.
+        const enrichedNamespaces = group.namespaces
+          .filter((name) => Boolean(name && name.trim()))
+          .map((name) => {
+            const scope = name.trim();
+            if (useDetails) {
+              const existing = namespaceDetailsByScope.get(scope);
+              if (existing) {
+                return existing;
+              }
+            }
+            return {
+              name: scope,
+              scope,
+              status: '',
+              details: '',
+              age: '',
+              hasWorkloads: true,
+              workloadsUnknown: false,
+              resourceVersion: `catalog-${scope}`,
+            } satisfies NamespaceListItem;
+          });
+
+        const allNamespaces =
+          (useDetails && namespaceDetailsByScope.get(ALL_NAMESPACES_SCOPE)) || allNamespacesItem;
+
+        return {
+          clusterId: group.clusterId,
+          clusterName: group.clusterName || group.clusterId,
+          namespaces: [allNamespaces, ...enrichedNamespaces],
+        };
+      })
+      .sort((a, b) => a.clusterName.localeCompare(b.clusterName));
+  }, [
+    allNamespacesItem,
+    catalogDomain.data?.namespaceGroups,
+    namespaceDetailsByScope,
+    selectedClusterId,
+  ]);
+
+  const resolvedSelectionClusterId = selectedNamespaceClusterId ?? selectedClusterId;
+  const selectedNamespaceKey = useMemo(() => {
+    if (!selectedNamespace) {
+      return null;
+    }
+    return toNamespaceKey(resolvedSelectionClusterId, selectedNamespace);
+  }, [resolvedSelectionClusterId, selectedNamespace]);
+
   const getCurrentSelectionTarget = useCallback((): SidebarCursorTarget | null => {
     if (sidebarSelection?.type === 'overview') {
       return { kind: 'overview' };
@@ -82,11 +193,12 @@ function Sidebar() {
     if (
       sidebarSelection?.type === 'namespace' &&
       sidebarSelection.value &&
-      viewState.activeNamespaceTab
+      viewState.activeNamespaceTab &&
+      selectedNamespaceKey
     ) {
       return {
         kind: 'namespace-view',
-        namespace: sidebarSelection.value,
+        namespace: selectedNamespaceKey,
         view: viewState.activeNamespaceTab,
       };
     }
@@ -96,6 +208,7 @@ function Sidebar() {
     viewState.activeClusterTab,
     viewState.activeNamespaceTab,
     viewState.viewType,
+    selectedNamespaceKey,
   ]);
 
   const { buildSidebarItemClassName, isKeyboardNavActive } = useSidebarKeyboardControls({
@@ -120,28 +233,28 @@ function Sidebar() {
 
   // Scroll selected namespace into view when it changes
   useEffect(() => {
-    if (selectedNamespaceRef.current && sidebarSelection?.type === 'namespace') {
+    if (selectedNamespaceRef.current && selectedNamespaceKey) {
       selectedNamespaceRef.current.scrollIntoView({
         block: 'nearest',
         behavior: 'smooth',
       });
     }
-  }, [sidebarSelection]);
+  }, [selectedNamespaceKey]);
 
-  // Keep expanded namespace in sync with selection
+  // Keep expanded namespace in sync with the current selection key.
   useEffect(() => {
-    if (sidebarSelection?.type === 'namespace' && sidebarSelection?.value) {
-      setExpandedNamespace(sidebarSelection.value);
+    if (selectedNamespaceKey) {
+      setExpandedNamespaceKey(selectedNamespaceKey);
     }
-  }, [sidebarSelection]);
+  }, [selectedNamespaceKey]);
 
   // Scroll to show expanded namespace whenever it changes
   useEffect(() => {
-    if (expandedNamespace) {
+    if (expandedNamespaceKey) {
       // Delay to allow expansion animation to complete
       const scrollTimer = setTimeout(() => {
         const namespaceElement = document.querySelector(
-          `.sidebar-item[data-namespace="${expandedNamespace}"]`
+          `.sidebar-item[data-namespace="${expandedNamespaceKey}"]`
         );
         if (namespaceElement) {
           const parentContainer = namespaceElement.closest('.namespace-items');
@@ -169,7 +282,7 @@ function Sidebar() {
 
       return () => clearTimeout(scrollTimer);
     }
-  }, [expandedNamespace]);
+  }, [expandedNamespaceKey]);
 
   const handleClusterViewSelect = (view: ClusterViewType) => {
     setPendingSelection({ kind: 'cluster-view', view });
@@ -178,20 +291,26 @@ function Sidebar() {
     viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
   };
 
-  const handleNamespaceSelect = (namespaceScope: string) => {
+  const handleNamespaceSelect = (namespaceScope: string, clusterId?: string) => {
+    const namespaceKey = toNamespaceKey(clusterId, namespaceScope);
     if (isAllNamespaces(namespaceScope)) {
-      setExpandedNamespace((previous) => (previous === namespaceScope ? null : namespaceScope));
+      setExpandedNamespaceKey((previous) => (previous === namespaceKey ? null : namespaceKey));
       return;
     }
     // Keep the namespace expanded unless another namespace is selected.
-    setExpandedNamespace(namespaceScope);
-    setSelectedNamespace(namespaceScope);
+    setExpandedNamespaceKey(namespaceKey);
+    setSelectedNamespace(namespaceScope, clusterId);
     viewState.onNamespaceSelect(namespaceScope);
   };
 
-  const handleNamespaceViewSelect = (namespaceScope: string, view: NamespaceViewType) => {
-    setPendingSelection({ kind: 'namespace-view', namespace: namespaceScope, view });
-    setSelectedNamespace(namespaceScope);
+  const handleNamespaceViewSelect = (
+    namespaceScope: string,
+    view: NamespaceViewType,
+    clusterId?: string
+  ) => {
+    const namespaceKey = toNamespaceKey(clusterId, namespaceScope);
+    setPendingSelection({ kind: 'namespace-view', namespace: namespaceKey, view });
+    setSelectedNamespace(namespaceScope, clusterId);
 
     if (
       viewState.sidebarSelection?.type !== 'namespace' ||
@@ -205,6 +324,20 @@ function Sidebar() {
 
     viewState.setActiveNamespaceTab(view);
   };
+
+  // Fall back to the legacy namespace list until catalog groups are available.
+  const namespaceGroupsToRender: NamespaceGroup[] =
+    namespaceGroups.length > 0
+      ? namespaceGroups
+      : [
+          {
+            clusterId: selectedClusterId ?? '',
+            clusterName: '',
+            namespaces: namespaces.length > 0 ? namespaces : [allNamespacesItem],
+          },
+        ];
+  const showClusterLabels = namespaceGroups.length > 1;
+  const showNamespaceLoading = namespaceLoading && namespaceGroups.length === 0;
 
   return (
     <div
@@ -316,101 +449,119 @@ function Sidebar() {
 
             <div className="sidebar-section namespaces-section">
               <h3>Namespaces</h3>
-              {namespaceLoading ? (
+              {showNamespaceLoading ? (
                 <LoadingSpinner message="Loading namespaces..." />
               ) : (
                 <div className="namespace-items">
-                  {namespaces.map((namespace) => {
-                    const scope = namespace.scope ?? namespace.name;
-                    const key = `${scope}-${namespace.resourceVersion}`;
-                    const isExpanded = expandedNamespace === scope;
-
+                  {namespaceGroupsToRender.map((group) => {
+                    const groupKey = group.clusterId || group.clusterName || 'default';
                     return (
-                      <div key={key}>
-                        <div
-                          ref={
-                            sidebarSelection?.type === 'namespace' &&
-                            sidebarSelection?.value === scope
-                              ? selectedNamespaceRef
-                              : null
-                          }
-                          className={buildSidebarItemClassName(
-                            [
-                              'sidebar-item',
-                              !namespace.hasWorkloads && !namespace.workloadsUnknown
-                                ? 'dimmed'
-                                : '',
-                              namespace.workloadsUnknown ? 'workloads-unknown' : '',
-                            ].filter(Boolean),
-                            {
-                              kind: 'namespace-toggle',
-                              namespace: scope,
-                            }
-                          )}
-                          data-namespace={scope}
-                          onClick={() => {
-                            if (!keyboardActivationRef.current) {
-                              clearKeyboardPreview();
-                            }
-                            handleNamespaceSelect(scope);
-                          }}
-                          data-sidebar-focusable="true"
-                          data-sidebar-target-kind="namespace-toggle"
-                          data-sidebar-target-namespace={scope}
-                          title={
-                            namespace.workloadsUnknown
-                              ? 'Unable to determine workloads in this namespace (check permissions)'
-                              : namespace.details || undefined
-                          }
-                          tabIndex={-1}
-                        >
-                          {isExpanded ? (
-                            <NamespaceOpenIcon width={14} height={14} />
-                          ) : (
-                            <NamespaceIcon width={14} height={14} />
-                          )}
-                          <span>{namespace.name}</span>
-                          {namespace.workloadsUnknown && (
-                            <span className="namespace-status-badge">Unknown</span>
-                          )}
-                        </div>
-                        {isExpanded && (
-                          <div className="sidebar-views">
-                            {namespaceViews
-                              .filter((view) => !(isAllNamespaces(scope) && view.id === 'objects'))
-                              .map((view) => {
-                                const label = view.id === 'objects' ? `All Objects` : view.label;
-                                return (
-                                  <div
-                                    key={view.id}
-                                    className={buildSidebarItemClassName(
-                                      ['sidebar-item', 'indented'],
-                                      {
-                                        kind: 'namespace-view',
-                                        namespace: scope,
-                                        view: view.id,
-                                      }
-                                    )}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (!keyboardActivationRef.current) {
-                                        clearKeyboardPreview();
-                                      }
-                                      handleNamespaceViewSelect(scope, view.id);
-                                    }}
-                                    data-sidebar-focusable="true"
-                                    data-sidebar-target-kind="namespace-view"
-                                    data-sidebar-target-namespace={scope}
-                                    data-sidebar-target-view={view.id}
-                                    tabIndex={-1}
-                                  >
-                                    <CategoryIcon width={14} height={14} />
-                                    <span>{label}</span>
-                                  </div>
-                                );
-                              })}
+                      <div key={groupKey} className="namespace-cluster-group">
+                        {showClusterLabels && (
+                          <div className="namespace-cluster-label" title={group.clusterName}>
+                            {group.clusterName}
                           </div>
                         )}
+                        {group.namespaces.map((namespace) => {
+                          const scope = namespace.scope ?? namespace.name;
+                          const namespaceKey = toNamespaceKey(group.clusterId, scope);
+                          const isExpanded = expandedNamespaceKey === namespaceKey;
+
+                          return (
+                            <div key={namespaceKey}>
+                              <div
+                                ref={
+                                  selectedNamespaceKey === namespaceKey
+                                    ? selectedNamespaceRef
+                                    : null
+                                }
+                                className={buildSidebarItemClassName(
+                                  [
+                                    'sidebar-item',
+                                    !namespace.hasWorkloads && !namespace.workloadsUnknown
+                                      ? 'dimmed'
+                                      : '',
+                                    namespace.workloadsUnknown ? 'workloads-unknown' : '',
+                                  ].filter(Boolean),
+                                  {
+                                    kind: 'namespace-toggle',
+                                    namespace: namespaceKey,
+                                  }
+                                )}
+                                data-namespace={namespaceKey}
+                                onClick={() => {
+                                  if (!keyboardActivationRef.current) {
+                                    clearKeyboardPreview();
+                                  }
+                                  handleNamespaceSelect(scope, group.clusterId || undefined);
+                                }}
+                                data-sidebar-focusable="true"
+                                data-sidebar-target-kind="namespace-toggle"
+                                data-sidebar-target-namespace={namespaceKey}
+                                title={
+                                  namespace.workloadsUnknown
+                                    ? 'Unable to determine workloads in this namespace (check permissions)'
+                                    : namespace.details || undefined
+                                }
+                                tabIndex={-1}
+                              >
+                                {isExpanded ? (
+                                  <NamespaceOpenIcon width={14} height={14} />
+                                ) : (
+                                  <NamespaceIcon width={14} height={14} />
+                                )}
+                                <span>{namespace.name}</span>
+                                {namespace.workloadsUnknown && (
+                                  <span className="namespace-status-badge">Unknown</span>
+                                )}
+                              </div>
+                              {isExpanded && (
+                                <div className="sidebar-views">
+                                  {namespaceViews
+                                    .filter(
+                                      (view) => !(isAllNamespaces(scope) && view.id === 'objects')
+                                    )
+                                    .map((view) => {
+                                      const label =
+                                        view.id === 'objects' ? `All Objects` : view.label;
+                                      return (
+                                        <div
+                                          key={view.id}
+                                          className={buildSidebarItemClassName(
+                                            ['sidebar-item', 'indented'],
+                                            {
+                                              kind: 'namespace-view',
+                                              namespace: namespaceKey,
+                                              view: view.id,
+                                            }
+                                          )}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (!keyboardActivationRef.current) {
+                                              clearKeyboardPreview();
+                                            }
+                                            handleNamespaceViewSelect(
+                                              scope,
+                                              view.id,
+                                              group.clusterId || undefined
+                                            );
+                                          }}
+                                          data-sidebar-focusable="true"
+                                          data-sidebar-target-kind="namespace-view"
+                                          data-sidebar-target-namespace={namespaceKey}
+                                          data-sidebar-target-view={view.id}
+                                          tabIndex={-1}
+                                        >
+                                          <CategoryIcon width={14} height={14} />
+                                          <span>{label}</span>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })}

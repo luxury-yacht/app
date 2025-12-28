@@ -18,9 +18,31 @@ const runtimeMocks = vi.hoisted(() => ({
   eventsOff: vi.fn(),
 }));
 
+const refreshMocks = vi.hoisted(() => ({
+  catalogDomain: {
+    status: 'idle' as const,
+    data: null as any,
+    stats: null,
+    error: null,
+    droppedAutoRefreshes: 0,
+    scope: undefined,
+  },
+}));
+
+const testClusterId = 'cluster-a';
+const namespaceKey = (scope: string) => `${testClusterId}|${scope}`;
+
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOn: runtimeMocks.eventsOn,
   EventsOff: runtimeMocks.eventsOff,
+}));
+
+vi.mock('@core/refresh', () => ({
+  useRefreshDomain: () => refreshMocks.catalogDomain,
+}));
+
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedClusterId: testClusterId }),
 }));
 
 type NamespaceEntry = {
@@ -32,7 +54,15 @@ type NamespaceEntry = {
   details: string;
 };
 
-const createNamespaceState = () => ({
+type NamespaceState = {
+  namespaces: NamespaceEntry[];
+  namespaceLoading: boolean;
+  selectedNamespace?: string;
+  selectedNamespaceClusterId?: string;
+  setSelectedNamespace: (namespace: string, clusterId?: string) => void;
+};
+
+const createNamespaceState = (): NamespaceState => ({
   namespaces: [
     {
       name: 'default',
@@ -44,7 +74,9 @@ const createNamespaceState = () => ({
     },
   ] as NamespaceEntry[],
   namespaceLoading: false,
-  setSelectedNamespace: vi.fn<(ns: string) => void>(),
+  selectedNamespace: 'default',
+  selectedNamespaceClusterId: testClusterId,
+  setSelectedNamespace: vi.fn<(ns: string, clusterId?: string) => void>(),
 });
 
 const createViewState = () => ({
@@ -123,6 +155,7 @@ describe('Sidebar', () => {
     root = ReactDOM.createRoot(container);
     namespaceState = createNamespaceState();
     viewStateMock = createViewState();
+    refreshMocks.catalogDomain.data = null;
   });
 
   afterEach(() => {
@@ -215,6 +248,8 @@ describe('Sidebar', () => {
   });
 
   it('scrolls expanded namespaces into view after toggling', () => {
+    namespaceState.selectedNamespace = undefined;
+    namespaceState.selectedNamespaceClusterId = undefined;
     renderSidebar();
     const originalScroll = Element.prototype.scrollIntoView;
     const scrollSpy = vi.fn();
@@ -242,7 +277,9 @@ describe('Sidebar', () => {
     vi.useFakeTimers();
 
     const namespaceToggle = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="default"]'
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"]`
     );
     expect(namespaceToggle).not.toBeNull();
     act(() => {
@@ -264,7 +301,9 @@ describe('Sidebar', () => {
   it('selects the namespace without forcing a specific view when clicking a namespace name', () => {
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="default"]'
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"]`
     );
     expect(namespaceToggle).not.toBeNull();
 
@@ -272,15 +311,41 @@ describe('Sidebar', () => {
       namespaceToggle!.click();
     });
 
-    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default');
+    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default', testClusterId);
     expect(viewStateMock.onNamespaceSelect).toHaveBeenCalledWith('default');
     expect(viewStateMock.setActiveNamespaceTab).not.toHaveBeenCalled();
+  });
+
+  it('uses catalog group cluster ids when selecting a namespace', () => {
+    refreshMocks.catalogDomain.data = {
+      namespaceGroups: [
+        {
+          clusterId: 'cluster-b',
+          clusterName: 'Cluster B',
+          namespaces: ['default'],
+        },
+      ],
+    };
+    renderSidebar();
+    const namespaceToggle = container!.querySelector<HTMLDivElement>(
+      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-b|default"]'
+    );
+    expect(namespaceToggle).not.toBeNull();
+
+    act(() => {
+      namespaceToggle!.click();
+    });
+
+    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default', 'cluster-b');
+    expect(viewStateMock.onNamespaceSelect).toHaveBeenCalledWith('default');
   });
 
   it('keeps a namespace expanded when clicked repeatedly', () => {
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="default"]'
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"]`
     );
     expect(namespaceToggle).not.toBeNull();
 
@@ -290,7 +355,9 @@ describe('Sidebar', () => {
 
     const namespaceViews = () =>
       container!.querySelector(
-        '[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="default"]'
+        `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
+          'default'
+        )}"]`
       );
     expect(namespaceViews()).not.toBeNull();
 
@@ -314,7 +381,9 @@ describe('Sidebar', () => {
     ];
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(
-      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${ALL_NAMESPACES_SCOPE}"]`
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        ALL_NAMESPACES_SCOPE
+      )}"]`
     );
     expect(namespaceToggle).not.toBeNull();
 
@@ -341,7 +410,9 @@ describe('Sidebar', () => {
     });
 
     const podsView = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="default"][data-sidebar-target-view="pods"]'
+      `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"][data-sidebar-target-view="pods"]`
     );
     expect(podsView).not.toBeNull();
 
@@ -360,7 +431,9 @@ describe('Sidebar', () => {
   it('selects a namespace view and notifies the namespace context', () => {
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="default"]'
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"]`
     );
     expect(namespaceToggle).not.toBeNull();
     act(() => {
@@ -368,7 +441,9 @@ describe('Sidebar', () => {
     });
 
     const podsView = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="default"][data-sidebar-target-view="pods"]'
+      `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"][data-sidebar-target-view="pods"]`
     );
     expect(podsView).not.toBeNull();
 
@@ -376,7 +451,7 @@ describe('Sidebar', () => {
       podsView!.click();
     });
 
-    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default');
+    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default', testClusterId);
     expect(viewStateMock.onNamespaceSelect).toHaveBeenCalledWith('default');
     expect(viewStateMock.setActiveNamespaceTab).toHaveBeenCalledWith('pods');
   });
@@ -452,11 +527,13 @@ describe('Sidebar', () => {
       },
     ];
     renderSidebar();
-    const dimmedItem = container!.querySelector('[data-sidebar-target-namespace="dimmed"]');
+    const dimmedItem = container!.querySelector(
+      `[data-sidebar-target-namespace="${namespaceKey('dimmed')}"]`
+    );
     expect(dimmedItem).not.toBeNull();
     expect(dimmedItem!.className).toContain('dimmed');
     const unknownBadge = container!.querySelector(
-      '[data-sidebar-target-namespace="unknown"] .namespace-status-badge'
+      `[data-sidebar-target-namespace="${namespaceKey('unknown')}"] .namespace-status-badge`
     );
     expect(unknownBadge?.textContent).toBe('Unknown');
   });
@@ -488,7 +565,9 @@ describe('Sidebar', () => {
       await Promise.resolve();
     });
     const podsView = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="default"][data-sidebar-target-view="pods"]'
+      `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"][data-sidebar-target-view="pods"]`
     );
     expect(podsView).not.toBeNull();
   });

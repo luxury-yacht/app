@@ -163,12 +163,12 @@ Backend
   - ✅ Start per-cluster catalog services keyed by `clusterId` and wire them into refresh subsystems.
   - ✅ Build catalog dependencies from cluster-specific clients/informers so summaries stay cluster-scoped.
   - ✅ Adjust catalog snapshot outputs to expose per-cluster namespace data and selected namespaces.
-    - ✅ Add per-cluster namespace groups to the catalog snapshot payload (keep existing fields for compatibility).
-    - ✅ Add catalog service accessors to expose namespace lists per cluster.
-    - ✅ Update refresh catalog wiring to include namespace groups.
-    - ✅ Update frontend catalog snapshot types to include namespace groups.
+  - ✅ Add per-cluster namespace groups to the catalog snapshot payload (keep existing fields for compatibility).
+  - ✅ Add catalog service accessors to expose namespace lists per cluster.
+  - ✅ Update refresh catalog wiring to include namespace groups.
+  - ✅ Update frontend catalog snapshot types to include namespace groups.
   - ✅ Fix cluster scope encoding for empty scopes so namespace snapshots render correctly.
-  - Decide whether the catalog snapshot should include the current global namespace selection.
+  - ✅ Keep current global namespace selection in the frontend; do not add it to catalog snapshots.
 - Accept selected cluster sets in manual refresh endpoints and streaming handlers; merge multi-cluster stream events.
 - Surface diagnostics and permission issues per cluster in telemetry and refresh status.
 
@@ -179,6 +179,8 @@ Frontend
 - Pass selected cluster sets through the refresh orchestrator and manage per-cluster streams.
 - Add Cluster column + Clusters filter using shared column factories; persist filter state with cluster IDs.
 - Update namespace sidebar to show per-cluster collapsible lists when multiple clusters are active.
+- ✅ Wire namespace sidebar to render catalog namespace groups and pass cluster ID on selection.
+- ✅ Fix Sidebar test typing for optional namespace selection after cluster-scoped keys.
 - ✅ Scope namespace selection to the cluster that owns the selection (still one global selection) and use that cluster for namespace refresh context.
 
 Tests
