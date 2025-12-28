@@ -68,25 +68,61 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 		return nil, fmt.Errorf("no clusters available for %s", domain)
 	}
 
+	allowPartial := clusterID == "" && len(targets) > 1
 	snapshots := make([]*refresh.Snapshot, 0, len(targets))
+	warnings := make([]string, 0, len(targets))
+	var firstErr error
 	for _, id := range targets {
 		service := s.services[id]
 		if service == nil {
-			return nil, fmt.Errorf("snapshot service unavailable for %s", id)
+			buildErr := fmt.Errorf("snapshot service unavailable for %s", id)
+			if !allowPartial {
+				return nil, buildErr
+			}
+			if firstErr == nil {
+				firstErr = buildErr
+			}
+			warnings = append(warnings, formatClusterWarning(id, buildErr))
+			continue
 		}
 		scoped := refresh.JoinClusterScope(id, scopeValue)
 		snapshotData, err := service.Build(ctx, domain, scoped)
 		if err != nil {
-			return nil, err
+			if !allowPartial {
+				return nil, err
+			}
+			if firstErr == nil {
+				firstErr = err
+			}
+			// Preserve partial data when a cluster fails in multi-cluster views.
+			warnings = append(warnings, formatClusterWarning(id, err))
+			continue
 		}
 		snapshots = append(snapshots, snapshotData)
 	}
 
+	if len(snapshots) == 0 {
+		if firstErr != nil {
+			return nil, firstErr
+		}
+		return nil, fmt.Errorf("no snapshots built for %s", domain)
+	}
 	if len(snapshots) == 1 {
-		return snapshots[0], nil
+		merged := snapshots[0]
+		if len(warnings) > 0 {
+			merged.Stats.Warnings = append(merged.Stats.Warnings, warnings...)
+		}
+		return merged, nil
 	}
 
-	return snapshot.MergeSnapshots(domain, scope, snapshots)
+	merged, err := snapshot.MergeSnapshots(domain, scope, snapshots)
+	if err != nil {
+		return nil, err
+	}
+	if len(warnings) > 0 {
+		merged.Stats.Warnings = append(merged.Stats.Warnings, warnings...)
+	}
+	return merged, nil
 }
 
 // resolveTargets chooses which clusters should handle the requested domain/scope pair.
@@ -119,4 +155,12 @@ func isSingleClusterDomain(domain string) bool {
 	default:
 		return strings.HasPrefix(domain, "object-")
 	}
+}
+
+// formatClusterWarning prefixes a cluster identifier onto a warning message.
+func formatClusterWarning(clusterID string, err error) string {
+	if err == nil {
+		return fmt.Sprintf("Cluster %s: unknown error", clusterID)
+	}
+	return fmt.Sprintf("Cluster %s: %s", clusterID, err.Error())
 }
