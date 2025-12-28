@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	clientfake "k8s.io/client-go/kubernetes/fake"
@@ -338,6 +339,66 @@ func TestComputeDiffLinesTruncatesLargeInput(t *testing.T) {
 	lines, truncated := computeDiffLines(large, large)
 	if !truncated || lines != nil {
 		t.Fatalf("expected truncation for large diff")
+	}
+}
+
+func TestWrapKubernetesErrorFormatsStatusErrors(t *testing.T) {
+	statusErr := apierrors.NewInvalid(
+		schema.GroupKind{Group: "apps", Kind: "Deployment"},
+		"demo",
+		field.ErrorList{
+			field.Required(field.NewPath("spec", "replicas"), "field required"),
+		},
+	)
+
+	wrapped := wrapKubernetesError(statusErr, "apply failed")
+	objErr, ok := wrapped.(*objectYAMLError)
+	if !ok {
+		t.Fatalf("expected objectYAMLError, got %T", wrapped)
+	}
+	if objErr.Code != string(statusErr.ErrStatus.Reason) {
+		t.Fatalf("unexpected error code: %s", objErr.Code)
+	}
+	if len(objErr.Causes) == 0 {
+		t.Fatalf("expected causes to be populated")
+	}
+	if !strings.Contains(objErr.Causes[0], "spec.replicas") {
+		t.Fatalf("expected field in causes, got %#v", objErr.Causes)
+	}
+}
+
+func TestWrapKubernetesErrorUsesDefaultMessage(t *testing.T) {
+	err := errors.New("boom")
+	wrapped := wrapKubernetesError(err, "apply failed")
+	if wrapped == nil || !strings.Contains(wrapped.Error(), "apply failed") {
+		t.Fatalf("expected wrapped error to include default message")
+	}
+}
+
+func TestGetGVRForGVKFallsBackToCache(t *testing.T) {
+	app, _ := setupYAMLTestApp(t)
+
+	gvr, namespaced, err := app.getGVRForGVK(context.Background(), schema.GroupVersionKind{
+		Group:   "apps",
+		Version: "v1",
+		Kind:    "Deployment",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gvr.Resource != "deployments" || gvr.Group != "apps" || gvr.Version != "v1" {
+		t.Fatalf("unexpected GVR: %#v", gvr)
+	}
+	if !namespaced {
+		t.Fatalf("expected namespaced resource")
+	}
+}
+
+func TestGetGVRForGVKWithoutClientFails(t *testing.T) {
+	app := NewApp()
+	_, _, err := app.getGVRForGVK(context.Background(), schema.GroupVersionKind{Kind: "Deployment"})
+	if err == nil {
+		t.Fatalf("expected error for missing client")
 	}
 }
 

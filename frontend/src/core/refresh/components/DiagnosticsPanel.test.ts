@@ -440,6 +440,46 @@ describe('DiagnosticsPanel component', () => {
     expect(markup).toContain('team-a');
   });
 
+  test('strips cluster prefixes from pod scopes when rendering labels', async () => {
+    seedBaseDomainStates();
+    const now = Date.now();
+
+    scopedEntriesMap['pods'] = [
+      [
+        'cluster-a|namespace:team-a',
+        {
+          ...createReadyState({
+            pods: [{ metadata: { name: 'pod-a' } }],
+            metrics: {
+              collectedAt: now,
+              stale: false,
+              lastError: '',
+              consecutiveFailures: 0,
+              successCount: 1,
+              failureCount: 0,
+            },
+          }),
+          lastUpdated: now,
+        },
+      ],
+    ];
+
+    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+
+    const markup = renderToStaticMarkup(
+      React.createElement(KeyboardProvider, {
+        disabled: true,
+        children: React.createElement(DiagnosticsPanel, {
+          isOpen: true,
+          onClose: () => undefined,
+        }),
+      })
+    );
+
+    // Only the namespace portion should be shown in the label.
+    expect(markup).toContain('Pods (team-a)');
+  });
+
   test('renders telemetry summaries after successful fetch', async () => {
     vi.useFakeTimers();
     const baseTime = new Date('2024-01-01T12:00:00Z');

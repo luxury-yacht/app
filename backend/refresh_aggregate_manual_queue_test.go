@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -112,4 +113,49 @@ func TestAggregateManualQueueStatusAggregatesFailures(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, refresh.JobStateFailed, aggStatus.State)
 	require.Contains(t, aggStatus.Error, "cluster-b")
+}
+
+func TestAggregateManualQueueUpdateReplacesJob(t *testing.T) {
+	queue := newStubManualQueue()
+	subsystems := map[string]*system.Subsystem{
+		"cluster-a": {ManualQueue: queue},
+	}
+	aggregate := newAggregateManualQueue("cluster-a", []string{"cluster-a"}, subsystems)
+
+	job, err := aggregate.Enqueue(context.Background(), "namespaces", "cluster-a|", "initial")
+	require.NoError(t, err)
+
+	updated := *job
+	updated.Reason = "updated"
+	aggregate.Update(&updated)
+
+	aggStatus, ok := aggregate.Status(job.ID)
+	require.True(t, ok)
+	require.Equal(t, "updated", aggStatus.Reason)
+}
+
+func TestAggregateManualQueueNextReturnsContextError(t *testing.T) {
+	queue := newStubManualQueue()
+	subsystems := map[string]*system.Subsystem{
+		"cluster-a": {ManualQueue: queue},
+	}
+	aggregate := newAggregateManualQueue("cluster-a", []string{"cluster-a"}, subsystems)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	job, err := aggregate.Next(ctx)
+	require.Nil(t, job)
+	require.ErrorIs(t, err, context.Canceled)
+}
+
+func TestGenerateAggregateJobIDReturnsUniquePrefix(t *testing.T) {
+	id1 := generateAggregateJobID()
+	time.Sleep(time.Nanosecond)
+	id2 := generateAggregateJobID()
+
+	require.NotEmpty(t, id1)
+	require.NotEmpty(t, id2)
+	require.NotEqual(t, id1, id2)
+	require.Contains(t, id1, "job-agg-")
 }

@@ -104,3 +104,45 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 			strings.Contains(body, `"clusterId":"cluster-b"`)
 	}, time.Second, 10*time.Millisecond)
 }
+
+func TestApplyEventCORSAcceptsOptionsRequests(t *testing.T) {
+	req := httptest.NewRequest(http.MethodOptions, "/api/v2/stream/events", nil)
+	rec := httptest.NewRecorder()
+
+	ok := applyEventCORS(rec, req)
+	require.False(t, ok)
+	require.Equal(t, http.StatusNoContent, rec.Code)
+	require.Equal(t, "*", rec.Header().Get("Access-Control-Allow-Origin"))
+}
+
+func TestApplyEventCORSAllowsGetRequests(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/events", nil)
+	rec := httptest.NewRecorder()
+
+	ok := applyEventCORS(rec, req)
+	require.True(t, ok)
+	require.Equal(t, "*", rec.Header().Get("Access-Control-Allow-Origin"))
+}
+
+func TestWriteEventPayloadEmitsSSE(t *testing.T) {
+	rec := newFlushRecorder()
+	payload := eventstream.Payload{
+		Domain:   "events",
+		Scope:    "cluster",
+		Sequence: 5,
+	}
+
+	err := writeEventPayload(rec, rec, payload)
+	require.NoError(t, err)
+	require.Contains(t, rec.Body.String(), "event: event")
+	require.Contains(t, rec.Body.String(), "id: 5")
+	require.Contains(t, rec.Body.String(), "\"sequence\":5")
+}
+
+func TestNoopLoggerDoesNothing(t *testing.T) {
+	logger := noopLogger{}
+	logger.Debug("debug")
+	logger.Info("info")
+	logger.Warn("warn")
+	logger.Error("error")
+}
