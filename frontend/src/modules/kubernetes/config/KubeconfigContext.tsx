@@ -141,8 +141,9 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     refreshOrchestrator.updateContext({
       selectedClusterId: selectedClusterMeta.id || undefined,
       selectedClusterName: selectedClusterMeta.name || undefined,
+      selectedClusterIds,
     });
-  }, [selectedClusterMeta.id, selectedClusterMeta.name]);
+  }, [selectedClusterMeta.id, selectedClusterMeta.name, selectedClusterIds]);
 
   const loadKubeconfigs = useCallback(async () => {
     setKubeconfigsLoading(true);

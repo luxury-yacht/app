@@ -43,7 +43,7 @@ import type { DomainPayloadMap, RefreshDomain } from './types';
 import { logStreamManager } from './streaming/logStreamManager';
 import { eventStreamManager } from './streaming/eventStreamManager';
 import { errorHandler } from '@utils/errorHandler';
-import { buildClusterScope } from './clusterScope';
+import { buildClusterScope, buildClusterScopeList } from './clusterScope';
 
 type DomainCategory = 'system' | 'cluster' | 'namespace';
 
@@ -837,15 +837,36 @@ class RefreshOrchestrator {
     return this.fetchScopedDomain('pods', scope, { isManual: true });
   }
 
-  private normalizeScope(value?: string | null): string | undefined {
+  private normalizeScope(value?: string | null, allowEmpty = false): string | undefined {
+    const selectedClusterIds = this.getSelectedClusterIds();
     if (!value) {
-      return undefined;
+      if (!allowEmpty) {
+        return undefined;
+      }
+      const clusterScope = buildClusterScopeList(selectedClusterIds, '');
+      return clusterScope || undefined;
     }
     const trimmed = value.trim();
     if (!trimmed) {
-      return undefined;
+      if (!allowEmpty) {
+        return undefined;
+      }
+      const clusterScope = buildClusterScopeList(selectedClusterIds, '');
+      return clusterScope || undefined;
     }
-    return buildClusterScope(this.context.selectedClusterId, trimmed);
+    return buildClusterScopeList(selectedClusterIds, trimmed);
+  }
+
+  private getSelectedClusterIds(context: RefreshContext = this.context): string[] {
+    // Prefer the explicit multi-select list, fall back to the primary selection.
+    const explicit = (context.selectedClusterIds ?? [])
+      .map((id) => (id ?? '').trim())
+      .filter(Boolean);
+    if (explicit.length > 0) {
+      return explicit;
+    }
+    const primary = (context.selectedClusterId ?? '').trim();
+    return primary ? [primary] : [];
   }
 
   private normalizeNamespaceScope(value?: string | null): string | null {
@@ -1302,10 +1323,14 @@ class RefreshOrchestrator {
 
   private normalizeStreamingScope(domain: RefreshDomain, rawScope?: string): string {
     if (domain === 'cluster-events') {
-      return buildClusterScope(this.context.selectedClusterId, CLUSTER_SCOPE);
+      return buildClusterScopeList(this.getSelectedClusterIds(), CLUSTER_SCOPE);
     }
     if (rawScope && rawScope.trim()) {
-      return buildClusterScope(this.context.selectedClusterId, rawScope.trim());
+      if (domain === 'namespace-events') {
+        const clusterId = this.context.selectedNamespaceClusterId ?? this.context.selectedClusterId;
+        return buildClusterScope(clusterId, rawScope.trim());
+      }
+      return buildClusterScopeList(this.getSelectedClusterIds(), rawScope.trim());
     }
     return '';
   }

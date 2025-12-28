@@ -547,6 +547,22 @@ describe('refreshOrchestrator', () => {
     expect(normalize('catalog', '')).toBe('');
   });
 
+  it('prefixes streaming scopes with the selected cluster list when available', () => {
+    refreshOrchestrator.updateContext({
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+      selectedClusterId: 'cluster-a',
+      selectedNamespaceClusterId: 'cluster-b',
+    });
+
+    const normalize = orchestratorInternals.normalizeStreamingScope.bind(refreshOrchestrator) as (
+      domain: RefreshDomain,
+      scope?: string
+    ) => string;
+
+    expect(normalize('cluster-events', undefined)).toBe('clusters=cluster-a,cluster-b|cluster');
+    expect(normalize('namespace-events', 'namespace:team-a')).toBe('cluster-b|namespace:team-a');
+  });
+
   it('updates loading and error state for non-scoped streaming domains', () => {
     const domain = 'catalog';
     orchestratorInternals.setStreamingLoadingState(domain, 'limit=5', { scoped: false });
