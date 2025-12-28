@@ -56,6 +56,9 @@
 25. ✅ Resolve hook dependency lint errors from per-tab state wiring.
 26. ✅ Fix object panel tests by handling missing `selectedClusterIds` defaults in context mocks.
 27. ✅ Prevent ObjectPanelStateContext from re-running selection pruning when kubeconfig mocks omit `selectedClusterIds`.
+28. ✅ Scope sidebar namespaces to the active cluster (filter catalog namespace groups + namespace refresh data) and add coverage.
+29. ✅ Update namespace context tests to include multi-cluster payloads after active-cluster filtering.
+30. ✅ Prevent namespace selection updates from running against stale cluster namespace lists.
 
 ## Risks / watchouts
 

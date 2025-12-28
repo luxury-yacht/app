@@ -127,11 +127,16 @@ function Sidebar() {
 
   const namespaceGroups = useMemo<NamespaceGroup[]>(() => {
     const groups = catalogDomain.data?.namespaceGroups ?? [];
-    if (groups.length === 0) {
+    const activeClusterId = selectedClusterId?.trim();
+    if (!activeClusterId || groups.length === 0) {
+      return [];
+    }
+    const activeGroups = groups.filter((group) => group.clusterId === activeClusterId);
+    if (activeGroups.length === 0) {
       return [];
     }
 
-    return groups
+    return activeGroups
       .filter((group): group is CatalogNamespaceGroup & { clusterId: string } => !!group.clusterId)
       .map((group) => {
         const useDetails = group.clusterId === selectedClusterId;

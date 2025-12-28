@@ -316,27 +316,38 @@ describe('Sidebar', () => {
     expect(viewStateMock.setActiveNamespaceTab).not.toHaveBeenCalled();
   });
 
-  it('uses catalog group cluster ids when selecting a namespace', () => {
+  it('filters catalog namespace groups to the active cluster', () => {
     refreshMocks.catalogDomain.data = {
       namespaceGroups: [
         {
+          clusterId: testClusterId,
+          clusterName: 'Cluster A',
+          namespaces: ['default'],
+        },
+        {
           clusterId: 'cluster-b',
           clusterName: 'Cluster B',
-          namespaces: ['default'],
+          namespaces: ['other'],
         },
       ],
     };
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(
-      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-b|default"]'
+      `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"]`
     );
     expect(namespaceToggle).not.toBeNull();
+    const otherClusterToggle = container!.querySelector<HTMLDivElement>(
+      '[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="cluster-b|other"]'
+    );
+    expect(otherClusterToggle).toBeNull();
 
     act(() => {
       namespaceToggle!.click();
     });
 
-    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default', 'cluster-b');
+    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default', testClusterId);
     expect(viewStateMock.onNamespaceSelect).toHaveBeenCalledWith('default');
   });
 
