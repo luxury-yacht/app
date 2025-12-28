@@ -70,10 +70,6 @@ const useWorkloadTableColumns = ({
       })
     );
 
-    cf.upsertClusterColumn(columns, {
-      accessor: (row) => row.clusterName ?? row.clusterId ?? '—',
-    });
-
     if (showNamespaceColumn) {
       cf.upsertNamespaceColumn(columns, {
         accessor: (row) => row.namespace ?? '',
@@ -174,7 +170,6 @@ const useWorkloadTableColumns = ({
     const sizing: cf.ColumnSizingMap = {
       kind: { autoWidth: true },
       name: { autoWidth: true },
-      cluster: { autoWidth: true },
       namespace: { autoWidth: true },
       status: { autoWidth: true },
       ready: { autoWidth: true },

@@ -1,0 +1,83 @@
+.cluster-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  min-height: 32px;
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+  overflow-x: auto;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  --wails-draggable: none;
+}
+
+.cluster-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  max-width: 220px;
+  --wails-draggable: none;
+}
+
+.cluster-tab__button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  max-width: 180px;
+  --wails-draggable: none;
+}
+
+.cluster-tab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+}
+
+.cluster-tab__close {
+  border: none;
+  background: none;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 6px 0 2px;
+  --wails-draggable: none;
+}
+
+.cluster-tab__close:hover {
+  color: var(--color-text);
+}
+
+.cluster-tab__button:focus-visible,
+.cluster-tab__close:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.cluster-tab--active {
+  background: var(--color-bg);
+  color: var(--color-text);
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.cluster-tab--dragging {
+  opacity: 0.6;
+}
+
+.cluster-tab--drop-target {
+  border-color: var(--color-accent);
+}

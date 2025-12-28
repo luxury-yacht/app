@@ -128,13 +128,13 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 // resolveTargets chooses which clusters should handle the requested domain/scope pair.
 func (s *aggregateSnapshotService) resolveTargets(domain string, clusterIDs []string) ([]string, error) {
 	if len(clusterIDs) > 0 {
+		if isSingleClusterDomain(domain) && len(clusterIDs) > 1 {
+			return nil, fmt.Errorf("domain %s is only available on a single cluster", domain)
+		}
 		targets := make([]string, 0, len(clusterIDs))
 		for _, id := range clusterIDs {
 			if _, ok := s.services[id]; !ok {
 				return nil, fmt.Errorf("cluster %s not active", id)
-			}
-			if isSingleClusterDomain(domain) && id != s.primaryID {
-				return nil, fmt.Errorf("domain %s is only available on the primary cluster", domain)
 			}
 			targets = append(targets, id)
 		}

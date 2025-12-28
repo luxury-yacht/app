@@ -59,7 +59,6 @@ describe('gridTablePersistence', () => {
           search: ' pods ',
           kinds: ['Pod', 'Deployment'],
           namespaces: ['team-a', 'team-b'],
-          clusters: ['alpha:ctx', 'beta:ctx'],
         },
       },
       {
@@ -69,7 +68,6 @@ describe('gridTablePersistence', () => {
         filterOptions: {
           kinds: ['Pod'],
           namespaces: ['team-a'],
-          clusters: ['alpha:ctx'],
           isNamespaceScoped: true,
         },
       }
@@ -82,7 +80,6 @@ describe('gridTablePersistence', () => {
       search: 'pods',
       kinds: ['Pod'],
       namespaces: [],
-      clusters: ['alpha:ctx'],
     });
   });
 
@@ -94,7 +91,7 @@ describe('gridTablePersistence', () => {
       columnVisibility: { status: false, extra: true },
       columnWidths: { status: sampleWidthState, orphan: sampleWidthState },
       sort: { key: 'name', direction: 'asc' },
-      filters: { search: 'abc', kinds: ['Pod'], namespaces: ['team-a'], clusters: ['alpha:ctx'] },
+      filters: { search: 'abc', kinds: ['Pod'], namespaces: ['team-a'] },
       filterOptions: { isNamespaceScoped: true },
     });
 
@@ -103,7 +100,7 @@ describe('gridTablePersistence', () => {
       columnVisibility: { status: false },
       columnWidths: { status: sampleWidthState },
       sort: { key: 'name', direction: 'asc' },
-      filters: { search: 'abc', kinds: ['Pod'], namespaces: [], clusters: ['alpha:ctx'] },
+      filters: { search: 'abc', kinds: ['Pod'], namespaces: [] },
     });
   });
 });

@@ -30,6 +30,7 @@ export interface AppEvents {
 
   // Settings events
   'settings:auto-refresh': boolean;
+  'settings:refresh-background': boolean;
   'settings:short-names': boolean;
   'settings:theme': string;
 

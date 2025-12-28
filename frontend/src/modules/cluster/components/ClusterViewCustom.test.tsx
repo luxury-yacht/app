@@ -57,7 +57,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], clusters: [] },
+    filters: { search: '', kinds: [], namespaces: [] },
     setFilters: setFiltersMock,
     resetState: vi.fn(),
     hydrated: true,

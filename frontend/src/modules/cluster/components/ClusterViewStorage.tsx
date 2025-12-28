@@ -155,15 +155,9 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         cf.createAgeColumn(),
       ];
 
-      cf.upsertClusterColumn(baseColumns, {
-        accessor: (pv) => pv.clusterName ?? pv.clusterId ?? '—',
-        sortValue: (pv) => (pv.clusterName ?? pv.clusterId ?? '').toLowerCase(),
-      });
-
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
-        cluster: { autoWidth: true },
         capacity: { autoWidth: true },
         accessModes: { autoWidth: true },
         status: { autoWidth: true },
@@ -288,7 +282,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showKindDropdown: true,
-                showClusterDropdown: true,
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

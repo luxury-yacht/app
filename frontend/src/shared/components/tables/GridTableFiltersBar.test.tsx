@@ -74,7 +74,7 @@ describe('GridTableFiltersBar', () => {
     await act(async () => {
       root.render(
         <GridTableFiltersBar
-          activeFilters={{ search: '', kinds: [], namespaces: [], clusters: [] }}
+          activeFilters={{ search: '', kinds: [], namespaces: [] }}
           resolvedFilterOptions={{
             kinds: [
               { label: 'Pods', value: 'Pod' },
@@ -84,24 +84,17 @@ describe('GridTableFiltersBar', () => {
               { label: 'team-a', value: 'team-a' },
               { label: 'team-b', value: 'team-b' },
             ],
-            clusters: [
-              { label: 'alpha', value: 'alpha:ctx' },
-              { label: 'beta', value: 'beta:ctx' },
-            ],
           }}
           kindDropdownId="kinds"
           namespaceDropdownId="namespaces"
-          clusterDropdownId="clusters"
           searchInputId="search"
           onKindsChange={vi.fn()}
           onNamespacesChange={vi.fn()}
-          onClustersChange={vi.fn()}
           onSearchChange={vi.fn()}
           onReset={vi.fn()}
           renderOption={(option) => option.label}
           renderKindsValue={() => 'Kinds'}
           renderNamespacesValue={() => 'Namespaces'}
-          renderClustersValue={() => 'Clusters'}
           {...props}
         />
       );
@@ -112,18 +105,15 @@ describe('GridTableFiltersBar', () => {
   it('renders dropdowns and propagates changes', async () => {
     const onKindsChange = vi.fn();
     const onNamespacesChange = vi.fn();
-    const onClustersChange = vi.fn();
     const onSearchChange = vi.fn();
     const onReset = vi.fn();
 
     await renderFilters({
       showKindDropdown: true,
       showNamespaceDropdown: true,
-      showClusterDropdown: true,
-      activeFilters: { search: 'pods', kinds: [], namespaces: [], clusters: [] },
+      activeFilters: { search: 'pods', kinds: [], namespaces: [] },
       onKindsChange,
       onNamespacesChange,
-      onClustersChange,
       onSearchChange,
       onReset,
     });
@@ -143,16 +133,6 @@ describe('GridTableFiltersBar', () => {
       nsDropdown.dispatchEvent(new Event('change', { bubbles: true }));
     });
     expect(onNamespacesChange).toHaveBeenCalledWith(['team-b']);
-
-    const clusterDropdown = container.querySelector(
-      '[data-testid="clusters"]'
-    ) as HTMLSelectElement;
-    expect(clusterDropdown).toBeTruthy();
-    await act(async () => {
-      clusterDropdown.value = 'beta:ctx';
-      clusterDropdown.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    expect(onClustersChange).toHaveBeenCalledWith(['beta:ctx']);
 
     const resetButton = container.querySelector('button');
     await act(async () => {

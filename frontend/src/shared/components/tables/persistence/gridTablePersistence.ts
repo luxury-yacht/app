@@ -28,7 +28,6 @@ export interface GridTablePersistenceKeyParts {
 export interface GridTableFilterPersistenceOptions {
   kinds?: string[];
   namespaces?: string[];
-  clusters?: string[];
   isNamespaceScoped?: boolean;
 }
 
@@ -270,27 +269,19 @@ export const prunePersistedState = <T>(
     const normalizedSearch = persisted.filters.search?.trim() ?? '';
     const normalizedKinds = normalizeFilterArray(persisted.filters.kinds);
     const normalizedNamespaces = normalizeFilterArray(persisted.filters.namespaces);
-    const normalizedClusters = normalizeFilterArray(persisted.filters.clusters);
 
     const kinds = intersectsAllowed(normalizedKinds, context.filterOptions?.kinds);
     const namespaces = isNamespaceScoped
       ? []
       : intersectsAllowed(normalizedNamespaces, context.filterOptions?.namespaces);
-    const clusters = intersectsAllowed(normalizedClusters, context.filterOptions?.clusters);
 
     const filters: GridTableFilterState = {
       search: normalizedSearch,
       kinds,
       namespaces,
-      clusters,
     };
 
-    if (
-      filters.search !== '' ||
-      filters.kinds.length > 0 ||
-      filters.namespaces.length > 0 ||
-      filters.clusters.length > 0
-    ) {
+    if (filters.search !== '' || filters.kinds.length > 0 || filters.namespaces.length > 0) {
       pruned.filters = filters;
     }
   }
@@ -356,14 +347,8 @@ export const buildPersistedStateForSave = <T>(
       search: context.filters.search?.trim() ?? '',
       kinds: normalizeFilterArray(context.filters.kinds),
       namespaces: isNamespaceScoped ? [] : normalizeFilterArray(context.filters.namespaces),
-      clusters: normalizeFilterArray(context.filters.clusters),
     };
-    if (
-      filters.search ||
-      filters.kinds.length > 0 ||
-      filters.namespaces.length > 0 ||
-      filters.clusters.length > 0
-    ) {
+    if (filters.search || filters.kinds.length > 0 || filters.namespaces.length > 0) {
       state.filters = filters;
     }
   }

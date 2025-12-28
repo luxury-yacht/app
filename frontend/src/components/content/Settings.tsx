@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 import { GetThemeInfo, GetAppSettings, SetUseShortResourceNames } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
-import { useAutoRefresh } from '@/core/refresh';
+import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import { changeTheme, initSystemThemeListener } from '@/utils/themes';
 import { eventBus } from '@/core/events';
 import './Settings.css';
@@ -27,6 +27,7 @@ interface SettingsProps {
 function Settings({ onClose }: SettingsProps) {
   const [themeInfo, setThemeInfo] = useState<types.ThemeInfo | null>(null);
   const { enabled: refreshEnabled, setAutoRefresh } = useAutoRefresh();
+  const { enabled: backgroundRefreshEnabled, setBackgroundRefresh } = useBackgroundRefresh();
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
@@ -177,6 +178,17 @@ function Settings({ onClose }: SettingsProps) {
                 onChange={(e) => handleRefreshToggle(e.target.checked)}
               />
               Enable auto-refresh
+            </label>
+          </div>
+          <div className="setting-item">
+            <label htmlFor="refresh-background">
+              <input
+                type="checkbox"
+                id="refresh-background"
+                checked={backgroundRefreshEnabled}
+                onChange={(e) => setBackgroundRefresh(e.target.checked)}
+              />
+              Refresh background clusters
             </label>
           </div>
         </div>

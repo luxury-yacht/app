@@ -431,6 +431,8 @@ class RefreshManager {
     current: RefreshContext
   ): RefresherName[] {
     const targets = new Set<RefresherName>();
+    // Switching active clusters should refresh the active view even if the view type is unchanged.
+    const clusterChanged = previous.selectedClusterId !== current.selectedClusterId;
 
     // Namespace scope changes include the cluster identity tied to the selection.
     const namespaceChanged =
@@ -455,6 +457,19 @@ class RefreshManager {
       if (clusterRefresher) {
         targets.add(clusterRefresher);
       }
+    }
+
+    if (clusterChanged && current.currentView === 'cluster') {
+      const clusterRefresher = current.activeClusterView
+        ? clusterViewToRefresher[current.activeClusterView]
+        : null;
+      if (clusterRefresher) {
+        targets.add(clusterRefresher);
+      }
+    }
+
+    if (clusterChanged && current.currentView === 'overview') {
+      targets.add(SYSTEM_REFRESHERS.clusterOverview);
     }
 
     if (this.didObjectPanelTargetChange(previous, current)) {

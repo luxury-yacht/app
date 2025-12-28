@@ -31,11 +31,11 @@ export const KubernetesProvider: React.FC<KubernetesProviderProps> = ({ children
     <ThemeProvider>
       <RefreshManagerProvider>
         <ObjectCatalogProvider>
-          <ViewStateProvider>
-            <KubeconfigProvider>
+          <KubeconfigProvider>
+            <ViewStateProvider>
               <NamespaceProvider>{children}</NamespaceProvider>
-            </KubeconfigProvider>
-          </ViewStateProvider>
+            </ViewStateProvider>
+          </KubeconfigProvider>
         </ObjectCatalogProvider>
       </RefreshManagerProvider>
     </ThemeProvider>

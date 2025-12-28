@@ -89,8 +89,6 @@ describe('useGridTableFilters', () => {
   const defaultAccessors = {
     defaultGetKind: (row: Row) => row.kind,
     defaultGetNamespace: (row: Row) => row.namespace,
-    defaultGetClusterId: (row: Row) => row.clusterId,
-    defaultGetClusterName: (row: Row) => row.clusterName,
     defaultGetSearchText: (row: Row) => [row.name, row.description],
   };
 
@@ -135,7 +133,6 @@ describe('useGridTableFilters', () => {
     expect(result?.filterSignature).toBe('');
     expect(result?.resolvedFilterOptions.kinds).toEqual([]);
     expect(result?.resolvedFilterOptions.namespaces).toEqual([]);
-    expect(result?.resolvedFilterOptions.clusters).toEqual([]);
   });
 
   it('filters rows using uncontrolled state change handlers', async () => {
@@ -182,7 +179,7 @@ describe('useGridTableFilters', () => {
     });
 
     result = getResult();
-    expect(result?.activeFilters).toEqual({ search: '', kinds: [], namespaces: [], clusters: [] });
+    expect(result?.activeFilters).toEqual({ search: '', kinds: [], namespaces: [] });
     expect(result?.tableData.length).toBe(rows.length);
   });
 
@@ -192,7 +189,6 @@ describe('useGridTableFilters', () => {
       search: '',
       kinds: ['configmap'],
       namespaces: [''],
-      clusters: ['beta:ctx'],
     };
 
     const { getResult } = await renderHook({
@@ -213,7 +209,6 @@ describe('useGridTableFilters', () => {
       search: 'gateway',
       kinds: ['configmap'],
       namespaces: [''],
-      clusters: ['beta:ctx'],
     });
 
     result = getResult();
@@ -235,19 +230,5 @@ describe('useGridTableFilters', () => {
       'default',
       'platform',
     ]);
-    expect(result?.resolvedFilterOptions.clusters.map((opt) => opt.label)).toEqual([
-      'alpha',
-      'beta',
-    ]);
-  });
-
-  it('filters rows by cluster selection', async () => {
-    const { getResult } = await renderHook({
-      enabled: true,
-      initial: { clusters: ['beta:ctx'] },
-    });
-
-    const result = getResult();
-    expect(result?.tableData.map((row) => row.id)).toEqual(['3', '4']);
   });
 });

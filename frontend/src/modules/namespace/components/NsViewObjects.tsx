@@ -20,6 +20,7 @@ import { refreshManager, refreshOrchestrator, useRefreshDomain } from '@/core/re
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 
@@ -228,6 +229,7 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
   const domain = useRefreshDomain('catalog');
   const useShortResourceNames = useShortNames();
   const { openWithObject } = useObjectPanel();
+  const { selectedClusterId } = useKubeconfig();
 
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [continueToken, setContinueToken] = useState<string | null>(null);
@@ -299,15 +301,9 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
       ageColumn,
     ];
 
-    cf.upsertClusterColumn(baseColumns, {
-      accessor: (row) => row.item.clusterName ?? row.item.clusterId ?? '—',
-      sortValue: (row) => (row.item.clusterName ?? row.item.clusterId ?? '').toLowerCase(),
-    });
-
     const sizing: cf.ColumnSizingMap = {
       kind: { width: 160, autoWidth: false },
       name: { width: 320, autoWidth: false },
-      cluster: { width: 220, autoWidth: false },
       age: { width: 120, autoWidth: false },
     };
     cf.applyColumnSizing(baseColumns, sizing);
@@ -399,7 +395,7 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
     refreshOrchestrator.setDomainScope('catalog', normalizedScope);
     lastAppliedScopeRef.current = normalizedScope;
     void refreshOrchestrator.triggerManualRefresh('catalog', { suppressSpinner: true });
-  }, [baseScope, pageLimit, trimmedNamespace]);
+  }, [baseScope, pageLimit, trimmedNamespace, selectedClusterId]);
 
   useEffect(() => {
     if (!domain.data || !domain.scope) {
@@ -496,7 +492,6 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
         namespaces: [],
         showKindDropdown: true,
         showNamespaceDropdown: false,
-        showClusterDropdown: true,
         includeClusterScopedSyntheticNamespace: false,
         customActions: (
           <button

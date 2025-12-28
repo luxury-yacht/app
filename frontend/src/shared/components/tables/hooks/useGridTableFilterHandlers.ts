@@ -10,13 +10,11 @@ import { useCallback } from 'react';
 interface UseGridTableFilterHandlersOptions {
   handleFilterKindsChange: (next: string[]) => void;
   handleFilterNamespacesChange: (next: string[]) => void;
-  handleFilterClustersChange: (next: string[]) => void;
 }
 
 export function useGridTableFilterHandlers({
   handleFilterKindsChange,
   handleFilterNamespacesChange,
-  handleFilterClustersChange,
 }: UseGridTableFilterHandlersOptions) {
   const handleKindDropdownChange = useCallback(
     (value: string | string[]) => {
@@ -34,13 +32,5 @@ export function useGridTableFilterHandlers({
     [handleFilterNamespacesChange]
   );
 
-  const handleClusterDropdownChange = useCallback(
-    (value: string | string[]) => {
-      const next = Array.isArray(value) ? value : value ? [value] : [];
-      handleFilterClustersChange(next);
-    },
-    [handleFilterClustersChange]
-  );
-
-  return { handleKindDropdownChange, handleNamespaceDropdownChange, handleClusterDropdownChange };
+  return { handleKindDropdownChange, handleNamespaceDropdownChange };
 }

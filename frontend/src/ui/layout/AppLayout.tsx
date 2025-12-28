@@ -18,6 +18,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { eventBus } from '@/core/events';
 // Content Components
 import AppHeader from '@ui/layout/AppHeader';
+import ClusterTabs from '@ui/layout/ClusterTabs';
 import ClusterOverview from '@modules/cluster/components/ClusterOverview';
 import type { ClusterViewType, NamespaceViewType } from '@ui/navigation/types';
 import { ClusterResourcesManager } from '@modules/cluster/components/ClusterResourcesManager';
@@ -165,6 +166,7 @@ export const AppLayout: React.FC = () => {
           contentTitle={getContentTitle()}
           onAboutClick={() => viewState.setIsAboutOpen(true)}
         />
+        <ClusterTabs />
 
         <main className="app-main">
           <Sidebar />

@@ -278,52 +278,6 @@ interface NamespaceColumnOptions<T> extends CreateTextColumnOptions<T> {
   sortValue?: (item: T) => string | number | undefined;
 }
 
-interface ClusterColumnOptions<T> extends CreateTextColumnOptions<T> {
-  accessor?: (item: T) => string | undefined;
-  sortValue?: (item: T) => string | number | undefined;
-}
-
-export function upsertClusterColumn<T>(
-  columns: GridColumnDefinition<T>[],
-  options: ClusterColumnOptions<T>
-): void {
-  const clusterAccessor =
-    options.accessor ??
-    ((item: T) => {
-      const value =
-        (item as unknown as { clusterName?: string; clusterId?: string }).clusterName ??
-        (item as unknown as { clusterName?: string; clusterId?: string }).clusterId ??
-        (item as unknown as { item?: { clusterName?: string; clusterId?: string } }).item
-          ?.clusterName ??
-        (item as unknown as { item?: { clusterName?: string; clusterId?: string } }).item
-          ?.clusterId;
-      return value ?? '—';
-    });
-
-  const clusterColumn = createTextColumn<T>('cluster', 'Cluster', clusterAccessor, options);
-  if (options.sortValue) {
-    clusterColumn.sortValue = options.sortValue;
-  }
-
-  const existingIndex = columns.findIndex((column) => column.key === 'cluster');
-  if (existingIndex >= 0) {
-    columns.splice(existingIndex, 1);
-  }
-
-  let insertIndex = columns.findIndex((column) => column.key === 'namespace');
-  if (insertIndex === -1) {
-    const nameIndex = columns.findIndex((column) => column.key === 'name');
-    if (nameIndex >= 0) {
-      insertIndex = nameIndex + 1;
-    } else {
-      const kindIndex = columns.findIndex((column) => column.key === 'kind');
-      insertIndex = kindIndex >= 0 ? kindIndex + 1 : columns.length;
-    }
-  }
-
-  columns.splice(insertIndex, 0, clusterColumn);
-}
-
 export function upsertNamespaceColumn<T>(
   columns: GridColumnDefinition<T>[],
   options: NamespaceColumnOptions<T>
@@ -351,9 +305,7 @@ export function upsertNamespaceColumn<T>(
     columns.splice(existingIndex, 1);
   }
 
-  const clusterIndex = columns.findIndex((column) => column.key === 'cluster');
-  const insertIndex = clusterIndex >= 0 ? clusterIndex + 1 : nameIndex + 1;
-  columns.splice(insertIndex, 0, namespaceColumn);
+  columns.splice(nameIndex + 1, 0, namespaceColumn);
 }
 
 /**

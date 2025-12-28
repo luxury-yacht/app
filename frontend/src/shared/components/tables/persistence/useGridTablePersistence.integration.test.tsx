@@ -201,7 +201,6 @@ describe('useGridTablePersistence integration', () => {
         search: 'abc',
         kinds: ['Pod'],
         namespaces: [],
-        clusters: [],
       });
     });
 
@@ -216,7 +215,6 @@ describe('useGridTablePersistence integration', () => {
       search: '',
       kinds: [],
       namespaces: [],
-      clusters: [],
     });
 
     await act(async () => {

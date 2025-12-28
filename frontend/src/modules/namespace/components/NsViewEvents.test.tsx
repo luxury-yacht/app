@@ -73,7 +73,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], clusters: [] },
+    filters: { search: '', kinds: [], namespaces: [] },
     setFilters: vi.fn(),
     isNamespaceScoped: true,
     resetState: vi.fn(),

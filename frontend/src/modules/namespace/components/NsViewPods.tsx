@@ -227,15 +227,9 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         cf.createAgeColumn(),
       ];
 
-      cf.upsertClusterColumn(baseColumns, {
-        accessor: (pod) => pod.clusterName ?? pod.clusterId ?? '—',
-        sortValue: (pod) => (pod.clusterName ?? pod.clusterId ?? '').toLowerCase(),
-      });
-
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
-        cluster: { autoWidth: true },
         namespace: { autoWidth: true },
         status: { autoWidth: true },
         ready: { autoWidth: true },
@@ -434,7 +428,6 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showNamespaceDropdown: showNamespaceFilter,
-                showClusterDropdown: true,
                 customActions: unhealthyToggle,
               },
             }}

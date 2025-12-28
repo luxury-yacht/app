@@ -120,15 +120,9 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
         cf.createAgeColumn(),
       ];
 
-      cf.upsertClusterColumn(baseColumns, {
-        accessor: (resource) => resource.clusterName ?? resource.clusterId ?? '—',
-        sortValue: (resource) => (resource.clusterName ?? resource.clusterId ?? '').toLowerCase(),
-      });
-
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
-        cluster: { autoWidth: true },
         namespace: { autoWidth: true },
         age: { autoWidth: true },
       };
@@ -251,7 +245,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
-                showClusterDropdown: true,
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

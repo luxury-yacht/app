@@ -14,7 +14,6 @@ interface GridTableKeyboardOptions {
   filteringEnabled: boolean;
   showKindDropdown: boolean;
   showNamespaceDropdown: boolean;
-  showClusterDropdown: boolean;
   filtersContainerRef: RefObject<HTMLDivElement | null>;
   filterFocusIndexRef: RefObject<number | null>;
   wrapperRef: RefObject<HTMLDivElement | null>;
@@ -27,7 +26,6 @@ export const useGridTableKeyboardScopes = ({
   filteringEnabled,
   showKindDropdown,
   showNamespaceDropdown,
-  showClusterDropdown,
   filtersContainerRef,
   filterFocusIndexRef,
   wrapperRef,
@@ -62,24 +60,11 @@ export const useGridTableKeyboardScopes = ({
         )
       );
     }
-    if (showClusterDropdown) {
-      addTarget(
-        container.querySelector<HTMLElement>(
-          '[data-gridtable-filter-role="cluster"] .dropdown-trigger'
-        )
-      );
-    }
     addTarget(container.querySelector<HTMLElement>('[data-gridtable-filter-role="search"]'));
     addTarget(container.querySelector<HTMLElement>('[data-gridtable-filter-role="reset"]'));
 
     return targets;
-  }, [
-    filteringEnabled,
-    filtersContainerRef,
-    showKindDropdown,
-    showNamespaceDropdown,
-    showClusterDropdown,
-  ]);
+  }, [filteringEnabled, filtersContainerRef, showKindDropdown, showNamespaceDropdown]);
 
   const focusFilterAtIndex = useCallback(
     (index: number) => {

@@ -70,11 +70,15 @@ interface NamespaceProviderProps {
 
 export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }) => {
   const namespaceDomain = useRefreshDomain('namespaces');
-  const { selectedKubeconfig, selectedClusterId } = useKubeconfig();
-  const [selectedNamespace, setSelectedNamespace] = useState<string | undefined>();
-  const [selectedNamespaceClusterId, setSelectedNamespaceClusterId] = useState<
-    string | undefined
-  >();
+  const { selectedKubeconfig, selectedClusterId, selectedClusterIds } = useKubeconfig();
+  // Track namespace selection per cluster tab to avoid cross-tab selection bleed.
+  const [namespaceSelections, setNamespaceSelections] = useState<
+    Record<string, string | undefined>
+  >({});
+  const clusterKey = selectedClusterId || '__default__';
+  const selectedNamespace = namespaceSelections[clusterKey];
+  const selectedNamespaceClusterId =
+    selectedNamespace && selectedClusterId ? selectedClusterId : undefined;
   const lastErrorRef = useRef<string | null>(null);
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
 
@@ -151,30 +155,37 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     await loadNamespaces(false);
   }, [loadNamespaces]);
 
-  const applySelection = useCallback((namespace?: string | null, clusterId?: string | null) => {
-    const nextNamespace = (namespace ?? '').trim();
-    const normalizedNamespace = nextNamespace.length > 0 ? nextNamespace : undefined;
-    const nextClusterId = (clusterId ?? '').trim();
-    const normalizedClusterId =
-      normalizedNamespace && nextClusterId.length > 0 ? nextClusterId : undefined;
+  const applySelection = useCallback(
+    (namespace?: string | null, targetKey?: string) => {
+      const nextNamespace = (namespace ?? '').trim();
+      const normalizedNamespace = nextNamespace.length > 0 ? nextNamespace : undefined;
+      const key = targetKey ?? clusterKey;
 
-    setSelectedNamespace((prev) => (prev === normalizedNamespace ? prev : normalizedNamespace));
-    setSelectedNamespaceClusterId((prev) =>
-      prev === normalizedClusterId ? prev : normalizedClusterId
-    );
-  }, []);
+      setNamespaceSelections((prev) => {
+        if (prev[key] === normalizedNamespace) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [key]: normalizedNamespace,
+        };
+      });
+    },
+    [clusterKey]
+  );
 
   const handleSetSelectedNamespace = useCallback(
     (namespace: string, clusterId?: string) => {
-      // Keep namespace selection tied to the cluster it belongs to for refresh scoping.
-      applySelection(namespace, clusterId ?? selectedClusterId);
+      // Always scope namespace selection to the active tab to avoid cross-tab updates.
+      const targetKey = selectedClusterId || clusterId || '__default__';
+      applySelection(namespace, targetKey);
     },
     [applySelection, selectedClusterId]
   );
 
   const clearSelection = useCallback(() => {
-    applySelection(undefined, undefined);
-  }, [applySelection]);
+    applySelection(undefined, clusterKey);
+  }, [applySelection, clusterKey]);
 
   useEffect(() => {
     const enabled = Boolean(selectedKubeconfig);
@@ -211,20 +222,21 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
     const current = selectedNamespace;
     if (current && namespaces.some((item) => item.scope === current)) {
-      applySelection(current, selectedNamespaceClusterId ?? selectedClusterId);
+      applySelection(current, clusterKey);
       return;
     }
 
     const firstRealNamespace = namespaces.find((item) => !item.isSynthetic)?.scope;
     const fallbackNamespace = namespaces[0]?.scope;
-    applySelection(firstRealNamespace ?? fallbackNamespace, selectedClusterId);
+    applySelection(firstRealNamespace ?? fallbackNamespace, clusterKey);
   }, [
     applySelection,
+    clusterKey,
+    clearSelection,
     namespaces,
     namespaceDomain.status,
     selectedClusterId,
     selectedNamespace,
-    selectedNamespaceClusterId,
   ]);
 
   useEffect(() => {
@@ -238,10 +250,11 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     }
 
     const normalized = namespaceToEvaluate.toLowerCase();
-    if (lastEvaluatedNamespaceRef.current === normalized) {
+    const evaluationKey = `${selectedClusterId || 'none'}|${normalized}`;
+    if (lastEvaluatedNamespaceRef.current === evaluationKey) {
       return;
     }
-    lastEvaluatedNamespaceRef.current = normalized;
+    lastEvaluatedNamespaceRef.current = evaluationKey;
     // Scope namespace permission checks to the active cluster.
     const clusterId = selectedNamespaceClusterId ?? selectedClusterId;
     evaluateNamespacePermissions(namespaceToEvaluate, { clusterId });
@@ -265,6 +278,22 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
     return () => window.clearTimeout(timeout);
   }, [selectedNamespace, selectedNamespaceClusterId]);
+
+  useEffect(() => {
+    setNamespaceSelections((prev) => {
+      if (selectedClusterIds.length === 0) {
+        return prev.__default__ ? { __default__: prev.__default__ } : {};
+      }
+      const allowed = new Set(selectedClusterIds);
+      const next: Record<string, string | undefined> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        if (key === '__default__' || allowed.has(key)) {
+          next[key] = value;
+        }
+      });
+      return next;
+    });
+  }, [selectedClusterIds]);
 
   useEffect(() => {
     const handleResetViews = () => {

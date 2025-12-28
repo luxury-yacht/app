@@ -346,7 +346,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
               options: {
                 showNamespaceDropdown: showNamespaceFilter,
                 showKindDropdown: true,
-                showClusterDropdown: true,
               },
             }}
             virtualization={{ enabled: true, threshold: 40, overscan: 8, estimateRowHeight: 44 }}

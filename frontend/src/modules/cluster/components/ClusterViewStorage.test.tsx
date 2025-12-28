@@ -54,7 +54,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], clusters: [] },
+    filters: { search: '', kinds: [], namespaces: [] },
     setFilters: vi.fn(),
     resetState: vi.fn(),
     hydrated: true,
@@ -113,7 +113,7 @@ describe('ClusterViewStorage', () => {
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
     expect(props.columnVisibility).toBe(null);
-    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [], clusters: [] });
+    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [] });
     expect(props.columnWidths).toBe(null);
   });
 });

@@ -56,7 +56,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], clusters: [] },
+    filters: { search: '', kinds: [], namespaces: [] },
     setFilters: setFiltersMock,
     resetState: vi.fn(),
     hydrated: true,
@@ -116,7 +116,7 @@ describe('ClusterViewCRDs', () => {
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
-    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [], clusters: [] });
+    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [] });
     expect(props.columnVisibility).toBeFalsy();
     expect(props.columnWidths).toBeFalsy();
   });

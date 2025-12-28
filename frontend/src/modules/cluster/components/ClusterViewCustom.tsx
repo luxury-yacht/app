@@ -112,15 +112,9 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
         cf.createAgeColumn(),
       ];
 
-      cf.upsertClusterColumn(baseColumns, {
-        accessor: (resource) => resource.clusterName ?? resource.clusterId ?? '—',
-        sortValue: (resource) => (resource.clusterName ?? resource.clusterId ?? '').toLowerCase(),
-      });
-
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
-        cluster: { autoWidth: true },
         apiGroup: { autoWidth: true },
         age: { autoWidth: true },
       };
@@ -226,7 +220,6 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showKindDropdown: true,
-                showClusterDropdown: true,
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

@@ -212,7 +212,6 @@ const GridTable = memo(function GridTable<T>({
     filterFocusIndexRef,
     showKindDropdown,
     showNamespaceDropdown,
-    showClusterDropdown,
     filtersNode,
   } = useGridTableFiltersWiring<T>({
     data: sourceData,
@@ -340,7 +339,6 @@ const GridTable = memo(function GridTable<T>({
     filteringEnabled,
     showKindDropdown,
     showNamespaceDropdown,
-    showClusterDropdown,
     filtersContainerRef,
     filterFocusIndexRef,
     wrapperRef,

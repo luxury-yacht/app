@@ -14,8 +14,6 @@ import { useGridTableFilters } from '@shared/components/tables/useGridTableFilte
 import { useGridTableFilterHandlers } from '@shared/components/tables/hooks/useGridTableFilterHandlers';
 import {
   defaultGetKind,
-  defaultGetClusterId,
-  defaultGetClusterName,
   defaultGetNamespace,
   defaultGetSearchText,
 } from '@shared/components/tables/GridTable.utils';
@@ -68,15 +66,12 @@ export function useGridTableFiltersWiring<T>({
     handleFilterSearchChange,
     handleFilterKindsChange,
     handleFilterNamespacesChange,
-    handleFilterClustersChange,
     handleFilterReset,
   } = useGridTableFilters({
     data,
     filters,
     defaultGetKind,
     defaultGetNamespace,
-    defaultGetClusterId,
-    defaultGetClusterName,
     defaultGetSearchText,
   });
 
@@ -86,23 +81,18 @@ export function useGridTableFiltersWiring<T>({
     }
   }, [filteringEnabled]);
 
-  const { handleKindDropdownChange, handleNamespaceDropdownChange, handleClusterDropdownChange } =
-    useGridTableFilterHandlers({
-      handleFilterKindsChange,
-      handleFilterNamespacesChange,
-      handleFilterClustersChange,
-    });
+  const { handleKindDropdownChange, handleNamespaceDropdownChange } = useGridTableFilterHandlers({
+    handleFilterKindsChange,
+    handleFilterNamespacesChange,
+  });
 
   const searchInputId = useId();
   const kindDropdownId = useId();
   const namespaceDropdownId = useId();
-  const clusterDropdownId = useId();
   const columnsDropdownId = useId();
 
   const showKindDropdown = filters?.options?.showKindDropdown ?? false;
   const showNamespaceDropdown = filters?.options?.showNamespaceDropdown ?? false;
-  const showClusterDropdown =
-    (filters?.options?.showClusterDropdown ?? false) && resolvedFilterOptions.clusters.length > 0;
 
   const renderFilterOption = useCallback(
     (option: DropdownOption, isSelected: boolean): ReactNode => (
@@ -133,13 +123,6 @@ export function useGridTableFiltersWiring<T>({
     },
     []
   );
-  const renderClustersValue = useCallback(
-    (value: string | string[], _options: DropdownOption[]) => {
-      const count = Array.isArray(value) ? value.length : value ? 1 : 0;
-      return count > 0 ? `Clusters (${count})` : 'Clusters';
-    },
-    []
-  );
   const renderColumnsValue = useCallback(
     (_value: string | string[], _options: DropdownOption[]) => 'Columns',
     []
@@ -155,7 +138,6 @@ export function useGridTableFiltersWiring<T>({
       searchInputId,
       kindDropdownId,
       namespaceDropdownId,
-      clusterDropdownId,
       columnsDropdownId,
       resolvedFilterOptions,
       containerRef: filtersContainerRef,
@@ -163,15 +145,12 @@ export function useGridTableFiltersWiring<T>({
       onSearchChange: handleFilterSearchChange,
       onKindsChange: handleKindDropdownChange,
       onNamespacesChange: handleNamespaceDropdownChange,
-      onClustersChange: handleClusterDropdownChange,
       onReset: handleFilterReset,
       showKindDropdown,
       showNamespaceDropdown,
-      showClusterDropdown,
       renderOption: renderFilterOption,
       renderKindsValue,
       renderNamespacesValue,
-      renderClustersValue,
       renderColumnsValue: columnsDropdown?.renderValue ?? renderColumnsValue,
       columnOptions: columnsDropdown?.options,
       columnValue: columnsDropdown?.value,
@@ -185,22 +164,18 @@ export function useGridTableFiltersWiring<T>({
       searchInputId,
       kindDropdownId,
       namespaceDropdownId,
-      clusterDropdownId,
       columnsDropdownId,
       resolvedFilterOptions,
       activeFilters,
       handleFilterSearchChange,
       handleKindDropdownChange,
       handleNamespaceDropdownChange,
-      handleClusterDropdownChange,
       handleFilterReset,
       showKindDropdown,
       showNamespaceDropdown,
-      showClusterDropdown,
       renderFilterOption,
       renderKindsValue,
       renderNamespacesValue,
-      renderClustersValue,
       columnsDropdown,
       renderColumnsValue,
       showColumnsDropdown,
@@ -222,7 +197,6 @@ export function useGridTableFiltersWiring<T>({
     filterFocusIndexRef,
     showKindDropdown,
     showNamespaceDropdown,
-    showClusterDropdown,
     filtersBarProps,
     filtersNode,
   };

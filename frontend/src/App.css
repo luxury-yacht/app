@@ -25,7 +25,7 @@
 .app-container {
   flex: 1;
   display: grid;
-  grid-template-rows: 38px 1fr;
+  grid-template-rows: 38px auto 1fr;
   grid-template-columns: auto 1fr;
   border: 1px solid var(--color-bg-secondary);
   overflow: hidden;
@@ -39,7 +39,7 @@
 
 .app-main {
   grid-column: 1 / -1; /* Span full width */
-  grid-row: 2;
+  grid-row: 3;
   display: flex;
   overflow: hidden;
   min-height: 0; /* Important for flex children */

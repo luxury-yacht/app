@@ -5,6 +5,7 @@
  * Provides context for components to access and modify sidebar state.
  */
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 export type SidebarSelectionType =
   | { type: 'cluster'; value: 'cluster' }
@@ -38,14 +39,24 @@ interface SidebarStateProviderProps {
   children: React.ReactNode;
 }
 
+const DEFAULT_SIDEBAR_SELECTION: SidebarSelectionType = {
+  type: 'overview',
+  value: 'overview',
+};
+
 export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ children }) => {
+  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useState(250);
   const [isResizing, setIsResizing] = useState(false);
-  const [sidebarSelection, setSidebarSelection] = useState<SidebarSelectionType>({
-    type: 'overview',
-    value: 'overview',
-  });
+  const [sidebarSelections, setSidebarSelections] = useState<Record<string, SidebarSelectionType>>(
+    {}
+  );
+  const clusterKey = selectedClusterId || '__default__';
+  const sidebarSelection = useMemo(
+    () => sidebarSelections[clusterKey] ?? DEFAULT_SIDEBAR_SELECTION,
+    [sidebarSelections, clusterKey]
+  );
 
   // Sync sidebar state with backend on mount and changes
   useEffect(() => {
@@ -64,6 +75,22 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
     });
   }, []);
 
+  useEffect(() => {
+    setSidebarSelections((prev) => {
+      if (selectedClusterIds.length === 0) {
+        return prev.__default__ ? { __default__: prev.__default__ } : {};
+      }
+      const allowed = new Set(selectedClusterIds);
+      const next: Record<string, SidebarSelectionType> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        if (key === '__default__' || allowed.has(key)) {
+          next[key] = value;
+        }
+      });
+      return next;
+    });
+  }, [selectedClusterIds]);
+
   const value = useMemo(
     () => ({
       isSidebarVisible,
@@ -73,9 +100,14 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
       toggleSidebar,
       setSidebarWidth,
       setIsResizing,
-      setSidebarSelection,
+      setSidebarSelection: (selection: SidebarSelectionType) => {
+        setSidebarSelections((prev) => ({
+          ...prev,
+          [clusterKey]: selection,
+        }));
+      },
     }),
-    [isSidebarVisible, sidebarWidth, isResizing, sidebarSelection, toggleSidebar]
+    [isSidebarVisible, sidebarWidth, isResizing, sidebarSelection, toggleSidebar, clusterKey]
   );
 
   return <SidebarStateContext.Provider value={value}>{children}</SidebarStateContext.Provider>;

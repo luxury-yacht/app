@@ -179,15 +179,9 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
         },
       ];
 
-      cf.upsertClusterColumn(columns, {
-        accessor: (row) => row.clusterName ?? row.clusterId ?? '—',
-        sortValue: (row) => (row.clusterName ?? row.clusterId ?? '').toLowerCase(),
-      });
-
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
-        cluster: { autoWidth: true },
         version: { autoWidth: true },
         status: { autoWidth: true },
         pods: { autoWidth: true },
@@ -282,9 +276,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
               value: persistedFilters,
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
-              options: {
-                showClusterDropdown: true,
-              },
+              options: {},
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
             columnWidths={columnWidths}

@@ -11,6 +11,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { NamespaceProvider, useNamespace } from './NamespaceContext';
 
+let mockClusterId = 'cluster-a';
+let mockClusterIds = ['cluster-a'];
+
 const { mockRefreshOrchestrator, namespaceDomainRef } = vi.hoisted(() => {
   return {
     mockRefreshOrchestrator: {
@@ -24,7 +27,11 @@ const { mockRefreshOrchestrator, namespaceDomainRef } = vi.hoisted(() => {
 });
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'test', selectedClusterId: 'cluster-a' }),
+  useKubeconfig: () => ({
+    selectedKubeconfig: 'test',
+    selectedClusterId: mockClusterId,
+    selectedClusterIds: mockClusterIds,
+  }),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -47,6 +54,13 @@ const SelectedNamespace: React.FC = () => {
   );
 };
 
+const namespaceRef: { current: ReturnType<typeof useNamespace> | null } = { current: null };
+
+const Harness: React.FC = () => {
+  namespaceRef.current = useNamespace();
+  return null;
+};
+
 describe('NamespaceProvider selection behaviour', () => {
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -55,6 +69,9 @@ describe('NamespaceProvider selection behaviour', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     namespaceDomainRef.current = createNamespaceDomain('ready', ['alpha', 'beta']);
+    mockClusterId = 'cluster-a';
+    mockClusterIds = ['cluster-a', 'cluster-b'];
+    namespaceRef.current = null;
     vi.clearAllMocks();
   });
 
@@ -69,6 +86,7 @@ describe('NamespaceProvider selection behaviour', () => {
     act(() => {
       root.render(
         <NamespaceProvider>
+          <Harness />
           <SelectedNamespace />
         </NamespaceProvider>
       );
@@ -78,6 +96,7 @@ describe('NamespaceProvider selection behaviour', () => {
       act(() => {
         root.render(
           <NamespaceProvider>
+            <Harness />
             <SelectedNamespace />
           </NamespaceProvider>
         );
@@ -140,6 +159,73 @@ describe('NamespaceProvider selection behaviour', () => {
 
     expect(getSelected()).toBe('bravo');
     expect(getSelectedCluster()).toBe('cluster-a');
+    cleanup();
+  });
+
+  it('keeps namespace selection scoped to the active cluster tab', () => {
+    const { rerender, cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    act(() => {
+      namespaceRef.current?.setSelectedNamespace('beta');
+    });
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(getSelected()).toBe('beta');
+
+    mockClusterId = 'cluster-b';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(getSelected()).toBe('alpha');
+
+    act(() => {
+      namespaceRef.current?.setSelectedNamespace('alpha');
+    });
+
+    mockClusterId = 'cluster-a';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(getSelected()).toBe('beta');
+    cleanup();
+  });
+
+  it('drops namespace selections for closed cluster tabs', () => {
+    const { rerender, cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    mockClusterId = 'cluster-b';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+    act(() => {
+      namespaceRef.current?.setSelectedNamespace('beta');
+    });
+
+    mockClusterIds = ['cluster-a'];
+    mockClusterId = 'cluster-a';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    mockClusterIds = ['cluster-a', 'cluster-b'];
+    mockClusterId = 'cluster-b';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(getSelected()).toBe('alpha');
     cleanup();
   });
 });

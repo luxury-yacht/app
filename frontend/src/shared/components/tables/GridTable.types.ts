@@ -64,15 +64,12 @@ export interface GridTableFilterState {
   search: string;
   kinds: string[];
   namespaces: string[];
-  clusters: string[];
 }
 
 export interface GridTableFilterAccessors<T> {
   getSearchText?: (row: T) => string | string[] | null | undefined;
   getKind?: (row: T) => string | null | undefined;
   getNamespace?: (row: T) => string | null | undefined;
-  getClusterId?: (row: T) => string | null | undefined;
-  getClusterName?: (row: T) => string | null | undefined;
 }
 
 export interface GridTableFilterOptions {
@@ -81,8 +78,6 @@ export interface GridTableFilterOptions {
   namespaces?: string[];
   showKindDropdown?: boolean;
   showNamespaceDropdown?: boolean;
-  clusters?: string[];
-  showClusterDropdown?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
   customActions?: React.ReactNode;
 }
@@ -142,7 +137,6 @@ export interface GridTableProps<T> {
 export interface InternalFilterOptions {
   kinds: DropdownOption[];
   namespaces: DropdownOption[];
-  clusters: DropdownOption[];
   searchPlaceholder?: string;
   customActions?: React.ReactNode;
 }

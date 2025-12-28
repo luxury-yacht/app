@@ -54,7 +54,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [], clusters: [] },
+    filters: { search: '', kinds: [], namespaces: [] },
     setFilters: vi.fn(),
     resetState: vi.fn(),
     hydrated: true,
@@ -110,7 +110,7 @@ describe('ClusterViewEvents', () => {
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'ageTimestamp', direction: 'desc' });
     expect(props.columnVisibility).toBe(null);
-    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [], clusters: [] });
+    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [] });
 
     const key = props.keyExtractor(baseEvent, 0);
     expect(key).toContain('team-a');

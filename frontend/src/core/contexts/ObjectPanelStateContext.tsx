@@ -4,8 +4,23 @@
  * Manages object panel state including visibility, selected object, and navigation history.
  * Provides context for components to access and modify object panel state.
  */
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import type { KubernetesObjectReference, NavigationHistoryEntry } from '@/types/view-state';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+
+interface ObjectPanelState {
+  showObjectPanel: boolean;
+  selectedObject: KubernetesObjectReference | null;
+  navigationHistory: NavigationHistoryEntry[];
+  navigationIndex: number;
+}
+
+const DEFAULT_OBJECT_PANEL_STATE: ObjectPanelState = {
+  showObjectPanel: false,
+  selectedObject: null,
+  navigationHistory: [],
+  navigationIndex: -1,
+};
 
 interface ObjectPanelStateContextType {
   showObjectPanel: boolean;
@@ -34,42 +49,80 @@ interface ObjectPanelStateProviderProps {
   children: React.ReactNode;
 }
 
+const EMPTY_CLUSTER_IDS: string[] = [];
+
 export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> = ({ children }) => {
-  const [showObjectPanel, setShowObjectPanel] = useState(false);
-  const [selectedObject, setSelectedObject] = useState<KubernetesObjectReference | null>(null);
-  const [navigationHistory, setNavigationHistory] = useState<NavigationHistoryEntry[]>([]);
-  const [navigationIndex, setNavigationIndex] = useState(-1);
+  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  // Ensure a stable fallback array when kubeconfig mocks omit selectedClusterIds.
+  const activeClusterIds = selectedClusterIds ?? EMPTY_CLUSTER_IDS;
+  // Keep object panel state scoped per cluster tab to avoid cross-tab state leakage.
+  const [objectPanelStateByCluster, setObjectPanelStateByCluster] = useState<
+    Record<string, ObjectPanelState>
+  >({});
+  const clusterKey = selectedClusterId || '__default__';
+  const activeState = objectPanelStateByCluster[clusterKey] ?? DEFAULT_OBJECT_PANEL_STATE;
+  const { showObjectPanel, selectedObject, navigationHistory, navigationIndex } = activeState;
+
+  const updateActiveState = useCallback(
+    (updater: (prev: ObjectPanelState) => ObjectPanelState) => {
+      setObjectPanelStateByCluster((prev) => {
+        const current = prev[clusterKey] ?? DEFAULT_OBJECT_PANEL_STATE;
+        const next = updater(current);
+        return {
+          ...prev,
+          [clusterKey]: next,
+        };
+      });
+    },
+    [clusterKey]
+  );
+
+  useEffect(() => {
+    setObjectPanelStateByCluster((prev) => {
+      if (activeClusterIds.length === 0) {
+        return prev.__default__ ? { __default__: prev.__default__ } : {};
+      }
+      const allowed = new Set(activeClusterIds);
+      const next: Record<string, ObjectPanelState> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        if (key === '__default__' || allowed.has(key)) {
+          next[key] = value;
+        }
+      });
+      return next;
+    });
+  }, [activeClusterIds]);
 
   const onRowClick = useCallback(
     (data: KubernetesObjectReference) => {
-      setSelectedObject(data);
-      setShowObjectPanel(true);
-
-      // Add to navigation history
-      setNavigationHistory((prev) => {
-        const newHistory = [...prev.slice(0, navigationIndex + 1), data];
-        setNavigationIndex(newHistory.length - 1);
-        return newHistory;
+      updateActiveState((prev) => {
+        const nextHistory = [...prev.navigationHistory.slice(0, prev.navigationIndex + 1), data];
+        return {
+          showObjectPanel: true,
+          selectedObject: data,
+          navigationHistory: nextHistory,
+          navigationIndex: nextHistory.length - 1,
+        };
       });
     },
-    [navigationIndex]
+    [updateActiveState]
   );
 
   const onCloseObjectPanel = useCallback(() => {
-    setShowObjectPanel(false);
-    setSelectedObject(null);
-    setNavigationHistory([]);
-    setNavigationIndex(-1);
-  }, []);
+    updateActiveState(() => DEFAULT_OBJECT_PANEL_STATE);
+  }, [updateActiveState]);
 
   const onNavigate = useCallback(
     (index: number) => {
       if (index >= 0 && index < navigationHistory.length) {
-        setNavigationIndex(index);
-        setSelectedObject(navigationHistory[index]);
+        updateActiveState((prev) => ({
+          ...prev,
+          navigationIndex: index,
+          selectedObject: prev.navigationHistory[index] ?? null,
+        }));
       }
     },
-    [navigationHistory]
+    [navigationHistory, updateActiveState]
   );
 
   const value = useMemo(
@@ -78,8 +131,12 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       selectedObject,
       navigationHistory,
       navigationIndex,
-      setShowObjectPanel,
-      setSelectedObject,
+      setShowObjectPanel: (show: boolean) => {
+        updateActiveState((prev) => ({ ...prev, showObjectPanel: show }));
+      },
+      setSelectedObject: (obj: KubernetesObjectReference | null) => {
+        updateActiveState((prev) => ({ ...prev, selectedObject: obj }));
+      },
       onRowClick,
       onCloseObjectPanel,
       onNavigate,
@@ -92,6 +149,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       onRowClick,
       onCloseObjectPanel,
       onNavigate,
+      updateActiveState,
     ]
   );
 

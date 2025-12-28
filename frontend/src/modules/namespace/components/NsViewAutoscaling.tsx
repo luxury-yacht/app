@@ -127,11 +127,6 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
         })
       );
 
-      cf.upsertClusterColumn(baseColumns, {
-        accessor: (resource) => resource.clusterName ?? resource.clusterId ?? '—',
-        sortValue: (resource) => (resource.clusterName ?? resource.clusterId ?? '').toLowerCase(),
-      });
-
       baseColumns.push(
         cf.createTextColumn<AutoscalingData>(
           'scaleTarget',
@@ -220,7 +215,6 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         name: { autoWidth: true },
-        cluster: { autoWidth: true },
         namespace: { autoWidth: true },
         scaleTarget: { autoWidth: true },
         replicas: { autoWidth: true },
@@ -370,7 +364,6 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
-                showClusterDropdown: true,
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

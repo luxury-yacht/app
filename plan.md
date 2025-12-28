@@ -20,8 +20,12 @@
 1. ✅ Cluster-aware IDs/scopes/payloads across backend + frontend (Phase 1 complete).
 2. ✅ Per-cluster object catalog services + namespace groups in catalog snapshots; scope encoding fixed.
 3. ✅ Namespace selection is cluster-scoped in refresh context; sidebar renders catalog namespace groups and passes cluster ID.
-4. ⏳ Cluster-scoped GridTable row keys applied across cluster/namespace views; `NsViewPods` test data now includes cluster metadata.
-5. ⏳ Cluster tabs plan approved; implementation pending.
+4. ✅ Cluster-scoped GridTable row keys applied across cluster/namespace views; `NsViewPods` test data now includes cluster metadata.
+5. ✅ Backend aggregation rules updated so explicit cluster-scoped single-cluster domain requests can target non-primary clusters.
+6. ✅ Background refresh setting + persistence added; refresh context fan-out now gated by the toggle.
+7. ✅ Cluster tabs state + row rendering done (drag reorder + close + persistence).
+8. ✅ Per-tab sidebar/object panel/navigation/namespace state wiring complete.
+9. ✅ Per-tab refresh scopes updated so non-primary tabs refresh correctly on tab switch.
 
 ## Implementation steps (ordered)
 
@@ -37,18 +41,21 @@
 10. ✅ Expand backend + frontend tests for multi-select, fan-out, stream merge, and diagnostics; confirm >=80% coverage or note gaps.
 11. ✅ Fix remaining TypeScript errors from cluster filter wiring (superseded; will be removed per cluster tabs).
 12. ✅ Run frontend typecheck/tests to validate cluster filter wiring changes (superseded; will be removed per cluster tabs).
-13. ⏳ Add targeted frontend tests to raise coverage to >=80% for cluster/namespace views + refresh UI.
+13. ⏳ Add targeted frontend tests to raise coverage to >=80% for cluster/namespace views + refresh UI (include RefreshManager cluster-switch/manual-refresh coverage).
 14. ✅ Make backend coverage runnable in the sandbox (covdata/toolchain + cache path workaround) and re-run `go test` with coverage.
-15. ⏳ Diagnose and fix non-primary tabs still showing primary data (ensure per-tab refresh scopes and UI scoping).
-16. ⏳ Update backend aggregation rules so explicit cluster-scoped requests can target non-primary clusters for single-cluster domains (catalog/object/*/node-maintenance).
-17. ⏳ Introduce cluster tabs state + persistence (open clusters, active tab, order) and wire it to kubeconfig selections; reconcile order by applying persisted drag order when available and falling back to current selection order for new/reopened tabs.
-18. ⏳ Render cluster tabs row in layout, draggable ordering (no new deps), close button, hidden when <2 tabs.
-19. ⏳ Make view state per tab by introducing a tab-scoped provider tree (per-tab ViewState, NamespaceContext, ObjectPanelState) and render the active tab’s provider subtree; ensure no shared state between tabs.
-20. ⏳ Remove cluster columns/filters and related persistence/tests from all views and shared GridTable wiring.
-21. ⏳ Add settings toggle in Auto-Refresh for "Refresh background clusters" (default off), persist in frontend storage, and hydrate on startup to drive refresh context defaults.
-22. ⏳ Update refresh context to follow active tab cluster ID; only fan-out when background refresh toggle is enabled.
-23. ⏳ Add/adjust tests for tabs, per-tab state, and cleanup on tab close; re-evaluate coverage notes.
+15. ✅ Diagnose and fix non-primary tabs still showing primary data (ensure per-tab refresh scopes and UI scoping).
+16. ✅ Update backend aggregation rules so explicit cluster-scoped requests can target non-primary clusters for single-cluster domains (catalog/object/*/node-maintenance).
+17. ✅ Introduce cluster tabs state + persistence (open clusters, active tab, order) and wire it to kubeconfig selections; reconcile order by applying persisted drag order when available and falling back to current selection order for new/reopened tabs.
+18. ✅ Render cluster tabs row in layout, draggable ordering (no new deps), close button, hidden when <2 tabs.
+19. ✅ Make view state per tab by storing tab-scoped state keyed by active cluster in Sidebar/ObjectPanel/Navigation/Namespace contexts and switching to the active tab’s state on change.
+20. ✅ Remove cluster columns/filters and related persistence/tests from all views and shared GridTable wiring.
+21. ✅ Add settings toggle in Auto-Refresh for "Refresh background clusters" (default off), persist in frontend storage, and hydrate on startup to drive refresh context defaults.
+22. ✅ Update refresh context to follow active tab cluster ID; only fan-out when background refresh toggle is enabled.
+23. ✅ Add/adjust tests for tabs, per-tab state, and cleanup on tab close; re-evaluate coverage notes.
 24. ⏳ Verify multi-cluster UI: open/close tabs, reorder, per-tab namespace, object panel, and views show only active cluster data.
+25. ✅ Resolve hook dependency lint errors from per-tab state wiring.
+26. ✅ Fix object panel tests by handling missing `selectedClusterIds` defaults in context mocks.
+27. ✅ Prevent ObjectPanelStateContext from re-running selection pruning when kubeconfig mocks omit `selectedClusterIds`.
 
 ## Risks / watchouts
 
@@ -58,7 +65,8 @@
 
 ## Coverage notes
 
-- Frontend coverage is still below 80% in multiple areas (cluster/namespace views and refresh/UI wiring); need guidance on which modules to prioritize for additional tests.
+- Added tests for ClusterTabs and per-tab sidebar state; coverage has not been remeasured yet, so remaining gaps are unknown.
+- Added ObjectPanelStateContext + NamespaceContext per-tab selection tests; coverage still needs remeasurement.
 - Backend coverage is now runnable via `build/go-tools` + `build/gocache` (local covdata toolchain); current `go test ./backend -cover` reports 74.4% coverage, so hitting 80% would require more tests in lower-coverage backend areas.
 
 ## Cluster Tabs

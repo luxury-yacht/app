@@ -110,15 +110,9 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
         },
       ];
 
-      cf.upsertClusterColumn(baseColumns, {
-        accessor: (event) => event.clusterName ?? event.clusterId ?? '—',
-        sortValue: (event) => (event.clusterName ?? event.clusterId ?? '').toLowerCase(),
-      });
-
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         type: { autoWidth: true },
-        cluster: { autoWidth: true },
         namespace: { autoWidth: true },
         source: { autoWidth: true },
         object: { autoWidth: true },
@@ -210,9 +204,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
             value: persistedFilters,
             onChange: setPersistedFilters,
             onReset: resetPersistedState,
-            options: {
-              showClusterDropdown: true,
-            },
           }}
           virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
           columnWidths={columnWidths}
