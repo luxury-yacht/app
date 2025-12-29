@@ -127,6 +127,11 @@
 93. ✅ Fix remaining backend wrapper tests to pass cluster ID for node force-delete signatures.
 94. ✅ Fix failing LogViewer tests for cluster-aware log/container calls.
 95. ✅ Fix failing ObjectPanel tests after cluster-aware RPC changes.
+96. ✅ Re-audit for legacy single-cluster entry points and remaining assumptions.
+97. ⏳ Pass `clusterId` into all `openWithObject` calls from catalog/browse/command palette and namespace/cluster views to keep object panel requests scoped to the originating tab.
+98. ⏳ Pass `clusterId` through object panel detail overviews (endpoints/policy/workload) when navigating to related objects.
+99. ⏳ Update/extend frontend tests to cover cluster-aware `openWithObject` payloads for catalog, namespace, cluster, and overview navigation flows.
+100. ✅ Run a full single-cluster assumption audit (backend RPCs, refresh scopes, navigation paths, payload types) and list any remaining gaps.
 
 ## Risks / watchouts
 
@@ -140,12 +145,13 @@
 
 ## Audit findings (legacy single-cluster entry points)
 
-- Object YAML + YAML mutations: `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx` calls `GetObjectYAML`, and `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTabUtils.ts` calls `ValidateObjectYaml`/`ApplyObjectYaml`. Backend paths `backend/object_yaml.go` and `backend/object_yaml_mutation.go` still use the base single-cluster client/dynamic client.
-- Object panel actions (restart/scale/delete): `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelActions.ts` calls `DeletePod`, `DeleteResource`, `DeleteHelmRelease`, `RestartWorkload`, `ScaleWorkload`. Backend paths use `a.resourceDependencies()` (single cluster) via `backend/resources_pods.go`, `backend/resources_generic.go`, `backend/resources_helm.go`, `backend/resources_workloads.go`.
-- Node maintenance actions: `frontend/src/modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab.tsx` calls node operations; backend uses single-cluster deps in `backend/resources_nodes.go`.
-- Logs + shell: `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx` (`LogFetcher`, `GetPodContainers`) and `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx` (`StartShellSession`, etc). Backend uses `a.client`/`a.restConfig` in `backend/resources_pods.go` and `backend/shell_sessions.go`.
-- Namespace/cluster view deletes: `DeleteResource` is used in multiple views (e.g. `frontend/src/modules/namespace/components/NsViewConfig.tsx`, `frontend/src/modules/cluster/components/ClusterViewRBAC.tsx`) and still routes through `backend/resources_generic.go` (single-cluster deps).
-- Capabilities: frontend includes `clusterId` in descriptors, but `backend/app_capabilities.go` ignores it and resolves GVR using the base selection only.
+- Resolved: YAML fetch/mutation, object panel actions, node maintenance, logs/shell, generic deletes, and capability checks are now cluster-aware (see steps 85-95).
+- Remaining: multiple `openWithObject` callsites still omit `clusterId`, so object panel detail scopes can fall back to the current selection.
+  - Catalog/browse/command palette: `frontend/src/modules/browse/components/BrowseView.tsx`, `frontend/src/modules/namespace/components/NsViewObjects.tsx`, `frontend/src/ui/command-palette/CommandPalette.tsx`.
+  - Namespace views: `frontend/src/modules/namespace/components/NsViewNetwork.tsx`, `frontend/src/modules/namespace/components/NsViewRBAC.tsx`, `frontend/src/modules/namespace/components/NsViewQuotas.tsx`, `frontend/src/modules/namespace/components/NsViewAutoscaling.tsx`, `frontend/src/modules/namespace/components/NsViewCustom.tsx`, `frontend/src/modules/namespace/components/NsViewStorage.tsx`, `frontend/src/modules/namespace/components/NsViewConfig.tsx`, `frontend/src/modules/namespace/components/NsViewWorkloads.tsx`, `frontend/src/modules/namespace/components/NsViewHelm.tsx`, `frontend/src/modules/namespace/components/NsViewEvents.tsx`.
+  - Cluster views: `frontend/src/modules/cluster/components/ClusterViewRBAC.tsx`, `frontend/src/modules/cluster/components/ClusterViewConfig.tsx`, `frontend/src/modules/cluster/components/ClusterViewCustom.tsx`, `frontend/src/modules/cluster/components/ClusterViewCRDs.tsx`, `frontend/src/modules/cluster/components/ClusterViewStorage.tsx`, `frontend/src/modules/cluster/components/ClusterViewEvents.tsx`.
+  - Object panel overview navigation: `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PodOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ConfigMapOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/SecretOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/HelmOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/EndpointsOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PolicyOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/WorkloadOverview.tsx`.
+- Remaining backend fallback behavior: single-cluster RPC getters in `backend/resources_*.go` and `backend/object_detail_provider.go` still use `a.resourceDependencies()` when cluster meta is missing, so unscoped requests will hit the base selection.
 
 ## Multi-cluster selection note
 
