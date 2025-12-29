@@ -96,6 +96,7 @@
 63. ✅ Resolve DiagnosticsPanel mock hoisting errors by hoisting mock factories.
 64. ✅ Fix refresh manager mock for DiagnosticsPanel tests (missing subscribe).
 65. ✅ Add missing refresh manager APIs in DiagnosticsPanel test mock.
+66. ✅ Prevent dockable panels (object panel) from overlapping the cluster tabs row by enforcing a dynamic top offset.
 
 ## Risks / watchouts
 

@@ -150,6 +150,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     allowMaximize,
     maximizeTargetSelector,
     onMaximizeChange,
+    panelRef,
   });
 
   const {
@@ -248,6 +249,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     minHeight: safeMinHeight,
     isResizing,
     isMaximized,
+    panelRef,
   });
 
   // Handle position changes
@@ -299,10 +301,10 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         style.width = `${maximizedRect.width}px`;
         style.height = `${maximizedRect.height}px`;
       } else {
-        style.top = 'var(--app-header-height)';
+        style.top = 'var(--dockable-panel-top-offset)';
         style.left = '0px';
         style.width = '100vw';
-        style.height = 'calc(100vh - var(--app-header-height))';
+        style.height = 'calc(100vh - var(--dockable-panel-top-offset))';
       }
       style.right = 'auto';
       style.bottom = 'auto';

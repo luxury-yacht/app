@@ -30,12 +30,27 @@ export const LAYOUT = {
   RESIZE_DEBOUNCE_MS: 100,
 } as const;
 
-// Read the CSS token so drag/resizes match the actual header height.
-export const getAppHeaderHeight = (): number => {
+// Read the CSS token so drag/resizes match the combined header + tab strip height.
+const parseCssPixelValue = (raw: string, fallback: number): number => {
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+export const getAppTopOffset = (): number => {
   if (typeof document === 'undefined') {
     return LAYOUT.APP_HEADER_HEIGHT;
   }
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--app-header-height');
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : LAYOUT.APP_HEADER_HEIGHT;
+  const raw = getComputedStyle(document.documentElement).getPropertyValue('--app-content-top');
+  return parseCssPixelValue(raw, LAYOUT.APP_HEADER_HEIGHT);
+};
+
+export const getDockablePanelTopOffset = (panel?: HTMLElement | null): number => {
+  if (typeof document === 'undefined') {
+    return LAYOUT.APP_HEADER_HEIGHT;
+  }
+  if (panel) {
+    const raw = getComputedStyle(panel).getPropertyValue('--dockable-panel-top-offset');
+    return parseCssPixelValue(raw, getAppTopOffset());
+  }
+  return getAppTopOffset();
 };

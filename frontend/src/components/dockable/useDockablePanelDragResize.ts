@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, RefObject } from 'react';
 import type { DockPosition } from './useDockablePanelState';
-import { LAYOUT, getAppHeaderHeight } from './dockablePanelLayout';
+import { LAYOUT, getDockablePanelTopOffset } from './dockablePanelLayout';
 
 interface DockablePanelState {
   position: DockPosition;
@@ -55,7 +55,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     left: 0,
     top: 0,
   });
-  const appHeaderHeightRef = useRef<number>(LAYOUT.APP_HEADER_HEIGHT);
+  const appTopOffsetRef = useRef<number>(LAYOUT.APP_HEADER_HEIGHT);
 
   useEffect(() => {
     // Keep the latest panel state for global event handlers without re-binding them.
@@ -71,7 +71,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       const rect = panelRef.current?.getBoundingClientRect();
       if (!rect) return;
 
-      appHeaderHeightRef.current = getAppHeaderHeight();
+      appTopOffsetRef.current = getDockablePanelTopOffset(panelRef.current);
       setIsDragging(true);
       setDragOffset({
         x: e.clientX - rect.left,
@@ -87,7 +87,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     (e: ReactMouseEvent, direction: string) => {
       if (isMaximized) return;
       e.stopPropagation();
-      appHeaderHeightRef.current = getAppHeaderHeight();
+      appTopOffsetRef.current = getDockablePanelTopOffset(panelRef.current);
       setIsResizing(true);
       setResizeDirection(direction);
       setResizeStart({
@@ -257,14 +257,14 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       if (!currentPanelState.isOpen) return;
 
       if (isDragging && currentPanelState.position === 'floating') {
-        const headerHeight = appHeaderHeightRef.current;
+        const topOffset = appTopOffsetRef.current;
         const minDistanceFromEdge = LAYOUT.MIN_EDGE_DISTANCE;
         const newX = Math.max(
           minDistanceFromEdge,
           Math.min(window.innerWidth - currentPanelState.size.width, e.clientX - dragOffset.x)
         );
         const newY = Math.max(
-          Math.max(headerHeight, minDistanceFromEdge),
+          Math.max(topOffset, minDistanceFromEdge),
           Math.min(window.innerHeight - currentPanelState.size.height, e.clientY - dragOffset.y)
         );
 
@@ -288,9 +288,11 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
           );
         } else if (currentPanelState.position === 'bottom') {
           // For bottom-docked panels, dragging up (negative deltaY) increases height
+          const reservedTop = Math.max(LAYOUT.BOTTOM_RESERVED_HEIGHT, appTopOffsetRef.current);
+          const maxAvailableHeight = window.innerHeight - reservedTop;
           newHeight = Math.max(
             safeMinHeight,
-            Math.min(safeMaxHeight || window.innerHeight, resizeStart.height - deltaY)
+            Math.min(safeMaxHeight || maxAvailableHeight, resizeStart.height - deltaY)
           );
         } else if (currentPanelState.position === 'floating') {
           // Handle multi-directional resizing for floating panels
@@ -324,17 +326,14 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
           }
           if (resizeDirection.includes('n')) {
             const proposedHeight = resizeStart.height - deltaY;
-            const headerHeight = appHeaderHeightRef.current;
+            const topOffset = appTopOffsetRef.current;
             if (proposedHeight >= safeMinHeight) {
-              newHeight = Math.min(
-                safeMaxHeight || window.innerHeight - headerHeight,
-                proposedHeight
-              );
-              // Don't allow dragging above the header
-              newTop = Math.max(headerHeight, resizeStart.top + deltaY);
-              // Adjust height if we hit the header
-              if (resizeStart.top + deltaY < headerHeight) {
-                newHeight = resizeStart.height + resizeStart.top - headerHeight;
+              newHeight = Math.min(safeMaxHeight || window.innerHeight - topOffset, proposedHeight);
+              // Don't allow dragging above the header + tab strip.
+              newTop = Math.max(topOffset, resizeStart.top + deltaY);
+              // Adjust height if we hit the top chrome.
+              if (resizeStart.top + deltaY < topOffset) {
+                newHeight = resizeStart.height + resizeStart.top - topOffset;
               }
             }
           }

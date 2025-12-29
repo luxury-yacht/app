@@ -576,6 +576,7 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
         defaultSize={{ width: 700, height: 600 }}
         minWidth={MIN_PANEL_WIDTH}
         minHeight={400}
+        className="object-panel-dockable"
         allowMaximize
         maximizeTargetSelector=".content-body"
         onClose={close}

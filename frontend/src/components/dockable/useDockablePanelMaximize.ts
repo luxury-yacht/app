@@ -5,8 +5,9 @@
  * Tracks maximized state, target bounds, and handles state restoration.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { DockPosition } from './useDockablePanelState';
+import { getDockablePanelTopOffset } from './dockablePanelLayout';
 
 interface DockablePanelState {
   position: DockPosition;
@@ -24,13 +25,14 @@ interface DockablePanelMaximizeOptions {
   allowMaximize: boolean;
   maximizeTargetSelector?: string;
   onMaximizeChange?: (isMaximized: boolean) => void;
+  panelRef?: RefObject<HTMLDivElement | null>;
 }
 
 /**
  * Manage maximize/restore behavior and track the target bounds for maximized panels.
  */
 export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) {
-  const { panelState, allowMaximize, maximizeTargetSelector, onMaximizeChange } = options;
+  const { panelState, allowMaximize, maximizeTargetSelector, onMaximizeChange, panelRef } = options;
   const [isMaximized, setIsMaximized] = useState(false);
   const [maximizedRect, setMaximizedRect] = useState<DOMRect | null>(null);
   const restoreStateRef = useRef<{
@@ -76,11 +78,7 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
         return;
       }
 
-      const headerHeightRaw =
-        typeof document !== 'undefined'
-          ? getComputedStyle(document.documentElement).getPropertyValue('--app-header-height')
-          : '';
-      const headerHeight = parseInt(headerHeightRaw, 10) || 0;
+      const headerHeight = getDockablePanelTopOffset(panelRef?.current);
       const rect = new DOMRect(
         0,
         headerHeight,
@@ -114,7 +112,7 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
         resizeObserverRef.current = null;
       }
     };
-  }, [isMaximized, resolveMaximizeTarget]);
+  }, [isMaximized, resolveMaximizeTarget, panelRef]);
 
   useEffect(() => {
     if (panelState.isOpen) {

@@ -3,7 +3,7 @@
  *
  * Cluster tab strip for multi-cluster navigation.
  */
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import './ClusterTabs.css';
 
@@ -65,6 +65,7 @@ const ClusterTabs: React.FC = () => {
   const [tabOrder, setTabOrder] = useState<string[]>(() => readPersistedOrder());
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const tabsRef = useRef<HTMLDivElement | null>(null);
 
   const tabs = useMemo<ClusterTab[]>(() => {
     return selectedKubeconfigs.map((selection) => {
@@ -145,12 +146,42 @@ const ClusterTabs: React.FC = () => {
     [draggingId, mergedOrder]
   );
 
+  useEffect(() => {
+    // Expose the tab strip height so dockable panels can respect the top chrome.
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const root = document.documentElement;
+    if (orderedTabs.length < 2) {
+      root.style.setProperty('--cluster-tabs-height', '0px');
+      return;
+    }
+    const updateHeight = () => {
+      const height = tabsRef.current?.getBoundingClientRect().height ?? 0;
+      root.style.setProperty('--cluster-tabs-height', `${Math.round(height)}px`);
+    };
+
+    updateHeight();
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && tabsRef.current) {
+      observer = new ResizeObserver(() => updateHeight());
+      observer.observe(tabsRef.current);
+    }
+
+    return () => {
+      observer?.disconnect();
+      root.style.setProperty('--cluster-tabs-height', '0px');
+    };
+  }, [orderedTabs.length]);
+
   if (orderedTabs.length < 2) {
     return null;
   }
 
   return (
-    <div className="cluster-tabs" role="tablist" aria-label="Cluster tabs">
+    <div ref={tabsRef} className="cluster-tabs" role="tablist" aria-label="Cluster tabs">
       {orderedTabs.map((tab) => {
         const isActive = tab.id === activeTabId;
         const isDragging = tab.id === draggingId;
