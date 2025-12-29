@@ -49,10 +49,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     const nodesDomain = useRefreshDomain('nodes');
     const metricsInfo = useMemo(() => {
       const metricsByCluster = nodesDomain.data?.metricsByCluster;
-      if (metricsByCluster && selectedClusterId) {
-        return metricsByCluster[selectedClusterId] ?? nodesDomain.data?.metrics;
+      if (metricsByCluster) {
+        return selectedClusterId ? metricsByCluster[selectedClusterId] ?? null : null;
       }
-      return nodesDomain.data?.metrics;
+      return nodesDomain.data?.metrics ?? null;
     }, [nodesDomain.data?.metrics, nodesDomain.data?.metricsByCluster, selectedClusterId]);
 
     const handleNodeClick = useCallback(

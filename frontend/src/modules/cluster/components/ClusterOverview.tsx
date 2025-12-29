@@ -72,23 +72,32 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const metricsInfo = useMemo(() => {
     const metricsByCluster = overviewDomain.data?.metricsByCluster;
-    if (metricsByCluster && selectedClusterId) {
-      return metricsByCluster[selectedClusterId] ?? overviewDomain.data?.metrics;
+    if (metricsByCluster) {
+      return selectedClusterId ? metricsByCluster[selectedClusterId] ?? null : null;
     }
-    return overviewDomain.data?.metrics;
+    return overviewDomain.data?.metrics ?? null;
   }, [overviewDomain.data?.metrics, overviewDomain.data?.metricsByCluster, selectedClusterId]);
   const metricsBanner = useMemo(() => getMetricsBannerInfo(metricsInfo), [metricsInfo]);
   const { setSelectedNamespace } = useNamespace();
   const { setActiveNamespaceTab, setSidebarSelection, navigateToNamespace } = useViewState();
 
+  const selectedOverview = useMemo(() => {
+    const overviewByCluster = overviewDomain.data?.overviewByCluster;
+    if (overviewByCluster) {
+      return selectedClusterId ? overviewByCluster[selectedClusterId] ?? null : null;
+    }
+    return overviewDomain.data?.overview ?? null;
+  }, [overviewDomain.data?.overview, overviewDomain.data?.overviewByCluster, selectedClusterId]);
+
   useEffect(() => {
-    const payload = overviewDomain.data?.overview ?? null;
-    if (payload) {
-      setOverviewData(payload);
+    if (selectedOverview) {
+      setOverviewData(selectedOverview);
       setIsHydrated(true);
       setIsSwitching(false);
       return;
-    } else if (overviewDomain.status === 'idle') {
+    }
+
+    if (overviewDomain.status === 'idle') {
       setOverviewData(EMPTY_OVERVIEW);
       setIsHydrated(false);
       return;
@@ -98,7 +107,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       setOverviewData(EMPTY_OVERVIEW);
       setIsSwitching(false);
     }
-  }, [overviewDomain.data, overviewDomain.status, isHydrated]);
+  }, [selectedOverview, overviewDomain.status, isHydrated]);
 
   useEffect(() => {
     let isActive = true;

@@ -76,6 +76,7 @@
 44. ✅ Trigger a manual refresh for the active cluster view when the selected cluster list changes to preload new tabs.
 45. ✅ Remove permission-pending gating so cluster views load without waiting on capability checks.
 46. ✅ Add per-cluster metrics metadata for nodes/overview snapshots and use it in the UI to avoid cross-cluster metrics bleed.
+47. ✅ Add per-cluster overview payloads and render cluster overview by active tab instead of merged totals.
 
 ## Risks / watchouts
 

@@ -23,8 +23,8 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
   }, [overviewDomain.data, overviewDomain.status]);
 
   const metricsByCluster = overviewDomain.data?.metricsByCluster;
-  if (metricsByCluster && selectedClusterId) {
-    return metricsByCluster[selectedClusterId] ?? overviewDomain.data?.metrics ?? null;
+  if (metricsByCluster) {
+    return selectedClusterId ? metricsByCluster[selectedClusterId] ?? null : null;
   }
   return overviewDomain.data?.metrics ?? null;
 };

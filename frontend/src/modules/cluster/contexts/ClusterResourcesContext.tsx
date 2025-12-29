@@ -308,8 +308,8 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       return undefined;
     }
     const metricsByCluster = nodeSnapshot.metricsByCluster;
-    if (metricsByCluster && selectedClusterId) {
-      return metricsByCluster[selectedClusterId] ?? nodeSnapshot.metrics;
+    if (metricsByCluster) {
+      return selectedClusterId ? metricsByCluster[selectedClusterId] ?? undefined : undefined;
     }
     return nodeSnapshot.metrics;
   }, [nodeSnapshot, selectedClusterId]);

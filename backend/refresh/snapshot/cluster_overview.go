@@ -50,9 +50,11 @@ type ClusterOverviewBuilder struct {
 // ClusterOverviewSnapshot is the payload published for the cluster overview domain.
 type ClusterOverviewSnapshot struct {
 	ClusterMeta
-	Overview          ClusterOverviewPayload             `json:"overview"`
-	Metrics           ClusterOverviewMetrics             `json:"metrics"`
-	MetricsByCluster  map[string]ClusterOverviewMetrics  `json:"metricsByCluster,omitempty"`
+	Overview         ClusterOverviewPayload              `json:"overview"`
+	Metrics          ClusterOverviewMetrics              `json:"metrics"`
+	MetricsByCluster map[string]ClusterOverviewMetrics   `json:"metricsByCluster,omitempty"`
+	// OverviewByCluster keeps per-cluster cards for multi-cluster snapshots.
+	OverviewByCluster map[string]ClusterOverviewPayload `json:"overviewByCluster,omitempty"`
 }
 
 // ClusterOverviewMetrics exposes poller metadata relevant to aggregated usage values.

@@ -159,6 +159,7 @@ export interface ClusterOverviewSnapshotPayload extends ClusterMeta {
   overview: ClusterOverviewPayload;
   metrics: ClusterOverviewMetrics;
   metricsByCluster?: Record<string, ClusterOverviewMetrics>;
+  overviewByCluster?: Record<string, ClusterOverviewPayload>;
 }
 
 export interface ClusterRBACEntry extends ClusterMeta {
