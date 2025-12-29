@@ -62,6 +62,9 @@
 31. ✅ Format header title as "cluster-name - namespace (if applicable) - view-name".
 32. ✅ Update kubeconfig dropdown placeholder text to "Select Kubeconfig".
 33. ✅ Keep kubeconfig dropdown label fixed to "Select Kubeconfig" regardless of selection.
+34. ✅ Replace kubeconfig dropdown selected highlight with checkmark to match other multi-selects.
+35. ✅ Fix kubeconfig dropdown renderOption signature to pass selection state for checkmarks.
+36. ✅ Restrict kubeconfig hover highlight to context line only (no full-row highlight).
 
 ## Risks / watchouts
 

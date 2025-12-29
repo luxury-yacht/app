@@ -115,7 +115,7 @@ function KubeconfigSelector() {
         renderValue={renderSelectedValue}
         size="compact"
         multiple
-        renderOption={(option) => (
+        renderOption={(option, isSelected) => (
           <div
             className={`kubeconfig-option ${!option.metadata?.isFirstForFile ? 'no-filename' : ''} ${option.metadata?.isCurrentContext ? 'current-context' : ''}`}
             title={
@@ -124,12 +124,16 @@ function KubeconfigSelector() {
                 : undefined
             }
           >
-            {option.metadata?.isFirstForFile && (
-              <div className="kubeconfig-filename">{option.metadata.filename}</div>
-            )}
-            <div className="kubeconfig-context">{option.metadata?.context}</div>
+          {option.metadata?.isFirstForFile && (
+            <div className="kubeconfig-filename">{option.metadata.filename}</div>
+          )}
+          <div className="kubeconfig-context">
+            {/* Match other multi-select dropdowns by showing a checkmark for selected entries. */}
+            <span className="kubeconfig-check">{isSelected ? '✓' : ''}</span>
+            <span className="kubeconfig-context-label">{option.metadata?.context}</span>
           </div>
-        )}
+        </div>
+      )}
       />
     </div>
   );
