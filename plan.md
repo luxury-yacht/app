@@ -15,6 +15,8 @@
 - Use a single refresh orchestrator; scope refresh context to the active tab by default.
 - Logs/diagnostics/modals remain outside tab context; each tab has its own sidebar, main content, and object panel.
 - No primary cluster concept; selection is a set and all backend/frontend flows must avoid primary/first-cluster assumptions.
+- Prefer `clusterId` everywhere (object identity, request payloads, test data); missing `clusterId` is legacy single-cluster only.
+- Always include `clusterId` on `openWithObject` payloads; do not rely on fallback selection.
 - Do not add new dependencies for drag-and-drop.
 - Treat multi-select add/remove as a lightweight selection change; only emit `kubeconfig:changing` when the selection becomes empty, and only emit `kubeconfig:changed` when at least one cluster is active after an empty selection.
 
@@ -128,10 +130,12 @@
 94. ✅ Fix failing LogViewer tests for cluster-aware log/container calls.
 95. ✅ Fix failing ObjectPanel tests after cluster-aware RPC changes.
 96. ✅ Re-audit for legacy single-cluster entry points and remaining assumptions.
-97. ⏳ Pass `clusterId` into all `openWithObject` calls from catalog/browse/command palette and namespace/cluster views to keep object panel requests scoped to the originating tab.
-98. ⏳ Pass `clusterId` through object panel detail overviews (endpoints/policy/workload) when navigating to related objects.
-99. ⏳ Update/extend frontend tests to cover cluster-aware `openWithObject` payloads for catalog, namespace, cluster, and overview navigation flows.
+97. ✅ Pass `clusterId` into all `openWithObject` calls from catalog/browse/command palette and namespace/cluster views to keep object panel requests scoped to the originating tab.
+98. ✅ Pass `clusterId` through object panel detail overviews (endpoints/policy/workload) when navigating to related objects.
+99. ✅ Update/extend frontend tests to cover cluster-aware `openWithObject` payloads for catalog, namespace, cluster, and overview navigation flows.
 100. ✅ Run a full single-cluster assumption audit (backend RPCs, refresh scopes, navigation paths, payload types) and list any remaining gaps.
+101. ✅ Apply remaining `openWithObject` clusterId plumbing and update tests (steps 97-99).
+102. ✅ Confirm whether `openWithObject` should rely on active tab cluster fallback when callsites omit cluster metadata, or require explicit cluster IDs in all callsites. (Decision: always include `clusterId`.)
 
 ## Risks / watchouts
 
@@ -146,11 +150,7 @@
 ## Audit findings (legacy single-cluster entry points)
 
 - Resolved: YAML fetch/mutation, object panel actions, node maintenance, logs/shell, generic deletes, and capability checks are now cluster-aware (see steps 85-95).
-- Remaining: multiple `openWithObject` callsites still omit `clusterId`, so object panel detail scopes can fall back to the current selection.
-  - Catalog/browse/command palette: `frontend/src/modules/browse/components/BrowseView.tsx`, `frontend/src/modules/namespace/components/NsViewObjects.tsx`, `frontend/src/ui/command-palette/CommandPalette.tsx`.
-  - Namespace views: `frontend/src/modules/namespace/components/NsViewNetwork.tsx`, `frontend/src/modules/namespace/components/NsViewRBAC.tsx`, `frontend/src/modules/namespace/components/NsViewQuotas.tsx`, `frontend/src/modules/namespace/components/NsViewAutoscaling.tsx`, `frontend/src/modules/namespace/components/NsViewCustom.tsx`, `frontend/src/modules/namespace/components/NsViewStorage.tsx`, `frontend/src/modules/namespace/components/NsViewConfig.tsx`, `frontend/src/modules/namespace/components/NsViewWorkloads.tsx`, `frontend/src/modules/namespace/components/NsViewHelm.tsx`, `frontend/src/modules/namespace/components/NsViewEvents.tsx`.
-  - Cluster views: `frontend/src/modules/cluster/components/ClusterViewRBAC.tsx`, `frontend/src/modules/cluster/components/ClusterViewConfig.tsx`, `frontend/src/modules/cluster/components/ClusterViewCustom.tsx`, `frontend/src/modules/cluster/components/ClusterViewCRDs.tsx`, `frontend/src/modules/cluster/components/ClusterViewStorage.tsx`, `frontend/src/modules/cluster/components/ClusterViewEvents.tsx`.
-  - Object panel overview navigation: `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PodOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ConfigMapOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/SecretOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/HelmOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/EndpointsOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PolicyOverview.tsx`, `frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/WorkloadOverview.tsx`.
+- Resolved: `openWithObject` callsites now include `clusterId` across catalog/browse/command palette, namespace/cluster views, and object panel overview navigation; tests updated accordingly.
 - Remaining backend fallback behavior: single-cluster RPC getters in `backend/resources_*.go` and `backend/object_detail_provider.go` still use `a.resourceDependencies()` when cluster meta is missing, so unscoped requests will hit the base selection.
 
 ## Multi-cluster selection note

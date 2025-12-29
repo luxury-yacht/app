@@ -51,7 +51,11 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
   labels,
   annotations,
 }) => {
-  const { openWithObject } = useObjectPanel();
+  const { openWithObject, objectData } = useObjectPanel();
+  const clusterMeta = {
+    clusterId: objectData?.clusterId ?? undefined,
+    clusterName: objectData?.clusterName ?? undefined,
+  };
 
   return (
     <>
@@ -84,6 +88,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
                     kind: owner.kind.toLowerCase(),
                     name: owner.name,
                     namespace: namespace,
+                    ...clusterMeta,
                   })
                 }
               >
@@ -101,7 +106,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
           value={
             <span
               className="object-panel-link"
-              onClick={() => openWithObject?.({ kind: 'node', name: node })}
+              onClick={() => openWithObject?.({ kind: 'node', name: node, ...clusterMeta })}
               title="Click to view node"
             >
               {node}
@@ -142,6 +147,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
                   kind: 'serviceaccount',
                   name: serviceAccount,
                   namespace: namespace,
+                  ...clusterMeta,
                 })
               }
               title="Click to view service account"

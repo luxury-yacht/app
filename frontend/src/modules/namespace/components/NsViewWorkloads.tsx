@@ -87,6 +87,8 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           kind: workload.kind,
           name: workload.name,
           namespace: workload.namespace,
+          clusterId: workload.clusterId ?? undefined,
+          clusterName: workload.clusterName ?? undefined,
         });
       },
       [openWithObject]

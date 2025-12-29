@@ -70,6 +70,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         openWithObject({
           kind: 'PersistentVolume',
           name: pv.name,
+          clusterId: pv.clusterId ?? undefined,
+          clusterName: pv.clusterName ?? undefined,
         });
       },
       [openWithObject]
@@ -96,6 +98,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           kind: 'PersistentVolumeClaim',
           namespace: target.namespace,
           name: target.name,
+          clusterId: pv.clusterId ?? undefined,
+          clusterName: pv.clusterName ?? undefined,
         });
       },
       [getClaimTarget, openWithObject]
@@ -140,6 +144,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               openWithObject({
                 kind: 'StorageClass',
                 name: pv.storageClass,
+                clusterId: pv.clusterId ?? undefined,
+                clusterName: pv.clusterName ?? undefined,
               });
             },
             isInteractive: (pv) => Boolean(pv.storageClass),

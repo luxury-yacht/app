@@ -12,9 +12,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { ConfigMapOverview } from './ConfigMapOverview';
 
 const openWithObjectMock = vi.fn();
+const defaultClusterId = 'alpha:ctx';
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
+  useObjectPanel: () => ({
+    openWithObject: openWithObjectMock,
+    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
+  }),
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
@@ -90,11 +94,14 @@ describe('ConfigMapOverview', () => {
     act(() => {
       podLink?.click();
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'pod',
-      name: 'pod-a',
-      namespace: 'default',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'pod',
+        name: 'pod-a',
+        namespace: 'default',
+        clusterId: defaultClusterId,
+      })
+    );
   });
 
   it('renders not-in-use message when no consumers', async () => {

@@ -105,7 +105,11 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
   const isDaemonSet = normalizedKind === 'daemonset';
   const isStatefulSet = normalizedKind === 'statefulset';
   const isReplicaSet = normalizedKind === 'replicaset';
-  const { openWithObject } = useObjectPanel();
+  const { openWithObject, objectData } = useObjectPanel();
+  const clusterMeta = {
+    clusterId: objectData?.clusterId ?? undefined,
+    clusterName: objectData?.clusterName ?? undefined,
+  };
 
   return (
     <>
@@ -243,6 +247,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
                       kind: 'Service',
                       name: serviceName,
                       namespace: namespace,
+                      ...clusterMeta,
                     })
                   }
                   title="Click to view service"

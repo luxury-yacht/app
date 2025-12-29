@@ -69,6 +69,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           kind: resource.kind || resource.kindAlias,
           name: resource.name,
           namespace: resource.namespace,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]
@@ -131,6 +133,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               openWithObject({
                 kind: 'StorageClass',
                 name: resource.storageClass,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
               });
             },
             isInteractive: (resource) => Boolean(resource.storageClass),

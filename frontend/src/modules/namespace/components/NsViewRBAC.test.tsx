@@ -154,11 +154,14 @@ describe('NsViewRBAC', () => {
     act(() => {
       openItem?.onClick?.();
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'Role',
-      name: 'view',
-      namespace: 'team-a',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Role',
+        name: 'view',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+      })
+    );
   });
 
   it('deletes RBAC entries on confirmation', async () => {

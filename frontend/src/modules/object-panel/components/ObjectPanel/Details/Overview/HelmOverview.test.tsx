@@ -12,9 +12,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { HelmOverview } from './HelmOverview';
 
 const openWithObjectMock = vi.fn();
+const defaultClusterId = 'alpha:ctx';
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
+  useObjectPanel: () => ({
+    openWithObject: openWithObjectMock,
+    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
+  }),
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
@@ -105,11 +109,14 @@ describe('HelmOverview', () => {
     act(() => {
       resourceLinks[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'deployment',
-      name: 'api',
-      namespace: 'prod',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'deployment',
+        name: 'api',
+        namespace: 'prod',
+        clusterId: defaultClusterId,
+      })
+    );
     expect(container.textContent).toContain('... and 1 more revision(s)');
   });
 

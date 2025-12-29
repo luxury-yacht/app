@@ -71,6 +71,8 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
             kind,
             name,
             namespace,
+            clusterId: event.clusterId ?? undefined,
+            clusterName: event.clusterName ?? undefined,
           });
         }
       },

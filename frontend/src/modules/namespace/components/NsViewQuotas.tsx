@@ -84,6 +84,8 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
           kind: resource.kind || resource.kindAlias,
           name: resource.name,
           namespace: resource.namespace,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]

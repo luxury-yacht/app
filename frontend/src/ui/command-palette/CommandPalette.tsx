@@ -546,6 +546,8 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
           version: catalogItem.version,
           resource: catalogItem.resource,
           uid: catalogItem.uid,
+          clusterId: catalogItem.clusterId ?? undefined,
+          clusterName: catalogItem.clusterName ?? undefined,
         });
       }, 100);
     },

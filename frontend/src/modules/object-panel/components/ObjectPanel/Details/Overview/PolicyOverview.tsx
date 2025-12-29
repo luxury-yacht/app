@@ -47,7 +47,11 @@ interface PolicyOverviewProps {
 // Policy resources Overview
 export const PolicyOverview: React.FC<PolicyOverviewProps> = (props) => {
   const { kind, name, namespace, age } = props;
-  const { openWithObject } = useObjectPanel();
+  const { openWithObject, objectData } = useObjectPanel();
+  const clusterMeta = {
+    clusterId: objectData?.clusterId ?? undefined,
+    clusterName: objectData?.clusterName ?? undefined,
+  };
 
   const handleTargetClick = () => {
     if (!props.scaleTargetRef || !openWithObject) {
@@ -58,6 +62,7 @@ export const PolicyOverview: React.FC<PolicyOverviewProps> = (props) => {
       kind: props.scaleTargetRef.kind,
       name: props.scaleTargetRef.name,
       namespace,
+      ...clusterMeta,
     });
   };
 

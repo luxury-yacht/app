@@ -92,6 +92,8 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           kind: resource.kind || resource.kindAlias,
           name: resource.name,
           namespace: resource.namespace,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]
@@ -153,6 +155,8 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
                 kind: resource.scaleTargetRef.kind,
                 name: resource.scaleTargetRef.name,
                 namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
               });
             },
             isInteractive: (resource) => Boolean(resource.scaleTargetRef),
@@ -309,6 +313,8 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
                   name: resource.name,
                   namespace: resource.namespace,
                   viewMode: 'events',
+                  clusterId: resource.clusterId ?? undefined,
+                  clusterName: resource.clusterName ?? undefined,
                 });
               },
             }

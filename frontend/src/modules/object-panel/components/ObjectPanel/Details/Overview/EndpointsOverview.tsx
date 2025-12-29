@@ -28,7 +28,11 @@ const parseTargetRef = (targetRef: string): { kind: string; name: string } | nul
 export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
   endpointSliceDetails,
 }) => {
-  const { openWithObject } = useObjectPanel();
+  const { openWithObject, objectData } = useObjectPanel();
+  const clusterMeta = {
+    clusterId: objectData?.clusterId ?? undefined,
+    clusterName: objectData?.clusterName ?? undefined,
+  };
 
   const handleTargetClick = useCallback(
     (targetRef: string, namespace: string) => {
@@ -38,10 +42,11 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
           kind: parsed.kind,
           name: parsed.name,
           namespace,
+          ...clusterMeta,
         });
       }
     },
-    [openWithObject]
+    [clusterMeta, openWithObject]
   );
 
   const handleNodeClick = useCallback(
@@ -49,9 +54,10 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
       openWithObject({
         kind: 'Node',
         name: nodeName,
+        ...clusterMeta,
       });
     },
-    [openWithObject]
+    [clusterMeta, openWithObject]
   );
 
   if (!endpointSliceDetails) return null;

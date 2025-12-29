@@ -343,6 +343,8 @@ const BrowseView: React.FC = () => {
         version: row.item.version,
         resource: row.item.resource,
         uid: row.item.uid,
+        clusterId: row.item.clusterId ?? undefined,
+        clusterName: row.item.clusterName ?? undefined,
       });
     },
     [openWithObject]

@@ -66,6 +66,8 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
         openWithObject({
           kind: 'CustomResourceDefinition',
           name: crd.name,
+          clusterId: crd.clusterId ?? undefined,
+          clusterName: crd.clusterName ?? undefined,
         });
       },
       [openWithObject]

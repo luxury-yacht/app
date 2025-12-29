@@ -12,9 +12,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PodOverview } from './PodOverview';
 
 const openWithObjectMock = vi.fn();
+const defaultClusterId = 'alpha:ctx';
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
+  useObjectPanel: () => ({
+    openWithObject: openWithObjectMock,
+    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
+  }),
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
@@ -108,11 +112,14 @@ describe('PodOverview', () => {
       ownerLink?.click();
     });
 
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'statefulset',
-      name: 'worker',
-      namespace: 'cluster',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'statefulset',
+        name: 'worker',
+        namespace: 'cluster',
+        clusterId: defaultClusterId,
+      })
+    );
   });
 
   it('navigates to related resources for node and service account links', async () => {
@@ -129,17 +136,26 @@ describe('PodOverview', () => {
     act(() => {
       nodeLink?.click();
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith({ kind: 'node', name: 'node-b' });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'node',
+        name: 'node-b',
+        clusterId: defaultClusterId,
+      })
+    );
 
     const serviceAccountLink = getLinkByText('cache-sa') ?? getElementByText('cache-sa');
     expect(serviceAccountLink).not.toBeUndefined();
     act(() => {
       serviceAccountLink?.click();
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'serviceaccount',
-      name: 'cache-sa',
-      namespace: 'infra',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'serviceaccount',
+        name: 'cache-sa',
+        namespace: 'infra',
+        clusterId: defaultClusterId,
+      })
+    );
   });
 });

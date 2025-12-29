@@ -71,6 +71,8 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             kind,
             name,
             namespace: resolvedNamespace,
+            clusterId: event.clusterId ?? undefined,
+            clusterName: event.clusterName ?? undefined,
           });
         }
       },

@@ -168,6 +168,7 @@ describe('NsViewCustom', () => {
         age: '10m',
         labels: { team: 'platform' },
         annotations: { owner: 'ops' },
+        clusterId: 'alpha:ctx',
       })
     );
 

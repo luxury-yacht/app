@@ -206,11 +206,14 @@ describe('NsViewNetwork', () => {
     act(() => {
       openItem?.onClick?.();
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'Ingress',
-      name: 'web-gateway',
-      namespace: 'team-a',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Ingress',
+        name: 'web-gateway',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+      })
+    );
   });
 
   it('gates delete option on permissions and confirms deletion', async () => {

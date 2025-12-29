@@ -76,6 +76,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           kind: 'HelmRelease',
           name: resource.name,
           namespace: resource.namespace,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]
@@ -295,6 +297,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
                 name: resource.name,
                 namespace: resource.namespace,
                 viewMode: 'values',
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
               });
             },
           },
@@ -307,6 +311,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
                 name: resource.name,
                 namespace: resource.namespace,
                 viewMode: 'chart',
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
               });
             },
           },
@@ -319,6 +325,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
                 name: resource.name,
                 namespace: resource.namespace,
                 viewMode: 'history',
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
               });
             },
           }
@@ -338,6 +346,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
                   name: resource.name,
                   namespace: resource.namespace,
                   viewMode: 'failure',
+                  clusterId: resource.clusterId ?? undefined,
+                  clusterName: resource.clusterName ?? undefined,
                 });
               },
             }

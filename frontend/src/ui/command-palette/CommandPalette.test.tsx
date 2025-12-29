@@ -26,6 +26,8 @@ const createCatalogItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
   resourceVersion: '1',
   creationTimestamp: baseTimestamp,
   scope: 'Namespace',
+  clusterId: 'alpha:ctx',
+  clusterName: 'alpha',
   ...overrides,
 });
 
@@ -473,6 +475,7 @@ describe('CommandPalette component behaviour', () => {
         namespace: 'metrics',
         resource: 'pods',
         uid: 'catalog-pod',
+        clusterId: 'alpha:ctx',
       })
     );
   });

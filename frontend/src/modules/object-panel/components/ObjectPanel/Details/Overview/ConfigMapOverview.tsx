@@ -17,7 +17,11 @@ interface ConfigMapOverviewProps {
 }
 
 export const ConfigMapOverview: React.FC<ConfigMapOverviewProps> = ({ configMapDetails }) => {
-  const { openWithObject } = useObjectPanel();
+  const { openWithObject, objectData } = useObjectPanel();
+  const clusterMeta = {
+    clusterId: objectData?.clusterId ?? undefined,
+    clusterName: objectData?.clusterName ?? undefined,
+  };
 
   if (!configMapDetails) return null;
 
@@ -63,6 +67,7 @@ export const ConfigMapOverview: React.FC<ConfigMapOverviewProps> = ({ configMapD
                           kind: 'pod',
                           name: podName,
                           namespace: configMapDetails.namespace,
+                          ...clusterMeta,
                         })
                       }
                       title={`Click to view pod: ${podName}`}

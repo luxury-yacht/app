@@ -65,6 +65,8 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         openWithObject({
           kind: resource.kind,
           name: resource.name,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]

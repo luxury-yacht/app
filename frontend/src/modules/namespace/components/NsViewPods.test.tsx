@@ -261,13 +261,15 @@ describe('NsViewPods', () => {
       cell.props.onClick?.({ stopPropagation: () => {} });
     });
 
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      clusterId: 'alpha:ctx',
-      clusterName: 'alpha',
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'alpha:ctx',
+        clusterName: 'alpha',
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+      })
+    );
   });
 
   it('renders namespace error and metrics banners when provided', async () => {

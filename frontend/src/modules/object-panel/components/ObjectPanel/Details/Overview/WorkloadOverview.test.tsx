@@ -12,9 +12,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { WorkloadOverview } from './WorkloadOverview';
 
 const openWithObjectMock = vi.fn();
+const defaultClusterId = 'alpha:ctx';
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
+  useObjectPanel: () => ({
+    openWithObject: openWithObjectMock,
+    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
+  }),
 }));
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
@@ -181,11 +185,14 @@ describe('WorkloadOverview', () => {
       serviceLink?.click();
     });
 
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'Service',
-      name: 'db-primary',
-      namespace: 'data',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Service',
+        name: 'db-primary',
+        namespace: 'data',
+        clusterId: defaultClusterId,
+      })
+    );
     expect(container.textContent).toContain('Pod Management');
     expect(container.textContent).toContain('Parallel');
     expect(container.textContent).toContain('Min Ready');

@@ -72,6 +72,8 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           age: resource.age,
           labels: resource.labels,
           annotations: resource.annotations,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]

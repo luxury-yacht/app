@@ -114,6 +114,8 @@ describe('NsViewEvents', () => {
     message: 'Insufficient CPU',
     objectNamespace: 'team-a',
     namespace: 'team-a',
+    clusterId: 'alpha:ctx',
+    clusterName: 'alpha',
     ageTimestamp: 42,
     ...overrides,
   });
@@ -149,11 +151,14 @@ describe('NsViewEvents', () => {
       menu[0].onClick?.();
     });
 
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+      })
+    );
   });
 
   it('renders interactive object column that triggers navigation', async () => {
@@ -169,11 +174,14 @@ describe('NsViewEvents', () => {
       cell.props.onClick({ stopPropagation: () => {} });
     });
 
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+      })
+    );
   });
 
   it('suppresses context actions when no related object provided', async () => {
@@ -207,11 +215,14 @@ describe('NsViewEvents', () => {
     act(() => {
       menu[0].onClick?.();
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'Pod',
-      name: 'api',
-      namespace: 'team-a',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Pod',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+      })
+    );
   });
 
   it('generates stable keys and omits namespace column when not requested', async () => {
