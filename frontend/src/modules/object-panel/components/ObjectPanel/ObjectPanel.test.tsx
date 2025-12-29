@@ -8,6 +8,7 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 
 type CapabilityState = {
   allowed: boolean;
@@ -78,6 +79,8 @@ const mockApp = {
   DeleteResource: vi.fn().mockResolvedValue(undefined),
   ScaleWorkload: vi.fn().mockResolvedValue(undefined),
 };
+
+const defaultClusterId = 'alpha:ctx';
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => mockUseObjectPanel(),
@@ -253,7 +256,7 @@ describe('ObjectPanel tab availability', () => {
   });
 
   const renderObjectPanel = async (options: PanelTestOptions) => {
-    const clusterId = options.clusterId ?? 'alpha:ctx';
+    const clusterId = options.clusterId ?? defaultClusterId;
     const navigationHistory = [
       {
         kind: options.kind,
@@ -345,7 +348,7 @@ describe('ObjectPanel tab availability', () => {
       scopedDomain: { data: { details: {} }, status: 'idle', error: null },
     });
 
-    const detailScope = 'team-a:pod:api';
+    const detailScope = buildClusterScope(defaultClusterId, 'team-a:pod:api');
 
     expect(mockRefreshManager.register).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'object-pod', interval: 2000 })
@@ -426,7 +429,7 @@ describe('ObjectPanel tab availability', () => {
     );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
-      'team-a:deployment:api',
+      buildClusterScope(defaultClusterId, 'team-a:deployment:api'),
       expect.objectContaining({ isManual: true })
     );
   });
@@ -597,6 +600,7 @@ describe('ObjectPanel tab availability', () => {
       resourceName: 'api',
       resourceKind: 'pod',
       isActive: true,
+      clusterId: defaultClusterId,
     });
   });
 
@@ -636,7 +640,7 @@ describe('ObjectPanel tab availability', () => {
     });
 
     expect(yamlTabPropsRef.current).toMatchObject({
-      scope: 'team-a:deployment:api',
+      scope: buildClusterScope(defaultClusterId, 'team-a:deployment:api'),
       canEdit: false,
       editDisabledReason: 'forbidden',
       isActive: true,
@@ -670,7 +674,7 @@ describe('ObjectPanel tab availability', () => {
       await Promise.resolve();
     });
     expect(manifestTabPropsRef.current).toMatchObject({
-      scope: 'team-a:my-app',
+      scope: buildClusterScope(defaultClusterId, 'team-a:my-app'),
       isActive: true,
     });
 
@@ -680,7 +684,7 @@ describe('ObjectPanel tab availability', () => {
       await Promise.resolve();
     });
     expect(valuesTabPropsRef.current).toMatchObject({
-      scope: 'team-a:my-app',
+      scope: buildClusterScope(defaultClusterId, 'team-a:my-app'),
       isActive: true,
     });
   });
@@ -693,7 +697,7 @@ describe('ObjectPanel tab availability', () => {
     });
 
     expect(mockEvaluateNamespacePermissions).toHaveBeenCalledWith('Team-A', {
-      clusterId: null,
+      clusterId: defaultClusterId,
     });
   });
 

@@ -125,6 +125,8 @@
 91. ✅ Audit remaining frontend/backend callsites for cluster-aware RPC signatures and fix any missed tests or mocks.
 92. ✅ Fix YAML mutation GVR fallback to use cluster-scoped selection keys and dependency logger (compile error cleanup).
 93. ✅ Fix remaining backend wrapper tests to pass cluster ID for node force-delete signatures.
+94. ✅ Fix failing LogViewer tests for cluster-aware log/container calls.
+95. ✅ Fix failing ObjectPanel tests after cluster-aware RPC changes.
 
 ## Risks / watchouts
 
