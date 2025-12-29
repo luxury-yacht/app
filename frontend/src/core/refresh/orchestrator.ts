@@ -107,11 +107,13 @@ class RefreshOrchestrator {
     objectPanel: { isOpen: false },
   };
   private lastNotifiedErrors = new Map<string, string>();
+  private suppressNetworkErrorsUntil = 0;
 
   constructor() {
     eventBus.on('view:reset', this.handleResetViews);
     eventBus.on('kubeconfig:changing', this.handleKubeconfigChanging);
     eventBus.on('kubeconfig:changed', this.handleKubeconfigChanged);
+    eventBus.on('kubeconfig:selection-changed', this.handleKubeconfigSelectionChanged);
   }
 
   private getErrorNotificationKey(domain: RefreshDomain, scope?: string): string {
@@ -123,6 +125,9 @@ class RefreshOrchestrator {
     scope: string | undefined,
     message: string
   ): void {
+    if (this.shouldSuppressNetworkError(message)) {
+      return;
+    }
     const key = this.getErrorNotificationKey(domain, scope);
     if (this.lastNotifiedErrors.get(key) === message) {
       return;
@@ -162,6 +167,26 @@ class RefreshOrchestrator {
     if (this.lastNotifiedErrors.has(key)) {
       this.lastNotifiedErrors.delete(key);
     }
+  }
+
+  private suppressNetworkErrors(durationMs: number): void {
+    this.suppressNetworkErrorsUntil = Math.max(
+      this.suppressNetworkErrorsUntil,
+      Date.now() + durationMs
+    );
+  }
+
+  private shouldSuppressNetworkError(message: string): boolean {
+    if (Date.now() > this.suppressNetworkErrorsUntil) {
+      return false;
+    }
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('load failed') ||
+      normalized.includes('failed to fetch') ||
+      normalized.includes('could not connect to the server') ||
+      normalized.includes('snapshot request failed')
+    );
   }
 
   registerDomain<K extends RefreshDomain>(config: DomainRegistration<K>): void {
@@ -1141,6 +1166,24 @@ class RefreshOrchestrator {
       }
 
       const message = error instanceof Error ? error.message : String(error);
+      if (this.shouldSuppressNetworkError(message)) {
+        if (isScoped) {
+          setScopedDomainState(domain, normalizedScope!, (prev) => ({
+            ...prev,
+            status: prev.data ? 'ready' : prev.status,
+            error: null,
+            isManual: options.isManual,
+          }));
+        } else {
+          setDomainState(domain, (prev) => ({
+            ...prev,
+            status: prev.data ? 'ready' : prev.status,
+            error: null,
+            isManual: options.isManual,
+          }));
+        }
+        return;
+      }
 
       if (isScoped) {
         setScopedDomainState(domain, normalizedScope!, (prev) => ({
@@ -1350,7 +1393,15 @@ class RefreshOrchestrator {
   private handleKubeconfigChanged = () => {
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
+    this.suppressNetworkErrors(6000);
     this.suspendedDomains.clear();
+  };
+
+  private handleKubeconfigSelectionChanged = () => {
+    // Backend may rebuild the refresh subsystem; invalidate base URL and suppress transient errors.
+    this.incrementContextVersion();
+    invalidateRefreshBaseURL();
+    this.suppressNetworkErrors(6000);
   };
 }
 

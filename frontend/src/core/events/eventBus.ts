@@ -16,6 +16,7 @@ export interface AppEvents {
   'kubeconfig:changing': string; // config name
   'kubeconfig:changed': string; // config name
   'kubeconfig:change-request': string; // config name to change to
+  'kubeconfig:selection-changed': void;
 
   // View events
   'view:reset': void;

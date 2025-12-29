@@ -207,9 +207,17 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           : previousActive;
       const wasEmpty = previousSelections.length === 0;
       const willBeEmpty = normalizedSelections.length === 0;
+      const selectionChanged =
+        normalizedSelections.length !== previousSelections.length ||
+        normalizedSelections.some((selection, index) => selection !== previousSelections[index]);
       const shouldEmitChanging = willBeEmpty;
       const shouldEmitChanged = !willBeEmpty && wasEmpty;
+      const shouldEmitSelectionChanged = selectionChanged && !willBeEmpty;
       try {
+        if (shouldEmitSelectionChanged) {
+          eventBus.emit('kubeconfig:selection-changed');
+        }
+
         // Optimistically update the UI immediately so the dropdown reflects the intent.
         setSelectedKubeconfigsState(normalizedSelections);
         setSelectedKubeconfigState(nextActive);

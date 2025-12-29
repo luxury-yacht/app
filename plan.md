@@ -82,6 +82,10 @@
 49. ✅ Cancel/ignore in-flight refreshes tied to removed clusters so tab closes don't surface "cluster not active" errors.
 50. ✅ Only emit `kubeconfig:changing` when the selection becomes empty, and only emit `kubeconfig:changed` when at least one cluster is active after an empty selection.
 51. ✅ Update ClusterOverview tests to mock kubeconfig context now that the component reads the active cluster.
+52. ✅ Handle refresh subsystem rebuilds on multi-select changes by invalidating the refresh base URL and retrying network failures with short backoff (no domain resets).
+53. ✅ Add a lightweight "selection changed" signal to invalidate refresh base URL, bump refresh context version, and suppress transient network errors while the backend rebuilds refresh endpoints.
+54. ✅ Also suppress transient network errors after `kubeconfig:changed` to cover transitions from zero to active clusters.
+55. ✅ Emit the selection-change signal before optimistic selection updates so refreshes re-resolve the base URL before new fetches fire.
 
 ## Risks / watchouts
 
