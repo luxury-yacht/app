@@ -66,6 +66,8 @@
 35. ✅ Fix kubeconfig dropdown renderOption signature to pass selection state for checkmarks.
 36. ✅ Restrict kubeconfig hover highlight to context line only (no full-row highlight).
 37. ✅ Expand cluster tabs to fit full cluster names (remove truncation/max widths).
+38. ✅ Ensure unscoped refresh domains include active cluster scope so same-view tab switches refresh correctly.
+39. ✅ Fix unused renderSelectedValue parameter in kubeconfig dropdown.
 
 ## Risks / watchouts
 

@@ -104,8 +104,7 @@ export const AppLayout: React.FC = () => {
       return '';
     }
 
-    const clusterLabel =
-      kubeconfig.selectedClusterName || kubeconfig.selectedClusterId || '';
+    const clusterLabel = kubeconfig.selectedClusterName || kubeconfig.selectedClusterId || '';
     const namespaceLabel =
       viewState.viewType === 'namespace' && namespace.selectedNamespace
         ? isAllNamespaces(namespace.selectedNamespace)

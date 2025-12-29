@@ -90,8 +90,8 @@ function KubeconfigSelector() {
     };
   });
 
-  const renderSelectedValue = (value: string | string[]) => {
-    return 'Select Cluster';
+  const renderSelectedValue = (_value: string | string[]) => {
+    return 'Select Kubeconfig';
   };
 
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -111,7 +111,7 @@ function KubeconfigSelector() {
         value={selectedKubeconfigs}
         onChange={handleDropdownChange}
         loading={loading}
-        placeholder="Select Cluster"
+        placeholder="Select Kubeconfig"
         renderValue={renderSelectedValue}
         size="compact"
         multiple
@@ -124,16 +124,16 @@ function KubeconfigSelector() {
                 : undefined
             }
           >
-          {option.metadata?.isFirstForFile && (
-            <div className="kubeconfig-filename">{option.metadata.filename}</div>
-          )}
-          <div className="kubeconfig-context">
-            {/* Match other multi-select dropdowns by showing a checkmark for selected entries. */}
-            <span className="kubeconfig-check">{isSelected ? '✓' : ''}</span>
-            <span className="kubeconfig-context-label">{option.metadata?.context}</span>
+            {option.metadata?.isFirstForFile && (
+              <div className="kubeconfig-filename">{option.metadata.filename}</div>
+            )}
+            <div className="kubeconfig-context">
+              {/* Match other multi-select dropdowns by showing a checkmark for selected entries. */}
+              <span className="kubeconfig-check">{isSelected ? '✓' : ''}</span>
+              <span className="kubeconfig-context-label">{option.metadata?.context}</span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
       />
     </div>
   );

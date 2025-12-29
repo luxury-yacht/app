@@ -989,7 +989,9 @@ class RefreshOrchestrator {
     config: DomainRegistration<RefreshDomain>
   ): Promise<void> {
     const isScoped = Boolean(config.scoped);
-    const normalizedScope = this.normalizeScope(scope);
+    // Include the active cluster scope for unscoped domains so tab switches with the same view
+    // still fetch the selected cluster data.
+    const normalizedScope = this.normalizeScope(scope, !isScoped);
 
     if (options.signal?.aborted) {
       return;
