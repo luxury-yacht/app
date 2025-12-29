@@ -92,6 +92,10 @@
 59. ✅ Add a Cmd/Ctrl+W shortcut to close the active cluster tab.
 60. ✅ Scope catalog snapshot requests (Browse + Namespace Objects) to the active cluster to avoid single-cluster domain errors.
 61. ✅ Batch capability checks into smaller EvaluateCapabilities calls to avoid Wails callback dropouts; add/adjust store tests.
+62. ✅ Fix refresh diagnostics and browse view test regressions triggered by recent mocks and batching changes.
+63. ✅ Resolve DiagnosticsPanel mock hoisting errors by hoisting mock factories.
+64. ✅ Fix refresh manager mock for DiagnosticsPanel tests (missing subscribe).
+65. ✅ Add missing refresh manager APIs in DiagnosticsPanel test mock.
 
 ## Risks / watchouts
 

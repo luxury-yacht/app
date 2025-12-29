@@ -470,7 +470,15 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
       refreshOrchestrator.setDomainScope('catalog', normalizedBaseScope);
       lastAppliedScopeRef.current = normalizedBaseScope;
     }
-  }, [domain.data, domain.scope, domain.status, baseScope, pageLimit, trimmedNamespace, selectedClusterId]);
+  }, [
+    domain.data,
+    domain.scope,
+    domain.status,
+    baseScope,
+    pageLimit,
+    trimmedNamespace,
+    selectedClusterId,
+  ]);
 
   const handleLoadMore = useCallback(() => {
     if (!continueToken || isRequestingMore) {

@@ -21,9 +21,11 @@ import type {
 import type { PermissionStatus } from '@/core/capabilities/bootstrap';
 import type { DomainSnapshotState } from '../store';
 
-const fetchTelemetrySummaryMock = vi.fn<() => Promise<TelemetrySummary>>(async () => {
-  throw new Error('fetchTelemetrySummary not stubbed');
-});
+const fetchTelemetrySummaryMock = vi.hoisted(() =>
+  vi.fn<() => Promise<TelemetrySummary>>(async () => {
+    throw new Error('fetchTelemetrySummary not stubbed');
+  })
+);
 
 vi.mock('../client', () => ({
   fetchTelemetrySummary: fetchTelemetrySummaryMock,
@@ -75,10 +77,12 @@ const defaultDomainState: DomainSnapshotState<any> = {
   scope: undefined,
 };
 
-const mockRefreshManager = {
+const mockRefreshManager = vi.hoisted(() => ({
   register: vi.fn(),
   unregister: vi.fn(),
   getRefresherInterval: vi.fn(() => 5000),
+  subscribe: vi.fn(() => () => undefined),
+  disable: vi.fn(),
   enableDomain: vi.fn(),
   disableDomain: vi.fn(),
   fetchDomain: vi.fn(),
@@ -88,7 +92,7 @@ const mockRefreshManager = {
   disableScopedDomain: vi.fn(),
   fetchScopedDomain: vi.fn(),
   getRegisteredDomains: vi.fn(() => new Set<string>()),
-};
+}));
 
 vi.mock('../RefreshManager', () => ({
   refreshManager: mockRefreshManager,

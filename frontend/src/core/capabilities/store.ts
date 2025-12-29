@@ -241,7 +241,7 @@ const markEntryError = (key: string, message: string, completedAt: number): bool
     };
   });
 
-const splitBatches = <T,>(items: T[], size: number): T[][] => {
+const splitBatches = <T>(items: T[], size: number): T[][] => {
   if (items.length === 0) {
     return [];
   }
