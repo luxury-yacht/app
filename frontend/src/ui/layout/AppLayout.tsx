@@ -155,8 +155,10 @@ export const AppLayout: React.FC = () => {
       return titles[viewState.viewType] || '';
     })();
 
-    // Compose the header as "cluster - namespace (optional) - view".
-    return [clusterLabel, namespaceLabel, viewLabel].filter(Boolean).join(' - ');
+    const clusterText = clusterLabel ? `cluster: ${clusterLabel}` : '';
+    const namespaceText = namespaceLabel ? `namespace: ${namespaceLabel}` : '';
+    const viewText = viewLabel ? `view: ${viewLabel}` : '';
+    return [clusterText, namespaceText, viewText].filter(Boolean).join(' • ');
   };
 
   return (

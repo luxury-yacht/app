@@ -64,7 +64,7 @@
 22. ✅ Add settings toggle in Auto-Refresh for "Refresh background clusters" (default on), persist in frontend storage, and hydrate on startup to drive refresh context defaults.
 23. ✅ Update refresh context to follow active tab cluster ID; only fan-out when background refresh toggle is enabled.
 24. ✅ Add/adjust tests for tabs, per-tab state, and cleanup on tab close; re-evaluate coverage notes.
-25. ⏳ Verify multi-cluster UI: open/close tabs, reorder, per-tab namespace, object panel, and views show only active cluster data.
+25. ✅ Verify multi-cluster UI: open/close tabs, reorder, per-tab namespace, object panel, and views show only active cluster data.
 26. ✅ Resolve hook dependency lint errors from per-tab state wiring.
 27. ✅ Fix object panel tests by handling missing `selectedClusterIds` defaults in context mocks.
 28. ✅ Prevent ObjectPanelStateContext from re-running selection pruning when kubeconfig mocks omit `selectedClusterIds`.
@@ -120,6 +120,9 @@
 78. ✅ Add a command palette action to close the current cluster tab.
 79. ✅ Show the Cmd/Ctrl+W shortcut on the command palette "Close Current Cluster Tab" item.
 80. ✅ Add Cmd/Ctrl+Alt+Arrow shortcuts to switch cluster tabs left/right.
+81. ✅ Center the header title text (cluster - namespace - view).
+82. ✅ Center the header title between the right edge of app-header-left and the left edge of app-header-controls.
+83. ✅ Update header title format to "Cluster: name • Namespace: name • View: name" with label/value colors.
 81. ✅ Rework namespace loading per active cluster so the "All namespaces" synthetic only appears after that cluster's namespace data arrives (including newly opened tabs).
 82. ✅ Stop auto-selecting namespaces on tab open; clear invalid selections and only select on explicit user action.
 83. ✅ Document the "no auto-selection" behavior in NamespaceContext.

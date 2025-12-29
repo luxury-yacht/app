@@ -39,7 +39,23 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
           style={{ cursor: onAboutClick ? 'pointer' : 'default' }}
           title="About Luxury Yacht"
         />
-        <span className="app-header-title">{contentTitle}</span>
+      </div>
+      <div className="app-header-center">
+        <span className="app-header-title">
+          {contentTitle.split(' • ').map((segment, index, arr) => {
+            const [label, ...rest] = segment.split(': ');
+            const value = rest.join(': ');
+            return (
+              <span key={`${label}-${index}`} className="app-header-segment">
+                <span className="app-header-label">{label}:</span>{' '}
+                <span className="app-header-value">{value}</span>
+                {index < arr.length - 1 ? (
+                  <span className="app-header-separator">&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                ) : null}
+              </span>
+            );
+          })}
+        </span>
       </div>
 
       <div className="app-header-controls" onDoubleClick={(e) => e.stopPropagation()}>

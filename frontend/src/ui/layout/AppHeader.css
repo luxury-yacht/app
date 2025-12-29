@@ -19,6 +19,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .app-header-logo {
@@ -27,16 +28,44 @@
   --wails-draggable: none;
 }
 
+.app-header-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+
 .app-header-title {
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-primary);
+  max-width: 100%;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-header-label {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+.app-header-value {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.app-header-separator {
+  color: var(--color-text-secondary);
+  font-weight: 400;
 }
 
 .app-header-controls {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
   --wails-draggable: none;
 }
 
