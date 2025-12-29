@@ -11,6 +11,7 @@ import { useKeyboardContext } from '../context';
 import { ShortcutHelpModal } from './ShortcutHelpModal';
 import { KeyCodes } from '../constants';
 import { isMacPlatform } from '@/utils/platform';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 interface GlobalShortcutsProps {
   onToggleSidebar?: () => void;
@@ -38,6 +39,7 @@ export function GlobalShortcuts({
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isModalAnimating, setIsModalAnimating] = useState(false);
   const { setContext } = useKeyboardContext();
+  const { selectedKubeconfig, selectedKubeconfigs, setSelectedKubeconfigs } = useKubeconfig();
 
   // Update context based on current view
   useEffect(() => {
@@ -99,6 +101,18 @@ export function GlobalShortcuts({
     },
     [onRefresh]
   );
+
+  const handleCloseClusterTab = useCallback(() => {
+    if (!selectedKubeconfig) {
+      return;
+    }
+    // Close the active cluster tab by removing it from the selection list.
+    const nextSelections = selectedKubeconfigs.filter((config) => config !== selectedKubeconfig);
+    if (nextSelections.length === selectedKubeconfigs.length) {
+      return;
+    }
+    void setSelectedKubeconfigs(nextSelections);
+  }, [selectedKubeconfig, selectedKubeconfigs, setSelectedKubeconfigs]);
 
   const macPlatform = isMacPlatform();
 
@@ -212,6 +226,16 @@ export function GlobalShortcuts({
     description: 'Toggle diagnostics panel',
     category: 'Global',
     enabled: !!onToggleDiagnostics,
+    view: 'global',
+  });
+
+  useShortcut({
+    key: 'w',
+    modifiers: macPlatform ? { meta: true } : { ctrl: true },
+    handler: handleCloseClusterTab,
+    description: 'Close current cluster tab',
+    category: 'Navigation',
+    enabled: selectedKubeconfigs.length > 0,
     view: 'global',
   });
 

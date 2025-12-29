@@ -86,6 +86,10 @@
 53. ✅ Add a lightweight "selection changed" signal to invalidate refresh base URL, bump refresh context version, and suppress transient network errors while the backend rebuilds refresh endpoints.
 54. ✅ Also suppress transient network errors after `kubeconfig:changed` to cover transitions from zero to active clusters.
 55. ✅ Emit the selection-change signal before optimistic selection updates so refreshes re-resolve the base URL before new fetches fire.
+56. ✅ Update cluster tab styling to read as conventional tabs (active tab visually connected to content row).
+57. ✅ Remove the blue outline/box-shadow from the active cluster tab while keeping the active tab distinction.
+58. ✅ Remove the accent border from the active cluster tab while keeping the active tab distinction.
+59. ✅ Add a Cmd/Ctrl+W shortcut to close the active cluster tab.
 
 ## Risks / watchouts
 
