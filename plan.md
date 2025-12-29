@@ -152,6 +152,8 @@
 107. ✅ Run a full single-cluster assumption audit (backend RPCs, refresh scopes, navigation paths, payload types) and list any remaining gaps.
 108. ✅ Apply remaining `openWithObject` clusterId plumbing and update tests (steps 97-99).
 109. ✅ Confirm whether `openWithObject` should rely on active tab cluster fallback when callsites omit cluster metadata, or require explicit cluster IDs in all callsites. (Decision: always include `clusterId`.)
+110. ✅ Document the refresh system and multi-cluster refresh behavior in `docs/development/refresh.md`.
+111. ✅ Add a refresh flow diagram to `docs/development/refresh.md`.
 
 ## Risks / watchouts
 
