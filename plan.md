@@ -65,6 +65,7 @@
 34. ✅ Replace kubeconfig dropdown selected highlight with checkmark to match other multi-selects.
 35. ✅ Fix kubeconfig dropdown renderOption signature to pass selection state for checkmarks.
 36. ✅ Restrict kubeconfig hover highlight to context line only (no full-row highlight).
+37. ✅ Expand cluster tabs to fit full cluster names (remove truncation/max widths).
 
 ## Risks / watchouts
 
