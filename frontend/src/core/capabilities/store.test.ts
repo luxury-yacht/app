@@ -17,6 +17,7 @@ import {
   requestCapabilities,
   resetCapabilityStore,
   __flushPending,
+  __getCapabilityBatchSize,
   __getPendingRequestCount,
   ensureCapabilityEntries,
   getCapabilityDiagnosticsSnapshot,
@@ -359,6 +360,41 @@ describe('capability store', () => {
     expect(EvaluateCapabilitiesMock).toHaveBeenCalledTimes(1);
 
     vi.useRealTimers();
+  });
+
+  it('splits large capability batches into multiple backend calls', async () => {
+    const batchSize = __getCapabilityBatchSize();
+    const descriptors = Array.from({ length: batchSize + 2 }, (_, index) =>
+      normalizeDescriptor({
+        id: `update-${index}`,
+        verb: 'update',
+        resourceKind: 'Deployment',
+        namespace: 'default',
+        name: `demo-${index}`,
+      })
+    );
+
+    EvaluateCapabilitiesMock.mockImplementation(async (payload: any[]) =>
+      payload.map((request) => ({
+        id: request.id,
+        verb: request.verb,
+        resourceKind: request.resourceKind,
+        namespace: request.namespace,
+        name: request.name,
+        subresource: request.subresource,
+        allowed: true,
+        deniedReason: '',
+        evaluationError: '',
+        error: '',
+      }))
+    );
+
+    requestCapabilities(descriptors, { ttlMs: 0 });
+    await __flushPending();
+
+    expect(EvaluateCapabilitiesMock).toHaveBeenCalledTimes(
+      Math.ceil(descriptors.length / batchSize)
+    );
   });
 
   it('uses cluster diagnostics bucket when namespace is absent', async () => {

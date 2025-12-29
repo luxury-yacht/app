@@ -39,6 +39,8 @@ let pendingFlush: Promise<void> | null = null;
 let version = 0;
 
 const DIAGNOSTICS_CLUSTER_KEY = '__cluster__';
+// Keep capability batches small enough to avoid long-running Wails callbacks.
+const MAX_CAPABILITY_BATCH = 80;
 
 const sanitizeNamespace = (value?: string | null): string | undefined => {
   if (value == null) {
@@ -239,6 +241,20 @@ const markEntryError = (key: string, message: string, completedAt: number): bool
     };
   });
 
+const splitBatches = <T,>(items: T[], size: number): T[][] => {
+  if (items.length === 0) {
+    return [];
+  }
+  if (items.length <= size) {
+    return [items];
+  }
+  const batches: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    batches.push(items.slice(i, i + size));
+  }
+  return batches;
+};
+
 const queueFlush = () => {
   if (pendingFlush) {
     return;
@@ -254,88 +270,95 @@ const queueFlush = () => {
     }
 
     const toEvaluate = Array.from(batch.entries());
-    const namespaceBuckets = new Map<
-      string,
-      {
-        namespace?: string;
-        clusterId?: string;
-        keys: string[];
-        descriptors: NormalizedCapabilityDescriptor[];
-        startedAt: number;
-      }
-    >();
-    const startTime = Date.now();
+    const batches = splitBatches(toEvaluate, MAX_CAPABILITY_BATCH);
+    let changed = false;
 
-    const payload: capabilities.CheckRequest[] = toEvaluate.map(([key, descriptor]) => {
-      const bucketKey = normalizeNamespaceKey(descriptor.namespace, descriptor.clusterId);
-      let bucket = namespaceBuckets.get(bucketKey);
-      if (!bucket) {
-        bucket = {
-          namespace: sanitizeNamespace(descriptor.namespace),
-          clusterId: descriptor.clusterId,
-          keys: [],
-          descriptors: [],
-          startedAt: startTime,
+    for (const chunk of batches) {
+      const namespaceBuckets = new Map<
+        string,
+        {
+          namespace?: string;
+          clusterId?: string;
+          keys: string[];
+          descriptors: NormalizedCapabilityDescriptor[];
+          startedAt: number;
+        }
+      >();
+      const startTime = Date.now();
+
+      const payload: capabilities.CheckRequest[] = chunk.map(([key, descriptor]) => {
+        const bucketKey = normalizeNamespaceKey(descriptor.namespace, descriptor.clusterId);
+        let bucket = namespaceBuckets.get(bucketKey);
+        if (!bucket) {
+          bucket = {
+            namespace: sanitizeNamespace(descriptor.namespace),
+            clusterId: descriptor.clusterId,
+            keys: [],
+            descriptors: [],
+            startedAt: startTime,
+          };
+          namespaceBuckets.set(bucketKey, bucket);
+        }
+        bucket.keys.push(key);
+        bucket.descriptors.push(descriptor);
+
+        return {
+          id: descriptor.id,
+          verb: descriptor.verb,
+          resourceKind: descriptor.resourceKind,
+          namespace: descriptor.namespace,
+          name: descriptor.name,
+          subresource: descriptor.subresource,
         };
-        namespaceBuckets.set(bucketKey, bucket);
-      }
-      bucket.keys.push(key);
-      bucket.descriptors.push(descriptor);
-
-      return {
-        id: descriptor.id,
-        verb: descriptor.verb,
-        resourceKind: descriptor.resourceKind,
-        namespace: descriptor.namespace,
-        name: descriptor.name,
-        subresource: descriptor.subresource,
-      };
-    });
-
-    // Preserve cluster-scoped keys by reconnecting results to their original descriptors.
-    const descriptorsById = new Map<string, NormalizedCapabilityDescriptor[]>();
-    toEvaluate.forEach(([, descriptor]) => {
-      const idKey = descriptor.id.trim();
-      const existing = descriptorsById.get(idKey);
-      if (existing) {
-        existing.push(descriptor);
-      } else {
-        descriptorsById.set(idKey, [descriptor]);
-      }
-    });
-
-    beginDiagnostics(namespaceBuckets);
-
-    let response: capabilities.CheckResult[] = [];
-    let raisedError: unknown = null;
-
-    try {
-      response = await EvaluateCapabilities(payload);
-    } catch (error) {
-      raisedError = error;
-    }
-
-    const completionTime = Date.now();
-    const resultMap = new Map<string, CapabilityResult>();
-    response.forEach((item) => {
-      const normalized = toCapabilityResult(item);
-      const matches = descriptorsById.get(normalized.id) ?? [];
-      if (matches.length === 0) {
-        resultMap.set(createCapabilityKey(normalized), normalized);
-        return;
-      }
-      matches.forEach((descriptor) => {
-        const enriched: CapabilityResult = {
-          ...normalized,
-          clusterId: descriptor.clusterId,
-        };
-        resultMap.set(createCapabilityKey(enriched), enriched);
       });
-    });
 
-    const changed = applyResults(toEvaluate, resultMap, raisedError, completionTime);
+      // Preserve cluster-scoped keys by reconnecting results to their original descriptors.
+      const descriptorsById = new Map<string, NormalizedCapabilityDescriptor[]>();
+      chunk.forEach(([, descriptor]) => {
+        const idKey = descriptor.id.trim();
+        const existing = descriptorsById.get(idKey);
+        if (existing) {
+          existing.push(descriptor);
+        } else {
+          descriptorsById.set(idKey, [descriptor]);
+        }
+      });
 
-    completeDiagnostics(namespaceBuckets, resultMap, raisedError, completionTime);
+      beginDiagnostics(namespaceBuckets);
+
+      let response: capabilities.CheckResult[] = [];
+      let raisedError: unknown = null;
+
+      try {
+        response = await EvaluateCapabilities(payload);
+      } catch (error) {
+        raisedError = error;
+      }
+
+      const completionTime = Date.now();
+      const resultMap = new Map<string, CapabilityResult>();
+      response.forEach((item) => {
+        const normalized = toCapabilityResult(item);
+        const matches = descriptorsById.get(normalized.id) ?? [];
+        if (matches.length === 0) {
+          resultMap.set(createCapabilityKey(normalized), normalized);
+          return;
+        }
+        matches.forEach((descriptor) => {
+          const enriched: CapabilityResult = {
+            ...normalized,
+            clusterId: descriptor.clusterId,
+          };
+          resultMap.set(createCapabilityKey(enriched), enriched);
+        });
+      });
+
+      if (applyResults(chunk, resultMap, raisedError, completionTime)) {
+        changed = true;
+      }
+
+      completeDiagnostics(namespaceBuckets, resultMap, raisedError, completionTime);
+    }
 
     if (changed) {
       notify();
@@ -452,6 +475,7 @@ export const getEntry = (key: string): CapabilityEntry | undefined => entries.ge
  * Number of pending requests (primarily used in tests).
  */
 export const __getPendingRequestCount = (): number => pendingRequests.size;
+export const __getCapabilityBatchSize = (): number => MAX_CAPABILITY_BATCH;
 
 /**
  * Clears the capability store. Intended for use in tests.
