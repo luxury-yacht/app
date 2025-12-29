@@ -309,7 +309,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     }
     const metricsByCluster = nodeSnapshot.metricsByCluster;
     if (metricsByCluster) {
-      return selectedClusterId ? metricsByCluster[selectedClusterId] ?? undefined : undefined;
+      return selectedClusterId ? (metricsByCluster[selectedClusterId] ?? undefined) : undefined;
     }
     return nodeSnapshot.metrics;
   }, [nodeSnapshot, selectedClusterId]);
@@ -572,45 +572,31 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
         case 'nodes':
           return nodes.data !== null
             ? true
-            : nodes.loading ||
-                !!nodes.error ||
-                domainPermissionDenied['nodes'];
+            : nodes.loading || !!nodes.error || domainPermissionDenied['nodes'];
         case 'rbac':
           return rbac.data !== null
             ? true
-            : rbac.loading ||
-                !!rbac.error ||
-                domainPermissionDenied['cluster-rbac'];
+            : rbac.loading || !!rbac.error || domainPermissionDenied['cluster-rbac'];
         case 'storage':
           return storage.data !== null
             ? true
-            : storage.loading ||
-                !!storage.error ||
-                domainPermissionDenied['cluster-storage'];
+            : storage.loading || !!storage.error || domainPermissionDenied['cluster-storage'];
         case 'config':
           return config.data !== null
             ? true
-            : config.loading ||
-                !!config.error ||
-                domainPermissionDenied['cluster-config'];
+            : config.loading || !!config.error || domainPermissionDenied['cluster-config'];
         case 'crds':
           return crds.data !== null
             ? true
-            : crds.loading ||
-                !!crds.error ||
-                domainPermissionDenied['cluster-crds'];
+            : crds.loading || !!crds.error || domainPermissionDenied['cluster-crds'];
         case 'custom':
           return custom.data !== null
             ? true
-            : custom.loading ||
-                !!custom.error ||
-                domainPermissionDenied['cluster-custom'];
+            : custom.loading || !!custom.error || domainPermissionDenied['cluster-custom'];
         case 'events':
           return events.data !== null
             ? true
-            : events.loading ||
-                !!events.error ||
-                domainPermissionDenied['cluster-events'];
+            : events.loading || !!events.error || domainPermissionDenied['cluster-events'];
         default:
           return true;
       }

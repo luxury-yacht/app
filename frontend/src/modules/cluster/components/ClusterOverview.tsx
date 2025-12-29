@@ -73,7 +73,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const metricsInfo = useMemo(() => {
     const metricsByCluster = overviewDomain.data?.metricsByCluster;
     if (metricsByCluster) {
-      return selectedClusterId ? metricsByCluster[selectedClusterId] ?? null : null;
+      return selectedClusterId ? (metricsByCluster[selectedClusterId] ?? null) : null;
     }
     return overviewDomain.data?.metrics ?? null;
   }, [overviewDomain.data?.metrics, overviewDomain.data?.metricsByCluster, selectedClusterId]);
@@ -84,7 +84,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   const selectedOverview = useMemo(() => {
     const overviewByCluster = overviewDomain.data?.overviewByCluster;
     if (overviewByCluster) {
-      return selectedClusterId ? overviewByCluster[selectedClusterId] ?? null : null;
+      return selectedClusterId ? (overviewByCluster[selectedClusterId] ?? null) : null;
     }
     return overviewDomain.data?.overview ?? null;
   }, [overviewDomain.data?.overview, overviewDomain.data?.overviewByCluster, selectedClusterId]);

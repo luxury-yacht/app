@@ -15,6 +15,7 @@
 - Use a single refresh orchestrator; scope refresh context to the active tab by default.
 - Logs/diagnostics/modals remain outside tab context; each tab has its own sidebar, main content, and object panel.
 - Do not add new dependencies for drag-and-drop.
+- Treat multi-select add/remove as a lightweight selection change; only emit `kubeconfig:changing` when the selection becomes empty, and only emit `kubeconfig:changed` when at least one cluster is active after an empty selection.
 
 ## Current status
 
@@ -22,11 +23,11 @@
 2. ✅ Per-cluster object catalog services + namespace groups in catalog snapshots; scope encoding fixed.
 3. ✅ Namespace selection is cluster-scoped in refresh context; sidebar renders catalog namespace groups and passes cluster ID.
 4. ✅ Cluster-scoped GridTable row keys applied across cluster/namespace views; `NsViewPods` test data now includes cluster metadata.
-5. ✅ Backend aggregation rules updated so explicit cluster-scoped single-cluster domain requests can target non-primary clusters.
+5. ✅ Backend aggregation rules updated so explicit cluster-scoped single-cluster domain requests can target non-active clusters.
 6. ✅ Background refresh setting + persistence added; refresh context fan-out now gated by the toggle.
 7. ✅ Cluster tabs state + row rendering done (drag reorder + close + persistence).
 8. ✅ Per-tab sidebar/object panel/navigation/namespace state wiring complete.
-9. ✅ Per-tab refresh scopes updated so non-primary tabs refresh correctly on tab switch.
+9. ✅ Per-tab refresh scopes updated so non-active tabs refresh correctly on tab switch.
 
 ## Implementation steps (ordered)
 
@@ -35,7 +36,7 @@
 3. ✅ Namespace selection cluster-scoped in refresh context + sidebar group rendering.
 4. ✅ Finish refresh fan-out + snapshot merge for all domains; keep per-cluster permission/diagnostic isolation.
 5. ✅ Accept selected cluster sets in manual refresh endpoints + streaming handlers; merge multi-cluster stream events.
-6. ✅ Implement kubeconfig multi-select UI + selected cluster list handling; keep a primary selection for current consumers; disable duplicate context names with tooltip.
+6. ✅ Implement kubeconfig multi-select UI + selected cluster list handling; use the active tab as the single-cluster selection for current consumers; disable duplicate context names with tooltip.
 7. ✅ Frontend: pass selected cluster sets through refresh orchestrator; manage per-cluster streams.
 8. ✅ Fix scoped domain normalization regression in refresh orchestrator (TypeScript error cleanup).
 9. ✅ Add Cluster column + Clusters filter in GridTable and persist filter state with cluster IDs (superseded; will be removed per cluster tabs).
@@ -44,13 +45,13 @@
 12. ✅ Run frontend typecheck/tests to validate cluster filter wiring changes (superseded; will be removed per cluster tabs).
 13. ⏳ Add targeted frontend tests to raise coverage to >=80% for cluster/namespace views + refresh UI (include RefreshManager cluster-switch/manual-refresh coverage).
 14. ✅ Make backend coverage runnable in the sandbox (covdata/toolchain + cache path workaround) and re-run `go test` with coverage.
-15. ✅ Diagnose and fix non-primary tabs still showing primary data (ensure per-tab refresh scopes and UI scoping).
-16. ✅ Update backend aggregation rules so explicit cluster-scoped requests can target non-primary clusters for single-cluster domains (catalog/object/*/node-maintenance).
+15. ✅ Diagnose and fix non-active tabs still showing active data (ensure per-tab refresh scopes and UI scoping).
+16. ✅ Update backend aggregation rules so explicit cluster-scoped requests can target non-active clusters for single-cluster domains (catalog/object/\*/node-maintenance).
 17. ✅ Introduce cluster tabs state + persistence (open clusters, active tab, order) and wire it to kubeconfig selections; reconcile order by applying persisted drag order when available and falling back to current selection order for new/reopened tabs.
 18. ✅ Render cluster tabs row in layout, draggable ordering (no new deps), close button, hidden when <2 tabs.
 19. ✅ Make view state per tab by storing tab-scoped state keyed by active cluster in Sidebar/ObjectPanel/Navigation/Namespace contexts and switching to the active tab’s state on change.
 20. ✅ Remove cluster columns/filters and related persistence/tests from all views and shared GridTable wiring.
-21. ✅ Add settings toggle in Auto-Refresh for "Refresh background clusters" (default off), persist in frontend storage, and hydrate on startup to drive refresh context defaults.
+21. ✅ Add settings toggle in Auto-Refresh for "Refresh background clusters" (default on), persist in frontend storage, and hydrate on startup to drive refresh context defaults.
 22. ✅ Update refresh context to follow active tab cluster ID; only fan-out when background refresh toggle is enabled.
 23. ✅ Add/adjust tests for tabs, per-tab state, and cleanup on tab close; re-evaluate coverage notes.
 24. ⏳ Verify multi-cluster UI: open/close tabs, reorder, per-tab namespace, object panel, and views show only active cluster data.
@@ -77,18 +78,62 @@
 45. ✅ Remove permission-pending gating so cluster views load without waiting on capability checks.
 46. ✅ Add per-cluster metrics metadata for nodes/overview snapshots and use it in the UI to avoid cross-cluster metrics bleed.
 47. ✅ Add per-cluster overview payloads and render cluster overview by active tab instead of merged totals.
+48. ✅ Scope cluster-overview refresh to the active tab only and suppress refresh requests for closed tabs to avoid "cluster not active" errors.
+49. ✅ Cancel/ignore in-flight refreshes tied to removed clusters so tab closes don't surface "cluster not active" errors.
+50. ✅ Only emit `kubeconfig:changing` when the selection becomes empty, and only emit `kubeconfig:changed` when at least one cluster is active after an empty selection.
+51. ✅ Update ClusterOverview tests to mock kubeconfig context now that the component reads the active cluster.
 
 ## Risks / watchouts
 
 - Fan-out refresh load and timeouts per cluster; may need concurrency limits.
 - Stream merge ordering/volume; consider backpressure and per-cluster throttling.
-- Single-cluster domain restrictions (catalog/object) must allow explicit cluster-scoped requests to avoid blocking non-primary tabs.
+- Single-cluster domain restrictions (catalog/object) must allow explicit cluster-scoped requests to avoid blocking non-active tabs.
 
 ## Coverage notes
 
 - Added tests for ClusterTabs and per-tab sidebar state; coverage has not been remeasured yet, so remaining gaps are unknown.
 - Added ObjectPanelStateContext + NamespaceContext per-tab selection tests; coverage still needs remeasurement.
 - Backend coverage is now runnable via `build/go-tools` + `build/gocache` (local covdata toolchain); current `go test ./backend -cover` reports 74.4% coverage, so hitting 80% would require more tests in lower-coverage backend areas.
+
+## Multi-Cluster Select
+
+Possible conditions:
+
+- No clusters are active
+  - Disable the sidebar and main content area of the app until a cluster is selected. Do not attempt to load data or show loading spinners if no cluster is selected. Kubeconfig dropdown, command palette, settings modal, about modal, and application logs work as expected.
+  - Clear all snapshot state and stop all refresh/streams.
+- A single cluster is active
+  - App behaves normally for a single cluster
+  - Cluster tab area is not visible
+- Multiple clusters are selected
+  - App behaves normally for multiple clusters
+  - Cluster tab area is visible
+
+Possible cluster activation methods:
+
+- Cluster(s) activated on startup due to persistence
+- Cluster selected from the kubeconfig dropdown
+- Cluster selected from the Command Palette
+
+Possible cluster activation conditions:
+
+- A cluster is activated when no clusters are active
+  - Enable the cluster. Reactivate the sidebar and main content areas.
+- A cluster is activated when one or more clusters are already active
+  - App works as described in "Possible conditions"
+
+Possible cluster deactivation methods:
+
+- Cluster is de-selected from the kubeconfig dropdown
+- Cluster is de-selected from the Command Palette
+- Cluster is deactivated by clicking the close button on the tab
+
+Possible cluster deactivation conditions:
+
+- Cluster is the last remaining active cluster
+  - Follow the instruction for "No clusters are active"
+- Other clusters remain active after this cluster is closed
+  - App works as described in "Possible conditions"
 
 ## Cluster Tabs
 

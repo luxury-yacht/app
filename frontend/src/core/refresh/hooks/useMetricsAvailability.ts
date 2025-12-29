@@ -24,7 +24,7 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
 
   const metricsByCluster = overviewDomain.data?.metricsByCluster;
   if (metricsByCluster) {
-    return selectedClusterId ? metricsByCluster[selectedClusterId] ?? null : null;
+    return selectedClusterId ? (metricsByCluster[selectedClusterId] ?? null) : null;
   }
   return overviewDomain.data?.metrics ?? null;
 };

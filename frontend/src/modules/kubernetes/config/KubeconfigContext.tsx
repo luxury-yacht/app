@@ -205,7 +205,10 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         : removedActive
           ? normalizedSelections[0] || ''
           : previousActive;
-      const nextPrimary = normalizedSelections[0] || '';
+      const wasEmpty = previousSelections.length === 0;
+      const willBeEmpty = normalizedSelections.length === 0;
+      const shouldEmitChanging = willBeEmpty;
+      const shouldEmitChanged = !willBeEmpty && wasEmpty;
       try {
         // Optimistically update the UI immediately so the dropdown reflects the intent.
         setSelectedKubeconfigsState(normalizedSelections);
@@ -214,13 +217,17 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         // Follow the required order while keeping per-tab state intact.
         // 1. Show the loading spinner (handled by kubeconfig:changing event)
         // 2. Cancel any refresh in progress (also handled by kubeconfig:changing event)
-        eventBus.emit('kubeconfig:changing', nextPrimary);
+        if (shouldEmitChanging) {
+          eventBus.emit('kubeconfig:changing', '');
+        }
 
         // Perform the actual kubeconfig switch
         await SetSelectedKubeconfigs(normalizedSelections);
 
         // 4. Perform a manual refresh (will be triggered by kubeconfig:changed event)
-        eventBus.emit('kubeconfig:changed', nextPrimary);
+        if (shouldEmitChanged) {
+          eventBus.emit('kubeconfig:changed', '');
+        }
       } catch (error) {
         // Roll back the UI to the previous value if the backend switch failed.
         setSelectedKubeconfigsState(previousSelections);

@@ -50,7 +50,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     const metricsInfo = useMemo(() => {
       const metricsByCluster = nodesDomain.data?.metricsByCluster;
       if (metricsByCluster) {
-        return selectedClusterId ? metricsByCluster[selectedClusterId] ?? null : null;
+        return selectedClusterId ? (metricsByCluster[selectedClusterId] ?? null) : null;
       }
       return nodesDomain.data?.metrics ?? null;
     }, [nodesDomain.data?.metrics, nodesDomain.data?.metricsByCluster, selectedClusterId]);

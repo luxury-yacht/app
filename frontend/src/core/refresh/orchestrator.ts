@@ -655,6 +655,12 @@ class RefreshOrchestrator {
     return this.normalizeNamespaceScope(this.context.selectedNamespace) ?? undefined;
   }
 
+  getSelectedClusterId(): string | undefined {
+    // Keep the active tab's cluster ID available for per-tab refresh scopes.
+    const selected = (this.context.selectedClusterId ?? '').trim();
+    return selected || undefined;
+  }
+
   isStreamingDomain(domain: RefreshDomain): boolean {
     const config = this.configs.get(domain);
     return Boolean(config?.streaming);
@@ -1129,6 +1135,10 @@ class RefreshOrchestrator {
       if (controller.signal.aborted) {
         return;
       }
+      if (contextVersion !== this.contextVersion) {
+        // Ignore errors from refreshes started before a context switch.
+        return;
+      }
 
       const message = error instanceof Error ? error.message : String(error);
 
@@ -1357,6 +1367,11 @@ refreshOrchestrator.registerDomain({
   domain: 'cluster-overview',
   refresherName: SYSTEM_REFRESHERS.clusterOverview,
   category: 'system',
+  scopeResolver: () => {
+    // Refresh the overview only for the active tab's cluster to avoid closed-tab errors.
+    const clusterId = refreshOrchestrator.getSelectedClusterId();
+    return clusterId ? buildClusterScopeList([clusterId], '') : '';
+  },
   autoStart: false,
 });
 
