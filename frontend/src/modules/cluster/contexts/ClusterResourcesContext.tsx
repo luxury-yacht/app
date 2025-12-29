@@ -270,11 +270,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     []
   );
 
-  const isPermissionPending = useCallback(
-    (permission?: PermissionStatus | null): boolean => Boolean(permission?.pending),
-    []
-  );
-
   const domainPermissionDenied = useMemo(() => {
     const configDenied =
       isPermissionDenied(configStorageClassPermission) ||
@@ -301,38 +296,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     crdListPermission,
     eventListPermission,
     isPermissionDenied,
-    nodeListPermission,
-    rbacClusterRoleBindingPermission,
-    rbacClusterRolePermission,
-    storageListPermission,
-  ]);
-
-  const domainPermissionPending = useMemo(() => {
-    const configPending =
-      isPermissionPending(configStorageClassPermission) ||
-      isPermissionPending(configIngressClassPermission) ||
-      isPermissionPending(configMutatingWebhookPermission) ||
-      isPermissionPending(configValidatingWebhookPermission);
-
-    return {
-      nodes: isPermissionPending(nodeListPermission),
-      'cluster-storage': isPermissionPending(storageListPermission),
-      'cluster-rbac':
-        isPermissionPending(rbacClusterRolePermission) ||
-        isPermissionPending(rbacClusterRoleBindingPermission),
-      'cluster-config': configPending,
-      'cluster-crds': isPermissionPending(crdListPermission),
-      'cluster-custom': isPermissionPending(crdListPermission),
-      'cluster-events': isPermissionPending(eventListPermission),
-    } as Partial<Record<RefreshDomain, boolean>>;
-  }, [
-    configIngressClassPermission,
-    configMutatingWebhookPermission,
-    configStorageClassPermission,
-    configValidatingWebhookPermission,
-    crdListPermission,
-    eventListPermission,
-    isPermissionPending,
     nodeListPermission,
     rbacClusterRoleBindingPermission,
     rbacClusterRolePermission,
@@ -480,15 +443,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
         activeClusterRefresherRef.current = null;
         return;
       }
-
-      if (nextDomain !== 'nodes' && domainPermissionPending[nextDomain]) {
-        const pendingState = domainStateRef.current[nextDomain];
-        if (!pendingState?.data) {
-          // Keep cached data when permissions are still resolving to avoid tab-switch flicker.
-          refreshOrchestrator.setDomainEnabled(nextDomain, false);
-        }
-        return;
-      }
+      // Allow fetches even while permissions are pending to avoid delaying the view.
 
       refreshOrchestrator.setDomainEnabled(nextDomain, true);
       const state = domainStateRef.current[nextDomain];
@@ -503,7 +458,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     }
 
     activeClusterRefresherRef.current = nextRefresher ?? null;
-  }, [activeResourceType, domainPermissionDenied, domainPermissionPending]);
+  }, [activeResourceType, domainPermissionDenied]);
 
   useEffect(() => {
     return () => {
@@ -610,50 +565,43 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
             ? true
             : nodes.loading ||
                 !!nodes.error ||
-                domainPermissionDenied['nodes'] ||
-                domainPermissionPending['nodes'];
+                domainPermissionDenied['nodes'];
         case 'rbac':
           return rbac.data !== null
             ? true
             : rbac.loading ||
                 !!rbac.error ||
-                domainPermissionDenied['cluster-rbac'] ||
-                domainPermissionPending['cluster-rbac'];
+                domainPermissionDenied['cluster-rbac'];
         case 'storage':
           return storage.data !== null
             ? true
             : storage.loading ||
                 !!storage.error ||
-                domainPermissionDenied['cluster-storage'] ||
-                domainPermissionPending['cluster-storage'];
+                domainPermissionDenied['cluster-storage'];
         case 'config':
           return config.data !== null
             ? true
             : config.loading ||
                 !!config.error ||
-                domainPermissionDenied['cluster-config'] ||
-                domainPermissionPending['cluster-config'];
+                domainPermissionDenied['cluster-config'];
         case 'crds':
           return crds.data !== null
             ? true
             : crds.loading ||
                 !!crds.error ||
-                domainPermissionDenied['cluster-crds'] ||
-                domainPermissionPending['cluster-crds'];
+                domainPermissionDenied['cluster-crds'];
         case 'custom':
           return custom.data !== null
             ? true
             : custom.loading ||
                 !!custom.error ||
-                domainPermissionDenied['cluster-custom'] ||
-                domainPermissionPending['cluster-custom'];
+                domainPermissionDenied['cluster-custom'];
         case 'events':
           return events.data !== null
             ? true
             : events.loading ||
                 !!events.error ||
-                domainPermissionDenied['cluster-events'] ||
-                domainPermissionPending['cluster-events'];
+                domainPermissionDenied['cluster-events'];
         default:
           return true;
       }
@@ -689,7 +637,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     storage.error,
     storage.loading,
     domainPermissionDenied,
-    domainPermissionPending,
   ]);
 
   const contextValue = useMemo(
