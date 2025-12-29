@@ -17,11 +17,11 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 	cancelCalled := 0
 	done := make(chan struct{}, 1)
 	done <- struct{}{}
-	app.storeObjectCatalogEntry("primary", &objectCatalogEntry{
+	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
 		service: &objectcatalog.Service{},
 		cancel:  func() { cancelCalled++ },
 		done:    done,
-	}, true)
+	})
 	app.telemetryRecorder = telemetry.NewRecorder()
 
 	app.stopObjectCatalog()
@@ -29,7 +29,7 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 	if cancelCalled != 1 {
 		t.Fatalf("expected cancel to be invoked once, got %d", cancelCalled)
 	}
-	if app.objectCatalogServiceForCluster("") != nil {
+	if app.objectCatalogServiceForCluster("cluster-a") != nil {
 		t.Fatalf("expected catalog references to be cleared")
 	}
 
@@ -42,9 +42,9 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 func TestGetCatalogDiagnosticsCombinesTelemetryAndServiceState(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
-	app.storeObjectCatalogEntry("primary", &objectCatalogEntry{
+	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
 		service: &objectcatalog.Service{},
-	}, true)
+	})
 	app.telemetryRecorder = telemetry.NewRecorder()
 
 	app.telemetryRecorder.RecordCatalog(true, 7, 3, 1500*time.Millisecond, nil)

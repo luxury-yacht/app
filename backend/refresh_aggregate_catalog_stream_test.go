@@ -25,46 +25,29 @@ func (h *captureHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func TestAggregateCatalogStreamRoutesToPrimary(t *testing.T) {
-	// Without a cluster scope, the primary handler should receive the request.
-	primary := &captureHandler{status: http.StatusOK, body: "primary"}
-	secondary := &captureHandler{status: http.StatusOK, body: "secondary"}
-	handler := newAggregateCatalogStreamHandler("cluster-a", map[string]*system.Subsystem{
-		"cluster-a": {Handler: primary},
-		"cluster-b": {Handler: secondary},
-	})
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/catalog?limit=50", nil)
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, req)
-
-	require.True(t, primary.called)
-	require.False(t, secondary.called)
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.Contains(t, rec.Body.String(), "primary")
-}
-
-func TestAggregateCatalogStreamRejectsNonPrimaryCluster(t *testing.T) {
-	// Catalog streaming must target the primary cluster only.
-	primary := &captureHandler{status: http.StatusOK, body: "primary"}
-	handler := newAggregateCatalogStreamHandler("cluster-a", map[string]*system.Subsystem{
-		"cluster-a": {Handler: primary},
+func TestAggregateCatalogStreamRoutesToRequestedCluster(t *testing.T) {
+	clusterA := &captureHandler{status: http.StatusOK, body: "cluster-a"}
+	clusterB := &captureHandler{status: http.StatusOK, body: "cluster-b"}
+	handler := newAggregateCatalogStreamHandler(map[string]*system.Subsystem{
+		"cluster-a": {Handler: clusterA},
+		"cluster-b": {Handler: clusterB},
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/catalog", nil)
-	req.URL.RawQuery = "cluster-b|limit=25"
+	req.URL.RawQuery = "cluster-b|limit=50"
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Contains(t, rec.Body.String(), "catalog stream is only available on the primary cluster")
+	require.False(t, clusterA.called)
+	require.True(t, clusterB.called)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Contains(t, rec.Body.String(), "cluster-b")
 }
 
 func TestAggregateCatalogStreamRejectsMultipleClusters(t *testing.T) {
 	// The catalog stream can only select a single cluster scope.
-	primary := &captureHandler{status: http.StatusOK, body: "primary"}
-	handler := newAggregateCatalogStreamHandler("cluster-a", map[string]*system.Subsystem{
-		"cluster-a": {Handler: primary},
+	handler := newAggregateCatalogStreamHandler(map[string]*system.Subsystem{
+		"cluster-a": {Handler: &captureHandler{status: http.StatusOK, body: "cluster-a"}},
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/catalog", nil)
@@ -73,16 +56,15 @@ func TestAggregateCatalogStreamRejectsMultipleClusters(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Contains(t, rec.Body.String(), "catalog stream requires a single cluster")
+	require.Contains(t, rec.Body.String(), "catalog stream requires a single cluster scope")
 }
 
-func TestAggregateCatalogStreamRejectsMissingPrimary(t *testing.T) {
-	// A missing primary cluster should surface a clear error message.
-	handler := newAggregateCatalogStreamHandler("", map[string]*system.Subsystem{})
+func TestAggregateCatalogStreamRejectsMissingClusterScope(t *testing.T) {
+	handler := newAggregateCatalogStreamHandler(map[string]*system.Subsystem{})
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/catalog?limit=25", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Contains(t, rec.Body.String(), "primary cluster not available")
+	require.Contains(t, rec.Body.String(), "catalog stream requires a single cluster scope")
 }

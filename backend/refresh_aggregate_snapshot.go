@@ -13,14 +13,12 @@ import (
 
 // aggregateSnapshotService fans out snapshot builds to per-cluster services and merges results.
 type aggregateSnapshotService struct {
-	primaryID    string
 	clusterOrder []string
 	services     map[string]refresh.SnapshotService
 }
 
 // newAggregateSnapshotService builds an aggregator for the provided cluster snapshot services.
 func newAggregateSnapshotService(
-	primaryID string,
 	clusterOrder []string,
 	subsystems map[string]*system.Subsystem,
 ) *aggregateSnapshotService {
@@ -46,12 +44,7 @@ func newAggregateSnapshotService(
 		sort.Strings(ordered)
 	}
 
-	if primaryID == "" && len(ordered) > 0 {
-		primaryID = ordered[0]
-	}
-
 	return &aggregateSnapshotService{
-		primaryID:    primaryID,
 		clusterOrder: ordered,
 		services:     services,
 	}
@@ -142,10 +135,7 @@ func (s *aggregateSnapshotService) resolveTargets(domain string, clusterIDs []st
 	}
 
 	if isSingleClusterDomain(domain) {
-		if s.primaryID == "" {
-			return nil, fmt.Errorf("primary cluster not available")
-		}
-		return []string{s.primaryID}, nil
+		return nil, fmt.Errorf("domain %s requires an explicit cluster scope", domain)
 	}
 
 	return append([]string(nil), s.clusterOrder...), nil

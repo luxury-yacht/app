@@ -52,7 +52,7 @@ interface ObjectPanelStateProviderProps {
 const EMPTY_CLUSTER_IDS: string[] = [];
 
 export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> = ({ children }) => {
-  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const { selectedClusterId, selectedClusterName, selectedClusterIds } = useKubeconfig();
   // Ensure a stable fallback array when kubeconfig mocks omit selectedClusterIds.
   const activeClusterIds = selectedClusterIds ?? EMPTY_CLUSTER_IDS;
   // Keep object panel state scoped per cluster tab to avoid cross-tab state leakage.
@@ -93,19 +93,40 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
     });
   }, [activeClusterIds]);
 
+  const hydrateClusterMeta = useCallback(
+    (data: KubernetesObjectReference): KubernetesObjectReference => {
+      const clusterId = data.clusterId?.trim() || selectedClusterId?.trim() || undefined;
+      const clusterName = data.clusterName?.trim() || selectedClusterName?.trim() || undefined;
+      // Fill in missing cluster metadata so detail scopes stay aligned to the active tab.
+      if (!clusterId && !clusterName) {
+        return data;
+      }
+      return {
+        ...data,
+        clusterId,
+        clusterName,
+      };
+    },
+    [selectedClusterId, selectedClusterName]
+  );
+
   const onRowClick = useCallback(
     (data: KubernetesObjectReference) => {
+      const enriched = hydrateClusterMeta(data);
       updateActiveState((prev) => {
-        const nextHistory = [...prev.navigationHistory.slice(0, prev.navigationIndex + 1), data];
+        const nextHistory = [
+          ...prev.navigationHistory.slice(0, prev.navigationIndex + 1),
+          enriched,
+        ];
         return {
           showObjectPanel: true,
-          selectedObject: data,
+          selectedObject: enriched,
           navigationHistory: nextHistory,
           navigationIndex: nextHistory.length - 1,
         };
       });
     },
-    [updateActiveState]
+    [hydrateClusterMeta, updateActiveState]
   );
 
   const onCloseObjectPanel = useCallback(() => {
@@ -135,7 +156,10 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         updateActiveState((prev) => ({ ...prev, showObjectPanel: show }));
       },
       setSelectedObject: (obj: KubernetesObjectReference | null) => {
-        updateActiveState((prev) => ({ ...prev, selectedObject: obj }));
+        updateActiveState((prev) => ({
+          ...prev,
+          selectedObject: obj ? hydrateClusterMeta(obj) : null,
+        }));
       },
       onRowClick,
       onCloseObjectPanel,

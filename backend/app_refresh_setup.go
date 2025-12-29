@@ -36,15 +36,15 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	ctx, cancel := context.WithCancel(a.Ctx)
 	a.refreshCancel = cancel
 
-	var primarySubsystem *system.Subsystem
-	primaryID := ""
+	var hostSubsystem *system.Subsystem
+	hostClusterID := ""
 
 	if len(selections) == 0 {
 		clusterMeta := a.currentClusterMeta()
 		if clusterMeta.ID != "" {
-			primaryID = clusterMeta.ID
+			hostClusterID = clusterMeta.ID
 		} else if selectionKey != "" {
-			primaryID = selectionKey
+			hostClusterID = selectionKey
 		}
 
 		catalogClusterID := clusterMeta.ID
@@ -76,18 +76,18 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			return nil, err
 		}
 
-		if primaryID != "" {
-			subsystems[primaryID] = subsystem
-			clusterOrder = append(clusterOrder, primaryID)
+		if hostClusterID != "" {
+			subsystems[hostClusterID] = subsystem
+			clusterOrder = append(clusterOrder, hostClusterID)
 		}
-		primarySubsystem = subsystem
+		hostSubsystem = subsystem
 	} else {
 		// Align the client pool to the selected cluster set before building managers.
 		if err := a.syncClusterClientPool(selections); err != nil {
 			return nil, err
 		}
 
-		for idx, selection := range selections {
+		for _, selection := range selections {
 			clusterMeta := a.clusterMetaForSelection(selection)
 			if clusterMeta.ID == "" {
 				return nil, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
@@ -126,14 +126,13 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 
 			subsystems[clusterMeta.ID] = subsystem
 			clusterOrder = append(clusterOrder, clusterMeta.ID)
-			if idx == 0 {
-				primarySubsystem = subsystem
-				primaryID = clusterMeta.ID
+			if hostSubsystem == nil {
+				hostSubsystem = subsystem
 			}
 		}
 	}
 
-	if primarySubsystem == nil {
+	if hostSubsystem == nil {
 		return nil, errors.New("refresh subsystem not initialised")
 	}
 
@@ -149,25 +148,25 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		}(manager)
 	}
 
-	// Wrap the primary refresh API with aggregate services for multi-cluster domains.
-	aggregateService := newAggregateSnapshotService(primaryID, clusterOrder, subsystems)
-	aggregateQueue := newAggregateManualQueue(primaryID, clusterOrder, subsystems)
+	// Wrap the base refresh API with aggregate services for multi-cluster domains.
+	aggregateService := newAggregateSnapshotService(clusterOrder, subsystems)
+	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
 	aggregateEvents := newAggregateEventStreamHandler(
 		aggregateService,
 		collectEventManagers(subsystems),
 		collectClusterMeta(subsystems),
 		clusterOrder,
-		primarySubsystem.Telemetry,
+		hostSubsystem.Telemetry,
 		a.logger,
 	)
-	aggregateLogs := newAggregateLogStreamHandler(primaryID, subsystems)
-	aggregateCatalog := newAggregateCatalogStreamHandler(primaryID, subsystems)
+	aggregateLogs := newAggregateLogStreamHandler(subsystems)
+	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
 	mux := http.NewServeMux()
-	api.NewServer(primarySubsystem.Registry, aggregateService, aggregateQueue, primarySubsystem.Telemetry).Register(mux)
+	api.NewServer(hostSubsystem.Registry, aggregateService, aggregateQueue, hostSubsystem.Telemetry).Register(mux)
 	mux.Handle("/api/v2/stream/events", aggregateEvents)
 	mux.Handle("/api/v2/stream/logs", aggregateLogs)
 	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)
-	mux.Handle("/", primarySubsystem.Handler)
+	mux.Handle("/", hostSubsystem.Handler)
 
 	if a.listenLoopback == nil {
 		a.listenLoopback = defaultLoopbackListener
@@ -179,16 +178,16 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	}
 
 	srv := &http.Server{Handler: mux}
-	a.refreshManager = primarySubsystem.Manager
+	a.refreshManager = hostSubsystem.Manager
 	a.refreshHTTPServer = srv
 	a.refreshListener = listener
 	a.refreshBaseURL = "http://" + listener.Addr().String()
-	a.telemetryRecorder = primarySubsystem.Telemetry
+	a.telemetryRecorder = hostSubsystem.Telemetry
 	a.refreshServerDone = make(chan struct{})
 	a.refreshSubsystems = subsystems
-	if primarySubsystem.InformerFactory != nil {
-		a.sharedInformerFactory = primarySubsystem.InformerFactory.SharedInformerFactory()
-		a.apiExtensionsInformerFactory = primarySubsystem.InformerFactory.APIExtensionsInformerFactory()
+	if hostSubsystem.InformerFactory != nil {
+		a.sharedInformerFactory = hostSubsystem.InformerFactory.SharedInformerFactory()
+		a.apiExtensionsInformerFactory = hostSubsystem.InformerFactory.APIExtensionsInformerFactory()
 	} else {
 		a.sharedInformerFactory = nil
 		a.apiExtensionsInformerFactory = nil
@@ -201,7 +200,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		}
 	}()
 
-	return primarySubsystem.PermissionCache, nil
+	return hostSubsystem.PermissionCache, nil
 }
 
 // buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.

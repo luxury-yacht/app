@@ -10,12 +10,11 @@ import (
 
 // aggregateLogStreamHandler routes log stream requests to the requested cluster.
 type aggregateLogStreamHandler struct {
-	primaryID string
 	handlers  map[string]http.Handler
 }
 
 // newAggregateLogStreamHandler builds a log stream router for all active clusters.
-func newAggregateLogStreamHandler(primaryID string, subsystems map[string]*system.Subsystem) *aggregateLogStreamHandler {
+func newAggregateLogStreamHandler(subsystems map[string]*system.Subsystem) *aggregateLogStreamHandler {
 	handlers := make(map[string]http.Handler)
 	for id, subsystem := range subsystems {
 		if subsystem == nil || subsystem.Handler == nil {
@@ -23,10 +22,7 @@ func newAggregateLogStreamHandler(primaryID string, subsystems map[string]*syste
 		}
 		handlers[id] = subsystem.Handler
 	}
-	return &aggregateLogStreamHandler{
-		primaryID: primaryID,
-		handlers:  handlers,
-	}
+	return &aggregateLogStreamHandler{handlers: handlers}
 }
 
 // ServeHTTP forwards the request to the matching cluster handler.
@@ -48,14 +44,8 @@ func (h *aggregateLogStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Req
 }
 
 func (h *aggregateLogStreamHandler) selectCluster(clusterIDs []string) (string, error) {
-	if len(clusterIDs) == 0 {
-		if h.primaryID == "" {
-			return "", fmt.Errorf("primary cluster not available")
-		}
-		return h.primaryID, nil
-	}
-	if len(clusterIDs) > 1 {
-		return "", fmt.Errorf("log stream requires a single cluster")
+	if len(clusterIDs) != 1 {
+		return "", fmt.Errorf("log stream requires a single cluster scope")
 	}
 	return clusterIDs[0], nil
 }

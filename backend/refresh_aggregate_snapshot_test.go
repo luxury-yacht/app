@@ -41,7 +41,6 @@ func TestAggregateSnapshotServiceBuildAllowsPartialFailures(t *testing.T) {
 		},
 	}
 	aggregate := &aggregateSnapshotService{
-		primaryID:    "cluster-a",
 		clusterOrder: []string{"cluster-a", "cluster-b"},
 		services:     services,
 	}
@@ -80,7 +79,6 @@ func TestAggregateSnapshotServiceBuildAllowsPartialFailuresForClusterList(t *tes
 		},
 	}
 	aggregate := &aggregateSnapshotService{
-		primaryID:    "cluster-a",
 		clusterOrder: []string{"cluster-a", "cluster-b"},
 		services:     services,
 	}
@@ -110,7 +108,6 @@ func TestAggregateSnapshotServiceBuildReturnsErrorWhenAllClustersFail(t *testing
 		},
 	}
 	aggregate := &aggregateSnapshotService{
-		primaryID:    "cluster-a",
 		clusterOrder: []string{"cluster-a", "cluster-b"},
 		services:     services,
 	}

@@ -55,11 +55,14 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       return nodesDomain.data?.metrics ?? null;
     }, [nodesDomain.data?.metrics, nodesDomain.data?.metricsByCluster, selectedClusterId]);
 
+    // Keep node selections pinned to their source cluster for object details.
     const handleNodeClick = useCallback(
       (node: ClusterNodeRow) => {
         openWithObject({
           kind: 'Node',
           name: node.name,
+          clusterId: node.clusterId ?? undefined,
+          clusterName: node.clusterName ?? undefined,
         });
       },
       [openWithObject]

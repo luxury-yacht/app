@@ -35,7 +35,7 @@ func TestAggregateLogStreamHandlerRoutesByCluster(t *testing.T) {
 		"cluster-a": {Handler: handlerA},
 		"cluster-b": {Handler: handlerB},
 	}
-	aggregate := newAggregateLogStreamHandler("cluster-a", subsystems)
+	aggregate := newAggregateLogStreamHandler(subsystems)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/logs?scope=cluster-b|default:pod:nginx", nil)
 	rec := httptest.NewRecorder()

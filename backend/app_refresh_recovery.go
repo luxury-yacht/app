@@ -24,7 +24,7 @@ func (a *App) teardownRefreshSubsystem() {
 
 	subsystems := a.refreshSubsystems
 	if len(subsystems) == 0 && a.refreshManager != nil {
-		subsystems = map[string]*system.Subsystem{"primary": {Manager: a.refreshManager}}
+		subsystems = map[string]*system.Subsystem{"standalone": {Manager: a.refreshManager}}
 	}
 
 	for _, subsystem := range subsystems {

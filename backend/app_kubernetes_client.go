@@ -100,7 +100,7 @@ func (a *App) initKubernetesClient() (err error) {
 	a.restConfig = config
 
 	// Keep the client pool aligned with the active kubeconfig selection.
-	a.registerPrimaryClusterClient()
+	a.registerSelectedClusterClient()
 
 	selectionKey := a.currentSelectionKey()
 	existingCache := a.getPermissionCache(selectionKey)
@@ -151,11 +151,12 @@ func (a *App) restoreKubeconfigSelection() {
 			normalized = append(normalized, parsed.String())
 		}
 		if len(normalized) > 0 {
-			primary, err := parseKubeconfigSelection(normalized[0])
+			// Use the first saved selection to seed the single-cluster client for legacy calls.
+			baseSelection, err := parseKubeconfigSelection(normalized[0])
 			if err == nil {
 				a.selectedKubeconfigs = normalized
-				a.selectedKubeconfig = primary.Path
-				a.selectedContext = primary.Context
+				a.selectedKubeconfig = baseSelection.Path
+				a.selectedContext = baseSelection.Context
 				return
 			}
 		}

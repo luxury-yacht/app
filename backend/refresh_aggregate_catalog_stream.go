@@ -8,14 +8,13 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
-// aggregateCatalogStreamHandler routes catalog streams to the primary cluster.
+// aggregateCatalogStreamHandler routes catalog streams to the requested cluster.
 type aggregateCatalogStreamHandler struct {
-	primaryID string
 	handlers  map[string]http.Handler
 }
 
 // newAggregateCatalogStreamHandler builds a catalog stream router for active clusters.
-func newAggregateCatalogStreamHandler(primaryID string, subsystems map[string]*system.Subsystem) *aggregateCatalogStreamHandler {
+func newAggregateCatalogStreamHandler(subsystems map[string]*system.Subsystem) *aggregateCatalogStreamHandler {
 	handlers := make(map[string]http.Handler)
 	for id, subsystem := range subsystems {
 		if subsystem == nil || subsystem.Handler == nil {
@@ -24,7 +23,6 @@ func newAggregateCatalogStreamHandler(primaryID string, subsystems map[string]*s
 		handlers[id] = subsystem.Handler
 	}
 	return &aggregateCatalogStreamHandler{
-		primaryID: primaryID,
 		handlers:  handlers,
 	}
 }
@@ -48,17 +46,8 @@ func (h *aggregateCatalogStreamHandler) ServeHTTP(w http.ResponseWriter, r *http
 }
 
 func (h *aggregateCatalogStreamHandler) selectCluster(clusterIDs []string) (string, error) {
-	if len(clusterIDs) == 0 {
-		if h.primaryID == "" {
-			return "", fmt.Errorf("primary cluster not available")
-		}
-		return h.primaryID, nil
-	}
-	if len(clusterIDs) > 1 {
-		return "", fmt.Errorf("catalog stream requires a single cluster")
-	}
-	if clusterIDs[0] != h.primaryID {
-		return "", fmt.Errorf("catalog stream is only available on the primary cluster")
+	if len(clusterIDs) != 1 {
+		return "", fmt.Errorf("catalog stream requires a single cluster scope")
 	}
 	return clusterIDs[0], nil
 }

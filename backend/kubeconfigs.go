@@ -175,7 +175,7 @@ func (a *App) SetKubeconfig(selection string) error {
 	}
 
 	a.selectedKubeconfigs = []string{parsed.String()}
-	if err := a.setPrimaryKubeconfig(parsed, true); err != nil {
+	if err := a.setBaseKubeconfig(parsed, true); err != nil {
 		return err
 	}
 
@@ -216,8 +216,16 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 		normalizedStrings = append(normalizedStrings, parsed.String())
 	}
 
-	primary := normalized[0]
-	primaryChanged := a.selectedKubeconfig != primary.Path || a.selectedContext != primary.Context
+	baseSelection := normalized[0]
+	if a.selectedKubeconfig != "" || a.selectedContext != "" {
+		for _, selection := range normalized {
+			if selection.Path == a.selectedKubeconfig && selection.Context == a.selectedContext {
+				baseSelection = selection
+				break
+			}
+		}
+	}
+	baseChanged := a.selectedKubeconfig != baseSelection.Path || a.selectedContext != baseSelection.Context
 	selectionChanged := len(previousSelections) != len(normalizedStrings)
 	if !selectionChanged {
 		for i, selection := range previousSelections {
@@ -234,12 +242,12 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 	}
 	a.appSettings.SelectedKubeconfigs = normalizedStrings
 
-	if primaryChanged {
-		if err := a.setPrimaryKubeconfig(primary, false); err != nil {
+	if baseChanged {
+		if err := a.setBaseKubeconfig(baseSelection, false); err != nil {
 			return err
 		}
 	} else {
-		a.appSettings.SelectedKubeconfig = primary.String()
+		a.appSettings.SelectedKubeconfig = baseSelection.String()
 		if err := a.saveAppSettings(); err != nil {
 			a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
 		}
@@ -258,8 +266,8 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 	return nil
 }
 
-// setPrimaryKubeconfig applies a single kubeconfig selection while optionally updating the selection list.
-func (a *App) setPrimaryKubeconfig(selection kubeconfigSelection, updateSelectionList bool) error {
+// setBaseKubeconfig applies a single kubeconfig selection while optionally updating the selection list.
+func (a *App) setBaseKubeconfig(selection kubeconfigSelection, updateSelectionList bool) error {
 	// Update selected kubeconfig and context, reset client to force reinitialization
 	a.logger.Info("Resetting Kubernetes clients for kubeconfig switch", "KubeconfigManager")
 	a.selectedKubeconfig = selection.Path

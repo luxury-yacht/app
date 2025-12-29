@@ -14,6 +14,7 @@
 - Background refresh defaults to enabled on startup; skip forced manual refreshes on cluster tab switches when background refresh has multi-cluster scope.
 - Use a single refresh orchestrator; scope refresh context to the active tab by default.
 - Logs/diagnostics/modals remain outside tab context; each tab has its own sidebar, main content, and object panel.
+- No primary cluster concept; selection is a set and all backend/frontend flows must avoid primary/first-cluster assumptions.
 - Do not add new dependencies for drag-and-drop.
 - Treat multi-select add/remove as a lightweight selection change; only emit `kubeconfig:changing` when the selection becomes empty, and only emit `kubeconfig:changed` when at least one cluster is active after an empty selection.
 
@@ -98,6 +99,8 @@
 65. ✅ Add missing refresh manager APIs in DiagnosticsPanel test mock.
 66. ✅ Prevent dockable panels (object panel) from overlapping the cluster tabs row by enforcing a dynamic top offset.
 67. ✅ Adjust kubeconfig dropdown width: compact trigger, expanded menu fits content with right-edge alignment.
+68. ✅ Fix object panel open flow to avoid "object is no longer available" errors when selecting items.
+69. ✅ Remove all primary-cluster assumptions across backend + frontend (refresh aggregates, kubeconfig selection storage, catalog/streams) and replace with multi-cluster selection semantics.
 
 ## Risks / watchouts
 

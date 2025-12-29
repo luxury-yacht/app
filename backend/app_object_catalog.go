@@ -114,9 +114,6 @@ func (a *App) objectCatalogServiceForCluster(clusterID string) *objectcatalog.Se
 	a.objectCatalogMu.Lock()
 	defer a.objectCatalogMu.Unlock()
 	if clusterID == "" {
-		clusterID = a.objectCatalogPrimaryID
-	}
-	if clusterID == "" {
 		return nil
 	}
 	entry := a.objectCatalogEntries[clusterID]
@@ -138,22 +135,17 @@ func (a *App) startObjectCatalog() {
 		return
 	}
 
-	primarySet := false
 	for _, target := range targets {
-		primary := !primarySet
-		if err := a.startObjectCatalogForTarget(target, primary); err != nil {
+		if err := a.startObjectCatalogForTarget(target); err != nil {
 			if a.logger != nil {
 				a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", target.meta.ID, err), "ObjectCatalog")
 			}
 			continue
 		}
-		if primary {
-			primarySet = true
-		}
 	}
 }
 
-func (a *App) startObjectCatalogForTarget(target catalogTarget, primary bool) error {
+func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 	if target.meta.ID == "" {
 		return fmt.Errorf("cluster identifier missing")
 	}
@@ -204,7 +196,7 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget, primary bool) er
 		cancel:  cancel,
 		done:    done,
 		meta:    target.meta,
-	}, primary)
+	})
 
 	if telemetryRecorder != nil {
 		telemetryRecorder.RecordCatalog(true, 0, 0, 0, nil)
@@ -263,7 +255,7 @@ func (a *App) waitForCatalogInformerCaches(ctx context.Context, factory *refresh
 	return nil
 }
 
-func (a *App) storeObjectCatalogEntry(clusterID string, entry *objectCatalogEntry, primary bool) {
+func (a *App) storeObjectCatalogEntry(clusterID string, entry *objectCatalogEntry) {
 	if clusterID == "" || entry == nil {
 		return
 	}
@@ -273,9 +265,6 @@ func (a *App) storeObjectCatalogEntry(clusterID string, entry *objectCatalogEntr
 		a.objectCatalogEntries = make(map[string]*objectCatalogEntry)
 	}
 	a.objectCatalogEntries[clusterID] = entry
-	if primary {
-		a.objectCatalogPrimaryID = clusterID
-	}
 }
 
 func (a *App) clearObjectCatalogEntries() []*objectCatalogEntry {
@@ -286,7 +275,6 @@ func (a *App) clearObjectCatalogEntries() []*objectCatalogEntry {
 		entries = append(entries, entry)
 	}
 	a.objectCatalogEntries = make(map[string]*objectCatalogEntry)
-	a.objectCatalogPrimaryID = ""
 	return entries
 }
 
@@ -368,7 +356,8 @@ func waitForAPIExtensionsFactorySync(ctx context.Context, factory apiextinformer
 // GetCatalogDiagnostics returns the latest catalog telemetry snapshot for diagnostics tools.
 func (a *App) GetCatalogDiagnostics() (*CatalogDiagnostics, error) {
 	diag := &CatalogDiagnostics{}
-	if a.objectCatalogServiceForCluster("") != nil {
+	entries := a.snapshotObjectCatalogEntries()
+	if len(entries) > 0 {
 		diag.Enabled = true
 	}
 	if a.telemetryRecorder == nil {
@@ -416,7 +405,9 @@ func (a *App) GetCatalogDiagnostics() (*CatalogDiagnostics, error) {
 		}
 	}
 
-	if svc := a.objectCatalogServiceForCluster(""); svc != nil {
+	// Only attach per-service health when a single catalog is active to avoid implying a preferred cluster.
+	if len(entries) == 1 && entries[0] != nil && entries[0].service != nil {
+		svc := entries[0].service
 		health := svc.Health()
 		if health.Status != objectcatalog.HealthStateUnknown {
 			diag.Health = &CatalogHealth{

@@ -23,8 +23,8 @@ type clusterClients struct {
 	restConfig          *rest.Config
 }
 
-// registerPrimaryClusterClient keeps the client pool aligned with the primary selection.
-func (a *App) registerPrimaryClusterClient() {
+// registerSelectedClusterClient keeps the client pool aligned with the selected cluster.
+func (a *App) registerSelectedClusterClient() {
 	if a == nil || a.client == nil {
 		return
 	}

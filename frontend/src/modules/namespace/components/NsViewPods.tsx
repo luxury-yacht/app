@@ -96,12 +96,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       pod: PodSnapshotEntry | null;
     }>({ show: false, pod: null });
 
+    // Include cluster metadata so object details stay scoped to the active tab.
     const handlePodOpen = useCallback(
       (pod: PodSnapshotEntry) => {
         openWithObject({
           kind: 'Pod',
           name: pod.name,
           namespace: pod.namespace,
+          clusterId: pod.clusterId ?? undefined,
+          clusterName: pod.clusterName ?? undefined,
         });
       },
       [openWithObject]
@@ -116,6 +119,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           kind: pod.ownerKind,
           name: pod.ownerName,
           namespace: pod.namespace,
+          clusterId: pod.clusterId ?? undefined,
+          clusterName: pod.clusterName ?? undefined,
         });
       },
       [openWithObject]
@@ -129,6 +134,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         openWithObject({
           kind: 'Node',
           name: pod.node,
+          clusterId: pod.clusterId ?? undefined,
+          clusterName: pod.clusterName ?? undefined,
         });
       },
       [openWithObject]

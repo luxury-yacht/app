@@ -889,15 +889,15 @@ class RefreshOrchestrator {
   }
 
   private getSelectedClusterIds(context: RefreshContext = this.context): string[] {
-    // Prefer the explicit multi-select list, fall back to the primary selection.
+    // Prefer the explicit multi-select list, fall back to the active selection.
     const explicit = (context.selectedClusterIds ?? [])
       .map((id) => (id ?? '').trim())
       .filter(Boolean);
     if (explicit.length > 0) {
       return explicit;
     }
-    const primary = (context.selectedClusterId ?? '').trim();
-    return primary ? [primary] : [];
+    const active = (context.selectedClusterId ?? '').trim();
+    return active ? [active] : [];
   }
 
   private normalizeNamespaceScope(value?: string | null): string | null {

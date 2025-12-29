@@ -69,6 +69,14 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
   );
 
   const keyExtractor = useCallback((pod: PodSnapshotEntry) => `${pod.namespace}:${pod.name}`, []);
+  // Ensure pod navigation keeps the active cluster context for object detail scopes.
+  const getPodClusterMeta = useCallback(
+    (pod: PodSnapshotEntry) => ({
+      clusterId: pod.clusterId ?? undefined,
+      clusterName: pod.clusterName ?? undefined,
+    }),
+    []
+  );
   const handleNamespaceSelect = useCallback(
     (pod: PodSnapshotEntry) => {
       if (!pod.namespace) {
@@ -90,11 +98,23 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     const base: GridColumnDefinition<PodSnapshotEntry>[] = [
       createKindColumn<PodSnapshotEntry>({
         getKind: () => 'Pod',
-        onClick: (pod) => openWithObject({ kind: 'Pod', name: pod.name, namespace: pod.namespace }),
+        onClick: (pod) =>
+          openWithObject({
+            kind: 'Pod',
+            name: pod.name,
+            namespace: pod.namespace,
+            ...getPodClusterMeta(pod),
+          }),
         sortable: false,
       }),
       createTextColumn<PodSnapshotEntry>('name', 'Name', {
-        onClick: (pod) => openWithObject({ kind: 'Pod', name: pod.name, namespace: pod.namespace }),
+        onClick: (pod) =>
+          openWithObject({
+            kind: 'Pod',
+            name: pod.name,
+            namespace: pod.namespace,
+            ...getPodClusterMeta(pod),
+          }),
         getClassName: () => 'object-panel-link',
         getTitle: (pod) => pod.name,
       }),
@@ -119,6 +139,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
                 kind: pod.ownerKind,
                 name: pod.ownerName,
                 namespace: pod.namespace,
+                ...getPodClusterMeta(pod),
               })
             : undefined,
         isInteractive: (pod) => Boolean(pod.ownerKind && pod.ownerName),
@@ -130,6 +151,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             ? openWithObject({
                 kind: 'Node',
                 name: pod.node,
+                ...getPodClusterMeta(pod),
               })
             : undefined,
         isInteractive: (pod) => Boolean(pod.node),
@@ -187,6 +209,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     metrics?.lastError,
     metrics?.stale,
     metricsLastUpdated,
+    getPodClusterMeta,
     openWithObject,
   ]);
 
@@ -247,7 +270,12 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             sortConfig={tableSort}
             keyExtractor={keyExtractor}
             onRowClick={(pod) =>
-              openWithObject({ kind: 'Pod', name: pod.name, namespace: pod.namespace })
+              openWithObject({
+                kind: 'Pod',
+                name: pod.name,
+                namespace: pod.namespace,
+                ...getPodClusterMeta(pod),
+              })
             }
             enableContextMenu
             getCustomContextMenuItems={(pod) => [
@@ -255,7 +283,12 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
                 label: 'Open',
                 icon: '→',
                 onClick: () =>
-                  openWithObject({ kind: 'Pod', name: pod.name, namespace: pod.namespace }),
+                  openWithObject({
+                    kind: 'Pod',
+                    name: pod.name,
+                    namespace: pod.namespace,
+                    ...getPodClusterMeta(pod),
+                  }),
               },
             ]}
             tableClassName="gridtable-pods gridtable-pods--namespaced"

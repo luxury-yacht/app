@@ -57,7 +57,6 @@ type App struct {
 
 	objectCatalogMu        sync.Mutex
 	objectCatalogEntries   map[string]*objectCatalogEntry
-	objectCatalogPrimaryID string
 
 	permissionCacheMu sync.Mutex
 	permissionCaches  map[string]map[string]bool

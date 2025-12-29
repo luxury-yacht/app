@@ -73,7 +73,7 @@ func TestAggregateManualQueueEnqueueFansOut(t *testing.T) {
 		"cluster-a": {ManualQueue: queueA},
 		"cluster-b": {ManualQueue: queueB},
 	}
-	aggregate := newAggregateManualQueue("cluster-a", []string{"cluster-a", "cluster-b"}, subsystems)
+	aggregate := newAggregateManualQueue([]string{"cluster-a", "cluster-b"}, subsystems)
 
 	job, err := aggregate.Enqueue(context.Background(), "namespaces", "clusters=cluster-a,cluster-b|namespace:default", "manual")
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestAggregateManualQueueStatusAggregatesFailures(t *testing.T) {
 		"cluster-a": {ManualQueue: queueA},
 		"cluster-b": {ManualQueue: queueB},
 	}
-	aggregate := newAggregateManualQueue("cluster-a", []string{"cluster-a", "cluster-b"}, subsystems)
+	aggregate := newAggregateManualQueue([]string{"cluster-a", "cluster-b"}, subsystems)
 
 	job, err := aggregate.Enqueue(context.Background(), "namespaces", "clusters=cluster-a,cluster-b|", "")
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestAggregateManualQueueUpdateReplacesJob(t *testing.T) {
 	subsystems := map[string]*system.Subsystem{
 		"cluster-a": {ManualQueue: queue},
 	}
-	aggregate := newAggregateManualQueue("cluster-a", []string{"cluster-a"}, subsystems)
+	aggregate := newAggregateManualQueue([]string{"cluster-a"}, subsystems)
 
 	job, err := aggregate.Enqueue(context.Background(), "namespaces", "cluster-a|", "initial")
 	require.NoError(t, err)
@@ -139,7 +139,7 @@ func TestAggregateManualQueueNextReturnsContextError(t *testing.T) {
 	subsystems := map[string]*system.Subsystem{
 		"cluster-a": {ManualQueue: queue},
 	}
-	aggregate := newAggregateManualQueue("cluster-a", []string{"cluster-a"}, subsystems)
+	aggregate := newAggregateManualQueue([]string{"cluster-a"}, subsystems)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

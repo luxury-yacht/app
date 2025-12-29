@@ -14,7 +14,6 @@ import (
 
 // aggregateManualQueue fans out manual refresh jobs to per-cluster queues and aggregates status.
 type aggregateManualQueue struct {
-	primaryID    string
 	clusterOrder []string
 	queues       map[string]refresh.ManualQueue
 
@@ -28,7 +27,7 @@ type aggregateManualJob struct {
 	clusterJobs map[string]string
 }
 
-func newAggregateManualQueue(primaryID string, clusterOrder []string, subsystems map[string]*system.Subsystem) *aggregateManualQueue {
+func newAggregateManualQueue(clusterOrder []string, subsystems map[string]*system.Subsystem) *aggregateManualQueue {
 	queues := make(map[string]refresh.ManualQueue)
 	for id, subsystem := range subsystems {
 		if subsystem == nil || subsystem.ManualQueue == nil {
@@ -49,12 +48,7 @@ func newAggregateManualQueue(primaryID string, clusterOrder []string, subsystems
 		}
 		sort.Strings(ordered)
 	}
-	if primaryID == "" && len(ordered) > 0 {
-		primaryID = ordered[0]
-	}
-
 	return &aggregateManualQueue{
-		primaryID:    primaryID,
 		clusterOrder: ordered,
 		queues:       queues,
 		jobs:         make(map[string]*aggregateManualJob),
@@ -157,10 +151,7 @@ func (q *aggregateManualQueue) resolveTargets(domain string, clusterIDs []string
 	}
 
 	if isSingleClusterDomain(domain) {
-		if q.primaryID == "" {
-			return nil, fmt.Errorf("primary cluster not available")
-		}
-		return []string{q.primaryID}, nil
+		return nil, fmt.Errorf("domain %s requires an explicit cluster scope", domain)
 	}
 
 	return append([]string(nil), q.clusterOrder...), nil
