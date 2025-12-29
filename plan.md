@@ -114,12 +114,17 @@
 80. ✅ Fix Sidebar.test.tsx expectations to match namespace expand/collapse and loading behavior.
 81. ✅ Add an auto-dismiss progress bar to error toasts with theme tokens for track/fill colors and duration.
 82. ✅ Flip the toast auto-dismiss progress animation to shrink left-to-right.
+83. ✅ Fix object-detail fetches in multi-cluster by routing backend detail calls through per-cluster clients using the request cluster context.
 
 ## Risks / watchouts
 
 - Fan-out refresh load and timeouts per cluster; may need concurrency limits.
 - Stream merge ordering/volume; consider backpressure and per-cluster throttling.
 - Single-cluster domain restrictions (catalog/object) must allow explicit cluster-scoped requests to avoid blocking non-active tabs.
+
+## Planning notes (post-mortem)
+
+- Missed: object detail provider still routed through single-cluster App getters. Action: audit remaining legacy single-cluster entry points and ensure they use cluster-scoped dependencies.
 
 ## Coverage notes
 

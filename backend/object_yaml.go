@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -88,16 +89,32 @@ func storeGVRCached(key string, entry gvrCacheEntry) {
 	}
 }
 
-// GetObjectYAML fetches the YAML representation of a Kubernetes object
+// GetObjectYAML fetches the YAML representation of a Kubernetes object.
 func (a *App) GetObjectYAML(resourceKind, namespace, name string) (string, error) {
-	a.logger.Debug(fmt.Sprintf("GetObjectYAML called with: type='%s', namespace='%s', name='%s'", resourceKind, namespace, name), "ObjectYAML")
+	deps := a.resourceDependencies()
+	return getObjectYAMLWithDependencies(deps, a.currentSelectionKey(), resourceKind, namespace, name)
+}
 
-	if a.client == nil {
+// getObjectYAMLWithDependencies fetches object YAML using the supplied cluster-scoped dependencies.
+func getObjectYAMLWithDependencies(
+	deps common.Dependencies,
+	selectionKey string,
+	resourceKind, namespace, name string,
+) (string, error) {
+	logger := deps.Logger
+	if logger != nil {
+		logger.Debug(
+			fmt.Sprintf("GetObjectYAML called with: type='%s', namespace='%s', name='%s'", resourceKind, namespace, name),
+			"ObjectYAML",
+		)
+	}
+
+	if deps.KubernetesClient == nil {
 		return "", fmt.Errorf("kubernetes client not initialized")
 	}
 
 	if strings.EqualFold(resourceKind, "endpointslice") || strings.EqualFold(resourceKind, "endpointslices") {
-		sliceList, err := a.listEndpointSlicesForService(namespace, name)
+		sliceList, err := listEndpointSlicesForServiceWithDependencies(deps, namespace, name)
 		if err != nil {
 			return "", fmt.Errorf("failed to list endpoint slices: %w", err)
 		}
@@ -108,28 +125,36 @@ func (a *App) GetObjectYAML(resourceKind, namespace, name string) (string, error
 		return string(yamlBytes), nil
 	}
 
-	dynamicClient := a.dynamicClient
+	dynamicClient := deps.DynamicClient
 	if dynamicClient == nil {
 		return "", fmt.Errorf("dynamic client not initialized")
 	}
 
-	// Use discovery to get GVR for the resource type
-	gvr, isNamespaced, err := a.getGVR(resourceKind)
+	// Use discovery to get GVR for the resource type.
+	gvr, isNamespaced, err := getGVRForDependencies(deps, selectionKey, resourceKind)
 	if err != nil {
 		return "", fmt.Errorf("failed to discover resource type %s: %v", resourceKind, err)
 	}
-	var obj interface{}
 
-	// Handle both namespaced and cluster-scoped resources
-	// For cluster-scoped resources, ignore the namespace parameter
-	fetchCtx, fetchCancel := context.WithTimeout(a.CtxOrBackground(), discoveryTimeout)
+	baseCtx := deps.Context
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+
+	var obj interface{}
+	fetchCtx, fetchCancel := context.WithTimeout(baseCtx, discoveryTimeout)
 	defer fetchCancel()
 
+	// Handle both namespaced and cluster-scoped resources.
 	if isNamespaced && namespace != "" {
-		a.logger.Debug(fmt.Sprintf("Fetching namespaced resource: %s/%s", namespace, name), "ObjectYAML")
+		if logger != nil {
+			logger.Debug(fmt.Sprintf("Fetching namespaced resource: %s/%s", namespace, name), "ObjectYAML")
+		}
 		obj, err = dynamicClient.Resource(gvr).Namespace(namespace).Get(fetchCtx, name, metav1.GetOptions{})
 	} else {
-		a.logger.Debug(fmt.Sprintf("Fetching cluster-scoped resource: %s", name), "ObjectYAML")
+		if logger != nil {
+			logger.Debug(fmt.Sprintf("Fetching cluster-scoped resource: %s", name), "ObjectYAML")
+		}
 		obj, err = dynamicClient.Resource(gvr).Get(fetchCtx, name, metav1.GetOptions{})
 	}
 
@@ -137,7 +162,7 @@ func (a *App) GetObjectYAML(resourceKind, namespace, name string) (string, error
 		return "", fmt.Errorf("failed to get %s %s: %v", resourceKind, name, err)
 	}
 
-	// Convert to YAML
+	// Convert to YAML.
 	yamlBytes, err := yaml.Marshal(obj)
 	if err != nil {
 		return "", fmt.Errorf("failed to convert to YAML: %v", err)
@@ -176,13 +201,56 @@ func (a *App) listEndpointSlicesForService(namespace, name string) (*discoveryv1
 	return list, nil
 }
 
+// listEndpointSlicesForServiceWithDependencies loads endpoint slices with explicit dependencies.
+func listEndpointSlicesForServiceWithDependencies(
+	deps common.Dependencies,
+	namespace, name string,
+) (*discoveryv1.EndpointSliceList, error) {
+	if deps.KubernetesClient == nil {
+		return nil, fmt.Errorf("kubernetes client not initialized")
+	}
+
+	ctx := deps.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	selector := labels.Set{discoveryv1.LabelServiceName: name}.AsSelector().String()
+	list, err := deps.KubernetesClient.DiscoveryV1().EndpointSlices(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
+	if err != nil {
+		return nil, err
+	}
+	if list == nil {
+		return &discoveryv1.EndpointSliceList{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "EndpointSliceList",
+				APIVersion: discoveryv1.SchemeGroupVersion.String(),
+			},
+			Items: []discoveryv1.EndpointSlice{},
+		}, nil
+	}
+	list.TypeMeta = metav1.TypeMeta{
+		Kind:       "EndpointSliceList",
+		APIVersion: discoveryv1.SchemeGroupVersion.String(),
+	}
+	return list, nil
+}
+
 // getGVR finds the GVR for any resource type using discovery
 // Returns the GVR and whether the resource is namespaced
 func (a *App) getGVR(resourceKind string) (schema.GroupVersionResource, bool, error) {
-	cacheKey := gvrCacheKey(a.currentSelectionKey(), resourceKind)
+	return getGVRForDependencies(a.resourceDependencies(), a.currentSelectionKey(), resourceKind)
+}
+
+// getGVRForDependencies discovers the GVR for a kind using the provided dependencies and cache key.
+func getGVRForDependencies(
+	deps common.Dependencies,
+	selectionKey, resourceKind string,
+) (schema.GroupVersionResource, bool, error) {
+	cacheKey := gvrCacheKey(selectionKey, resourceKind)
 	legacyKey := strings.TrimSpace(resourceKind)
 
-	// Check cache first (scoped key) with legacy fallbacks for compatibility
+	// Check cache first (scoped key) with legacy fallbacks for compatibility.
 	gvrCacheMutex.RLock()
 	if cached, found := gvrCache[cacheKey]; found {
 		gvrCacheMutex.RUnlock()
@@ -201,96 +269,112 @@ func (a *App) getGVR(resourceKind string) (schema.GroupVersionResource, bool, er
 	}
 	gvrCacheMutex.RUnlock()
 
-	ctx, cancel := context.WithTimeout(a.CtxOrBackground(), discoveryTimeout)
+	baseCtx := deps.Context
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(baseCtx, discoveryTimeout)
 	defer cancel()
 
-	// Use the discovery client to find all available resources
-	discoveryClient := a.client.Discovery()
-	if a.restConfig != nil {
-		cfg := rest.CopyConfig(a.restConfig)
+	// Use the discovery client to find all available resources.
+	var discoveryClient discovery.DiscoveryInterface
+	if deps.KubernetesClient != nil {
+		discoveryClient = deps.KubernetesClient.Discovery()
+	}
+	if deps.RestConfig != nil {
+		cfg := rest.CopyConfig(deps.RestConfig)
 		cfg.Timeout = discoveryTimeout
 		if dc, err := discovery.NewDiscoveryClientForConfig(cfg); err == nil {
 			discoveryClient = dc
 		}
 	}
-
-	// Get all API resources with a bounded context to avoid hanging on slow clusters
-	var apiResourceLists []*metav1.APIResourceList
-	apiResourceLists, err := discoveryClient.ServerPreferredResources()
-	if err != nil {
-		// Even if there's an error, we might have partial results
-		// So we continue with what we have
+	if discoveryClient == nil {
+		return schema.GroupVersionResource{}, false, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	// Search through all API resources for a matching Kind
+	// Get all API resources with a bounded context to avoid hanging on slow clusters.
+	apiResourceLists, err := discoveryClient.ServerPreferredResources()
+	if err != nil {
+		// Even if there's an error, we might have partial results.
+	}
+
+	logger := deps.Logger
+
+	// Search through all API resources for a matching Kind.
 	for _, apiResourceList := range apiResourceLists {
-		// Parse the group version from the list
+		// Parse the group version from the list.
 		gv, err := schema.ParseGroupVersion(apiResourceList.GroupVersion)
 		if err != nil {
 			continue
 		}
 
-		// Check each resource in this group/version
 		for _, apiResource := range apiResourceList.APIResources {
-			// Skip sub-resources (those with slashes in the name like pods/log)
 			if strings.Contains(apiResource.Name, "/") {
 				continue
 			}
 
-			// Case-insensitive match by Kind (singular name)
 			if strings.EqualFold(apiResource.Kind, resourceKind) {
-				a.logger.Debug(fmt.Sprintf("Found match by Kind: %s -> %s, namespaced=%v", resourceKind, apiResource.Kind, apiResource.Namespaced), "ObjectYAML")
+				if logger != nil {
+					logger.Debug(
+						fmt.Sprintf("Found match by Kind: %s -> %s, namespaced=%v", resourceKind, apiResource.Kind, apiResource.Namespaced),
+						"ObjectYAML",
+					)
+				}
 				gvr := schema.GroupVersionResource{
 					Group:    gv.Group,
 					Version:  gv.Version,
 					Resource: apiResource.Name,
 				}
-				// Cache the result
 				storeGVRCached(cacheKey, gvrCacheEntry{gvr: gvr, namespaced: apiResource.Namespaced})
 				return gvr, apiResource.Namespaced, nil
 			}
 
-			// Check singular name (e.g., "node" for nodes)
 			if strings.EqualFold(apiResource.SingularName, resourceKind) {
-				a.logger.Debug(fmt.Sprintf("Found match by singular name: %s -> %s, namespaced=%v", resourceKind, apiResource.SingularName, apiResource.Namespaced), "ObjectYAML")
+				if logger != nil {
+					logger.Debug(
+						fmt.Sprintf("Found match by singular name: %s -> %s, namespaced=%v", resourceKind, apiResource.SingularName, apiResource.Namespaced),
+						"ObjectYAML",
+					)
+				}
 				gvr := schema.GroupVersionResource{
 					Group:    gv.Group,
 					Version:  gv.Version,
 					Resource: apiResource.Name,
 				}
-				// Cache the result
 				storeGVRCached(cacheKey, gvrCacheEntry{gvr: gvr, namespaced: apiResource.Namespaced})
 				return gvr, apiResource.Namespaced, nil
 			}
 
-			// Also check if the resource type matches the resource name
-			// (sometimes users might pass the plural form)
 			if strings.EqualFold(apiResource.Name, resourceKind) {
-				a.logger.Debug(fmt.Sprintf("Found match by resource name: %s -> %s, namespaced=%v", resourceKind, apiResource.Name, apiResource.Namespaced), "ObjectYAML")
+				if logger != nil {
+					logger.Debug(
+						fmt.Sprintf("Found match by resource name: %s -> %s, namespaced=%v", resourceKind, apiResource.Name, apiResource.Namespaced),
+						"ObjectYAML",
+					)
+				}
 				gvr := schema.GroupVersionResource{
 					Group:    gv.Group,
 					Version:  gv.Version,
 					Resource: apiResource.Name,
 				}
-				// Cache the result
 				storeGVRCached(cacheKey, gvrCacheEntry{gvr: gvr, namespaced: apiResource.Namespaced})
 				return gvr, apiResource.Namespaced, nil
 			}
 		}
 	}
 
-	// If not found in API resources, check CRDs as well
-	// (some CRDs might not show up in ServerPreferredResources)
-	if a.apiextensionsClient != nil {
-		crds, err := a.apiextensionsClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
+	if deps.APIExtensionsClient != nil {
+		crds, err := deps.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
 		if err == nil {
 			for _, crd := range crds.Items {
-				// Case-insensitive match for CRD Kind
 				if strings.EqualFold(crd.Spec.Names.Kind, resourceKind) {
-					// CRDs have a Scope field: "Namespaced" or "Cluster"
 					isNamespaced := crd.Spec.Scope == "Namespaced"
-					a.logger.Debug(fmt.Sprintf("Found CRD match: %s -> %s, namespaced=%v", resourceKind, crd.Spec.Names.Kind, isNamespaced), "ObjectYAML")
-					// Get the preferred version
+					if logger != nil {
+						logger.Debug(
+							fmt.Sprintf("Found CRD match: %s -> %s, namespaced=%v", resourceKind, crd.Spec.Names.Kind, isNamespaced),
+							"ObjectYAML",
+						)
+					}
 					var version string
 					for _, v := range crd.Spec.Versions {
 						if v.Served && v.Storage {
@@ -307,7 +391,6 @@ func (a *App) getGVR(resourceKind string) (schema.GroupVersionResource, bool, er
 						Version:  version,
 						Resource: crd.Spec.Names.Plural,
 					}
-					// Cache the result
 					storeGVRCached(cacheKey, gvrCacheEntry{gvr: gvr, namespaced: isNamespaced})
 					return gvr, isNamespaced, nil
 				}
@@ -315,6 +398,8 @@ func (a *App) getGVR(resourceKind string) (schema.GroupVersionResource, bool, er
 		}
 	}
 
-	a.logger.Error(fmt.Sprintf("Resource type %s not found in discovery or CRDs", resourceKind), "ObjectYAML")
+	if logger != nil {
+		logger.Error(fmt.Sprintf("Resource type %s not found in discovery or CRDs", resourceKind), "ObjectYAML")
+	}
 	return schema.GroupVersionResource{}, false, fmt.Errorf("resource type %s not found", resourceKind)
 }

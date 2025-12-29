@@ -80,6 +80,47 @@ func TestObjectDetailProviderUnknownKind(t *testing.T) {
 	}
 }
 
+func TestObjectDetailProviderUsesClusterContext(t *testing.T) {
+	app := NewApp()
+	app.Ctx = context.Background()
+
+	clusterAID := "config-a:ctx-a"
+	clusterBID := "config-b:ctx-b"
+
+	app.clusterClients = map[string]*clusterClients{
+		clusterAID: {
+			meta:              ClusterMeta{ID: clusterAID, Name: "ctx-a"},
+			kubeconfigPath:    "/path/a",
+			kubeconfigContext: "ctx-a",
+			client:            fake.NewClientset(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-a"}}),
+		},
+		clusterBID: {
+			meta:              ClusterMeta{ID: clusterBID, Name: "ctx-b"},
+			kubeconfigPath:    "/path/b",
+			kubeconfigContext: "ctx-b",
+			client:            fake.NewClientset(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "node-b"}}),
+		},
+	}
+
+	provider := app.objectDetailProvider()
+	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
+		ClusterID:   clusterBID,
+		ClusterName: "ctx-b",
+	})
+
+	detail, _, err := provider.FetchObjectDetails(ctx, "Node", "", "node-b")
+	if err != nil {
+		t.Fatalf("FetchObjectDetails returned error: %v", err)
+	}
+	if detail == nil {
+		t.Fatal("FetchObjectDetails returned nil detail")
+	}
+
+	if _, _, err := provider.FetchObjectDetails(ctx, "Node", "", "node-a"); err == nil {
+		t.Fatal("expected error when fetching node from another cluster")
+	}
+}
+
 func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "demo-deploy", Namespace: "extra"},
