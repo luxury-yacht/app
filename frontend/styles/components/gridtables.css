@@ -602,7 +602,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  padding: 3px 0 6px 0;
+  padding: 8px 0 6px 0;
   align-items: center;
   justify-content: space-between;
 }

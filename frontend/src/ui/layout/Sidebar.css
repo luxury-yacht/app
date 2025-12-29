@@ -18,7 +18,7 @@
 /* Sidebar content styles */
 
 .sidebar-content {
-  padding-top: 0.5rem;
+  padding-top: 0.7rem;
   padding-bottom: 0.5rem;
   padding-left: 1rem;
   overflow-y: hidden;
@@ -223,7 +223,7 @@
   z-index: 10;
   background: transparent;
   border: none;
-  padding: 6px;
+  padding: 10px 6px 6px 6px;
   cursor: pointer;
   color: var(--color-text-secondary);
   display: flex;

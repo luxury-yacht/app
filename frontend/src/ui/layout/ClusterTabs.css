@@ -3,9 +3,9 @@
   align-items: center;
   gap: 2px;
   padding: 0 6px;
-  min-height: 30px;
+  min-height: 26px;
   background: var(--color-bg-secondary);
-  /* border-bottom: 1px solid var(--color-border); */
+  border-bottom: 1px solid var(--color-border);
   overflow-x: auto;
   grid-column: 1 / -1;
   grid-row: 2;
