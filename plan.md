@@ -90,6 +90,7 @@
 57. ✅ Remove the blue outline/box-shadow from the active cluster tab while keeping the active tab distinction.
 58. ✅ Remove the accent border from the active cluster tab while keeping the active tab distinction.
 59. ✅ Add a Cmd/Ctrl+W shortcut to close the active cluster tab.
+60. ✅ Scope catalog snapshot requests (Browse + Namespace Objects) to the active cluster to avoid single-cluster domain errors.
 
 ## Risks / watchouts
 

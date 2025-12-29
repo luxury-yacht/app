@@ -18,6 +18,7 @@ import { useTableSort } from '@/hooks/useTableSort';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import { refreshManager, refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -41,6 +42,22 @@ type PageRequestMode = 'reset' | 'append' | null;
 
 const parseContinueToken = (value: unknown): string | null =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+
+// Split a cluster-prefixed scope so we can normalize the query while preserving the cluster id.
+const splitClusterScope = (value: string): { prefix: string; scope: string } => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { prefix: '', scope: '' };
+  }
+  const delimiterIndex = trimmed.indexOf('|');
+  if (delimiterIndex <= 0) {
+    return { prefix: '', scope: trimmed };
+  }
+  return {
+    prefix: trimmed.slice(0, delimiterIndex).trim(),
+    scope: trimmed.slice(delimiterIndex + 1).trim(),
+  };
+};
 
 type UpsertResult = {
   nextItems: CatalogItem[];
@@ -172,12 +189,15 @@ const buildCatalogScope = (params: {
 const normalizeCatalogScope = (
   raw: string | null | undefined,
   fallbackLimit: number,
-  namespace: string
+  namespace: string,
+  clusterId?: string | null
 ): string | null => {
   if (!raw) {
     return null;
   }
-  const trimmed = raw.trim().replace(/^\?/, '');
+  const cleaned = raw.trim().replace(/^\?/, '');
+  const { prefix, scope } = splitClusterScope(cleaned);
+  const trimmed = scope.trim().replace(/^\?/, '');
   if (!trimmed) {
     return null;
   }
@@ -193,15 +213,22 @@ const normalizeCatalogScope = (
     const continueToken = params.get('continue');
     const kinds = params.getAll('kind');
 
-    return buildCatalogScope({
+    const normalized = buildCatalogScope({
       limit,
       search,
       kinds,
       namespace,
       continueToken,
     });
+    if (prefix) {
+      return `${prefix}|${normalized}`;
+    }
+    return buildClusterScope(clusterId ?? undefined, normalized);
   } catch {
-    return trimmed;
+    if (prefix) {
+      return `${prefix}|${trimmed}`;
+    }
+    return buildClusterScope(clusterId ?? undefined, trimmed);
   }
 };
 
@@ -386,7 +413,8 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
 
   useEffect(() => {
     const normalizedScope =
-      normalizeCatalogScope(baseScope, pageLimit, trimmedNamespace) ?? baseScope;
+      normalizeCatalogScope(baseScope, pageLimit, trimmedNamespace, selectedClusterId) ??
+      buildClusterScope(selectedClusterId, baseScope);
 
     requestModeRef.current = 'reset';
     setIsRequestingMore(false);
@@ -405,7 +433,8 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
       return;
     }
     const normalizedIncoming =
-      normalizeCatalogScope(domain.scope, pageLimit, trimmedNamespace) ?? domain.scope;
+      normalizeCatalogScope(domain.scope, pageLimit, trimmedNamespace, selectedClusterId) ??
+      domain.scope;
     if (normalizedIncoming !== lastAppliedScopeRef.current) {
       return;
     }
@@ -436,11 +465,12 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
 
     if (mode === 'append') {
       const normalizedBaseScope =
-        normalizeCatalogScope(baseScope, pageLimit, trimmedNamespace) ?? baseScope;
+        normalizeCatalogScope(baseScope, pageLimit, trimmedNamespace, selectedClusterId) ??
+        buildClusterScope(selectedClusterId, baseScope);
       refreshOrchestrator.setDomainScope('catalog', normalizedBaseScope);
       lastAppliedScopeRef.current = normalizedBaseScope;
     }
-  }, [domain.data, domain.scope, domain.status, baseScope, pageLimit, trimmedNamespace]);
+  }, [domain.data, domain.scope, domain.status, baseScope, pageLimit, trimmedNamespace, selectedClusterId]);
 
   const handleLoadMore = useCallback(() => {
     if (!continueToken || isRequestingMore) {
@@ -458,7 +488,8 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
     });
 
     const normalizedScope =
-      normalizeCatalogScope(pageScope, pageLimit, trimmedNamespace) ?? pageScope;
+      normalizeCatalogScope(pageScope, pageLimit, trimmedNamespace, selectedClusterId) ??
+      buildClusterScope(selectedClusterId, pageScope);
     refreshOrchestrator.setDomainScope('catalog', normalizedScope);
     lastAppliedScopeRef.current = normalizedScope;
     void refreshOrchestrator.triggerManualRefresh('catalog', { suppressSpinner: true });
@@ -469,6 +500,7 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
     persistedFilters.search,
     persistedFilters.kinds,
     trimmedNamespace,
+    selectedClusterId,
   ]);
 
   const { sortedData, sortConfig, handleSort } = useTableSort<TableRow>(rows, 'kind', 'asc', {

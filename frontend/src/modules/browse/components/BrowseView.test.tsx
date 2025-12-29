@@ -30,7 +30,11 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context' }),
+  useKubeconfig: () => ({
+    selectedKubeconfig: 'path:context',
+    selectedClusterId: 'cluster-1',
+    selectedClusterIds: ['cluster-1'],
+  }),
 }));
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
@@ -124,7 +128,10 @@ describe('BrowseView', () => {
 
     expect(refreshMocks.orchestrator.setDomainEnabled).toHaveBeenCalledWith('catalog', true);
     expect(refreshMocks.manager.disable).toHaveBeenCalledWith('catalog');
-    expect(refreshMocks.orchestrator.setDomainScope).toHaveBeenCalledWith('catalog', 'limit=200');
+    expect(refreshMocks.orchestrator.setDomainScope).toHaveBeenCalledWith(
+      'catalog',
+      'cluster-1|limit=200'
+    );
     expect(refreshMocks.orchestrator.triggerManualRefresh).toHaveBeenCalledWith('catalog', {
       suppressSpinner: true,
     });
@@ -136,7 +143,7 @@ describe('BrowseView', () => {
       await Promise.resolve();
     });
 
-    refreshMocks.catalogDomain.scope = 'limit=200';
+    refreshMocks.catalogDomain.scope = 'cluster-1|limit=200';
     refreshMocks.catalogDomain.data = {
       items: [
         {
@@ -172,13 +179,13 @@ describe('BrowseView', () => {
 
     expect(refreshMocks.orchestrator.setDomainScope).toHaveBeenCalledWith(
       'catalog',
-      'limit=200&continue=200'
+      'cluster-1|limit=200&continue=200'
     );
     expect(refreshMocks.orchestrator.triggerManualRefresh).toHaveBeenCalledWith('catalog', {
       suppressSpinner: true,
     });
 
-    refreshMocks.catalogDomain.scope = 'limit=200&continue=200';
+    refreshMocks.catalogDomain.scope = 'cluster-1|limit=200&continue=200';
     refreshMocks.catalogDomain.data = {
       items: [
         {

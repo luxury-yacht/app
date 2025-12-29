@@ -9,7 +9,7 @@
   overflow-x: auto;
   grid-column: 1 / -1;
   grid-row: 2;
-  --wails-draggable: none;
+  /* --wails-draggable: none; */
 }
 
 .cluster-tab {
@@ -22,7 +22,7 @@
   border-radius: 8px 8px 0 0;
   color: var(--color-text-secondary);
   margin-bottom: -1px;
-  --wails-draggable: none;
+  /* --wails-draggable: none; */
 }
 
 .cluster-tab__button {
@@ -37,7 +37,7 @@
   font-size: 12px;
   font-weight: 600;
   text-transform: none;
-  --wails-draggable: none;
+  /* --wails-draggable: none; */
 }
 
 .cluster-tab__label {
@@ -65,10 +65,10 @@
 }
 
 .cluster-tab--active {
-  background: var(--color-bg);
+  background: var(--color-bg-tertiary);
   color: var(--color-text);
   border-color: var(--color-border);
-  border-bottom: 1px solid var(--color-bg);
+  border-bottom: 1px solid var(--color-text-secondary);
 }
 
 .cluster-tab--dragging {
