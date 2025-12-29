@@ -950,8 +950,14 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                           onClick={() => executePaletteItem({ type: 'command', command })}
                           onMouseEnter={() => setSelectedIndex(currentIndex)}
                         >
-                          {command.icon && (
-                            <span className="command-palette-item-icon">{command.icon}</span>
+                          {command.icon === '✓' ? (
+                            <span className="command-palette-item-check" aria-hidden="true">
+                              ✓
+                            </span>
+                          ) : (
+                            command.icon && (
+                              <span className="command-palette-item-icon">{command.icon}</span>
+                            )
                           )}
                           <div className="command-palette-item-content">
                             <div className="command-palette-item-label">{command.label}</div>

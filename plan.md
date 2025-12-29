@@ -101,6 +101,10 @@
 67. ✅ Adjust kubeconfig dropdown width: compact trigger, expanded menu fits content with right-edge alignment.
 68. ✅ Fix object panel open flow to avoid "object is no longer available" errors when selecting items.
 69. ✅ Remove all primary-cluster assumptions across backend + frontend (refresh aggregates, kubeconfig selection storage, catalog/streams) and replace with multi-cluster selection semantics.
+70. ✅ Update NsViewPods tests to assert cluster metadata is passed when opening the object panel.
+71. ✅ Update command palette kubeconfig entries to toggle selections and show checkmarks for active clusters.
+72. ✅ Reduce command palette kubeconfig checkmark size to match standard item height.
+73. ✅ Align command palette kubeconfig checkmark in the left gutter without shifting item labels.
 
 ## Risks / watchouts
 

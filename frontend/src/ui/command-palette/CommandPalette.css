@@ -118,6 +118,7 @@
   padding-left: 2rem;
   cursor: pointer;
   transition: background-color 0.1s ease;
+  position: relative;
 }
 
 .command-palette-item:hover {
@@ -145,6 +146,15 @@
   width: 1.5rem;
   text-align: center;
   flex-shrink: 0;
+}
+
+.command-palette-item-check {
+  position: absolute;
+  left: 0.6rem;
+  width: 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  line-height: 1;
 }
 
 .command-palette-item-content {

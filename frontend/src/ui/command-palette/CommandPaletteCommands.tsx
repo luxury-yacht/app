@@ -446,6 +446,7 @@ export function useCommandPaletteCommands() {
     return kubeconfig.kubeconfigs.map((config) => {
       // Backend ALWAYS expects format "path:context"
       const configValue = `${config.path}:${config.context}`;
+      const isActive = kubeconfig.selectedKubeconfigs.includes(configValue);
 
       return {
         id: `kubeconfig-${configValue}`,
@@ -453,14 +454,17 @@ export function useCommandPaletteCommands() {
         description:
           config.name !== config.context ? `From ${config.name}` : 'Switch to this context',
         category: 'Kubeconfigs',
+        icon: isActive ? '✓' : undefined,
         action: () => {
-          // Trigger kubeconfig change with the proper value format
-          eventBus.emit('kubeconfig:change-request', configValue);
+          const nextSelections = isActive
+            ? kubeconfig.selectedKubeconfigs.filter((selection) => selection !== configValue)
+            : [...kubeconfig.selectedKubeconfigs, configValue];
+          void kubeconfig.setSelectedKubeconfigs(nextSelections);
         },
         keywords: ['kubeconfig', 'context', config.name, config.context],
       };
     });
-  }, [kubeconfig.kubeconfigs]);
+  }, [kubeconfig.kubeconfigs, kubeconfig.selectedKubeconfigs, kubeconfig.setSelectedKubeconfigs]);
 
   // Order: Application, Navigation (including namespace views), Kubeconfigs, Namespaces
   return [...commands, ...namespaceviewCommands, ...namespaceCommands, ...kubeconfigCommands];

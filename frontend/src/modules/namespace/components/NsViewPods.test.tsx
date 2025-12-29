@@ -262,6 +262,8 @@ describe('NsViewPods', () => {
     });
 
     expect(openWithObjectMock).toHaveBeenCalledWith({
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
       kind: 'Pod',
       name: 'api',
       namespace: 'team-a',
