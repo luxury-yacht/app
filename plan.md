@@ -46,7 +46,13 @@
 10. ✅ Expand backend + frontend tests for multi-select, fan-out, stream merge, and diagnostics; confirm >=80% coverage or note gaps.
 11. ✅ Fix remaining TypeScript errors from cluster filter wiring (superseded; will be removed per cluster tabs).
 12. ✅ Run frontend typecheck/tests to validate cluster filter wiring changes (superseded; will be removed per cluster tabs).
-13. ⏳ Add targeted frontend tests to raise coverage to >=80% for cluster/namespace views + refresh UI (include RefreshManager cluster-switch/manual-refresh coverage).
+13. ✅ Add targeted frontend tests to raise coverage to >=80% for cluster/namespace views + refresh UI (include RefreshManager cluster-switch/manual-refresh coverage).
+14. ✅ Add additional frontend coverage for multi-cluster refresh/scoping edge cases (background refresh toggle, cluster selection changes, namespace selection persistence).
+    - ✅ Fix Vitest hoisting in `KubeconfigContext` tests by moving refresh mocks into `vi.hoisted`.
+    - ✅ Add hook tests for `useBackgroundRefresh` (localStorage default, eventBus sync).
+    - ✅ Add cluster/namespace view tests that exercise object navigation payloads (ClusterViewNodes, NsViewWorkloads).
+    - ✅ Add RefreshManager test coverage for cluster-selection manual refresh targeting.
+    - ✅ Add namespace selection loading/persistence coverage for multi-cluster tabs.
 14. ✅ Make backend coverage runnable in the sandbox (covdata/toolchain + cache path workaround) and re-run `go test` with coverage.
 15. ✅ Diagnose and fix non-active tabs still showing active data (ensure per-tab refresh scopes and UI scoping).
 16. ✅ Update backend aggregation rules so explicit cluster-scoped requests can target non-active clusters for single-cluster domains (catalog/object/\*/node-maintenance).

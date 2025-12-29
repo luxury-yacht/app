@@ -840,6 +840,25 @@ describe('RefreshManager guard paths and helpers', () => {
     expect(manualTargets).toEqual([]);
   });
 
+  it('refreshes the active cluster view when the selected cluster set changes', () => {
+    const previous: RefreshContext = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      objectPanel: { isOpen: false },
+    };
+    const current: RefreshContext = {
+      ...previous,
+      // Keep the active cluster the same but expand the selected set.
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    };
+
+    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+
+    expect(manualTargets).toEqual(['cluster-config']);
+  });
+
   it('skips manual refreshes when the cluster view is cleared', () => {
     const manualSpy = vi
       .spyOn(refreshManager, 'triggerManualRefreshMany')

@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
 
 const gridTablePropsRef: { current: any } = { current: null };
+const openWithObjectMock = vi.fn();
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -26,7 +27,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
 });
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: vi.fn() }),
+  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -106,6 +107,7 @@ describe('NsViewWorkloads', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    openWithObjectMock.mockReset();
   });
 
   afterEach(() => {
@@ -135,5 +137,53 @@ describe('NsViewWorkloads', () => {
     expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [] });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('routes workload clicks through the object panel with cluster metadata', async () => {
+    const workload = {
+      kind: 'Deployment',
+      name: 'api',
+      namespace: 'team-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      cpuUsage: '10m',
+      memUsage: '20Mi',
+      age: '5m',
+      clusterId: 'alpha:ctx',
+      clusterName: 'alpha',
+    };
+
+    await act(async () => {
+      root.render(
+        <NsViewWorkloads
+          namespace="team-a"
+          data={[workload as any]}
+          loading={false}
+          loaded={true}
+          metrics={null}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const nameColumn = props.columns.find((column: any) => column.key === 'name');
+    const cell = nameColumn.render(props.data[0]);
+
+    // Use the name column click handler to verify object panel routing.
+    act(() => {
+      cell.props.onClick?.({ stopPropagation: () => {} });
+    });
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+        clusterName: 'alpha',
+      })
+    );
   });
 });

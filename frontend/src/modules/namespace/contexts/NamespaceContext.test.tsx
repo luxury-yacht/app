@@ -303,6 +303,42 @@ describe('NamespaceProvider selection behaviour', () => {
     expect(getSelected()).toBe('none');
     cleanup();
   });
+
+  it('keeps namespaces empty while the active cluster has no data', () => {
+    namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
+      {
+        clusterId: 'cluster-a',
+        clusterName: 'alpha',
+        names: ['alpha'],
+      },
+    ]);
+    mockClusterId = 'cluster-b';
+
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(namespaceRef.current?.namespaces).toEqual([]);
+    expect(namespaceRef.current?.namespaceLoading).toBe(true);
+    cleanup();
+  });
+
+  it('triggers manual refresh with spinner control', async () => {
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    await act(async () => {
+      await namespaceRef.current?.loadNamespaces(false);
+    });
+
+    expect(mockRefreshOrchestrator.triggerManualRefresh).toHaveBeenCalledWith('namespaces', {
+      suppressSpinner: true,
+    });
+    cleanup();
+  });
 });
 
 function getSelected(): string {
