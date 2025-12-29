@@ -456,15 +456,21 @@ export function useCommandPaletteCommands() {
         category: 'Kubeconfigs',
         icon: isActive ? '✓' : undefined,
         action: () => {
-          const nextSelections = isActive
-            ? kubeconfig.selectedKubeconfigs.filter((selection) => selection !== configValue)
-            : [...kubeconfig.selectedKubeconfigs, configValue];
-          void kubeconfig.setSelectedKubeconfigs(nextSelections);
+          if (isActive) {
+            kubeconfig.setActiveKubeconfig(configValue);
+            return;
+          }
+          void kubeconfig.setSelectedKubeconfigs([...kubeconfig.selectedKubeconfigs, configValue]);
         },
         keywords: ['kubeconfig', 'context', config.name, config.context],
       };
     });
-  }, [kubeconfig.kubeconfigs, kubeconfig.selectedKubeconfigs, kubeconfig.setSelectedKubeconfigs]);
+  }, [
+    kubeconfig.kubeconfigs,
+    kubeconfig.selectedKubeconfigs,
+    kubeconfig.setActiveKubeconfig,
+    kubeconfig.setSelectedKubeconfigs,
+  ]);
 
   // Order: Application, Navigation (including namespace views), Kubeconfigs, Namespaces
   return [...commands, ...namespaceviewCommands, ...namespaceCommands, ...kubeconfigCommands];

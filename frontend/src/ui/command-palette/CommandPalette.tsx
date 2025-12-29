@@ -18,8 +18,10 @@ import {
   KeyboardShortcutPriority,
 } from '@ui/shortcuts/priorities';
 import { fetchSnapshot } from '@/core/refresh/client';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { getDisplayKind, aliasToKindMap, canonicalKinds } from '@/utils/kindAliasMap';
 import { useShortNames } from '@/hooks/useShortNames';
 import { Command } from './CommandPaletteCommands';
@@ -223,6 +225,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
   const { pushContext, popContext } = useKeyboardContext();
   const shortcutContextActiveRef = useRef(false);
   const { openWithObject } = useObjectPanel();
+  const { selectedClusterId } = useKubeconfig();
   const useShortResourceNames = useShortNames();
   const parsedTokens = useMemo(() => parseQueryTokens(searchQuery), [searchQuery]);
   const macPlatform = isMacPlatform();
@@ -326,6 +329,14 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
       return;
     }
 
+    const activeClusterId = (selectedClusterId ?? '').trim();
+    if (!activeClusterId) {
+      setCatalogResults([]);
+      setCatalogStats(null);
+      setCatalogLoading(false);
+      return;
+    }
+
     setCatalogResults([]);
     setCatalogStats(null);
 
@@ -347,8 +358,10 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
         params.set('search', query);
       }
 
+      const scope = buildClusterScope(activeClusterId, params.toString());
+
       fetchSnapshot<CatalogSnapshotPayload>('catalog', {
-        scope: params.toString(),
+        scope,
         signal: controller.signal,
       })
         .then((result) => {
@@ -394,7 +407,7 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
       }
       setCatalogLoading(false);
     };
-  }, [showCatalogSearch, searchQuery, parsedTokens]);
+  }, [showCatalogSearch, searchQuery, parsedTokens, selectedClusterId]);
 
   const catalogDisplayItems = useMemo<CatalogDisplayEntry[]>(() => {
     if (!showCatalogSearch) {

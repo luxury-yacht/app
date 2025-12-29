@@ -17,6 +17,7 @@
 - No primary cluster concept; selection is a set and all backend/frontend flows must avoid primary/first-cluster assumptions.
 - Prefer `clusterId` everywhere (object identity, request payloads, test data); missing `clusterId` is legacy single-cluster only.
 - Always include `clusterId` on `openWithObject` payloads; do not rely on fallback selection.
+- Command palette kubeconfig actions only open/switch tabs (no close/deselect from the palette).
 - Do not add new dependencies for drag-and-drop.
 - Treat multi-select add/remove as a lightweight selection change; only emit `kubeconfig:changing` when the selection becomes empty, and only emit `kubeconfig:changed` when at least one cluster is active after an empty selection.
 
@@ -113,6 +114,8 @@
 71. ✅ Update command palette kubeconfig entries to toggle selections and show checkmarks for active clusters.
 72. ✅ Reduce command palette kubeconfig checkmark size to match standard item height.
 73. ✅ Align command palette kubeconfig checkmark in the left gutter without shifting item labels.
+74. ✅ Change command palette kubeconfig action to open the tab if closed or switch to it when already open (no deselect).
+75. ✅ Prefix command palette catalog search scopes with the active cluster ID to avoid unscoped catalog errors.
 74. ✅ Rework namespace loading per active cluster so the "All namespaces" synthetic only appears after that cluster's namespace data arrives (including newly opened tabs).
 75. ✅ Stop auto-selecting namespaces on tab open; clear invalid selections and only select on explicit user action.
 76. ✅ Document the "no auto-selection" behavior in NamespaceContext.
