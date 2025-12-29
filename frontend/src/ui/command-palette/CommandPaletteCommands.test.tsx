@@ -8,7 +8,7 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useCommandPaletteCommands } from './CommandPaletteCommands';
+import { useCommandPaletteCommands, type Command } from './CommandPaletteCommands';
 import type { types } from '@wailsjs/go/models';
 
 const { mocks } = vi.hoisted(() => ({
@@ -79,7 +79,7 @@ const renderHook = () => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
-  let commands: ReturnType<typeof useCommandPaletteCommands> | null = null;
+  let commands: Command[] | null = null;
 
   const HookHost = () => {
     commands = useCommandPaletteCommands();
