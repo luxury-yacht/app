@@ -22,6 +22,7 @@ const registeredShortcuts: Array<{
 }> = [];
 const isMacPlatformMock = vi.fn(() => true);
 const setSelectedKubeconfigsMock = vi.fn();
+const setActiveKubeconfigMock = vi.fn();
 const kubeconfigState = {
   selectedKubeconfig: 'cluster-1',
   selectedKubeconfigs: ['cluster-1', 'cluster-2'],
@@ -59,8 +60,8 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
     kubeconfigsLoading: false,
     setSelectedKubeconfigs: setSelectedKubeconfigsMock,
     setSelectedKubeconfig: vi.fn(),
-    setActiveKubeconfig: vi.fn(),
-    getClusterMeta: vi.fn(),
+    setActiveKubeconfig: setActiveKubeconfigMock,
+    getClusterMeta: (selection: string) => ({ id: selection, name: selection }),
     loadKubeconfigs: vi.fn(),
   }),
 }));
@@ -123,6 +124,8 @@ describe('GlobalShortcuts', () => {
     latestHelpProps = null;
     setContextMock.mockClear();
     setSelectedKubeconfigsMock.mockClear();
+    setActiveKubeconfigMock.mockClear();
+    localStorage.clear();
     kubeconfigState.selectedKubeconfig = 'cluster-1';
     kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2'];
     isMacPlatformMock.mockReturnValue(true);
@@ -342,5 +345,35 @@ describe('GlobalShortcuts', () => {
     });
 
     expect(setSelectedKubeconfigsMock).toHaveBeenCalledWith(['cluster-1']);
+  });
+
+  it('switches to the previous cluster tab on Cmd+Alt+Left', async () => {
+    isMacPlatformMock.mockReturnValue(true);
+    registeredShortcuts.length = 0;
+    kubeconfigState.selectedKubeconfig = 'cluster-2';
+    kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2', 'cluster-3'];
+
+    await renderComponent({});
+
+    act(() => {
+      findShortcut(KeyCodes.ARROW_LEFT, { meta: true, alt: true }).handler();
+    });
+
+    expect(setActiveKubeconfigMock).toHaveBeenCalledWith('cluster-1');
+  });
+
+  it('switches to the next cluster tab on Ctrl+Alt+Right', async () => {
+    isMacPlatformMock.mockReturnValue(false);
+    registeredShortcuts.length = 0;
+    kubeconfigState.selectedKubeconfig = 'cluster-2';
+    kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2', 'cluster-3'];
+
+    await renderComponent({});
+
+    act(() => {
+      findShortcut(KeyCodes.ARROW_RIGHT, { ctrl: true, alt: true }).handler();
+    });
+
+    expect(setActiveKubeconfigMock).toHaveBeenCalledWith('cluster-3');
   });
 });
