@@ -110,6 +110,8 @@
 76. ✅ Document the "no auto-selection" behavior in NamespaceContext.
 77. ✅ Reset cluster overview display on tab switch so new tabs show loading shimmers instead of cached data.
 78. ✅ Gate ClusterOverview fallback data by cluster ID so cached single-cluster payloads cannot render on a different tab.
+79. ✅ Toggle namespace expand/collapse on click without selecting a namespace or view (including All Namespaces).
+80. ✅ Fix Sidebar.test.tsx expectations to match namespace expand/collapse and loading behavior.
 
 ## Risks / watchouts
 

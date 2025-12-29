@@ -303,14 +303,8 @@ function Sidebar() {
 
   const handleNamespaceSelect = (namespaceScope: string, clusterId?: string) => {
     const namespaceKey = toNamespaceKey(clusterId, namespaceScope);
-    if (isAllNamespaces(namespaceScope)) {
-      setExpandedNamespaceKey((previous) => (previous === namespaceKey ? null : namespaceKey));
-      return;
-    }
-    // Keep the namespace expanded unless another namespace is selected.
-    setExpandedNamespaceKey(namespaceKey);
-    setSelectedNamespace(namespaceScope, clusterId);
-    viewState.onNamespaceSelect(namespaceScope);
+    // Toggle expansion only; namespace selection happens when a view is chosen.
+    setExpandedNamespaceKey((previous) => (previous === namespaceKey ? null : namespaceKey));
   };
 
   const handleNamespaceViewSelect = (

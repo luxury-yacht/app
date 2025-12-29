@@ -74,8 +74,8 @@ const createNamespaceState = (): NamespaceState => ({
     },
   ] as NamespaceEntry[],
   namespaceLoading: false,
-  selectedNamespace: 'default',
-  selectedNamespaceClusterId: testClusterId,
+  selectedNamespace: undefined,
+  selectedNamespaceClusterId: undefined,
   setSelectedNamespace: vi.fn<(ns: string, clusterId?: string) => void>(),
 });
 
@@ -298,7 +298,7 @@ describe('Sidebar', () => {
     document.querySelector = originalQuerySelector;
   });
 
-  it('selects the namespace without forcing a specific view when clicking a namespace name', () => {
+  it('toggles namespace expansion without selecting a view', () => {
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
@@ -311,8 +311,14 @@ describe('Sidebar', () => {
       namespaceToggle!.click();
     });
 
-    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default', testClusterId);
-    expect(viewStateMock.onNamespaceSelect).toHaveBeenCalledWith('default');
+    const namespaceViews = container!.querySelector(
+      `[data-sidebar-target-kind="namespace-view"][data-sidebar-target-namespace="${namespaceKey(
+        'default'
+      )}"]`
+    );
+    expect(namespaceViews).not.toBeNull();
+    expect(namespaceState.setSelectedNamespace).not.toHaveBeenCalled();
+    expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
     expect(viewStateMock.setActiveNamespaceTab).not.toHaveBeenCalled();
   });
 
@@ -347,11 +353,11 @@ describe('Sidebar', () => {
       namespaceToggle!.click();
     });
 
-    expect(namespaceState.setSelectedNamespace).toHaveBeenCalledWith('default', testClusterId);
-    expect(viewStateMock.onNamespaceSelect).toHaveBeenCalledWith('default');
+    expect(namespaceState.setSelectedNamespace).not.toHaveBeenCalled();
+    expect(viewStateMock.onNamespaceSelect).not.toHaveBeenCalled();
   });
 
-  it('keeps a namespace expanded when clicked repeatedly', () => {
+  it('collapses a namespace when clicked repeatedly', () => {
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(
       `[data-sidebar-target-kind="namespace-toggle"][data-sidebar-target-namespace="${namespaceKey(
@@ -376,7 +382,7 @@ describe('Sidebar', () => {
       namespaceToggle!.click();
     });
 
-    expect(namespaceViews()).not.toBeNull();
+    expect(namespaceViews()).toBeNull();
   });
 
   it('keeps All Namespaces clicks to expand/collapse only', () => {
@@ -407,6 +413,8 @@ describe('Sidebar', () => {
   });
 
   it('updates view state when selecting a namespace that is already focused', async () => {
+    namespaceState.selectedNamespace = 'default';
+    namespaceState.selectedNamespaceClusterId = testClusterId;
     renderSidebar({
       viewState: {
         sidebarSelection: { type: 'namespace', value: 'default' },
@@ -565,6 +573,8 @@ describe('Sidebar', () => {
   });
 
   it('expands the active namespace based on view state selection on mount', async () => {
+    namespaceState.selectedNamespace = 'default';
+    namespaceState.selectedNamespaceClusterId = testClusterId;
     renderSidebar({
       viewState: {
         sidebarSelection: { type: 'namespace', value: 'default' },
