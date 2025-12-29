@@ -116,6 +116,7 @@ export interface NodeMetricsInfo {
 export interface ClusterNodeSnapshotPayload extends ClusterMeta {
   nodes: ClusterNodeSnapshotEntry[];
   metrics?: NodeMetricsInfo;
+  metricsByCluster?: Record<string, NodeMetricsInfo>;
 }
 
 export type ClusterNodeRow = ClusterNodeSnapshotEntry;
@@ -157,6 +158,7 @@ export interface ClusterOverviewPayload {
 export interface ClusterOverviewSnapshotPayload extends ClusterMeta {
   overview: ClusterOverviewPayload;
   metrics: ClusterOverviewMetrics;
+  metricsByCluster?: Record<string, ClusterOverviewMetrics>;
 }
 
 export interface ClusterRBACEntry extends ClusterMeta {

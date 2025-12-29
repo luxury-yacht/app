@@ -47,7 +47,13 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const nodesDomain = useRefreshDomain('nodes');
-    const metricsInfo = nodesDomain.data?.metrics;
+    const metricsInfo = useMemo(() => {
+      const metricsByCluster = nodesDomain.data?.metricsByCluster;
+      if (metricsByCluster && selectedClusterId) {
+        return metricsByCluster[selectedClusterId] ?? nodesDomain.data?.metrics;
+      }
+      return nodesDomain.data?.metrics;
+    }, [nodesDomain.data?.metrics, nodesDomain.data?.metricsByCluster, selectedClusterId]);
 
     const handleNodeClick = useCallback(
       (node: ClusterNodeRow) => {

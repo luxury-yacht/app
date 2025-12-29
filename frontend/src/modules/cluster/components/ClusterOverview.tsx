@@ -21,6 +21,7 @@ import { emitPodsUnhealthySignal } from '@modules/namespace/components/podsFilte
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { GetAppInfo } from '@wailsjs/go/backend/App';
 import { backend } from '@wailsjs/go/models';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 interface ClusterOverviewProps {
   clusterContext: string;
@@ -64,11 +65,18 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   }, [clusterContext]);
 
   const overviewDomain = useRefreshDomain('cluster-overview');
+  const { selectedClusterId } = useKubeconfig();
   const [overviewData, setOverviewData] = useState<ClusterOverviewPayload>(EMPTY_OVERVIEW);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isSwitching, setIsSwitching] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const metricsInfo = overviewDomain.data?.metrics;
+  const metricsInfo = useMemo(() => {
+    const metricsByCluster = overviewDomain.data?.metricsByCluster;
+    if (metricsByCluster && selectedClusterId) {
+      return metricsByCluster[selectedClusterId] ?? overviewDomain.data?.metrics;
+    }
+    return overviewDomain.data?.metrics;
+  }, [overviewDomain.data?.metrics, overviewDomain.data?.metricsByCluster, selectedClusterId]);
   const metricsBanner = useMemo(() => getMetricsBannerInfo(metricsInfo), [metricsInfo]);
   const { setSelectedNamespace } = useNamespace();
   const { setActiveNamespaceTab, setSidebarSelection, navigateToNamespace } = useViewState();

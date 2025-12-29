@@ -342,6 +342,7 @@ func mergeNodeSnapshots(domain, scope string, snapshots []*refresh.Snapshot) (*r
 	items := make([]NodeSummary, 0)
 	stats := make([]refresh.SnapshotStats, 0, len(snapshots))
 	metricInputs := make([]metricFields, 0, len(snapshots))
+	metricsByCluster := make(map[string]NodeMetricsInfo)
 	var version uint64
 
 	for _, snap := range snapshots {
@@ -351,6 +352,16 @@ func mergeNodeSnapshots(domain, scope string, snapshots []*refresh.Snapshot) (*r
 		}
 		items = append(items, payload.Nodes...)
 		stats = append(stats, snap.Stats)
+		if len(payload.MetricsByCluster) > 0 {
+			for id, info := range payload.MetricsByCluster {
+				if strings.TrimSpace(id) == "" {
+					continue
+				}
+				metricsByCluster[id] = info
+			}
+		} else if id := strings.TrimSpace(payload.ClusterID); id != "" {
+			metricsByCluster[id] = payload.Metrics
+		}
 		metricInputs = append(metricInputs, metricFields{
 			collectedAt:         payload.Metrics.CollectedAt,
 			stale:               payload.Metrics.Stale,
@@ -364,7 +375,7 @@ func mergeNodeSnapshots(domain, scope string, snapshots []*refresh.Snapshot) (*r
 
 	metrics := mergeMetricFields(metricInputs)
 	merged := NodeSnapshot{
-		Nodes: items,
+		Nodes:   items,
 		Metrics: NodeMetricsInfo{
 			CollectedAt:         metrics.collectedAt,
 			Stale:               metrics.stale,
@@ -374,6 +385,9 @@ func mergeNodeSnapshots(domain, scope string, snapshots []*refresh.Snapshot) (*r
 			FailureCount:        metrics.failureCount,
 		},
 	}
+	if len(metricsByCluster) > 0 {
+		merged.MetricsByCluster = metricsByCluster
+	}
 	mergedStats := mergeListStats(stats, len(items))
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)
 }
@@ -382,6 +396,7 @@ func mergeNodeSnapshots(domain, scope string, snapshots []*refresh.Snapshot) (*r
 func mergeClusterOverview(domain, scope string, snapshots []*refresh.Snapshot) (*refresh.Snapshot, error) {
 	payloads := make([]ClusterOverviewSnapshot, 0, len(snapshots))
 	metricsInputs := make([]metricFields, 0, len(snapshots))
+	metricsByCluster := make(map[string]ClusterOverviewMetrics)
 	var version uint64
 
 	for _, snap := range snapshots {
@@ -390,6 +405,16 @@ func mergeClusterOverview(domain, scope string, snapshots []*refresh.Snapshot) (
 			return nil, fmt.Errorf("%s payload mismatch", domain)
 		}
 		payloads = append(payloads, payload)
+		if len(payload.MetricsByCluster) > 0 {
+			for id, info := range payload.MetricsByCluster {
+				if strings.TrimSpace(id) == "" {
+					continue
+				}
+				metricsByCluster[id] = info
+			}
+		} else if id := strings.TrimSpace(payload.ClusterID); id != "" {
+			metricsByCluster[id] = payload.Metrics
+		}
 		metricsInputs = append(metricsInputs, metricFields{
 			collectedAt:         payload.Metrics.CollectedAt,
 			stale:               payload.Metrics.Stale,
@@ -413,6 +438,9 @@ func mergeClusterOverview(domain, scope string, snapshots []*refresh.Snapshot) (
 			SuccessCount:        metrics.successCount,
 			FailureCount:        metrics.failureCount,
 		},
+	}
+	if len(metricsByCluster) > 0 {
+		merged.MetricsByCluster = metricsByCluster
 	}
 	mergedStats := refresh.SnapshotStats{ItemCount: overview.TotalNodes}
 	return buildMergedSnapshot(domain, scope, version, merged, mergedStats, snapshots)

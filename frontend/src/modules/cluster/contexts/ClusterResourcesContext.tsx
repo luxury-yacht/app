@@ -302,8 +302,17 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     storageListPermission,
   ]);
 
-  const nodeMetricsInfo = nodeDomain.data?.metrics;
   const nodeSnapshot = nodeDomain.data;
+  const nodeMetricsInfo = useMemo(() => {
+    if (!nodeSnapshot) {
+      return undefined;
+    }
+    const metricsByCluster = nodeSnapshot.metricsByCluster;
+    if (metricsByCluster && selectedClusterId) {
+      return metricsByCluster[selectedClusterId] ?? nodeSnapshot.metrics;
+    }
+    return nodeSnapshot.metrics;
+  }, [nodeSnapshot, selectedClusterId]);
   const nodeStatus = nodeDomain.status;
   const nodeError = nodeDomain.error;
   const nodeLastUpdated = nodeDomain.lastUpdated;

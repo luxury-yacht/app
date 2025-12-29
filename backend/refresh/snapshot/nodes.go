@@ -41,8 +41,9 @@ type NodeListBuilder struct {
 // NodeSnapshot is the payload for the nodes domain.
 type NodeSnapshot struct {
 	ClusterMeta
-	Nodes   []NodeSummary   `json:"nodes"`
-	Metrics NodeMetricsInfo `json:"metrics"`
+	Nodes            []NodeSummary             `json:"nodes"`
+	Metrics          NodeMetricsInfo           `json:"metrics"`
+	MetricsByCluster map[string]NodeMetricsInfo `json:"metricsByCluster,omitempty"`
 }
 
 // NodeMetricsInfo captures metadata about metrics collection.
