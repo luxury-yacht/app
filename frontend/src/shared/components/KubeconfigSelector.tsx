@@ -91,16 +91,7 @@ function KubeconfigSelector() {
   });
 
   const renderSelectedValue = (value: string | string[]) => {
-    const selections = Array.isArray(value) ? value : value ? [value] : [];
-    if (selections.length === 0) {
-      return 'Select context';
-    }
-
-    const contextNames = selections
-      .map((selection) => configByValue.get(selection)?.context || selection)
-      .filter(Boolean) as string[];
-
-    return contextNames.length > 0 ? contextNames.join(', ') : 'Select context';
+    return 'Select Cluster';
   };
 
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -120,7 +111,7 @@ function KubeconfigSelector() {
         value={selectedKubeconfigs}
         onChange={handleDropdownChange}
         loading={loading}
-        placeholder="Select context"
+        placeholder="Select Cluster"
         renderValue={renderSelectedValue}
         size="compact"
         multiple

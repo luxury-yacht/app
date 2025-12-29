@@ -60,6 +60,8 @@
 29. ✅ Update namespace context tests to include multi-cluster payloads after active-cluster filtering.
 30. ✅ Prevent namespace selection updates from running against stale cluster namespace lists.
 31. ✅ Format header title as "cluster-name - namespace (if applicable) - view-name".
+32. ✅ Update kubeconfig dropdown placeholder text to "Select Kubeconfig".
+33. ✅ Keep kubeconfig dropdown label fixed to "Select Kubeconfig" regardless of selection.
 
 ## Risks / watchouts
 
