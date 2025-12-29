@@ -149,6 +149,7 @@ export function NodeMaintenanceTab({
   const [showCordonConfirm, setShowCordonConfirm] = useState(false);
   const [showDrainConfirm, setShowDrainConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const resolvedClusterId = clusterId?.trim() ?? '';
 
   const nodeName = useMemo(() => {
     const fromDetails = nodeDetails?.name?.trim();
@@ -266,9 +267,9 @@ export function NodeMaintenanceTab({
       setPendingAction(action);
       try {
         if (action === 'cordon') {
-          await CordonNode(nodeName);
+          await CordonNode(resolvedClusterId, nodeName);
         } else {
-          await UncordonNode(nodeName);
+          await UncordonNode(resolvedClusterId, nodeName);
         }
         onRefresh?.();
       } catch (error) {
@@ -290,7 +291,7 @@ export function NodeMaintenanceTab({
         setPendingAction(null);
       }
     },
-    [nodeName, pendingAction, onRefresh]
+    [nodeName, pendingAction, onRefresh, resolvedClusterId]
   );
 
   const hasCustomGrace = useMemo(() => {
@@ -330,7 +331,7 @@ export function NodeMaintenanceTab({
         ...drainOptions,
         gracePeriodSeconds: Math.max(0, Math.floor(drainOptions.gracePeriodSeconds ?? 0)),
       };
-      await DrainNode(nodeName, payload);
+      await DrainNode(resolvedClusterId, nodeName, payload);
       onRefresh?.();
       await refreshMaintenance();
     } catch (error) {
@@ -348,7 +349,7 @@ export function NodeMaintenanceTab({
     } finally {
       setDrainPending(false);
     }
-  }, [nodeName, drainPending, drainOptions, onRefresh, refreshMaintenance]);
+  }, [nodeName, drainPending, drainOptions, onRefresh, refreshMaintenance, resolvedClusterId]);
 
   const handleDeleteNode = useCallback(async () => {
     if (!nodeName || deletePending) {
@@ -358,7 +359,7 @@ export function NodeMaintenanceTab({
     setDeleteStatus(null);
     setDeletePending(true);
     try {
-      await DeleteNode(nodeName);
+      await DeleteNode(resolvedClusterId, nodeName);
       setDeleteStatus('Delete requested. Refresh cluster nodes to verify removal.');
       onRefresh?.();
     } catch (error) {
@@ -376,7 +377,7 @@ export function NodeMaintenanceTab({
     } finally {
       setDeletePending(false);
     }
-  }, [deletePending, nodeName, onRefresh]);
+  }, [deletePending, nodeName, onRefresh, resolvedClusterId]);
 
   if (!nodeName) {
     return (

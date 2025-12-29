@@ -161,19 +161,35 @@ func TestEmitShellEventsGuards(t *testing.T) {
 func TestStartShellSessionValidation(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
+	app.clusterClients = map[string]*clusterClients{
+		shellClusterID: {
+			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+		},
+	}
 
 	// missing client should fail fast
-	if _, err := app.StartShellSession(ShellSessionRequest{}); err == nil {
+	if _, err := app.StartShellSession(shellClusterID, ShellSessionRequest{}); err == nil {
 		t.Fatal("expected error when client is nil")
 	}
 
 	app.client = fake.NewClientset()
 	app.restConfig = &rest.Config{}
+	app.clusterClients = map[string]*clusterClients{
+		shellClusterID: {
+			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            app.client,
+			restConfig:        app.restConfig,
+		},
+	}
 
-	if _, err := app.StartShellSession(ShellSessionRequest{}); err == nil {
+	if _, err := app.StartShellSession(shellClusterID, ShellSessionRequest{}); err == nil {
 		t.Fatal("expected namespace validation error")
 	}
-	if _, err := app.StartShellSession(ShellSessionRequest{Namespace: "ns"}); err == nil {
+	if _, err := app.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "ns"}); err == nil {
 		t.Fatal("expected pod name validation error")
 	}
 }
@@ -188,16 +204,34 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 		Spec:       corev1.PodSpec{}, // no containers
 	}
 	app.client = fake.NewClientset(pod)
+	app.clusterClients = map[string]*clusterClients{
+		shellClusterID: {
+			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            app.client,
+			restConfig:        app.restConfig,
+		},
+	}
 
-	_, err := app.StartShellSession(ShellSessionRequest{Namespace: "default", PodName: "pod-1"})
+	_, err := app.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1"})
 	if err == nil {
 		t.Fatal("expected error when pod has no containers")
 	}
 
 	pod.Spec.Containers = []corev1.Container{{Name: "main"}}
 	app.client = fake.NewClientset(pod)
+	app.clusterClients = map[string]*clusterClients{
+		shellClusterID: {
+			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            app.client,
+			restConfig:        app.restConfig,
+		},
+	}
 
-	if _, err := app.StartShellSession(ShellSessionRequest{Namespace: "default", PodName: "pod-1", Container: "missing"}); err == nil {
+	if _, err := app.StartShellSession(shellClusterID, ShellSessionRequest{Namespace: "default", PodName: "pod-1", Container: "missing"}); err == nil {
 		t.Fatal("expected error for missing container")
 	}
 }

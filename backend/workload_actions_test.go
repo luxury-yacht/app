@@ -15,6 +15,8 @@ import (
 	kubetesting "k8s.io/client-go/testing"
 )
 
+const workloadClusterID = "config:ctx"
+
 func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 	t.Helper()
 
@@ -121,8 +123,16 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 				client: tc.object,
 				logger: NewLogger(100),
 			}
+			app.clusterClients = map[string]*clusterClients{
+				workloadClusterID: {
+					meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+					kubeconfigPath:    "/path",
+					kubeconfigContext: "ctx",
+					client:            tc.object,
+				},
+			}
 
-			err := app.RestartWorkload("default", "demo", tc.kind)
+			err := app.RestartWorkload(workloadClusterID, "default", "demo", tc.kind)
 			require.NoError(t, err)
 
 			annotations, err := tc.get(context.Background(), tc.object)
@@ -145,12 +155,27 @@ func TestRestartWorkloadErrors(t *testing.T) {
 		client: kubefake.NewClientset(),
 		logger: NewLogger(10),
 	}
+	app.clusterClients = map[string]*clusterClients{
+		workloadClusterID: {
+			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            app.client,
+		},
+	}
 
-	err := app.RestartWorkload("default", "demo", "Job")
+	err := app.RestartWorkload(workloadClusterID, "default", "demo", "Job")
 	require.EqualError(t, err, `restart not supported for workload kind "Job"`)
 
 	appNilClient := &App{}
-	err = appNilClient.RestartWorkload("default", "demo", "Deployment")
+	appNilClient.clusterClients = map[string]*clusterClients{
+		workloadClusterID: {
+			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+		},
+	}
+	err = appNilClient.RestartWorkload(workloadClusterID, "default", "demo", "Deployment")
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }
 
@@ -203,8 +228,16 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 				client: client,
 				logger: NewLogger(100),
 			}
+			app.clusterClients = map[string]*clusterClients{
+				workloadClusterID: {
+					meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+					kubeconfigPath:    "/path",
+					kubeconfigContext: "ctx",
+					client:            client,
+				},
+			}
 
-			err := app.ScaleWorkload("default", "demo", tc.kind, 3)
+			err := app.ScaleWorkload(workloadClusterID, "default", "demo", tc.kind, 3)
 			require.NoError(t, err)
 
 			require.Equal(t, int32(3), observed.replicas, "expected replicas to be updated")
@@ -221,14 +254,29 @@ func TestScaleWorkloadErrors(t *testing.T) {
 		client: client,
 		logger: NewLogger(10),
 	}
+	app.clusterClients = map[string]*clusterClients{
+		workloadClusterID: {
+			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
 
-	err := app.ScaleWorkload("default", "demo", "Deployment", -1)
+	err := app.ScaleWorkload(workloadClusterID, "default", "demo", "Deployment", -1)
 	require.EqualError(t, err, "replicas must be non-negative")
 
-	err = app.ScaleWorkload("default", "demo", "CronJob", 1)
+	err = app.ScaleWorkload(workloadClusterID, "default", "demo", "CronJob", 1)
 	require.EqualError(t, err, `scaling not supported for workload kind "CronJob"`)
 
 	appNilClient := &App{}
-	err = appNilClient.ScaleWorkload("default", "demo", "Deployment", 1)
+	appNilClient.clusterClients = map[string]*clusterClients{
+		workloadClusterID: {
+			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+		},
+	}
+	err = appNilClient.ScaleWorkload(workloadClusterID, "default", "demo", "Deployment", 1)
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }

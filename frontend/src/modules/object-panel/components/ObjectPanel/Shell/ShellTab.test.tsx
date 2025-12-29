@@ -176,6 +176,7 @@ describe('ShellTab', () => {
       availableContainers: [],
       isActive: true,
       disabledReason: undefined,
+      clusterId: 'alpha:ctx',
       ...props,
     };
     await act(async () => {
@@ -192,7 +193,7 @@ describe('ShellTab', () => {
 
     clickConnectButton();
 
-    expect(wailsMocks.StartShellSession).toHaveBeenCalledWith({
+    expect(wailsMocks.StartShellSession).toHaveBeenCalledWith('alpha:ctx', {
       namespace: 'team-a',
       podName: 'pod-1',
       container: undefined,

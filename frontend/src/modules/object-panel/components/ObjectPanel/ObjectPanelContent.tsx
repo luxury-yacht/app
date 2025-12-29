@@ -162,6 +162,7 @@ export function ObjectPanelContent({
             isActive={isPanelOpen && activeTab === 'shell'}
             disabledReason={capabilityReasons.shell}
             availableContainers={availableContainers}
+            clusterId={objectData?.clusterId ?? null}
           />
         </ErrorBoundary>
       )}
@@ -203,6 +204,7 @@ export function ObjectPanelContent({
             isActive={isPanelOpen && activeTab === 'yaml'}
             canEdit={capabilities.canEditYaml}
             editDisabledReason={capabilityReasons.editYaml}
+            clusterId={objectData?.clusterId ?? null}
           />
         </ErrorBoundary>
       )}

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -94,11 +95,16 @@ func (a *App) mutationContext() (context.Context, context.CancelFunc) {
 }
 
 // ValidateObjectYaml performs a dry-run server-side apply to ensure the YAML is valid and safe to apply.
-func (a *App) ValidateObjectYaml(req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
+func (a *App) ValidateObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := a.mutationContext()
 	defer cancel()
 
-	mc, err := a.prepareMutationContext(ctx, req)
+	mc, err := prepareMutationContextWithDependencies(ctx, deps, selectionKey, req)
 	if err != nil {
 		return nil, err
 	}
@@ -118,11 +124,16 @@ func (a *App) ValidateObjectYaml(req ObjectYAMLMutationRequest) (*ObjectYAMLMuta
 }
 
 // ApplyObjectYaml performs a guarded update using the validated YAML.
-func (a *App) ApplyObjectYaml(req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
+func (a *App) ApplyObjectYaml(clusterID string, req ObjectYAMLMutationRequest) (*ObjectYAMLMutationResponse, error) {
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := a.mutationContext()
 	defer cancel()
 
-	mc, err := a.prepareMutationContext(ctx, req)
+	mc, err := prepareMutationContextWithDependencies(ctx, deps, selectionKey, req)
 	if err != nil {
 		return nil, err
 	}
@@ -141,12 +152,20 @@ func (a *App) ApplyObjectYaml(req ObjectYAMLMutationRequest) (*ObjectYAMLMutatio
 	}, nil
 }
 
-func (a *App) prepareMutationContext(ctx context.Context, req ObjectYAMLMutationRequest) (*mutationContext, error) {
-	if a.client == nil || a.dynamicClient == nil {
+func prepareMutationContextWithDependencies(
+	ctx context.Context,
+	deps common.Dependencies,
+	selectionKey string,
+	req ObjectYAMLMutationRequest,
+) (*mutationContext, error) {
+	if deps.KubernetesClient == nil || deps.DynamicClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 	if ctx == nil {
-		ctx = context.Background()
+		ctx = deps.Context
+		if ctx == nil {
+			ctx = context.Background()
+		}
 	}
 
 	trimmedYAML := strings.TrimSpace(req.YAML)
@@ -201,7 +220,7 @@ func (a *App) prepareMutationContext(ctx context.Context, req ObjectYAMLMutation
 	}
 
 	gvk := schema.FromAPIVersionAndKind(req.APIVersion, req.Kind)
-	gvr, isNamespaced, err := a.getGVRForGVK(ctx, gvk)
+	gvr, isNamespaced, err := getGVRForGVKWithDependencies(ctx, deps, selectionKey, gvk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve resource mapping for %s: %w", gvk.String(), err)
 	}
@@ -212,9 +231,9 @@ func (a *App) prepareMutationContext(ctx context.Context, req ObjectYAMLMutation
 		if namespace == "" {
 			return nil, fmt.Errorf("namespaced resources require metadata.namespace")
 		}
-		resource = a.dynamicClient.Resource(gvr).Namespace(namespace)
+		resource = deps.DynamicClient.Resource(gvr).Namespace(namespace)
 	} else {
-		resource = a.dynamicClient.Resource(gvr)
+		resource = deps.DynamicClient.Resource(gvr)
 		desired.SetNamespace("")
 	}
 
@@ -492,35 +511,47 @@ func wrapKubernetesError(err error, defaultMessage string) error {
 }
 
 func (a *App) getGVRForGVK(ctx context.Context, gvk schema.GroupVersionKind) (schema.GroupVersionResource, bool, error) {
-	if a.client == nil {
+	return getGVRForGVKWithDependencies(ctx, a.resourceDependencies(), a.currentSelectionKey(), gvk)
+}
+
+func getGVRForGVKWithDependencies(
+	ctx context.Context,
+	deps common.Dependencies,
+	selectionKey string,
+	gvk schema.GroupVersionKind,
+) (schema.GroupVersionResource, bool, error) {
+	if deps.KubernetesClient == nil {
 		return schema.GroupVersionResource{}, false, fmt.Errorf("kubernetes client not initialized")
 	}
 
 	if ctx == nil {
-		ctx = context.Background()
+		ctx = deps.Context
+		if ctx == nil {
+			ctx = context.Background()
+		}
 	}
 
-	discoveryClient := a.client.Discovery()
-	if a.restConfig != nil {
+	discoveryClient := deps.KubernetesClient.Discovery()
+	if deps.RestConfig != nil {
 		timeout := mutationRequestTimeout
 		if deadline, ok := ctx.Deadline(); ok {
 			if remaining := time.Until(deadline); remaining > 0 && remaining < timeout {
 				timeout = remaining
 			}
 		}
-		cfg := rest.CopyConfig(a.restConfig)
+		cfg := rest.CopyConfig(deps.RestConfig)
 		cfg.Timeout = timeout
 		if dc, err := discovery.NewDiscoveryClientForConfig(cfg); err == nil {
 			discoveryClient = dc
-		} else if a.logger != nil {
-			a.logger.Debug(fmt.Sprintf("Discovery client fallback for YAML mutation: %v", err), "ObjectYAML")
+		} else if deps.Logger != nil {
+			deps.Logger.Debug(fmt.Sprintf("Discovery client fallback for YAML mutation: %v", err), "ObjectYAML")
 		}
 	}
 
 	apiResourceLists, err := discoveryClient.ServerPreferredResources()
-	if err != nil && a.logger != nil {
+	if err != nil && deps.Logger != nil {
 		// Partial discovery failures are common with aggregated APIs; continue with what we have.
-		a.logger.Debug(fmt.Sprintf("ServerPreferredResources returned error: %v", err), "ObjectYAML")
+		deps.Logger.Debug(fmt.Sprintf("ServerPreferredResources returned error: %v", err), "ObjectYAML")
 	}
 
 	for _, apiResourceList := range apiResourceLists {
@@ -547,8 +578,8 @@ func (a *App) getGVRForGVK(ctx context.Context, gvk schema.GroupVersionKind) (sc
 		}
 	}
 
-	if a.apiextensionsClient != nil {
-		crds, listErr := a.apiextensionsClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
+	if deps.APIExtensionsClient != nil {
+		crds, listErr := deps.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().List(ctx, metav1.ListOptions{})
 		if listErr == nil {
 			for _, crd := range crds.Items {
 				if !strings.EqualFold(crd.Spec.Names.Kind, gvk.Kind) {
@@ -578,13 +609,13 @@ func (a *App) getGVRForGVK(ctx context.Context, gvk schema.GroupVersionKind) (sc
 					crd.Spec.Scope == apiextensionsv1.NamespaceScoped,
 					nil
 			}
-		} else if a.logger != nil {
-			a.logger.Debug(fmt.Sprintf("CRD discovery failed: %v", listErr), "ObjectYAML")
+		} else if deps.Logger != nil {
+			deps.Logger.Debug(fmt.Sprintf("CRD discovery failed: %v", listErr), "ObjectYAML")
 		}
 	}
 
 	// Fallback to legacy GVR resolution by Kind if group/version-specific lookup fails.
-	if fallbackGVR, namespaced, err := a.getGVR(gvk.Kind); err == nil {
+	if fallbackGVR, namespaced, err := getGVRForDependencies(deps, selectionKey, gvk.Kind); err == nil {
 		if (gvk.Group == "" || strings.EqualFold(fallbackGVR.Group, gvk.Group)) &&
 			(gvk.Version == "" || strings.EqualFold(fallbackGVR.Version, gvk.Version)) {
 			return fallbackGVR, namespaced, nil

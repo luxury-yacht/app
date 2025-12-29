@@ -196,7 +196,12 @@ describe('NsViewCustom', () => {
       await modalProps.current.onConfirm();
     });
 
-    expect(deleteResourceMock).toHaveBeenCalledWith('CronJob', 'ops', 'nightly-cleanup');
+    expect(deleteResourceMock).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'CronJob',
+      'ops',
+      'nightly-cleanup'
+    );
     await flush();
     expect(modalProps.current?.isOpen).toBe(false);
   });

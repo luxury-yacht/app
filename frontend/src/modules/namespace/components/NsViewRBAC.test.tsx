@@ -121,6 +121,7 @@ describe('NsViewRBAC', () => {
     kind: 'Role',
     name: 'view',
     namespace: 'team-a',
+    clusterId: 'alpha:ctx',
     rulesCount: 3,
     age: '5h',
     ...overrides,
@@ -178,6 +179,6 @@ describe('NsViewRBAC', () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
 
-    expect(deleteResourceMock).toHaveBeenCalledWith('Role', 'team-a', 'view');
+    expect(deleteResourceMock).toHaveBeenCalledWith('alpha:ctx', 'Role', 'team-a', 'view');
   });
 });

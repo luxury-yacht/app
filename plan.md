@@ -115,6 +115,16 @@
 81. ✅ Add an auto-dismiss progress bar to error toasts with theme tokens for track/fill colors and duration.
 82. ✅ Flip the toast auto-dismiss progress animation to shrink left-to-right.
 83. ✅ Fix object-detail fetches in multi-cluster by routing backend detail calls through per-cluster clients using the request cluster context.
+84. ✅ Audit remaining legacy single-cluster entry points that could be used in multi-cluster flows; list candidates and risks.
+85. ✅ Add cluster-aware Wails RPCs for object YAML fetch/mutations; route backend handlers through `resourceDependenciesForClusterID` and return a clear error when the cluster is not active.
+86. ✅ Add cluster-aware Wails RPCs for object panel actions (delete/restart/scale/helm delete), node maintenance, pod logs/containers, and shell sessions; use per-cluster dependencies.
+87. ✅ Update frontend callers to pass the active tab `clusterId` for YAML, object panel actions, logs/shell, node maintenance, and delete flows; update any helpers that build requests.
+88. ✅ Update capability checks to be cluster-aware end-to-end (frontend descriptors + backend GVR resolution via cluster-scoped deps).
+89. ✅ Update Wails JS bindings/mocks/types and adjust tests for the new cluster-aware RPC signatures; add coverage where gaps remain.
+90. ✅ Update namespace view data models to include cluster metadata where delete actions rely on it (Autoscaling + Custom views).
+91. ✅ Audit remaining frontend/backend callsites for cluster-aware RPC signatures and fix any missed tests or mocks.
+92. ✅ Fix YAML mutation GVR fallback to use cluster-scoped selection keys and dependency logger (compile error cleanup).
+93. ✅ Fix remaining backend wrapper tests to pass cluster ID for node force-delete signatures.
 
 ## Risks / watchouts
 
@@ -125,6 +135,19 @@
 ## Planning notes (post-mortem)
 
 - Missed: object detail provider still routed through single-cluster App getters. Action: audit remaining legacy single-cluster entry points and ensure they use cluster-scoped dependencies.
+
+## Audit findings (legacy single-cluster entry points)
+
+- Object YAML + YAML mutations: `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.tsx` calls `GetObjectYAML`, and `frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTabUtils.ts` calls `ValidateObjectYaml`/`ApplyObjectYaml`. Backend paths `backend/object_yaml.go` and `backend/object_yaml_mutation.go` still use the base single-cluster client/dynamic client.
+- Object panel actions (restart/scale/delete): `frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelActions.ts` calls `DeletePod`, `DeleteResource`, `DeleteHelmRelease`, `RestartWorkload`, `ScaleWorkload`. Backend paths use `a.resourceDependencies()` (single cluster) via `backend/resources_pods.go`, `backend/resources_generic.go`, `backend/resources_helm.go`, `backend/resources_workloads.go`.
+- Node maintenance actions: `frontend/src/modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab.tsx` calls node operations; backend uses single-cluster deps in `backend/resources_nodes.go`.
+- Logs + shell: `frontend/src/modules/object-panel/components/ObjectPanel/Logs/LogViewer.tsx` (`LogFetcher`, `GetPodContainers`) and `frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx` (`StartShellSession`, etc). Backend uses `a.client`/`a.restConfig` in `backend/resources_pods.go` and `backend/shell_sessions.go`.
+- Namespace/cluster view deletes: `DeleteResource` is used in multiple views (e.g. `frontend/src/modules/namespace/components/NsViewConfig.tsx`, `frontend/src/modules/cluster/components/ClusterViewRBAC.tsx`) and still routes through `backend/resources_generic.go` (single-cluster deps).
+- Capabilities: frontend includes `clusterId` in descriptors, but `backend/app_capabilities.go` ignores it and resolves GVR using the base selection only.
+
+## Multi-cluster selection note
+
+- The backend base selection is set once in `backend/kubeconfigs.go` (`SetSelectedKubeconfigs`), and `frontend/src/modules/kubernetes/config/KubeconfigContext.tsx` `setActiveKubeconfig` only updates frontend state. Any Wails RPC calls that still use base selection can execute against the wrong cluster tab.
 
 ## Coverage notes
 

@@ -304,6 +304,7 @@ const queueFlush = () => {
 
         return {
           id: descriptor.id,
+          clusterId: descriptor.clusterId,
           verb: descriptor.verb,
           resourceKind: descriptor.resourceKind,
           namespace: descriptor.namespace,

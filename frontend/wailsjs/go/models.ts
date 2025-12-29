@@ -381,6 +381,7 @@ export namespace capabilities {
 	
 	export class CheckRequest {
 	    id: string;
+	    clusterId?: string;
 	    verb: string;
 	    resourceKind: string;
 	    namespace?: string;
@@ -394,6 +395,7 @@ export namespace capabilities {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.clusterId = source["clusterId"];
 	        this.verb = source["verb"];
 	        this.resourceKind = source["resourceKind"];
 	        this.namespace = source["namespace"];
@@ -403,6 +405,7 @@ export namespace capabilities {
 	}
 	export class CheckResult {
 	    id: string;
+	    clusterId?: string;
 	    verb: string;
 	    resourceKind: string;
 	    namespace?: string;
@@ -420,6 +423,7 @@ export namespace capabilities {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.clusterId = source["clusterId"];
 	        this.verb = source["verb"];
 	        this.resourceKind = source["resourceKind"];
 	        this.namespace = source["namespace"];
@@ -3939,4 +3943,3 @@ export namespace versioned {
 	}
 
 }
-

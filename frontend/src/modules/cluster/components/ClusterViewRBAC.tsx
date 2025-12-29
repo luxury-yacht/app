@@ -140,7 +140,13 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       if (!deleteConfirm.resource) return;
 
       try {
-        await DeleteResource(deleteConfirm.resource.kind, '', deleteConfirm.resource.name);
+        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? '';
+        await DeleteResource(
+          clusterId,
+          deleteConfirm.resource.kind,
+          '',
+          deleteConfirm.resource.name
+        );
         setDeleteConfirm({ show: false, resource: null });
       } catch (error) {
         errorHandler.handle(error, {
@@ -150,7 +156,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
         });
         setDeleteConfirm({ show: false, resource: null });
       }
-    }, [deleteConfirm.resource]);
+    }, [deleteConfirm.resource, selectedClusterId]);
 
     // Get context menu items
     const getContextMenuItems = useCallback(

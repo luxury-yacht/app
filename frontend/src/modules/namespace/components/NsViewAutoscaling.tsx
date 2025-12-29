@@ -34,6 +34,9 @@ export interface AutoscalingData {
   kindAlias?: string;
   name: string;
   namespace: string;
+  // Multi-cluster metadata used for per-tab actions and stable row keys.
+  clusterId?: string;
+  clusterName?: string;
   // HorizontalPodAutoscaler-specific fields
   scaleTargetRef?: {
     kind: string;
@@ -265,6 +268,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
 
       try {
         await DeleteResource(
+          deleteConfirm.resource.clusterId ?? '',
           deleteConfirm.resource.kind,
           deleteConfirm.resource.namespace,
           deleteConfirm.resource.name

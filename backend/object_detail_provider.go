@@ -62,9 +62,6 @@ func (p *objectDetailProvider) resolveDetailContext(ctx context.Context) resolve
 
 func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, kind, namespace, name string) (string, error) {
 	resolved := p.resolveDetailContext(ctx)
-	if !resolved.scoped {
-		return p.app.GetObjectYAML(kind, namespace, name)
-	}
 	return getObjectYAMLWithDependencies(resolved.deps, resolved.selectionKey, kind, namespace, name)
 }
 

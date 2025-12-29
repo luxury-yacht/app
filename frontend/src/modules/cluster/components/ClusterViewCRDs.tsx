@@ -143,7 +143,13 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       if (!deleteConfirm.resource) return;
 
       try {
-        await DeleteResource('CustomResourceDefinition', '', deleteConfirm.resource.name);
+        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? '';
+        await DeleteResource(
+          clusterId,
+          'CustomResourceDefinition',
+          '',
+          deleteConfirm.resource.name
+        );
       } catch (error) {
         errorHandler.handle(error, {
           action: 'delete',
@@ -153,7 +159,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       } finally {
         setDeleteConfirm({ show: false, resource: null });
       }
-    }, [deleteConfirm.resource]);
+    }, [deleteConfirm.resource, selectedClusterId]);
 
     // Get context menu items
     const getContextMenuItems = useCallback(

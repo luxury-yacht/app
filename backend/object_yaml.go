@@ -90,9 +90,12 @@ func storeGVRCached(key string, entry gvrCacheEntry) {
 }
 
 // GetObjectYAML fetches the YAML representation of a Kubernetes object.
-func (a *App) GetObjectYAML(resourceKind, namespace, name string) (string, error) {
-	deps := a.resourceDependencies()
-	return getObjectYAMLWithDependencies(deps, a.currentSelectionKey(), resourceKind, namespace, name)
+func (a *App) GetObjectYAML(clusterID, resourceKind, namespace, name string) (string, error) {
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return "", err
+	}
+	return getObjectYAMLWithDependencies(deps, selectionKey, resourceKind, namespace, name)
 }
 
 // getObjectYAMLWithDependencies fetches object YAML using the supplied cluster-scoped dependencies.

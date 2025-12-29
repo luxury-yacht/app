@@ -300,7 +300,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       }
 
       try {
-        await DeletePod(deleteConfirm.pod.namespace, deleteConfirm.pod.name);
+        await DeletePod(
+          deleteConfirm.pod.clusterId ?? '',
+          deleteConfirm.pod.namespace,
+          deleteConfirm.pod.name
+        );
         setDeleteConfirm({ show: false, pod: null });
       } catch (err) {
         errorHandler.handle(err, {

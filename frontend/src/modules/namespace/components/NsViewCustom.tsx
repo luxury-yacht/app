@@ -33,6 +33,9 @@ export interface CustomResourceData {
   kindAlias?: string;
   name: string;
   namespace: string;
+  // Multi-cluster metadata used for per-tab actions and stable row keys.
+  clusterId?: string;
+  clusterName?: string;
   apiGroup?: string;
   apiVersion?: string;
   labels?: Record<string, string>;
@@ -176,6 +179,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
 
       try {
         await DeleteResource(
+          deleteConfirm.resource.clusterId ?? '',
           deleteConfirm.resource.kind || deleteConfirm.resource.kindAlias || 'CustomResource',
           deleteConfirm.resource.namespace,
           deleteConfirm.resource.name

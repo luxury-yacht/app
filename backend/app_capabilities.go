@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	authorizationv1 "k8s.io/api/authorization/v1"
 )
 
@@ -20,18 +21,21 @@ func (a *App) EvaluateCapabilities(checks []capabilities.CheckRequest) ([]capabi
 		return results, nil
 	}
 
-	service := capabilities.NewService(capabilities.Dependencies{
-		Common: a.resourceDependencies(),
-	})
+	type capabilityBatch struct {
+		deps             common.Dependencies
+		selectionKey     string
+		service          *capabilities.Service
+		pending          []capabilities.ReviewAttributes
+		pendingMappings  [][]int
+		uniqueIndexByKey map[string]int
+	}
 
-	pending := make([]capabilities.ReviewAttributes, 0, len(checks))
-	pendingMappings := make([][]int, 0, len(checks))
-	uniqueIndexByKey := make(map[string]int, len(checks))
-	ensuredClient := false
+	batches := make(map[string]*capabilityBatch)
 
 	for _, check := range checks {
 		base := capabilities.CheckResult{
 			ID:           strings.TrimSpace(check.ID),
+			ClusterID:    strings.TrimSpace(check.ClusterID),
 			Verb:         strings.ToLower(strings.TrimSpace(check.Verb)),
 			ResourceKind: strings.TrimSpace(check.ResourceKind),
 			Namespace:    strings.TrimSpace(check.Namespace),
@@ -45,16 +49,36 @@ func (a *App) EvaluateCapabilities(checks []capabilities.CheckRequest) ([]capabi
 			continue
 		}
 
-		if !ensuredClient {
-			if err := a.ensureClientInitialized("SelfSubjectAccessReview"); err != nil {
+		if base.ClusterID == "" {
+			base.Error = "clusterId is required"
+			results = append(results, base)
+			continue
+		}
+
+		batch, ok := batches[base.ClusterID]
+		if !ok {
+			deps, selectionKey, err := a.resolveClusterDependencies(base.ClusterID)
+			if err != nil {
 				base.Error = err.Error()
 				results = append(results, base)
 				continue
 			}
-			ensuredClient = true
+			batch = &capabilityBatch{
+				deps:             deps,
+				selectionKey:     selectionKey,
+				service:          capabilities.NewService(capabilities.Dependencies{Common: deps}),
+				uniqueIndexByKey: make(map[string]int),
+			}
+			batches[base.ClusterID] = batch
 		}
 
-		gvr, _, err := a.getGVR(base.ResourceKind)
+		if batch.deps.KubernetesClient == nil {
+			base.Error = "kubernetes client not initialized"
+			results = append(results, base)
+			continue
+		}
+
+		gvr, _, err := getGVRForDependencies(batch.deps, batch.selectionKey, base.ResourceKind)
 		if err != nil {
 			base.Error = fmt.Sprintf("failed to resolve resource kind %s: %v", base.ResourceKind, err)
 			results = append(results, base)
@@ -72,43 +96,44 @@ func (a *App) EvaluateCapabilities(checks []capabilities.CheckRequest) ([]capabi
 		}
 
 		key := capabilityAttributesKey(attr)
-		uniqueIndex, exists := uniqueIndexByKey[key]
+		uniqueIndex, exists := batch.uniqueIndexByKey[key]
 		if !exists {
-			uniqueIndex = len(pending)
-			uniqueIndexByKey[key] = uniqueIndex
-			pending = append(pending, capabilities.ReviewAttributes{
+			uniqueIndex = len(batch.pending)
+			batch.uniqueIndexByKey[key] = uniqueIndex
+			batch.pending = append(batch.pending, capabilities.ReviewAttributes{
 				ID:         base.ID,
 				Attributes: attr,
 			})
-			pendingMappings = append(pendingMappings, []int{len(results)})
+			batch.pendingMappings = append(batch.pendingMappings, []int{len(results)})
 		} else {
-			pendingMappings[uniqueIndex] = append(pendingMappings[uniqueIndex], len(results))
+			batch.pendingMappings[uniqueIndex] = append(batch.pendingMappings[uniqueIndex], len(results))
 		}
 
 		results = append(results, base)
 	}
 
-	if len(pending) == 0 {
-		return results, nil
-	}
-
-	evaluated, err := service.Evaluate(a.CtxOrBackground(), pending)
-	if err != nil {
-		return nil, err
-	}
-
-	for i, eval := range evaluated {
-		if i >= len(pendingMappings) {
-			break
+	for _, batch := range batches {
+		if len(batch.pending) == 0 {
+			continue
 		}
-		for _, targetIdx := range pendingMappings[i] {
-			if targetIdx >= len(results) {
-				continue
+		evaluated, err := batch.service.Evaluate(a.CtxOrBackground(), batch.pending)
+		if err != nil {
+			return nil, err
+		}
+
+		for i, eval := range evaluated {
+			if i >= len(batch.pendingMappings) {
+				break
 			}
-			results[targetIdx].Allowed = eval.Allowed
-			results[targetIdx].DeniedReason = eval.DeniedReason
-			results[targetIdx].EvaluationError = eval.EvaluationError
-			results[targetIdx].Error = eval.Error
+			for _, targetIdx := range batch.pendingMappings[i] {
+				if targetIdx >= len(results) {
+					continue
+				}
+				results[targetIdx].Allowed = eval.Allowed
+				results[targetIdx].DeniedReason = eval.DeniedReason
+				results[targetIdx].EvaluationError = eval.EvaluationError
+				results[targetIdx].Error = eval.Error
+			}
 		}
 	}
 

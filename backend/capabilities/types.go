@@ -11,6 +11,7 @@ package capabilities
 // operations or verbs that operate on collections.
 type CheckRequest struct {
 	ID           string `json:"id"`
+	ClusterID    string `json:"clusterId,omitempty"`
 	Verb         string `json:"verb"`
 	ResourceKind string `json:"resourceKind"`
 	Namespace    string `json:"namespace,omitempty"`
@@ -29,6 +30,7 @@ type CheckRequest struct {
 // are echoed to simplify correlating results on the frontend.
 type CheckResult struct {
 	ID              string `json:"id"`
+	ClusterID       string `json:"clusterId,omitempty"`
 	Verb            string `json:"verb"`
 	ResourceKind    string `json:"resourceKind"`
 	Namespace       string `json:"namespace,omitempty"`

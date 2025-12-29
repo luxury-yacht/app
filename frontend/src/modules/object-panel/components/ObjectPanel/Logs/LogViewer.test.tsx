@@ -220,6 +220,7 @@ describe('LogViewer active pod synchronisation', () => {
       resourceKind = 'deployment',
       isActive = true,
       activePodNames = null,
+      clusterId = 'alpha:ctx',
     } = overrides;
 
     await act(async () => {
@@ -230,6 +231,7 @@ describe('LogViewer active pod synchronisation', () => {
           resourceKind={resourceKind}
           isActive={isActive}
           activePodNames={activePodNames}
+          clusterId={clusterId}
         />
       );
       await Promise.resolve();
@@ -401,7 +403,8 @@ describe('LogViewer active pod synchronisation', () => {
     });
 
     expect(LogFetcher).toHaveBeenCalledTimes(1);
-    const request = (LogFetcher as unknown as ViMock).mock.calls[0][0];
+    const request = (LogFetcher as unknown as ViMock).mock.calls[0][1];
+    expect((LogFetcher as unknown as ViMock).mock.calls[0][0]).toBe('alpha:ctx');
     expect(request).toMatchObject({
       namespace: 'team-a',
       podName: 'api',
@@ -452,7 +455,7 @@ describe('LogViewer active pod synchronisation', () => {
     await waitForMockCalls(LogFetcher as unknown as ViMock, 1);
 
     expect(LogFetcher).toHaveBeenCalledTimes(1);
-    expect((LogFetcher as unknown as ViMock).mock.calls[0][0]).toMatchObject({
+    expect((LogFetcher as unknown as ViMock).mock.calls[0][1]).toMatchObject({
       workloadKind: 'deployment',
     });
     expect(mockModules.orchestrator.restartStreamingDomain).not.toHaveBeenCalled();
@@ -644,7 +647,11 @@ describe('LogViewer active pod synchronisation', () => {
     await waitForMockCalls(GetPodContainers as unknown as ViMock, 1);
     await flushAsync();
 
-    expect((GetPodContainers as unknown as ViMock).mock.calls[0]).toEqual(['team-a', 'api']);
+    expect((GetPodContainers as unknown as ViMock).mock.calls[0]).toEqual([
+      'alpha:ctx',
+      'team-a',
+      'api',
+    ]);
 
     const containerSelect = container.querySelector<HTMLSelectElement>(
       '[data-testid="pod-container-dropdown"]'

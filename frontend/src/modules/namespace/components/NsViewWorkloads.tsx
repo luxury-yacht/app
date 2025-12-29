@@ -167,7 +167,12 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       }
 
       try {
-        await RestartWorkload(workload.namespace, workload.name, workload.kind);
+        await RestartWorkload(
+          workload.clusterId ?? '',
+          workload.namespace,
+          workload.name,
+          workload.kind
+        );
       } catch (err) {
         errorHandler.handle(err, {
           action: 'restart',
@@ -188,7 +193,12 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       }
 
       try {
-        await DeleteResource(workload.kind, workload.namespace, workload.name);
+        await DeleteResource(
+          workload.clusterId ?? '',
+          workload.kind,
+          workload.namespace,
+          workload.name
+        );
       } catch (err) {
         errorHandler.handle(err, {
           action: 'delete',
@@ -240,6 +250,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       setScaleError(null);
       try {
         await ScaleWorkload(
+          scaleState.workload.clusterId ?? '',
           scaleState.workload.namespace,
           scaleState.workload.name,
           scaleState.workload.kind,

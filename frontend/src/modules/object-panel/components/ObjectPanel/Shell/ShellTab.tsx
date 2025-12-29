@@ -28,6 +28,7 @@ interface ShellTabProps {
   disabledReason?: string;
   isActive: boolean;
   availableContainers: string[];
+  clusterId?: string | null;
 }
 
 type ShellStatus = 'idle' | 'connecting' | 'open' | 'closed' | 'error';
@@ -50,6 +51,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   isActive,
   disabledReason,
   availableContainers,
+  clusterId,
 }) => {
   const panelState = useDockablePanelState('object-panel');
   const [session, setSession] = useState<types.ShellSession | null>(null);
@@ -66,6 +68,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const terminalDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const [terminalReady, setTerminalReady] = useState(false);
+  const resolvedClusterId = clusterId?.trim() ?? '';
   const writeToTerminal = useCallback((text: string) => {
     if (!terminalRef.current) {
       return;
@@ -274,7 +277,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
 
     const start = async () => {
       try {
-        const shellSession = await StartShellSession({
+        const shellSession = await StartShellSession(resolvedClusterId, {
           namespace,
           podName: resourceName,
           container: containerOverride ?? undefined,
@@ -344,6 +347,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     namespace,
     reconnectToken,
     resourceName,
+    resolvedClusterId,
     writeLine,
   ]);
 

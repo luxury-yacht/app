@@ -152,6 +152,7 @@ const sampleData = [
     kindAlias: 'cfg',
     name: 'app-config',
     namespace: 'default',
+    clusterId: 'alpha:ctx',
     data: 2,
     age: '1d',
   },
@@ -230,6 +231,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
     });
 
     expect(deleteResourceMock.DeleteResource).toHaveBeenCalledWith(
+      'alpha:ctx',
       'ConfigMap',
       'default',
       'app-config'

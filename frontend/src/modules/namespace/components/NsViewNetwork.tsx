@@ -159,6 +159,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
 
       try {
         await DeleteResource(
+          deleteConfirm.resource.clusterId ?? '',
           deleteConfirm.resource.kind,
           deleteConfirm.resource.namespace,
           deleteConfirm.resource.name

@@ -144,6 +144,7 @@ describe('NsViewQuotas', () => {
     kind: 'ResourceQuota',
     name: 'rq-default',
     namespace: 'team-a',
+    clusterId: 'alpha:ctx',
     hard: {
       'requests.cpu': '2',
       'requests.memory': '2147483648',
@@ -224,7 +225,12 @@ describe('NsViewQuotas', () => {
     await act(async () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
-    expect(deleteResourceMock).toHaveBeenCalledWith('ResourceQuota', 'team-a', 'rq-default');
+    expect(deleteResourceMock).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'ResourceQuota',
+      'team-a',
+      'rq-default'
+    );
   });
 
   it('handles delete failure with errorHandler', async () => {

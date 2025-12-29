@@ -118,6 +118,7 @@ export const useObjectPanelActions = ({
 
       const namespace = objectData.namespace || '';
       const name = objectData.name || '';
+      const clusterId = objectData.clusterId ?? '';
 
       try {
         switch (action) {
@@ -133,18 +134,18 @@ export const useObjectPanelActions = ({
                   `Unsupported workload kind for restart: ${objectKind ?? 'unknown'}`
                 );
               }
-              await app.RestartWorkload(namespace, name, workloadKind);
+              await app.RestartWorkload(clusterId, namespace, name, workloadKind);
             }
             break;
           }
           case 'delete': {
             if (objectKind === 'pod') {
-              await app.DeletePod(namespace, name);
+              await app.DeletePod(clusterId, namespace, name);
             } else if (objectKind === 'helmrelease') {
-              await app.DeleteHelmRelease(namespace, name);
+              await app.DeleteHelmRelease(clusterId, namespace, name);
             } else {
               const resourceKind = objectData.kind || objectKind;
-              await app.DeleteResource(resourceKind, namespace, name);
+              await app.DeleteResource(clusterId, resourceKind, namespace, name);
             }
             dispatch({ type: 'SET_RESOURCE_DELETED', payload: { deleted: true, name } });
             close();
@@ -157,7 +158,7 @@ export const useObjectPanelActions = ({
               if (!workloadKind) {
                 throw new Error(`Unsupported workload kind for scale: ${objectKind ?? 'unknown'}`);
               }
-              await app.ScaleWorkload(namespace, name, workloadKind, replicas);
+              await app.ScaleWorkload(clusterId, namespace, name, workloadKind, replicas);
             }
             hideScaleInput();
             await fetchResourceDetails(true);

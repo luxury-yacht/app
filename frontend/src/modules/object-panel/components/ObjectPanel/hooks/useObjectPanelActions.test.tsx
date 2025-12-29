@@ -57,6 +57,7 @@ describe('useObjectPanelActions', () => {
     kind: 'Deployment',
     name: 'api',
     namespace: 'team-a',
+    clusterId: 'alpha:ctx',
   };
 
   const renderHook = async (
@@ -142,7 +143,7 @@ describe('useObjectPanelActions', () => {
       type: 'SET_ACTION_ERROR',
       payload: null,
     });
-    expect(restartMock).toHaveBeenCalledWith('team-a', 'api', 'Deployment');
+    expect(restartMock).toHaveBeenCalledWith('alpha:ctx', 'team-a', 'api', 'Deployment');
     expect(dispatchMock).toHaveBeenLastCalledWith({
       type: 'SET_ACTION_LOADING',
       payload: false,
@@ -153,7 +154,7 @@ describe('useObjectPanelActions', () => {
   it('deletes pods and closes the panel', async () => {
     const deleteState = baseState();
     const { getResult } = await renderHook({
-      objectData: { kind: 'Pod', name: 'api-0', namespace: 'team-a' },
+      objectData: { kind: 'Pod', name: 'api-0', namespace: 'team-a', clusterId: 'alpha:ctx' },
       objectKind: 'pod',
       state: deleteState,
     });
@@ -161,7 +162,7 @@ describe('useObjectPanelActions', () => {
     const actions = getResult();
     await actions.handleAction('delete', 'showDeleteConfirm');
 
-    expect(deletePodMock).toHaveBeenCalledWith('team-a', 'api-0');
+    expect(deletePodMock).toHaveBeenCalledWith('alpha:ctx', 'team-a', 'api-0');
     expect(closeMock).toHaveBeenCalled();
     expect(dispatchMock).toHaveBeenCalledWith({
       type: 'SET_RESOURCE_DELETED',
@@ -177,7 +178,7 @@ describe('useObjectPanelActions', () => {
 
     await actions.handleAction('scale');
 
-    expect(scaleMock).toHaveBeenCalledWith('team-a', 'api', 'Deployment', 2);
+    expect(scaleMock).toHaveBeenCalledWith('alpha:ctx', 'team-a', 'api', 'Deployment', 2);
     expect(dispatchMock).toHaveBeenCalledWith({ type: 'SHOW_SCALE_INPUT', payload: false });
     expect(fetchDetailsMock).toHaveBeenCalledWith(true);
 
@@ -187,7 +188,7 @@ describe('useObjectPanelActions', () => {
     const updatedActions = resultRef.current!;
     await updatedActions.handleAction('scale', undefined, 5);
 
-    expect(scaleMock).toHaveBeenLastCalledWith('team-a', 'api', 'Deployment', 5);
+    expect(scaleMock).toHaveBeenLastCalledWith('alpha:ctx', 'team-a', 'api', 'Deployment', 5);
   });
 
   it('exposes helpers to manipulate confirmation and scale state', async () => {

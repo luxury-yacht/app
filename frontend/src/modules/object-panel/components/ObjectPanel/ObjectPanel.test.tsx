@@ -20,6 +20,7 @@ type PanelTestOptions = {
   name: string;
   namespace?: string;
   isOpen?: boolean;
+  clusterId?: string;
   capabilityOverrides?: Record<string, CapabilityState>;
   logPermission?: { allowed: boolean; pending: boolean };
   scopedDomain?: { data: unknown; status: string; error: string | null };
@@ -252,12 +253,14 @@ describe('ObjectPanel tab availability', () => {
   });
 
   const renderObjectPanel = async (options: PanelTestOptions) => {
+    const clusterId = options.clusterId ?? 'alpha:ctx';
     const navigationHistory = [
       {
         kind: options.kind,
         name: options.name,
         namespace: options.namespace,
         kindAlias: options.kind,
+        clusterId,
       },
     ];
 
@@ -395,7 +398,7 @@ describe('ObjectPanel tab availability', () => {
       await modalProps.onConfirm();
     });
 
-    expect(mockApp.DeletePod).toHaveBeenCalledWith('team-a', 'api');
+    expect(mockApp.DeletePod).toHaveBeenCalledWith('alpha:ctx', 'team-a', 'api');
     expect(panelState.close).toHaveBeenCalled();
   });
 
@@ -414,7 +417,13 @@ describe('ObjectPanel tab availability', () => {
       await detailsProps.onScaleClick(5);
     });
 
-    expect(mockApp.ScaleWorkload).toHaveBeenCalledWith('team-a', 'api', 'Deployment', 5);
+    expect(mockApp.ScaleWorkload).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'team-a',
+      'api',
+      'Deployment',
+      5
+    );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'object-details',
       'team-a:deployment:api',
@@ -444,7 +453,12 @@ describe('ObjectPanel tab availability', () => {
       await modalProps.onConfirm();
     });
 
-    expect(mockApp.RestartWorkload).toHaveBeenCalledWith('team-a', 'api', 'Deployment');
+    expect(mockApp.RestartWorkload).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'team-a',
+      'api',
+      'Deployment'
+    );
   });
 
   it('initialises the scale input based on desired replicas when shown', async () => {
@@ -511,7 +525,7 @@ describe('ObjectPanel tab availability', () => {
       await deleteModalPropsRef.current.onConfirm();
     });
 
-    expect(mockApp.DeleteHelmRelease).toHaveBeenCalledWith('helm-ns', 'demo');
+    expect(mockApp.DeleteHelmRelease).toHaveBeenCalledWith('alpha:ctx', 'helm-ns', 'demo');
   });
 
   it('falls back to DeleteResource for generic kinds', async () => {
@@ -528,7 +542,12 @@ describe('ObjectPanel tab availability', () => {
       await deleteModalPropsRef.current.onConfirm();
     });
 
-    expect(mockApp.DeleteResource).toHaveBeenCalledWith('ConfigMap', 'team-a', 'settings');
+    expect(mockApp.DeleteResource).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'ConfigMap',
+      'team-a',
+      'settings'
+    );
   });
 
   it('handles scale errors and keeps the scale input visible', async () => {

@@ -156,7 +156,13 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       if (!deleteConfirm.resource) return;
 
       try {
-        await DeleteResource(deleteConfirm.resource.kind, '', deleteConfirm.resource.name);
+        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? '';
+        await DeleteResource(
+          clusterId,
+          deleteConfirm.resource.kind,
+          '',
+          deleteConfirm.resource.name
+        );
       } catch (err) {
         errorHandler.handle(err, {
           action: 'delete',
@@ -166,7 +172,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       } finally {
         setDeleteConfirm({ show: false, resource: null });
       }
-    }, [deleteConfirm.resource]);
+    }, [deleteConfirm.resource, selectedClusterId]);
 
     // Get context menu items
     const getContextMenuItems = useCallback(

@@ -53,11 +53,12 @@ export const applyResourceVersionToYaml = (yamlText: string, resourceVersion: st
 };
 
 export const validateYamlOnServer = async (
+  clusterId: string,
   yamlContent: string,
   identity: ObjectIdentity,
   resourceVersion: string
 ): Promise<ObjectYamlMutationResponse> => {
-  return ValidateObjectYaml({
+  return ValidateObjectYaml(clusterId, {
     yaml: yamlContent,
     kind: identity.kind,
     apiVersion: identity.apiVersion,
@@ -68,11 +69,12 @@ export const validateYamlOnServer = async (
 };
 
 export const applyYamlOnServer = async (
+  clusterId: string,
   yamlContent: string,
   identity: ObjectIdentity,
   resourceVersion: string
 ): Promise<ObjectYamlMutationResponse> => {
-  return ApplyObjectYaml({
+  return ApplyObjectYaml(clusterId, {
     yaml: yamlContent,
     kind: identity.kind,
     apiVersion: identity.apiVersion,

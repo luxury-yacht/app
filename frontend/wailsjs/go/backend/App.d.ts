@@ -10,31 +10,31 @@ import {dynamic} from '../models';
 import {versioned} from '../models';
 import {rest} from '../models';
 
-export function ApplyObjectYaml(arg1:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
+export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
 export function ClearLogs():Promise<void>;
 
 export function CloseShellSession(arg1:string):Promise<void>;
 
-export function CordonNode(arg1:string):Promise<void>;
+export function CordonNode(arg1:string,arg2:string):Promise<void>;
 
 export function CreateVersionedEndpoint(arg1:string,arg2:string,arg3:any,arg4:string):Promise<backend.VersionedResponse>;
 
 export function CtxOrBackground():Promise<context.Context>;
 
-export function DeleteHelmRelease(arg1:string,arg2:string):Promise<void>;
+export function DeleteHelmRelease(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function DeleteNode(arg1:string):Promise<void>;
+export function DeleteNode(arg1:string,arg2:string):Promise<void>;
 
-export function DeletePod(arg1:string,arg2:string):Promise<void>;
+export function DeletePod(arg1:string,arg2:string,arg3:string):Promise<void>;
 
-export function DeleteResource(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function DeleteResource(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
-export function DrainNode(arg1:string,arg2:types.DrainNodeOptions):Promise<void>;
+export function DrainNode(arg1:string,arg2:string,arg3:types.DrainNodeOptions):Promise<void>;
 
 export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Promise<Array<capabilities.CheckResult>>;
 
-export function ForceDeleteNode(arg1:string):Promise<void>;
+export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;
 
 export function GetAppInfo():Promise<backend.AppInfo>;
 
@@ -86,7 +86,7 @@ export function GetNetworkPolicy(arg1:string,arg2:string):Promise<types.NetworkP
 
 export function GetNode(arg1:string):Promise<types.NodeDetails>;
 
-export function GetObjectYAML(arg1:string,arg2:string,arg3:string):Promise<string>;
+export function GetObjectYAML(arg1:string,arg2:string,arg3:string,arg4:string):Promise<string>;
 
 export function GetPersistentVolume(arg1:string):Promise<types.PersistentVolumeDetails>;
 
@@ -94,7 +94,7 @@ export function GetPersistentVolumeClaim(arg1:string,arg2:string):Promise<types.
 
 export function GetPod(arg1:string,arg2:string,arg3:boolean):Promise<types.PodDetailInfo>;
 
-export function GetPodContainers(arg1:string,arg2:string):Promise<Array<string>>;
+export function GetPodContainers(arg1:string,arg2:string,arg3:string):Promise<Array<string>>;
 
 export function GetPodDisruptionBudget(arg1:string,arg2:string):Promise<types.PodDisruptionBudgetDetails>;
 
@@ -138,15 +138,15 @@ export function IsSidebarVisible():Promise<boolean>;
 
 export function LoadWindowSettings():Promise<types.WindowSettings>;
 
-export function LogFetcher(arg1:types.LogFetchRequest):Promise<types.LogFetchResponse>;
+export function LogFetcher(arg1:string,arg2:types.LogFetchRequest):Promise<types.LogFetchResponse>;
 
 export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<void>;
 
-export function RestartWorkload(arg1:string,arg2:string,arg3:string):Promise<void>;
+export function RestartWorkload(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function SaveWindowSettings():Promise<void>;
 
-export function ScaleWorkload(arg1:string,arg2:string,arg3:string,arg4:number):Promise<void>;
+export function ScaleWorkload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<void>;
 
 export function SendShellInput(arg1:string,arg2:string):Promise<void>;
 
@@ -174,7 +174,7 @@ export function ShowAbout():Promise<void>;
 
 export function ShowSettings():Promise<void>;
 
-export function StartShellSession(arg1:types.ShellSessionRequest):Promise<types.ShellSession>;
+export function StartShellSession(arg1:string,arg2:types.ShellSessionRequest):Promise<types.ShellSession>;
 
 export function Startup(arg1:context.Context):Promise<void>;
 
@@ -184,8 +184,8 @@ export function ToggleLogsPanel():Promise<void>;
 
 export function ToggleSidebar():Promise<void>;
 
-export function UncordonNode(arg1:string):Promise<void>;
+export function UncordonNode(arg1:string,arg2:string):Promise<void>;
 
 export function UpdateMenu():Promise<void>;
 
-export function ValidateObjectYaml(arg1:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
+export function ValidateObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;

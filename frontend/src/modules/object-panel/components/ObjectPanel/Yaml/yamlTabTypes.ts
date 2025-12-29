@@ -10,4 +10,5 @@ export interface YamlTabProps {
   isActive?: boolean;
   canEdit?: boolean;
   editDisabledReason?: string | null;
+  clusterId?: string | null;
 }

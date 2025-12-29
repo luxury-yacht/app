@@ -483,7 +483,7 @@ describe('NsViewPods', () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
 
-    expect(deletePodMock).toHaveBeenCalledWith('team-a', 'api');
+    expect(deletePodMock).toHaveBeenCalledWith('alpha:ctx', 'team-a', 'api');
   });
 
   it('handles delete failure with errorHandler and resets confirmation state', async () => {

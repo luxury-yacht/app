@@ -96,6 +96,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const hasPrimedScopeRef = useRef(false);
   const fallbackRecoveringRef = useRef(false);
   const previousActivePodsRef = useRef<string[] | null>(null);
+  const resolvedClusterId = clusterId?.trim() ?? '';
 
   // Refs
   const logsContentRef = useRef<HTMLDivElement>(null);
@@ -230,7 +231,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
           sinceSeconds: 0,
         };
 
-        const response = await LogFetcher(request);
+        const response = await LogFetcher(resolvedClusterId, request);
         if (response?.error) {
           throw new Error(response.error);
         }
@@ -274,6 +275,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
       resourceName,
       resourceKindKey,
       selectedContainer,
+      resolvedClusterId,
     ]
   );
 
@@ -819,7 +821,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
     let isCancelled = false;
     const fetchContainers = async () => {
       try {
-        const containerList = await GetPodContainers(namespace, podName);
+        const containerList = await GetPodContainers(resolvedClusterId, namespace, podName);
 
         if (isCancelled) return;
 
