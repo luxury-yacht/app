@@ -58,6 +58,46 @@
 }
 
 /* ==========================================================================
+   Auto-dismiss Progress
+   ========================================================================== */
+
+.error-notification-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--toast-progress-height);
+  background: var(--toast-progress-track-bg);
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.error-notification-progress-bar {
+  display: block;
+  height: 100%;
+  background: var(--toast-progress-fill-bg);
+  transform-origin: right;
+  animation: toast-dismiss-progress var(--toast-auto-dismiss-short) linear forwards;
+}
+
+.error-notification--auto-dismiss-long .error-notification-progress-bar {
+  animation-duration: var(--toast-auto-dismiss-long);
+}
+
+.error-notification--auto-dismiss-short .error-notification-progress-bar {
+  animation-duration: var(--toast-auto-dismiss-short);
+}
+
+@keyframes toast-dismiss-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* ==========================================================================
    Stacking Behaviour
    ========================================================================== */
 

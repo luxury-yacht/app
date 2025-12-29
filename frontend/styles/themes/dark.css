@@ -141,6 +141,11 @@
   --toast-dismiss-border: rgba(255, 255, 255, 0.08);
   --toast-count-bg: rgba(235, 87, 87, 0.95);
   --toast-count-text: #ffffff;
+  --toast-progress-track-bg: var(--toast-card-border);
+  --toast-progress-fill-bg: var(--toast-card-header-bg);
+  --toast-progress-height: 3px;
+  --toast-auto-dismiss-short: 5000ms;
+  --toast-auto-dismiss-long: 10000ms;
 
   /* Log viewer */
   --log-surface-bg: #1e1e1e;

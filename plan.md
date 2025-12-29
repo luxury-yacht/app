@@ -112,6 +112,8 @@
 78. ✅ Gate ClusterOverview fallback data by cluster ID so cached single-cluster payloads cannot render on a different tab.
 79. ✅ Toggle namespace expand/collapse on click without selecting a namespace or view (including All Namespaces).
 80. ✅ Fix Sidebar.test.tsx expectations to match namespace expand/collapse and loading behavior.
+81. ✅ Add an auto-dismiss progress bar to error toasts with theme tokens for track/fill colors and duration.
+82. ✅ Flip the toast auto-dismiss progress animation to shrink left-to-right.
 
 ## Risks / watchouts
 

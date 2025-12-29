@@ -27,6 +27,11 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
 }) => {
   const getSeverityClass = (severity: ErrorSeverity) => `error-notification-${severity}`;
   const isTop = stackPosition === 0;
+  const autoDismissClass = error.autoDismiss
+    ? error.autoDismissTimeout && error.autoDismissTimeout >= 10000
+      ? 'error-notification--auto-dismiss-long'
+      : 'error-notification--auto-dismiss-short'
+    : '';
   const stackStyle = {
     '--notification-stack-index': `${stackPosition}`,
     '--notification-stack-count': `${stackSize}`,
@@ -36,7 +41,7 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
     <div
       className={`error-notification ${getSeverityClass(error.severity)} ${
         isTop ? 'error-notification--active' : 'error-notification--stacked'
-      }`}
+      } ${autoDismissClass}`}
       data-stack-size={stackSize}
       style={stackStyle}
     >
@@ -94,6 +99,11 @@ const ErrorNotificationItem: React.FC<ErrorNotificationItemProps> = ({
           >
             Retry
           </button>
+        </div>
+      )}
+      {error.autoDismiss && (
+        <div className="error-notification-progress" aria-hidden="true">
+          <span className="error-notification-progress-bar" />
         </div>
       )}
     </div>
