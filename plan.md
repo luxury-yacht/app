@@ -123,37 +123,38 @@
 81. ✅ Center the header title text (cluster - namespace - view).
 82. ✅ Center the header title between the right edge of app-header-left and the left edge of app-header-controls.
 83. ✅ Update header title format to "Cluster: name • Namespace: name • View: name" with label/value colors.
-81. ✅ Rework namespace loading per active cluster so the "All namespaces" synthetic only appears after that cluster's namespace data arrives (including newly opened tabs).
-82. ✅ Stop auto-selecting namespaces on tab open; clear invalid selections and only select on explicit user action.
-83. ✅ Document the "no auto-selection" behavior in NamespaceContext.
-84. ✅ Reset cluster overview display on tab switch so new tabs show loading shimmers instead of cached data.
-85. ✅ Gate ClusterOverview fallback data by cluster ID so cached single-cluster payloads cannot render on a different tab.
-86. ✅ Toggle namespace expand/collapse on click without selecting a namespace or view (including All Namespaces).
-87. ✅ Fix Sidebar.test.tsx expectations to match namespace expand/collapse and loading behavior.
-88. ✅ Add an auto-dismiss progress bar to error toasts with theme tokens for track/fill colors and duration.
-89. ✅ Flip the toast auto-dismiss progress animation to shrink left-to-right.
-90. ✅ Fix object-detail fetches in multi-cluster by routing backend detail calls through per-cluster clients using the request cluster context.
-91. ✅ Audit remaining legacy single-cluster entry points that could be used in multi-cluster flows; list candidates and risks.
-92. ✅ Add cluster-aware Wails RPCs for object YAML fetch/mutations; route backend handlers through `resourceDependenciesForClusterID` and return a clear error when the cluster is not active.
-93. ✅ Add cluster-aware Wails RPCs for object panel actions (delete/restart/scale/helm delete), node maintenance, pod logs/containers, and shell sessions; use per-cluster dependencies.
-94. ✅ Update frontend callers to pass the active tab `clusterId` for YAML, object panel actions, logs/shell, node maintenance, and delete flows; update any helpers that build requests.
-95. ✅ Update capability checks to be cluster-aware end-to-end (frontend descriptors + backend GVR resolution via cluster-scoped deps).
-96. ✅ Update Wails JS bindings/mocks/types and adjust tests for the new cluster-aware RPC signatures; add coverage where gaps remain.
-97. ✅ Update namespace view data models to include cluster metadata where delete actions rely on it (Autoscaling + Custom views).
-98. ✅ Audit remaining frontend/backend callsites for cluster-aware RPC signatures and fix any missed tests or mocks.
-99. ✅ Fix YAML mutation GVR fallback to use cluster-scoped selection keys and dependency logger (compile error cleanup).
-100. ✅ Fix remaining backend wrapper tests to pass cluster ID for node force-delete signatures.
-101. ✅ Fix failing LogViewer tests for cluster-aware log/container calls.
-102. ✅ Fix failing ObjectPanel tests after cluster-aware RPC changes.
-103. ✅ Re-audit for legacy single-cluster entry points and remaining assumptions.
-104. ✅ Pass `clusterId` into all `openWithObject` calls from catalog/browse/command palette and namespace/cluster views to keep object panel requests scoped to the originating tab.
-105. ✅ Pass `clusterId` through object panel detail overviews (endpoints/policy/workload) when navigating to related objects.
-106. ✅ Update/extend frontend tests to cover cluster-aware `openWithObject` payloads for catalog, namespace, cluster, and overview navigation flows.
-107. ✅ Run a full single-cluster assumption audit (backend RPCs, refresh scopes, navigation paths, payload types) and list any remaining gaps.
-108. ✅ Apply remaining `openWithObject` clusterId plumbing and update tests (steps 97-99).
-109. ✅ Confirm whether `openWithObject` should rely on active tab cluster fallback when callsites omit cluster metadata, or require explicit cluster IDs in all callsites. (Decision: always include `clusterId`.)
-110. ✅ Document the refresh system and multi-cluster refresh behavior in `docs/development/refresh.md`.
-111. ✅ Add a refresh flow diagram to `docs/development/refresh.md`.
+84. ✅ Rework namespace loading per active cluster so the "All namespaces" synthetic only appears after that cluster's namespace data arrives (including newly opened tabs).
+85. ✅ Stop auto-selecting namespaces on tab open; clear invalid selections and only select on explicit user action.
+86. ✅ Document the "no auto-selection" behavior in NamespaceContext.
+87. ✅ Reset cluster overview display on tab switch so new tabs show loading shimmers instead of cached data.
+88. ✅ Gate ClusterOverview fallback data by cluster ID so cached single-cluster payloads cannot render on a different tab.
+89. ✅ Toggle namespace expand/collapse on click without selecting a namespace or view (including All Namespaces).
+90. ✅ Fix Sidebar.test.tsx expectations to match namespace expand/collapse and loading behavior.
+91. ✅ Add an auto-dismiss progress bar to error toasts with theme tokens for track/fill colors and duration.
+92. ✅ Flip the toast auto-dismiss progress animation to shrink left-to-right.
+93. ✅ Fix object-detail fetches in multi-cluster by routing backend detail calls through per-cluster clients using the request cluster context.
+94. ✅ Audit remaining legacy single-cluster entry points that could be used in multi-cluster flows; list candidates and risks.
+95. ✅ Add cluster-aware Wails RPCs for object YAML fetch/mutations; route backend handlers through `resourceDependenciesForClusterID` and return a clear error when the cluster is not active.
+96. ✅ Add cluster-aware Wails RPCs for object panel actions (delete/restart/scale/helm delete), node maintenance, pod logs/containers, and shell sessions; use per-cluster dependencies.
+97. ✅ Update frontend callers to pass the active tab `clusterId` for YAML, object panel actions, logs/shell, node maintenance, and delete flows; update any helpers that build requests.
+98. ✅ Update capability checks to be cluster-aware end-to-end (frontend descriptors + backend GVR resolution via cluster-scoped deps).
+99. ✅ Update Wails JS bindings/mocks/types and adjust tests for the new cluster-aware RPC signatures; add coverage where gaps remain.
+100. ✅ Update namespace view data models to include cluster metadata where delete actions rely on it (Autoscaling + Custom views).
+101. ✅ Audit remaining frontend/backend callsites for cluster-aware RPC signatures and fix any missed tests or mocks.
+102. ✅ Fix YAML mutation GVR fallback to use cluster-scoped selection keys and dependency logger (compile error cleanup).
+103. ✅ Fix remaining backend wrapper tests to pass cluster ID for node force-delete signatures.
+104. ✅ Fix failing LogViewer tests for cluster-aware log/container calls.
+105. ✅ Fix failing ObjectPanel tests after cluster-aware RPC changes.
+106. ✅ Re-audit for legacy single-cluster entry points and remaining assumptions.
+107. ✅ Pass `clusterId` into all `openWithObject` calls from catalog/browse/command palette and namespace/cluster views to keep object panel requests scoped to the originating tab.
+108. ✅ Pass `clusterId` through object panel detail overviews (endpoints/policy/workload) when navigating to related objects.
+109. ✅ Update/extend frontend tests to cover cluster-aware `openWithObject` payloads for catalog, namespace, cluster, and overview navigation flows.
+110. ✅ Run a full single-cluster assumption audit (backend RPCs, refresh scopes, navigation paths, payload types) and list any remaining gaps.
+111. ✅ Apply remaining `openWithObject` clusterId plumbing and update tests (steps 97-99).
+112. ✅ Confirm whether `openWithObject` should rely on active tab cluster fallback when callsites omit cluster metadata, or require explicit cluster IDs in all callsites. (Decision: always include `clusterId`.)
+113. ✅ Document the refresh system and multi-cluster refresh behavior in `docs/development/refresh.md`.
+114. ✅ Add a refresh flow diagram to `docs/development/refresh.md`.
+115. ✅ Capture multi-cluster support decisions and rules in `docs/development/multi-cluster-support.md`.
 
 ## Risks / watchouts
 
