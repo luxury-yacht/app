@@ -97,6 +97,7 @@
 64. ✅ Fix refresh manager mock for DiagnosticsPanel tests (missing subscribe).
 65. ✅ Add missing refresh manager APIs in DiagnosticsPanel test mock.
 66. ✅ Prevent dockable panels (object panel) from overlapping the cluster tabs row by enforcing a dynamic top offset.
+67. ✅ Adjust kubeconfig dropdown width: compact trigger, expanded menu fits content with right-edge alignment.
 
 ## Risks / watchouts
 

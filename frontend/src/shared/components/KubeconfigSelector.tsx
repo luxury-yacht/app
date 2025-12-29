@@ -91,7 +91,7 @@ function KubeconfigSelector() {
   });
 
   const renderSelectedValue = (_value: string | string[]) => {
-    return 'Select Kubeconfig';
+    return 'Select kubeconfig';
   };
 
   const containerRef = React.useRef<HTMLDivElement | null>(null);
@@ -111,7 +111,7 @@ function KubeconfigSelector() {
         value={selectedKubeconfigs}
         onChange={handleDropdownChange}
         loading={loading}
-        placeholder="Select Kubeconfig"
+        placeholder="Select kubeconfig"
         renderValue={renderSelectedValue}
         size="compact"
         multiple
