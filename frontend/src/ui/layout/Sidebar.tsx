@@ -125,6 +125,8 @@ function Sidebar() {
     return entries;
   }, [namespaces]);
 
+  const hasNamespaceData = !namespaceLoading && namespaces.some((item) => !item.isSynthetic);
+
   const namespaceGroups = useMemo<NamespaceGroup[]>(() => {
     const groups = catalogDomain.data?.namespaceGroups ?? [];
     const activeClusterId = selectedClusterId?.trim();
@@ -164,18 +166,21 @@ function Sidebar() {
           });
 
         const allNamespaces =
-          (useDetails && namespaceDetailsByScope.get(ALL_NAMESPACES_SCOPE)) || allNamespacesItem;
+          hasNamespaceData && useDetails
+            ? namespaceDetailsByScope.get(ALL_NAMESPACES_SCOPE) || allNamespacesItem
+            : null;
 
         return {
           clusterId: group.clusterId,
           clusterName: group.clusterName || group.clusterId,
-          namespaces: [allNamespaces, ...enrichedNamespaces],
+          namespaces: allNamespaces ? [allNamespaces, ...enrichedNamespaces] : enrichedNamespaces,
         };
       })
       .sort((a, b) => a.clusterName.localeCompare(b.clusterName));
   }, [
     allNamespacesItem,
     catalogDomain.data?.namespaceGroups,
+    hasNamespaceData,
     namespaceDetailsByScope,
     selectedClusterId,
   ]);
@@ -338,11 +343,11 @@ function Sidebar() {
           {
             clusterId: selectedClusterId ?? '',
             clusterName: '',
-            namespaces: namespaces.length > 0 ? namespaces : [allNamespacesItem],
+            namespaces: namespaces.length > 0 ? namespaces : [],
           },
         ];
   const showClusterLabels = namespaceGroups.length > 1;
-  const showNamespaceLoading = namespaceLoading && namespaceGroups.length === 0;
+  const showNamespaceLoading = namespaceLoading;
 
   return (
     <div

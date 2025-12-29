@@ -118,6 +118,13 @@ describe('NamespaceProvider selection behaviour', () => {
       vi.runAllTimers();
     });
 
+    act(() => {
+      namespaceRef.current?.setSelectedNamespace('alpha');
+    });
+    act(() => {
+      vi.runAllTimers();
+    });
+
     expect(getSelected()).toBe('alpha');
     expect(getSelectedCluster()).toBe('cluster-a');
 
@@ -144,8 +151,15 @@ describe('NamespaceProvider selection behaviour', () => {
     cleanup();
   });
 
-  it('moves selection when refreshed list removes the previous namespace', () => {
+  it('clears selection when refreshed list removes the previous namespace', () => {
     const { rerender, cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    act(() => {
+      namespaceRef.current?.setSelectedNamespace('alpha');
+    });
     act(() => {
       vi.runAllTimers();
     });
@@ -158,8 +172,8 @@ describe('NamespaceProvider selection behaviour', () => {
       vi.runAllTimers();
     });
 
-    expect(getSelected()).toBe('bravo');
-    expect(getSelectedCluster()).toBe('cluster-a');
+    expect(getSelected()).toBe('none');
+    expect(getSelectedCluster()).toBe('none');
     cleanup();
   });
 
@@ -230,7 +244,7 @@ describe('NamespaceProvider selection behaviour', () => {
     act(() => {
       vi.runAllTimers();
     });
-    expect(getSelected()).toBe('gamma');
+    expect(getSelected()).toBe('none');
 
     act(() => {
       namespaceRef.current?.setSelectedNamespace('delta');
@@ -286,7 +300,7 @@ describe('NamespaceProvider selection behaviour', () => {
       vi.runAllTimers();
     });
 
-    expect(getSelected()).toBe('gamma');
+    expect(getSelected()).toBe('none');
     cleanup();
   });
 });

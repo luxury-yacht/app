@@ -105,6 +105,9 @@
 71. ✅ Update command palette kubeconfig entries to toggle selections and show checkmarks for active clusters.
 72. ✅ Reduce command palette kubeconfig checkmark size to match standard item height.
 73. ✅ Align command palette kubeconfig checkmark in the left gutter without shifting item labels.
+74. ✅ Rework namespace loading per active cluster so the "All namespaces" synthetic only appears after that cluster's namespace data arrives (including newly opened tabs).
+75. ✅ Stop auto-selecting namespaces on tab open; clear invalid selections and only select on explicit user action.
+76. ✅ Document the "no auto-selection" behavior in NamespaceContext.
 
 ## Risks / watchouts
 
