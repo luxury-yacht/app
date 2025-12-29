@@ -108,6 +108,8 @@
 74. ✅ Rework namespace loading per active cluster so the "All namespaces" synthetic only appears after that cluster's namespace data arrives (including newly opened tabs).
 75. ✅ Stop auto-selecting namespaces on tab open; clear invalid selections and only select on explicit user action.
 76. ✅ Document the "no auto-selection" behavior in NamespaceContext.
+77. ✅ Reset cluster overview display on tab switch so new tabs show loading shimmers instead of cached data.
+78. ✅ Gate ClusterOverview fallback data by cluster ID so cached single-cluster payloads cannot render on a different tab.
 
 ## Risks / watchouts
 
