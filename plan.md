@@ -116,6 +116,9 @@
 73. ✅ Align command palette kubeconfig checkmark in the left gutter without shifting item labels.
 74. ✅ Change command palette kubeconfig action to open the tab if closed or switch to it when already open (no deselect).
 75. ✅ Prefix command palette catalog search scopes with the active cluster ID to avoid unscoped catalog errors.
+76. ✅ Re-audit for remaining single-cluster assumptions (unscoped catalog/object fetches, refresh scopes, and cluster metadata propagation); list findings and fix any gaps.
+77. ✅ Add a command palette action to close the current cluster tab.
+78. ✅ Show the Cmd/Ctrl+W shortcut on the command palette "Close Current Cluster Tab" item.
 74. ✅ Rework namespace loading per active cluster so the "All namespaces" synthetic only appears after that cluster's namespace data arrives (including newly opened tabs).
 75. ✅ Stop auto-selecting namespaces on tab open; clear invalid selections and only select on explicit user action.
 76. ✅ Document the "no auto-selection" behavior in NamespaceContext.

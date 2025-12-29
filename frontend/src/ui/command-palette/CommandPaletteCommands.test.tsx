@@ -16,6 +16,7 @@ const { mocks } = vi.hoisted(() => ({
     kubeconfig: {
       kubeconfigs: [] as types.KubeconfigInfo[],
       selectedKubeconfigs: [] as string[],
+      selectedKubeconfig: '',
       setSelectedKubeconfigs: vi.fn(),
       setActiveKubeconfig: vi.fn(),
     },
@@ -113,6 +114,7 @@ describe('CommandPaletteCommands', () => {
   beforeEach(() => {
     mocks.kubeconfig.kubeconfigs = [];
     mocks.kubeconfig.selectedKubeconfigs = [];
+    mocks.kubeconfig.selectedKubeconfig = '';
     mocks.kubeconfig.setActiveKubeconfig.mockReset();
     mocks.kubeconfig.setSelectedKubeconfigs.mockReset();
   });
@@ -156,6 +158,7 @@ describe('CommandPaletteCommands', () => {
       },
     ];
     mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev'];
+    mocks.kubeconfig.selectedKubeconfig = '/kube/alpha:dev';
 
     const { getCommands, unmount } = renderHook();
     const commands = getCommands();
@@ -167,6 +170,36 @@ describe('CommandPaletteCommands', () => {
     expect(mocks.kubeconfig.setActiveKubeconfig).toHaveBeenCalledWith('/kube/alpha:dev');
     expect(mocks.kubeconfig.setSelectedKubeconfigs).not.toHaveBeenCalled();
 
+    unmount();
+  });
+
+  it('closes the current cluster tab when requested', () => {
+    mocks.kubeconfig.kubeconfigs = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'beta',
+        path: '/kube/beta',
+        context: 'prod',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+    ];
+    mocks.kubeconfig.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:prod'];
+    mocks.kubeconfig.selectedKubeconfig = '/kube/beta:prod';
+
+    const { getCommands, unmount } = renderHook();
+    const commands = getCommands();
+    const command = commands.find((entry) => entry.id === 'close-cluster-tab');
+
+    command?.action();
+
+    expect(mocks.kubeconfig.setSelectedKubeconfigs).toHaveBeenCalledWith(['/kube/alpha:dev']);
     unmount();
   });
 });

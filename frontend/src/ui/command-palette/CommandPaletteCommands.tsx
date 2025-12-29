@@ -17,6 +17,7 @@ import { isAllNamespaces } from '@modules/namespace/constants';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import { eventBus } from '@/core/events';
+import { isMacPlatform } from '@/utils/platform';
 
 export interface Command {
   id: string;
@@ -52,6 +53,24 @@ export function useCommandPaletteCommands() {
     [viewState]
   );
 
+  const closeCurrentClusterTab = useCallback(() => {
+    const active = kubeconfig.selectedKubeconfig;
+    if (!active) {
+      return;
+    }
+    if (!kubeconfig.selectedKubeconfigs.includes(active)) {
+      return;
+    }
+    const nextSelections = kubeconfig.selectedKubeconfigs.filter(
+      (selection) => selection !== active
+    );
+    void kubeconfig.setSelectedKubeconfigs(nextSelections);
+  }, [
+    kubeconfig.selectedKubeconfig,
+    kubeconfig.selectedKubeconfigs,
+    kubeconfig.setSelectedKubeconfigs,
+  ]);
+
   const selectNamespace = useCallback(
     (scope: string) => {
       namespace.setSelectedNamespace(scope);
@@ -62,6 +81,8 @@ export function useCommandPaletteCommands() {
     },
     [namespace, viewState]
   );
+
+  const closeTabShortcut = useMemo(() => (isMacPlatform() ? ['⌘', 'W'] : ['Ctrl', 'W']), []);
 
   const commands = useMemo(
     () => [
@@ -221,6 +242,15 @@ export function useCommandPaletteCommands() {
 
       // Navigation Commands
       {
+        id: 'close-cluster-tab',
+        label: 'Close Current Cluster Tab',
+        description: 'Close the active cluster tab',
+        category: 'Navigation',
+        action: closeCurrentClusterTab,
+        shortcut: closeTabShortcut,
+        keywords: ['cluster', 'tab', 'close', 'kubeconfig'],
+      },
+      {
         id: 'select-kubeconfig',
         label: 'Select Kubeconfig',
         description: 'Switch to a different kubeconfig',
@@ -305,7 +335,7 @@ export function useCommandPaletteCommands() {
         keywords: ['cluster', 'events', 'logs', 'history'],
       },
     ],
-    [viewState, theme, openClusterTab, toggleAutoRefresh]
+    [viewState, theme, openClusterTab, closeCurrentClusterTab, closeTabShortcut, toggleAutoRefresh]
   );
 
   // Add namespace view navigation commands (only when a namespace is selected in the sidebar)
