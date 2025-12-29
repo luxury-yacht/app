@@ -104,59 +104,60 @@ export const AppLayout: React.FC = () => {
       return '';
     }
 
-    // Handle overview view
-    if (viewState.viewType === 'overview') {
-      return 'Cluster Overview';
-    }
+    const clusterLabel =
+      kubeconfig.selectedClusterName || kubeconfig.selectedClusterId || '';
+    const namespaceLabel =
+      viewState.viewType === 'namespace' && namespace.selectedNamespace
+        ? isAllNamespaces(namespace.selectedNamespace)
+          ? ALL_NAMESPACES_DISPLAY_NAME
+          : namespace.selectedNamespace
+        : '';
+    const viewLabel = (() => {
+      if (viewState.viewType === 'overview') {
+        return 'Cluster Overview';
+      }
 
-    // Handle cluster view with active tab
-    if (viewState.viewType === 'cluster' && viewState.activeClusterTab) {
-      const tabTitlesCluster: Record<string, string> = {
-        nodes: 'Cluster Nodes',
-        rbac: 'Cluster RBAC',
-        storage: 'Cluster Storage',
-        config: 'Cluster Config',
-        crds: 'Cluster CRDs',
-        custom: 'Cluster Custom Resources',
-        events: 'Cluster Events',
+      if (viewState.viewType === 'cluster' && viewState.activeClusterTab) {
+        const tabTitlesCluster: Record<string, string> = {
+          browse: 'Browse',
+          nodes: 'Nodes',
+          rbac: 'RBAC',
+          storage: 'Storage',
+          config: 'Config',
+          crds: 'CRDs',
+          custom: 'Custom Resources',
+          events: 'Events',
+        };
+        return tabTitlesCluster[viewState.activeClusterTab] || 'Cluster Resources';
+      }
+
+      if (viewState.viewType === 'namespace' && viewState.activeNamespaceTab) {
+        const tabTitlesNamespace: Record<string, string> = {
+          objects: 'All Objects',
+          workloads: 'Workloads',
+          pods: 'Pods',
+          autoscaling: 'Autoscaling',
+          config: 'Config',
+          custom: 'Custom Resources',
+          events: 'Events',
+          helm: 'Helm',
+          network: 'Network',
+          quotas: 'Quotas',
+          rbac: 'RBAC',
+          storage: 'Storage',
+        };
+        return tabTitlesNamespace[viewState.activeNamespaceTab] || 'Namespace';
+      }
+
+      const titles: Record<string, string> = {
+        cluster: 'Cluster Resources',
+        namespace: 'Namespace',
       };
-      return tabTitlesCluster[viewState.activeClusterTab] || 'Cluster Resources';
-    }
+      return titles[viewState.viewType] || '';
+    })();
 
-    // Handle namespace view with active tab
-    if (
-      viewState.viewType === 'namespace' &&
-      viewState.activeNamespaceTab &&
-      namespace.selectedNamespace
-    ) {
-      const resolvedNamespaceName = isAllNamespaces(namespace.selectedNamespace)
-        ? ALL_NAMESPACES_DISPLAY_NAME
-        : namespace.selectedNamespace;
-      const tabTitlesNamespace: Record<string, string> = {
-        objects: `All Objects - ${resolvedNamespaceName}`,
-        workloads: `Workloads - ${resolvedNamespaceName}`,
-        pods: `Pods - ${resolvedNamespaceName}`,
-        autoscaling: `Autoscaling - ${resolvedNamespaceName}`,
-        config: `Config - ${resolvedNamespaceName}`,
-        custom: `Custom Resources - ${resolvedNamespaceName}`,
-        events: `Events - ${resolvedNamespaceName}`,
-        helm: `Helm - ${resolvedNamespaceName}`,
-        network: `Network - ${resolvedNamespaceName}`,
-        quotas: `Quotas - ${resolvedNamespaceName}`,
-        rbac: `RBAC - ${resolvedNamespaceName}`,
-        storage: `Storage - ${resolvedNamespaceName}`,
-      };
-      return tabTitlesNamespace[viewState.activeNamespaceTab] || resolvedNamespaceName;
-    }
-
-    // Handle other view types
-    const titles: Record<string, string> = {
-      cluster: 'Cluster Resources',
-      namespace: isAllNamespaces(namespace.selectedNamespace)
-        ? ALL_NAMESPACES_DISPLAY_NAME
-        : namespace.selectedNamespace || '',
-    };
-    return titles[viewState.viewType] || '';
+    // Compose the header as "cluster - namespace (optional) - view".
+    return [clusterLabel, namespaceLabel, viewLabel].filter(Boolean).join(' - ');
   };
 
   return (

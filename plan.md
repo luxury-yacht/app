@@ -59,6 +59,7 @@
 28. ✅ Scope sidebar namespaces to the active cluster (filter catalog namespace groups + namespace refresh data) and add coverage.
 29. ✅ Update namespace context tests to include multi-cluster payloads after active-cluster filtering.
 30. ✅ Prevent namespace selection updates from running against stale cluster namespace lists.
+31. ✅ Format header title as "cluster-name - namespace (if applicable) - view-name".
 
 ## Risks / watchouts
 
