@@ -79,6 +79,20 @@ const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>(Object.values(CLUSTER_REFRESHE
 
 const noop = () => {};
 
+// Keep merged multi-cluster payloads scoped to the active tab.
+const filterByClusterId = <T extends { clusterId?: string | null }>(
+  items: T[] | null | undefined,
+  clusterId: string | null | undefined
+): T[] | null => {
+  if (!items) {
+    return null;
+  }
+  if (!clusterId) {
+    return items.filter((item) => !item.clusterId);
+  }
+  return items.filter((item) => item.clusterId === clusterId);
+};
+
 function useClusterDomainResource<K extends RefreshDomain, TResult>(
   domainName: K,
   state: DomainSnapshotState<DomainPayloadMap[K]>,
@@ -350,7 +364,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   }, []);
 
   const nodes: ResourceDataReturn<ClusterNodeRow[]> = useMemo(() => {
-    const data = nodeSnapshot ? nodeSnapshot.nodes : null;
+    const data = nodeSnapshot ? filterByClusterId(nodeSnapshot.nodes, selectedClusterId) : null;
     const lastUpdated = nodeMetricsInfo?.collectedAt
       ? new Date(nodeMetricsInfo.collectedAt * 1000)
       : nodeLastUpdated
@@ -419,6 +433,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     nodeMetricsInfo?.failureCount,
     refreshNodes,
     resetNodes,
+    selectedClusterId,
   ]);
 
   const domainStateRef = useRef<Partial<Record<RefreshDomain, DomainSnapshotState<any>>>>({
@@ -467,7 +482,11 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
       }
 
       if (nextDomain !== 'nodes' && domainPermissionPending[nextDomain]) {
-        refreshOrchestrator.setDomainEnabled(nextDomain, false);
+        const pendingState = domainStateRef.current[nextDomain];
+        if (!pendingState?.data) {
+          // Keep cached data when permissions are still resolving to avoid tab-switch flicker.
+          refreshOrchestrator.setDomainEnabled(nextDomain, false);
+        }
         return;
       }
 
@@ -517,28 +536,34 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   }, [setActiveResourceTypeWithCallback]);
 
   const rbacExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-rbac'] | null) => payload?.resources ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-rbac'] | null) =>
+      filterByClusterId(payload?.resources ?? null, selectedClusterId),
+    [selectedClusterId]
   );
   const storageExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-storage'] | null) => payload?.volumes ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-storage'] | null) =>
+      filterByClusterId(payload?.volumes ?? null, selectedClusterId),
+    [selectedClusterId]
   );
   const configExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-config'] | null) => payload?.resources ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-config'] | null) =>
+      filterByClusterId(payload?.resources ?? null, selectedClusterId),
+    [selectedClusterId]
   );
   const crdExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-crds'] | null) => payload?.definitions ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-crds'] | null) =>
+      filterByClusterId(payload?.definitions ?? null, selectedClusterId),
+    [selectedClusterId]
   );
   const customExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-custom'] | null) => payload?.resources ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-custom'] | null) =>
+      filterByClusterId(payload?.resources ?? null, selectedClusterId),
+    [selectedClusterId]
   );
   const eventsExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-events'] | null) => payload?.events ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-events'] | null) =>
+      filterByClusterId(payload?.events ?? null, selectedClusterId),
+    [selectedClusterId]
   );
 
   const rbac = useClusterDomainResource('cluster-rbac', rbacDomain, rbacExtractor);

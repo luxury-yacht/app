@@ -431,8 +431,27 @@ class RefreshManager {
     current: RefreshContext
   ): RefresherName[] {
     const targets = new Set<RefresherName>();
+    const normalizeClusterIds = (ids?: string[]) =>
+      (ids ?? []).map((id) => id.trim()).filter(Boolean);
+    const hasSameClusterSelection = (left?: string[], right?: string[]) => {
+      const leftSet = new Set(normalizeClusterIds(left));
+      const rightSet = new Set(normalizeClusterIds(right));
+      if (leftSet.size !== rightSet.size) {
+        return false;
+      }
+      for (const id of leftSet) {
+        if (!rightSet.has(id)) {
+          return false;
+        }
+      }
+      return true;
+    };
     // Switching active clusters should refresh the active view even if the view type is unchanged.
     const clusterChanged = previous.selectedClusterId !== current.selectedClusterId;
+    const clusterSelectionChanged = !hasSameClusterSelection(
+      previous.selectedClusterIds,
+      current.selectedClusterIds
+    );
 
     // Namespace scope changes include the cluster identity tied to the selection.
     const namespaceChanged =
@@ -459,7 +478,19 @@ class RefreshManager {
       }
     }
 
-    if (clusterChanged && current.currentView === 'cluster') {
+    // Avoid forced refreshes on cluster switches when background refresh already covers all tabs.
+    const hasMultiClusterScope = (current.selectedClusterIds ?? []).length > 1;
+
+    if (clusterChanged && current.currentView === 'cluster' && !hasMultiClusterScope) {
+      const clusterRefresher = current.activeClusterView
+        ? clusterViewToRefresher[current.activeClusterView]
+        : null;
+      if (clusterRefresher) {
+        targets.add(clusterRefresher);
+      }
+    }
+
+    if (clusterSelectionChanged && current.currentView === 'cluster') {
       const clusterRefresher = current.activeClusterView
         ? clusterViewToRefresher[current.activeClusterView]
         : null;

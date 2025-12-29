@@ -44,6 +44,9 @@ const DEFAULT_SIDEBAR_SELECTION: SidebarSelectionType = {
   value: 'overview',
 };
 
+const canUpdateSidebarVisible = () =>
+  typeof window !== 'undefined' && Boolean((window as any).go?.backend?.App?.SetSidebarVisible);
+
 export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ children }) => {
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
@@ -60,6 +63,9 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
 
   // Sync sidebar state with backend on mount and changes
   useEffect(() => {
+    if (!canUpdateSidebarVisible()) {
+      return;
+    }
     import('@wailsjs/go/backend/App').then(({ SetSidebarVisible }) => {
       SetSidebarVisible(isSidebarVisible);
     });
@@ -68,9 +74,11 @@ export const SidebarStateProvider: React.FC<SidebarStateProviderProps> = ({ chil
   const toggleSidebar = useCallback(() => {
     setIsSidebarVisible((prev) => {
       const newState = !prev;
-      import('@wailsjs/go/backend/App').then(({ SetSidebarVisible }) => {
-        SetSidebarVisible(newState);
-      });
+      if (canUpdateSidebarVisible()) {
+        import('@wailsjs/go/backend/App').then(({ SetSidebarVisible }) => {
+          SetSidebarVisible(newState);
+        });
+      }
       return newState;
     });
   }, []);

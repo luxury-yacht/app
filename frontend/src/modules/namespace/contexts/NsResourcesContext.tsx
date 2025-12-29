@@ -92,6 +92,20 @@ const DOMAIN_BY_RESOURCE: Partial<Record<NamespaceViewType, RefreshDomain | null
   events: 'namespace-events',
 };
 
+// Filter merged namespace payloads to the active cluster tab.
+const filterByClusterId = <T extends { clusterId?: string | null }>(
+  items: T[] | null | undefined,
+  clusterId?: string | null
+): T[] => {
+  if (!items || items.length === 0) {
+    return [];
+  }
+  if (!clusterId) {
+    return items.filter((item) => !item.clusterId);
+  }
+  return items.filter((item) => item.clusterId === clusterId);
+};
+
 type NamespaceCapabilitySpec = {
   id: string;
   resourceKind: string;
@@ -653,7 +667,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const workloads = useRefreshBackedResource<any[]>(
     'workloads',
     'namespace-workloads',
-    (payload) => payload?.workloads ?? [],
+    (payload) => filterByClusterId(payload?.workloads, namespaceClusterId),
     [],
     isResourceActive('workloads'),
     currentNamespace,
@@ -663,7 +677,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const config = useRefreshBackedResource<any[]>(
     'config',
     'namespace-config',
-    (payload) => payload?.resources ?? [],
+    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
     [],
     isResourceActive('config'),
     currentNamespace,
@@ -673,7 +687,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const network = useRefreshBackedResource<any[]>(
     'network',
     'namespace-network',
-    (payload) => payload?.resources ?? [],
+    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
     [],
     isResourceActive('network'),
     currentNamespace,
@@ -683,7 +697,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const rbac = useRefreshBackedResource<any[]>(
     'rbac',
     'namespace-rbac',
-    (payload) => payload?.resources ?? [],
+    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
     [],
     isResourceActive('rbac'),
     currentNamespace,
@@ -693,7 +707,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const storage = useRefreshBackedResource<any[]>(
     'storage',
     'namespace-storage',
-    (payload) => payload?.resources ?? [],
+    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
     [],
     isResourceActive('storage'),
     currentNamespace,
@@ -704,24 +718,26 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     'autoscaling',
     'namespace-autoscaling',
     (payload?: NamespaceAutoscalingSnapshotPayload) =>
-      (payload?.resources ?? []).map((item: NamespaceAutoscalingSummary) => {
-        const scaleTargetRef = parseAutoscalingTarget(item.target);
-        return {
-          kind: item.kind,
-          kindAlias: item.kind,
-          name: item.name,
-          namespace: item.namespace,
-          scaleTargetRef,
-          target: item.target,
-          min: item.min,
-          max: item.max,
-          current: item.current,
-          minReplicas: item.min,
-          maxReplicas: item.max,
-          currentReplicas: item.current,
-          age: item.age,
-        };
-      }),
+      filterByClusterId(payload?.resources, namespaceClusterId).map(
+        (item: NamespaceAutoscalingSummary) => {
+          const scaleTargetRef = parseAutoscalingTarget(item.target);
+          return {
+            kind: item.kind,
+            kindAlias: item.kind,
+            name: item.name,
+            namespace: item.namespace,
+            scaleTargetRef,
+            target: item.target,
+            min: item.min,
+            max: item.max,
+            current: item.current,
+            minReplicas: item.min,
+            maxReplicas: item.max,
+            currentReplicas: item.current,
+            age: item.age,
+          };
+        }
+      ),
     [],
     isResourceActive('autoscaling'),
     currentNamespace,
@@ -731,7 +747,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const quotas = useRefreshBackedResource<any[]>(
     'quotas',
     'namespace-quotas',
-    (payload) => payload?.resources ?? [],
+    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
     [],
     isResourceActive('quotas'),
     currentNamespace,
@@ -741,7 +757,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const events = useRefreshBackedResource<any[]>(
     'events',
     'namespace-events',
-    (payload) => payload?.events ?? [],
+    (payload) => filterByClusterId(payload?.events, namespaceClusterId),
     [],
     isResourceActive('events'),
     currentNamespace,
@@ -756,17 +772,19 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     'custom',
     'namespace-custom',
     (payload?: NamespaceCustomSnapshotPayload) =>
-      (payload?.resources ?? []).map((item: NamespaceCustomSummary) => ({
-        kind: item.kind,
-        kindAlias: item.kind,
-        name: item.name,
-        namespace: item.namespace,
-        apiGroup: item.apiGroup,
-        age: item.age,
-        // Preserve metadata for the custom view/object panel.
-        labels: item.labels,
-        annotations: item.annotations,
-      })),
+      filterByClusterId(payload?.resources, namespaceClusterId).map(
+        (item: NamespaceCustomSummary) => ({
+          kind: item.kind,
+          kindAlias: item.kind,
+          name: item.name,
+          namespace: item.namespace,
+          apiGroup: item.apiGroup,
+          age: item.age,
+          // Preserve metadata for the custom view/object panel.
+          labels: item.labels,
+          annotations: item.annotations,
+        })
+      ),
     [],
     isResourceActive('custom'),
     currentNamespace,
@@ -777,19 +795,21 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     'helm',
     'namespace-helm',
     (payload?: NamespaceHelmSnapshotPayload) =>
-      (payload?.releases ?? []).map((release: NamespaceHelmSummary) => ({
-        kind: 'HelmRelease',
-        name: release.name,
-        namespace: release.namespace,
-        chart: release.chart,
-        appVersion: release.appVersion,
-        status: release.status,
-        revision: release.revision,
-        updated: release.updated,
-        description: release.description,
-        notes: release.notes,
-        age: release.age,
-      })),
+      filterByClusterId(payload?.releases, namespaceClusterId).map(
+        (release: NamespaceHelmSummary) => ({
+          kind: 'HelmRelease',
+          name: release.name,
+          namespace: release.namespace,
+          chart: release.chart,
+          appVersion: release.appVersion,
+          status: release.status,
+          revision: release.revision,
+          updated: release.updated,
+          description: release.description,
+          notes: release.notes,
+          age: release.age,
+        })
+      ),
     [],
     isResourceActive('helm'),
     currentNamespace,

@@ -11,6 +11,7 @@
 - Cluster tabs replace the cluster columns/filters; remove all cluster column/filter UI and persistence.
 - Cluster tabs are hidden unless multiple clusters are open; initial order follows kubeconfig selection order, but manual drag order persists across restarts (closed tabs reset to selection order when reopened).
 - Refresh is per-tab by default; add a settings toggle to refresh background tabs when enabled.
+- Background refresh defaults to enabled on startup; skip forced manual refreshes on cluster tab switches when background refresh has multi-cluster scope.
 - Use a single refresh orchestrator; scope refresh context to the active tab by default.
 - Logs/diagnostics/modals remain outside tab context; each tab has its own sidebar, main content, and object panel.
 - Do not add new dependencies for drag-and-drop.
@@ -68,6 +69,11 @@
 37. ✅ Expand cluster tabs to fit full cluster names (remove truncation/max widths).
 38. ✅ Ensure unscoped refresh domains include active cluster scope so same-view tab switches refresh correctly.
 39. ✅ Fix unused renderSelectedValue parameter in kubeconfig dropdown.
+40. ✅ Scope cluster/namespace/browse view data to the active cluster to prevent cross-tab data bleed; update tests as needed.
+41. ✅ Default background refresh to enabled and skip manual refresh on cluster tab switches when multi-cluster background refresh is active.
+42. ✅ Avoid clearing cluster domain data when permissions are pending so background-refreshed data stays visible on tab switches.
+43. ✅ Guard SidebarStateContext Wails calls so tests don't invoke `window.go`; remove the global App mock that caused hangs.
+44. ✅ Trigger a manual refresh for the active cluster view when the selected cluster list changes to preload new tabs.
 
 ## Risks / watchouts
 

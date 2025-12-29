@@ -822,6 +822,24 @@ describe('RefreshManager guard paths and helpers', () => {
     expect(manualTargets).toEqual([]);
   });
 
+  it('skips cluster manual targets when background refresh has multi-cluster scope', () => {
+    const previous: RefreshContext = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+      objectPanel: { isOpen: false },
+    };
+    const current: RefreshContext = {
+      ...previous,
+      selectedClusterId: 'cluster-b',
+    };
+
+    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+
+    expect(manualTargets).toEqual([]);
+  });
+
   it('skips manual refreshes when the cluster view is cleared', () => {
     const manualSpy = vi
       .spyOn(refreshManager, 'triggerManualRefreshMany')
@@ -848,6 +866,24 @@ describe('RefreshManager guard paths and helpers', () => {
       activeClusterView: undefined,
       objectPanel: { isOpen: false },
     });
+  });
+
+  it('refreshes the active cluster view when the cluster selection list changes', () => {
+    const previous: RefreshContext = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      objectPanel: { isOpen: false },
+    };
+    const current: RefreshContext = {
+      ...previous,
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    };
+
+    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+
+    expect(manualTargets).toEqual(['cluster-config']);
   });
 
   it('adds object panel refreshers when the panel target changes', () => {

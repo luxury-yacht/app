@@ -61,6 +61,14 @@ type PageRequestMode = 'reset' | 'append' | null;
 const parseContinueToken = (value: unknown): string | null =>
   typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 
+// Keep catalog data aligned to the active cluster tab.
+const filterCatalogItems = (items: CatalogItem[], clusterId?: string | null): CatalogItem[] => {
+  if (!clusterId) {
+    return items.filter((item) => !item.clusterId);
+  }
+  return items.filter((item) => item.clusterId === clusterId);
+};
+
 type UpsertResult = {
   nextItems: CatalogItem[];
   changed: boolean;
@@ -376,9 +384,14 @@ const BrowseView: React.FC = () => {
     []
   );
 
+  const filteredItems = useMemo(
+    () => filterCatalogItems(items, selectedClusterId),
+    [items, selectedClusterId]
+  );
+
   const rows = useMemo(
-    () => toTableRows(items, useShortResourceNames),
-    [items, useShortResourceNames]
+    () => toTableRows(filteredItems, useShortResourceNames),
+    [filteredItems, useShortResourceNames]
   );
 
   // Hold the initial snapshot flag so filter-driven refreshes don't unmount the table.

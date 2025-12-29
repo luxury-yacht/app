@@ -1,3 +1,5 @@
+import { vi } from 'vitest';
+
 const ensureStorage = (key: 'localStorage' | 'sessionStorage') => {
   const existing = (globalThis as any)[key];
   if (
@@ -43,9 +45,9 @@ ensureStorage('sessionStorage');
 
 // Ensure React testing utilities run without extra warnings
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOnMultiple: () => undefined,
   EventsOff: () => undefined,
   EventsOn: () => undefined,
 }));
-import { vi } from 'vitest';

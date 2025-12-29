@@ -10,8 +10,17 @@ import { eventBus } from '@/core/events';
 
 const STORAGE_KEY = 'refreshBackgroundClustersEnabled';
 
-const readStoredValue = (): boolean =>
-  typeof window !== 'undefined' && window.localStorage?.getItem(STORAGE_KEY) === 'true';
+const readStoredValue = (): boolean => {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+  const stored = window.localStorage?.getItem(STORAGE_KEY);
+  if (stored == null) {
+    // Default to enabled unless the user explicitly disables it.
+    return true;
+  }
+  return stored === 'true';
+};
 
 export function useBackgroundRefresh() {
   const [enabled, setEnabled] = useState(() => readStoredValue());
