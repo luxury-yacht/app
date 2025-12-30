@@ -104,23 +104,24 @@
 - Frontend should clear app-specific browser storage (localStorage, sessionStorage, GridTable persistence keys).
 - This must run before migration work so users can recover from failed or partial migrations.
 
-### Phase 1: Storage & Schema Foundation
+### Phase 1: Storage & Schema Foundation ✅
 - Add backend settings store in `os.UserConfigDir()/luxury-yacht` with atomic read/write helpers.
 - Define `settings.json` and `persistence.json` structs with `schemaVersion` and `updatedAt`.
 - Wire load/save for window settings + core preferences into the new store.
 
-### Phase 2: Migration (Legacy -> New)
-- Execute the one-time migration plan to import legacy backend files and frontend `localStorage`.
-- Delete legacy stores only after successful migration.
-
-### Phase 3: Frontend Settings Migration
+### Phase 2: Frontend Settings Migration
 - Replace `localStorage` usage for theme, short names, refresh toggles, and GridTable persistence mode with backend APIs.
-- Keep in-memory caching where needed, but treat backend as source of truth.
+- Keep legacy `localStorage` reads for hydration until migration is complete.
+- Treat backend as source of truth once migration is done.
 
-### Phase 4: UI Persistence Migration
+### Phase 3: UI Persistence Migration
 - Move GridTable persistence and cluster tab ordering into `persistence.json`.
 - Ensure `clusterTabs.order` uses full `path:context` selections.
 - Keep cleanup logic to prune stale entries after restore or config changes.
+
+### Phase 4: Migration (Legacy -> New)
+- Execute the one-time migration plan to import legacy backend files and frontend `localStorage`.
+- Delete legacy stores only after successful migration.
 
 ### Phase 5: Backup/Restore (Secondary)
 - Implement export/import to/from a single JSON payload containing `settings` + `persistence`.
