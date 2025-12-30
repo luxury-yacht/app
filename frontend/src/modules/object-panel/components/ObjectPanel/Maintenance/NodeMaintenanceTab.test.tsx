@@ -100,6 +100,7 @@ describe('NodeMaintenanceTab', () => {
               } as any
             }
             isActive
+            clusterId="alpha:ctx"
             {...props}
           />
         </KeyboardProvider>
@@ -131,7 +132,7 @@ describe('NodeMaintenanceTab', () => {
     });
     await confirmModal();
 
-    expect(mockCordonNode).toHaveBeenCalledWith('node-1');
+    expect(mockCordonNode).toHaveBeenCalledWith('alpha:ctx', 'node-1');
   });
 
   it('uncordons a cordoned node when the button is clicked', async () => {
@@ -150,7 +151,7 @@ describe('NodeMaintenanceTab', () => {
     });
     await confirmModal();
 
-    expect(mockUncordonNode).toHaveBeenCalledWith('node-2');
+    expect(mockUncordonNode).toHaveBeenCalledWith('alpha:ctx', 'node-2');
   });
 
   it('drains a node with the configured options', async () => {
@@ -171,7 +172,11 @@ describe('NodeMaintenanceTab', () => {
     });
     await confirmModal();
 
-    expect(mockDrainNode).toHaveBeenCalledWith('node-1', expect.objectContaining({ force: true }));
+    expect(mockDrainNode).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'node-1',
+      expect.objectContaining({ force: true })
+    );
     expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalled();
   });
 
@@ -214,7 +219,7 @@ describe('NodeMaintenanceTab', () => {
     expect(mockDrainNode).not.toHaveBeenCalled();
     expect(mockCordonNode).toHaveBeenCalledTimes(0);
     expect(mockUncordonNode).toHaveBeenCalledTimes(0);
-    expect(mockDeleteNode).toHaveBeenCalledWith('node-1');
+    expect(mockDeleteNode).toHaveBeenCalledWith('alpha:ctx', 'node-1');
   });
 
   it('disables delete when capability is denied', () => {

@@ -25,12 +25,15 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 // Define the data structure for cluster custom resources
 interface ClusterCustomData {
   kind: string;
   kindAlias?: string;
   name: string;
+  clusterId?: string;
+  clusterName?: string;
   apiGroup?: string;
   age?: string;
   labels?: Record<string, string>;
@@ -52,7 +55,7 @@ interface ClusterCustomViewProps {
 const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
 
     const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -69,6 +72,8 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           age: resource.age,
           labels: resource.labels,
           annotations: resource.annotations,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]
@@ -76,7 +81,10 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
 
     const keyExtractor = useCallback(
       (resource: ClusterCustomData) =>
-        ['custom', resource.kind, resource.name].filter(Boolean).join('/'),
+        buildClusterScopedKey(
+          resource,
+          ['custom', resource.kind, resource.name].filter(Boolean).join('/')
+        ),
       []
     );
 
@@ -130,7 +138,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<ClusterCustomData>({
       viewId: 'cluster-custom',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns,
@@ -150,7 +158,13 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       if (!deleteConfirm.resource) return;
 
       try {
-        await DeleteResource(deleteConfirm.resource.kind, '', deleteConfirm.resource.name);
+        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? '';
+        await DeleteResource(
+          clusterId,
+          deleteConfirm.resource.kind,
+          '',
+          deleteConfirm.resource.name
+        );
       } catch (err) {
         errorHandler.handle(err, {
           action: 'delete',
@@ -160,7 +174,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       } finally {
         setDeleteConfirm({ show: false, resource: null });
       }
-    }, [deleteConfirm.resource]);
+    }, [deleteConfirm.resource, selectedClusterId]);
 
     // Get context menu items
     const getContextMenuItems = useCallback(

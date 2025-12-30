@@ -22,18 +22,46 @@ type Row = {
   namespace: string | null;
   name: string;
   description: string;
+  clusterId: string;
+  clusterName: string;
 };
 
 const rows: Row[] = [
-  { id: '1', kind: 'Deployment', namespace: 'default', name: 'frontend', description: 'web app' },
-  { id: '2', kind: 'Pod', namespace: 'default', name: 'frontend-1', description: 'pod instance' },
-  { id: '3', kind: 'Deployment', namespace: 'platform', name: 'gateway', description: 'edge' },
+  {
+    id: '1',
+    kind: 'Deployment',
+    namespace: 'default',
+    name: 'frontend',
+    description: 'web app',
+    clusterId: 'alpha:ctx',
+    clusterName: 'alpha',
+  },
+  {
+    id: '2',
+    kind: 'Pod',
+    namespace: 'default',
+    name: 'frontend-1',
+    description: 'pod instance',
+    clusterId: 'alpha:ctx',
+    clusterName: 'alpha',
+  },
+  {
+    id: '3',
+    kind: 'Deployment',
+    namespace: 'platform',
+    name: 'gateway',
+    description: 'edge',
+    clusterId: 'beta:ctx',
+    clusterName: 'beta',
+  },
   {
     id: '4',
     kind: 'ConfigMap',
     namespace: null,
     name: 'global-config',
     description: 'cluster wide',
+    clusterId: 'beta:ctx',
+    clusterName: 'beta',
   },
 ];
 

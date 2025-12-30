@@ -66,7 +66,7 @@ describe('YamlTab shortcuts', () => {
     root = ReactDOM.createRoot(container);
 
     await act(async () => {
-      root.render(<YamlTab scope="team-a:pod:demo" isActive canEdit />);
+      root.render(<YamlTab scope="team-a:pod:demo" isActive canEdit clusterId="alpha:ctx" />);
       await Promise.resolve();
     });
   });

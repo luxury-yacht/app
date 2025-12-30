@@ -15,8 +15,12 @@ const rolloutAnnotation = "kubectl.kubernetes.io/restartedAt"
 
 // RestartWorkload performs a rollout restart by patching the pod template metadata on the target workload.
 // Supported workload kinds: Deployment, StatefulSet, DaemonSet.
-func (a *App) RestartWorkload(namespace, name, workloadKind string) error {
-	if a.client == nil {
+func (a *App) RestartWorkload(clusterID, namespace, name, workloadKind string) error {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return err
+	}
+	if deps.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client is not initialized")
 	}
 
@@ -38,26 +42,31 @@ func (a *App) RestartWorkload(namespace, name, workloadKind string) error {
 		return fmt.Errorf("failed to marshal restart patch: %w", err)
 	}
 
+	ctx := deps.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	switch workloadKind {
 	case "Deployment":
-		_, err = a.client.AppsV1().Deployments(namespace).Patch(
-			a.CtxOrBackground(),
+		_, err = deps.KubernetesClient.AppsV1().Deployments(namespace).Patch(
+			ctx,
 			name,
 			types.StrategicMergePatchType,
 			patchBytes,
 			metav1.PatchOptions{},
 		)
 	case "StatefulSet":
-		_, err = a.client.AppsV1().StatefulSets(namespace).Patch(
-			a.CtxOrBackground(),
+		_, err = deps.KubernetesClient.AppsV1().StatefulSets(namespace).Patch(
+			ctx,
 			name,
 			types.StrategicMergePatchType,
 			patchBytes,
 			metav1.PatchOptions{},
 		)
 	case "DaemonSet":
-		_, err = a.client.AppsV1().DaemonSets(namespace).Patch(
-			a.CtxOrBackground(),
+		_, err = deps.KubernetesClient.AppsV1().DaemonSets(namespace).Patch(
+			ctx,
 			name,
 			types.StrategicMergePatchType,
 			patchBytes,
@@ -71,14 +80,20 @@ func (a *App) RestartWorkload(namespace, name, workloadKind string) error {
 		return fmt.Errorf("failed to restart %s/%s (%s): %w", namespace, name, workloadKind, err)
 	}
 
-	a.logger.Info(fmt.Sprintf("Restarted %s %s/%s", workloadKind, namespace, name), "RestartWorkload")
+	if deps.Logger != nil {
+		deps.Logger.Info(fmt.Sprintf("Restarted %s %s/%s", workloadKind, namespace, name), "RestartWorkload")
+	}
 	return nil
 }
 
 // ScaleWorkload updates the replica count on a scalable workload.
 // Supported workload kinds: Deployment, StatefulSet, ReplicaSet.
-func (a *App) ScaleWorkload(namespace, name, workloadKind string, replicas int) error {
-	if a.client == nil {
+func (a *App) ScaleWorkload(clusterID, namespace, name, workloadKind string, replicas int) error {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return err
+	}
+	if deps.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client is not initialized")
 	}
 
@@ -94,10 +109,15 @@ func (a *App) ScaleWorkload(namespace, name, workloadKind string, replicas int) 
 		Spec: autoscalingv1.ScaleSpec{Replicas: int32(replicas)},
 	}
 
+	ctx := deps.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	switch workloadKind {
 	case "Deployment":
-		_, err := a.client.AppsV1().Deployments(namespace).UpdateScale(
-			a.CtxOrBackground(),
+		_, err := deps.KubernetesClient.AppsV1().Deployments(namespace).UpdateScale(
+			ctx,
 			name,
 			scale,
 			metav1.UpdateOptions{},
@@ -106,8 +126,8 @@ func (a *App) ScaleWorkload(namespace, name, workloadKind string, replicas int) 
 			return fmt.Errorf("failed to scale deployment %s/%s: %w", namespace, name, err)
 		}
 	case "StatefulSet":
-		_, err := a.client.AppsV1().StatefulSets(namespace).UpdateScale(
-			a.CtxOrBackground(),
+		_, err := deps.KubernetesClient.AppsV1().StatefulSets(namespace).UpdateScale(
+			ctx,
 			name,
 			scale,
 			metav1.UpdateOptions{},
@@ -116,8 +136,8 @@ func (a *App) ScaleWorkload(namespace, name, workloadKind string, replicas int) 
 			return fmt.Errorf("failed to scale statefulset %s/%s: %w", namespace, name, err)
 		}
 	case "ReplicaSet":
-		_, err := a.client.AppsV1().ReplicaSets(namespace).UpdateScale(
-			a.CtxOrBackground(),
+		_, err := deps.KubernetesClient.AppsV1().ReplicaSets(namespace).UpdateScale(
+			ctx,
 			name,
 			scale,
 			metav1.UpdateOptions{},
@@ -129,7 +149,12 @@ func (a *App) ScaleWorkload(namespace, name, workloadKind string, replicas int) 
 		return fmt.Errorf("scaling not supported for workload kind %q", workloadKind)
 	}
 
-	a.logger.Info(fmt.Sprintf("Scaled %s %s/%s to %d replicas", workloadKind, namespace, name, replicas), "ScaleWorkload")
+	if deps.Logger != nil {
+		deps.Logger.Info(
+			fmt.Sprintf("Scaled %s %s/%s to %d replicas", workloadKind, namespace, name, replicas),
+			"ScaleWorkload",
+		)
+	}
 	return nil
 }
 

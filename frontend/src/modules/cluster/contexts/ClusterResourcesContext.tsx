@@ -44,6 +44,7 @@ import type {
 import type { ClusterViewType } from '@/types/navigation/views';
 import { useUserPermission } from '@/core/capabilities';
 import type { PermissionStatus } from '@/core/capabilities';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 export type { ClusterNodeRow } from '@/core/refresh/types';
 
@@ -77,6 +78,20 @@ const CLUSTER_REFRESHER_TO_DOMAIN: Partial<Record<ClusterRefresherName, RefreshD
 const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>(Object.values(CLUSTER_REFRESHER_TO_DOMAIN));
 
 const noop = () => {};
+
+// Keep merged multi-cluster payloads scoped to the active tab.
+const filterByClusterId = <T extends { clusterId?: string | null }>(
+  items: T[] | null | undefined,
+  clusterId: string | null | undefined
+): T[] | null => {
+  if (!items) {
+    return null;
+  }
+  if (!clusterId) {
+    return items.filter((item) => !item.clusterId);
+  }
+  return items.filter((item) => item.clusterId === clusterId);
+};
 
 function useClusterDomainResource<K extends RefreshDomain, TResult>(
   domainName: K,
@@ -186,28 +201,72 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const customDomain = useRefreshDomain('cluster-custom');
   const eventsDomain = useRefreshDomain('cluster-events');
 
-  const nodeListPermission = useUserPermission('Node', 'list');
-  const storageListPermission = useUserPermission('PersistentVolume', 'list');
-  const rbacClusterRolePermission = useUserPermission('ClusterRole', 'list');
-  const rbacClusterRoleBindingPermission = useUserPermission('ClusterRoleBinding', 'list');
-  const crdListPermission = useUserPermission('CustomResourceDefinition', 'list');
-  const eventListPermission = useUserPermission('Event', 'list');
-  const configStorageClassPermission = useUserPermission('StorageClass', 'list');
-  const configIngressClassPermission = useUserPermission('IngressClass', 'list');
-  const configMutatingWebhookPermission = useUserPermission('MutatingWebhookConfiguration', 'list');
+  const { selectedClusterId } = useKubeconfig();
+  // Ensure permission state is tracked per-cluster to prevent cross-cluster leakage.
+  const permissionClusterId = selectedClusterId || null;
+
+  const nodeListPermission = useUserPermission('Node', 'list', null, null, permissionClusterId);
+  const storageListPermission = useUserPermission(
+    'PersistentVolume',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const rbacClusterRolePermission = useUserPermission(
+    'ClusterRole',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const rbacClusterRoleBindingPermission = useUserPermission(
+    'ClusterRoleBinding',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const crdListPermission = useUserPermission(
+    'CustomResourceDefinition',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const eventListPermission = useUserPermission('Event', 'list', null, null, permissionClusterId);
+  const configStorageClassPermission = useUserPermission(
+    'StorageClass',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const configIngressClassPermission = useUserPermission(
+    'IngressClass',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const configMutatingWebhookPermission = useUserPermission(
+    'MutatingWebhookConfiguration',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
   const configValidatingWebhookPermission = useUserPermission(
     'ValidatingWebhookConfiguration',
-    'list'
+    'list',
+    null,
+    null,
+    permissionClusterId
   );
 
   const isPermissionDenied = useCallback(
     (permission?: PermissionStatus | null): boolean =>
       Boolean(permission && !permission.pending && !permission.allowed),
-    []
-  );
-
-  const isPermissionPending = useCallback(
-    (permission?: PermissionStatus | null): boolean => Boolean(permission?.pending),
     []
   );
 
@@ -243,40 +302,17 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     storageListPermission,
   ]);
 
-  const domainPermissionPending = useMemo(() => {
-    const configPending =
-      isPermissionPending(configStorageClassPermission) ||
-      isPermissionPending(configIngressClassPermission) ||
-      isPermissionPending(configMutatingWebhookPermission) ||
-      isPermissionPending(configValidatingWebhookPermission);
-
-    return {
-      nodes: isPermissionPending(nodeListPermission),
-      'cluster-storage': isPermissionPending(storageListPermission),
-      'cluster-rbac':
-        isPermissionPending(rbacClusterRolePermission) ||
-        isPermissionPending(rbacClusterRoleBindingPermission),
-      'cluster-config': configPending,
-      'cluster-crds': isPermissionPending(crdListPermission),
-      'cluster-custom': isPermissionPending(crdListPermission),
-      'cluster-events': isPermissionPending(eventListPermission),
-    } as Partial<Record<RefreshDomain, boolean>>;
-  }, [
-    configIngressClassPermission,
-    configMutatingWebhookPermission,
-    configStorageClassPermission,
-    configValidatingWebhookPermission,
-    crdListPermission,
-    eventListPermission,
-    isPermissionPending,
-    nodeListPermission,
-    rbacClusterRoleBindingPermission,
-    rbacClusterRolePermission,
-    storageListPermission,
-  ]);
-
-  const nodeMetricsInfo = nodeDomain.data?.metrics;
   const nodeSnapshot = nodeDomain.data;
+  const nodeMetricsInfo = useMemo(() => {
+    if (!nodeSnapshot) {
+      return undefined;
+    }
+    const metricsByCluster = nodeSnapshot.metricsByCluster;
+    if (metricsByCluster) {
+      return selectedClusterId ? (metricsByCluster[selectedClusterId] ?? undefined) : undefined;
+    }
+    return nodeSnapshot.metrics;
+  }, [nodeSnapshot, selectedClusterId]);
   const nodeStatus = nodeDomain.status;
   const nodeError = nodeDomain.error;
   const nodeLastUpdated = nodeDomain.lastUpdated;
@@ -300,7 +336,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   }, []);
 
   const nodes: ResourceDataReturn<ClusterNodeRow[]> = useMemo(() => {
-    const data = nodeSnapshot ? nodeSnapshot.nodes : null;
+    const data = nodeSnapshot ? filterByClusterId(nodeSnapshot.nodes, selectedClusterId) : null;
     const lastUpdated = nodeMetricsInfo?.collectedAt
       ? new Date(nodeMetricsInfo.collectedAt * 1000)
       : nodeLastUpdated
@@ -369,6 +405,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     nodeMetricsInfo?.failureCount,
     refreshNodes,
     resetNodes,
+    selectedClusterId,
   ]);
 
   const domainStateRef = useRef<Partial<Record<RefreshDomain, DomainSnapshotState<any>>>>({
@@ -415,11 +452,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
         activeClusterRefresherRef.current = null;
         return;
       }
-
-      if (nextDomain !== 'nodes' && domainPermissionPending[nextDomain]) {
-        refreshOrchestrator.setDomainEnabled(nextDomain, false);
-        return;
-      }
+      // Allow fetches even while permissions are pending to avoid delaying the view.
 
       refreshOrchestrator.setDomainEnabled(nextDomain, true);
       const state = domainStateRef.current[nextDomain];
@@ -434,7 +467,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     }
 
     activeClusterRefresherRef.current = nextRefresher ?? null;
-  }, [activeResourceType, domainPermissionDenied, domainPermissionPending]);
+  }, [activeResourceType, domainPermissionDenied]);
 
   useEffect(() => {
     return () => {
@@ -467,28 +500,34 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   }, [setActiveResourceTypeWithCallback]);
 
   const rbacExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-rbac'] | null) => payload?.resources ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-rbac'] | null) =>
+      filterByClusterId(payload?.resources ?? null, selectedClusterId),
+    [selectedClusterId]
   );
   const storageExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-storage'] | null) => payload?.volumes ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-storage'] | null) =>
+      filterByClusterId(payload?.volumes ?? null, selectedClusterId),
+    [selectedClusterId]
   );
   const configExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-config'] | null) => payload?.resources ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-config'] | null) =>
+      filterByClusterId(payload?.resources ?? null, selectedClusterId),
+    [selectedClusterId]
   );
   const crdExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-crds'] | null) => payload?.definitions ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-crds'] | null) =>
+      filterByClusterId(payload?.definitions ?? null, selectedClusterId),
+    [selectedClusterId]
   );
   const customExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-custom'] | null) => payload?.resources ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-custom'] | null) =>
+      filterByClusterId(payload?.resources ?? null, selectedClusterId),
+    [selectedClusterId]
   );
   const eventsExtractor = useCallback(
-    (payload: DomainPayloadMap['cluster-events'] | null) => payload?.events ?? null,
-    []
+    (payload: DomainPayloadMap['cluster-events'] | null) =>
+      filterByClusterId(payload?.events ?? null, selectedClusterId),
+    [selectedClusterId]
   );
 
   const rbac = useClusterDomainResource('cluster-rbac', rbacDomain, rbacExtractor);
@@ -533,52 +572,31 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
         case 'nodes':
           return nodes.data !== null
             ? true
-            : nodes.loading ||
-                !!nodes.error ||
-                domainPermissionDenied['nodes'] ||
-                domainPermissionPending['nodes'];
+            : nodes.loading || !!nodes.error || domainPermissionDenied['nodes'];
         case 'rbac':
           return rbac.data !== null
             ? true
-            : rbac.loading ||
-                !!rbac.error ||
-                domainPermissionDenied['cluster-rbac'] ||
-                domainPermissionPending['cluster-rbac'];
+            : rbac.loading || !!rbac.error || domainPermissionDenied['cluster-rbac'];
         case 'storage':
           return storage.data !== null
             ? true
-            : storage.loading ||
-                !!storage.error ||
-                domainPermissionDenied['cluster-storage'] ||
-                domainPermissionPending['cluster-storage'];
+            : storage.loading || !!storage.error || domainPermissionDenied['cluster-storage'];
         case 'config':
           return config.data !== null
             ? true
-            : config.loading ||
-                !!config.error ||
-                domainPermissionDenied['cluster-config'] ||
-                domainPermissionPending['cluster-config'];
+            : config.loading || !!config.error || domainPermissionDenied['cluster-config'];
         case 'crds':
           return crds.data !== null
             ? true
-            : crds.loading ||
-                !!crds.error ||
-                domainPermissionDenied['cluster-crds'] ||
-                domainPermissionPending['cluster-crds'];
+            : crds.loading || !!crds.error || domainPermissionDenied['cluster-crds'];
         case 'custom':
           return custom.data !== null
             ? true
-            : custom.loading ||
-                !!custom.error ||
-                domainPermissionDenied['cluster-custom'] ||
-                domainPermissionPending['cluster-custom'];
+            : custom.loading || !!custom.error || domainPermissionDenied['cluster-custom'];
         case 'events':
           return events.data !== null
             ? true
-            : events.loading ||
-                !!events.error ||
-                domainPermissionDenied['cluster-events'] ||
-                domainPermissionPending['cluster-events'];
+            : events.loading || !!events.error || domainPermissionDenied['cluster-events'];
         default:
           return true;
       }
@@ -614,7 +632,6 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     storage.error,
     storage.loading,
     domainPermissionDenied,
-    domainPermissionPending,
   ]);
 
   const contextValue = useMemo(

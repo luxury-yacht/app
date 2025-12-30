@@ -21,6 +21,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
@@ -32,6 +33,9 @@ export interface CustomResourceData {
   kindAlias?: string;
   name: string;
   namespace: string;
+  // Multi-cluster metadata used for per-tab actions and stable row keys.
+  clusterId?: string;
+  clusterName?: string;
   apiGroup?: string;
   apiVersion?: string;
   labels?: Record<string, string>;
@@ -93,16 +97,23 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           age: resource.age,
           labels: resource.labels,
           annotations: resource.annotations,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]
     );
 
-    const keyExtractor = useCallback((resource: CustomResourceData) => {
-      return [resource.namespace, resource.kindAlias ?? resource.kind ?? 'custom', resource.name]
-        .filter(Boolean)
-        .join('/');
-    }, []);
+    const keyExtractor = useCallback(
+      (resource: CustomResourceData) =>
+        buildClusterScopedKey(
+          resource,
+          [resource.namespace, resource.kindAlias ?? resource.kind ?? 'custom', resource.name]
+            .filter(Boolean)
+            .join('/')
+        ),
+      []
+    );
 
     const columns: GridColumnDefinition<CustomResourceData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<CustomResourceData>[] = [
@@ -170,6 +181,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
 
       try {
         await DeleteResource(
+          deleteConfirm.resource.clusterId ?? '',
           deleteConfirm.resource.kind || deleteConfirm.resource.kindAlias || 'CustomResource',
           deleteConfirm.resource.namespace,
           deleteConfirm.resource.name

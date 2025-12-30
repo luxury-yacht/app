@@ -1,5 +1,9 @@
 /* Object Details Flyout Styles */
 
+.object-panel-dockable {
+  --dockable-panel-top-offset: var(--app-content-top);
+}
+
 .object-panel {
   position: absolute;
   top: 0;

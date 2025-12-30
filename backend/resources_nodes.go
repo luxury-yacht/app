@@ -9,45 +9,60 @@ func (a *App) GetNode(name string) (*NodeDetails, error) {
 	})
 }
 
-func (a *App) CordonNode(nodeName string) error {
-	deps := nodes.Dependencies{Common: a.resourceDependencies()}
-	if err := nodes.NewService(deps).Cordon(nodeName); err != nil {
+func (a *App) CordonNode(clusterID, nodeName string) error {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return err
+	}
+	if err := nodes.NewService(nodes.Dependencies{Common: deps}).Cordon(nodeName); err != nil {
 		return err
 	}
 	a.clearNodeCaches(nodeName)
 	return nil
 }
 
-func (a *App) UncordonNode(nodeName string) error {
-	deps := nodes.Dependencies{Common: a.resourceDependencies()}
-	if err := nodes.NewService(deps).Uncordon(nodeName); err != nil {
+func (a *App) UncordonNode(clusterID, nodeName string) error {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return err
+	}
+	if err := nodes.NewService(nodes.Dependencies{Common: deps}).Uncordon(nodeName); err != nil {
 		return err
 	}
 	a.clearNodeCaches(nodeName)
 	return nil
 }
 
-func (a *App) DrainNode(nodeName string, options DrainNodeOptions) error {
-	deps := nodes.Dependencies{Common: a.resourceDependencies()}
-	if err := nodes.NewService(deps).Drain(nodeName, options); err != nil {
+func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) error {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return err
+	}
+	if err := nodes.NewService(nodes.Dependencies{Common: deps}).Drain(nodeName, options); err != nil {
 		return err
 	}
 	a.clearNodeCaches(nodeName)
 	return nil
 }
 
-func (a *App) DeleteNode(nodeName string) error {
-	deps := nodes.Dependencies{Common: a.resourceDependencies()}
-	if err := nodes.NewService(deps).Delete(nodeName, false); err != nil {
+func (a *App) DeleteNode(clusterID, nodeName string) error {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return err
+	}
+	if err := nodes.NewService(nodes.Dependencies{Common: deps}).Delete(nodeName, false); err != nil {
 		return err
 	}
 	a.clearNodeCaches(nodeName)
 	return nil
 }
 
-func (a *App) ForceDeleteNode(nodeName string) error {
-	deps := nodes.Dependencies{Common: a.resourceDependencies()}
-	if err := nodes.NewService(deps).Delete(nodeName, true); err != nil {
+func (a *App) ForceDeleteNode(clusterID, nodeName string) error {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return err
+	}
+	if err := nodes.NewService(nodes.Dependencies{Common: deps}).Delete(nodeName, true); err != nil {
 		return err
 	}
 	a.clearNodeCaches(nodeName)

@@ -8,14 +8,22 @@ import (
 func TestWrapperGuardPathsRequireClient(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
+	clusterID := "config:ctx"
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+		},
+	}
 
 	errorCases := []struct {
 		name string
 		call func() error
 	}{
 		{"GetPod", func() error { _, err := app.GetPod("ns", "pod", false); return err }},
-		{"DeletePod", func() error { return app.DeletePod("ns", "pod") }},
-		{"PodContainers", func() error { _, err := app.GetPodContainers("ns", "pod"); return err }},
+		{"DeletePod", func() error { return app.DeletePod(clusterID, "ns", "pod") }},
+		{"PodContainers", func() error { _, err := app.GetPodContainers(clusterID, "ns", "pod"); return err }},
 		{"PodDisruptionBudget", func() error { _, err := app.GetPodDisruptionBudget("ns", "pdb"); return err }},
 		{"Service", func() error { _, err := app.GetService("ns", "svc"); return err }},
 		{"EndpointSlice", func() error { _, err := app.GetEndpointSlice("ns", "ep"); return err }},
@@ -29,7 +37,7 @@ func TestWrapperGuardPathsRequireClient(t *testing.T) {
 		{"HelmDetails", func() error { _, err := app.GetHelmReleaseDetails("ns", "rel"); return err }},
 		{"HelmManifest", func() error { _, err := app.GetHelmManifest("ns", "rel"); return err }},
 		{"HelmValues", func() error { _, err := app.GetHelmValues("ns", "rel"); return err }},
-		{"HelmDelete", func() error { return app.DeleteHelmRelease("ns", "rel") }},
+		{"HelmDelete", func() error { return app.DeleteHelmRelease(clusterID, "ns", "rel") }},
 		{"Deployment", func() error { _, err := app.GetDeployment("ns", "deploy"); return err }},
 		{"ReplicaSet", func() error { _, err := app.GetReplicaSet("ns", "rs"); return err }},
 		{"StatefulSet", func() error { _, err := app.GetStatefulSet("ns", "sts"); return err }},
@@ -53,7 +61,7 @@ func TestWrapperGuardPathsRequireClient(t *testing.T) {
 		}
 	}
 
-	resp := app.LogFetcher(LogFetchRequest{Namespace: "ns", PodName: "pod"})
+	resp := app.LogFetcher(clusterID, LogFetchRequest{Namespace: "ns", PodName: "pod"})
 	if resp.Error == "" {
 		t.Fatalf("expected error for LogFetcher without client")
 	}

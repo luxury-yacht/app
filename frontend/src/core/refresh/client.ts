@@ -120,22 +120,58 @@ export async function fetchSnapshot<TPayload>(
   domain: string,
   options: FetchSnapshotOptions = {}
 ): Promise<{ snapshot?: Snapshot<TPayload>; etag?: string; notModified: boolean }> {
-  const baseURL = await resolveRefreshBaseURL();
-  const url = new URL(`/api/v2/snapshots/${domain}`, baseURL);
+  const buildRequest = async () => {
+    const baseURL = await resolveRefreshBaseURL();
+    const url = new URL(`/api/v2/snapshots/${domain}`, baseURL);
 
-  if (options.scope) {
-    url.searchParams.set('scope', options.scope);
+    if (options.scope) {
+      url.searchParams.set('scope', options.scope);
+    }
+
+    const headers: Record<string, string> = {};
+    if (options.ifNoneMatch) {
+      headers['If-None-Match'] = options.ifNoneMatch;
+    }
+
+    return fetch(url.toString(), {
+      signal: options.signal,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+    });
+  };
+
+  const isRetryableNetworkError = (error: unknown) => {
+    if (options.signal?.aborted) {
+      return false;
+    }
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return false;
+    }
+    if (error instanceof TypeError) {
+      const message = error.message.toLowerCase();
+      return message.includes('failed to fetch') || message.includes('load failed');
+    }
+    return false;
+  };
+
+  const maxAttempts = 3;
+  let response: Response | undefined;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      response = await buildRequest();
+      break;
+    } catch (error) {
+      if (!isRetryableNetworkError(error) || attempt + 1 >= maxAttempts) {
+        throw error;
+      }
+      // Refresh base URLs can change when the backend rebuilds the refresh subsystem.
+      invalidateRefreshBaseURL();
+      const delayMs = Math.min(1000, 200 * 2 ** attempt);
+      await delay(delayMs);
+    }
   }
-
-  const headers: Record<string, string> = {};
-  if (options.ifNoneMatch) {
-    headers['If-None-Match'] = options.ifNoneMatch;
+  if (!response) {
+    throw new Error('Snapshot request failed');
   }
-
-  const response = await fetch(url.toString(), {
-    signal: options.signal,
-    headers: Object.keys(headers).length > 0 ? headers : undefined,
-  });
 
   if (response.status === 304) {
     return { notModified: true };

@@ -28,17 +28,20 @@ type HelmContentProvider interface {
 
 // ObjectYAMLSnapshotPayload represents the YAML payload.
 type ObjectYAMLSnapshotPayload struct {
+	ClusterMeta
 	YAML string `json:"yaml"`
 }
 
 // ObjectHelmManifestSnapshotPayload represents the Helm manifest payload.
 type ObjectHelmManifestSnapshotPayload struct {
+	ClusterMeta
 	Manifest string `json:"manifest"`
 	Revision int    `json:"revision,omitempty"`
 }
 
 // ObjectHelmValuesSnapshotPayload represents the Helm values payload.
 type ObjectHelmValuesSnapshotPayload struct {
+	ClusterMeta
 	Values   map[string]interface{} `json:"values"`
 	Revision int                    `json:"revision,omitempty"`
 }
@@ -89,6 +92,7 @@ func (b *ObjectYAMLBuilder) Build(ctx context.Context, scope string) (*refresh.S
 	if err != nil {
 		return nil, err
 	}
+	meta := ClusterMetaFromContext(ctx)
 
 	yaml, err := b.provider.FetchObjectYAML(ctx, kind, namespace, name)
 	if err != nil {
@@ -99,7 +103,7 @@ func (b *ObjectYAMLBuilder) Build(ctx context.Context, scope string) (*refresh.S
 		Domain:  objectYAMLDdomain,
 		Scope:   scope,
 		Version: 0,
-		Payload: ObjectYAMLSnapshotPayload{YAML: yaml},
+		Payload: ObjectYAMLSnapshotPayload{ClusterMeta: meta, YAML: yaml},
 		Stats: refresh.SnapshotStats{
 			ItemCount: 1,
 		},
@@ -116,6 +120,7 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 	if err != nil {
 		return nil, err
 	}
+	meta := ClusterMetaFromContext(ctx)
 
 	manifest, revision, err := b.provider.FetchHelmManifest(ctx, namespace, name)
 	if err != nil {
@@ -131,7 +136,11 @@ func (b *ObjectHelmManifestBuilder) Build(ctx context.Context, scope string) (*r
 		Domain:  objectHelmManifestDomain,
 		Scope:   scope,
 		Version: version,
-		Payload: ObjectHelmManifestSnapshotPayload{Manifest: manifest, Revision: revision},
+		Payload: ObjectHelmManifestSnapshotPayload{
+			ClusterMeta: meta,
+			Manifest:    manifest,
+			Revision:    revision,
+		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: 1,
 		},
@@ -148,6 +157,7 @@ func (b *ObjectHelmValuesBuilder) Build(ctx context.Context, scope string) (*ref
 	if err != nil {
 		return nil, err
 	}
+	meta := ClusterMetaFromContext(ctx)
 
 	values, revision, err := b.provider.FetchHelmValues(ctx, namespace, name)
 	if err != nil {
@@ -163,7 +173,11 @@ func (b *ObjectHelmValuesBuilder) Build(ctx context.Context, scope string) (*ref
 		Domain:  objectHelmValuesDomain,
 		Scope:   scope,
 		Version: version,
-		Payload: ObjectHelmValuesSnapshotPayload{Values: values, Revision: revision},
+		Payload: ObjectHelmValuesSnapshotPayload{
+			ClusterMeta: meta,
+			Values:      values,
+			Revision:    revision,
+		},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(values),
 		},
@@ -174,9 +188,10 @@ func parseHelmScope(scope string) (string, string, error) {
 	if strings.TrimSpace(scope) == "" {
 		return "", "", fmt.Errorf("helm scope is required")
 	}
-	parts := strings.SplitN(scope, ":", 2)
+	_, trimmed := refresh.SplitClusterScope(scope)
+	parts := strings.SplitN(trimmed, ":", 2)
 	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid helm scope %q", scope)
+		return "", "", fmt.Errorf("invalid helm scope %q", trimmed)
 	}
 	namespace := parts[0]
 	if namespace == clusterScopeToken {

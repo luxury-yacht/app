@@ -21,9 +21,11 @@ import type {
 import type { PermissionStatus } from '@/core/capabilities/bootstrap';
 import type { DomainSnapshotState } from '../store';
 
-const fetchTelemetrySummaryMock = vi.fn<() => Promise<TelemetrySummary>>(async () => {
-  throw new Error('fetchTelemetrySummary not stubbed');
-});
+const fetchTelemetrySummaryMock = vi.hoisted(() =>
+  vi.fn<() => Promise<TelemetrySummary>>(async () => {
+    throw new Error('fetchTelemetrySummary not stubbed');
+  })
+);
 
 vi.mock('../client', () => ({
   fetchTelemetrySummary: fetchTelemetrySummaryMock,
@@ -75,10 +77,12 @@ const defaultDomainState: DomainSnapshotState<any> = {
   scope: undefined,
 };
 
-const mockRefreshManager = {
+const mockRefreshManager = vi.hoisted(() => ({
   register: vi.fn(),
   unregister: vi.fn(),
   getRefresherInterval: vi.fn(() => 5000),
+  subscribe: vi.fn(() => () => undefined),
+  disable: vi.fn(),
   enableDomain: vi.fn(),
   disableDomain: vi.fn(),
   fetchDomain: vi.fn(),
@@ -88,7 +92,7 @@ const mockRefreshManager = {
   disableScopedDomain: vi.fn(),
   fetchScopedDomain: vi.fn(),
   getRegisteredDomains: vi.fn(() => new Set<string>()),
-};
+}));
 
 vi.mock('../RefreshManager', () => ({
   refreshManager: mockRefreshManager,
@@ -241,25 +245,27 @@ afterEach(() => {
 describe('resolveDomainNamespace', () => {
   test('returns namespace suffix for namespace domains', async () => {
     const module = await import('./RefreshDiagnosticsPanel');
-    expect(module.resolveDomainNamespace('namespace-workloads', 'cluster:default')).toBe('default');
+    expect(module.resolveDomainNamespace('namespace-workloads', 'alpha|cluster:default')).toBe(
+      'default'
+    );
   });
 
   test('returns workload namespace for pod scopes', async () => {
     const module = await import('./RefreshDiagnosticsPanel');
-    expect(module.resolveDomainNamespace('pods', 'workload:default:deployment:web')).toBe(
+    expect(module.resolveDomainNamespace('pods', 'alpha|workload:default:deployment:web')).toBe(
       'default'
     );
   });
 
   test('returns namespace for namespace-scoped pod scopes', async () => {
     const module = await import('./RefreshDiagnosticsPanel');
-    expect(module.resolveDomainNamespace('pods', 'namespace:dev')).toBe('dev');
-    expect(module.resolveDomainNamespace('pods', 'namespace:all')).toBe('All');
+    expect(module.resolveDomainNamespace('pods', 'alpha|namespace:dev')).toBe('dev');
+    expect(module.resolveDomainNamespace('pods', 'alpha|namespace:all')).toBe('All');
   });
 
   test('returns dash for cluster scoped domains', async () => {
     const module = await import('./RefreshDiagnosticsPanel');
-    expect(module.resolveDomainNamespace('cluster-events', 'ignored')).toBe('-');
+    expect(module.resolveDomainNamespace('cluster-events', 'alpha|cluster')).toBe('-');
   });
 });
 
@@ -436,6 +442,46 @@ describe('DiagnosticsPanel component', () => {
 
     expect(markup).toContain('Pods (team-a)');
     expect(markup).toContain('team-a');
+  });
+
+  test('strips cluster prefixes from pod scopes when rendering labels', async () => {
+    seedBaseDomainStates();
+    const now = Date.now();
+
+    scopedEntriesMap['pods'] = [
+      [
+        'cluster-a|namespace:team-a',
+        {
+          ...createReadyState({
+            pods: [{ metadata: { name: 'pod-a' } }],
+            metrics: {
+              collectedAt: now,
+              stale: false,
+              lastError: '',
+              consecutiveFailures: 0,
+              successCount: 1,
+              failureCount: 0,
+            },
+          }),
+          lastUpdated: now,
+        },
+      ],
+    ];
+
+    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+
+    const markup = renderToStaticMarkup(
+      React.createElement(KeyboardProvider, {
+        disabled: true,
+        children: React.createElement(DiagnosticsPanel, {
+          isOpen: true,
+          onClose: () => undefined,
+        }),
+      })
+    );
+
+    // Only the namespace portion should be shown in the label.
+    expect(markup).toContain('Pods (team-a)');
   });
 
   test('renders telemetry summaries after successful fetch', async () => {

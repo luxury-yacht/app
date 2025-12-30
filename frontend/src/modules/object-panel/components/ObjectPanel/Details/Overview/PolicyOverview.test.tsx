@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { PolicyOverview } from './PolicyOverview';
 
 const openWithObjectMock = vi.fn();
+const defaultClusterId = 'alpha:ctx';
 
 vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
   ResourceHeader: (props: any) => (
@@ -22,7 +23,10 @@ vi.mock('@shared/components/kubernetes/ResourceHeader', () => ({
 }));
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
+  useObjectPanel: () => ({
+    openWithObject: openWithObjectMock,
+    objectData: { clusterId: defaultClusterId, clusterName: 'alpha' },
+  }),
 }));
 
 const getValueForLabel = (container: HTMLElement, label: string) => {
@@ -102,11 +106,14 @@ describe('PolicyOverview', () => {
     act(() => {
       targetLink?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'Deployment',
-      name: 'api',
-      namespace: 'prod',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'prod',
+        clusterId: defaultClusterId,
+      })
+    );
     // New format shows Current, Min, Max on separate lines
     const replicasContent = getValueForLabel(container, 'Replicas');
     expect(replicasContent?.textContent).toContain('Current:');

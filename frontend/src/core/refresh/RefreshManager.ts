@@ -26,6 +26,10 @@ export interface RefreshContext {
   activeNamespaceView?: NamespaceViewType;
   activeClusterView?: ClusterViewType;
   selectedNamespace?: string;
+  selectedNamespaceClusterId?: string;
+  selectedClusterIds?: string[];
+  selectedClusterId?: string;
+  selectedClusterName?: string;
   objectPanel: {
     isOpen: boolean;
     objectKind?: string;
@@ -245,9 +249,13 @@ class RefreshManager {
     this.context = { ...this.context, ...context };
 
     const manualTargets = this.getManualRefreshTargets(previousContext, this.context);
+    // Treat namespace cluster changes as namespace changes so refreshers re-scope correctly.
+    const namespaceChanged =
+      previousContext.selectedNamespace !== this.context.selectedNamespace ||
+      previousContext.selectedNamespaceClusterId !== this.context.selectedNamespaceClusterId;
 
     if (manualTargets.length > 0) {
-      if (previousContext.selectedNamespace !== this.context.selectedNamespace) {
+      if (namespaceChanged) {
         manualTargets.forEach((name) => this.abortRefresher(name));
       } else if (previousContext.currentView !== this.context.currentView) {
         manualTargets
@@ -423,11 +431,33 @@ class RefreshManager {
     current: RefreshContext
   ): RefresherName[] {
     const targets = new Set<RefresherName>();
+    const normalizeClusterIds = (ids?: string[]) =>
+      (ids ?? []).map((id) => id.trim()).filter(Boolean);
+    const hasSameClusterSelection = (left?: string[], right?: string[]) => {
+      const leftSet = new Set(normalizeClusterIds(left));
+      const rightSet = new Set(normalizeClusterIds(right));
+      if (leftSet.size !== rightSet.size) {
+        return false;
+      }
+      for (const id of leftSet) {
+        if (!rightSet.has(id)) {
+          return false;
+        }
+      }
+      return true;
+    };
+    // Switching active clusters should refresh the active view even if the view type is unchanged.
+    const clusterChanged = previous.selectedClusterId !== current.selectedClusterId;
+    const clusterSelectionChanged = !hasSameClusterSelection(
+      previous.selectedClusterIds,
+      current.selectedClusterIds
+    );
 
-    if (
-      previous.selectedNamespace !== current.selectedNamespace &&
-      current.currentView === 'namespace'
-    ) {
+    // Namespace scope changes include the cluster identity tied to the selection.
+    const namespaceChanged =
+      previous.selectedNamespace !== current.selectedNamespace ||
+      previous.selectedNamespaceClusterId !== current.selectedNamespaceClusterId;
+    if (namespaceChanged && current.currentView === 'namespace') {
       const namespaceRefresher = current.activeNamespaceView
         ? namespaceViewToRefresher[current.activeNamespaceView]
         : null;
@@ -446,6 +476,31 @@ class RefreshManager {
       if (clusterRefresher) {
         targets.add(clusterRefresher);
       }
+    }
+
+    // Avoid forced refreshes on cluster switches when background refresh already covers all tabs.
+    const hasMultiClusterScope = (current.selectedClusterIds ?? []).length > 1;
+
+    if (clusterChanged && current.currentView === 'cluster' && !hasMultiClusterScope) {
+      const clusterRefresher = current.activeClusterView
+        ? clusterViewToRefresher[current.activeClusterView]
+        : null;
+      if (clusterRefresher) {
+        targets.add(clusterRefresher);
+      }
+    }
+
+    if (clusterSelectionChanged && current.currentView === 'cluster') {
+      const clusterRefresher = current.activeClusterView
+        ? clusterViewToRefresher[current.activeClusterView]
+        : null;
+      if (clusterRefresher) {
+        targets.add(clusterRefresher);
+      }
+    }
+
+    if (clusterChanged && current.currentView === 'overview') {
+      targets.add(SYSTEM_REFRESHERS.clusterOverview);
     }
 
     if (this.didObjectPanelTargetChange(previous, current)) {

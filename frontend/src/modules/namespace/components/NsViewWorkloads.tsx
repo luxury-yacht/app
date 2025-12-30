@@ -21,6 +21,7 @@ import WorkloadScaleModal from '@modules/namespace/components/WorkloadScaleModal
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import GridTable from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
@@ -86,13 +87,15 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           kind: workload.kind,
           name: workload.name,
           namespace: workload.namespace,
+          clusterId: workload.clusterId ?? undefined,
+          clusterName: workload.clusterName ?? undefined,
         });
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
-      (row: WorkloadData) => `workload:${buildWorkloadKey(row)}`,
+      (row: WorkloadData) => buildClusterScopedKey(row, `workload:${buildWorkloadKey(row)}`),
       []
     );
 
@@ -166,7 +169,12 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       }
 
       try {
-        await RestartWorkload(workload.namespace, workload.name, workload.kind);
+        await RestartWorkload(
+          workload.clusterId ?? '',
+          workload.namespace,
+          workload.name,
+          workload.kind
+        );
       } catch (err) {
         errorHandler.handle(err, {
           action: 'restart',
@@ -187,7 +195,12 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       }
 
       try {
-        await DeleteResource(workload.kind, workload.namespace, workload.name);
+        await DeleteResource(
+          workload.clusterId ?? '',
+          workload.kind,
+          workload.namespace,
+          workload.name
+        );
       } catch (err) {
         errorHandler.handle(err, {
           action: 'delete',
@@ -239,6 +252,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       setScaleError(null);
       try {
         await ScaleWorkload(
+          scaleState.workload.clusterId ?? '',
           scaleState.workload.namespace,
           scaleState.workload.name,
           scaleState.workload.kind,

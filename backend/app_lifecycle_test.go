@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
@@ -75,12 +74,17 @@ func TestSetupRefreshSubsystemStoresPermissionCache(t *testing.T) {
 	handler := http.NewServeMux()
 
 	var capturedCfg system.Config
-	original := newRefreshSubsystem
-	newRefreshSubsystem = func(cfg system.Config) (*refresh.Manager, http.Handler, *telemetry.Recorder, []system.PermissionIssue, map[string]bool, *informer.Factory, error) {
+	original := newRefreshSubsystemWithServices
+	newRefreshSubsystemWithServices = func(cfg system.Config) (*system.Subsystem, error) {
 		capturedCfg = cfg
-		return manager, handler, telemetry.NewRecorder(), nil, map[string]bool{"watch": true}, nil, nil
+		return &system.Subsystem{
+			Manager:         manager,
+			Handler:         handler,
+			Telemetry:       telemetry.NewRecorder(),
+			PermissionCache: map[string]bool{"watch": true},
+		}, nil
 	}
-	defer func() { newRefreshSubsystem = original }()
+	defer func() { newRefreshSubsystemWithServices = original }()
 
 	cache, err := app.setupRefreshSubsystem(fakeClient, "selection", initialCache)
 	require.NoError(t, err)
@@ -125,6 +129,24 @@ func TestRestoreKubeconfigSelectionPrefersSavedContext(t *testing.T) {
 
 	require.Equal(t, "/saved/config", app.selectedKubeconfig)
 	require.Equal(t, "saved", app.selectedContext)
+}
+
+func TestRestoreKubeconfigSelectionUsesSelectedKubeconfigs(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.availableKubeconfigs = []KubeconfigInfo{
+		{Path: "/other/config", Context: "other"},
+		{Path: "/saved/config", Context: "saved"},
+	}
+	app.appSettings = &AppSettings{
+		SelectedKubeconfig:  "/other/config:other",
+		SelectedKubeconfigs: []string{"/saved/config:saved", "/other/config:other"},
+	}
+
+	app.restoreKubeconfigSelection()
+
+	require.Equal(t, "/saved/config", app.selectedKubeconfig)
+	require.Equal(t, "saved", app.selectedContext)
+	require.Equal(t, []string{"/saved/config:saved", "/other/config:other"}, app.selectedKubeconfigs)
 }
 
 func TestRestoreKubeconfigSelectionFallsBack(t *testing.T) {
@@ -226,16 +248,16 @@ users:
 	require.NoError(t, os.WriteFile(configPath, []byte(kubeconfig), 0o600))
 	app.selectedKubeconfig = configPath
 
-	original := newRefreshSubsystem
-	newRefreshSubsystem = func(cfg system.Config) (*refresh.Manager, http.Handler, *telemetry.Recorder, []system.PermissionIssue, map[string]bool, *informer.Factory, error) {
-		return nil, nil, nil, nil, nil, nil, errors.New("boom")
+	original := newRefreshSubsystemWithServices
+	newRefreshSubsystemWithServices = func(cfg system.Config) (*system.Subsystem, error) {
+		return nil, errors.New("boom")
 	}
-	defer func() { newRefreshSubsystem = original }()
+	defer func() { newRefreshSubsystemWithServices = original }()
 
 	err := app.initKubernetesClient()
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to initialise refresh subsystem")
-	require.Nil(t, app.objectCatalogService)
+	require.Nil(t, app.objectCatalogServiceForCluster(""))
 	require.Nil(t, app.telemetryRecorder)
 	require.Nil(t, app.client)
 }

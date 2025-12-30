@@ -127,6 +127,27 @@ func TestServiceQueryStreamsWithoutFullCache(t *testing.T) {
 	}
 }
 
+func TestServiceNamespacesUsesCachedOrDerivedValues(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+	svc.items = map[string]Summary{
+		"one":   {Namespace: "default"},
+		"two":   {Namespace: "kube-system"},
+		"three": {Namespace: "default"},
+		"four":  {Namespace: ""},
+	}
+
+	namespaces := svc.Namespaces()
+	if !reflect.DeepEqual(namespaces, []string{"default", "kube-system"}) {
+		t.Fatalf("unexpected namespaces: %#v", namespaces)
+	}
+
+	svc.cachedNamespaces = []string{"cached"}
+	namespaces = svc.Namespaces()
+	if !reflect.DeepEqual(namespaces, []string{"cached"}) {
+		t.Fatalf("expected cached namespaces, got %#v", namespaces)
+	}
+}
+
 func TestServiceSyncCollectsResources(t *testing.T) {
 	scheme := runtime.NewScheme()
 	appsGVK := schema.GroupVersionKind{Group: "apps", Version: "v1", Kind: "Deployment"}

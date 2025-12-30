@@ -22,6 +22,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
@@ -33,6 +34,8 @@ export interface QuotaData {
   kindAlias?: string;
   name: string;
   namespace: string;
+  clusterId?: string;
+  clusterName?: string;
   details?: string;
   hard?: Record<string, string | number>;
   used?: Record<string, string | number>;
@@ -81,14 +84,21 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
           kind: resource.kind || resource.kindAlias,
           name: resource.name,
           namespace: resource.namespace,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]
     );
 
-    const keyExtractor = useCallback((resource: QuotaData) => {
-      return [resource.namespace, resource.kind, resource.name].filter(Boolean).join('/');
-    }, []);
+    const keyExtractor = useCallback(
+      (resource: QuotaData) =>
+        buildClusterScopedKey(
+          resource,
+          [resource.namespace, resource.kind, resource.name].filter(Boolean).join('/')
+        ),
+      []
+    );
 
     const columns: GridColumnDefinition<QuotaData>[] = useMemo(() => {
       // Keep the quotas table focused on core identity fields.
@@ -157,6 +167,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
 
       try {
         await DeleteResource(
+          deleteConfirm.resource.clusterId ?? '',
           deleteConfirm.resource.kind,
           deleteConfirm.resource.namespace,
           deleteConfirm.resource.name

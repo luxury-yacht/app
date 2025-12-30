@@ -32,7 +32,7 @@ import { subscribeGridTableResetAll } from '@shared/components/tables/persistenc
 
 export interface UseGridTablePersistenceParams<T> {
   viewId: string;
-  clusterIdentity: string; // e.g., path:context
+  clusterIdentity: string; // e.g., filename:context
   namespace?: string | null;
   isNamespaceScoped: boolean;
   columns: GridColumnDefinition<T>[];

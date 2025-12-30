@@ -179,6 +179,58 @@ func TestCatalogBuildErrorsWhenServiceUnavailable(t *testing.T) {
 	}
 }
 
+func TestCatalogBuildAddsNamespaceGroups(t *testing.T) {
+	summaries := []objectcatalog.Summary{
+		{
+			Kind:      "Pod",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "pods",
+			Namespace: "default",
+			Name:      "pod-a",
+			UID:       "uid-a",
+			Scope:     objectcatalog.ScopeNamespace,
+		},
+	}
+	svc := seedCatalogService(t, summaries)
+
+	builder := &catalogBuilder{
+		catalogService: func() *objectcatalog.Service { return svc },
+		namespaceGroups: func() []CatalogNamespaceGroup {
+			return []CatalogNamespaceGroup{
+				{
+					ClusterMeta: ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
+					Namespaces:  []string{"default", "kube-system"},
+				},
+			}
+		},
+	}
+
+	snap, err := builder.Build(context.Background(), "namespace=default&namespace=kube-system")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	payload, ok := snap.Payload.(CatalogSnapshot)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", snap.Payload)
+	}
+
+	if len(payload.NamespaceGroups) != 1 {
+		t.Fatalf("expected one namespace group, got %d", len(payload.NamespaceGroups))
+	}
+	group := payload.NamespaceGroups[0]
+	if group.ClusterID != "cluster-a" || group.ClusterName != "alpha" {
+		t.Fatalf("unexpected cluster metadata: %+v", group)
+	}
+	if !reflect.DeepEqual(group.Namespaces, []string{"default", "kube-system"}) {
+		t.Fatalf("unexpected namespaces: %+v", group.Namespaces)
+	}
+	if !reflect.DeepEqual(group.SelectedNamespaces, []string{"default", "kube-system"}) {
+		t.Fatalf("unexpected selected namespaces: %+v", group.SelectedNamespaces)
+	}
+}
+
 func seedCatalogService(t *testing.T, summaries []objectcatalog.Summary) *objectcatalog.Service {
 	t.Helper()
 	svc := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)

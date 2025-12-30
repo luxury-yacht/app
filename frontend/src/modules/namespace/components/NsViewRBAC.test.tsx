@@ -121,6 +121,7 @@ describe('NsViewRBAC', () => {
     kind: 'Role',
     name: 'view',
     namespace: 'team-a',
+    clusterId: 'alpha:ctx',
     rulesCount: 3,
     age: '5h',
     ...overrides,
@@ -153,11 +154,14 @@ describe('NsViewRBAC', () => {
     act(() => {
       openItem?.onClick?.();
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'Role',
-      name: 'view',
-      namespace: 'team-a',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Role',
+        name: 'view',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+      })
+    );
   });
 
   it('deletes RBAC entries on confirmation', async () => {
@@ -178,6 +182,6 @@ describe('NsViewRBAC', () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
 
-    expect(deleteResourceMock).toHaveBeenCalledWith('Role', 'team-a', 'view');
+    expect(deleteResourceMock).toHaveBeenCalledWith('alpha:ctx', 'Role', 'team-a', 'view');
   });
 });

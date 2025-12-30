@@ -8,6 +8,8 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
+	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/api"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"helm.sh/helm/v3/pkg/action"
@@ -23,28 +25,148 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		return nil, errors.New("application context not initialised")
 	}
 
-	cfg := system.Config{
-		KubernetesClient:      kubeClient,
-		MetricsClient:         a.metricsClient,
-		RestConfig:            a.restConfig,
-		ResyncInterval:        config.RefreshResyncInterval,
-		MetricsInterval:       config.RefreshMetricsInterval,
-		APIExtensionsClient:   a.apiextensionsClient,
-		DynamicClient:         a.dynamicClient,
-		HelmFactory:           a.helmActionFactory(),
-		ObjectDetailsProvider: a.objectDetailProvider(),
-		Logger:                a.logger,
-		PermissionCache:       permissionCache,
-		ObjectCatalogService: func() *objectcatalog.Service {
-			return a.objectCatalogService
-		},
-		ObjectCatalogEnabled: func() bool { return true },
+	selections, err := a.selectedKubeconfigSelections()
+	if err != nil {
+		selections = nil
 	}
 
-	manager, handler, recorder, issues, updatedCache, infFactory, err := newRefreshSubsystem(cfg)
-	if err != nil {
-		return nil, err
+	subsystems := make(map[string]*system.Subsystem)
+	clusterOrder := make([]string, 0)
+
+	ctx, cancel := context.WithCancel(a.Ctx)
+	a.refreshCancel = cancel
+
+	var hostSubsystem *system.Subsystem
+	hostClusterID := ""
+
+	if len(selections) == 0 {
+		clusterMeta := a.currentClusterMeta()
+		if clusterMeta.ID != "" {
+			hostClusterID = clusterMeta.ID
+		} else if selectionKey != "" {
+			hostClusterID = selectionKey
+		}
+
+		catalogClusterID := clusterMeta.ID
+		if catalogClusterID == "" {
+			catalogClusterID = selectionKey
+		}
+
+		subsystem, err := a.buildRefreshSubsystem(system.Config{
+			KubernetesClient:      kubeClient,
+			MetricsClient:         a.metricsClient,
+			RestConfig:            a.restConfig,
+			ResyncInterval:        config.RefreshResyncInterval,
+			MetricsInterval:       config.RefreshMetricsInterval,
+			APIExtensionsClient:   a.apiextensionsClient,
+			DynamicClient:         a.dynamicClient,
+			HelmFactory:           a.helmActionFactory(),
+			ObjectDetailsProvider: a.objectDetailProvider(),
+			Logger:                a.logger,
+			PermissionCache:       permissionCache,
+			ObjectCatalogService: func() *objectcatalog.Service {
+				return a.objectCatalogServiceForCluster(catalogClusterID)
+			},
+			ObjectCatalogNamespaces: a.catalogNamespaceGroups,
+			ObjectCatalogEnabled:    func() bool { return true },
+			ClusterID:               clusterMeta.ID,
+			ClusterName:             clusterMeta.Name,
+		}, selectionKey)
+		if err != nil {
+			return nil, err
+		}
+
+		if hostClusterID != "" {
+			subsystems[hostClusterID] = subsystem
+			clusterOrder = append(clusterOrder, hostClusterID)
+		}
+		hostSubsystem = subsystem
+	} else {
+		// Align the client pool to the selected cluster set before building managers.
+		if err := a.syncClusterClientPool(selections); err != nil {
+			return nil, err
+		}
+
+		for _, selection := range selections {
+			clusterMeta := a.clusterMetaForSelection(selection)
+			if clusterMeta.ID == "" {
+				return nil, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
+			}
+			clients := a.clusterClientsForID(clusterMeta.ID)
+			if clients == nil {
+				return nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
+			}
+
+			cfg := system.Config{
+				KubernetesClient:      clients.client,
+				MetricsClient:         clients.metricsClient,
+				RestConfig:            clients.restConfig,
+				ResyncInterval:        config.RefreshResyncInterval,
+				MetricsInterval:       config.RefreshMetricsInterval,
+				APIExtensionsClient:   clients.apiextensionsClient,
+				DynamicClient:         clients.dynamicClient,
+				HelmFactory:           a.helmActionFactoryForSelection(selection),
+				ObjectDetailsProvider: a.objectDetailProvider(),
+				Logger:                a.logger,
+				PermissionCache:       a.getPermissionCache(clusterMeta.ID),
+				ClusterID:             clusterMeta.ID,
+				ClusterName:           clusterMeta.Name,
+			}
+
+			cfg.ObjectCatalogService = func() *objectcatalog.Service {
+				return a.objectCatalogServiceForCluster(clusterMeta.ID)
+			}
+			cfg.ObjectCatalogNamespaces = a.catalogNamespaceGroups
+			cfg.ObjectCatalogEnabled = func() bool { return true }
+
+			subsystem, err := a.buildRefreshSubsystem(cfg, clusterMeta.ID)
+			if err != nil {
+				return nil, err
+			}
+
+			subsystems[clusterMeta.ID] = subsystem
+			clusterOrder = append(clusterOrder, clusterMeta.ID)
+			if hostSubsystem == nil {
+				hostSubsystem = subsystem
+			}
+		}
 	}
+
+	if hostSubsystem == nil {
+		return nil, errors.New("refresh subsystem not initialised")
+	}
+
+	for _, subsystem := range subsystems {
+		manager := subsystem.Manager
+		if manager == nil {
+			continue
+		}
+		go func(mgr *refresh.Manager) {
+			if err := mgr.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), "Refresh")
+			}
+		}(manager)
+	}
+
+	// Wrap the base refresh API with aggregate services for multi-cluster domains.
+	aggregateService := newAggregateSnapshotService(clusterOrder, subsystems)
+	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
+	aggregateEvents := newAggregateEventStreamHandler(
+		aggregateService,
+		collectEventManagers(subsystems),
+		collectClusterMeta(subsystems),
+		clusterOrder,
+		hostSubsystem.Telemetry,
+		a.logger,
+	)
+	aggregateLogs := newAggregateLogStreamHandler(subsystems)
+	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
+	mux := http.NewServeMux()
+	api.NewServer(hostSubsystem.Registry, aggregateService, aggregateQueue, hostSubsystem.Telemetry).Register(mux)
+	mux.Handle("/api/v2/stream/events", aggregateEvents)
+	mux.Handle("/api/v2/stream/logs", aggregateLogs)
+	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)
+	mux.Handle("/", hostSubsystem.Handler)
 
 	if a.listenLoopback == nil {
 		a.listenLoopback = defaultLoopbackListener
@@ -55,32 +177,21 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		return nil, err
 	}
 
-	srv := &http.Server{Handler: handler}
-	ctx, cancel := context.WithCancel(a.Ctx)
-	a.refreshCancel = cancel
-	a.refreshManager = manager
+	srv := &http.Server{Handler: mux}
+	a.refreshManager = hostSubsystem.Manager
 	a.refreshHTTPServer = srv
 	a.refreshListener = listener
 	a.refreshBaseURL = "http://" + listener.Addr().String()
-	a.telemetryRecorder = recorder
+	a.telemetryRecorder = hostSubsystem.Telemetry
 	a.refreshServerDone = make(chan struct{})
-	if infFactory != nil {
-		a.sharedInformerFactory = infFactory.SharedInformerFactory()
-		a.apiExtensionsInformerFactory = infFactory.APIExtensionsInformerFactory()
+	a.refreshSubsystems = subsystems
+	if hostSubsystem.InformerFactory != nil {
+		a.sharedInformerFactory = hostSubsystem.InformerFactory.SharedInformerFactory()
+		a.apiExtensionsInformerFactory = hostSubsystem.InformerFactory.APIExtensionsInformerFactory()
 	} else {
 		a.sharedInformerFactory = nil
 		a.apiExtensionsInformerFactory = nil
 	}
-
-	if len(issues) > 0 {
-		a.handlePermissionIssues(issues)
-	}
-
-	go func() {
-		if err := manager.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), "Refresh")
-		}
-	}()
 
 	go func() {
 		defer close(a.refreshServerDone)
@@ -89,21 +200,47 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		}
 	}()
 
-	if updatedCache != nil && selectionKey != "" {
-		a.setPermissionCache(selectionKey, updatedCache)
+	return hostSubsystem.PermissionCache, nil
+}
+
+// buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.
+// buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.
+func (a *App) buildRefreshSubsystem(cfg system.Config, cacheKey string) (*system.Subsystem, error) {
+	subsystem, err := newRefreshSubsystemWithServices(cfg)
+	if err != nil {
+		return nil, err
 	}
 
-	return updatedCache, nil
+	if len(subsystem.PermissionIssues) > 0 {
+		a.handlePermissionIssues(subsystem.PermissionIssues)
+	}
+	if subsystem.PermissionCache != nil {
+		if cacheKey == "" {
+			cacheKey = cfg.ClusterID
+		}
+		if cacheKey != "" {
+			a.setPermissionCache(cacheKey, subsystem.PermissionCache)
+		}
+	}
+	return subsystem, nil
 }
 
 func (a *App) helmActionFactory() snapshot.HelmActionFactory {
+	return a.helmActionFactoryForSelection(kubeconfigSelection{
+		Path:    a.selectedKubeconfig,
+		Context: a.selectedContext,
+	})
+}
+
+// helmActionFactoryForSelection wires Helm actions to a specific kubeconfig selection.
+func (a *App) helmActionFactoryForSelection(selection kubeconfigSelection) snapshot.HelmActionFactory {
 	return func(namespace string) (*action.Configuration, error) {
 		settings := cli.New()
-		if a.selectedKubeconfig != "" {
-			settings.KubeConfig = a.selectedKubeconfig
+		if selection.Path != "" {
+			settings.KubeConfig = selection.Path
 		}
-		if a.selectedContext != "" {
-			settings.KubeContext = a.selectedContext
+		if selection.Context != "" {
+			settings.KubeContext = selection.Context
 		}
 
 		actionConfig := new(action.Configuration)

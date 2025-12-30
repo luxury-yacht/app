@@ -268,7 +268,12 @@ const waitForUpdates = async () => {
 };
 
 const renderYamlTab = async (
-  props: Partial<{ scope: string | null; isActive: boolean; canEdit: boolean }> = {}
+  props: Partial<{
+    scope: string | null;
+    isActive: boolean;
+    canEdit: boolean;
+    clusterId: string;
+  }> = {}
 ) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
@@ -278,6 +283,7 @@ const renderYamlTab = async (
     scope: 'default:pod:demo',
     isActive: true,
     canEdit: true,
+    clusterId: 'alpha:ctx',
   };
 
   await act(async () => {

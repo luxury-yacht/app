@@ -14,6 +14,7 @@ import { refreshOrchestrator, initializeAutoRefresh } from '@/core/refresh';
 import { eventBus } from '@/core/events';
 import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
@@ -39,11 +40,12 @@ function AppContent() {
   const viewState = useViewState();
   const appLogsPanel = useAppLogsPanel();
   const connectionStatus = useConnectionStatus();
+  const { selectedClusterId } = useKubeconfig();
 
   // Initialize permissions bootstrap
   useEffect(() => {
-    initializeUserPermissionsBootstrap();
-  }, []);
+    initializeUserPermissionsBootstrap(selectedClusterId);
+  }, [selectedClusterId]);
 
   // Initialize auto-refresh setting from localStorage
   useEffect(() => {

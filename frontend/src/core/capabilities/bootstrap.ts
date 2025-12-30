@@ -14,7 +14,11 @@ import {
   snapshotEntries,
   subscribe as subscribeCapabilities,
 } from './store';
-import type { CapabilityEntry, NormalizedCapabilityDescriptor } from './types';
+import type {
+  CapabilityDescriptor,
+  CapabilityEntry,
+  NormalizedCapabilityDescriptor,
+} from './types';
 import { CLUSTER_CAPABILITIES, type CapabilityDefinition } from './catalog';
 import { createCapabilityKey, normalizeDescriptor } from './utils';
 import { eventBus, type UnsubscribeFn } from '@/core/events';
@@ -44,18 +48,38 @@ let initialized = false;
 let eventBusSubscribed = false;
 let unsubscribeChanging: UnsubscribeFn | null = null;
 let unsubscribeChanged: UnsubscribeFn | null = null;
+let currentClusterId = '';
+
+const normalizeClusterId = (value?: string | null): string => (value ?? '').trim();
+
+const resolveClusterId = (value?: string | null): string =>
+  normalizeClusterId(value ?? currentClusterId);
+
+const applyClusterId = (
+  descriptor: CapabilityDescriptor,
+  clusterId?: string | null
+): CapabilityDescriptor => {
+  const resolved = resolveClusterId(clusterId ?? descriptor.clusterId ?? null);
+  if (!resolved) {
+    return descriptor;
+  }
+  if (descriptor.clusterId === resolved) {
+    return descriptor;
+  }
+  return { ...descriptor, clusterId: resolved };
+};
 
 const buildBootstrapDefinitions = (): CapabilityDefinition[] =>
   CLUSTER_CAPABILITIES.filter((capability) => capability.scope === 'cluster');
 
-const dedupeDefinitions = (definitions: CapabilityDefinition[]) => {
+const dedupeDefinitions = (definitions: CapabilityDefinition[], clusterId?: string | null) => {
   const descriptorMap = new Map<string, NormalizedCapabilityDescriptor>();
   const featureByKey = new Map<string, string | undefined>();
   const keys: string[] = [];
   const list: NormalizedCapabilityDescriptor[] = [];
 
   for (const definition of definitions) {
-    const descriptor = definition.descriptor;
+    const descriptor = applyClusterId(definition.descriptor, clusterId);
     const normalized = normalizeDescriptor(descriptor);
     const key = createCapabilityKey(normalized);
     if (descriptorMap.has(key)) {
@@ -71,12 +95,21 @@ const dedupeDefinitions = (definitions: CapabilityDefinition[]) => {
 };
 
 const BOOTSTRAP_DEFINITIONS = buildBootstrapDefinitions();
-const {
-  descriptorMap: BOOTSTRAP_DESCRIPTOR_MAP,
-  featureByKey: BOOTSTRAP_FEATURES_BY_KEY,
-  keys: BOOTSTRAP_KEYS,
-  list: BOOTSTRAP_NORMALIZED_DESCRIPTORS,
-} = dedupeDefinitions(BOOTSTRAP_DEFINITIONS);
+
+const buildBootstrapBundle = (clusterId?: string | null): DescriptorBundle =>
+  dedupeDefinitions(BOOTSTRAP_DEFINITIONS, clusterId);
+
+let bootstrapBundle = buildBootstrapBundle(currentClusterId);
+
+const updateBootstrapClusterId = (clusterId?: string | null): boolean => {
+  const nextClusterId = normalizeClusterId(clusterId);
+  if (nextClusterId === currentClusterId) {
+    return false;
+  }
+  currentClusterId = nextClusterId;
+  bootstrapBundle = buildBootstrapBundle(currentClusterId);
+  return true;
+};
 
 type DescriptorBundle = {
   descriptorMap: ReadonlyMap<string, NormalizedCapabilityDescriptor>;
@@ -126,32 +159,45 @@ const dedupeNormalizedDescriptors = (
   };
 };
 
-const createNamespaceCapabilityEntry = (): NamespaceCapabilityEntry => {
+const createNamespaceCapabilityEntry = (clusterId?: string | null): NamespaceCapabilityEntry => {
   const definitions = new Map<string, CapabilityDefinition>();
 
   return {
     definitions,
-    bundle: dedupeDefinitions([]),
+    bundle: dedupeDefinitions([], clusterId),
   };
 };
 
-const getNamespaceCapabilityEntry = (namespace: string): NamespaceCapabilityEntry => {
-  const trimmed = namespace.trim();
-  let entry = namespaceDescriptorRegistry.get(trimmed);
+const makeNamespaceRegistryKey = (namespace: string, clusterId?: string | null): string => {
+  const trimmedNamespace = namespace.trim().toLowerCase();
+  const clusterKey = resolveClusterId(clusterId).toLowerCase();
+  if (!clusterKey) {
+    return trimmedNamespace;
+  }
+  return `${clusterKey}|${trimmedNamespace}`;
+};
+
+const getNamespaceCapabilityEntry = (
+  namespace: string,
+  clusterId?: string | null
+): NamespaceCapabilityEntry => {
+  const registryKey = makeNamespaceRegistryKey(namespace, clusterId);
+  let entry = namespaceDescriptorRegistry.get(registryKey);
   if (entry) {
     return entry;
   }
-  entry = createNamespaceCapabilityEntry();
-  namespaceDescriptorRegistry.set(trimmed, entry);
+  entry = createNamespaceCapabilityEntry(clusterId);
+  namespaceDescriptorRegistry.set(registryKey, entry);
   return entry;
 };
 
 const appendNamespaceDefinitions = (
   namespace: string,
-  definitions: CapabilityDefinition[]
+  definitions: CapabilityDefinition[],
+  clusterId?: string | null
 ): { added: NormalizedCapabilityDescriptor[]; entry: NamespaceCapabilityEntry } => {
   const trimmed = namespace.trim();
-  const entry = getNamespaceCapabilityEntry(trimmed);
+  const entry = getNamespaceCapabilityEntry(trimmed, clusterId);
   const added: NormalizedCapabilityDescriptor[] = [];
 
   for (const definition of definitions) {
@@ -164,10 +210,15 @@ const appendNamespaceDefinitions = (
       continue;
     }
 
-    const normalized = normalizeDescriptor({
-      ...definition.descriptor,
-      namespace: targetNamespace,
-    });
+    const normalized = normalizeDescriptor(
+      applyClusterId(
+        {
+          ...definition.descriptor,
+          namespace: targetNamespace,
+        },
+        clusterId
+      )
+    );
 
     if (!normalized.id) {
       continue;
@@ -182,6 +233,7 @@ const appendNamespaceDefinitions = (
       ...definition,
       descriptor: {
         id: normalized.id,
+        clusterId: normalized.clusterId,
         verb: normalized.verb,
         resourceKind: normalized.resourceKind,
         namespace: normalized.namespace,
@@ -193,8 +245,8 @@ const appendNamespaceDefinitions = (
   }
 
   if (added.length > 0) {
-    entry.bundle = dedupeDefinitions(Array.from(entry.definitions.values()));
-    namespaceDescriptorRegistry.set(trimmed, entry);
+    entry.bundle = dedupeDefinitions(Array.from(entry.definitions.values()), clusterId);
+    namespaceDescriptorRegistry.set(makeNamespaceRegistryKey(trimmed, clusterId), entry);
   }
 
   return { added, entry };
@@ -203,15 +255,16 @@ const appendNamespaceDefinitions = (
 export const registerNamespaceCapabilityDefinitions = (
   namespace: string,
   definitions: CapabilityDefinition[],
-  options: { force?: boolean; ttlMs?: number } = {}
+  options: { force?: boolean; ttlMs?: number; clusterId?: string | null } = {}
 ): void => {
   const trimmed = namespace?.trim();
   if (!trimmed || definitions.length === 0) {
     return;
   }
 
-  const { added, entry } = appendNamespaceDefinitions(trimmed, definitions);
-  trackedNamespaces.add(trimmed);
+  const registryKey = makeNamespaceRegistryKey(trimmed, options.clusterId);
+  const { added, entry } = appendNamespaceDefinitions(trimmed, definitions, options.clusterId);
+  trackedNamespaces.add(registryKey);
 
   if (added.length === 0 && !options.force) {
     return;
@@ -229,14 +282,15 @@ export const registerNamespaceCapabilityDefinitions = (
 const makePermissionKey = (
   descriptor: Pick<
     NormalizedCapabilityDescriptor,
-    'resourceKind' | 'verb' | 'namespace' | 'subresource'
+    'clusterId' | 'resourceKind' | 'verb' | 'namespace' | 'subresource'
   >
 ): PermissionKey => {
+  const clusterId = resolveClusterId(descriptor.clusterId).toLowerCase();
   const resourceKind = descriptor.resourceKind.toLowerCase();
   const verb = descriptor.verb.toLowerCase();
   const namespace = descriptor.namespace ? descriptor.namespace.toLowerCase() : 'cluster';
   const subresource = descriptor.subresource ? descriptor.subresource.toLowerCase() : '';
-  return `${resourceKind}|${verb}|${namespace}|${subresource}`;
+  return `${clusterId}|${resourceKind}|${verb}|${namespace}|${subresource}`;
 };
 
 const notifyListeners = () => {
@@ -280,16 +334,16 @@ const rebuildPermissionMap = () => {
   };
 
   appendEntries(
-    snapshotEntries(BOOTSTRAP_KEYS, BOOTSTRAP_DESCRIPTOR_MAP),
-    BOOTSTRAP_FEATURES_BY_KEY
+    snapshotEntries(bootstrapBundle.keys, bootstrapBundle.descriptorMap),
+    bootstrapBundle.featureByKey
   );
 
   if (adHocDescriptorBundle.list.length > 0) {
     appendEntries(snapshotEntries(adHocDescriptorBundle.keys, adHocDescriptorBundle.descriptorMap));
   }
 
-  trackedNamespaces.forEach((namespace) => {
-    const entry = namespaceDescriptorRegistry.get(namespace);
+  trackedNamespaces.forEach((registryKey) => {
+    const entry = namespaceDescriptorRegistry.get(registryKey);
     if (!entry) {
       return;
     }
@@ -306,7 +360,9 @@ export const registerAdHocCapabilities = (
 ): void => {
   let changed = false;
   descriptors.forEach((descriptor) => {
-    const normalized = normalizeDescriptor(descriptor);
+    const normalized = normalizeDescriptor(
+      applyClusterId(descriptor, descriptor.clusterId ?? currentClusterId)
+    );
     if (!normalized.id) {
       return;
     }
@@ -328,24 +384,25 @@ export const registerAdHocCapabilities = (
 };
 
 const refreshClusterPermissions = (force: boolean) => {
-  ensureCapabilityEntries(BOOTSTRAP_NORMALIZED_DESCRIPTORS);
-  requestCapabilities(BOOTSTRAP_NORMALIZED_DESCRIPTORS, {
+  ensureCapabilityEntries(bootstrapBundle.list);
+  requestCapabilities(bootstrapBundle.list, {
     force,
   });
 };
 
 export const evaluateNamespacePermissions = (
   namespace: string,
-  options: { force?: boolean } = {}
+  options: { force?: boolean; clusterId?: string | null } = {}
 ): void => {
   const trimmed = namespace?.trim();
   if (!trimmed) {
     return;
   }
 
-  const alreadyTracked = trackedNamespaces.has(trimmed);
-  const entry = getNamespaceCapabilityEntry(trimmed);
-  trackedNamespaces.add(trimmed);
+  const registryKey = makeNamespaceRegistryKey(trimmed, options.clusterId);
+  const alreadyTracked = trackedNamespaces.has(registryKey);
+  const entry = getNamespaceCapabilityEntry(trimmed, options.clusterId);
+  trackedNamespaces.add(registryKey);
 
   if (entry.bundle.list.length === 0) {
     return;
@@ -382,9 +439,13 @@ const registerEventBusListeners = () => {
   eventBusSubscribed = true;
 };
 
-export const initializeUserPermissionsBootstrap = (): void => {
+export const initializeUserPermissionsBootstrap = (clusterId?: string | null): void => {
+  const clusterChanged = updateBootstrapClusterId(clusterId);
   if (initialized) {
-    refreshClusterPermissions(false);
+    if (clusterChanged) {
+      rebuildPermissionMap();
+    }
+    refreshClusterPermissions(clusterChanged);
     return;
   }
 
@@ -412,13 +473,15 @@ export const getUserPermission = (
   resourceKind: string,
   verb: string,
   namespace?: string | null,
-  subresource?: string | null
+  subresource?: string | null,
+  clusterId?: string | null
 ): PermissionStatus | undefined => {
   const key = makePermissionKey({
     resourceKind,
     verb,
     namespace: namespace ?? undefined,
     subresource: subresource ?? undefined,
+    clusterId: clusterId ?? undefined,
   });
   return permissionMap.get(key);
 };
@@ -430,10 +493,11 @@ export const useUserPermission = (
   resourceKind: string,
   verb: string,
   namespace?: string | null,
-  subresource?: string | null
+  subresource?: string | null,
+  clusterId?: string | null
 ): PermissionStatus | undefined => {
   const map = useUserPermissions();
-  const key = getPermissionKey(resourceKind, verb, namespace, subresource);
+  const key = getPermissionKey(resourceKind, verb, namespace, subresource, clusterId);
   return map.get(key);
 };
 
@@ -441,13 +505,15 @@ export const getPermissionKey = (
   resourceKind: string,
   verb: string,
   namespace?: string | null,
-  subresource?: string | null
+  subresource?: string | null,
+  clusterId?: string | null
 ): PermissionKey =>
   makePermissionKey({
     resourceKind,
     verb,
     namespace: namespace ?? undefined,
     subresource: subresource ?? undefined,
+    clusterId: clusterId ?? undefined,
   });
 
 /** @public Used in bootstrap.test.ts via dynamic import */
@@ -463,6 +529,8 @@ export const __resetCapabilitiesStateForTests = (): void => {
     keys: [],
     list: [],
   };
+  currentClusterId = '';
+  bootstrapBundle = buildBootstrapBundle(currentClusterId);
   storeSubscriptionRegistered = false;
   initialized = false;
   if (unsubscribeChanging) {

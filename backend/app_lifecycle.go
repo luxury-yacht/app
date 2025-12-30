@@ -13,7 +13,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-var newRefreshSubsystem = system.NewSubsystem
+var newRefreshSubsystemWithServices = system.NewSubsystemWithServices
 var (
 	runtimeEventsEmit     = runtime.EventsEmit
 	runtimeMessageDialog  = runtime.MessageDialog

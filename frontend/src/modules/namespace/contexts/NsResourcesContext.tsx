@@ -44,6 +44,9 @@ import { useViewState } from '@/core/contexts/ViewStateContext';
 import type { CapabilityDefinition } from '@/core/capabilities/catalog';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { resetScopedDomainState } from '@/core/refresh/store';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 
 export interface PodsResourceDataReturn extends ResourceDataReturn<PodSnapshotEntry[]> {
   metrics: PodMetricsInfo | null;
@@ -87,6 +90,20 @@ const DOMAIN_BY_RESOURCE: Partial<Record<NamespaceViewType, RefreshDomain | null
   custom: 'namespace-custom',
   helm: 'namespace-helm',
   events: 'namespace-events',
+};
+
+// Filter merged namespace payloads to the active cluster tab.
+const filterByClusterId = <T extends { clusterId?: string | null }>(
+  items: T[] | null | undefined,
+  clusterId?: string | null
+): T[] => {
+  if (!items || items.length === 0) {
+    return [];
+  }
+  if (!clusterId) {
+    return items.filter((item) => !item.clusterId);
+  }
+  return items.filter((item) => item.clusterId === clusterId);
 };
 
 type NamespaceCapabilitySpec = {
@@ -296,7 +313,10 @@ const buildCapabilityDefinitionsForNamespace = (
     })
   );
 
-const normalizeNamespaceScope = (value?: string | null): string | null => {
+const normalizeNamespaceScope = (
+  value?: string | null,
+  clusterId?: string | null
+): string | null => {
   if (!value) {
     return null;
   }
@@ -304,7 +324,8 @@ const normalizeNamespaceScope = (value?: string | null): string | null => {
   if (!trimmed) {
     return null;
   }
-  return trimmed.startsWith('namespace:') ? trimmed : `namespace:${trimmed}`;
+  const namespaceScope = trimmed.startsWith('namespace:') ? trimmed : `namespace:${trimmed}`;
+  return buildClusterScope(clusterId ?? undefined, namespaceScope);
 };
 
 const getCapabilityNamespace = (value?: string | null): string | null => {
@@ -324,9 +345,13 @@ const getCapabilityNamespace = (value?: string | null): string | null => {
 
 const useNamespacePodsResource = (
   enabled: boolean,
-  namespace?: string | null
+  namespace?: string | null,
+  clusterId?: string | null
 ): PodsResourceDataReturn => {
-  const scope = useMemo(() => normalizeNamespaceScope(namespace), [namespace]);
+  const scope = useMemo(
+    () => normalizeNamespaceScope(namespace, clusterId),
+    [clusterId, namespace]
+  );
   const capabilityNamespace = useMemo(() => getCapabilityNamespace(namespace), [namespace]);
 
   const scopedStates = useRefreshScopedDomainStates('pods');
@@ -344,11 +369,12 @@ const useNamespacePodsResource = (
       registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
         force: false,
         ttlMs: DEFAULT_CAPABILITY_TTL_MS,
+        clusterId,
       });
-      evaluateNamespacePermissions(capabilityNamespace);
+      evaluateNamespacePermissions(capabilityNamespace, { clusterId });
     }
     await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: true });
-  }, [capabilityNamespace, enabled, scope]);
+  }, [capabilityNamespace, clusterId, enabled, scope]);
 
   const refresh = useCallback(async () => {
     if (!enabled || !scope) {
@@ -362,10 +388,11 @@ const useNamespacePodsResource = (
       registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
         force: true,
         ttlMs: DEFAULT_CAPABILITY_TTL_MS,
+        clusterId,
       });
     }
     await refreshOrchestrator.fetchScopedDomain('pods', scope, { isManual: true });
-  }, [capabilityNamespace, enabled, scope]);
+  }, [capabilityNamespace, clusterId, enabled, scope]);
 
   const reset = useCallback(() => {
     if (!scope) {
@@ -436,7 +463,8 @@ function useRefreshBackedResource<T>(
   selector: (payload: any) => T,
   fallback: T,
   enabled: boolean,
-  namespace?: string | null
+  namespace?: string | null,
+  clusterId?: string | null
 ): ResourceDataReturn<T> {
   const domainState = useRefreshDomain(domain);
   const domainData = domainState.data;
@@ -461,8 +489,9 @@ function useRefreshBackedResource<T>(
         registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
           force: false,
           ttlMs: DEFAULT_CAPABILITY_TTL_MS,
+          clusterId,
         });
-        evaluateNamespacePermissions(capabilityNamespace);
+        evaluateNamespacePermissions(capabilityNamespace, { clusterId });
       }
 
       try {
@@ -475,7 +504,7 @@ function useRefreshBackedResource<T>(
         });
       }
     },
-    [capabilityNamespace, capabilitySpecs, domain, enabled, isStreaming, resourceKey]
+    [capabilityNamespace, capabilitySpecs, clusterId, domain, enabled, isStreaming, resourceKey]
   );
 
   const refresh = useCallback(async () => {
@@ -491,6 +520,7 @@ function useRefreshBackedResource<T>(
       registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
         force: true,
         ttlMs: DEFAULT_CAPABILITY_TTL_MS,
+        clusterId,
       });
     }
 
@@ -501,7 +531,7 @@ function useRefreshBackedResource<T>(
         source: `namespace-resource-refresh-${resourceKey}`,
       });
     }
-  }, [capabilityNamespace, capabilitySpecs, domain, enabled, isStreaming, resourceKey]);
+  }, [capabilityNamespace, capabilitySpecs, clusterId, domain, enabled, isStreaming, resourceKey]);
 
   const reset = useCallback(() => {
     refreshOrchestrator.resetDomain(domain);
@@ -597,6 +627,10 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   activeView,
 }) => {
   const { viewType } = useViewState();
+  const { selectedClusterId } = useKubeconfig();
+  const { selectedNamespaceClusterId } = useNamespace();
+  // Prefer the cluster tied to the namespace selection; fall back to the kubeconfig selection.
+  const namespaceClusterId = selectedNamespaceClusterId ?? selectedClusterId;
   const isNamespaceView = viewType === 'namespace';
   const [currentNamespace, setCurrentNamespace] = useState<string | null>(propNamespace || null);
   // Default to 'workloads' since that's the default view in NamespaceViews
@@ -633,148 +667,168 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   const workloads = useRefreshBackedResource<any[]>(
     'workloads',
     'namespace-workloads',
-    (payload) => payload?.workloads ?? [],
+    (payload) => filterByClusterId(payload?.workloads, namespaceClusterId),
     [],
     isResourceActive('workloads'),
-    currentNamespace
+    currentNamespace,
+    namespaceClusterId
   );
 
   const config = useRefreshBackedResource<any[]>(
     'config',
     'namespace-config',
-    (payload) => payload?.resources ?? [],
+    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
     [],
     isResourceActive('config'),
-    currentNamespace
+    currentNamespace,
+    namespaceClusterId
   );
 
   const network = useRefreshBackedResource<any[]>(
     'network',
     'namespace-network',
-    (payload) => payload?.resources ?? [],
+    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
     [],
     isResourceActive('network'),
-    currentNamespace
+    currentNamespace,
+    namespaceClusterId
   );
 
   const rbac = useRefreshBackedResource<any[]>(
     'rbac',
     'namespace-rbac',
-    (payload) => payload?.resources ?? [],
+    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
     [],
     isResourceActive('rbac'),
-    currentNamespace
+    currentNamespace,
+    namespaceClusterId
   );
 
   const storage = useRefreshBackedResource<any[]>(
     'storage',
     'namespace-storage',
-    (payload) => payload?.resources ?? [],
+    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
     [],
     isResourceActive('storage'),
-    currentNamespace
+    currentNamespace,
+    namespaceClusterId
   );
 
   const autoscaling = useRefreshBackedResource<any[]>(
     'autoscaling',
     'namespace-autoscaling',
     (payload?: NamespaceAutoscalingSnapshotPayload) =>
-      (payload?.resources ?? []).map((item: NamespaceAutoscalingSummary) => {
-        const scaleTargetRef = parseAutoscalingTarget(item.target);
-        return {
-          kind: item.kind,
-          kindAlias: item.kind,
-          name: item.name,
-          namespace: item.namespace,
-          scaleTargetRef,
-          target: item.target,
-          min: item.min,
-          max: item.max,
-          current: item.current,
-          minReplicas: item.min,
-          maxReplicas: item.max,
-          currentReplicas: item.current,
-          age: item.age,
-        };
-      }),
+      filterByClusterId(payload?.resources, namespaceClusterId).map(
+        (item: NamespaceAutoscalingSummary) => {
+          const scaleTargetRef = parseAutoscalingTarget(item.target);
+          return {
+            kind: item.kind,
+            kindAlias: item.kind,
+            name: item.name,
+            namespace: item.namespace,
+            scaleTargetRef,
+            target: item.target,
+            min: item.min,
+            max: item.max,
+            current: item.current,
+            minReplicas: item.min,
+            maxReplicas: item.max,
+            currentReplicas: item.current,
+            age: item.age,
+          };
+        }
+      ),
     [],
     isResourceActive('autoscaling'),
-    currentNamespace
+    currentNamespace,
+    namespaceClusterId
   );
 
   const quotas = useRefreshBackedResource<any[]>(
     'quotas',
     'namespace-quotas',
-    (payload) => payload?.resources ?? [],
+    (payload) => filterByClusterId(payload?.resources, namespaceClusterId),
     [],
     isResourceActive('quotas'),
-    currentNamespace
+    currentNamespace,
+    namespaceClusterId
   );
 
   const events = useRefreshBackedResource<any[]>(
     'events',
     'namespace-events',
-    (payload) => payload?.events ?? [],
+    (payload) => filterByClusterId(payload?.events, namespaceClusterId),
     [],
     isResourceActive('events'),
-    currentNamespace
+    currentNamespace,
+    namespaceClusterId
   );
 
   const podsEnabled =
     Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === 'pods';
-  const pods = useNamespacePodsResource(podsEnabled, currentNamespace);
+  const pods = useNamespacePodsResource(podsEnabled, currentNamespace, namespaceClusterId);
 
   const custom = useRefreshBackedResource<any[]>(
     'custom',
     'namespace-custom',
     (payload?: NamespaceCustomSnapshotPayload) =>
-      (payload?.resources ?? []).map((item: NamespaceCustomSummary) => ({
-        kind: item.kind,
-        kindAlias: item.kind,
-        name: item.name,
-        namespace: item.namespace,
-        apiGroup: item.apiGroup,
-        age: item.age,
-        // Preserve metadata for the custom view/object panel.
-        labels: item.labels,
-        annotations: item.annotations,
-      })),
+      filterByClusterId(payload?.resources, namespaceClusterId).map(
+        (item: NamespaceCustomSummary) => ({
+          kind: item.kind,
+          kindAlias: item.kind,
+          name: item.name,
+          namespace: item.namespace,
+          apiGroup: item.apiGroup,
+          age: item.age,
+          // Preserve metadata for the custom view/object panel.
+          labels: item.labels,
+          annotations: item.annotations,
+        })
+      ),
     [],
     isResourceActive('custom'),
-    currentNamespace
+    currentNamespace,
+    namespaceClusterId
   );
 
   const helm = useRefreshBackedResource<any[]>(
     'helm',
     'namespace-helm',
     (payload?: NamespaceHelmSnapshotPayload) =>
-      (payload?.releases ?? []).map((release: NamespaceHelmSummary) => ({
-        kind: 'HelmRelease',
-        name: release.name,
-        namespace: release.namespace,
-        chart: release.chart,
-        appVersion: release.appVersion,
-        status: release.status,
-        revision: release.revision,
-        updated: release.updated,
-        description: release.description,
-        notes: release.notes,
-        age: release.age,
-      })),
+      filterByClusterId(payload?.releases, namespaceClusterId).map(
+        (release: NamespaceHelmSummary) => ({
+          kind: 'HelmRelease',
+          name: release.name,
+          namespace: release.namespace,
+          chart: release.chart,
+          appVersion: release.appVersion,
+          status: release.status,
+          revision: release.revision,
+          updated: release.updated,
+          description: release.description,
+          notes: release.notes,
+          age: release.age,
+        })
+      ),
     [],
     isResourceActive('helm'),
-    currentNamespace
+    currentNamespace,
+    namespaceClusterId
   );
 
   useEffect(() => {
     if (!isNamespaceView) {
-      refreshOrchestrator.updateContext({ selectedNamespace: undefined });
+      refreshOrchestrator.updateContext({
+        selectedNamespace: undefined,
+        selectedNamespaceClusterId: undefined,
+      });
       return;
     }
     refreshOrchestrator.updateContext({
       selectedNamespace: currentNamespace ?? undefined,
+      selectedNamespaceClusterId: currentNamespace ? (namespaceClusterId ?? undefined) : undefined,
     });
-  }, [currentNamespace, isNamespaceView]);
+  }, [currentNamespace, isNamespaceView, namespaceClusterId]);
 
   useEffect(() => {
     const entries = Object.entries(DOMAIN_BY_RESOURCE) as Array<
@@ -794,11 +848,18 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
         refreshOrchestrator.resetDomain(domain);
       }
     });
-    const scope = normalizeNamespaceScope(currentNamespace);
+    const scope = normalizeNamespaceScope(currentNamespace, namespaceClusterId);
     if (scope) {
       refreshOrchestrator.setScopedDomainEnabled('pods', scope, podsEnabled);
     }
-  }, [activeNamespaceView, currentNamespace, isNamespaceView, podsEnabled, pods]);
+  }, [
+    activeNamespaceView,
+    currentNamespace,
+    isNamespaceView,
+    podsEnabled,
+    pods,
+    namespaceClusterId,
+  ]);
 
   useEffect(() => {
     const domains = Object.values(DOMAIN_BY_RESOURCE).filter(Boolean) as RefreshDomain[];
@@ -807,12 +868,12 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       domains.forEach((domain) => {
         refreshOrchestrator.setDomainEnabled(domain, false);
       });
-      const scope = normalizeNamespaceScope(currentNamespace);
+      const scope = normalizeNamespaceScope(currentNamespace, namespaceClusterId);
       if (scope) {
         refreshOrchestrator.setScopedDomainEnabled('pods', scope, false);
       }
     };
-  }, [currentNamespace]);
+  }, [currentNamespace, namespaceClusterId]);
 
   useEffect(() => {
     const nextNamespace = propNamespace ?? null;
@@ -1031,8 +1092,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     if (!capabilityNamespace) {
       return;
     }
-    evaluateNamespacePermissions(capabilityNamespace);
-  }, [currentNamespace]);
+    // Evaluate namespace permissions against the active cluster context.
+    evaluateNamespacePermissions(capabilityNamespace, { clusterId: namespaceClusterId });
+  }, [currentNamespace, namespaceClusterId]);
 
   return (
     <NamespaceResourcesContext.Provider value={contextValue}>

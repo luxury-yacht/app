@@ -35,11 +35,13 @@ type NamespaceCustomBuilder struct {
 
 // NamespaceCustomSnapshot is returned to clients.
 type NamespaceCustomSnapshot struct {
+	ClusterMeta
 	Resources []NamespaceCustomSummary `json:"resources"`
 }
 
 // NamespaceCustomSummary captures key CR instance fields.
 type NamespaceCustomSummary struct {
+	ClusterMeta
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	APIGroup  string `json:"apiGroup"`
@@ -76,7 +78,9 @@ func RegisterNamespaceCustomDomain(
 }
 
 func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	trimmed := strings.TrimSpace(scope)
+	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {
 		return nil, fmt.Errorf("namespace scope is required")
 	}
@@ -115,11 +119,12 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 		if isAll {
 			snapshotScope = "namespace:all"
 		}
+		snapshotScope = refresh.JoinClusterScope(clusterID, snapshotScope)
 		return &refresh.Snapshot{
 			Domain:  namespaceCustomDomainName,
 			Scope:   snapshotScope,
 			Version: 0,
-			Payload: NamespaceCustomSnapshot{Resources: []NamespaceCustomSummary{}},
+			Payload: NamespaceCustomSnapshot{ClusterMeta: meta, Resources: []NamespaceCustomSummary{}},
 			Stats:   refresh.SnapshotStats{ItemCount: 0},
 		}, nil
 	}
@@ -191,6 +196,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 					itemNamespace = namespace
 				}
 				items = append(items, NamespaceCustomSummary{
+					ClusterMeta: meta,
 					Kind:        resourceKind(item, crdCopy.Spec.Names.Kind),
 					Name:        item.GetName(),
 					APIGroup:    gvr.Group,
@@ -226,7 +232,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 
 	sortNamespaceCustomSummaries(summaries)
 
-	payload := NamespaceCustomSnapshot{Resources: summaries}
+	payload := NamespaceCustomSnapshot{ClusterMeta: meta, Resources: summaries}
 	if payload.Resources == nil {
 		payload.Resources = []NamespaceCustomSummary{}
 	}
@@ -242,6 +248,7 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 	if isAll {
 		snapshotScope = "namespace:all"
 	}
+	snapshotScope = refresh.JoinClusterScope(clusterID, snapshotScope)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceCustomDomainName,
@@ -253,7 +260,8 @@ func (b *NamespaceCustomBuilder) Build(ctx context.Context, scope string) (*refr
 }
 
 func normalizeNamespaceScope(scope string) string {
-	value := strings.TrimSpace(scope)
+	_, scopeValue := refresh.SplitClusterScope(scope)
+	value := strings.TrimSpace(scopeValue)
 	if value == "" {
 		return ""
 	}

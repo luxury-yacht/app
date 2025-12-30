@@ -25,7 +25,7 @@ const normalizeFilterArray = (values?: string[]): string[] => {
     return [];
   }
   const seen = new Set<string>();
-  const clusterKey = '__cluster__';
+  const emptyKey = '__empty__';
   const result: string[] = [];
   for (const raw of values) {
     if (typeof raw !== 'string') {
@@ -34,8 +34,8 @@ const normalizeFilterArray = (values?: string[]): string[] => {
     const trimmed = raw.trim();
     const normalized = trimmed !== '' ? trimmed : '';
     if (normalized === '') {
-      if (!seen.has(clusterKey)) {
-        seen.add(clusterKey);
+      if (!seen.has(emptyKey)) {
+        seen.add(emptyKey);
         result.push('');
       }
       continue;

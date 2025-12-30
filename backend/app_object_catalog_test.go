@@ -1,8 +1,10 @@
 package backend
 
 import (
+	"reflect"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -13,11 +15,13 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 	app.logger = NewLogger(10)
 
 	cancelCalled := 0
-	app.objectCatalogCancel = func() { cancelCalled++ }
 	done := make(chan struct{}, 1)
 	done <- struct{}{}
-	app.objectCatalogDone = done
-	app.objectCatalogService = &objectcatalog.Service{}
+	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
+		service: &objectcatalog.Service{},
+		cancel:  func() { cancelCalled++ },
+		done:    done,
+	})
 	app.telemetryRecorder = telemetry.NewRecorder()
 
 	app.stopObjectCatalog()
@@ -25,7 +29,7 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 	if cancelCalled != 1 {
 		t.Fatalf("expected cancel to be invoked once, got %d", cancelCalled)
 	}
-	if app.objectCatalogCancel != nil || app.objectCatalogDone != nil || app.objectCatalogService != nil {
+	if app.objectCatalogServiceForCluster("cluster-a") != nil {
 		t.Fatalf("expected catalog references to be cleared")
 	}
 
@@ -38,7 +42,9 @@ func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
 func TestGetCatalogDiagnosticsCombinesTelemetryAndServiceState(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
-	app.objectCatalogService = &objectcatalog.Service{}
+	app.storeObjectCatalogEntry("cluster-a", &objectCatalogEntry{
+		service: &objectcatalog.Service{},
+	})
 	app.telemetryRecorder = telemetry.NewRecorder()
 
 	app.telemetryRecorder.RecordCatalog(true, 7, 3, 1500*time.Millisecond, nil)
@@ -59,4 +65,82 @@ func TestGetCatalogDiagnosticsCombinesTelemetryAndServiceState(t *testing.T) {
 	if diag.Status != "success" {
 		t.Fatalf("expected status success, got %s", diag.Status)
 	}
+}
+
+func TestSnapshotObjectCatalogEntriesSortsByClusterID(t *testing.T) {
+	app := NewApp()
+	entryA := &objectCatalogEntry{meta: ClusterMeta{ID: "cluster-a"}}
+	entryB := &objectCatalogEntry{meta: ClusterMeta{ID: "cluster-b"}}
+
+	app.objectCatalogEntries = map[string]*objectCatalogEntry{
+		"b":   entryB,
+		"a":   entryA,
+		"nil": nil,
+	}
+
+	entries := app.snapshotObjectCatalogEntries()
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(entries))
+	}
+	if entries[0] != entryA || entries[1] != entryB {
+		t.Fatalf("expected sorted entries, got %#v", entries)
+	}
+	if entries[2] != nil {
+		t.Fatalf("expected nil entry at the end")
+	}
+}
+
+func TestCatalogNamespaceGroupsFiltersAndMapsNamespaces(t *testing.T) {
+	app := NewApp()
+
+	withNamespaces := objectcatalog.NewService(objectcatalog.Dependencies{}, nil)
+	setCatalogServiceNamespaces(t, withNamespaces, []string{"default", "kube-system"})
+
+	app.objectCatalogEntries = map[string]*objectCatalogEntry{
+		"cluster-a": {
+			service: withNamespaces,
+			meta: ClusterMeta{
+				ID:   "cluster-a",
+				Name: "Cluster A",
+			},
+		},
+		"cluster-b": {
+			service: objectcatalog.NewService(objectcatalog.Dependencies{}, nil),
+			meta: ClusterMeta{
+				ID:   "cluster-b",
+				Name: "Cluster B",
+			},
+		},
+		"cluster-c": {
+			service: withNamespaces,
+			meta: ClusterMeta{
+				ID:   "",
+				Name: "Cluster C",
+			},
+		},
+		"cluster-d": nil,
+	}
+
+	groups := app.catalogNamespaceGroups()
+	if len(groups) != 1 {
+		t.Fatalf("expected 1 namespace group, got %d", len(groups))
+	}
+	group := groups[0]
+	if group.ClusterID != "cluster-a" || group.ClusterName != "Cluster A" {
+		t.Fatalf("unexpected cluster metadata: %#v", group)
+	}
+	if len(group.Namespaces) != 2 {
+		t.Fatalf("expected namespace list, got %#v", group.Namespaces)
+	}
+}
+
+func setCatalogServiceNamespaces(t *testing.T, svc *objectcatalog.Service, namespaces []string) {
+	t.Helper()
+	// Use reflection to set cached namespaces without running the catalog service.
+	value := reflect.ValueOf(svc).Elem().FieldByName("cachedNamespaces")
+	if !value.IsValid() {
+		t.Fatalf("cachedNamespaces field not found")
+	}
+	copyNamespaces := append([]string(nil), namespaces...)
+	reflect.NewAt(value.Type(), unsafe.Pointer(value.UnsafeAddr())).Elem().Set(reflect.ValueOf(copyNamespaces))
 }

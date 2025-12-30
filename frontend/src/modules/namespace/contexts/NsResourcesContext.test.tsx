@@ -98,6 +98,16 @@ vi.mock('@/core/refresh/store', () => ({
   resetScopedDomainState: (...args: unknown[]) => storeMocks.resetScopedDomainState(...args),
 }));
 
+const testClusterId = 'test-cluster';
+
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedClusterId: testClusterId }),
+}));
+
+vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
+  useNamespace: () => ({ selectedNamespaceClusterId: testClusterId }),
+}));
+
 const TestConsumer: React.FC = () => {
   const context = useNamespaceResources();
   contextRef.current = context;
@@ -185,7 +195,7 @@ describe('NamespaceResourcesProvider', () => {
   });
 
   it('enables the active domain, registers capabilities, and performs manual refresh', async () => {
-    scopedStates['namespace:team-a'] = {
+    scopedStates[`${testClusterId}|namespace:team-a`] = {
       status: 'idle',
       data: null,
       error: null,
@@ -200,6 +210,7 @@ describe('NamespaceResourcesProvider', () => {
 
     expect(orchestrator.updateContext).toHaveBeenCalledWith({
       selectedNamespace: 'team-a',
+      selectedNamespaceClusterId: testClusterId,
     });
     expect(orchestrator.setDomainEnabled).toHaveBeenCalledWith('namespace-config', true);
     expect(orchestrator.triggerManualRefresh).toHaveBeenCalledWith(
@@ -209,14 +220,16 @@ describe('NamespaceResourcesProvider', () => {
     expect(capabilityMocks.registerNamespaceCapabilityDefinitions).toHaveBeenCalledWith(
       'team-a',
       expect.any(Array),
-      expect.objectContaining({ ttlMs: expect.any(Number) })
+      expect.objectContaining({ ttlMs: expect.any(Number), clusterId: testClusterId })
     );
-    expect(capabilityMocks.evaluateNamespacePermissions).toHaveBeenCalledWith('team-a');
+    expect(capabilityMocks.evaluateNamespacePermissions).toHaveBeenCalledWith('team-a', {
+      clusterId: testClusterId,
+    });
     expect(contextRef.current?.config.data).toEqual([]);
   });
 
   it('switches active resources and toggles scoped pods access', async () => {
-    scopedStates['namespace:team-a'] = {
+    scopedStates[`${testClusterId}|namespace:team-a`] = {
       status: 'idle',
       data: null,
       error: null,
@@ -242,7 +255,7 @@ describe('NamespaceResourcesProvider', () => {
 
     expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'pods',
-      'namespace:team-a',
+      `${testClusterId}|namespace:team-a`,
       true
     );
 
@@ -255,7 +268,7 @@ describe('NamespaceResourcesProvider', () => {
   });
 
   it('resets domains and triggers reload when the namespace changes', async () => {
-    scopedStates['namespace:team-a'] = {
+    scopedStates[`${testClusterId}|namespace:team-a`] = {
       status: 'ready',
       data: null,
       error: null,
@@ -274,7 +287,7 @@ describe('NamespaceResourcesProvider', () => {
     orchestrator.resetDomain.mockClear();
     storeMocks.resetScopedDomainState.mockClear();
 
-    scopedStates['namespace:team-b'] = {
+    scopedStates[`${testClusterId}|namespace:team-b`] = {
       status: 'idle',
       data: null,
       error: null,
@@ -299,7 +312,7 @@ describe('NamespaceResourcesProvider', () => {
     );
     expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'pods',
-      'namespace:team-b',
+      `${testClusterId}|namespace:team-b`,
       false
     );
   });

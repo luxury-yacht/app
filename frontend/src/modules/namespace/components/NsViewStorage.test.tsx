@@ -146,6 +146,7 @@ describe('NsViewStorage', () => {
     kind: 'PersistentVolumeClaim',
     name: 'pvc-data',
     namespace: 'team-a',
+    clusterId: 'alpha:ctx',
     status: 'Bound',
     capacity: '10Gi',
     storageClass: 'fast-ssd',
@@ -189,11 +190,14 @@ describe('NsViewStorage', () => {
     act(() => {
       openItem?.onClick?.();
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'PersistentVolumeClaim',
-      name: 'pvc-data',
-      namespace: 'team-a',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'PersistentVolumeClaim',
+        name: 'pvc-data',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+      })
+    );
   });
 
   it('exposes delete action and calls backend on confirmation', async () => {
@@ -213,7 +217,12 @@ describe('NsViewStorage', () => {
     await act(async () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
-    expect(deleteResourceMock).toHaveBeenCalledWith('PersistentVolumeClaim', 'team-a', 'pvc-data');
+    expect(deleteResourceMock).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'PersistentVolumeClaim',
+      'team-a',
+      'pvc-data'
+    );
   });
 
   it('navigates to storage class when storage column is activated', async () => {
@@ -230,10 +239,13 @@ describe('NsViewStorage', () => {
       renderedCell.props.onClick({ stopPropagation: () => {} });
     });
 
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'StorageClass',
-      name: 'fast-ssd',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'StorageClass',
+        name: 'fast-ssd',
+        clusterId: 'alpha:ctx',
+      })
+    );
   });
 
   it('applies status and capacity classes based on resource state', async () => {

@@ -46,9 +46,10 @@ export interface NamespaceListItem {
 interface NamespaceContextType {
   namespaces: NamespaceListItem[];
   selectedNamespace?: string;
+  selectedNamespaceClusterId?: string;
   namespaceLoading: boolean;
   namespaceRefreshing: boolean;
-  setSelectedNamespace: (namespace: string) => void;
+  setSelectedNamespace: (namespace: string, clusterId?: string) => void;
   loadNamespaces: (showSpinner?: boolean) => Promise<void>;
   refreshNamespaces: () => Promise<void>;
 }
@@ -69,13 +70,21 @@ interface NamespaceProviderProps {
 
 export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }) => {
   const namespaceDomain = useRefreshDomain('namespaces');
-  const { selectedKubeconfig } = useKubeconfig();
-  const [selectedNamespace, setSelectedNamespace] = useState<string | undefined>();
+  const { selectedKubeconfig, selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const activeClusterId = selectedClusterId?.trim() || '';
+  // Track namespace selection per cluster tab to avoid cross-tab selection bleed.
+  const [namespaceSelections, setNamespaceSelections] = useState<
+    Record<string, string | undefined>
+  >({});
+  const clusterKey = selectedClusterId || '__default__';
+  const selectedNamespace = namespaceSelections[clusterKey];
+  const selectedNamespaceClusterId =
+    selectedNamespace && selectedClusterId ? selectedClusterId : undefined;
   const lastErrorRef = useRef<string | null>(null);
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
 
   const [namespaces, setNamespaces] = useState<NamespaceListItem[]>([]);
-  const hasLoadedOnceRef = useRef(false);
+  const namespacesRef = useRef<NamespaceListItem[]>([]);
   const allNamespaceItem = useMemo<NamespaceListItem>(
     () => ({
       name: ALL_NAMESPACES_DISPLAY_NAME,
@@ -91,16 +100,35 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     []
   );
 
+  const updateNamespaces = useCallback((nextNamespaces: NamespaceListItem[]) => {
+    namespacesRef.current = nextNamespaces;
+    setNamespaces(nextNamespaces);
+  }, []);
+
+  const scopedNamespaces = useMemo(() => {
+    if (!namespaceDomain.data || !activeClusterId) {
+      return [];
+    }
+    return namespaceDomain.data.namespaces.filter((ns) => ns.clusterId === activeClusterId);
+  }, [activeClusterId, namespaceDomain.data]);
+
   useEffect(() => {
     if (!namespaceDomain.data) {
       if (namespaceDomain.status === 'idle') {
-        setNamespaces([allNamespaceItem]);
-        hasLoadedOnceRef.current = false;
+        updateNamespaces([]);
       }
       return;
     }
 
-    const mappedNamespaces = namespaceDomain.data.namespaces.map((ns) => {
+    if (!activeClusterId) {
+      updateNamespaces([]);
+      return;
+    }
+    if (scopedNamespaces.length === 0) {
+      updateNamespaces([]);
+      return;
+    }
+    const mappedNamespaces = scopedNamespaces.map((ns) => {
       const createdAtMs = (ns.creationTimestamp || 0) * 1000;
       const age = formatAge(createdAtMs || Date.now());
       const workloadsUnknown = Boolean(ns.workloadsUnknown);
@@ -122,20 +150,20 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       } satisfies NamespaceListItem;
     });
 
-    setNamespaces([allNamespaceItem, ...mappedNamespaces]);
-    hasLoadedOnceRef.current = true;
-  }, [allNamespaceItem, namespaceDomain.data, namespaceDomain.status]);
+    updateNamespaces([allNamespaceItem, ...mappedNamespaces]);
+  }, [
+    activeClusterId,
+    allNamespaceItem,
+    namespaceDomain.status,
+    namespaceDomain.data,
+    scopedNamespaces,
+    updateNamespaces,
+  ]);
 
-  const hasRealNamespaces = namespaces.some((item) => !item.isSynthetic);
-
+  const hasActiveClusterNamespaces = scopedNamespaces.length > 0;
   const namespaceLoading =
-    (!hasRealNamespaces &&
-      (namespaceDomain.status === 'idle' ||
-        namespaceDomain.status === 'initialising' ||
-        namespaceDomain.status === 'loading')) ||
-    (!hasRealNamespaces && !hasLoadedOnceRef.current);
-
-  const namespaceRefreshing = hasRealNamespaces && namespaceDomain.status === 'updating';
+    Boolean(activeClusterId) && !hasActiveClusterNamespaces && namespaceDomain.status !== 'error';
+  const namespaceRefreshing = hasActiveClusterNamespaces && namespaceDomain.status === 'updating';
 
   const loadNamespaces = useCallback(async (showSpinner: boolean = true) => {
     await refreshOrchestrator.triggerManualRefresh('namespaces', {
@@ -147,19 +175,46 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     await loadNamespaces(false);
   }, [loadNamespaces]);
 
-  const handleSetSelectedNamespace = useCallback((namespace: string) => {
-    setSelectedNamespace((prev) => (prev === namespace ? prev : namespace));
-  }, []);
+  const applySelection = useCallback(
+    (namespace?: string | null, targetKey?: string) => {
+      const nextNamespace = (namespace ?? '').trim();
+      const normalizedNamespace = nextNamespace.length > 0 ? nextNamespace : undefined;
+      const key = targetKey ?? clusterKey;
+
+      setNamespaceSelections((prev) => {
+        if (prev[key] === normalizedNamespace) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [key]: normalizedNamespace,
+        };
+      });
+    },
+    [clusterKey]
+  );
+
+  const handleSetSelectedNamespace = useCallback(
+    (namespace: string, clusterId?: string) => {
+      // Always scope namespace selection to the active tab to avoid cross-tab updates.
+      const targetKey = selectedClusterId || clusterId || '__default__';
+      applySelection(namespace, targetKey);
+    },
+    [applySelection, selectedClusterId]
+  );
+
+  const clearSelection = useCallback(() => {
+    applySelection(undefined, clusterKey);
+  }, [applySelection, clusterKey]);
 
   useEffect(() => {
     const enabled = Boolean(selectedKubeconfig);
     refreshOrchestrator.setDomainEnabled('namespaces', enabled);
 
     if (!enabled) {
-      setSelectedNamespace(undefined);
+      clearSelection();
       refreshOrchestrator.resetDomain('namespaces');
-      setNamespaces([allNamespaceItem]);
-      hasLoadedOnceRef.current = false;
+      updateNamespaces([]);
       lastEvaluatedNamespaceRef.current = null;
       return;
     }
@@ -167,28 +222,43 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     if (namespaceDomain.status === 'idle' && !namespaceDomain.data) {
       void refreshOrchestrator.triggerManualRefresh('namespaces');
     }
-  }, [allNamespaceItem, selectedKubeconfig, namespaceDomain.status, namespaceDomain.data]);
+  }, [
+    allNamespaceItem,
+    clearSelection,
+    selectedKubeconfig,
+    namespaceDomain.status,
+    namespaceDomain.data,
+    updateNamespaces,
+  ]);
 
   useEffect(() => {
-    if (!namespaces.length) {
+    const activeNamespaces = namespacesRef.current.length > 0 ? namespacesRef.current : namespaces;
+    if (!activeNamespaces.length) {
       if (namespaceDomain.status === 'ready') {
-        setSelectedNamespace(undefined);
+        clearSelection();
       }
       lastEvaluatedNamespaceRef.current = null;
       return;
     }
 
-    setSelectedNamespace((prev) => {
-      if (prev && namespaces.some((item) => item.scope === prev)) {
-        return prev;
-      }
-      const firstRealNamespace = namespaces.find((item) => !item.isSynthetic)?.scope;
-      if (firstRealNamespace) {
-        return firstRealNamespace;
-      }
-      return namespaces[0]?.scope;
-    });
-  }, [namespaces, namespaceDomain.status]);
+    const current = selectedNamespace;
+    if (current && activeNamespaces.some((item) => item.scope === current)) {
+      applySelection(current, clusterKey);
+      return;
+    }
+    if (current) {
+      // Avoid auto-selecting; clear stale selections and wait for explicit user choice.
+      clearSelection();
+    }
+  }, [
+    applySelection,
+    clusterKey,
+    clearSelection,
+    namespaces,
+    namespaceDomain.status,
+    selectedClusterId,
+    selectedNamespace,
+  ]);
 
   useEffect(() => {
     const namespaceToEvaluate = selectedNamespace?.trim();
@@ -201,12 +271,15 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     }
 
     const normalized = namespaceToEvaluate.toLowerCase();
-    if (lastEvaluatedNamespaceRef.current === normalized) {
+    const evaluationKey = `${selectedClusterId || 'none'}|${normalized}`;
+    if (lastEvaluatedNamespaceRef.current === evaluationKey) {
       return;
     }
-    lastEvaluatedNamespaceRef.current = normalized;
-    evaluateNamespacePermissions(namespaceToEvaluate);
-  }, [selectedNamespace]);
+    lastEvaluatedNamespaceRef.current = evaluationKey;
+    // Scope namespace permission checks to the active cluster.
+    const clusterId = selectedNamespaceClusterId ?? selectedClusterId;
+    evaluateNamespacePermissions(namespaceToEvaluate, { clusterId });
+  }, [selectedNamespace, selectedClusterId, selectedNamespaceClusterId]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -216,33 +289,49 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     const timeout = window.setTimeout(() => {
       const normalized =
         selectedNamespace && selectedNamespace.trim().length > 0 ? selectedNamespace : undefined;
+      const clusterId =
+        normalized && selectedNamespaceClusterId ? selectedNamespaceClusterId : undefined;
       refreshOrchestrator.updateContext({
         selectedNamespace: normalized,
+        selectedNamespaceClusterId: clusterId,
       });
     }, 0);
 
     return () => window.clearTimeout(timeout);
-  }, [selectedNamespace]);
+  }, [selectedNamespace, selectedNamespaceClusterId]);
+
+  useEffect(() => {
+    setNamespaceSelections((prev) => {
+      if (selectedClusterIds.length === 0) {
+        return prev.__default__ ? { __default__: prev.__default__ } : {};
+      }
+      const allowed = new Set(selectedClusterIds);
+      const next: Record<string, string | undefined> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        if (key === '__default__' || allowed.has(key)) {
+          next[key] = value;
+        }
+      });
+      return next;
+    });
+  }, [selectedClusterIds]);
 
   useEffect(() => {
     const handleResetViews = () => {
       refreshOrchestrator.resetDomain('namespaces');
-      setSelectedNamespace(undefined);
-      setNamespaces([allNamespaceItem]);
-      hasLoadedOnceRef.current = false;
+      clearSelection();
+      updateNamespaces([]);
     };
 
     const handleKubeconfigChanging = () => {
       refreshOrchestrator.setDomainEnabled('namespaces', false);
       refreshOrchestrator.resetDomain('namespaces');
-      setSelectedNamespace(undefined);
-      setNamespaces([allNamespaceItem]);
-      hasLoadedOnceRef.current = false;
+      clearSelection();
+      updateNamespaces([]);
     };
 
     const handleKubeconfigChanged = () => {
       refreshOrchestrator.setDomainEnabled('namespaces', true);
-      hasLoadedOnceRef.current = false;
       void refreshOrchestrator.triggerManualRefresh('namespaces');
     };
 
@@ -255,7 +344,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       unsubChanging();
       unsubChanged();
     };
-  }, [allNamespaceItem]);
+  }, [allNamespaceItem, clearSelection, updateNamespaces]);
 
   useEffect(() => {
     if (namespaceDomain.status === 'error' && namespaceDomain.error) {
@@ -279,6 +368,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     () => ({
       namespaces,
       selectedNamespace,
+      selectedNamespaceClusterId,
       namespaceLoading,
       namespaceRefreshing,
       setSelectedNamespace: handleSetSelectedNamespace,
@@ -288,6 +378,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     [
       namespaces,
       selectedNamespace,
+      selectedNamespaceClusterId,
       namespaceLoading,
       namespaceRefreshing,
       handleSetSelectedNamespace,

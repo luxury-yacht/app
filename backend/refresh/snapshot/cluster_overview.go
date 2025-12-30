@@ -49,8 +49,12 @@ type ClusterOverviewBuilder struct {
 
 // ClusterOverviewSnapshot is the payload published for the cluster overview domain.
 type ClusterOverviewSnapshot struct {
-	Overview ClusterOverviewPayload `json:"overview"`
-	Metrics  ClusterOverviewMetrics `json:"metrics"`
+	ClusterMeta
+	Overview         ClusterOverviewPayload              `json:"overview"`
+	Metrics          ClusterOverviewMetrics              `json:"metrics"`
+	MetricsByCluster map[string]ClusterOverviewMetrics   `json:"metricsByCluster,omitempty"`
+	// OverviewByCluster keeps per-cluster cards for multi-cluster snapshots.
+	OverviewByCluster map[string]ClusterOverviewPayload `json:"overviewByCluster,omitempty"`
 }
 
 // ClusterOverviewMetrics exposes poller metadata relevant to aggregated usage values.
@@ -257,6 +261,7 @@ func buildClusterOverviewSnapshot(
 	versionFn func(context.Context) string,
 	serverHost string,
 ) (*refresh.Snapshot, error) {
+	meta := ClusterMetaFromContext(ctx)
 	overview := ClusterOverviewPayload{}
 	var version uint64
 
@@ -430,6 +435,7 @@ func buildClusterOverviewSnapshot(
 		Scope:   "",
 		Version: version,
 		Payload: ClusterOverviewSnapshot{
+			ClusterMeta: meta,
 			Overview: overview,
 			Metrics:  metricsSnapshot,
 		},

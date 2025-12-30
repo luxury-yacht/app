@@ -180,7 +180,7 @@ func newTestHandler(t testing.TB, build func(scope string) (*refresh.Snapshot, e
 	}))
 
 	recorder := telemetry.NewRecorder()
-	service := snapshot.NewService(reg, recorder)
+	service := snapshot.NewService(reg, recorder, snapshot.ClusterMeta{})
 	manager := &Manager{
 		subscribers: make(map[string]map[uint64]*subscription),
 		logger:      noopLogger{},

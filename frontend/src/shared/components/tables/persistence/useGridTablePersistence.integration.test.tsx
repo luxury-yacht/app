@@ -211,7 +211,11 @@ describe('useGridTablePersistence integration', () => {
 
     const stateAfterReset = (globalThis as any).__LATEST_STATE__;
     expect(stateAfterReset.columnVisibility).toEqual({});
-    expect(stateAfterReset.filters).toEqual({ search: '', kinds: [], namespaces: [] });
+    expect(stateAfterReset.filters).toEqual({
+      search: '',
+      kinds: [],
+      namespaces: [],
+    });
 
     await act(async () => {
       root.unmount();

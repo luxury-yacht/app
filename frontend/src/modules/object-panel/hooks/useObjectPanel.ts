@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useDockablePanelState } from '@components/dockable';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
 import type { KubernetesObjectReference } from '@/types/view-state';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 // Callback ref for closeObjectPanelGlobal to use
 let closeCallback: (() => void) | null = null;
@@ -28,6 +29,7 @@ export function useObjectPanel() {
     onNavigate,
     showObjectPanel,
   } = useObjectPanelState();
+  const { selectedClusterId, selectedClusterName } = useKubeconfig();
 
   // Keep the close callback updated for closeObjectPanelGlobal
   const closeRef = useRef(onCloseObjectPanel);
@@ -49,10 +51,13 @@ export function useObjectPanel() {
 
   const openWithObject = useCallback(
     (obj: KubernetesObjectReference) => {
-      onRowClick(obj);
+      const clusterId = obj.clusterId?.trim() || selectedClusterId?.trim() || undefined;
+      const clusterName = obj.clusterName?.trim() || selectedClusterName?.trim() || undefined;
+      const enriched = clusterId || clusterName ? { ...obj, clusterId, clusterName } : obj;
+      onRowClick(enriched);
       panelState.setOpen(true);
     },
-    [onRowClick, panelState]
+    [onRowClick, panelState, selectedClusterId, selectedClusterName]
   );
 
   const close = useCallback(() => {

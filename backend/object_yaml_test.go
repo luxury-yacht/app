@@ -23,11 +23,27 @@ func resetGVRCache() {
 	gvrCache = make(map[string]gvrCacheEntry)
 }
 
+const testClusterID = "config:ctx"
+
+func registerTestCluster(app *App, clusterID string) {
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:                ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:      "/path",
+			kubeconfigContext:   "ctx",
+			client:              app.client,
+			dynamicClient:       app.dynamicClient,
+			apiextensionsClient: app.apiextensionsClient,
+		},
+	}
+}
+
 func TestGetObjectYAMLAggregatesEndpointSlices(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
 	app.client = kubernetesfake.NewClientset()
+	registerTestCluster(app, testClusterID)
 
 	port := int32(80)
 	slice := &discoveryv1.EndpointSlice{
@@ -49,7 +65,7 @@ func TestGetObjectYAMLAggregatesEndpointSlices(t *testing.T) {
 		t.Fatalf("failed to seed endpoint slice: %v", err)
 	}
 
-	yamlStr, err := app.GetObjectYAML("endpointslice", "demo", "svc")
+	yamlStr, err := app.GetObjectYAML(testClusterID, "endpointslice", "demo", "svc")
 	if err != nil {
 		t.Fatalf("GetObjectYAML returned error: %v", err)
 	}
@@ -94,8 +110,9 @@ func TestGetObjectYAMLNamespacedResource(t *testing.T) {
 		},
 	}
 	app.dynamicClient = dynamicfake.NewSimpleDynamicClient(scheme, pod)
+	registerTestCluster(app, testClusterID)
 
-	yamlStr, err := app.GetObjectYAML("Pod", "demo", "demo-pod")
+	yamlStr, err := app.GetObjectYAML(testClusterID, "Pod", "demo", "demo-pod")
 	if err != nil {
 		t.Fatalf("GetObjectYAML returned error: %v", err)
 	}
@@ -139,8 +156,9 @@ func TestGetObjectYAMLClusterScopedResource(t *testing.T) {
 		},
 	}
 	app.dynamicClient = dynamicfake.NewSimpleDynamicClient(scheme, node)
+	registerTestCluster(app, testClusterID)
 
-	yamlStr, err := app.GetObjectYAML("node", "", "node-1")
+	yamlStr, err := app.GetObjectYAML(testClusterID, "node", "", "node-1")
 	if err != nil {
 		t.Fatalf("GetObjectYAML returned error: %v", err)
 	}
@@ -154,6 +172,7 @@ func TestGetObjectYAMLRequiresDynamicClient(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
 	app.client = kubernetesfake.NewClientset()
+	registerTestCluster(app, testClusterID)
 
 	discovery := app.client.Discovery().(*fakediscovery.FakeDiscovery)
 	discovery.Resources = []*metav1.APIResourceList{
@@ -168,7 +187,7 @@ func TestGetObjectYAMLRequiresDynamicClient(t *testing.T) {
 		},
 	}
 
-	_, err := app.GetObjectYAML("pod", "demo", "missing")
+	_, err := app.GetObjectYAML(testClusterID, "pod", "demo", "missing")
 	if err == nil || !strings.Contains(err.Error(), "dynamic client not initialized") {
 		t.Fatalf("expected dynamic client error, got %v", err)
 	}

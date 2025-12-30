@@ -18,6 +18,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { eventBus } from '@/core/events';
 // Content Components
 import AppHeader from '@ui/layout/AppHeader';
+import ClusterTabs from '@ui/layout/ClusterTabs';
 import ClusterOverview from '@modules/cluster/components/ClusterOverview';
 import type { ClusterViewType, NamespaceViewType } from '@ui/navigation/types';
 import { ClusterResourcesManager } from '@modules/cluster/components/ClusterResourcesManager';
@@ -66,6 +67,7 @@ export const AppLayout: React.FC = () => {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isFocusOverlayVisible, setIsFocusOverlayVisible] = useState(false);
   const [isErrorOverlayVisible, setIsErrorOverlayVisible] = useState(false);
+  const hasActiveClusters = kubeconfig.selectedClusterIds.length > 0;
   const handleAboutClose = () => {
     viewState.setIsAboutOpen(false);
   };
@@ -98,64 +100,69 @@ export const AppLayout: React.FC = () => {
   }, []);
 
   const getContentTitle = () => {
+    if (!hasActiveClusters) {
+      return 'No Active Clusters';
+    }
     // Return empty string for welcome page (no view selected)
     if (!viewState.viewType) {
       return '';
     }
 
-    // Handle overview view
-    if (viewState.viewType === 'overview') {
-      return 'Cluster Overview';
-    }
+    const clusterLabel = kubeconfig.selectedClusterName || kubeconfig.selectedClusterId || '';
+    const namespaceLabel =
+      viewState.viewType === 'namespace' && namespace.selectedNamespace
+        ? isAllNamespaces(namespace.selectedNamespace)
+          ? ALL_NAMESPACES_DISPLAY_NAME
+          : namespace.selectedNamespace
+        : '';
+    const viewLabel = (() => {
+      if (viewState.viewType === 'overview') {
+        return 'Cluster Overview';
+      }
 
-    // Handle cluster view with active tab
-    if (viewState.viewType === 'cluster' && viewState.activeClusterTab) {
-      const tabTitlesCluster: Record<string, string> = {
-        nodes: 'Cluster Nodes',
-        rbac: 'Cluster RBAC',
-        storage: 'Cluster Storage',
-        config: 'Cluster Config',
-        crds: 'Cluster CRDs',
-        custom: 'Cluster Custom Resources',
-        events: 'Cluster Events',
+      if (viewState.viewType === 'cluster' && viewState.activeClusterTab) {
+        const tabTitlesCluster: Record<string, string> = {
+          browse: 'Browse',
+          nodes: 'Nodes',
+          rbac: 'RBAC',
+          storage: 'Storage',
+          config: 'Config',
+          crds: 'CRDs',
+          custom: 'Custom Resources',
+          events: 'Events',
+        };
+        return tabTitlesCluster[viewState.activeClusterTab] || 'Cluster Resources';
+      }
+
+      if (viewState.viewType === 'namespace' && viewState.activeNamespaceTab) {
+        const tabTitlesNamespace: Record<string, string> = {
+          objects: 'All Objects',
+          workloads: 'Workloads',
+          pods: 'Pods',
+          autoscaling: 'Autoscaling',
+          config: 'Config',
+          custom: 'Custom Resources',
+          events: 'Events',
+          helm: 'Helm',
+          network: 'Network',
+          quotas: 'Quotas',
+          rbac: 'RBAC',
+          storage: 'Storage',
+        };
+        return tabTitlesNamespace[viewState.activeNamespaceTab] || 'Namespace';
+      }
+
+      const titles: Record<string, string> = {
+        cluster: 'Cluster Resources',
+        namespace: 'Namespace',
       };
-      return tabTitlesCluster[viewState.activeClusterTab] || 'Cluster Resources';
-    }
+      return titles[viewState.viewType] || '';
+    })();
 
-    // Handle namespace view with active tab
-    if (
-      viewState.viewType === 'namespace' &&
-      viewState.activeNamespaceTab &&
-      namespace.selectedNamespace
-    ) {
-      const resolvedNamespaceName = isAllNamespaces(namespace.selectedNamespace)
-        ? ALL_NAMESPACES_DISPLAY_NAME
-        : namespace.selectedNamespace;
-      const tabTitlesNamespace: Record<string, string> = {
-        objects: `All Objects - ${resolvedNamespaceName}`,
-        workloads: `Workloads - ${resolvedNamespaceName}`,
-        pods: `Pods - ${resolvedNamespaceName}`,
-        autoscaling: `Autoscaling - ${resolvedNamespaceName}`,
-        config: `Config - ${resolvedNamespaceName}`,
-        custom: `Custom Resources - ${resolvedNamespaceName}`,
-        events: `Events - ${resolvedNamespaceName}`,
-        helm: `Helm - ${resolvedNamespaceName}`,
-        network: `Network - ${resolvedNamespaceName}`,
-        quotas: `Quotas - ${resolvedNamespaceName}`,
-        rbac: `RBAC - ${resolvedNamespaceName}`,
-        storage: `Storage - ${resolvedNamespaceName}`,
-      };
-      return tabTitlesNamespace[viewState.activeNamespaceTab] || resolvedNamespaceName;
-    }
-
-    // Handle other view types
-    const titles: Record<string, string> = {
-      cluster: 'Cluster Resources',
-      namespace: isAllNamespaces(namespace.selectedNamespace)
-        ? ALL_NAMESPACES_DISPLAY_NAME
-        : namespace.selectedNamespace || '',
-    };
-    return titles[viewState.viewType] || '';
+    const clusterText = clusterLabel ? `cluster: ${clusterLabel}` : '';
+    const namespaceText = namespaceLabel ? `namespace: ${namespaceLabel}` : '';
+    const viewText = viewLabel ? `view: ${viewLabel}` : '';
+    return [clusterText, namespaceText, viewText].filter(Boolean).join(' • ');
   };
 
   return (
@@ -165,8 +172,9 @@ export const AppLayout: React.FC = () => {
           contentTitle={getContentTitle()}
           onAboutClick={() => viewState.setIsAboutOpen(true)}
         />
+        <ClusterTabs />
 
-        <main className="app-main">
+        <main className={`app-main ${hasActiveClusters ? '' : 'app-main-inactive'}`}>
           <Sidebar />
           {viewState.isSidebarVisible && (
             <div
@@ -180,65 +188,75 @@ export const AppLayout: React.FC = () => {
 
           <div className="content">
             <div className="content-body">
-              {viewState.viewType === 'cluster' ? (
-                viewState.activeClusterTab === 'browse' ? (
-                  <RouteErrorBoundary routeName="browse">
-                    <BrowseView />
-                  </RouteErrorBoundary>
-                ) : (
-                  <RouteErrorBoundary routeName="cluster">
-                    <ClusterResourcesProvider activeView={viewState.activeClusterTab}>
-                      <ClusterResourcesManager
-                        activeTab={viewState.activeClusterTab}
-                        onTabChange={(tab: string) =>
-                          viewState.setActiveClusterView(tab as ClusterViewType)
-                        }
-                      />
-                    </ClusterResourcesProvider>
-                  </RouteErrorBoundary>
-                )
-              ) : viewState.viewType === 'namespace' ? (
-                namespace.selectedNamespace ? (
-                  isAllNamespaces(namespace.selectedNamespace) ? (
-                    <RouteErrorBoundary routeName="namespace-all">
-                      <AllNamespacesView activeTab={viewState.activeNamespaceTab} />
+              {hasActiveClusters ? (
+                viewState.viewType === 'cluster' ? (
+                  viewState.activeClusterTab === 'browse' ? (
+                    <RouteErrorBoundary routeName="browse">
+                      <BrowseView />
                     </RouteErrorBoundary>
                   ) : (
-                    <RouteErrorBoundary routeName="namespace">
-                      <NamespaceResourcesProvider
-                        namespace={namespace.selectedNamespace}
-                        activeView={viewState.activeNamespaceTab}
-                      >
-                        <NamespaceResourcesManager
-                          namespace={namespace.selectedNamespace}
-                          activeTab={viewState.activeNamespaceTab}
-                          onTabChange={(tab: NamespaceViewType) =>
-                            viewState.setActiveNamespaceTab(tab)
+                    <RouteErrorBoundary routeName="cluster">
+                      <ClusterResourcesProvider activeView={viewState.activeClusterTab}>
+                        <ClusterResourcesManager
+                          activeTab={viewState.activeClusterTab}
+                          onTabChange={(tab: string) =>
+                            viewState.setActiveClusterView(tab as ClusterViewType)
                           }
                         />
-                      </NamespaceResourcesProvider>
+                      </ClusterResourcesProvider>
                     </RouteErrorBoundary>
                   )
+                ) : viewState.viewType === 'namespace' ? (
+                  namespace.selectedNamespace ? (
+                    isAllNamespaces(namespace.selectedNamespace) ? (
+                      <RouteErrorBoundary routeName="namespace-all">
+                        <AllNamespacesView activeTab={viewState.activeNamespaceTab} />
+                      </RouteErrorBoundary>
+                    ) : (
+                      <RouteErrorBoundary routeName="namespace">
+                        <NamespaceResourcesProvider
+                          namespace={namespace.selectedNamespace}
+                          activeView={viewState.activeNamespaceTab}
+                        >
+                          <NamespaceResourcesManager
+                            namespace={namespace.selectedNamespace}
+                            activeTab={viewState.activeNamespaceTab}
+                            onTabChange={(tab: NamespaceViewType) =>
+                              viewState.setActiveNamespaceTab(tab)
+                            }
+                          />
+                        </NamespaceResourcesProvider>
+                      </RouteErrorBoundary>
+                    )
+                  ) : (
+                    <div className="welcome">
+                      <img src={captainK8s} alt="Captain K8s" className="captain-k8s" />
+                      <img src={logo} alt="Luxury Yacht" className="welcome-logo" />
+                    </div>
+                  )
+                ) : viewState.viewType === 'overview' ? (
+                  <RouteErrorBoundary routeName="cluster-overview">
+                    <ClusterOverview clusterContext={kubeconfig.selectedKubeconfig || 'Default'} />
+                  </RouteErrorBoundary>
                 ) : (
                   <div className="welcome">
-                    <img src={captainK8s} alt="Captain K8s" className="captain-k8s" />
+                    <img src={captainK8s} alt="Captain K8s" className="welcome-logo" />
                     <img src={logo} alt="Luxury Yacht" className="welcome-logo" />
+
+                    <p>Select a view from the sidebar to get started</p>
                   </div>
                 )
-              ) : viewState.viewType === 'overview' ? (
-                <RouteErrorBoundary routeName="cluster-overview">
-                  <ClusterOverview clusterContext={kubeconfig.selectedKubeconfig || 'Default'} />
-                </RouteErrorBoundary>
-              ) : (
-                <div className="welcome">
-                  <img src={captainK8s} alt="Captain K8s" className="welcome-logo" />
-                  <img src={logo} alt="Luxury Yacht" className="welcome-logo" />
-
-                  <p>Select a view from the sidebar to get started</p>
-                </div>
-              )}
+              ) : null}
             </div>
           </div>
+          {!hasActiveClusters && (
+            <div className="no-active-clusters-overlay" role="status">
+              {/* Block interactions and loading when no clusters are active. */}
+              <div className="no-active-clusters-message">
+                No active clusters. Select a cluster from the kubeconfig dropdown.
+              </div>
+            </div>
+          )}
         </main>
 
         <PanelErrorBoundary onClose={() => {}} panelName="app-logs">

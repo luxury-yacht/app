@@ -22,12 +22,15 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 interface EventData {
   kind: string;
   kindAlias?: string;
   name: string;
   namespace: string;
+  clusterId?: string;
+  clusterName?: string;
   objectNamespace?: string;
   type: string; // Event severity (Normal, Warning)
   source: string;
@@ -52,7 +55,7 @@ interface EventViewProps {
 const ClusterEventsView: React.FC<EventViewProps> = React.memo(
   ({ data, loading = false, loaded, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
 
     const handleEventClick = useCallback(
@@ -68,6 +71,8 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
             kind,
             name,
             namespace,
+            clusterId: event.clusterId ?? undefined,
+            clusterName: event.clusterName ?? undefined,
           });
         }
       },
@@ -76,7 +81,10 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
 
     const keyExtractor = useCallback(
       (event: EventData, index: number) =>
-        `${event.namespace}-${event.reason}-${event.source}-${event.object}-${event.ageTimestamp ?? event.age ?? '0'}-${index}`,
+        buildClusterScopedKey(
+          event,
+          `${event.namespace}-${event.reason}-${event.source}-${event.object}-${event.ageTimestamp ?? event.age ?? '0'}-${index}`
+        ),
       []
     );
 
@@ -132,7 +140,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<EventData>({
       viewId: 'cluster-events',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns,

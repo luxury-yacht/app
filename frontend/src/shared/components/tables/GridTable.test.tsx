@@ -736,7 +736,11 @@ describe('GridTable interactions (non-virtualized)', () => {
 
   it('renders filter controls and propagates search changes', async () => {
     const onFilterChange = vi.fn();
-    let currentFilters = { search: '', kinds: [] as string[], namespaces: [] as string[] };
+    let currentFilters = {
+      search: '',
+      kinds: [] as string[],
+      namespaces: [] as string[],
+    };
 
     const handleFilterChange = (next: typeof currentFilters) => {
       currentFilters = next;
@@ -796,7 +800,11 @@ describe('GridTable interactions (non-virtualized)', () => {
     act(() => {
       resetButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(onFilterChange).toHaveBeenCalledWith({ search: '', kinds: [], namespaces: [] });
+    expect(onFilterChange).toHaveBeenCalledWith({
+      search: '',
+      kinds: [],
+      namespaces: [],
+    });
 
     await applyFilters(currentFilters);
     const resetRows = container.querySelectorAll('.gridtable-row');

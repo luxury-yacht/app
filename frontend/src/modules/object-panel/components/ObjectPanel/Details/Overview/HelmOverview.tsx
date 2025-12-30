@@ -46,7 +46,11 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
   labels,
   annotations,
 }) => {
-  const { openWithObject } = useObjectPanel();
+  const { openWithObject, objectData } = useObjectPanel();
+  const clusterMeta = {
+    clusterId: objectData?.clusterId ?? undefined,
+    clusterName: objectData?.clusterName ?? undefined,
+  };
 
   // Use details if available, otherwise fall back to table data
   const displayName = helmReleaseDetails?.name || name || '-';
@@ -125,6 +129,7 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
                         kind: resource.kind.toLowerCase(),
                         name: resource.name,
                         namespace: resource.namespace,
+                        ...clusterMeta,
                       })
                     }
                     title={`Click to view ${resource.kind}: ${resource.name}`}

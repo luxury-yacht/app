@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/objectcatalog"
@@ -17,18 +18,21 @@ const catalogDomain = "catalog"
 
 // CatalogConfig wires dependencies for the catalog browse domain.
 type CatalogConfig struct {
-	CatalogService func() *objectcatalog.Service
-	Logger         logstream.Logger
+	CatalogService  func() *objectcatalog.Service
+	NamespaceGroups func() []CatalogNamespaceGroup
+	Logger          logstream.Logger
 }
 
 // CatalogSnapshot captures the browse payload returned to clients.
 type CatalogSnapshot struct {
+	ClusterMeta
 	Items               []objectcatalog.Summary `json:"items"`
 	Continue            string                  `json:"continue,omitempty"`
 	Total               int                     `json:"total"`
 	ResourceCount       int                     `json:"resourceCount"`
 	Kinds               []string                `json:"kinds,omitempty"`
 	Namespaces          []string                `json:"namespaces,omitempty"`
+	NamespaceGroups     []CatalogNamespaceGroup `json:"namespaceGroups,omitempty"`
 	BatchIndex          int                     `json:"batchIndex"`
 	BatchSize           int                     `json:"batchSize"`
 	TotalBatches        int                     `json:"totalBatches"`
@@ -36,9 +40,17 @@ type CatalogSnapshot struct {
 	FirstBatchLatencyMs int64                   `json:"firstBatchLatencyMs,omitempty"`
 }
 
+// CatalogNamespaceGroup captures per-cluster namespace lists and selection.
+type CatalogNamespaceGroup struct {
+	ClusterMeta
+	Namespaces         []string `json:"namespaces"`
+	SelectedNamespaces []string `json:"selectedNamespaces,omitempty"`
+}
+
 type catalogBuilder struct {
-	catalogService func() *objectcatalog.Service
-	logger         logstream.Logger
+	catalogService  func() *objectcatalog.Service
+	namespaceGroups func() []CatalogNamespaceGroup
+	logger          logstream.Logger
 }
 
 type browseQueryOptions struct {
@@ -59,8 +71,9 @@ func RegisterCatalogDomain(reg *domain.Registry, cfg CatalogConfig) error {
 	}
 
 	builder := &catalogBuilder{
-		catalogService: cfg.CatalogService,
-		logger:         cfg.Logger,
+		catalogService:  cfg.CatalogService,
+		namespaceGroups: cfg.NamespaceGroups,
+		logger:          cfg.Logger,
 	}
 
 	return reg.Register(refresh.DomainConfig{
@@ -89,7 +102,10 @@ func (b *catalogBuilder) Build(ctx context.Context, scope string) (*refresh.Snap
 	health := svc.Health()
 	cachesReady := svc.CachesReady()
 
+	meta := ClusterMetaFromContext(ctx)
 	payload, truncated := buildCatalogSnapshot(result, opts, health, cachesReady, cachesReady)
+	payload.ClusterMeta = meta
+	payload.NamespaceGroups = buildCatalogNamespaceGroups(svc, meta, b.namespaceGroups, opts.Namespaces)
 	if cachesReady && payload.Total > 0 {
 		// Streaming caches are warm, but we still honour pagination when the client
 		// requested limited scopes. Preserve the continue token so UI callers can
@@ -200,6 +216,40 @@ func buildCatalogSnapshot(
 	return payload, truncated
 }
 
+func buildCatalogNamespaceGroups(
+	svc *objectcatalog.Service,
+	meta ClusterMeta,
+	provider func() []CatalogNamespaceGroup,
+	selected []string,
+) []CatalogNamespaceGroup {
+	groups := []CatalogNamespaceGroup(nil)
+	if provider != nil {
+		groups = provider()
+	}
+	if len(groups) == 0 && svc != nil {
+		if namespaces := svc.Namespaces(); len(namespaces) > 0 {
+			groups = []CatalogNamespaceGroup{{
+				ClusterMeta: meta,
+				Namespaces:  cloneStrings(namespaces),
+			}}
+		}
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+
+	groups = cloneNamespaceGroups(groups)
+	selected = normalizeSelectedNamespaces(selected)
+	if len(selected) > 0 {
+		for i := range groups {
+			if len(groups[i].SelectedNamespaces) == 0 {
+				groups[i].SelectedNamespaces = cloneStrings(selected)
+			}
+		}
+	}
+	return groups
+}
+
 func max(a, b int) int {
 	if a > b {
 		return a
@@ -208,10 +258,11 @@ func max(a, b int) int {
 }
 
 func parseBrowseScope(scope string) (browseQueryOptions, error) {
-	if scope == "" {
+	_, trimmed := refresh.SplitClusterScope(scope)
+	if trimmed == "" {
 		return browseQueryOptions{}, nil
 	}
-	values, err := url.ParseQuery(scope)
+	values, err := url.ParseQuery(trimmed)
 	if err != nil {
 		return browseQueryOptions{}, err
 	}
@@ -255,4 +306,37 @@ func cloneStrings(values []string) []string {
 	cloned := make([]string, len(values))
 	copy(cloned, values)
 	return cloned
+}
+
+func cloneNamespaceGroups(groups []CatalogNamespaceGroup) []CatalogNamespaceGroup {
+	if len(groups) == 0 {
+		return nil
+	}
+	cloned := make([]CatalogNamespaceGroup, len(groups))
+	for i, group := range groups {
+		cloned[i] = group
+		cloned[i].Namespaces = cloneStrings(group.Namespaces)
+		cloned[i].SelectedNamespaces = cloneStrings(group.SelectedNamespaces)
+	}
+	return cloned
+}
+
+func normalizeSelectedNamespaces(namespaces []string) []string {
+	if len(namespaces) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(namespaces))
+	normalized := make([]string, 0, len(namespaces))
+	for _, namespace := range namespaces {
+		value := strings.TrimSpace(namespace)
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	return normalized
 }

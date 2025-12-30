@@ -43,6 +43,7 @@ import type { DomainPayloadMap, RefreshDomain } from './types';
 import { logStreamManager } from './streaming/logStreamManager';
 import { eventStreamManager } from './streaming/eventStreamManager';
 import { errorHandler } from '@utils/errorHandler';
+import { buildClusterScope, buildClusterScopeList } from './clusterScope';
 
 type DomainCategory = 'system' | 'cluster' | 'namespace';
 
@@ -106,11 +107,13 @@ class RefreshOrchestrator {
     objectPanel: { isOpen: false },
   };
   private lastNotifiedErrors = new Map<string, string>();
+  private suppressNetworkErrorsUntil = 0;
 
   constructor() {
     eventBus.on('view:reset', this.handleResetViews);
     eventBus.on('kubeconfig:changing', this.handleKubeconfigChanging);
     eventBus.on('kubeconfig:changed', this.handleKubeconfigChanged);
+    eventBus.on('kubeconfig:selection-changed', this.handleKubeconfigSelectionChanged);
   }
 
   private getErrorNotificationKey(domain: RefreshDomain, scope?: string): string {
@@ -122,6 +125,9 @@ class RefreshOrchestrator {
     scope: string | undefined,
     message: string
   ): void {
+    if (this.shouldSuppressNetworkError(message)) {
+      return;
+    }
     const key = this.getErrorNotificationKey(domain, scope);
     if (this.lastNotifiedErrors.get(key) === message) {
       return;
@@ -161,6 +167,26 @@ class RefreshOrchestrator {
     if (this.lastNotifiedErrors.has(key)) {
       this.lastNotifiedErrors.delete(key);
     }
+  }
+
+  private suppressNetworkErrors(durationMs: number): void {
+    this.suppressNetworkErrorsUntil = Math.max(
+      this.suppressNetworkErrorsUntil,
+      Date.now() + durationMs
+    );
+  }
+
+  private shouldSuppressNetworkError(message: string): boolean {
+    if (Date.now() > this.suppressNetworkErrorsUntil) {
+      return false;
+    }
+    const normalized = message.toLowerCase();
+    return (
+      normalized.includes('load failed') ||
+      normalized.includes('failed to fetch') ||
+      normalized.includes('could not connect to the server') ||
+      normalized.includes('snapshot request failed')
+    );
   }
 
   registerDomain<K extends RefreshDomain>(config: DomainRegistration<K>): void {
@@ -533,7 +559,7 @@ class RefreshOrchestrator {
     if (!config.scoped) {
       throw new Error(`Domain "${domain}" is not scoped`);
     }
-    const normalizedScope = scope.trim();
+    const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope value`);
     }
@@ -586,7 +612,11 @@ class RefreshOrchestrator {
     if (!config.scoped) {
       throw new Error(`Domain "${domain}" is not scoped`);
     }
-    resetScopedDomainState(domain, scope);
+    const normalizedScope = this.normalizeScope(scope);
+    if (!normalizedScope) {
+      return;
+    }
+    resetScopedDomainState(domain, normalizedScope);
   }
 
   startStreamingDomain(domain: RefreshDomain, scope: string): void {
@@ -594,7 +624,7 @@ class RefreshOrchestrator {
     if (!config.streaming) {
       throw new Error(`Domain "${domain}" is not registered as streaming`);
     }
-    const normalizedScope = scope.trim();
+    const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -610,7 +640,7 @@ class RefreshOrchestrator {
     if (!config.streaming) {
       throw new Error(`Domain "${domain}" is not registered as streaming`);
     }
-    const normalizedScope = scope.trim();
+    const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -626,7 +656,7 @@ class RefreshOrchestrator {
       await this.restartStreamingDomain(domain, scope);
       return;
     }
-    const normalizedScope = scope.trim();
+    const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -638,7 +668,7 @@ class RefreshOrchestrator {
     if (!config.streaming) {
       throw new Error(`Domain "${domain}" is not registered as streaming`);
     }
-    const normalizedScope = scope.trim();
+    const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Streaming domain "${domain}" requires a non-empty scope value`);
     }
@@ -647,7 +677,13 @@ class RefreshOrchestrator {
   }
 
   getSelectedNamespace(): string | undefined {
-    return this.context.selectedNamespace ?? undefined;
+    return this.normalizeNamespaceScope(this.context.selectedNamespace) ?? undefined;
+  }
+
+  getSelectedClusterId(): string | undefined {
+    // Keep the active tab's cluster ID available for per-tab refresh scopes.
+    const selected = (this.context.selectedClusterId ?? '').trim();
+    return selected || undefined;
   }
 
   isStreamingDomain(domain: RefreshDomain): boolean {
@@ -832,6 +868,38 @@ class RefreshOrchestrator {
     return this.fetchScopedDomain('pods', scope, { isManual: true });
   }
 
+  private normalizeScope(value?: string | null, allowEmpty = false): string | undefined {
+    const selectedClusterIds = this.getSelectedClusterIds();
+    if (!value) {
+      if (!allowEmpty) {
+        return undefined;
+      }
+      const clusterScope = buildClusterScopeList(selectedClusterIds, '');
+      return clusterScope || undefined;
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      if (!allowEmpty) {
+        return undefined;
+      }
+      const clusterScope = buildClusterScopeList(selectedClusterIds, '');
+      return clusterScope || undefined;
+    }
+    return buildClusterScopeList(selectedClusterIds, trimmed);
+  }
+
+  private getSelectedClusterIds(context: RefreshContext = this.context): string[] {
+    // Prefer the explicit multi-select list, fall back to the active selection.
+    const explicit = (context.selectedClusterIds ?? [])
+      .map((id) => (id ?? '').trim())
+      .filter(Boolean);
+    if (explicit.length > 0) {
+      return explicit;
+    }
+    const active = (context.selectedClusterId ?? '').trim();
+    return active ? [active] : [];
+  }
+
   private normalizeNamespaceScope(value?: string | null): string | null {
     if (!value) {
       return null;
@@ -840,7 +908,10 @@ class RefreshOrchestrator {
     if (!trimmed) {
       return null;
     }
-    return trimmed.startsWith('namespace:') ? trimmed : `namespace:${trimmed}`;
+    const namespaceScope = trimmed.startsWith('namespace:') ? trimmed : `namespace:${trimmed}`;
+    // Prefer the cluster tied to the namespace selection for scoped refreshes.
+    const clusterId = this.context.selectedNamespaceClusterId ?? this.context.selectedClusterId;
+    return buildClusterScope(clusterId, namespaceScope) || null;
   }
 
   private ensureRefresher(config: DomainRegistration<RefreshDomain>): void {
@@ -920,22 +991,23 @@ class RefreshOrchestrator {
     if (!config.scoped) {
       throw new Error(`Domain "${domain}" is not registered as scoped`);
     }
-    if (!scope || !scope.trim()) {
+    const normalizedScope = this.normalizeScope(scope);
+    if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope`);
     }
 
     if (config.streaming) {
       if (options.isManual) {
-        await this.refreshStreamingDomainOnce(domain, scope);
+        await this.refreshStreamingDomainOnce(domain, normalizedScope);
       } else {
-        this.startStreamingScope(domain, scope.trim(), config.streaming);
+        this.startStreamingScope(domain, normalizedScope, config.streaming);
       }
       return;
     }
 
     await this.performFetch(
       domain,
-      scope,
+      normalizedScope,
       { isManual: options.isManual ?? true, signal: options.signal },
       config
     );
@@ -948,7 +1020,9 @@ class RefreshOrchestrator {
     config: DomainRegistration<RefreshDomain>
   ): Promise<void> {
     const isScoped = Boolean(config.scoped);
-    const normalizedScope = scope?.trim();
+    // Include the active cluster scope for unscoped domains so tab switches with the same view
+    // still fetch the selected cluster data.
+    const normalizedScope = this.normalizeScope(scope, !isScoped);
 
     if (options.signal?.aborted) {
       return;
@@ -1086,8 +1160,30 @@ class RefreshOrchestrator {
       if (controller.signal.aborted) {
         return;
       }
+      if (contextVersion !== this.contextVersion) {
+        // Ignore errors from refreshes started before a context switch.
+        return;
+      }
 
       const message = error instanceof Error ? error.message : String(error);
+      if (this.shouldSuppressNetworkError(message)) {
+        if (isScoped) {
+          setScopedDomainState(domain, normalizedScope!, (prev) => ({
+            ...prev,
+            status: prev.data ? 'ready' : prev.status,
+            error: null,
+            isManual: options.isManual,
+          }));
+        } else {
+          setDomainState(domain, (prev) => ({
+            ...prev,
+            status: prev.data ? 'ready' : prev.status,
+            error: null,
+            isManual: options.isManual,
+          }));
+        }
+        return;
+      }
 
       if (isScoped) {
         setScopedDomainState(domain, normalizedScope!, (prev) => ({
@@ -1282,10 +1378,14 @@ class RefreshOrchestrator {
 
   private normalizeStreamingScope(domain: RefreshDomain, rawScope?: string): string {
     if (domain === 'cluster-events') {
-      return CLUSTER_SCOPE;
+      return buildClusterScopeList(this.getSelectedClusterIds(), CLUSTER_SCOPE);
     }
     if (rawScope && rawScope.trim()) {
-      return rawScope.trim();
+      if (domain === 'namespace-events') {
+        const clusterId = this.context.selectedNamespaceClusterId ?? this.context.selectedClusterId;
+        return buildClusterScope(clusterId, rawScope.trim());
+      }
+      return buildClusterScopeList(this.getSelectedClusterIds(), rawScope.trim());
     }
     return '';
   }
@@ -1293,7 +1393,15 @@ class RefreshOrchestrator {
   private handleKubeconfigChanged = () => {
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
+    this.suppressNetworkErrors(6000);
     this.suspendedDomains.clear();
+  };
+
+  private handleKubeconfigSelectionChanged = () => {
+    // Backend may rebuild the refresh subsystem; invalidate base URL and suppress transient errors.
+    this.incrementContextVersion();
+    invalidateRefreshBaseURL();
+    this.suppressNetworkErrors(6000);
   };
 }
 
@@ -1310,6 +1418,11 @@ refreshOrchestrator.registerDomain({
   domain: 'cluster-overview',
   refresherName: SYSTEM_REFRESHERS.clusterOverview,
   category: 'system',
+  scopeResolver: () => {
+    // Refresh the overview only for the active tab's cluster to avoid closed-tab errors.
+    const clusterId = refreshOrchestrator.getSelectedClusterId();
+    return clusterId ? buildClusterScopeList([clusterId], '') : '';
+  },
   autoStart: false,
 });
 
@@ -1442,9 +1555,9 @@ refreshOrchestrator.registerDomain({
   scopeResolver: () => CLUSTER_SCOPE,
   autoStart: false,
   streaming: {
-    start: () => eventStreamManager.startCluster(),
-    stop: (_scope, options) => eventStreamManager.stopCluster(options?.reset ?? false),
-    refreshOnce: () => eventStreamManager.refreshCluster(),
+    start: (scope) => eventStreamManager.startCluster(scope),
+    stop: (scope, options) => eventStreamManager.stopCluster(scope, options?.reset ?? false),
+    refreshOnce: (scope) => eventStreamManager.refreshCluster(scope),
   },
 });
 
@@ -1511,9 +1624,9 @@ refreshOrchestrator.registerDomain({
   scopeResolver: () => refreshOrchestrator.getSelectedNamespace(),
   autoStart: false,
   streaming: {
-    start: (namespace) => eventStreamManager.startNamespace(namespace),
-    stop: (_namespace, options) => eventStreamManager.stopNamespace(options?.reset ?? false),
-    refreshOnce: (namespace) => eventStreamManager.refreshNamespace(namespace),
+    start: (scope) => eventStreamManager.startNamespace(scope),
+    stop: (scope, options) => eventStreamManager.stopNamespace(scope, options?.reset ?? false),
+    refreshOnce: (scope) => eventStreamManager.refreshNamespace(scope),
   },
 });
 

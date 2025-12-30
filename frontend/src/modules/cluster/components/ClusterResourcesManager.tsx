@@ -11,6 +11,7 @@ import ClusterResourcesViews from '@modules/cluster/components/ClusterResourcesV
 import { ClusterViewType } from '@ui/navigation/types';
 import { useUserPermission } from '@/core/capabilities';
 import type { PermissionStatus } from '@/core/capabilities';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 interface ClusterResourceManagerProps {
   activeTab?: ClusterViewType | null;
@@ -40,18 +41,61 @@ export function ClusterResourcesManager({
   const { data: rbacData, loading: rbacLoading, error: rbacError } = rbac;
   const { data: storageData, loading: storageLoading, error: storageError } = storage;
 
-  const nodesListPermission = useUserPermission('Node', 'list');
-  const configStorageClassPermission = useUserPermission('StorageClass', 'list');
-  const configIngressClassPermission = useUserPermission('IngressClass', 'list');
-  const crdListPermission = useUserPermission('CustomResourceDefinition', 'list');
-  const eventsListPermission = useUserPermission('Event', 'list');
-  const rbacListPermission = useUserPermission('ClusterRole', 'list');
-  const storageListPermission = useUserPermission('PersistentVolume', 'list');
+  const { selectedClusterId } = useKubeconfig();
+  // Scope permission lookups to the active cluster to avoid cache collisions.
+  const permissionClusterId = selectedClusterId || null;
+
+  const nodesListPermission = useUserPermission('Node', 'list', null, null, permissionClusterId);
+  const configStorageClassPermission = useUserPermission(
+    'StorageClass',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const configIngressClassPermission = useUserPermission(
+    'IngressClass',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const crdListPermission = useUserPermission(
+    'CustomResourceDefinition',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const eventsListPermission = useUserPermission('Event', 'list', null, null, permissionClusterId);
+  const rbacListPermission = useUserPermission(
+    'ClusterRole',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
+  const storageListPermission = useUserPermission(
+    'PersistentVolume',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
   const configValidatingWebhookPermission = useUserPermission(
     'ValidatingWebhookConfiguration',
-    'list'
+    'list',
+    null,
+    null,
+    permissionClusterId
   );
-  const configMutatingWebhookPermission = useUserPermission('MutatingWebhookConfiguration', 'list');
+  const configMutatingWebhookPermission = useUserPermission(
+    'MutatingWebhookConfiguration',
+    'list',
+    null,
+    null,
+    permissionClusterId
+  );
 
   const permissionToMessage = (permission?: PermissionStatus): string | null => {
     if (!permission || permission.pending || permission.allowed) {

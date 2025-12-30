@@ -25,12 +25,15 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 // Define the data structure for Persistent Volumes
 interface StorageData {
   kind: string;
   kindAlias?: string;
   name: string;
+  clusterId?: string;
+  clusterName?: string;
   capacity: string;
   accessModes: string;
   status: string;
@@ -54,7 +57,7 @@ interface StorageViewProps {
 const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -67,6 +70,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         openWithObject({
           kind: 'PersistentVolume',
           name: pv.name,
+          clusterId: pv.clusterId ?? undefined,
+          clusterName: pv.clusterName ?? undefined,
         });
       },
       [openWithObject]
@@ -93,13 +98,15 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           kind: 'PersistentVolumeClaim',
           namespace: target.namespace,
           name: target.name,
+          clusterId: pv.clusterId ?? undefined,
+          clusterName: pv.clusterName ?? undefined,
         });
       },
       [getClaimTarget, openWithObject]
     );
 
     const keyExtractor = useCallback(
-      (pv: StorageData) => ['pv', pv.name].filter(Boolean).join('/'),
+      (pv: StorageData) => buildClusterScopedKey(pv, ['pv', pv.name].filter(Boolean).join('/')),
       []
     );
 
@@ -137,6 +144,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               openWithObject({
                 kind: 'StorageClass',
                 name: pv.storageClass,
+                clusterId: pv.clusterId ?? undefined,
+                clusterName: pv.clusterName ?? undefined,
               });
             },
             isInteractive: (pv) => Boolean(pv.storageClass),
@@ -185,7 +194,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<StorageData>({
       viewId: 'cluster-storage',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns,
@@ -204,7 +213,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       if (!deleteConfirm.resource) return;
 
       try {
-        await DeleteResource('PersistentVolume', '', deleteConfirm.resource.name);
+        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? '';
+        await DeleteResource(clusterId, 'PersistentVolume', '', deleteConfirm.resource.name);
         setDeleteConfirm({ show: false, resource: null });
       } catch (error) {
         errorHandler.handle(error, {
@@ -214,7 +224,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         });
         setDeleteConfirm({ show: false, resource: null });
       }
-    }, [deleteConfirm.resource]);
+    }, [deleteConfirm.resource, selectedClusterId]);
 
     // Get context menu items
     const getContextMenuItems = useCallback(
@@ -263,7 +273,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
             data={sortedData}
             columns={columns}
             loading={loading}
-            keyExtractor={(pv) => pv.name}
+            keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
             onSort={handleSort}
             sortConfig={sortConfig}

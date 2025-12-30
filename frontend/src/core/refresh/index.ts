@@ -19,3 +19,4 @@ export { useRefreshManager } from './hooks/useRefreshManager';
 export { useRefreshWatcher } from './hooks/useRefreshWatcher';
 export { useRefreshContext } from './hooks/useRefreshContext';
 export { useAutoRefresh, initializeAutoRefresh } from './hooks/useAutoRefresh';
+export { useBackgroundRefresh, getBackgroundRefreshEnabled } from './hooks/useBackgroundRefresh';

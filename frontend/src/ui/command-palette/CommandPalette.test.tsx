@@ -26,6 +26,8 @@ const createCatalogItem = (overrides: Partial<CatalogItem>): CatalogItem => ({
   resourceVersion: '1',
   creationTimestamp: baseTimestamp,
   scope: 'Namespace',
+  clusterId: 'alpha:ctx',
+  clusterName: 'alpha',
   ...overrides,
 });
 
@@ -136,6 +138,10 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({
     openWithObject: openWithObjectMock,
   }),
+}));
+
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedClusterId: 'alpha:ctx' }),
 }));
 
 vi.mock('@hooks/useShortNames', () => ({
@@ -409,6 +415,7 @@ describe('CommandPalette component behaviour', () => {
 
     fetchSnapshotMock.mockImplementation((domain: unknown, options: any) => {
       expect(domain).toBe('catalog');
+      expect(options?.scope).toContain('alpha:ctx|');
       expect(options?.scope).toContain('limit=20');
       expect(options?.scope).toContain('kind=pod');
       expect(options?.scope).toContain('search=metrics');
@@ -473,6 +480,7 @@ describe('CommandPalette component behaviour', () => {
         namespace: 'metrics',
         resource: 'pods',
         uid: 'catalog-pod',
+        clusterId: 'alpha:ctx',
       })
     );
   });

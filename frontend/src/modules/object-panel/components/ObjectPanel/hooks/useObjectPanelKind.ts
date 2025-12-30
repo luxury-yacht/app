@@ -7,9 +7,11 @@
  * Also indicates if the object is a Helm release or an event.
  */
 import type { PanelObjectData } from '../types';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 
 export interface UseObjectPanelKindOptions {
   clusterScope?: string;
+  clusterId?: string | null;
 }
 
 export interface ObjectPanelKindResult {
@@ -28,6 +30,7 @@ export const useObjectPanelKind = (
   options: UseObjectPanelKindOptions = {}
 ): ObjectPanelKindResult => {
   const clusterScope = options.clusterScope ?? DEFAULT_CLUSTER_SCOPE;
+  const clusterId = objectData?.clusterId ?? options.clusterId ?? undefined;
 
   const objectKind = objectData?.kind ? objectData.kind.toLowerCase() : null;
 
@@ -37,12 +40,14 @@ export const useObjectPanelKind = (
       : objectData.namespace;
 
   const detailScope =
-    !objectData?.name || !objectKind ? null : `${scopeNamespace}:${objectKind}:${objectData.name}`;
+    !objectData?.name || !objectKind
+      ? null
+      : buildClusterScope(clusterId, `${scopeNamespace}:${objectKind}:${objectData.name}`);
 
   const helmScope =
     objectKind !== 'helmrelease' || !objectData?.name
       ? null
-      : `${scopeNamespace}:${objectData.name}`;
+      : buildClusterScope(clusterId, `${scopeNamespace}:${objectData.name}`);
 
   const isHelmRelease = objectKind === 'helmrelease';
   const isEvent = objectKind === 'event';

@@ -8,9 +8,11 @@
 import { useEffect } from 'react';
 import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
 import type { ClusterOverviewMetrics } from '@/core/refresh/types';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null => {
   const overviewDomain = useRefreshDomain('cluster-overview');
+  const { selectedClusterId } = useKubeconfig();
 
   useEffect(() => {
     refreshOrchestrator.setDomainEnabled('cluster-overview', true);
@@ -20,5 +22,9 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
     }
   }, [overviewDomain.data, overviewDomain.status]);
 
+  const metricsByCluster = overviewDomain.data?.metricsByCluster;
+  if (metricsByCluster) {
+    return selectedClusterId ? (metricsByCluster[selectedClusterId] ?? null) : null;
+  }
   return overviewDomain.data?.metrics ?? null;
 };

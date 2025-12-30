@@ -18,7 +18,7 @@
 /* Sidebar content styles */
 
 .sidebar-content {
-  padding-top: 0.5rem;
+  padding-top: 0.7rem;
   padding-bottom: 0.5rem;
   padding-left: 1rem;
   overflow-y: hidden;
@@ -88,6 +88,21 @@
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+}
+
+/* Cluster group headers within the Namespaces section. */
+.namespace-cluster-group + .namespace-cluster-group {
+  margin-top: 0.75rem;
+}
+
+.namespace-cluster-label {
+  padding: 0 0.5rem;
+  margin-bottom: 0.35rem;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold, 600);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
 }
 
 .sidebar-item {
@@ -208,7 +223,7 @@
   z-index: 10;
   background: transparent;
   border: none;
-  padding: 6px;
+  padding: 10px 6px 6px 6px;
   cursor: pointer;
   color: var(--color-text-secondary);
   display: flex;

@@ -24,6 +24,7 @@ import { refreshManager } from '../RefreshManager';
 import { useShortcut, useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { fetchTelemetrySummary } from '../client';
+import { stripClusterScope } from '@/core/refresh/clusterScope';
 import {
   getPermissionKey,
   useCapabilityDiagnostics,
@@ -623,15 +624,16 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       }
       const version = state.version != null ? String(state.version) : '—';
 
+      const displayScope = stripClusterScope(scope);
       let label = 'Pods';
-      if (scope.startsWith('namespace:')) {
-        const namespace = scope.slice('namespace:'.length) || 'all';
+      if (displayScope.startsWith('namespace:')) {
+        const namespace = displayScope.slice('namespace:'.length) || 'all';
         label = namespace === 'all' ? 'Pods (All namespaces)' : `Pods (${namespace})`;
-      } else if (scope.startsWith('node:')) {
-        const nodeName = scope.slice('node:'.length);
+      } else if (displayScope.startsWith('node:')) {
+        const nodeName = displayScope.slice('node:'.length);
         label = `Pods (Node ${nodeName})`;
-      } else if (scope.startsWith('workload:')) {
-        const [, namespace, kind, name] = scope.split(':');
+      } else if (displayScope.startsWith('workload:')) {
+        const [, namespace, kind, name] = displayScope.split(':');
         label = `Pods (${namespace}/${kind}/${name})`;
       }
 

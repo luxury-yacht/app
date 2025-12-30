@@ -164,6 +164,7 @@ describe('NsViewNetwork', () => {
     kindAlias: 'Ingress',
     name: 'web-gateway',
     namespace: 'team-a',
+    clusterId: 'alpha:ctx',
     details: 'Hosts: web.example.com',
     age: '3h',
     ...overrides,
@@ -205,11 +206,14 @@ describe('NsViewNetwork', () => {
     act(() => {
       openItem?.onClick?.();
     });
-    expect(openWithObjectMock).toHaveBeenCalledWith({
-      kind: 'Ingress',
-      name: 'web-gateway',
-      namespace: 'team-a',
-    });
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Ingress',
+        name: 'web-gateway',
+        namespace: 'team-a',
+        clusterId: 'alpha:ctx',
+      })
+    );
   });
 
   it('gates delete option on permissions and confirms deletion', async () => {
@@ -230,7 +234,12 @@ describe('NsViewNetwork', () => {
       await confirmationPropsRef.current?.onConfirm?.();
     });
 
-    expect(deleteResourceMock).toHaveBeenCalledWith('Ingress', 'team-a', 'web-gateway');
+    expect(deleteResourceMock).toHaveBeenCalledWith(
+      'alpha:ctx',
+      'Ingress',
+      'team-a',
+      'web-gateway'
+    );
   });
 
   it('hides delete action while permission is pending', async () => {

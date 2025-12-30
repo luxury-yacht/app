@@ -21,17 +21,18 @@
   display: flex;
   flex-direction: column;
   z-index: 1000;
+  --dockable-panel-top-offset: var(--app-header-height);
   transition: none; /* We'll handle animations separately */
 }
 
 /* Position variants */
 .dockable-panel--right {
-  top: var(--app-header-height);
+  top: var(--dockable-panel-top-offset);
   right: 0;
   bottom: 0;
   border-left: 2px solid var(--color-border, #333);
   border-right: none;
-  max-height: calc(100vh - var(--app-header-height));
+  max-height: calc(100vh - var(--dockable-panel-top-offset));
 }
 
 .dockable-panel--bottom {

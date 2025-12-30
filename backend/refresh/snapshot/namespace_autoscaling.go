@@ -29,11 +29,13 @@ type NamespaceAutoscalingBuilder struct {
 
 // NamespaceAutoscalingSnapshot payload for autoscaling tab.
 type NamespaceAutoscalingSnapshot struct {
+	ClusterMeta
 	Resources []AutoscalingSummary `json:"resources"`
 }
 
 // AutoscalingSummary captures HPA details for display.
 type AutoscalingSummary struct {
+	ClusterMeta
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
@@ -45,7 +47,8 @@ type AutoscalingSummary struct {
 }
 
 func parseAutoscalingNamespace(scope string) (string, error) {
-	namespace := strings.TrimSpace(scope)
+	_, scopeValue := refresh.SplitClusterScope(scope)
+	namespace := strings.TrimSpace(scopeValue)
 	if strings.HasPrefix(namespace, "namespace:") {
 		namespace = strings.TrimPrefix(namespace, "namespace:")
 		namespace = strings.TrimLeft(namespace, ":")
@@ -76,7 +79,9 @@ func RegisterNamespaceAutoscalingDomain(
 
 // Build assembles HPA summaries for a namespace.
 func (b *NamespaceAutoscalingBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	trimmed := strings.TrimSpace(scope)
+	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {
 		return nil, errors.New(errNamespaceAutoscalingScopeRequired)
 	}
@@ -88,13 +93,13 @@ func (b *NamespaceAutoscalingBuilder) Build(ctx context.Context, scope string) (
 		scopeLabel string
 	)
 	if isAll {
-		scopeLabel = "namespace:all"
+		scopeLabel = refresh.JoinClusterScope(clusterID, "namespace:all")
 	} else {
 		namespace, err = parseAutoscalingNamespace(trimmed)
 		if err != nil {
 			return nil, err
 		}
-		scopeLabel = trimmed
+		scopeLabel = refresh.JoinClusterScope(clusterID, trimmed)
 	}
 
 	hpas, err := b.listHPAs(namespace)
@@ -102,7 +107,7 @@ func (b *NamespaceAutoscalingBuilder) Build(ctx context.Context, scope string) (
 		return nil, fmt.Errorf("namespace autoscaling: failed to list hpas: %w", err)
 	}
 
-	return b.buildSnapshot(scopeLabel, hpas)
+	return b.buildSnapshot(meta, scopeLabel, hpas)
 }
 
 func (b *NamespaceAutoscalingBuilder) listHPAs(namespace string) ([]*autoscalingv1.HorizontalPodAutoscaler, error) {
@@ -112,7 +117,11 @@ func (b *NamespaceAutoscalingBuilder) listHPAs(namespace string) ([]*autoscaling
 	return b.hpaLister.HorizontalPodAutoscalers(namespace).List(labels.Everything())
 }
 
-func (b *NamespaceAutoscalingBuilder) buildSnapshot(scope string, hpas []*autoscalingv1.HorizontalPodAutoscaler) (*refresh.Snapshot, error) {
+func (b *NamespaceAutoscalingBuilder) buildSnapshot(
+	meta ClusterMeta,
+	scope string,
+	hpas []*autoscalingv1.HorizontalPodAutoscaler,
+) (*refresh.Snapshot, error) {
 	resources := make([]AutoscalingSummary, 0, len(hpas))
 	var version uint64
 
@@ -121,6 +130,7 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(scope string, hpas []*autosc
 			continue
 		}
 		summary := AutoscalingSummary{
+			ClusterMeta: meta,
 			Kind:      "HorizontalPodAutoscaler",
 			Name:      hpa.Name,
 			Namespace: hpa.Namespace,
@@ -151,7 +161,7 @@ func (b *NamespaceAutoscalingBuilder) buildSnapshot(scope string, hpas []*autosc
 		Domain:  namespaceAutoscalingDomainName,
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceAutoscalingSnapshot{Resources: resources},
+		Payload: NamespaceAutoscalingSnapshot{ClusterMeta: meta, Resources: resources},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(resources),
 		},

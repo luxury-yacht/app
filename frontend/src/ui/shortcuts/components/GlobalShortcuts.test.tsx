@@ -21,6 +21,12 @@ const registeredShortcuts: Array<{
   enabled?: boolean;
 }> = [];
 const isMacPlatformMock = vi.fn(() => true);
+const setSelectedKubeconfigsMock = vi.fn();
+const setActiveKubeconfigMock = vi.fn();
+const kubeconfigState = {
+  selectedKubeconfig: 'cluster-1',
+  selectedKubeconfigs: ['cluster-1', 'cluster-2'],
+};
 
 vi.mock('../context', () => ({
   useKeyboardContext: () => ({
@@ -41,6 +47,23 @@ vi.mock('../hooks', () => ({
 
 vi.mock('@/utils/platform', () => ({
   isMacPlatform: () => isMacPlatformMock(),
+}));
+
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({
+    kubeconfigs: [],
+    selectedKubeconfigs: kubeconfigState.selectedKubeconfigs,
+    selectedKubeconfig: kubeconfigState.selectedKubeconfig,
+    selectedClusterId: kubeconfigState.selectedKubeconfig,
+    selectedClusterName: kubeconfigState.selectedKubeconfig,
+    selectedClusterIds: kubeconfigState.selectedKubeconfigs,
+    kubeconfigsLoading: false,
+    setSelectedKubeconfigs: setSelectedKubeconfigsMock,
+    setSelectedKubeconfig: vi.fn(),
+    setActiveKubeconfig: setActiveKubeconfigMock,
+    getClusterMeta: (selection: string) => ({ id: selection, name: selection }),
+    loadKubeconfigs: vi.fn(),
+  }),
 }));
 
 vi.mock('./ShortcutHelpModal', () => ({
@@ -100,6 +123,11 @@ describe('GlobalShortcuts', () => {
     registeredShortcuts.length = 0;
     latestHelpProps = null;
     setContextMock.mockClear();
+    setSelectedKubeconfigsMock.mockClear();
+    setActiveKubeconfigMock.mockClear();
+    localStorage.clear();
+    kubeconfigState.selectedKubeconfig = 'cluster-1';
+    kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2'];
     isMacPlatformMock.mockReturnValue(true);
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -302,5 +330,50 @@ describe('GlobalShortcuts', () => {
     });
 
     expect(toggleSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the active cluster tab when Cmd+W fires', async () => {
+    isMacPlatformMock.mockReturnValue(true);
+    registeredShortcuts.length = 0;
+    kubeconfigState.selectedKubeconfig = 'cluster-2';
+    kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2'];
+
+    await renderComponent({});
+
+    act(() => {
+      findShortcut('w', { meta: true }).handler();
+    });
+
+    expect(setSelectedKubeconfigsMock).toHaveBeenCalledWith(['cluster-1']);
+  });
+
+  it('switches to the previous cluster tab on Cmd+Alt+Left', async () => {
+    isMacPlatformMock.mockReturnValue(true);
+    registeredShortcuts.length = 0;
+    kubeconfigState.selectedKubeconfig = 'cluster-2';
+    kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2', 'cluster-3'];
+
+    await renderComponent({});
+
+    act(() => {
+      findShortcut(KeyCodes.ARROW_LEFT, { meta: true, alt: true }).handler();
+    });
+
+    expect(setActiveKubeconfigMock).toHaveBeenCalledWith('cluster-1');
+  });
+
+  it('switches to the next cluster tab on Ctrl+Alt+Right', async () => {
+    isMacPlatformMock.mockReturnValue(false);
+    registeredShortcuts.length = 0;
+    kubeconfigState.selectedKubeconfig = 'cluster-2';
+    kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2', 'cluster-3'];
+
+    await renderComponent({});
+
+    act(() => {
+      findShortcut(KeyCodes.ARROW_RIGHT, { ctrl: true, alt: true }).handler();
+    });
+
+    expect(setActiveKubeconfigMock).toHaveBeenCalledWith('cluster-3');
   });
 });

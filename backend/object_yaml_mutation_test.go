@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	clientfake "k8s.io/client-go/kubernetes/fake"
@@ -22,7 +23,7 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient) {
+func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, string) {
 	t.Helper()
 
 	scheme := runtime.NewScheme()
@@ -94,6 +95,17 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient) {
 	app.client = client
 	app.dynamicClient = dynamicClient
 	app.apiextensionsClient = apiextensionsfake.NewClientset()
+	clusterID := "config:ctx"
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:                ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:      "/path",
+			kubeconfigContext:   "ctx",
+			client:              client,
+			dynamicClient:       dynamicClient,
+			apiextensionsClient: app.apiextensionsClient,
+		},
+	}
 
 	gvrCacheMutex.Lock()
 	original, hadOriginal := gvrCache["Deployment"]
@@ -117,11 +129,11 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient) {
 		}
 	})
 
-	return app, dynamicClient
+	return app, dynamicClient, clusterID
 }
 
 func TestValidateObjectYamlSuccess(t *testing.T) {
-	app, _ := setupYAMLTestApp(t)
+	app, _, clusterID := setupYAMLTestApp(t)
 
 	request := ObjectYAMLMutationRequest{
 		YAML: `apiVersion: apps/v1
@@ -151,7 +163,7 @@ spec:
 		ResourceVersion: "42",
 	}
 
-	response, err := app.ValidateObjectYaml(request)
+	response, err := app.ValidateObjectYaml(clusterID, request)
 	if err != nil {
 		t.Fatalf("ValidateObjectYaml returned error: %v", err)
 	}
@@ -164,7 +176,7 @@ spec:
 }
 
 func TestValidateObjectYamlDetectsResourceVersionDrift(t *testing.T) {
-	app, dynamicClient := setupYAMLTestApp(t)
+	app, dynamicClient, clusterID := setupYAMLTestApp(t)
 
 	// Bump live resourceVersion to simulate drift.
 	resource := dynamicClient.Resource(appsv1.SchemeGroupVersion.WithResource("deployments")).Namespace("default")
@@ -194,7 +206,7 @@ spec:
 		ResourceVersion: "42",
 	}
 
-	_, err = app.ValidateObjectYaml(request)
+	_, err = app.ValidateObjectYaml(clusterID, request)
 	if err == nil {
 		t.Fatalf("expected validation to fail due to resourceVersion drift")
 	}
@@ -204,7 +216,7 @@ spec:
 }
 
 func TestApplyObjectYamlSuccess(t *testing.T) {
-	app, _ := setupYAMLTestApp(t)
+	app, _, clusterID := setupYAMLTestApp(t)
 
 	request := ObjectYAMLMutationRequest{
 		YAML: `apiVersion: apps/v1
@@ -234,7 +246,7 @@ spec:
 		ResourceVersion: "42",
 	}
 
-	validation, err := app.ValidateObjectYaml(request)
+	validation, err := app.ValidateObjectYaml(clusterID, request)
 	if err != nil {
 		t.Fatalf("validation failed: %v", err)
 	}
@@ -242,7 +254,7 @@ spec:
 	request.ResourceVersion = validation.ResourceVersion
 	request.YAML = strings.Replace(request.YAML, `"42"`, fmt.Sprintf(`"%s"`, validation.ResourceVersion), 1)
 
-	response, err := app.ApplyObjectYaml(request)
+	response, err := app.ApplyObjectYaml(clusterID, request)
 	if err != nil {
 		t.Fatalf("apply failed: %v", err)
 	}
@@ -252,7 +264,7 @@ spec:
 }
 
 func TestValidateObjectYamlForbiddenError(t *testing.T) {
-	app, dynamicClient := setupYAMLTestApp(t)
+	app, dynamicClient, clusterID := setupYAMLTestApp(t)
 
 	dynamicClient.Fake.PrependReactor("update", "*", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		updateAction := action.(kubetesting.UpdateAction)
@@ -272,7 +284,7 @@ func TestValidateObjectYamlForbiddenError(t *testing.T) {
 		ResourceVersion: "42",
 	}
 
-	_, err := app.ValidateObjectYaml(request)
+	_, err := app.ValidateObjectYaml(clusterID, request)
 	if err == nil {
 		t.Fatalf("expected validation to return error")
 	}
@@ -338,6 +350,66 @@ func TestComputeDiffLinesTruncatesLargeInput(t *testing.T) {
 	lines, truncated := computeDiffLines(large, large)
 	if !truncated || lines != nil {
 		t.Fatalf("expected truncation for large diff")
+	}
+}
+
+func TestWrapKubernetesErrorFormatsStatusErrors(t *testing.T) {
+	statusErr := apierrors.NewInvalid(
+		schema.GroupKind{Group: "apps", Kind: "Deployment"},
+		"demo",
+		field.ErrorList{
+			field.Required(field.NewPath("spec", "replicas"), "field required"),
+		},
+	)
+
+	wrapped := wrapKubernetesError(statusErr, "apply failed")
+	objErr, ok := wrapped.(*objectYAMLError)
+	if !ok {
+		t.Fatalf("expected objectYAMLError, got %T", wrapped)
+	}
+	if objErr.Code != string(statusErr.ErrStatus.Reason) {
+		t.Fatalf("unexpected error code: %s", objErr.Code)
+	}
+	if len(objErr.Causes) == 0 {
+		t.Fatalf("expected causes to be populated")
+	}
+	if !strings.Contains(objErr.Causes[0], "spec.replicas") {
+		t.Fatalf("expected field in causes, got %#v", objErr.Causes)
+	}
+}
+
+func TestWrapKubernetesErrorUsesDefaultMessage(t *testing.T) {
+	err := errors.New("boom")
+	wrapped := wrapKubernetesError(err, "apply failed")
+	if wrapped == nil || !strings.Contains(wrapped.Error(), "apply failed") {
+		t.Fatalf("expected wrapped error to include default message")
+	}
+}
+
+func TestGetGVRForGVKFallsBackToCache(t *testing.T) {
+	app, _, _ := setupYAMLTestApp(t)
+
+	gvr, namespaced, err := app.getGVRForGVK(context.Background(), schema.GroupVersionKind{
+		Group:   "apps",
+		Version: "v1",
+		Kind:    "Deployment",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gvr.Resource != "deployments" || gvr.Group != "apps" || gvr.Version != "v1" {
+		t.Fatalf("unexpected GVR: %#v", gvr)
+	}
+	if !namespaced {
+		t.Fatalf("expected namespaced resource")
+	}
+}
+
+func TestGetGVRForGVKWithoutClientFails(t *testing.T) {
+	app := NewApp()
+	_, _, err := app.getGVRForGVK(context.Background(), schema.GroupVersionKind{Kind: "Deployment"})
+	if err == nil {
+		t.Fatalf("expected error for missing client")
 	}
 }
 

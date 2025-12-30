@@ -17,7 +17,11 @@ interface SecretOverviewProps {
 }
 
 export const SecretOverview: React.FC<SecretOverviewProps> = ({ secretDetails }) => {
-  const { openWithObject } = useObjectPanel();
+  const { openWithObject, objectData } = useObjectPanel();
+  const clusterMeta = {
+    clusterId: objectData?.clusterId ?? undefined,
+    clusterName: objectData?.clusterName ?? undefined,
+  };
 
   if (!secretDetails) return null;
 
@@ -79,6 +83,7 @@ export const SecretOverview: React.FC<SecretOverviewProps> = ({ secretDetails })
                           kind: 'pod',
                           name: podName,
                           namespace: secretDetails.namespace,
+                          ...clusterMeta,
                         })
                       }
                       title={`Click to view pod: ${podName}`}

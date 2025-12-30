@@ -48,6 +48,24 @@ vi.mock('@/core/refresh', () => ({
   useRefreshDomain: () => domainStateRef.current,
 }));
 
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  __esModule: true,
+  useKubeconfig: () => ({
+    kubeconfigs: [],
+    selectedKubeconfigs: ['cluster-1'],
+    selectedKubeconfig: 'cluster-1',
+    selectedClusterId: 'cluster-1',
+    selectedClusterName: 'cluster-1',
+    selectedClusterIds: ['cluster-1'],
+    kubeconfigsLoading: false,
+    setSelectedKubeconfigs: vi.fn(),
+    setSelectedKubeconfig: vi.fn(),
+    setActiveKubeconfig: vi.fn(),
+    getClusterMeta: vi.fn(),
+    loadKubeconfigs: vi.fn(),
+  }),
+}));
+
 vi.mock('@shared/components/ResourceBar', () => ({
   __esModule: true,
   default: ({ usage, request, limit, type }: Record<string, unknown>) => (

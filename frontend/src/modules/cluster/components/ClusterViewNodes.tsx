@@ -23,6 +23,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   calculateCpuOvercommitted,
   calculateMemoryOvercommitted,
@@ -43,16 +44,25 @@ interface NodesViewProps {
 const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const nodesDomain = useRefreshDomain('nodes');
-    const metricsInfo = nodesDomain.data?.metrics;
+    const metricsInfo = useMemo(() => {
+      const metricsByCluster = nodesDomain.data?.metricsByCluster;
+      if (metricsByCluster) {
+        return selectedClusterId ? (metricsByCluster[selectedClusterId] ?? null) : null;
+      }
+      return nodesDomain.data?.metrics ?? null;
+    }, [nodesDomain.data?.metrics, nodesDomain.data?.metricsByCluster, selectedClusterId]);
 
+    // Keep node selections pinned to their source cluster for object details.
     const handleNodeClick = useCallback(
       (node: ClusterNodeRow) => {
         openWithObject({
           kind: 'Node',
           name: node.name,
+          clusterId: node.clusterId ?? undefined,
+          clusterName: node.clusterName ?? undefined,
         });
       },
       [openWithObject]
@@ -205,7 +215,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       [error]
     );
 
-    const keyExtractor = useCallback((row: ClusterNodeRow) => `node:${row.name}`, []);
+    const keyExtractor = useCallback(
+      (row: ClusterNodeRow) => buildClusterScopedKey(row, `node:${row.name}`),
+      []
+    );
 
     // Set up grid table persistence
     const {
@@ -220,7 +233,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<ClusterNodeRow>({
       viewId: 'cluster-nodes',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns: tableColumns,
@@ -272,6 +285,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
               value: persistedFilters,
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
+              options: {},
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
             columnWidths={columnWidths}

@@ -381,6 +381,7 @@ export namespace capabilities {
 	
 	export class CheckRequest {
 	    id: string;
+	    clusterId?: string;
 	    verb: string;
 	    resourceKind: string;
 	    namespace?: string;
@@ -394,6 +395,7 @@ export namespace capabilities {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.clusterId = source["clusterId"];
 	        this.verb = source["verb"];
 	        this.resourceKind = source["resourceKind"];
 	        this.namespace = source["namespace"];
@@ -403,6 +405,7 @@ export namespace capabilities {
 	}
 	export class CheckResult {
 	    id: string;
+	    clusterId?: string;
 	    verb: string;
 	    resourceKind: string;
 	    namespace?: string;
@@ -420,6 +423,7 @@ export namespace capabilities {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.clusterId = source["clusterId"];
 	        this.verb = source["verb"];
 	        this.resourceKind = source["resourceKind"];
 	        this.namespace = source["namespace"];
@@ -588,6 +592,7 @@ export namespace types {
 	export class AppSettings {
 	    theme: string;
 	    selectedKubeconfig: string;
+	    selectedKubeconfigs: string[];
 	    useShortResourceNames: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -598,6 +603,7 @@ export namespace types {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.theme = source["theme"];
 	        this.selectedKubeconfig = source["selectedKubeconfig"];
+	        this.selectedKubeconfigs = source["selectedKubeconfigs"];
 	        this.useShortResourceNames = source["useShortResourceNames"];
 	    }
 	}

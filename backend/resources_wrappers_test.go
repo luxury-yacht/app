@@ -21,6 +21,14 @@ func wrapperTestApp(t *testing.T) *App {
 
 func TestResourceWrappersRequireClient(t *testing.T) {
 	app := wrapperTestApp(t)
+	clusterID := "config:ctx"
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+		},
+	}
 
 	errorCases := []struct {
 		name string
@@ -79,7 +87,7 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 			return err
 		}},
 		{"DeleteResource", func() error {
-			return app.DeleteResource("pod", "ns", "name")
+			return app.DeleteResource(clusterID, "pod", "ns", "name")
 		}},
 		{"HelmReleaseDetails", func() error {
 			_, err := app.GetHelmReleaseDetails("ns", "rel")
@@ -93,7 +101,7 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 			_, err := app.GetHelmValues("ns", "rel")
 			return err
 		}},
-		{"HelmDelete", func() error { return app.DeleteHelmRelease("ns", "rel") }},
+		{"HelmDelete", func() error { return app.DeleteHelmRelease(clusterID, "ns", "rel") }},
 		{"Deployment", func() error {
 			_, err := app.GetDeployment("ns", "deploy")
 			return err
@@ -154,11 +162,11 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 			_, err := app.GetNode("node")
 			return err
 		}},
-		{"Cordon", func() error { return app.CordonNode("node") }},
-		{"Uncordon", func() error { return app.UncordonNode("node") }},
-		{"Drain", func() error { return app.DrainNode("node", DrainNodeOptions{}) }},
-		{"DeleteNode", func() error { return app.DeleteNode("node") }},
-		{"ForceDeleteNode", func() error { return app.ForceDeleteNode("node") }},
+		{"Cordon", func() error { return app.CordonNode(clusterID, "node") }},
+		{"Uncordon", func() error { return app.UncordonNode(clusterID, "node") }},
+		{"Drain", func() error { return app.DrainNode(clusterID, "node", DrainNodeOptions{}) }},
+		{"DeleteNode", func() error { return app.DeleteNode(clusterID, "node") }},
+		{"ForceDeleteNode", func() error { return app.ForceDeleteNode(clusterID, "node") }},
 	}
 
 	for _, tc := range errorCases {

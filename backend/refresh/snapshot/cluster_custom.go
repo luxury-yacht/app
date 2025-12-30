@@ -34,6 +34,7 @@ type ClusterCustomBuilder struct {
 
 // ClusterCustomSummary captures key cluster custom resource fields.
 type ClusterCustomSummary struct {
+	ClusterMeta
 	Kind        string            `json:"kind"`
 	Name        string            `json:"name"`
 	APIGroup    string            `json:"apiGroup"`
@@ -44,6 +45,7 @@ type ClusterCustomSummary struct {
 
 // ClusterCustomSnapshot is returned to clients.
 type ClusterCustomSnapshot struct {
+	ClusterMeta
 	Resources []ClusterCustomSummary `json:"resources"`
 }
 
@@ -82,6 +84,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 		return nil, fmt.Errorf("dynamic client not initialised")
 	}
 
+	meta := ClusterMetaFromContext(ctx)
 	crds, err := b.crdLister.List(labels.Everything())
 	if err != nil {
 		return nil, err
@@ -98,7 +101,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 		return &refresh.Snapshot{
 			Domain:  clusterCustomDomainName,
 			Version: 0,
-			Payload: ClusterCustomSnapshot{Resources: []ClusterCustomSummary{}},
+			Payload: ClusterCustomSnapshot{ClusterMeta: meta, Resources: []ClusterCustomSummary{}},
 			Stats:   refresh.SnapshotStats{ItemCount: 0},
 		}, nil
 	}
@@ -168,6 +171,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 					continue
 				}
 				localSummaries = append(localSummaries, ClusterCustomSummary{
+					ClusterMeta: meta,
 					Kind:        resourceKind(item, crdCopy.Spec.Names.Kind),
 					Name:        item.GetName(),
 					APIGroup:    gvr.Group,
@@ -210,7 +214,7 @@ func (b *ClusterCustomBuilder) Build(ctx context.Context, scope string) (*refres
 		return summaries[i].Kind < summaries[j].Kind
 	})
 
-	payload := ClusterCustomSnapshot{Resources: summaries}
+	payload := ClusterCustomSnapshot{ClusterMeta: meta, Resources: summaries}
 	stats := refresh.SnapshotStats{ItemCount: len(summaries)}
 	if len(warnings) > 0 {
 		stats.Warnings = append(stats.Warnings, warnings...)

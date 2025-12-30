@@ -34,6 +34,8 @@ export interface KubernetesObjectReference {
   kindAlias?: string | null;
   name?: string | null;
   namespace?: string | null;
+  clusterId?: string | null;
+  clusterName?: string | null;
 
   // Raw Kubernetes API format (metadata object)
   metadata?: KubernetesMetadata;
@@ -76,4 +78,22 @@ export function getObjectNamespace(
   obj: KubernetesObjectReference | null | undefined
 ): string | undefined {
   return obj?.metadata?.namespace ?? obj?.namespace ?? undefined;
+}
+
+/**
+ * Helper to extract the cluster ID from a Kubernetes object reference.
+ */
+export function getObjectClusterId(
+  obj: KubernetesObjectReference | null | undefined
+): string | undefined {
+  return obj?.clusterId ?? undefined;
+}
+
+/**
+ * Helper to extract the cluster name from a Kubernetes object reference.
+ */
+export function getObjectClusterName(
+  obj: KubernetesObjectReference | null | undefined
+): string | undefined {
+  return obj?.clusterName ?? undefined;
 }

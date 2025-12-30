@@ -29,7 +29,7 @@ func TestServiceBuildEmitsSequenceAndChecksum(t *testing.T) {
 	}
 
 	rec := telemetry.NewRecorder()
-	service := NewService(reg, rec)
+	service := NewService(reg, rec, ClusterMeta{})
 
 	snap, err := service.Build(context.Background(), "demo", "scope-a")
 	if err != nil {
@@ -63,7 +63,7 @@ func TestServiceBuildRecordsFailure(t *testing.T) {
 	}
 
 	rec := telemetry.NewRecorder()
-	service := NewService(reg, rec)
+	service := NewService(reg, rec, ClusterMeta{})
 
 	if _, err := service.Build(context.Background(), "demo-fail", "scope-b"); err == nil {
 		t.Fatalf("expected build error")

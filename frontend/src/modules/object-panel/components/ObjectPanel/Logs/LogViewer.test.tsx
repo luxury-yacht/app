@@ -16,6 +16,7 @@ import {
   resetScopedDomainState,
   setScopedDomainState,
 } from '@/core/refresh/store';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { ObjectLogEntry } from '@/core/refresh/types';
 import { GetPodContainers, LogFetcher } from '@wailsjs/go/backend/App';
 
@@ -138,7 +139,9 @@ vi.mock('@shared/components/LoadingSpinner', () => ({
   default: ({ message }: { message?: string }) => <div>{message}</div>,
 }));
 
-const defaultScope = 'team-a:deployment:api';
+const testClusterId = 'alpha:ctx';
+const buildLogScope = (scope: string) => buildClusterScope(testClusterId, scope);
+const defaultScope = buildLogScope('team-a:deployment:api');
 let activeScope = defaultScope;
 
 const seedLogSnapshot = (
@@ -220,6 +223,7 @@ describe('LogViewer active pod synchronisation', () => {
       resourceKind = 'deployment',
       isActive = true,
       activePodNames = null,
+      clusterId = testClusterId,
     } = overrides;
 
     await act(async () => {
@@ -230,6 +234,7 @@ describe('LogViewer active pod synchronisation', () => {
           resourceKind={resourceKind}
           isActive={isActive}
           activePodNames={activePodNames}
+          clusterId={clusterId}
         />
       );
       await Promise.resolve();
@@ -295,7 +300,7 @@ describe('LogViewer active pod synchronisation', () => {
     shortcutMocks.useShortcut.mockClear();
     act(() => {
       resetScopedDomainState('object-logs', activeScope);
-      seedLogSnapshot([], 'team-a:pod:api');
+      seedLogSnapshot([], buildLogScope('team-a:pod:api'));
     });
     await renderViewer({
       resourceKind: 'pod',
@@ -353,7 +358,7 @@ describe('LogViewer active pod synchronisation', () => {
             isInit: false,
           },
         ],
-        'team-a:pod:api'
+        buildLogScope('team-a:pod:api')
       );
     });
     await renderViewer({
@@ -401,7 +406,8 @@ describe('LogViewer active pod synchronisation', () => {
     });
 
     expect(LogFetcher).toHaveBeenCalledTimes(1);
-    const request = (LogFetcher as unknown as ViMock).mock.calls[0][0];
+    const request = (LogFetcher as unknown as ViMock).mock.calls[0][1];
+    expect((LogFetcher as unknown as ViMock).mock.calls[0][0]).toBe('alpha:ctx');
     expect(request).toMatchObject({
       namespace: 'team-a',
       podName: 'api',
@@ -452,7 +458,7 @@ describe('LogViewer active pod synchronisation', () => {
     await waitForMockCalls(LogFetcher as unknown as ViMock, 1);
 
     expect(LogFetcher).toHaveBeenCalledTimes(1);
-    expect((LogFetcher as unknown as ViMock).mock.calls[0][0]).toMatchObject({
+    expect((LogFetcher as unknown as ViMock).mock.calls[0][1]).toMatchObject({
       workloadKind: 'deployment',
     });
     expect(mockModules.orchestrator.restartStreamingDomain).not.toHaveBeenCalled();
@@ -520,7 +526,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      'team-a:pod:api-pod-0'
+      buildLogScope('team-a:pod:api-pod-0')
     );
 
     await renderViewer({ resourceKind: 'pod', resourceName: 'api-pod-0' });
@@ -595,7 +601,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: false,
         },
       ],
-      'team-a:pod:api'
+      buildLogScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -632,7 +638,7 @@ describe('LogViewer active pod synchronisation', () => {
           isInit: true,
         },
       ],
-      'team-a:pod:api'
+      buildLogScope('team-a:pod:api')
     );
 
     await renderViewer({
@@ -644,7 +650,11 @@ describe('LogViewer active pod synchronisation', () => {
     await waitForMockCalls(GetPodContainers as unknown as ViMock, 1);
     await flushAsync();
 
-    expect((GetPodContainers as unknown as ViMock).mock.calls[0]).toEqual(['team-a', 'api']);
+    expect((GetPodContainers as unknown as ViMock).mock.calls[0]).toEqual([
+      'alpha:ctx',
+      'team-a',
+      'api',
+    ]);
 
     const containerSelect = container.querySelector<HTMLSelectElement>(
       '[data-testid="pod-container-dropdown"]'
@@ -675,7 +685,7 @@ describe('LogViewer active pod synchronisation', () => {
   });
 
   it('shows previous log message when toggled with no data', async () => {
-    seedLogSnapshot([], 'team-a:pod:api');
+    seedLogSnapshot([], buildLogScope('team-a:pod:api'));
     (LogFetcher as unknown as ViMock).mockResolvedValue({ entries: [] });
 
     await renderViewer({

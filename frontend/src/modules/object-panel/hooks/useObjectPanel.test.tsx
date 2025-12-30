@@ -43,6 +43,10 @@ vi.mock('@components/dockable', () => ({
   useDockablePanelState: mockUseDockablePanelState,
 }));
 
+vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({ selectedClusterId: 'test-cluster', selectedClusterName: 'test' }),
+}));
+
 beforeAll(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 });
@@ -100,6 +104,7 @@ describe('useObjectPanel', () => {
 
   it('opens the panel with object details and records history', async () => {
     const pod = { kind: 'Pod', name: 'api', namespace: 'default' };
+    const expectedPod = { ...pod, clusterId: 'test-cluster', clusterName: 'test' };
 
     act(() => {
       hookResult.openWithObject(pod);
@@ -107,14 +112,16 @@ describe('useObjectPanel', () => {
 
     expect(setOpenMock).toHaveBeenCalledWith(true);
     expect(hookResult.isOpen).toBe(true);
-    expect(hookResult.objectData).toEqual(pod);
-    expect(hookResult.navigationHistory).toEqual([pod]);
+    expect(hookResult.objectData).toEqual(expectedPod);
+    expect(hookResult.navigationHistory).toEqual([expectedPod]);
     expect(hookResult.navigationIndex).toBe(0);
   });
 
   it('navigates backward through the object history', async () => {
     const first = { kind: 'Deployment', name: 'api', namespace: 'default' };
     const second = { kind: 'Pod', name: 'api-123', namespace: 'default' };
+    const expectedFirst = { ...first, clusterId: 'test-cluster', clusterName: 'test' };
+    const expectedSecond = { ...second, clusterId: 'test-cluster', clusterName: 'test' };
 
     act(() => {
       hookResult.openWithObject(first);
@@ -124,14 +131,14 @@ describe('useObjectPanel', () => {
       hookResult.openWithObject(second);
     });
 
-    expect(hookResult.navigationHistory).toEqual([first, second]);
+    expect(hookResult.navigationHistory).toEqual([expectedFirst, expectedSecond]);
     expect(hookResult.navigationIndex).toBe(1);
 
     act(() => {
       hookResult.navigate(0);
     });
 
-    expect(hookResult.objectData).toEqual(first);
+    expect(hookResult.objectData).toEqual(expectedFirst);
     expect(hookResult.navigationIndex).toBe(0);
   });
 
@@ -155,12 +162,13 @@ describe('useObjectPanel', () => {
 
   it('closeObjectPanelGlobal closes the panel', async () => {
     const resource = { kind: 'Secret', name: 'credentials', namespace: 'default' };
+    const expectedResource = { ...resource, clusterId: 'test-cluster', clusterName: 'test' };
 
     act(() => {
       hookResult.openWithObject(resource);
     });
 
-    expect(hookResult.objectData).toEqual(resource);
+    expect(hookResult.objectData).toEqual(expectedResource);
 
     act(() => {
       closeObjectPanelGlobal();

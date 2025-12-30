@@ -25,12 +25,15 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 // Define the data structure for configuration resources
 interface ConfigData {
   kind: string;
   kindAlias?: string;
   name: string;
+  clusterId?: string;
+  clusterName?: string;
   age?: string;
 }
 
@@ -49,7 +52,7 @@ interface ConfigViewProps {
 const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -62,13 +65,19 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         openWithObject({
           kind: resource.kind,
           name: resource.name,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
-      (resource: ConfigData) => ['config', resource.kind, resource.name].filter(Boolean).join('/'),
+      (resource: ConfigData) =>
+        buildClusterScopedKey(
+          resource,
+          ['config', resource.kind, resource.name].filter(Boolean).join('/')
+        ),
       []
     );
 
@@ -113,7 +122,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<ConfigData>({
       viewId: 'cluster-config',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns,
@@ -133,7 +142,13 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       if (!deleteConfirm.resource) return;
 
       try {
-        await DeleteResource(deleteConfirm.resource.kind, '', deleteConfirm.resource.name);
+        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? '';
+        await DeleteResource(
+          clusterId,
+          deleteConfirm.resource.kind,
+          '',
+          deleteConfirm.resource.name
+        );
       } catch (err) {
         errorHandler.handle(err, {
           action: 'delete',
@@ -143,7 +158,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       } finally {
         setDeleteConfirm({ show: false, resource: null });
       }
-    }, [deleteConfirm.resource]);
+    }, [deleteConfirm.resource, selectedClusterId]);
 
     // Get context menu items
     const getContextMenuItems = useCallback(
@@ -192,7 +207,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
             data={sortedData}
             columns={columns}
             loading={loading}
-            keyExtractor={(resource) => `${resource.kind}-${resource.name}`}
+            keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
             onSort={handleSort}
             sortConfig={sortConfig}

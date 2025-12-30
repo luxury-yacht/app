@@ -24,11 +24,13 @@ type NamespaceEventsBuilder struct {
 
 // NamespaceEventsSnapshot payload for events tab.
 type NamespaceEventsSnapshot struct {
+	ClusterMeta
 	Events []EventSummary `json:"events"`
 }
 
 // EventSummary captures the essential event fields for display.
 type EventSummary struct {
+	ClusterMeta
 	Kind            string `json:"kind"`
 	Name            string `json:"name"`
 	Namespace       string `json:"namespace"`
@@ -58,7 +60,9 @@ func RegisterNamespaceEventsDomain(reg *domain.Registry, factory informers.Share
 // Build assembles event summaries for a namespace.
 func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	_ = ctx
-	trimmed := strings.TrimSpace(scope)
+	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {
 		return nil, fmt.Errorf("namespace scope is required")
 	}
@@ -122,6 +126,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 	if isAll {
 		scopeValue = "namespace:all"
 	}
+	scopeValue = refresh.JoinClusterScope(clusterID, scopeValue)
 
 	for _, event := range events {
 		if event == nil {
@@ -131,6 +136,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			continue
 		}
 		summary := EventSummary{
+			ClusterMeta:    meta,
 			Kind:            event.InvolvedObject.Kind,
 			Name:            event.Name,
 			Namespace:       event.InvolvedObject.Namespace,
@@ -161,7 +167,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		Domain:  namespaceEventsDomainName,
 		Scope:   scopeValue,
 		Version: version,
-		Payload: NamespaceEventsSnapshot{Events: summaries},
+		Payload: NamespaceEventsSnapshot{ClusterMeta: meta, Events: summaries},
 		Stats:   stats,
 	}, nil
 }

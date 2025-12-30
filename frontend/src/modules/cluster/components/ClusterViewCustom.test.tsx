@@ -78,6 +78,8 @@ const baseCustom = {
   name: 'gizmo',
   apiGroup: 'example.com',
   age: '1d',
+  clusterId: 'alpha:ctx',
+  clusterName: 'alpha',
   labels: { env: 'prod' },
   annotations: { owner: 'custom-team' },
 };
@@ -122,6 +124,7 @@ describe('ClusterViewCustom', () => {
         age: '1d',
         labels: { env: 'prod' },
         annotations: { owner: 'custom-team' },
+        clusterId: 'alpha:ctx',
       })
     );
   });

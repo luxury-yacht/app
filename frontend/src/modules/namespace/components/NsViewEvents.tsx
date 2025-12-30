@@ -21,6 +21,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
 export interface EventData {
@@ -31,6 +32,8 @@ export interface EventData {
   reason: string;
   object: string;
   message: string;
+  clusterId?: string;
+  clusterName?: string;
   objectNamespace?: string;
   namespace?: string;
   age?: string;
@@ -68,6 +71,8 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             kind,
             name,
             namespace: resolvedNamespace,
+            clusterId: event.clusterId ?? undefined,
+            clusterName: event.clusterName ?? undefined,
           });
         }
       },
@@ -82,7 +87,8 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             : event.namespace && event.namespace.length > 0
               ? event.namespace
               : namespace;
-        return `${eventNamespace}-${event.reason}-${event.source}-${event.object}-${event.ageTimestamp ?? event.age ?? '0'}-${index}`;
+        const baseKey = `${eventNamespace}-${event.reason}-${event.source}-${event.object}-${event.ageTimestamp ?? event.age ?? '0'}-${index}`;
+        return buildClusterScopedKey(event, baseKey);
       },
       [namespace]
     );

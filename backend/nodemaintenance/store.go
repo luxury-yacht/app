@@ -42,6 +42,8 @@ type DrainEvent struct {
 // DrainJob summarises the lifecycle of a single drain invocation.
 type DrainJob struct {
 	store       *Store
+	ClusterID   string                    `json:"clusterId,omitempty"`
+	ClusterName string                    `json:"clusterName,omitempty"`
 	ID          string                    `json:"id"`
 	NodeName    string                    `json:"nodeName"`
 	Status      DrainStatus               `json:"status"`
@@ -54,6 +56,8 @@ type DrainJob struct {
 
 // Snapshot is the payload returned to refresh clients.
 type Snapshot struct {
+	ClusterID   string     `json:"clusterId,omitempty"`
+	ClusterName string     `json:"clusterName,omitempty"`
 	Drains []DrainJob `json:"drains"`
 }
 

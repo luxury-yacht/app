@@ -22,6 +22,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { PODS_UNHEALTHY_STORAGE_KEY } from '@modules/namespace/components/podsFilterSignals';
@@ -95,12 +96,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       pod: PodSnapshotEntry | null;
     }>({ show: false, pod: null });
 
+    // Include cluster metadata so object details stay scoped to the active tab.
     const handlePodOpen = useCallback(
       (pod: PodSnapshotEntry) => {
         openWithObject({
           kind: 'Pod',
           name: pod.name,
           namespace: pod.namespace,
+          clusterId: pod.clusterId ?? undefined,
+          clusterName: pod.clusterName ?? undefined,
         });
       },
       [openWithObject]
@@ -115,6 +119,8 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           kind: pod.ownerKind,
           name: pod.ownerName,
           namespace: pod.namespace,
+          clusterId: pod.clusterId ?? undefined,
+          clusterName: pod.clusterName ?? undefined,
         });
       },
       [openWithObject]
@@ -128,14 +134,18 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         openWithObject({
           kind: 'Node',
           name: pod.node,
+          clusterId: pod.clusterId ?? undefined,
+          clusterName: pod.clusterName ?? undefined,
         });
       },
       [openWithObject]
     );
 
-    const keyExtractor = useCallback((pod: PodSnapshotEntry) => {
-      return `pod:${pod.namespace || ''}/${pod.name}`;
-    }, []);
+    const keyExtractor = useCallback(
+      (pod: PodSnapshotEntry) =>
+        buildClusterScopedKey(pod, `pod:${pod.namespace || ''}/${pod.name}`),
+      []
+    );
 
     const metricsBanner = useMemo(
       () => getMetricsBannerInfo(effectiveMetrics ?? null),
@@ -290,7 +300,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       }
 
       try {
-        await DeletePod(deleteConfirm.pod.namespace, deleteConfirm.pod.name);
+        await DeletePod(
+          deleteConfirm.pod.clusterId ?? '',
+          deleteConfirm.pod.namespace,
+          deleteConfirm.pod.name
+        );
         setDeleteConfirm({ show: false, pod: null });
       } catch (err) {
         errorHandler.handle(err, {

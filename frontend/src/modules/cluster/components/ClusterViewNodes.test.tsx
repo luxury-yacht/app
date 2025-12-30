@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import ClusterViewNodes from '@modules/cluster/components/ClusterViewNodes';
 
 const gridTablePropsRef: { current: any } = { current: null };
+const openWithObjectMock = vi.fn();
 
 vi.mock('@shared/components/tables/GridTable', async () => {
   const actual = await vi.importActual<typeof import('@shared/components/tables/GridTable')>(
@@ -26,7 +27,7 @@ vi.mock('@shared/components/tables/GridTable', async () => {
 });
 
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => ({ openWithObject: vi.fn() }),
+  useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -92,6 +93,8 @@ const baseNode = {
   taints: [],
   labels: {},
   restarts: 0,
+  clusterId: 'alpha:ctx',
+  clusterName: 'alpha',
 };
 
 describe('ClusterViewNodes', () => {
@@ -107,6 +110,7 @@ describe('ClusterViewNodes', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
+    openWithObjectMock.mockReset();
   });
 
   afterEach(() => {
@@ -128,5 +132,30 @@ describe('ClusterViewNodes', () => {
     expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [] });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
+  });
+
+  it('opens the object panel with cluster metadata when clicking a node name', async () => {
+    await act(async () => {
+      root.render(<ClusterViewNodes data={[baseNode as any]} loaded={true} />);
+      await Promise.resolve();
+    });
+
+    const props = gridTablePropsRef.current;
+    const nameColumn = props.columns.find((column: any) => column.key === 'name');
+    const cell = nameColumn.render(props.data[0]);
+
+    // Trigger the column click handler to exercise object navigation.
+    act(() => {
+      cell.props.onClick?.({ stopPropagation: () => {} });
+    });
+
+    expect(openWithObjectMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'Node',
+        name: 'node-1',
+        clusterId: 'alpha:ctx',
+        clusterName: 'alpha',
+      })
+    );
   });
 });

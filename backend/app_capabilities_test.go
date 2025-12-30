@@ -14,6 +14,8 @@ import (
 	kubetesting "k8s.io/client-go/testing"
 )
 
+const capabilitiesClusterID = "config:ctx"
+
 func TestEvaluateCapabilitiesSuccess(t *testing.T) {
 	client := clientfake.NewClientset()
 	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
@@ -42,6 +44,14 @@ func TestEvaluateCapabilitiesSuccess(t *testing.T) {
 	app := NewApp()
 	app.Ctx = context.Background()
 	app.client = client
+	app.clusterClients = map[string]*clusterClients{
+		capabilitiesClusterID: {
+			meta:              ClusterMeta{ID: capabilitiesClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
 
 	gvrCacheMutex.Lock()
 	original, hadOriginal := gvrCache["Deployment"]
@@ -67,6 +77,7 @@ func TestEvaluateCapabilitiesSuccess(t *testing.T) {
 	requests := []capabilities.CheckRequest{
 		{
 			ID:           "update",
+			ClusterID:    capabilitiesClusterID,
 			Verb:         "update",
 			ResourceKind: "Deployment",
 			Namespace:    "default",
@@ -91,9 +102,16 @@ func TestEvaluateCapabilitiesSuccess(t *testing.T) {
 func TestEvaluateCapabilitiesHandlesInvalidRequest(t *testing.T) {
 	app := NewApp()
 	app.Ctx = context.Background()
+	app.clusterClients = map[string]*clusterClients{
+		capabilitiesClusterID: {
+			meta:              ClusterMeta{ID: capabilitiesClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+		},
+	}
 
 	results, err := app.EvaluateCapabilities([]capabilities.CheckRequest{
-		{ID: "", Verb: "get", ResourceKind: "Pod"},
+		{ID: "", ClusterID: capabilitiesClusterID, Verb: "get", ResourceKind: "Pod"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -124,6 +142,14 @@ func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
 	app := NewApp()
 	app.Ctx = context.Background()
 	app.client = client
+	app.clusterClients = map[string]*clusterClients{
+		capabilitiesClusterID: {
+			meta:              ClusterMeta{ID: capabilitiesClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
 
 	gvrCacheMutex.Lock()
 	gvrCache["Deployment"] = gvrCacheEntry{
@@ -144,6 +170,7 @@ func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
 	requests := []capabilities.CheckRequest{
 		{
 			ID:           "delete-a",
+			ClusterID:    capabilitiesClusterID,
 			Verb:         "delete",
 			ResourceKind: "Deployment",
 			Namespace:    "default",
@@ -151,6 +178,7 @@ func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
 		},
 		{
 			ID:           "delete-b",
+			ClusterID:    capabilitiesClusterID,
 			Verb:         "delete",
 			ResourceKind: "Deployment",
 			Namespace:    "default",

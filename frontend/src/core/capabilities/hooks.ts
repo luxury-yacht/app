@@ -84,7 +84,8 @@ export const useCapabilities = (
         descriptor.resourceKind,
         descriptor.verb,
         descriptor.namespace ?? null,
-        descriptor.subresource ?? null
+        descriptor.subresource ?? null,
+        descriptor.clusterId ?? null
       );
       const permissionStatus = permissionMap.get(permissionKey);
 

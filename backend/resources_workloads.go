@@ -96,3 +96,47 @@ func (a *App) resourceDependencies() common.Dependencies {
 		SelectedContext:     a.selectedContext,
 	}
 }
+
+// resourceDependenciesForSelection returns dependencies scoped to a specific cluster selection.
+func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, clients *clusterClients, clusterID string) common.Dependencies {
+	// Ensure nil pointer metrics clients don't get wrapped in non-nil interfaces.
+	var metricsClient metricsclient.Interface
+	if clients != nil && clients.metricsClient != nil {
+		metricsClient = clients.metricsClient
+	}
+
+	deps := common.Dependencies{
+		Context:             a.Ctx,
+		Logger:              a.logger,
+		KubernetesClient:    nil,
+		MetricsClient:       metricsClient,
+		DynamicClient:       nil,
+		APIExtensionsClient: nil,
+		RestConfig:          nil,
+		SelectedKubeconfig:  selection.Path,
+		SelectedContext:     selection.Context,
+	}
+
+	if clients == nil {
+		return deps
+	}
+
+	deps.KubernetesClient = clients.client
+	deps.DynamicClient = clients.dynamicClient
+	deps.APIExtensionsClient = clients.apiextensionsClient
+	deps.RestConfig = clients.restConfig
+	deps.SetMetricsClient = func(mc metricsclient.Interface) {
+		clientset, ok := mc.(*metricsclient.Clientset)
+		if !ok {
+			return
+		}
+		a.clusterClientsMu.Lock()
+		defer a.clusterClientsMu.Unlock()
+		entry := a.clusterClients[clusterID]
+		if entry != nil {
+			entry.metricsClient = clientset
+		}
+	}
+
+	return deps
+}

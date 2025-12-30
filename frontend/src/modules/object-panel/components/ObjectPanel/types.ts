@@ -10,6 +10,8 @@ export type PanelObjectData = {
   kindAlias?: string | null;
   name?: string | null;
   namespace?: string | null;
+  clusterId?: string | null;
+  clusterName?: string | null;
 };
 
 export type ResourceCapability = {

@@ -22,6 +22,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
@@ -33,6 +34,9 @@ export interface AutoscalingData {
   kindAlias?: string;
   name: string;
   namespace: string;
+  // Multi-cluster metadata used for per-tab actions and stable row keys.
+  clusterId?: string;
+  clusterName?: string;
   // HorizontalPodAutoscaler-specific fields
   scaleTargetRef?: {
     kind: string;
@@ -88,14 +92,21 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           kind: resource.kind || resource.kindAlias,
           name: resource.name,
           namespace: resource.namespace,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]
     );
 
-    const keyExtractor = useCallback((resource: AutoscalingData) => {
-      return [resource.namespace, resource.kind, resource.name].filter(Boolean).join('/');
-    }, []);
+    const keyExtractor = useCallback(
+      (resource: AutoscalingData) =>
+        buildClusterScopedKey(
+          resource,
+          [resource.namespace, resource.kind, resource.name].filter(Boolean).join('/')
+        ),
+      []
+    );
 
     const columns: GridColumnDefinition<AutoscalingData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<AutoscalingData>[] = [];
@@ -144,6 +155,8 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
                 kind: resource.scaleTargetRef.kind,
                 name: resource.scaleTargetRef.name,
                 namespace: resource.namespace,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
               });
             },
             isInteractive: (resource) => Boolean(resource.scaleTargetRef),
@@ -259,6 +272,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
 
       try {
         await DeleteResource(
+          deleteConfirm.resource.clusterId ?? '',
           deleteConfirm.resource.kind,
           deleteConfirm.resource.namespace,
           deleteConfirm.resource.name
@@ -299,6 +313,8 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
                   name: resource.name,
                   namespace: resource.namespace,
                   viewMode: 'events',
+                  clusterId: resource.clusterId ?? undefined,
+                  clusterName: resource.clusterName ?? undefined,
                 });
               },
             }

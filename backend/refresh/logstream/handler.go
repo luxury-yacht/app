@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
@@ -266,10 +267,11 @@ func writeEvent(w http.ResponseWriter, f http.Flusher, payload EventPayload) err
 }
 
 func parseOptions(r *http.Request) (Options, error) {
-	scope := strings.TrimSpace(r.URL.Query().Get("scope"))
-	if scope == "" {
+	rawScope := strings.TrimSpace(r.URL.Query().Get("scope"))
+	if rawScope == "" {
 		return Options{}, errors.New("scope is required")
 	}
+	_, scope := refresh.SplitClusterScope(rawScope)
 	parts := strings.Split(scope, ":")
 	if len(parts) < 3 {
 		return Options{}, errors.New("scope must be namespace:kind:name")
@@ -290,7 +292,8 @@ func parseOptions(r *http.Request) (Options, error) {
 		Name:        name,
 		Container:   container,
 		TailLines:   tail,
-		ScopeString: scope,
+		// Keep the original scope for client-side keying.
+		ScopeString: rawScope,
 	}, nil
 }
 

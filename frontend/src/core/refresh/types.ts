@@ -13,15 +13,22 @@
 import { types } from '@wailsjs/go/models';
 import type { SnapshotStats } from './client';
 
-export interface NamespaceSnapshotPayload {
-  namespaces: Array<{
-    name: string;
-    phase: string;
-    resourceVersion: string;
-    creationTimestamp: number;
-    hasWorkloads?: boolean;
-    workloadsUnknown?: boolean;
-  }>;
+export interface ClusterMeta {
+  clusterId?: string;
+  clusterName?: string;
+}
+
+export interface NamespaceSummary extends ClusterMeta {
+  name: string;
+  phase: string;
+  resourceVersion: string;
+  creationTimestamp: number;
+  hasWorkloads?: boolean;
+  workloadsUnknown?: boolean;
+}
+
+export interface NamespaceSnapshotPayload extends ClusterMeta {
+  namespaces: NamespaceSummary[];
 }
 
 export interface NodePodMetric {
@@ -50,7 +57,7 @@ export interface NodeMaintenanceDrainEvent {
   podName?: string;
 }
 
-export interface NodeMaintenanceDrainJob {
+export interface NodeMaintenanceDrainJob extends ClusterMeta {
   id: string;
   nodeName: string;
   status: 'running' | 'succeeded' | 'failed';
@@ -61,11 +68,11 @@ export interface NodeMaintenanceDrainJob {
   events: NodeMaintenanceDrainEvent[];
 }
 
-export interface NodeMaintenanceSnapshotPayload {
+export interface NodeMaintenanceSnapshotPayload extends ClusterMeta {
   drains: NodeMaintenanceDrainJob[];
 }
 
-export interface ClusterNodeSnapshotEntry {
+export interface ClusterNodeSnapshotEntry extends ClusterMeta {
   name: string;
   status: string;
   roles: string;
@@ -106,9 +113,10 @@ export interface NodeMetricsInfo {
   failureCount: number;
 }
 
-export interface ClusterNodeSnapshotPayload {
+export interface ClusterNodeSnapshotPayload extends ClusterMeta {
   nodes: ClusterNodeSnapshotEntry[];
   metrics?: NodeMetricsInfo;
+  metricsByCluster?: Record<string, NodeMetricsInfo>;
 }
 
 export type ClusterNodeRow = ClusterNodeSnapshotEntry;
@@ -147,12 +155,14 @@ export interface ClusterOverviewPayload {
   totalNamespaces: number;
 }
 
-export interface ClusterOverviewSnapshotPayload {
+export interface ClusterOverviewSnapshotPayload extends ClusterMeta {
   overview: ClusterOverviewPayload;
   metrics: ClusterOverviewMetrics;
+  metricsByCluster?: Record<string, ClusterOverviewMetrics>;
+  overviewByCluster?: Record<string, ClusterOverviewPayload>;
 }
 
-export interface ClusterRBACEntry {
+export interface ClusterRBACEntry extends ClusterMeta {
   kind: string;
   name: string;
   details: string;
@@ -160,11 +170,11 @@ export interface ClusterRBACEntry {
   typeAlias?: string;
 }
 
-export interface ClusterRBACSnapshotPayload {
+export interface ClusterRBACSnapshotPayload extends ClusterMeta {
   resources: ClusterRBACEntry[];
 }
 
-export interface ClusterStorageEntry {
+export interface ClusterStorageEntry extends ClusterMeta {
   kind: string;
   name: string;
   storageClass?: string;
@@ -175,11 +185,11 @@ export interface ClusterStorageEntry {
   age: string;
 }
 
-export interface ClusterStorageSnapshotPayload {
+export interface ClusterStorageSnapshotPayload extends ClusterMeta {
   volumes: ClusterStorageEntry[];
 }
 
-export interface ClusterConfigEntry {
+export interface ClusterConfigEntry extends ClusterMeta {
   kind: string;
   name: string;
   details: string;
@@ -187,11 +197,11 @@ export interface ClusterConfigEntry {
   age: string;
 }
 
-export interface ClusterConfigSnapshotPayload {
+export interface ClusterConfigSnapshotPayload extends ClusterMeta {
   resources: ClusterConfigEntry[];
 }
 
-export interface ClusterCRDEntry {
+export interface ClusterCRDEntry extends ClusterMeta {
   kind: string;
   name: string;
   group: string;
@@ -201,11 +211,11 @@ export interface ClusterCRDEntry {
   typeAlias?: string;
 }
 
-export interface ClusterCRDSnapshotPayload {
+export interface ClusterCRDSnapshotPayload extends ClusterMeta {
   definitions: ClusterCRDEntry[];
 }
 
-export interface ClusterCustomEntry {
+export interface ClusterCustomEntry extends ClusterMeta {
   kind: string;
   name: string;
   apiGroup: string;
@@ -214,11 +224,11 @@ export interface ClusterCustomEntry {
   annotations?: Record<string, string>;
 }
 
-export interface ClusterCustomSnapshotPayload {
+export interface ClusterCustomSnapshotPayload extends ClusterMeta {
   resources: ClusterCustomEntry[];
 }
 
-export interface ClusterEventEntry {
+export interface ClusterEventEntry extends ClusterMeta {
   kind: string;
   kindAlias?: string;
   name: string;
@@ -233,13 +243,13 @@ export interface ClusterEventEntry {
   ageTimestamp?: number;
 }
 
-export interface ClusterEventsSnapshotPayload {
+export interface ClusterEventsSnapshotPayload extends ClusterMeta {
   events: ClusterEventEntry[];
 }
 
 export type CatalogItemScope = 'Cluster' | 'Namespace';
 
-export interface CatalogItem {
+export interface CatalogItem extends ClusterMeta {
   kind: string;
   group: string;
   version: string;
@@ -261,13 +271,19 @@ export interface CatalogParity {
   extraSample?: string[];
 }
 
-export interface CatalogSnapshotPayload {
+export interface CatalogNamespaceGroup extends ClusterMeta {
+  namespaces: string[];
+  selectedNamespaces?: string[];
+}
+
+export interface CatalogSnapshotPayload extends ClusterMeta {
   items: CatalogItem[];
   continue?: string;
   total: number;
   resourceCount: number;
   kinds?: string[];
   namespaces?: string[];
+  namespaceGroups?: CatalogNamespaceGroup[];
   parity?: CatalogParity | null;
   batchIndex: number;
   batchSize: number;
@@ -284,7 +300,7 @@ export interface CatalogStreamEventPayload {
   generatedAt: number;
 }
 
-export interface PodSnapshotEntry {
+export interface PodSnapshotEntry extends ClusterMeta {
   name: string;
   namespace: string;
   node: string;
@@ -311,16 +327,16 @@ export interface PodMetricsInfo {
   failureCount: number;
 }
 
-export interface PodSnapshotPayload {
+export interface PodSnapshotPayload extends ClusterMeta {
   pods: PodSnapshotEntry[];
   metrics?: PodMetricsInfo;
 }
 
-export interface ObjectDetailsSnapshotPayload {
+export interface ObjectDetailsSnapshotPayload extends ClusterMeta {
   details: any;
 }
 
-export interface ObjectEventSummary {
+export interface ObjectEventSummary extends ClusterMeta {
   kind: string;
   eventType: string;
   reason: string;
@@ -342,25 +358,25 @@ export interface ObjectEventSummary {
   namespace: string;
 }
 
-export interface ObjectEventsSnapshotPayload {
+export interface ObjectEventsSnapshotPayload extends ClusterMeta {
   events: ObjectEventSummary[];
 }
 
-export interface ObjectYAMLSnapshotPayload {
+export interface ObjectYAMLSnapshotPayload extends ClusterMeta {
   yaml: string;
 }
 
-export interface ObjectHelmManifestSnapshotPayload {
+export interface ObjectHelmManifestSnapshotPayload extends ClusterMeta {
   manifest: string;
   revision?: number;
 }
 
-export interface ObjectHelmValuesSnapshotPayload {
+export interface ObjectHelmValuesSnapshotPayload extends ClusterMeta {
   values: Record<string, any>;
   revision?: number;
 }
 
-export interface NamespaceWorkloadSummary {
+export interface NamespaceWorkloadSummary extends ClusterMeta {
   kind: string;
   name: string;
   namespace: string;
@@ -376,11 +392,11 @@ export interface NamespaceWorkloadSummary {
   memLimit?: string;
 }
 
-export interface NamespaceWorkloadSnapshotPayload {
+export interface NamespaceWorkloadSnapshotPayload extends ClusterMeta {
   workloads: NamespaceWorkloadSummary[];
 }
 
-export interface NamespaceConfigSummary {
+export interface NamespaceConfigSummary extends ClusterMeta {
   kind: string;
   typeAlias?: string;
   name: string;
@@ -389,11 +405,11 @@ export interface NamespaceConfigSummary {
   age: string;
 }
 
-export interface NamespaceConfigSnapshotPayload {
+export interface NamespaceConfigSnapshotPayload extends ClusterMeta {
   resources: NamespaceConfigSummary[];
 }
 
-export interface NamespaceNetworkSummary {
+export interface NamespaceNetworkSummary extends ClusterMeta {
   kind: string;
   name: string;
   namespace: string;
@@ -401,11 +417,11 @@ export interface NamespaceNetworkSummary {
   age: string;
 }
 
-export interface NamespaceNetworkSnapshotPayload {
+export interface NamespaceNetworkSnapshotPayload extends ClusterMeta {
   resources: NamespaceNetworkSummary[];
 }
 
-export interface NamespaceRBACSummary {
+export interface NamespaceRBACSummary extends ClusterMeta {
   kind: string;
   name: string;
   namespace: string;
@@ -413,11 +429,11 @@ export interface NamespaceRBACSummary {
   age: string;
 }
 
-export interface NamespaceRBACSnapshotPayload {
+export interface NamespaceRBACSnapshotPayload extends ClusterMeta {
   resources: NamespaceRBACSummary[];
 }
 
-export interface NamespaceStorageSummary {
+export interface NamespaceStorageSummary extends ClusterMeta {
   kind: string;
   name: string;
   namespace: string;
@@ -427,11 +443,11 @@ export interface NamespaceStorageSummary {
   age: string;
 }
 
-export interface NamespaceStorageSnapshotPayload {
+export interface NamespaceStorageSnapshotPayload extends ClusterMeta {
   resources: NamespaceStorageSummary[];
 }
 
-export interface NamespaceAutoscalingSummary {
+export interface NamespaceAutoscalingSummary extends ClusterMeta {
   kind: string;
   name: string;
   namespace: string;
@@ -442,11 +458,11 @@ export interface NamespaceAutoscalingSummary {
   age: string;
 }
 
-export interface NamespaceAutoscalingSnapshotPayload {
+export interface NamespaceAutoscalingSnapshotPayload extends ClusterMeta {
   resources: NamespaceAutoscalingSummary[];
 }
 
-export interface NamespaceQuotaSummary {
+export interface NamespaceQuotaSummary extends ClusterMeta {
   kind: string;
   name: string;
   namespace: string;
@@ -462,11 +478,11 @@ export interface NamespaceQuotaSummary {
   };
 }
 
-export interface NamespaceQuotasSnapshotPayload {
+export interface NamespaceQuotasSnapshotPayload extends ClusterMeta {
   resources: NamespaceQuotaSummary[];
 }
 
-export interface NamespaceEventSummary {
+export interface NamespaceEventSummary extends ClusterMeta {
   kind: string;
   kindAlias?: string;
   name: string;
@@ -481,11 +497,11 @@ export interface NamespaceEventSummary {
   ageTimestamp?: number;
 }
 
-export interface NamespaceEventsSnapshotPayload {
+export interface NamespaceEventsSnapshotPayload extends ClusterMeta {
   events: NamespaceEventSummary[];
 }
 
-export interface NamespaceCustomSummary {
+export interface NamespaceCustomSummary extends ClusterMeta {
   kind: string;
   name: string;
   apiGroup: string;
@@ -495,11 +511,11 @@ export interface NamespaceCustomSummary {
   annotations?: Record<string, string>;
 }
 
-export interface NamespaceCustomSnapshotPayload {
+export interface NamespaceCustomSnapshotPayload extends ClusterMeta {
   resources: NamespaceCustomSummary[];
 }
 
-export interface NamespaceHelmSummary {
+export interface NamespaceHelmSummary extends ClusterMeta {
   name: string;
   namespace: string;
   chart: string;
@@ -512,7 +528,7 @@ export interface NamespaceHelmSummary {
   age: string;
 }
 
-export interface NamespaceHelmSnapshotPayload {
+export interface NamespaceHelmSnapshotPayload extends ClusterMeta {
   releases: NamespaceHelmSummary[];
 }
 
@@ -596,6 +612,8 @@ export interface DomainPayloadMap {
 export interface TelemetrySnapshotStatus {
   domain: string;
   scope?: string;
+  clusterId?: string;
+  clusterName?: string;
   lastStatus: 'success' | 'error';
   lastError?: string;
   lastDurationMs: number;

@@ -5,9 +5,9 @@
  * Handles debouncing, dock positions, and respects user resize operations.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 import type { DockPosition } from './useDockablePanelState';
-import { LAYOUT } from './dockablePanelLayout';
+import { LAYOUT, getDockablePanelTopOffset } from './dockablePanelLayout';
 
 interface DockablePanelState {
   position: DockPosition;
@@ -23,6 +23,7 @@ interface WindowBoundsOptions {
   minHeight: number;
   isResizing: boolean;
   isMaximized: boolean;
+  panelRef?: RefObject<HTMLDivElement | null>;
 }
 
 /**
@@ -33,7 +34,7 @@ export function useWindowBoundsConstraint(
   panelState: DockablePanelState,
   options: WindowBoundsOptions
 ) {
-  const { minWidth, minHeight, isResizing, isMaximized } = options;
+  const { minWidth, minHeight, isResizing, isMaximized, panelRef } = options;
   const panelStateRef = useRef(panelState);
 
   // We use a ref to hold the latest panel state so the resize handler
@@ -118,8 +119,12 @@ export function useWindowBoundsConstraint(
           }
 
           // Ensure panel stays within top edge.
-          if (currentPosition.y < LAYOUT.MIN_EDGE_DISTANCE) {
-            newPosition.y = LAYOUT.MIN_EDGE_DISTANCE;
+          const topOffset = Math.max(
+            LAYOUT.MIN_EDGE_DISTANCE,
+            getDockablePanelTopOffset(panelRef?.current)
+          );
+          if (currentPosition.y < topOffset) {
+            newPosition.y = topOffset;
             needsUpdate = true;
           }
         } else if (currentPanelState.position === 'right') {
@@ -130,7 +135,11 @@ export function useWindowBoundsConstraint(
           }
           // If the panel is docked to the bottom, constrain its height.
         } else if (currentPanelState.position === 'bottom') {
-          const maxHeight = window.innerHeight - LAYOUT.BOTTOM_RESERVED_HEIGHT;
+          const reservedTop = Math.max(
+            LAYOUT.BOTTOM_RESERVED_HEIGHT,
+            getDockablePanelTopOffset(panelRef?.current)
+          );
+          const maxHeight = window.innerHeight - reservedTop;
           if (currentSize.height > maxHeight) {
             newSize.height = maxHeight;
             needsUpdate = true;
@@ -162,5 +171,5 @@ export function useWindowBoundsConstraint(
       }
       window.removeEventListener('resize', handleWindowResize);
     };
-  }, [minWidth, minHeight, isResizing, isMaximized, panelState.isOpen]);
+  }, [minWidth, minHeight, isResizing, isMaximized, panelState.isOpen, panelRef]);
 }

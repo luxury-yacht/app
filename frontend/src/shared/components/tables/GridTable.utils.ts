@@ -56,6 +56,43 @@ export const defaultGetNamespace = (row: any): string | null => {
   return value;
 };
 
+export const defaultGetClusterId = (row: any): string | null => {
+  if (!row || typeof row !== 'object') {
+    return null;
+  }
+  const value =
+    typeof row.clusterId === 'string'
+      ? row.clusterId
+      : row.item && typeof row.item.clusterId === 'string'
+        ? row.item.clusterId
+        : typeof row.clusterName === 'string'
+          ? row.clusterName
+          : row.item && typeof row.item.clusterName === 'string'
+            ? row.item.clusterName
+            : null;
+  return value ?? null;
+};
+
+export const defaultGetClusterName = (row: any): string | null => {
+  if (!row || typeof row !== 'object') {
+    return null;
+  }
+  const value =
+    typeof row.clusterName === 'string'
+      ? row.clusterName
+      : row.item && typeof row.item.clusterName === 'string'
+        ? row.item.clusterName
+        : null;
+  return value ?? null;
+};
+
+// Prefix row keys with cluster identity to keep multi-cluster rows stable.
+export const buildClusterScopedKey = (row: any, baseKey: string): string => {
+  const clusterId = defaultGetClusterId(row);
+  const trimmed = typeof clusterId === 'string' ? clusterId.trim() : '';
+  return trimmed ? `${trimmed}|${baseKey}` : baseKey;
+};
+
 export const defaultGetSearchText = (row: any): string[] => {
   if (!row || typeof row !== 'object') {
     return [];

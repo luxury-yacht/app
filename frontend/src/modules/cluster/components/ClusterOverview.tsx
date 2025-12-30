@@ -21,6 +21,7 @@ import { emitPodsUnhealthySignal } from '@modules/namespace/components/podsFilte
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { GetAppInfo } from '@wailsjs/go/backend/App';
 import { backend } from '@wailsjs/go/models';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 interface ClusterOverviewProps {
   clusterContext: string;
@@ -64,25 +65,76 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   }, [clusterContext]);
 
   const overviewDomain = useRefreshDomain('cluster-overview');
+  const { selectedClusterId } = useKubeconfig();
   const [overviewData, setOverviewData] = useState<ClusterOverviewPayload>(EMPTY_OVERVIEW);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [hydratedClusterId, setHydratedClusterId] = useState<string | null>(null);
   const [isSwitching, setIsSwitching] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const metricsInfo = overviewDomain.data?.metrics;
+  const metricsInfo = useMemo(() => {
+    const metricsByCluster = overviewDomain.data?.metricsByCluster;
+    if (metricsByCluster) {
+      return selectedClusterId ? (metricsByCluster[selectedClusterId] ?? null) : null;
+    }
+    if (!overviewDomain.data?.metrics) {
+      return null;
+    }
+    const payloadClusterId = overviewDomain.data.clusterId?.trim() || '';
+    if (selectedClusterId && payloadClusterId && payloadClusterId !== selectedClusterId) {
+      return null;
+    }
+    if (!payloadClusterId && hydratedClusterId && hydratedClusterId !== selectedClusterId) {
+      return null;
+    }
+    return overviewDomain.data.metrics;
+  }, [
+    hydratedClusterId,
+    overviewDomain.data?.clusterId,
+    overviewDomain.data?.metrics,
+    overviewDomain.data?.metricsByCluster,
+    selectedClusterId,
+  ]);
   const metricsBanner = useMemo(() => getMetricsBannerInfo(metricsInfo), [metricsInfo]);
   const { setSelectedNamespace } = useNamespace();
   const { setActiveNamespaceTab, setSidebarSelection, navigateToNamespace } = useViewState();
 
+  const selectedOverview = useMemo(() => {
+    const overviewByCluster = overviewDomain.data?.overviewByCluster;
+    if (overviewByCluster) {
+      return selectedClusterId ? (overviewByCluster[selectedClusterId] ?? null) : null;
+    }
+    if (!overviewDomain.data?.overview) {
+      return null;
+    }
+    const payloadClusterId = overviewDomain.data.clusterId?.trim() || '';
+    if (selectedClusterId && payloadClusterId && payloadClusterId !== selectedClusterId) {
+      return null;
+    }
+    if (!payloadClusterId && hydratedClusterId && hydratedClusterId !== selectedClusterId) {
+      return null;
+    }
+    return overviewDomain.data.overview;
+  }, [
+    hydratedClusterId,
+    overviewDomain.data?.clusterId,
+    overviewDomain.data?.overview,
+    overviewDomain.data?.overviewByCluster,
+    selectedClusterId,
+  ]);
+
   useEffect(() => {
-    const payload = overviewDomain.data?.overview ?? null;
-    if (payload) {
-      setOverviewData(payload);
+    if (selectedOverview) {
+      setOverviewData(selectedOverview);
       setIsHydrated(true);
+      setHydratedClusterId(selectedClusterId ?? null);
       setIsSwitching(false);
       return;
-    } else if (overviewDomain.status === 'idle') {
+    }
+
+    if (overviewDomain.status === 'idle') {
       setOverviewData(EMPTY_OVERVIEW);
       setIsHydrated(false);
+      setHydratedClusterId(null);
       return;
     }
 
@@ -90,7 +142,23 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       setOverviewData(EMPTY_OVERVIEW);
       setIsSwitching(false);
     }
-  }, [overviewDomain.data, overviewDomain.status, isHydrated]);
+  }, [selectedClusterId, selectedOverview, overviewDomain.status, isHydrated]);
+
+  useEffect(() => {
+    if (!selectedClusterId) {
+      setOverviewData(EMPTY_OVERVIEW);
+      setIsHydrated(false);
+      setHydratedClusterId(null);
+      setIsSwitching(false);
+      return;
+    }
+    if (hydratedClusterId && hydratedClusterId !== selectedClusterId && !selectedOverview) {
+      // Clear cached data when switching tabs so the new cluster shows loading shimmers.
+      setOverviewData(EMPTY_OVERVIEW);
+      setIsHydrated(false);
+      setIsSwitching(true);
+    }
+  }, [hydratedClusterId, selectedClusterId, selectedOverview]);
 
   useEffect(() => {
     let isActive = true;
@@ -129,11 +197,15 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     };
   }, []);
 
+  const isHydratedForCluster = isHydrated && hydratedClusterId === selectedClusterId;
+  const displayOverview = isHydratedForCluster ? overviewData : EMPTY_OVERVIEW;
   const isLoading = overviewDomain.status === 'loading';
   const errorMessage =
-    overviewDomain.status === 'error' && !isHydrated ? overviewDomain.error : null;
+    overviewDomain.status === 'error' && !isHydratedForCluster ? overviewDomain.error : null;
   const showSkeleton =
-    !errorMessage && !isHydrated && (isSwitching || isLoading || overviewDomain.status === 'idle');
+    !errorMessage &&
+    !isHydratedForCluster &&
+    (isSwitching || isLoading || overviewDomain.status === 'idle');
 
   useEffect(() => {
     const enableOverview = () => {
@@ -210,13 +282,13 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   );
 
   const podStatusCards = [
-    { key: 'running', label: 'Running', value: overviewData.runningPods, className: 'running' },
-    { key: 'pending', label: 'Pending', value: overviewData.pendingPods, className: 'pending' },
-    { key: 'failed', label: 'Failing', value: overviewData.failedPods, className: 'failed' },
+    { key: 'running', label: 'Running', value: displayOverview.runningPods, className: 'running' },
+    { key: 'pending', label: 'Pending', value: displayOverview.pendingPods, className: 'pending' },
+    { key: 'failed', label: 'Failing', value: displayOverview.failedPods, className: 'failed' },
     {
       key: 'restarted',
       label: 'Restarted',
-      value: overviewData.restartedPods,
+      value: displayOverview.restartedPods,
       className: 'restarted',
     },
   ];
@@ -262,14 +334,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <span className="cluster-info-item">
               <span className="cluster-info-label">Type:</span>
               <span className={`cluster-info-value${skeletonTextClass}`}>
-                {overviewData.clusterType || 'Unknown'}
+                {displayOverview.clusterType || 'Unknown'}
               </span>
             </span>
             <span className="cluster-info-separator">·</span>
             <span className="cluster-info-item">
               <span className="cluster-info-label">Version:</span>
               <span className={`cluster-info-value${skeletonTextClass}`}>
-                {overviewData.clusterVersion || 'Unknown'}
+                {displayOverview.clusterVersion || 'Unknown'}
               </span>
             </span>
             <span className="cluster-info-separator">·</span>
@@ -305,9 +377,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <div className="resource-item">
               <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
                 <ResourceBar
-                  usage={overviewData.cpuUsage}
-                  request={overviewData.cpuRequests}
-                  limit={overviewData.cpuAllocatable}
+                  usage={displayOverview.cpuUsage}
+                  request={displayOverview.cpuRequests}
+                  limit={displayOverview.cpuAllocatable}
                   type="cpu"
                   variant="default"
                 />
@@ -316,25 +388,25 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 <div className="detail-row">
                   <span className="utilization-detail-label">Usage</span>
                   <span className={`utilization-detail-value${skeletonTextClass}`}>
-                    {overviewData.cpuUsage || '0'}
+                    {displayOverview.cpuUsage || '0'}
                   </span>
                 </div>
                 <div className="detail-row">
                   <span className="utilization-detail-label">Allocatable</span>
                   <span className={`utilization-detail-value${skeletonTextClass}`}>
-                    {overviewData.cpuAllocatable || '0'}
+                    {displayOverview.cpuAllocatable || '0'}
                   </span>
                 </div>
                 <div className="detail-row">
                   <span className="utilization-detail-label">Requests</span>
                   <span className={`utilization-detail-value${skeletonTextClass}`}>
-                    {overviewData.cpuRequests || '0'}
+                    {displayOverview.cpuRequests || '0'}
                   </span>
                 </div>
                 <div className="detail-row">
                   <span className="utilization-detail-label">Limits</span>
                   <span className={`utilization-detail-value${skeletonTextClass}`}>
-                    {overviewData.cpuLimits || '0'}
+                    {displayOverview.cpuLimits || '0'}
                   </span>
                 </div>
               </div>
@@ -346,9 +418,9 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <div className="resource-item">
               <div className={`resource-bar-placeholder${skeletonBlockClass}`}>
                 <ResourceBar
-                  usage={overviewData.memoryUsage}
-                  request={overviewData.memoryRequests}
-                  limit={overviewData.memoryAllocatable}
+                  usage={displayOverview.memoryUsage}
+                  request={displayOverview.memoryRequests}
+                  limit={displayOverview.memoryAllocatable}
                   type="memory"
                   variant="default"
                 />
@@ -357,25 +429,25 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
                 <div className="detail-row">
                   <span className="utilization-detail-label">Usage</span>
                   <span className={`utilization-detail-value${skeletonTextClass}`}>
-                    {overviewData.memoryUsage || '0'}
+                    {displayOverview.memoryUsage || '0'}
                   </span>
                 </div>
                 <div className="detail-row">
                   <span className="utilization-detail-label">Allocatable</span>
                   <span className={`utilization-detail-value${skeletonTextClass}`}>
-                    {overviewData.memoryAllocatable || '0'}
+                    {displayOverview.memoryAllocatable || '0'}
                   </span>
                 </div>
                 <div className="detail-row">
                   <span className="utilization-detail-label">Requests</span>
                   <span className={`utilization-detail-value${skeletonTextClass}`}>
-                    {overviewData.memoryRequests || '0'}
+                    {displayOverview.memoryRequests || '0'}
                   </span>
                 </div>
                 <div className="detail-row">
                   <span className="utilization-detail-label">Limits</span>
                   <span className={`utilization-detail-value${skeletonTextClass}`}>
-                    {overviewData.memoryLimits || '0'}
+                    {displayOverview.memoryLimits || '0'}
                   </span>
                 </div>
               </div>
@@ -387,21 +459,21 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           <h2>Nodes</h2>
           <div className="stats-grid">
             <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>{overviewData.totalNodes}</div>
+              <div className={`stat-value${skeletonTextClass}`}>{displayOverview.totalNodes}</div>
               <div className="stat-label">Total</div>
             </div>
             <div className={`stat-card${skeletonBlockClass}`}>
               <div className={`stat-value${skeletonTextClass}`}>
-                {overviewData.clusterType === 'EKS'
-                  ? overviewData.ec2Nodes
-                  : overviewData.regularNodes}
+                {displayOverview.clusterType === 'EKS'
+                  ? displayOverview.ec2Nodes
+                  : displayOverview.regularNodes}
               </div>
               <div className="stat-label">
-                {overviewData.clusterType === 'EKS' ? 'EC2' : 'Standard'}
+                {displayOverview.clusterType === 'EKS' ? 'EC2' : 'Standard'}
               </div>
             </div>
             <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>{overviewData.fargateNodes}</div>
+              <div className={`stat-value${skeletonTextClass}`}>{displayOverview.fargateNodes}</div>
               <div className="stat-label">Fargate</div>
             </div>
           </div>
@@ -411,15 +483,19 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
           <h2>Workloads</h2>
           <div className="stats-grid">
             <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>{overviewData.totalNamespaces}</div>
+              <div className={`stat-value${skeletonTextClass}`}>
+                {displayOverview.totalNamespaces}
+              </div>
               <div className="stat-label">Namespaces</div>
             </div>
             <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>{overviewData.totalPods}</div>
+              <div className={`stat-value${skeletonTextClass}`}>{displayOverview.totalPods}</div>
               <div className="stat-label">Pods</div>
             </div>
             <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>{overviewData.totalContainers}</div>
+              <div className={`stat-value${skeletonTextClass}`}>
+                {displayOverview.totalContainers}
+              </div>
               <div className="stat-label">Containers</div>
             </div>
           </div>

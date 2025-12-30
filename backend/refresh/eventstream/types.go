@@ -22,6 +22,8 @@ func (noopLogger) Error(string, ...string) {}
 
 // Entry represents a single Kubernetes event emitted to streaming subscribers.
 type Entry struct {
+	ClusterID       string `json:"clusterId,omitempty"`
+	ClusterName     string `json:"clusterName,omitempty"`
 	Kind            string `json:"kind"`
 	Name            string `json:"name"`
 	Namespace       string `json:"namespace"`

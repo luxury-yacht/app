@@ -134,11 +134,15 @@ func (w *shellEventWriter) Write(p []byte) (int, error) {
 }
 
 // StartShellSession launches a kubectl exec session and begins streaming data back to the frontend.
-func (a *App) StartShellSession(req ShellSessionRequest) (*ShellSession, error) {
-	if err := a.ensureClientInitialized("pod-shell"); err != nil {
+func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*ShellSession, error) {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
 		return nil, err
 	}
-	if a.restConfig == nil {
+	if deps.KubernetesClient == nil {
+		return nil, fmt.Errorf("kubernetes client not initialized")
+	}
+	if deps.RestConfig == nil {
 		return nil, fmt.Errorf("kubernetes rest config not initialized")
 	}
 	if req.Namespace == "" {
@@ -153,7 +157,7 @@ func (a *App) StartShellSession(req ShellSessionRequest) (*ShellSession, error) 
 
 	podIdentifier := fmt.Sprintf("%s/%s", req.Namespace, req.PodName)
 	pod, err := executeWithRetry(ctx, a, "pod-shell", podIdentifier, func() (*corev1.Pod, error) {
-		return a.client.CoreV1().Pods(req.Namespace).Get(ctx, req.PodName, metav1.GetOptions{})
+		return deps.KubernetesClient.CoreV1().Pods(req.Namespace).Get(ctx, req.PodName, metav1.GetOptions{})
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pod: %w", err)
@@ -180,7 +184,7 @@ func (a *App) StartShellSession(req ShellSessionRequest) (*ShellSession, error) 
 	sizeQueue := newTerminalSizeQueue()
 	sizeQueue.Set(120, 40)
 
-	execReq := a.client.CoreV1().
+	execReq := deps.KubernetesClient.CoreV1().
 		RESTClient().
 		Post().
 		Resource("pods").
@@ -196,7 +200,7 @@ func (a *App) StartShellSession(req ShellSessionRequest) (*ShellSession, error) 
 			TTY:       true,
 		}, scheme.ParameterCodec)
 
-	executor, err := spdyExecutorFactory(a.restConfig, http.MethodPost, execReq.URL())
+	executor, err := spdyExecutorFactory(deps.RestConfig, http.MethodPost, execReq.URL())
 	if err != nil {
 		return nil, fmt.Errorf("failed to build exec session: %w", err)
 	}

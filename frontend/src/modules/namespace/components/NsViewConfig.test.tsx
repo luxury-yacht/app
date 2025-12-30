@@ -152,6 +152,7 @@ const sampleData = [
     kindAlias: 'cfg',
     name: 'app-config',
     namespace: 'default',
+    clusterId: 'alpha:ctx',
     data: 2,
     age: '1d',
   },
@@ -212,11 +213,14 @@ describe('NsViewConfig ConfigViewGrid', () => {
     act(() => {
       menuItems[0].onClick();
     });
-    expect(objectPanelMock.openWithObject).toHaveBeenCalledWith({
-      kind: resource.kind,
-      name: resource.name,
-      namespace: resource.namespace,
-    });
+    expect(objectPanelMock.openWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: resource.kind,
+        name: resource.name,
+        namespace: resource.namespace,
+        clusterId: 'alpha:ctx',
+      })
+    );
 
     const deleteAction = menuItems.find((item: any) => item.label === 'Delete');
     await act(async () => {
@@ -230,6 +234,7 @@ describe('NsViewConfig ConfigViewGrid', () => {
     });
 
     expect(deleteResourceMock.DeleteResource).toHaveBeenCalledWith(
+      'alpha:ctx',
       'ConfigMap',
       'default',
       'app-config'

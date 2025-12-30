@@ -10,6 +10,10 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NamespaceProvider, useNamespace } from './NamespaceContext';
+import { ALL_NAMESPACES_DISPLAY_NAME } from '@modules/namespace/constants';
+
+let mockClusterId = 'cluster-a';
+let mockClusterIds = ['cluster-a'];
 
 const { mockRefreshOrchestrator, namespaceDomainRef } = vi.hoisted(() => {
   return {
@@ -24,7 +28,11 @@ const { mockRefreshOrchestrator, namespaceDomainRef } = vi.hoisted(() => {
 });
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'test' }),
+  useKubeconfig: () => ({
+    selectedKubeconfig: 'test',
+    selectedClusterId: mockClusterId,
+    selectedClusterIds: mockClusterIds,
+  }),
 }));
 
 vi.mock('@/core/refresh', () => ({
@@ -38,8 +46,20 @@ vi.mock('@/core/refresh', () => ({
 }));
 
 const SelectedNamespace: React.FC = () => {
-  const { selectedNamespace } = useNamespace();
-  return <span data-testid="selected">{selectedNamespace ?? 'none'}</span>;
+  const { selectedNamespace, selectedNamespaceClusterId } = useNamespace();
+  return (
+    <>
+      <span data-testid="selected">{selectedNamespace ?? 'none'}</span>
+      <span data-testid="selected-cluster">{selectedNamespaceClusterId ?? 'none'}</span>
+    </>
+  );
+};
+
+const namespaceRef: { current: ReturnType<typeof useNamespace> | null } = { current: null };
+
+const Harness: React.FC = () => {
+  namespaceRef.current = useNamespace();
+  return null;
 };
 
 describe('NamespaceProvider selection behaviour', () => {
@@ -50,6 +70,9 @@ describe('NamespaceProvider selection behaviour', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     namespaceDomainRef.current = createNamespaceDomain('ready', ['alpha', 'beta']);
+    mockClusterId = 'cluster-a';
+    mockClusterIds = ['cluster-a', 'cluster-b'];
+    namespaceRef.current = null;
     vi.clearAllMocks();
   });
 
@@ -64,6 +87,7 @@ describe('NamespaceProvider selection behaviour', () => {
     act(() => {
       root.render(
         <NamespaceProvider>
+          <Harness />
           <SelectedNamespace />
         </NamespaceProvider>
       );
@@ -73,6 +97,7 @@ describe('NamespaceProvider selection behaviour', () => {
       act(() => {
         root.render(
           <NamespaceProvider>
+            <Harness />
             <SelectedNamespace />
           </NamespaceProvider>
         );
@@ -93,7 +118,15 @@ describe('NamespaceProvider selection behaviour', () => {
       vi.runAllTimers();
     });
 
+    act(() => {
+      namespaceRef.current?.setSelectedNamespace('alpha');
+    });
+    act(() => {
+      vi.runAllTimers();
+    });
+
     expect(getSelected()).toBe('alpha');
+    expect(getSelectedCluster()).toBe('cluster-a');
 
     namespaceDomainRef.current = {
       ...namespaceDomainRef.current,
@@ -105,6 +138,7 @@ describe('NamespaceProvider selection behaviour', () => {
     });
 
     expect(getSelected()).toBe('alpha');
+    expect(getSelectedCluster()).toBe('cluster-a');
 
     namespaceDomainRef.current = createNamespaceDomain('ready', ['alpha', 'beta']);
     rerender();
@@ -113,15 +147,24 @@ describe('NamespaceProvider selection behaviour', () => {
     });
 
     expect(getSelected()).toBe('alpha');
+    expect(getSelectedCluster()).toBe('cluster-a');
     cleanup();
   });
 
-  it('moves selection when refreshed list removes the previous namespace', () => {
+  it('clears selection when refreshed list removes the previous namespace', () => {
     const { rerender, cleanup } = renderWithProvider();
     act(() => {
       vi.runAllTimers();
     });
+
+    act(() => {
+      namespaceRef.current?.setSelectedNamespace('alpha');
+    });
+    act(() => {
+      vi.runAllTimers();
+    });
     expect(getSelected()).toBe('alpha');
+    expect(getSelectedCluster()).toBe('cluster-a');
 
     namespaceDomainRef.current = createNamespaceDomain('ready', ['bravo']);
     rerender();
@@ -129,7 +172,171 @@ describe('NamespaceProvider selection behaviour', () => {
       vi.runAllTimers();
     });
 
-    expect(getSelected()).toBe('bravo');
+    expect(getSelected()).toBe('none');
+    expect(getSelectedCluster()).toBe('none');
+    cleanup();
+  });
+
+  it('filters namespaces to the active cluster', () => {
+    namespaceDomainRef.current = {
+      status: 'ready',
+      data: {
+        namespaces: [
+          {
+            name: 'alpha',
+            phase: 'Active',
+            resourceVersion: '1',
+            creationTimestamp: Math.floor(Date.now() / 1000),
+            clusterId: 'cluster-a',
+            clusterName: 'alpha',
+          },
+          {
+            name: 'beta',
+            phase: 'Active',
+            resourceVersion: '2',
+            creationTimestamp: Math.floor(Date.now() / 1000),
+            clusterId: 'cluster-b',
+            clusterName: 'beta',
+          },
+        ],
+      },
+      error: null,
+    };
+
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    const visibleNames = namespaceRef.current?.namespaces.map((item) => item.name) ?? [];
+    expect(visibleNames).toEqual([ALL_NAMESPACES_DISPLAY_NAME, 'alpha']);
+    cleanup();
+  });
+
+  it('keeps namespace selection scoped to the active cluster tab', () => {
+    namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
+      {
+        clusterId: 'cluster-a',
+        clusterName: 'alpha',
+        names: ['alpha', 'beta'],
+      },
+      {
+        clusterId: 'cluster-b',
+        clusterName: 'beta',
+        names: ['gamma', 'delta'],
+      },
+    ]);
+    const { rerender, cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    act(() => {
+      namespaceRef.current?.setSelectedNamespace('beta');
+    });
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(getSelected()).toBe('beta');
+
+    mockClusterId = 'cluster-b';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(getSelected()).toBe('none');
+
+    act(() => {
+      namespaceRef.current?.setSelectedNamespace('delta');
+    });
+
+    mockClusterId = 'cluster-a';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+    expect(getSelected()).toBe('beta');
+    cleanup();
+  });
+
+  it('drops namespace selections for closed cluster tabs', () => {
+    namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
+      {
+        clusterId: 'cluster-a',
+        clusterName: 'alpha',
+        names: ['alpha', 'beta'],
+      },
+      {
+        clusterId: 'cluster-b',
+        clusterName: 'beta',
+        names: ['gamma', 'delta'],
+      },
+    ]);
+    const { rerender, cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    mockClusterId = 'cluster-b';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+    act(() => {
+      namespaceRef.current?.setSelectedNamespace('delta');
+    });
+
+    mockClusterIds = ['cluster-a'];
+    mockClusterId = 'cluster-a';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    mockClusterIds = ['cluster-a', 'cluster-b'];
+    mockClusterId = 'cluster-b';
+    rerender();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(getSelected()).toBe('none');
+    cleanup();
+  });
+
+  it('keeps namespaces empty while the active cluster has no data', () => {
+    namespaceDomainRef.current = createNamespaceDomainMulti('ready', [
+      {
+        clusterId: 'cluster-a',
+        clusterName: 'alpha',
+        names: ['alpha'],
+      },
+    ]);
+    mockClusterId = 'cluster-b';
+
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(namespaceRef.current?.namespaces).toEqual([]);
+    expect(namespaceRef.current?.namespaceLoading).toBe(true);
+    cleanup();
+  });
+
+  it('triggers manual refresh with spinner control', async () => {
+    const { cleanup } = renderWithProvider();
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    await act(async () => {
+      await namespaceRef.current?.loadNamespaces(false);
+    });
+
+    expect(mockRefreshOrchestrator.triggerManualRefresh).toHaveBeenCalledWith('namespaces', {
+      suppressSpinner: true,
+    });
     cleanup();
   });
 });
@@ -139,7 +346,21 @@ function getSelected(): string {
   return element?.textContent ?? '';
 }
 
+function getSelectedCluster(): string {
+  const element = document.querySelector('[data-testid="selected-cluster"]');
+  return element?.textContent ?? '';
+}
+
 function createNamespaceDomain(status: 'ready' | 'loading' | 'idle', names: string[]) {
+  return createNamespaceDomainWithCluster(status, names, 'cluster-a', 'alpha');
+}
+
+function createNamespaceDomainWithCluster(
+  status: 'ready' | 'loading' | 'idle',
+  names: string[],
+  clusterId: string,
+  clusterName: string
+) {
   return {
     status,
     data: {
@@ -148,7 +369,39 @@ function createNamespaceDomain(status: 'ready' | 'loading' | 'idle', names: stri
         phase: 'Active',
         resourceVersion: String(index + 1),
         creationTimestamp: Math.floor(Date.now() / 1000),
+        clusterId,
+        clusterName,
       })),
+    },
+    error: null,
+  };
+}
+
+type ClusterNamespaceGroup = {
+  clusterId: string;
+  clusterName: string;
+  names: string[];
+};
+
+function createNamespaceDomainMulti(
+  status: 'ready' | 'loading' | 'idle',
+  clusters: ClusterNamespaceGroup[]
+) {
+  const namespaces = clusters.flatMap((cluster) =>
+    cluster.names.map((name, index) => ({
+      name,
+      phase: 'Active',
+      resourceVersion: `${cluster.clusterId}-${index + 1}`,
+      creationTimestamp: Math.floor(Date.now() / 1000),
+      clusterId: cluster.clusterId,
+      clusterName: cluster.clusterName,
+    }))
+  );
+
+  return {
+    status,
+    data: {
+      namespaces,
     },
     error: null,
   };

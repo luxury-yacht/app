@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/versioning"
-	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
@@ -34,6 +34,7 @@ type App struct {
 	restConfig              *rest.Config
 	selectedKubeconfig      string
 	selectedContext         string
+	selectedKubeconfigs     []string
 	availableKubeconfigs    []KubeconfigInfo
 	windowSettings          *WindowSettings
 	appSettings             *AppSettings
@@ -52,13 +53,16 @@ type App struct {
 	telemetryRecorder            *telemetry.Recorder
 	sharedInformerFactory        informers.SharedInformerFactory
 	apiExtensionsInformerFactory apiextinformers.SharedInformerFactory
+	refreshSubsystems            map[string]*system.Subsystem
 
-	objectCatalogService *objectcatalog.Service
-	objectCatalogCancel  context.CancelFunc
-	objectCatalogDone    chan struct{}
+	objectCatalogMu        sync.Mutex
+	objectCatalogEntries   map[string]*objectCatalogEntry
 
 	permissionCacheMu sync.Mutex
 	permissionCaches  map[string]map[string]bool
+
+	clusterClientsMu sync.Mutex
+	clusterClients   map[string]*clusterClients
 
 	shellSessions   map[string]*shellSession
 	shellSessionsMu sync.Mutex
@@ -92,13 +96,16 @@ type App struct {
 // NewApp constructs a backend App with sane defaults.
 func NewApp() *App {
 	app := &App{
-		logger:           NewLogger(1000),
-		versionCache:     versioning.NewCache(),
-		sidebarVisible:   true,
-		logsPanelVisible: false,
-		permissionCaches: make(map[string]map[string]bool),
-		shellSessions:    make(map[string]*shellSession),
-		eventEmitter:     func(context.Context, string, ...interface{}) {},
+		logger:               NewLogger(1000),
+		versionCache:         versioning.NewCache(),
+		sidebarVisible:       true,
+		logsPanelVisible:     false,
+		permissionCaches:     make(map[string]map[string]bool),
+		refreshSubsystems:    make(map[string]*system.Subsystem),
+		clusterClients:       make(map[string]*clusterClients),
+		objectCatalogEntries: make(map[string]*objectCatalogEntry),
+		shellSessions:        make(map[string]*shellSession),
+		eventEmitter:         func(context.Context, string, ...interface{}) {},
 	}
 	app.startAuthRecovery = func(reason string) {
 		go app.runAuthRecovery(reason)
@@ -121,6 +128,10 @@ func (a *App) initKubeClient() error {
 }
 
 func (a *App) currentSelectionKey() string {
+	meta := a.currentClusterMeta()
+	if meta.ID != "" {
+		return meta.ID
+	}
 	if a.selectedKubeconfig == "" {
 		return ""
 	}

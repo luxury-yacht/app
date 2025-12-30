@@ -25,12 +25,15 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 
 // Define the data structure for Custom Resource Definitions
 interface CRDsData {
   kind: string;
   kindAlias?: string;
   name: string;
+  clusterId?: string;
+  clusterName?: string;
   group: string;
   scope: string;
   age?: string;
@@ -50,7 +53,7 @@ interface CRDsViewProps {
 const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedKubeconfig } = useKubeconfig();
+    const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
     const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -63,13 +66,16 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
         openWithObject({
           kind: 'CustomResourceDefinition',
           name: crd.name,
+          clusterId: crd.clusterId ?? undefined,
+          clusterName: crd.clusterName ?? undefined,
         });
       },
       [openWithObject]
     );
 
     const keyExtractor = useCallback(
-      (crd: CRDsData) => ['crd', crd.group, crd.name].filter(Boolean).join('/'),
+      (crd: CRDsData) =>
+        buildClusterScopedKey(crd, ['crd', crd.group, crd.name].filter(Boolean).join('/')),
       []
     );
 
@@ -119,7 +125,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       resetState: resetPersistedState,
     } = useGridTablePersistence<CRDsData>({
       viewId: 'cluster-crds',
-      clusterIdentity: selectedKubeconfig,
+      clusterIdentity: selectedClusterId,
       namespace: null,
       isNamespaceScoped: false,
       columns,
@@ -139,7 +145,13 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       if (!deleteConfirm.resource) return;
 
       try {
-        await DeleteResource('CustomResourceDefinition', '', deleteConfirm.resource.name);
+        const clusterId = deleteConfirm.resource.clusterId ?? selectedClusterId ?? '';
+        await DeleteResource(
+          clusterId,
+          'CustomResourceDefinition',
+          '',
+          deleteConfirm.resource.name
+        );
       } catch (error) {
         errorHandler.handle(error, {
           action: 'delete',
@@ -149,7 +161,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       } finally {
         setDeleteConfirm({ show: false, resource: null });
       }
-    }, [deleteConfirm.resource]);
+    }, [deleteConfirm.resource, selectedClusterId]);
 
     // Get context menu items
     const getContextMenuItems = useCallback(
@@ -199,7 +211,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
             data={sortedData}
             columns={columns}
             loading={loading}
-            keyExtractor={(crd) => crd.name}
+            keyExtractor={keyExtractor}
             onRowClick={handleResourceClick}
             onSort={handleSort}
             sortConfig={sortConfig}

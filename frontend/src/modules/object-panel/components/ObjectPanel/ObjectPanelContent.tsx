@@ -145,6 +145,7 @@ export function ObjectPanelContent({
             resourceName={objectData?.name || ''}
             resourceKind={objectKind || 'pod'}
             activePodNames={activePodNames}
+            clusterId={objectData?.clusterId ?? null}
           />
         </ErrorBoundary>
       )}
@@ -161,6 +162,7 @@ export function ObjectPanelContent({
             isActive={isPanelOpen && activeTab === 'shell'}
             disabledReason={capabilityReasons.shell}
             availableContainers={availableContainers}
+            clusterId={objectData?.clusterId ?? null}
           />
         </ErrorBoundary>
       )}
@@ -202,6 +204,7 @@ export function ObjectPanelContent({
             isActive={isPanelOpen && activeTab === 'yaml'}
             canEdit={capabilities.canEditYaml}
             editDisabledReason={capabilityReasons.editYaml}
+            clusterId={objectData?.clusterId ?? null}
           />
         </ErrorBoundary>
       )}
@@ -237,6 +240,7 @@ export function ObjectPanelContent({
             objectName={objectData?.name}
             onRefresh={onRefreshDetails}
             isActive={isPanelOpen && activeTab === 'maintenance'}
+            clusterId={objectData?.clusterId ?? null}
           />
         </ErrorBoundary>
       )}

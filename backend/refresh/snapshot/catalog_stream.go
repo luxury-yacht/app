@@ -13,9 +13,10 @@ import (
 )
 
 type catalogStreamHandler struct {
-	service   func() *objectcatalog.Service
-	telemetry *telemetry.Recorder
-	logger    logstream.Logger
+	service     func() *objectcatalog.Service
+	telemetry   *telemetry.Recorder
+	logger      logstream.Logger
+	clusterMeta ClusterMeta
 }
 
 // NewCatalogStreamHandler returns an SSE handler that streams catalog updates.
@@ -23,8 +24,9 @@ func NewCatalogStreamHandler(
 	service func() *objectcatalog.Service,
 	logger logstream.Logger,
 	recorder *telemetry.Recorder,
+	meta ClusterMeta,
 ) http.Handler {
-	return &catalogStreamHandler{service: service, telemetry: recorder, logger: logger}
+	return &catalogStreamHandler{service: service, telemetry: recorder, logger: logger, clusterMeta: meta}
 }
 
 func (h *catalogStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -128,6 +130,9 @@ func (h *catalogStreamHandler) writeSnapshot(
 	cachesReady := svc.CachesReady()
 
 	payload, truncated := buildCatalogSnapshot(result, opts, health, cachesReady, ready)
+	// Ensure streaming payloads include stable cluster identifiers.
+	payload.ClusterMeta = h.clusterMeta
+	payload.NamespaceGroups = buildCatalogNamespaceGroups(svc, h.clusterMeta, nil, opts.Namespaces)
 	if payload.FirstBatchLatencyMs == 0 {
 		if latency := svc.FirstBatchLatency(); latency > 0 {
 			payload.FirstBatchLatencyMs = latency.Milliseconds()

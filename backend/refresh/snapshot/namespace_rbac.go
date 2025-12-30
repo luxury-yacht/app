@@ -28,11 +28,13 @@ type NamespaceRBACBuilder struct {
 
 // NamespaceRBACSnapshot payload for RBAC view.
 type NamespaceRBACSnapshot struct {
+	ClusterMeta
 	Resources []RBACSummary `json:"resources"`
 }
 
 // RBACSummary describes a Role/RoleBinding/ServiceAccount entry.
 type RBACSummary struct {
+	ClusterMeta
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
@@ -59,7 +61,9 @@ func RegisterNamespaceRBACDomain(reg *domain.Registry, factory informers.SharedI
 // Build assembles roles, bindings, and service accounts for the namespace.
 func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 	_ = ctx
-	trimmed := strings.TrimSpace(scope)
+	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {
 		return nil, fmt.Errorf("namespace scope is required")
 	}
@@ -67,9 +71,7 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 	isAll := isAllNamespaceScope(trimmed)
 	var namespace string
 	if !isAll {
-		namespace = strings.TrimPrefix(trimmed, "namespace:")
-		namespace = strings.TrimPrefix(namespace, ":")
-		namespace = strings.TrimSpace(namespace)
+		namespace = normalizeNamespaceScope(trimmed)
 		if namespace == "" {
 			return nil, fmt.Errorf("namespace scope is required")
 		}
@@ -110,10 +112,12 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 		}
 	}
 
-	return buildNamespaceRBACSnapshot(isAll, namespace, roles, bindings, serviceAccounts)
+	return buildNamespaceRBACSnapshot(meta, clusterID, isAll, namespace, roles, bindings, serviceAccounts)
 }
 
 func buildNamespaceRBACSnapshot(
+	meta ClusterMeta,
+	clusterID string,
 	isAll bool,
 	namespace string,
 	roles []*rbacv1.Role,
@@ -128,6 +132,7 @@ func buildNamespaceRBACSnapshot(
 			continue
 		}
 		summary := RBACSummary{
+			ClusterMeta: meta,
 			Kind:      "Role",
 			Name:      role.Name,
 			Namespace: role.Namespace,
@@ -145,6 +150,7 @@ func buildNamespaceRBACSnapshot(
 			continue
 		}
 		summary := RBACSummary{
+			ClusterMeta: meta,
 			Kind:      "RoleBinding",
 			Name:      binding.Name,
 			Namespace: binding.Namespace,
@@ -162,6 +168,7 @@ func buildNamespaceRBACSnapshot(
 			continue
 		}
 		summary := RBACSummary{
+			ClusterMeta: meta,
 			Kind:      "ServiceAccount",
 			Name:      sa.Name,
 			Namespace: sa.Namespace,
@@ -180,12 +187,13 @@ func buildNamespaceRBACSnapshot(
 	if isAll {
 		scope = "namespace:all"
 	}
+	scope = refresh.JoinClusterScope(clusterID, scope)
 
 	return &refresh.Snapshot{
 		Domain:  namespaceRBACDomainName,
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceRBACSnapshot{Resources: resources},
+		Payload: NamespaceRBACSnapshot{ClusterMeta: meta, Resources: resources},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(resources),
 		},

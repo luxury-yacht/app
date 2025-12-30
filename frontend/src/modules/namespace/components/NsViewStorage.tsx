@@ -21,6 +21,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
@@ -32,6 +33,8 @@ export interface StorageData {
   kindAlias?: string;
   name: string;
   namespace: string;
+  clusterId?: string;
+  clusterName?: string;
   status: string;
   capacity: string;
   storageClass?: string;
@@ -66,16 +69,23 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           kind: resource.kind || resource.kindAlias,
           name: resource.name,
           namespace: resource.namespace,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]
     );
 
-    const keyExtractor = useCallback((resource: StorageData) => {
-      return [resource.namespace, resource.kind || resource.kindAlias, resource.name]
-        .filter(Boolean)
-        .join('/');
-    }, []);
+    const keyExtractor = useCallback(
+      (resource: StorageData) =>
+        buildClusterScopedKey(
+          resource,
+          [resource.namespace, resource.kind || resource.kindAlias, resource.name]
+            .filter(Boolean)
+            .join('/')
+        ),
+      []
+    );
 
     const columns: GridColumnDefinition<StorageData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<StorageData>[] = [
@@ -123,6 +133,8 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               openWithObject({
                 kind: 'StorageClass',
                 name: resource.storageClass,
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
               });
             },
             isInteractive: (resource) => Boolean(resource.storageClass),
@@ -186,6 +198,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
 
       try {
         await DeleteResource(
+          deleteConfirm.resource.clusterId ?? '',
           deleteConfirm.resource.kind,
           deleteConfirm.resource.namespace,
           deleteConfirm.resource.name

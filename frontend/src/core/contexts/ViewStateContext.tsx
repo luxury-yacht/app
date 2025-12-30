@@ -20,6 +20,7 @@ import type { ViewType, NamespaceViewType, ClusterViewType } from '@/types/navig
 import { getObjectKind, getObjectName, getObjectNamespace } from '@/types/view-state';
 import { refreshOrchestrator } from '@/core/refresh';
 import { eventBus } from '@/core/events';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 // Import specialized contexts
 import { SidebarStateProvider, useSidebarState } from './SidebarStateContext';
@@ -54,6 +55,20 @@ interface NavigationStateContextType {
 
 const NavigationStateContext = createContext<NavigationStateContextType | undefined>(undefined);
 
+interface NavigationTabState {
+  viewType: ViewType;
+  previousView: ViewType;
+  activeNamespaceView: NamespaceViewType;
+  activeClusterView: ClusterViewType | null;
+}
+
+const DEFAULT_NAVIGATION_STATE: NavigationTabState = {
+  viewType: 'overview',
+  previousView: 'overview',
+  activeNamespaceView: 'workloads',
+  activeClusterView: null,
+};
+
 const useNavigationState = () => {
   const context = useContext(NavigationStateContext);
   if (!context) {
@@ -67,19 +82,53 @@ interface NavigationStateProviderProps {
 }
 
 const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ children }) => {
-  const [viewType, setViewTypeState] = useState<ViewType>('overview');
-  const [previousView, setPreviousView] = useState<ViewType>('overview');
-  const [activeNamespaceView, setActiveNamespaceView] = useState<NamespaceViewType>('workloads');
-  const [activeClusterView, setActiveClusterViewState] = useState<ClusterViewType | null>(null);
+  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  // Keep navigation state scoped per cluster tab to avoid cross-tab state bleed.
+  const [navigationStateByCluster, setNavigationStateByCluster] = useState<
+    Record<string, NavigationTabState>
+  >({});
+  const clusterKey = selectedClusterId || '__default__';
+  const activeState = navigationStateByCluster[clusterKey] ?? DEFAULT_NAVIGATION_STATE;
+  const { viewType, previousView, activeNamespaceView, activeClusterView } = activeState;
 
   // Get sidebar state for navigation actions
   const { setSidebarSelection } = useSidebarState();
+
+  const updateActiveState = useCallback(
+    (updater: (prev: NavigationTabState) => NavigationTabState) => {
+      setNavigationStateByCluster((prev) => {
+        const current = prev[clusterKey] ?? DEFAULT_NAVIGATION_STATE;
+        const next = updater(current);
+        return {
+          ...prev,
+          [clusterKey]: next,
+        };
+      });
+    },
+    [clusterKey]
+  );
+
+  useEffect(() => {
+    setNavigationStateByCluster((prev) => {
+      if (selectedClusterIds.length === 0) {
+        return prev.__default__ ? { __default__: prev.__default__ } : {};
+      }
+      const allowed = new Set(selectedClusterIds);
+      const next: Record<string, NavigationTabState> = {};
+      Object.entries(prev).forEach(([key, value]) => {
+        if (key === '__default__' || allowed.has(key)) {
+          next[key] = value;
+        }
+      });
+      return next;
+    });
+  }, [selectedClusterIds]);
 
   // Enhanced setViewType that notifies RefreshManager
   const setViewType = useCallback(
     (view: ViewType) => {
       const viewIsChanging = view !== viewType;
-      setViewTypeState(view);
+      updateActiveState((prev) => ({ ...prev, viewType: view }));
 
       refreshOrchestrator.updateContext({ currentView: view });
 
@@ -87,15 +136,32 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
         void refreshOrchestrator.triggerManualRefreshForContext();
       }
     },
-    [viewType]
+    [updateActiveState, viewType]
   );
 
-  const setActiveClusterView = useCallback((tab: ClusterViewType | null) => {
-    setActiveClusterViewState(tab);
-    refreshOrchestrator.updateContext({
-      activeClusterView: tab ?? undefined,
-    });
-  }, []);
+  const setActiveClusterView = useCallback(
+    (tab: ClusterViewType | null) => {
+      updateActiveState((prev) => ({ ...prev, activeClusterView: tab }));
+      refreshOrchestrator.updateContext({
+        activeClusterView: tab ?? undefined,
+      });
+    },
+    [updateActiveState]
+  );
+
+  const setPreviousView = useCallback(
+    (view: ViewType) => {
+      updateActiveState((prev) => ({ ...prev, previousView: view }));
+    },
+    [updateActiveState]
+  );
+
+  const setActiveNamespaceView = useCallback(
+    (tab: NamespaceViewType) => {
+      updateActiveState((prev) => ({ ...prev, activeNamespaceView: tab }));
+    },
+    [updateActiveState]
+  );
 
   // Complex navigation actions
   const navigateToClusterView = useCallback(
@@ -103,13 +169,13 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       setPreviousView(viewType);
       setViewType(view);
     },
-    [viewType, setViewType]
+    [setPreviousView, viewType, setViewType]
   );
 
   const navigateToNamespace = useCallback(() => {
     setPreviousView(viewType);
     setViewType('namespace');
-  }, [viewType, setViewType]);
+  }, [setPreviousView, viewType, setViewType]);
 
   const onNamespaceSelect = useCallback(
     (namespace: string) => {
@@ -120,7 +186,7 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       const tabToUse = viewType === 'namespace' ? activeNamespaceView : 'objects';
       setActiveNamespaceView(tabToUse);
     },
-    [setViewType, viewType, activeNamespaceView, setSidebarSelection]
+    [setViewType, viewType, activeNamespaceView, setActiveNamespaceView, setSidebarSelection]
   );
 
   const onClusterObjectsClick = useCallback(() => {
@@ -131,15 +197,12 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
   // Listen for reset-views event
   useEffect(() => {
     const handleResetViews = () => {
-      setViewType('overview');
-      setPreviousView('overview');
+      updateActiveState(() => DEFAULT_NAVIGATION_STATE);
       setSidebarSelection({ type: 'overview', value: 'overview' });
-      setActiveNamespaceView('workloads');
-      setActiveClusterView(null);
     };
 
     return eventBus.on('view:reset', handleResetViews);
-  }, [setActiveClusterView, setViewType, setSidebarSelection]);
+  }, [setSidebarSelection, updateActiveState]);
 
   const value = useMemo(
     () => ({
@@ -162,6 +225,8 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       activeNamespaceView,
       activeClusterView,
       setViewType,
+      setPreviousView,
+      setActiveNamespaceView,
       setActiveClusterView,
       navigateToClusterView,
       navigateToNamespace,
@@ -182,7 +247,7 @@ const RefreshSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const { viewType, activeNamespaceTab, activeClusterTab } = useNavigationState();
   const { showObjectPanel, selectedObject } = useObjectPanelState();
 
-  // Single writer for refresh context to avoid duplicate object-panel updates.
+  // Single writer for view/object-panel refresh context updates.
   useEffect(() => {
     refreshOrchestrator.updateContext({
       currentView: viewType,

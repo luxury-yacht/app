@@ -99,6 +99,9 @@ func (a *App) initKubernetesClient() (err error) {
 	a.dynamicClient = dynamicClient
 	a.restConfig = config
 
+	// Keep the client pool aligned with the active kubeconfig selection.
+	a.registerSelectedClusterClient()
+
 	selectionKey := a.currentSelectionKey()
 	existingCache := a.getPermissionCache(selectionKey)
 	_, err = a.setupRefreshSubsystem(clientset, selectionKey, existingCache)
@@ -134,6 +137,31 @@ func (a *App) initKubernetesClient() (err error) {
 }
 
 func (a *App) restoreKubeconfigSelection() {
+	// Prefer multi-selection settings when available, then fall back to legacy single selection.
+	if a.appSettings != nil && len(a.appSettings.SelectedKubeconfigs) > 0 {
+		normalized := make([]string, 0, len(a.appSettings.SelectedKubeconfigs))
+		for _, selection := range a.appSettings.SelectedKubeconfigs {
+			parsed, err := a.normalizeKubeconfigSelection(selection)
+			if err != nil {
+				continue
+			}
+			if err := a.validateKubeconfigSelection(parsed); err != nil {
+				continue
+			}
+			normalized = append(normalized, parsed.String())
+		}
+		if len(normalized) > 0 {
+			// Use the first saved selection to seed the single-cluster client for legacy calls.
+			baseSelection, err := parseKubeconfigSelection(normalized[0])
+			if err == nil {
+				a.selectedKubeconfigs = normalized
+				a.selectedKubeconfig = baseSelection.Path
+				a.selectedContext = baseSelection.Context
+				return
+			}
+		}
+	}
+
 	if a.appSettings != nil && a.appSettings.SelectedKubeconfig != "" {
 		parts := strings.SplitN(a.appSettings.SelectedKubeconfig, ":", 2)
 		savedPath := parts[0]
@@ -172,5 +200,9 @@ func (a *App) restoreKubeconfigSelection() {
 			a.selectedKubeconfig = a.availableKubeconfigs[0].Path
 			a.selectedContext = a.availableKubeconfigs[0].Context
 		}
+	}
+
+	if a.selectedKubeconfig != "" {
+		a.selectedKubeconfigs = []string{a.GetSelectedKubeconfig()}
 	}
 }

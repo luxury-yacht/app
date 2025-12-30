@@ -5,12 +5,32 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useShortcut } from '../hooks';
 import { useKeyboardContext } from '../context';
 import { ShortcutHelpModal } from './ShortcutHelpModal';
 import { KeyCodes } from '../constants';
 import { isMacPlatform } from '@/utils/platform';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+
+const CLUSTER_TAB_ORDER_STORAGE_KEY = 'clusterTabs:order';
+
+const readClusterTabOrder = (): string[] => {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return [];
+  }
+  const raw = window.localStorage.getItem(CLUSTER_TAB_ORDER_STORAGE_KEY);
+  if (!raw) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
+  } catch (error) {
+    console.warn('Failed to parse cluster tab order from storage:', error);
+    return [];
+  }
+};
 
 interface GlobalShortcutsProps {
   onToggleSidebar?: () => void;
@@ -38,6 +58,13 @@ export function GlobalShortcuts({
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isModalAnimating, setIsModalAnimating] = useState(false);
   const { setContext } = useKeyboardContext();
+  const {
+    selectedKubeconfig,
+    selectedKubeconfigs,
+    setSelectedKubeconfigs,
+    setActiveKubeconfig,
+    getClusterMeta,
+  } = useKubeconfig();
 
   // Update context based on current view
   useEffect(() => {
@@ -98,6 +125,53 @@ export function GlobalShortcuts({
       return false;
     },
     [onRefresh]
+  );
+
+  const handleCloseClusterTab = useCallback(() => {
+    if (!selectedKubeconfig) {
+      return;
+    }
+    // Close the active cluster tab by removing it from the selection list.
+    const nextSelections = selectedKubeconfigs.filter((config) => config !== selectedKubeconfig);
+    if (nextSelections.length === selectedKubeconfigs.length) {
+      return;
+    }
+    void setSelectedKubeconfigs(nextSelections);
+  }, [selectedKubeconfig, selectedKubeconfigs, setSelectedKubeconfigs]);
+
+  const orderedClusterSelections = useMemo(() => {
+    // Follow the persisted tab order to mirror the visible cluster tabs.
+    const tabEntries = selectedKubeconfigs.map((selection) => {
+      const meta = getClusterMeta(selection);
+      return { selection, id: meta.id || selection };
+    });
+    const selectionOrderIds = tabEntries.map((entry) => entry.id);
+    const persisted = readClusterTabOrder().filter((id) => selectionOrderIds.includes(id));
+    const missing = selectionOrderIds.filter((id) => !persisted.includes(id));
+    const mergedOrder = [...persisted, ...missing];
+    const selectionById = new Map(tabEntries.map((entry) => [entry.id, entry.selection]));
+    return mergedOrder
+      .map((id) => selectionById.get(id))
+      .filter((selection): selection is string => Boolean(selection));
+  }, [getClusterMeta, selectedKubeconfigs]);
+
+  const handleSwitchClusterTab = useCallback(
+    (direction: 'prev' | 'next') => {
+      if (!selectedKubeconfig || orderedClusterSelections.length < 2) {
+        return;
+      }
+      const currentIndex = orderedClusterSelections.indexOf(selectedKubeconfig);
+      if (currentIndex < 0) {
+        return;
+      }
+      const nextIndex = direction === 'prev' ? currentIndex - 1 : currentIndex + 1;
+      const nextSelection = orderedClusterSelections[nextIndex];
+      if (!nextSelection) {
+        return;
+      }
+      setActiveKubeconfig(nextSelection);
+    },
+    [orderedClusterSelections, selectedKubeconfig, setActiveKubeconfig]
   );
 
   const macPlatform = isMacPlatform();
@@ -212,6 +286,36 @@ export function GlobalShortcuts({
     description: 'Toggle diagnostics panel',
     category: 'Global',
     enabled: !!onToggleDiagnostics,
+    view: 'global',
+  });
+
+  useShortcut({
+    key: 'w',
+    modifiers: macPlatform ? { meta: true } : { ctrl: true },
+    handler: handleCloseClusterTab,
+    description: 'Close current cluster tab',
+    category: 'Navigation',
+    enabled: selectedKubeconfigs.length > 0,
+    view: 'global',
+  });
+
+  useShortcut({
+    key: KeyCodes.ARROW_LEFT,
+    modifiers: macPlatform ? { meta: true, alt: true } : { ctrl: true, alt: true },
+    handler: () => handleSwitchClusterTab('prev'),
+    description: 'Switch to previous cluster tab',
+    category: 'Navigation',
+    enabled: selectedKubeconfigs.length > 1,
+    view: 'global',
+  });
+
+  useShortcut({
+    key: KeyCodes.ARROW_RIGHT,
+    modifiers: macPlatform ? { meta: true, alt: true } : { ctrl: true, alt: true },
+    handler: () => handleSwitchClusterTab('next'),
+    description: 'Switch to next cluster tab',
+    category: 'Navigation',
+    enabled: selectedKubeconfigs.length > 1,
     view: 'global',
   });
 

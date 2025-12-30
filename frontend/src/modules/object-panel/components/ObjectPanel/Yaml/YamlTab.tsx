@@ -49,7 +49,12 @@ import {
 
 export type { YamlTabProps } from './yamlTabTypes';
 
-const YamlTab: React.FC<YamlTabProps> = ({ scope, isActive = false, canEdit = false }) => {
+const YamlTab: React.FC<YamlTabProps> = ({
+  scope,
+  isActive = false,
+  canEdit = false,
+  clusterId,
+}) => {
   const [isEditing, setIsEditing] = useState(false);
   const [showManagedFields, setShowManagedFields] = useState(false);
   const [draftYaml, setDraftYaml] = useState('');
@@ -76,6 +81,7 @@ const YamlTab: React.FC<YamlTabProps> = ({ scope, isActive = false, canEdit = fa
 
   const effectiveScope = scope ?? INACTIVE_SCOPE;
   const snapshot = useRefreshScopedDomain('object-yaml', effectiveScope);
+  const resolvedClusterId = clusterId?.trim() ?? '';
 
   const [isDarkTheme, setIsDarkTheme] = useState(
     () => document.documentElement.getAttribute('data-theme') === 'dark'
@@ -322,34 +328,38 @@ const YamlTab: React.FC<YamlTabProps> = ({ scope, isActive = false, canEdit = fa
     }
   }, [manualYamlOverride, yamlContent]);
 
-  const hydrateLatestObject = useCallback(async (identity: ObjectIdentity) => {
-    const latestYamlRaw = await GetObjectYAML(
-      identity.kind,
-      identity.namespace ?? '',
-      identity.name
-    );
-    const normalizedYaml = normalizeYamlString(latestYamlRaw);
-    const parsedIdentity = parseObjectIdentity(normalizedYaml);
-    const resolvedIdentity: ObjectIdentity = parsedIdentity
-      ? {
-          ...parsedIdentity,
-          resourceVersion: parsedIdentity.resourceVersion ?? identity.resourceVersion ?? null,
-        }
-      : {
-          apiVersion: identity.apiVersion,
-          kind: identity.kind,
-          name: identity.name,
-          namespace: identity.namespace ?? null,
-          resourceVersion: identity.resourceVersion ?? null,
-        };
+  const hydrateLatestObject = useCallback(
+    async (identity: ObjectIdentity) => {
+      const latestYamlRaw = await GetObjectYAML(
+        resolvedClusterId,
+        identity.kind,
+        identity.namespace ?? '',
+        identity.name
+      );
+      const normalizedYaml = normalizeYamlString(latestYamlRaw);
+      const parsedIdentity = parseObjectIdentity(normalizedYaml);
+      const resolvedIdentity: ObjectIdentity = parsedIdentity
+        ? {
+            ...parsedIdentity,
+            resourceVersion: parsedIdentity.resourceVersion ?? identity.resourceVersion ?? null,
+          }
+        : {
+            apiVersion: identity.apiVersion,
+            kind: identity.kind,
+            name: identity.name,
+            namespace: identity.namespace ?? null,
+            resourceVersion: identity.resourceVersion ?? null,
+          };
 
-    setLatestObjectIdentity(resolvedIdentity);
-    setManualYamlOverride({
-      yaml: normalizedYaml,
-      resourceVersion: resolvedIdentity.resourceVersion,
-    });
-    return { latestIdentity: resolvedIdentity, normalizedYaml };
-  }, []);
+      setLatestObjectIdentity(resolvedIdentity);
+      setManualYamlOverride({
+        yaml: normalizedYaml,
+        resourceVersion: resolvedIdentity.resourceVersion,
+      });
+      return { latestIdentity: resolvedIdentity, normalizedYaml };
+    },
+    [resolvedClusterId]
+  );
 
   const handleEditorCreated = useCallback(
     (view: EditorView) => {
@@ -645,6 +655,7 @@ const YamlTab: React.FC<YamlTabProps> = ({ scope, isActive = false, canEdit = fa
 
     try {
       const validationResponse = await validateYamlOnServer(
+        resolvedClusterId,
         validation.normalizedYAML,
         identity,
         baselineVersion
@@ -665,6 +676,7 @@ const YamlTab: React.FC<YamlTabProps> = ({ scope, isActive = false, canEdit = fa
       }
 
       const applyResponse = await applyYamlOnServer(
+        resolvedClusterId,
         payloadForApply,
         identity,
         resourceVersionForApply
@@ -737,6 +749,7 @@ const YamlTab: React.FC<YamlTabProps> = ({ scope, isActive = false, canEdit = fa
     hasRemoteDrift,
     isEditing,
     isSaving,
+    resolvedClusterId,
     scope,
     showManagedFields,
   ]);

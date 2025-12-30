@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"strings"
 
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	batchlisters "k8s.io/client-go/listers/batch/v1"
@@ -34,11 +35,13 @@ type NamespaceBuilder struct {
 
 // NamespaceSnapshot payload returned to clients.
 type NamespaceSnapshot struct {
+	ClusterMeta
 	Namespaces []NamespaceSummary `json:"namespaces"`
 }
 
 // NamespaceSummary provides high level namespace metadata.
 type NamespaceSummary struct {
+	ClusterMeta
 	Name             string `json:"name"`
 	Phase            string `json:"phase"`
 	ResourceVersion  string `json:"resourceVersion"`
@@ -68,14 +71,16 @@ func RegisterNamespaceDomain(reg *domain.Registry, factory informers.SharedInfor
 
 // Build returns the namespace snapshot payload.
 func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+	meta := ClusterMetaFromContext(ctx)
+	_, scopeValue := refresh.SplitClusterScope(scope)
 	var (
 		namespaces []*corev1.Namespace
 		err        error
 	)
 
-	if scope != "" {
+	if strings.TrimSpace(scopeValue) != "" {
 		var ns *corev1.Namespace
-		ns, err = b.namespaces.Get(scope)
+		ns, err = b.namespaces.Get(scopeValue)
 		if err != nil {
 			if apimachineryerrors.IsNotFound(err) {
 				namespaces = []*corev1.Namespace{}
@@ -109,6 +114,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 	for _, ns := range namespaces {
 		hasWorkloads, workloadsUnknown := b.namespaceWorkloadsStatus(ns.Name, trackerReady)
 		items = append(items, NamespaceSummary{
+			ClusterMeta:     meta,
 			Name:             ns.Name,
 			Phase:            string(ns.Status.Phase),
 			ResourceVersion:  ns.ResourceVersion,
@@ -125,7 +131,7 @@ func (b *NamespaceBuilder) Build(ctx context.Context, scope string) (*refresh.Sn
 		Domain:  "namespaces",
 		Scope:   scope,
 		Version: version,
-		Payload: NamespaceSnapshot{Namespaces: items},
+		Payload: NamespaceSnapshot{ClusterMeta: meta, Namespaces: items},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(items),
 		},

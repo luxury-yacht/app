@@ -284,6 +284,41 @@ describe('RefreshManager context updates', () => {
     refreshManager.updateContext({
       activeNamespaceView: 'workloads',
       selectedNamespace: 'team-a',
+      selectedNamespaceClusterId: 'cluster-a',
+    });
+
+    await Promise.resolve();
+    expect(abortSpy).toHaveBeenCalledWith(NAME);
+    expect(manualSpy).toHaveBeenCalledWith(expect.arrayContaining([NAME]));
+  });
+
+  it('aborts running refreshers when the namespace cluster changes', async () => {
+    vi.useFakeTimers();
+    const manualSpy = vi.spyOn(refreshManager, 'triggerManualRefreshMany').mockResolvedValue();
+    const abortSpy = vi.spyOn(
+      refreshManager as unknown as { abortRefresher: (name: RefresherName) => void },
+      'abortRefresher'
+    );
+
+    refreshManager.register({
+      name: NAME,
+      interval: 1_000,
+      cooldown: 200,
+      timeout: 2,
+      resource: 'ns-workloads',
+    });
+
+    refreshManager.updateContext({
+      activeNamespaceView: 'workloads',
+      selectedNamespace: 'team-a',
+      selectedNamespaceClusterId: 'cluster-a',
+    });
+
+    manualSpy.mockClear();
+    abortSpy.mockClear();
+
+    refreshManager.updateContext({
+      selectedNamespaceClusterId: 'cluster-b',
     });
 
     await Promise.resolve();
@@ -752,6 +787,24 @@ describe('RefreshManager guard paths and helpers', () => {
     expect(manualTargets).toEqual(['config']);
   });
 
+  it('detects namespace manual targets when the namespace cluster changes', () => {
+    const previous: RefreshContext = {
+      currentView: 'namespace',
+      activeNamespaceView: 'config',
+      selectedNamespace: 'team-a',
+      selectedNamespaceClusterId: 'cluster-a',
+      objectPanel: { isOpen: false },
+    };
+    const current: RefreshContext = {
+      ...previous,
+      selectedNamespaceClusterId: 'cluster-b',
+    };
+
+    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+
+    expect(manualTargets).toEqual(['config']);
+  });
+
   it('omits cluster manual targets when the active cluster view becomes undefined', () => {
     const previous: RefreshContext = {
       currentView: 'cluster',
@@ -767,6 +820,43 @@ describe('RefreshManager guard paths and helpers', () => {
     const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
 
     expect(manualTargets).toEqual([]);
+  });
+
+  it('skips cluster manual targets when background refresh has multi-cluster scope', () => {
+    const previous: RefreshContext = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+      objectPanel: { isOpen: false },
+    };
+    const current: RefreshContext = {
+      ...previous,
+      selectedClusterId: 'cluster-b',
+    };
+
+    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+
+    expect(manualTargets).toEqual([]);
+  });
+
+  it('refreshes the active cluster view when the selected cluster set changes', () => {
+    const previous: RefreshContext = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      objectPanel: { isOpen: false },
+    };
+    const current: RefreshContext = {
+      ...previous,
+      // Keep the active cluster the same but expand the selected set.
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    };
+
+    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+
+    expect(manualTargets).toEqual(['cluster-config']);
   });
 
   it('skips manual refreshes when the cluster view is cleared', () => {
@@ -795,6 +885,24 @@ describe('RefreshManager guard paths and helpers', () => {
       activeClusterView: undefined,
       objectPanel: { isOpen: false },
     });
+  });
+
+  it('refreshes the active cluster view when the cluster selection list changes', () => {
+    const previous: RefreshContext = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterId: 'cluster-a',
+      selectedClusterIds: ['cluster-a'],
+      objectPanel: { isOpen: false },
+    };
+    const current: RefreshContext = {
+      ...previous,
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    };
+
+    const manualTargets = unsafeRefreshManager.getManualRefreshTargets(previous, current);
+
+    expect(manualTargets).toEqual(['cluster-config']);
   });
 
   it('adds object panel refreshers when the panel target changes', () => {

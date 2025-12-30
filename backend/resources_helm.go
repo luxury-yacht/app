@@ -23,9 +23,13 @@ func (a *App) GetHelmValues(namespace, name string) (map[string]interface{}, err
 	})
 }
 
-func (a *App) DeleteHelmRelease(namespace, name string) error {
-	_, err := FetchResource(a, "", "HelmDelete", namespace+"/"+name, func() (struct{}, error) {
-		service := helm.NewService(helm.Dependencies{Common: a.resourceDependencies()})
+func (a *App) DeleteHelmRelease(clusterID, namespace, name string) error {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return err
+	}
+	_, err = FetchResource(a, "", "HelmDelete", namespace+"/"+name, func() (struct{}, error) {
+		service := helm.NewService(helm.Dependencies{Common: deps})
 		return struct{}{}, service.DeleteRelease(namespace, name)
 	})
 	return err

@@ -32,12 +32,14 @@ type PodBuilder struct {
 
 // PodSnapshot is the payload for the pods domain.
 type PodSnapshot struct {
+	ClusterMeta
 	Pods    []PodSummary   `json:"pods"`
 	Metrics PodMetricsInfo `json:"metrics"`
 }
 
 // PodSummary captures essential pod information for UI tables.
 type PodSummary struct {
+	ClusterMeta
 	Name       string `json:"name"`
 	Namespace  string `json:"namespace"`
 	Node       string `json:"node"`
@@ -90,11 +92,14 @@ func RegisterPodDomain(reg *domain.Registry, factory informers.SharedInformerFac
 
 // Build returns the pod snapshot for the requested scope.
 func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	if strings.TrimSpace(scope) == "" {
+	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	trimmed = strings.TrimSpace(trimmed)
+	if trimmed == "" {
 		return nil, fmt.Errorf("pods scope is required")
 	}
 
-	pods, err := b.collectPods(scope)
+	pods, err := b.collectPods(trimmed)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +122,7 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 		if pod == nil {
 			continue
 		}
-		summary := buildPodSummary(pod, podUsage, rsMap)
+		summary := buildPodSummary(meta, pod, podUsage, rsMap)
 		summaries = append(summaries, summary)
 		if v := parsePodResourceVersion(pod); v > version {
 			version = v
@@ -145,9 +150,9 @@ func (b *PodBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot
 
 	snapshot := &refresh.Snapshot{
 		Domain:  podDomainName,
-		Scope:   scope,
+		Scope:   refresh.JoinClusterScope(clusterID, trimmed),
 		Version: version,
-		Payload: PodSnapshot{Pods: summaries, Metrics: metricsInfo},
+		Payload: PodSnapshot{ClusterMeta: meta, Pods: summaries, Metrics: metricsInfo},
 		Stats: refresh.SnapshotStats{
 			ItemCount: len(summaries),
 		},
@@ -323,7 +328,12 @@ func convertPodIndexerItems(items []interface{}) []*corev1.Pod {
 	return result
 }
 
-func buildPodSummary(pod *corev1.Pod, usage map[string]metrics.PodUsage, rsMap map[string]string) PodSummary {
+func buildPodSummary(
+	meta ClusterMeta,
+	pod *corev1.Pod,
+	usage map[string]metrics.PodUsage,
+	rsMap map[string]string,
+) PodSummary {
 	ready, total, restarts := podReadiness(pod)
 	status := derivePodStatus(pod)
 	ownerKind, ownerName := resolvePodOwner(pod, rsMap)
@@ -332,6 +342,7 @@ func buildPodSummary(pod *corev1.Pod, usage map[string]metrics.PodUsage, rsMap m
 	metricsUsage := usage[metricKey]
 
 	return PodSummary{
+		ClusterMeta: meta,
 		Name:       pod.Name,
 		Namespace:  pod.Namespace,
 		Node:       pod.Spec.NodeName,

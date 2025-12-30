@@ -20,6 +20,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
 // Data interface for Helm releases
@@ -75,14 +76,21 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           kind: 'HelmRelease',
           name: resource.name,
           namespace: resource.namespace,
+          clusterId: resource.clusterId ?? undefined,
+          clusterName: resource.clusterName ?? undefined,
         });
       },
       [openWithObject]
     );
 
-    const keyExtractor = useCallback((resource: HelmData) => {
-      return [resource.namespace, 'helm-release', resource.name].filter(Boolean).join('/');
-    }, []);
+    const keyExtractor = useCallback(
+      (resource: HelmData) =>
+        buildClusterScopedKey(
+          resource,
+          [resource.namespace, 'helm-release', resource.name].filter(Boolean).join('/')
+        ),
+      []
+    );
 
     const columns: GridColumnDefinition<HelmData>[] = useMemo(() => {
       const baseColumns: GridColumnDefinition<HelmData>[] = [
@@ -100,13 +108,10 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       ];
 
       if (showNamespaceColumn) {
-        baseColumns.push(
-          cf.createTextColumn<HelmData>(
-            'namespace',
-            'Namespace',
-            (resource) => resource.namespace || '-'
-          )
-        );
+        cf.upsertNamespaceColumn(baseColumns, {
+          accessor: (resource) => resource.namespace,
+          sortValue: (resource) => (resource.namespace || '').toLowerCase(),
+        });
       }
 
       baseColumns.push(
@@ -292,6 +297,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
                 name: resource.name,
                 namespace: resource.namespace,
                 viewMode: 'values',
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
               });
             },
           },
@@ -304,6 +311,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
                 name: resource.name,
                 namespace: resource.namespace,
                 viewMode: 'chart',
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
               });
             },
           },
@@ -316,6 +325,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
                 name: resource.name,
                 namespace: resource.namespace,
                 viewMode: 'history',
+                clusterId: resource.clusterId ?? undefined,
+                clusterName: resource.clusterName ?? undefined,
               });
             },
           }
@@ -335,6 +346,8 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
                   name: resource.name,
                   namespace: resource.namespace,
                   viewMode: 'failure',
+                  clusterId: resource.clusterId ?? undefined,
+                  clusterName: resource.clusterName ?? undefined,
                 });
               },
             }

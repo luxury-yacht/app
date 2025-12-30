@@ -54,6 +54,7 @@ var Aliases = map[string]interface{}{
 	"go-mod-update":       QC.GoModUpdate,
 	"knip":                QC.Knip,
 	"vet":                 QC.Vet,
+	"trivy":               QC.Trivy,
 	"reset":               QC.Reset,
 	"test":                Test.All,
 	"test-be":             Test.Backend,

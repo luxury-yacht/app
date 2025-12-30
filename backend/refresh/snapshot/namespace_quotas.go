@@ -31,11 +31,13 @@ type NamespaceQuotasBuilder struct {
 
 // NamespaceQuotasSnapshot payload for quotas tab.
 type NamespaceQuotasSnapshot struct {
+	ClusterMeta
 	Resources []QuotaSummary `json:"resources"`
 }
 
 // QuotaSummary captures quota/limit range/PDB info.
 type QuotaSummary struct {
+	ClusterMeta
 	Kind      string `json:"kind"`
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
@@ -75,7 +77,9 @@ func RegisterNamespaceQuotasDomain(
 
 // Build assembles quota summaries for the namespace.
 func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	trimmed := strings.TrimSpace(scope)
+	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {
 		return nil, fmt.Errorf("namespace scope is required")
 	}
@@ -87,13 +91,13 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 		scopeLabel string
 	)
 	if isAll {
-		scopeLabel = "namespace:all"
+		scopeLabel = refresh.JoinClusterScope(clusterID, "namespace:all")
 	} else {
 		namespace, err = parseAutoscalingNamespace(trimmed)
 		if err != nil {
 			return nil, err
 		}
-		scopeLabel = trimmed
+		scopeLabel = refresh.JoinClusterScope(clusterID, trimmed)
 	}
 
 	quotas, err := b.listResourceQuotas(namespace)
@@ -110,7 +114,7 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 		return nil, fmt.Errorf("namespace quotas: failed to list poddisruptionbudgets: %w", err)
 	}
 
-	return b.buildSnapshot(scopeLabel, quotas, limits, pdbs)
+	return b.buildSnapshot(meta, scopeLabel, quotas, limits, pdbs)
 }
 
 func (b *NamespaceQuotasBuilder) listResourceQuotas(namespace string) ([]*corev1.ResourceQuota, error) {
@@ -135,6 +139,7 @@ func (b *NamespaceQuotasBuilder) listPodDisruptionBudgets(namespace string) ([]*
 }
 
 func (b *NamespaceQuotasBuilder) buildSnapshot(
+	meta ClusterMeta,
 	namespace string,
 	quotas []*corev1.ResourceQuota,
 	limits []*corev1.LimitRange,
@@ -148,6 +153,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 			continue
 		}
 		summary := QuotaSummary{
+			ClusterMeta: meta,
 			Kind:      "ResourceQuota",
 			Name:      quota.Name,
 			Namespace: quota.Namespace,
@@ -165,6 +171,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 			continue
 		}
 		summary := QuotaSummary{
+			ClusterMeta: meta,
 			Kind:      "LimitRange",
 			Name:      limit.Name,
 			Namespace: limit.Namespace,
@@ -182,6 +189,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 			continue
 		}
 		summary := QuotaSummary{
+			ClusterMeta: meta,
 			Kind:      "PodDisruptionBudget",
 			Name:      pdb.Name,
 			Namespace: pdb.Namespace,
@@ -222,7 +230,7 @@ func (b *NamespaceQuotasBuilder) buildSnapshot(
 		Domain:  namespaceQuotasDomainName,
 		Scope:   namespace,
 		Version: version,
-		Payload: NamespaceQuotasSnapshot{Resources: resources},
+		Payload: NamespaceQuotasSnapshot{ClusterMeta: meta, Resources: resources},
 		Stats:   refresh.SnapshotStats{ItemCount: len(resources)},
 	}, nil
 }

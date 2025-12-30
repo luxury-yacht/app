@@ -24,6 +24,7 @@ import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import './EventsTab.css';
 
 interface EventsTabProps {
@@ -80,8 +81,9 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
       objectData.namespace && objectData.namespace.length > 0
         ? objectData.namespace
         : CLUSTER_SCOPE;
-    return `${namespace}:${objectData.kind}:${objectData.name}`;
-  }, [objectData?.kind, objectData?.name, objectData?.namespace]);
+    const rawScope = `${namespace}:${objectData.kind}:${objectData.name}`;
+    return buildClusterScope(objectData?.clusterId ?? undefined, rawScope);
+  }, [objectData?.clusterId, objectData?.kind, objectData?.name, objectData?.namespace]);
 
   const eventsSnapshot = useRefreshScopedDomain('object-events', eventsScope ?? INACTIVE_SCOPE);
 
@@ -204,22 +206,27 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
     return `${identifier}:${item.lastTime.getTime()}:${index}`;
   }, []);
 
-  const openRelatedObject = useCallback((item: EventDisplay) => {
-    if (!item.objectKind || !item.objectName) {
-      return;
-    }
+  const openRelatedObject = useCallback(
+    (item: EventDisplay) => {
+      if (!item.objectKind || !item.objectName) {
+        return;
+      }
 
-    const resolvedNamespace =
-      item.objectNamespace && item.objectNamespace !== CLUSTER_SCOPE
-        ? item.objectNamespace
-        : undefined;
+      const resolvedNamespace =
+        item.objectNamespace && item.objectNamespace !== CLUSTER_SCOPE
+          ? item.objectNamespace
+          : undefined;
 
-    openWithObjectRef.current({
-      kind: item.objectKind,
-      name: item.objectName,
-      namespace: resolvedNamespace,
-    });
-  }, []);
+      openWithObjectRef.current({
+        kind: item.objectKind,
+        name: item.objectName,
+        namespace: resolvedNamespace,
+        clusterId: objectData?.clusterId ?? undefined,
+        clusterName: objectData?.clusterName ?? undefined,
+      });
+    },
+    [objectData?.clusterId, objectData?.clusterName]
+  );
 
   const columns = useMemo<GridColumnDefinition<EventDisplay>[]>(() => {
     const base: GridColumnDefinition<EventDisplay>[] = [

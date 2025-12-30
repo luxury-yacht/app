@@ -29,11 +29,13 @@ type NamespaceStorageBuilder struct {
 
 // NamespaceStorageSnapshot payload for storage tab.
 type NamespaceStorageSnapshot struct {
+	ClusterMeta
 	Resources []StorageSummary `json:"resources"`
 }
 
 // StorageSummary captures PVC info for UI consumption.
 type StorageSummary struct {
+	ClusterMeta
 	Kind         string `json:"kind"`
 	Name         string `json:"name"`
 	Namespace    string `json:"namespace"`
@@ -62,7 +64,9 @@ func RegisterNamespaceStorageDomain(
 
 // Build assembles PVC summaries for the namespace.
 func (b *NamespaceStorageBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	trimmed := strings.TrimSpace(scope)
+	meta := ClusterMetaFromContext(ctx)
+	clusterID, trimmed := refresh.SplitClusterScope(scope)
+	trimmed = strings.TrimSpace(trimmed)
 	if trimmed == "" {
 		return nil, errors.New(errNamespaceStorageScopeRequired)
 	}
@@ -74,13 +78,13 @@ func (b *NamespaceStorageBuilder) Build(ctx context.Context, scope string) (*ref
 		scopeLabel string
 	)
 	if isAll {
-		scopeLabel = "namespace:all"
+		scopeLabel = refresh.JoinClusterScope(clusterID, "namespace:all")
 	} else {
 		namespace, err = parseAutoscalingNamespace(trimmed)
 		if err != nil {
 			return nil, errors.New(errNamespaceStorageScopeRequired)
 		}
-		scopeLabel = trimmed
+		scopeLabel = refresh.JoinClusterScope(clusterID, trimmed)
 	}
 
 	pvcs, err := b.listPVCs(namespace)
@@ -88,7 +92,7 @@ func (b *NamespaceStorageBuilder) Build(ctx context.Context, scope string) (*ref
 		return nil, fmt.Errorf("namespace storage: failed to list pvcs: %w", err)
 	}
 
-	return b.buildSnapshot(scopeLabel, pvcs)
+	return b.buildSnapshot(meta, scopeLabel, pvcs)
 }
 
 func (b *NamespaceStorageBuilder) listPVCs(namespace string) ([]*corev1.PersistentVolumeClaim, error) {
@@ -98,7 +102,11 @@ func (b *NamespaceStorageBuilder) listPVCs(namespace string) ([]*corev1.Persiste
 	return b.pvcLister.PersistentVolumeClaims(namespace).List(labels.Everything())
 }
 
-func (b *NamespaceStorageBuilder) buildSnapshot(namespace string, pvcs []*corev1.PersistentVolumeClaim) (*refresh.Snapshot, error) {
+func (b *NamespaceStorageBuilder) buildSnapshot(
+	meta ClusterMeta,
+	namespace string,
+	pvcs []*corev1.PersistentVolumeClaim,
+) (*refresh.Snapshot, error) {
 	resources := make([]StorageSummary, 0, len(pvcs))
 	var version uint64
 
@@ -107,6 +115,7 @@ func (b *NamespaceStorageBuilder) buildSnapshot(namespace string, pvcs []*corev1
 			continue
 		}
 		summary := StorageSummary{
+			ClusterMeta: meta,
 			Kind:         "PersistentVolumeClaim",
 			Name:         pvc.Name,
 			Namespace:    pvc.Namespace,
@@ -136,7 +145,7 @@ func (b *NamespaceStorageBuilder) buildSnapshot(namespace string, pvcs []*corev1
 		Domain:  namespaceStorageDomainName,
 		Scope:   namespace,
 		Version: version,
-		Payload: NamespaceStorageSnapshot{Resources: resources},
+		Payload: NamespaceStorageSnapshot{ClusterMeta: meta, Resources: resources},
 		Stats:   refresh.SnapshotStats{ItemCount: len(resources)},
 	}, nil
 }
