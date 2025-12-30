@@ -42,6 +42,16 @@
   margin-top: var(--spacing-md);
 }
 
+.setting-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.setting-actions button {
+  margin-top: 0;
+}
+
 .setting-item label {
   display: flex;
   align-items: center;

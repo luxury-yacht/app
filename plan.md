@@ -16,6 +16,7 @@
 - Treat the backend store as the source of truth. Frontend should stop using `localStorage` for durable data.
 - Expose Wails APIs: `GetSettings`, `UpdateSettings`, `ExportSettings`, `ImportSettings`.
 - Write settings atomically (temp file + rename) and include migration helpers for schema upgrades.
+  - On Windows, ensure atomic replacement handles existing files (remove target before rename or equivalent).
 
 ## Persistence Storage Proposal
 
@@ -97,6 +98,12 @@
 
 ## Phased Implementation Plan
 
+### Phase 0: Reset App State (Failsafe)
+- Add a Settings button labeled "Reset App State" that clears all app persistence.
+- Backend should delete new config files (`settings.json`, `persistence.json`) and legacy files (`window-settings.json`, `app-preferences.json`).
+- Frontend should clear app-specific browser storage (localStorage, sessionStorage, GridTable persistence keys).
+- This must run before migration work so users can recover from failed or partial migrations.
+
 ### Phase 1: Storage & Schema Foundation
 - Add backend settings store in `os.UserConfigDir()/luxury-yacht` with atomic read/write helpers.
 - Define `settings.json` and `persistence.json` structs with `schemaVersion` and `updatedAt`.
@@ -141,6 +148,7 @@
 - Run on startup when legacy stores exist.
 - Backend migrates old backend files directly.
 - Frontend reads `localStorage` and sends a single migration payload to the backend via a new Wails API (e.g., `MigrateLegacyStorage`).
+  - Legacy lookup should include the previous `~/.config/luxury-yacht` path on all OSes (Windows included).
 
 ### Conflict Resolution
 - Prefer `app-preferences.json` values when present.

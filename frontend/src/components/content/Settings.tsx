@@ -19,6 +19,7 @@ import {
   setGridTablePersistenceMode,
   type GridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
+import ConfirmationModal from '@components/modals/ConfirmationModal';
 
 interface SettingsProps {
   onClose?: () => void;
@@ -32,6 +33,8 @@ function Settings({ onClose }: SettingsProps) {
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
   );
+  // Controls the confirmation modal for clearing all persisted app state.
+  const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
 
   useEffect(() => {
     loadThemeInfo();
@@ -102,8 +105,40 @@ function Settings({ onClose }: SettingsProps) {
     setGridTablePersistenceMode(mode);
   };
 
-  const handleResetAllViews = () => {
+  const handleResetViews = () => {
     clearAllGridTableState();
+  };
+
+  // Clear persisted app state across backend files and browser storage, then reload.
+  const handleClearAllState = async () => {
+    setIsClearStateConfirmOpen(false);
+    try {
+      const clearAppState = (window as any)?.go?.backend?.App?.ClearAppState;
+      if (typeof clearAppState !== 'function') {
+        throw new Error('ClearAppState is not available');
+      }
+      await clearAppState();
+
+      clearAllGridTableState();
+      try {
+        localStorage.clear();
+      } catch {
+        /* ignore */
+      }
+      try {
+        sessionStorage.clear();
+      } catch {
+        /* ignore */
+      }
+
+      window.location.reload();
+    } catch (error) {
+      errorHandler.handle(error, { action: 'clearAllState' });
+    }
+  };
+
+  const handleClearAllStateRequest = () => {
+    setIsClearStateConfirmOpen(true);
   };
 
   return (
@@ -212,7 +247,7 @@ function Settings({ onClose }: SettingsProps) {
       </div>
 
       <div className="settings-section">
-        <h3>View Persistence</h3>
+        <h3>App State</h3>
         <div className="setting-item">
           <label htmlFor="persist-namespaced">
             <input
@@ -224,12 +259,24 @@ function Settings({ onClose }: SettingsProps) {
             Persist state per namespaced view
           </label>
         </div>
-        <div className="setting-item">
-          <button type="button" className="button generic" onClick={handleResetAllViews}>
-            Reset All Views
+        <div className="setting-item setting-actions">
+          <button type="button" className="button generic" onClick={handleResetViews}>
+            Reset Views
+          </button>
+          <button type="button" className="button generic" onClick={handleClearAllStateRequest}>
+            Factory Reset
           </button>
         </div>
       </div>
+      <ConfirmationModal
+        isOpen={isClearStateConfirmOpen}
+        title="Factory Reset"
+        message="This will clear all saved state and restart the app. Are you sure?"
+        confirmText="Confirm"
+        confirmButtonClass="danger"
+        onConfirm={handleClearAllState}
+        onCancel={() => setIsClearStateConfirmOpen(false)}
+      />
     </div>
   );
 }

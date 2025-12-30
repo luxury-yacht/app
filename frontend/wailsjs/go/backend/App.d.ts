@@ -12,6 +12,8 @@ import {rest} from '../models';
 
 export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
+export function ClearAppState():Promise<void>;
+
 export function ClearLogs():Promise<void>;
 
 export function CloseShellSession(arg1:string):Promise<void>;

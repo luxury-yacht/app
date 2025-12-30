@@ -6,6 +6,10 @@ export function ApplyObjectYaml(arg1, arg2) {
   return window['go']['backend']['App']['ApplyObjectYaml'](arg1, arg2);
 }
 
+export function ClearAppState() {
+  return window['go']['backend']['App']['ClearAppState']();
+}
+
 export function ClearLogs() {
   return window['go']['backend']['App']['ClearLogs']();
 }

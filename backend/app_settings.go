@@ -133,6 +133,69 @@ func (a *App) saveAppSettings() error {
 	return nil
 }
 
+// ClearAppState deletes persisted state files and resets in-memory caches for a clean restart.
+func (a *App) ClearAppState() error {
+	if err := a.clearKubeconfigSelection(); err != nil {
+		return err
+	}
+
+	var errs []error
+
+	windowSettingsFile, err := a.getConfigFilePath()
+	if err == nil {
+		if err := removeFileIfExists(windowSettingsFile); err != nil {
+			errs = append(errs, err)
+		}
+	} else {
+		errs = append(errs, err)
+	}
+
+	appSettingsFile, err := a.getAppSettingsFilePath()
+	if err == nil {
+		if err := removeFileIfExists(appSettingsFile); err != nil {
+			errs = append(errs, err)
+		}
+		legacyDir := filepath.Dir(appSettingsFile)
+		if err := removeFileIfExists(filepath.Join(legacyDir, "settings.json")); err != nil {
+			errs = append(errs, err)
+		}
+		if err := removeFileIfExists(filepath.Join(legacyDir, "persistence.json")); err != nil {
+			errs = append(errs, err)
+		}
+	} else {
+		errs = append(errs, err)
+	}
+
+	if configDir, err := os.UserConfigDir(); err == nil {
+		newDir := filepath.Join(configDir, "luxury-yacht")
+		if err := removeFileIfExists(filepath.Join(newDir, "settings.json")); err != nil {
+			errs = append(errs, err)
+		}
+		if err := removeFileIfExists(filepath.Join(newDir, "persistence.json")); err != nil {
+			errs = append(errs, err)
+		}
+	} else {
+		errs = append(errs, err)
+	}
+
+	a.appSettings = nil
+	a.windowSettings = nil
+
+	if len(errs) > 0 {
+		return fmt.Errorf("clear app state: %w", errs[0])
+	}
+
+	return nil
+}
+
+// removeFileIfExists ignores missing files so reset can be re-run safely.
+func removeFileIfExists(path string) error {
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 func (a *App) getAppSettingsFilePath() (string, error) {
 	home := homedir.HomeDir()
 	if home == "" {
