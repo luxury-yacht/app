@@ -43,12 +43,20 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
       <div className="app-header-center">
         <span className="app-header-title">
           {contentTitle.split(' • ').map((segment, index, arr) => {
-            const [label, ...rest] = segment.split(': ');
-            const value = rest.join(': ');
+            const separatorIndex = segment.indexOf(': ');
+            const hasLabel = separatorIndex > -1;
+            const label = hasLabel ? segment.slice(0, separatorIndex) : segment;
+            const value = hasLabel ? segment.slice(separatorIndex + 2) : '';
             return (
               <span key={`${label}-${index}`} className="app-header-segment">
-                <span className="app-header-label">{label}:</span>{' '}
-                <span className="app-header-value">{value}</span>
+                {hasLabel ? (
+                  <>
+                    <span className="app-header-label">{label}:</span>{' '}
+                    <span className="app-header-value">{value}</span>
+                  </>
+                ) : (
+                  <span className="app-header-value">{label}</span>
+                )}
                 {index < arr.length - 1 ? (
                   <span className="app-header-separator">&nbsp;&nbsp;&nbsp;&nbsp;</span>
                 ) : null}

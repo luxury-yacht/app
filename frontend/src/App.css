@@ -43,6 +43,7 @@
   display: flex;
   overflow: hidden;
   min-height: 0; /* Important for flex children */
+  position: relative;
 }
 
 .loading {
@@ -70,6 +71,32 @@
   display: flex;
   flex-direction: column;
   min-height: 0; /* Important for nested flex containers */
+}
+
+.app-main-inactive .sidebar,
+.app-main-inactive .content,
+.app-main-inactive .sidebar-resizer {
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.no-active-clusters-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  color: var(--color-text-secondary);
+  background-color: color-mix(in srgb, var(--color-bg) 80%, transparent);
+  z-index: 2;
+}
+
+.no-active-clusters-message {
+  font-size: 1rem;
+  max-width: 520px;
+  line-height: 1.5;
 }
 
 .content h2 {

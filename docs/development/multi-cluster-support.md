@@ -42,6 +42,8 @@ current agreed behavior.
 ### No clusters active
 
 - Disable sidebar and main content (no data loading or spinners).
+- Show an overlay message in the main layout: "No active clusters. Select a cluster from the kubeconfig dropdown."
+- Set the header title to "No Active Clusters".
 - Clear snapshot state and stop all refresh/streams.
 - Kubeconfig dropdown, command palette, settings/about, and logs still work.
 

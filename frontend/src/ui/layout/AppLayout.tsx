@@ -67,6 +67,7 @@ export const AppLayout: React.FC = () => {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isFocusOverlayVisible, setIsFocusOverlayVisible] = useState(false);
   const [isErrorOverlayVisible, setIsErrorOverlayVisible] = useState(false);
+  const hasActiveClusters = kubeconfig.selectedClusterIds.length > 0;
   const handleAboutClose = () => {
     viewState.setIsAboutOpen(false);
   };
@@ -99,6 +100,9 @@ export const AppLayout: React.FC = () => {
   }, []);
 
   const getContentTitle = () => {
+    if (!hasActiveClusters) {
+      return 'No Active Clusters';
+    }
     // Return empty string for welcome page (no view selected)
     if (!viewState.viewType) {
       return '';
@@ -170,7 +174,7 @@ export const AppLayout: React.FC = () => {
         />
         <ClusterTabs />
 
-        <main className="app-main">
+        <main className={`app-main ${hasActiveClusters ? '' : 'app-main-inactive'}`}>
           <Sidebar />
           {viewState.isSidebarVisible && (
             <div
@@ -184,65 +188,75 @@ export const AppLayout: React.FC = () => {
 
           <div className="content">
             <div className="content-body">
-              {viewState.viewType === 'cluster' ? (
-                viewState.activeClusterTab === 'browse' ? (
-                  <RouteErrorBoundary routeName="browse">
-                    <BrowseView />
-                  </RouteErrorBoundary>
-                ) : (
-                  <RouteErrorBoundary routeName="cluster">
-                    <ClusterResourcesProvider activeView={viewState.activeClusterTab}>
-                      <ClusterResourcesManager
-                        activeTab={viewState.activeClusterTab}
-                        onTabChange={(tab: string) =>
-                          viewState.setActiveClusterView(tab as ClusterViewType)
-                        }
-                      />
-                    </ClusterResourcesProvider>
-                  </RouteErrorBoundary>
-                )
-              ) : viewState.viewType === 'namespace' ? (
-                namespace.selectedNamespace ? (
-                  isAllNamespaces(namespace.selectedNamespace) ? (
-                    <RouteErrorBoundary routeName="namespace-all">
-                      <AllNamespacesView activeTab={viewState.activeNamespaceTab} />
+              {hasActiveClusters ? (
+                viewState.viewType === 'cluster' ? (
+                  viewState.activeClusterTab === 'browse' ? (
+                    <RouteErrorBoundary routeName="browse">
+                      <BrowseView />
                     </RouteErrorBoundary>
                   ) : (
-                    <RouteErrorBoundary routeName="namespace">
-                      <NamespaceResourcesProvider
-                        namespace={namespace.selectedNamespace}
-                        activeView={viewState.activeNamespaceTab}
-                      >
-                        <NamespaceResourcesManager
-                          namespace={namespace.selectedNamespace}
-                          activeTab={viewState.activeNamespaceTab}
-                          onTabChange={(tab: NamespaceViewType) =>
-                            viewState.setActiveNamespaceTab(tab)
+                    <RouteErrorBoundary routeName="cluster">
+                      <ClusterResourcesProvider activeView={viewState.activeClusterTab}>
+                        <ClusterResourcesManager
+                          activeTab={viewState.activeClusterTab}
+                          onTabChange={(tab: string) =>
+                            viewState.setActiveClusterView(tab as ClusterViewType)
                           }
                         />
-                      </NamespaceResourcesProvider>
+                      </ClusterResourcesProvider>
                     </RouteErrorBoundary>
                   )
+                ) : viewState.viewType === 'namespace' ? (
+                  namespace.selectedNamespace ? (
+                    isAllNamespaces(namespace.selectedNamespace) ? (
+                      <RouteErrorBoundary routeName="namespace-all">
+                        <AllNamespacesView activeTab={viewState.activeNamespaceTab} />
+                      </RouteErrorBoundary>
+                    ) : (
+                      <RouteErrorBoundary routeName="namespace">
+                        <NamespaceResourcesProvider
+                          namespace={namespace.selectedNamespace}
+                          activeView={viewState.activeNamespaceTab}
+                        >
+                          <NamespaceResourcesManager
+                            namespace={namespace.selectedNamespace}
+                            activeTab={viewState.activeNamespaceTab}
+                            onTabChange={(tab: NamespaceViewType) =>
+                              viewState.setActiveNamespaceTab(tab)
+                            }
+                          />
+                        </NamespaceResourcesProvider>
+                      </RouteErrorBoundary>
+                    )
+                  ) : (
+                    <div className="welcome">
+                      <img src={captainK8s} alt="Captain K8s" className="captain-k8s" />
+                      <img src={logo} alt="Luxury Yacht" className="welcome-logo" />
+                    </div>
+                  )
+                ) : viewState.viewType === 'overview' ? (
+                  <RouteErrorBoundary routeName="cluster-overview">
+                    <ClusterOverview clusterContext={kubeconfig.selectedKubeconfig || 'Default'} />
+                  </RouteErrorBoundary>
                 ) : (
                   <div className="welcome">
-                    <img src={captainK8s} alt="Captain K8s" className="captain-k8s" />
+                    <img src={captainK8s} alt="Captain K8s" className="welcome-logo" />
                     <img src={logo} alt="Luxury Yacht" className="welcome-logo" />
+
+                    <p>Select a view from the sidebar to get started</p>
                   </div>
                 )
-              ) : viewState.viewType === 'overview' ? (
-                <RouteErrorBoundary routeName="cluster-overview">
-                  <ClusterOverview clusterContext={kubeconfig.selectedKubeconfig || 'Default'} />
-                </RouteErrorBoundary>
-              ) : (
-                <div className="welcome">
-                  <img src={captainK8s} alt="Captain K8s" className="welcome-logo" />
-                  <img src={logo} alt="Luxury Yacht" className="welcome-logo" />
-
-                  <p>Select a view from the sidebar to get started</p>
-                </div>
-              )}
+              ) : null}
             </div>
           </div>
+          {!hasActiveClusters && (
+            <div className="no-active-clusters-overlay" role="status">
+              {/* Block interactions and loading when no clusters are active. */}
+              <div className="no-active-clusters-message">
+                No active clusters. Select a cluster from the kubeconfig dropdown.
+              </div>
+            </div>
+          )}
         </main>
 
         <PanelErrorBoundary onClose={() => {}} panelName="app-logs">
