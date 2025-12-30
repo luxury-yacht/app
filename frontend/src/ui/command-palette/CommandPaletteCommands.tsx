@@ -33,7 +33,14 @@ export interface Command {
 export function useCommandPaletteCommands() {
   const viewState = useViewState();
   const namespace = useNamespace();
-  const kubeconfig = useKubeconfig();
+  // Destructure kubeconfig fields so hook deps stay explicit.
+  const {
+    selectedKubeconfig,
+    selectedKubeconfigs,
+    setSelectedKubeconfigs,
+    kubeconfigs,
+    setActiveKubeconfig,
+  } = useKubeconfig();
   const { theme } = useTheme();
   const { toggle: toggleAutoRefresh } = useAutoRefresh();
 
@@ -54,22 +61,16 @@ export function useCommandPaletteCommands() {
   );
 
   const closeCurrentClusterTab = useCallback(() => {
-    const active = kubeconfig.selectedKubeconfig;
+    const active = selectedKubeconfig;
     if (!active) {
       return;
     }
-    if (!kubeconfig.selectedKubeconfigs.includes(active)) {
+    if (!selectedKubeconfigs.includes(active)) {
       return;
     }
-    const nextSelections = kubeconfig.selectedKubeconfigs.filter(
-      (selection) => selection !== active
-    );
-    void kubeconfig.setSelectedKubeconfigs(nextSelections);
-  }, [
-    kubeconfig.selectedKubeconfig,
-    kubeconfig.selectedKubeconfigs,
-    kubeconfig.setSelectedKubeconfigs,
-  ]);
+    const nextSelections = selectedKubeconfigs.filter((selection) => selection !== active);
+    void setSelectedKubeconfigs(nextSelections);
+  }, [selectedKubeconfig, selectedKubeconfigs, setSelectedKubeconfigs]);
 
   const selectNamespace = useCallback(
     (scope: string) => {
@@ -469,14 +470,14 @@ export function useCommandPaletteCommands() {
 
   // Add kubeconfig-specific commands dynamically
   const kubeconfigCommands = useMemo(() => {
-    if (!kubeconfig.kubeconfigs || kubeconfig.kubeconfigs.length === 0) {
+    if (!kubeconfigs || kubeconfigs.length === 0) {
       return [];
     }
 
-    return kubeconfig.kubeconfigs.map((config) => {
+    return kubeconfigs.map((config) => {
       // Backend ALWAYS expects format "path:context"
       const configValue = `${config.path}:${config.context}`;
-      const isActive = kubeconfig.selectedKubeconfigs.includes(configValue);
+      const isActive = selectedKubeconfigs.includes(configValue);
 
       return {
         id: `kubeconfig-${configValue}`,
@@ -487,20 +488,15 @@ export function useCommandPaletteCommands() {
         icon: isActive ? '✓' : undefined,
         action: () => {
           if (isActive) {
-            kubeconfig.setActiveKubeconfig(configValue);
+            setActiveKubeconfig(configValue);
             return;
           }
-          void kubeconfig.setSelectedKubeconfigs([...kubeconfig.selectedKubeconfigs, configValue]);
+          void setSelectedKubeconfigs([...selectedKubeconfigs, configValue]);
         },
         keywords: ['kubeconfig', 'context', config.name, config.context],
       };
     });
-  }, [
-    kubeconfig.kubeconfigs,
-    kubeconfig.selectedKubeconfigs,
-    kubeconfig.setActiveKubeconfig,
-    kubeconfig.setSelectedKubeconfigs,
-  ]);
+  }, [kubeconfigs, selectedKubeconfigs, setActiveKubeconfig, setSelectedKubeconfigs]);
 
   // Order: Application, Navigation (including namespace views), Kubeconfigs, Namespaces
   return [...commands, ...namespaceviewCommands, ...namespaceCommands, ...kubeconfigCommands];

@@ -859,7 +859,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
     return () => {
       isCancelled = true;
     };
-  }, [namespace, podName, isWorkload]);
+  }, [namespace, podName, isWorkload, resolvedClusterId]);
 
   // Auto-scroll effect - only scroll when there are new logs or view changes
   useEffect(() => {

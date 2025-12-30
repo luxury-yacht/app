@@ -100,7 +100,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       });
       e.preventDefault();
     },
-    [panelState.size, panelState.floatingPosition, isMaximized]
+    [panelState.size, panelState.floatingPosition, panelRef, isMaximized]
   );
 
   // Detect resize edge for floating panels

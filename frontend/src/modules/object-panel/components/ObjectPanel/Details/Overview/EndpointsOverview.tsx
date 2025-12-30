@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the object panel feature.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { types } from '@wailsjs/go/models';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
@@ -29,10 +29,16 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
   endpointSliceDetails,
 }) => {
   const { openWithObject, objectData } = useObjectPanel();
-  const clusterMeta = {
-    clusterId: objectData?.clusterId ?? undefined,
-    clusterName: objectData?.clusterName ?? undefined,
-  };
+  const clusterId = objectData?.clusterId ?? undefined;
+  const clusterName = objectData?.clusterName ?? undefined;
+  // Memoize cluster metadata to keep callbacks stable.
+  const clusterMeta = useMemo(
+    () => ({
+      clusterId,
+      clusterName,
+    }),
+    [clusterId, clusterName]
+  );
 
   const handleTargetClick = useCallback(
     (targetRef: string, namespace: string) => {

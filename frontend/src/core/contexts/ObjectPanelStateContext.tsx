@@ -170,6 +170,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
       selectedObject,
       navigationHistory,
       navigationIndex,
+      hydrateClusterMeta,
       onRowClick,
       onCloseObjectPanel,
       onNavigate,
