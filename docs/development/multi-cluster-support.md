@@ -1,8 +1,6 @@
-# Multi-cluster support (decisions + rules)
+# Multi-cluster support
 
-This document captures the multi-cluster decisions, rules, and constraints that
-must be preserved in future work. It is derived from `plan.md` and reflects the
-current agreed behavior.
+This document captures the multi-cluster decisions, rules, and constraints that must be preserved in future work.
 
 ## Goals
 
@@ -18,8 +16,6 @@ current agreed behavior.
 - Refresh scopes and keys are `clusterId|<scope>` (multi-cluster: `clusters=id1,id2|<scope>`).
 - Duplicate context names may exist, but only one can be active at a time.
 - Namespace selection stays in the frontend; do not add it to catalog snapshots.
-- Cluster tabs replace cluster columns/filters; cluster column/filter UI is removed.
-- Do not add new dependencies for drag-and-drop.
 
 ## Cluster selection rules
 
@@ -31,7 +27,7 @@ current agreed behavior.
 - Cluster deactivation can come from:
   - Kubeconfig dropdown
   - Cluster tab close button
-  - Command palette close command
+  - `ctrl+w/cmd+w` key command
 
 ### Selection events
 
@@ -62,7 +58,7 @@ current agreed behavior.
 
 ## Per-tab UI state
 
-- Each tab has its own sidebar, view state, and object panel state.
+- Each tab has its own view state, sidebar, and object panel state.
 - Views only show data for the active tab cluster.
 - Object panel actions must always be scoped to the originating cluster.
 
@@ -78,8 +74,7 @@ current agreed behavior.
 
 - Per-tab refresh is the default.
 - Background refresh toggle exists and defaults to enabled.
-- When background refresh is enabled, skip forced manual refresh on tab switches
-  because all tabs are already refreshed.
+- When background refresh is enabled, skip forced manual refresh on tab switches because all tabs are already refreshed.
 
 ### Domain scoping
 
@@ -95,7 +90,7 @@ current agreed behavior.
 ## Command palette behavior
 
 - Kubeconfig items open a cluster tab if closed, or switch to it if already open.
-- Kubeconfig items show a checkmark when active; no close/deselect from palette.
+- Kubeconfig items show a checkmark when active; no close/deselect from command palette.
 - "Close Current Cluster Tab" command exists and shows Cmd/Ctrl+W shortcut.
 
 ## Kubeconfig dropdown behavior
@@ -107,11 +102,10 @@ current agreed behavior.
 ## Error handling and transitions
 
 - Refresh base URL may change when the backend rebuilds the refresh subsystem.
-- Frontend invalidates the base URL and suppresses transient network errors during
-  selection transitions.
+- Frontend invalidates the base URL and suppresses transient network errors during selection transitions.
 - In-flight refreshes tied to removed clusters must be ignored or canceled.
 
-## Risks / watchouts
+## Risks
 
 - Refresh fan-out can increase load per cluster; watch for timeouts.
 - Stream merge volume/order can create backpressure; throttle if needed.
@@ -119,10 +113,4 @@ current agreed behavior.
 
 ## Audit notes
 
-- Remaining backend fallback behavior: if cluster metadata is missing in a request,
-  some backend getters still fall back to base selection (single-cluster path).
-
-## Testing notes
-
-- Added multi-cluster frontend coverage for refresh, tabs, and object panel flows.
-- Backend coverage was ~74% after changes; more tests may be required to reach 80%.
+- Remaining backend fallback behavior: if cluster metadata is missing in a request, some backend getters still fall back to base selection (single-cluster path).
