@@ -106,7 +106,7 @@ describe('KubeconfigContext', () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
         name: 'alpha',
-        path: '/kube/alpha',
+        path: 'C\\Users\\John\\.kube\\config',
         context: 'dev',
         isDefault: false,
         isCurrentContext: false,
@@ -235,6 +235,33 @@ describe('KubeconfigContext', () => {
     expect(emitSpy).toHaveBeenCalledWith('kubeconfig:changed', '');
 
     emitSpy.mockRestore();
+    unmount();
+  });
+
+  it('resolves cluster metadata for Windows kubeconfig selections', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'default',
+        path: 'C:\\Users\\John\\.kube\\config',
+        context: 'minikube',
+        isDefault: true,
+        isCurrentContext: true,
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getSelectedKubeconfigsMock.mockResolvedValue([
+      'C\\\\Users\\\\John\\\\.kube\\\\default:minikube',
+    ]);
+
+    const { getContext, unmount } = await renderProvider();
+
+    expect(getContext().selectedClusterId).toBe('default:minikube');
+    expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith({
+      selectedClusterId: 'default:minikube',
+      selectedClusterName: 'minikube',
+      selectedClusterIds: ['default:minikube'],
+    });
+
     unmount();
   });
 });

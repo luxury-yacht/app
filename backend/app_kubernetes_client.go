@@ -3,7 +3,6 @@ package backend
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
@@ -163,12 +162,7 @@ func (a *App) restoreKubeconfigSelection() {
 	}
 
 	if a.appSettings != nil && a.appSettings.SelectedKubeconfig != "" {
-		parts := strings.SplitN(a.appSettings.SelectedKubeconfig, ":", 2)
-		savedPath := parts[0]
-		savedContext := ""
-		if len(parts) == 2 {
-			savedContext = parts[1]
-		}
+		savedPath, savedContext := splitSelectionParts(a.appSettings.SelectedKubeconfig)
 
 		for _, kc := range a.availableKubeconfigs {
 			if kc.Path == savedPath && (savedContext == "" || kc.Context == savedContext) {

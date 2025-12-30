@@ -45,6 +45,37 @@ interface KubeconfigContextType {
 
 const KubeconfigContext = createContext<KubeconfigContextType | undefined>(undefined);
 
+const hasWindowsDrivePrefix = (value: string): boolean => {
+  if (!value || value.length < 2) {
+    return false;
+  }
+  const first = value[0];
+  const isAlpha = (first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z');
+  if (!isAlpha || value[1] !== ':') {
+    return false;
+  }
+  if (value.length === 2) {
+    return true;
+  }
+  return value[2] !== ':';
+};
+
+const splitSelectionComponents = (selection: string): { path: string; context: string } => {
+  const trimmed = selection.trim();
+  if (!trimmed) {
+    return { path: '', context: '' };
+  }
+  const startIndex = hasWindowsDrivePrefix(trimmed) ? 2 : 0;
+  const delimiterIndex = trimmed.indexOf(':', startIndex);
+  if (delimiterIndex === -1) {
+    return { path: trimmed, context: '' };
+  }
+  return {
+    path: trimmed.slice(0, delimiterIndex),
+    context: trimmed.slice(delimiterIndex + 1),
+  };
+};
+
 export const useKubeconfig = () => {
   const context = useContext(KubeconfigContext);
   if (!context) {
@@ -71,9 +102,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       return { id: '', name: '' };
     }
 
-    const separatorIndex = trimmed.indexOf(':');
-    const path = separatorIndex >= 0 ? trimmed.slice(0, separatorIndex) : trimmed;
-    const context = separatorIndex >= 0 ? trimmed.slice(separatorIndex + 1) : '';
+    const { path, context } = splitSelectionComponents(trimmed);
 
     const match = configs.find((config) => config.path === path && config.context === context);
     if (match) {
