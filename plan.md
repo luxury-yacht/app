@@ -98,7 +98,7 @@
 
 ## Phased Implementation Plan
 
-### Phase 0: Reset App State (Failsafe)
+### Phase 0: Reset App State (Failsafe) ✅
 - Add a Settings button labeled "Reset App State" that clears all app persistence.
 - Backend should delete new config files (`settings.json`, `persistence.json`) and legacy files (`window-settings.json`, `app-preferences.json`).
 - Frontend should clear app-specific browser storage (localStorage, sessionStorage, GridTable persistence keys).

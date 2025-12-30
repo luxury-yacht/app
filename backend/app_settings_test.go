@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -21,8 +22,16 @@ func newTestAppWithDefaults(t *testing.T) *App {
 	}
 }
 
+func setTestConfigEnv(t *testing.T) {
+	t.Helper()
+	baseDir := t.TempDir()
+	t.Setenv("HOME", baseDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(baseDir, ".config"))
+	t.Setenv("APPDATA", filepath.Join(baseDir, "AppData", "Roaming"))
+}
+
 func TestAppGetConfigFilePathCreatesDirectory(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
 	path, err := app.getConfigFilePath()
@@ -33,7 +42,7 @@ func TestAppGetConfigFilePathCreatesDirectory(t *testing.T) {
 }
 
 func TestAppLoadWindowSettingsDefaultWhenMissing(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
 	settings, err := app.LoadWindowSettings()
@@ -44,14 +53,23 @@ func TestAppLoadWindowSettingsDefaultWhenMissing(t *testing.T) {
 }
 
 func TestAppLoadWindowSettingsReadsExistingFile(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
-	configPath, err := app.getConfigFilePath()
+	configPath, err := app.getSettingsFilePath()
 	require.NoError(t, err)
 
 	want := &WindowSettings{X: 10, Y: 20, Width: 900, Height: 600, Maximized: true}
-	bytes, err := json.Marshal(want)
+	settings := &settingsFile{
+		SchemaVersion: settingsSchemaVersion,
+		UpdatedAt:     time.Now().UTC(),
+		Preferences: settingsPreferences{
+			Theme:                    "system",
+			GridTablePersistenceMode: "shared",
+		},
+		UI: settingsUI{Window: *want},
+	}
+	bytes, err := json.Marshal(settings)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(configPath, bytes, 0o644))
 
@@ -62,7 +80,7 @@ func TestAppLoadWindowSettingsReadsExistingFile(t *testing.T) {
 }
 
 func TestAppGetAppSettingsReturnsDefaultWhenMissing(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
 	settings, err := app.GetAppSettings()
@@ -72,7 +90,7 @@ func TestAppGetAppSettingsReturnsDefaultWhenMissing(t *testing.T) {
 }
 
 func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
 	app.appSettings = &AppSettings{
@@ -91,7 +109,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 }
 
 func TestAppSetThemePersistsAndLogs(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
 	require.NoError(t, app.SetTheme("dark"))
@@ -109,7 +127,7 @@ func TestAppSetThemePersistsAndLogs(t *testing.T) {
 }
 
 func TestAppSetThemeRejectsInvalidValues(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
 	err := app.SetTheme("blue")
@@ -118,7 +136,7 @@ func TestAppSetThemeRejectsInvalidValues(t *testing.T) {
 }
 
 func TestAppSetUseShortResourceNamesPersists(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
 	require.NoError(t, app.SetUseShortResourceNames(true))
@@ -136,7 +154,7 @@ func TestAppSetUseShortResourceNamesPersists(t *testing.T) {
 }
 
 func TestAppGetThemeInfoReflectsCurrentSettings(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
 	require.NoError(t, app.SetTheme("light"))
@@ -147,7 +165,7 @@ func TestAppGetThemeInfoReflectsCurrentSettings(t *testing.T) {
 }
 
 func TestAppShowSettingsWarnsWhenContextNil(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
 	app.ShowSettings()
@@ -160,7 +178,7 @@ func TestAppShowSettingsWarnsWhenContextNil(t *testing.T) {
 }
 
 func TestAppShowAboutWarnsWhenContextNil(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
 
 	app.ShowAbout()
