@@ -25,9 +25,7 @@
   text-transform: uppercase;
 }
 
-/* Refresh Settings */
-
-.refresh-settings {
+.settings-items {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);

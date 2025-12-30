@@ -35,6 +35,8 @@ function Settings({ onClose }: SettingsProps) {
   );
   // Controls the confirmation modal for clearing all persisted app state.
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
+  // Controls the confirmation modal for resetting view persistence.
+  const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
 
   useEffect(() => {
     loadThemeInfo();
@@ -106,6 +108,7 @@ function Settings({ onClose }: SettingsProps) {
   };
 
   const handleResetViews = () => {
+    setIsResetViewsConfirmOpen(false);
     clearAllGridTableState();
   };
 
@@ -139,6 +142,10 @@ function Settings({ onClose }: SettingsProps) {
 
   const handleClearAllStateRequest = () => {
     setIsClearStateConfirmOpen(true);
+  };
+
+  const handleResetViewsRequest = () => {
+    setIsResetViewsConfirmOpen(true);
   };
 
   return (
@@ -203,7 +210,7 @@ function Settings({ onClose }: SettingsProps) {
 
       <div className="settings-section">
         <h3>Auto-Refresh</h3>
-        <div className="refresh-settings">
+        <div className="settings-items">
           <div className="setting-item">
             <label htmlFor="refresh-enabled">
               <input
@@ -231,7 +238,7 @@ function Settings({ onClose }: SettingsProps) {
 
       <div className="settings-section">
         <h3>Display</h3>
-        <div className="display-settings">
+        <div className="settings-items">
           <div className="setting-item">
             <label htmlFor="short-resource-names">
               <input
@@ -248,26 +255,37 @@ function Settings({ onClose }: SettingsProps) {
 
       <div className="settings-section">
         <h3>App State</h3>
-        <div className="setting-item">
-          <label htmlFor="persist-namespaced">
-            <input
-              type="checkbox"
-              id="persist-namespaced"
-              checked={persistenceMode === 'namespaced'}
-              onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
-            />
-            Persist state per namespaced view
-          </label>
-        </div>
-        <div className="setting-item setting-actions">
-          <button type="button" className="button generic" onClick={handleResetViews}>
-            Reset Views
-          </button>
-          <button type="button" className="button generic" onClick={handleClearAllStateRequest}>
-            Factory Reset
-          </button>
+        <div className="settings-items">
+          <div className="setting-item">
+            <label htmlFor="persist-namespaced">
+              <input
+                type="checkbox"
+                id="persist-namespaced"
+                checked={persistenceMode === 'namespaced'}
+                onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
+              />
+              Persist state per namespaced view
+            </label>
+          </div>
+          <div className="setting-item setting-actions">
+            <button type="button" className="button generic" onClick={handleResetViewsRequest}>
+              Reset Views
+            </button>
+            <button type="button" className="button generic" onClick={handleClearAllStateRequest}>
+              Factory Reset
+            </button>
+          </div>
         </div>
       </div>
+      <ConfirmationModal
+        isOpen={isResetViewsConfirmOpen}
+        title="Reset Views"
+        message="This will clear your view settings (columns/sorting/filters). Are you sure?"
+        confirmText="Confirm"
+        confirmButtonClass="warning"
+        onConfirm={handleResetViews}
+        onCancel={() => setIsResetViewsConfirmOpen(false)}
+      />
       <ConfirmationModal
         isOpen={isClearStateConfirmOpen}
         title="Factory Reset"
