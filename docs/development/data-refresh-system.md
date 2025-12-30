@@ -16,19 +16,28 @@ Multi-cluster support uses a single refresh orchestrator in the frontend and a b
 
 Explanations of terminology used in this document.
 
-Snapshot:
-Snapshot Payload:
-Stream:
-Refresh:
-Refresher:
-Refresh Manager:
-Refresh Orchestrator:
-Backend Subsystem:
-Frontend Scope:
-SSE:
-Refresh Store:
-Refresh Domain:
-Domain:
+| Term                 | Area     | Definition                                                                                                                                                                                          |
+| -------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend Subsystem    | Backend  | The per-cluster backend bundle that registers domains, builds snapshots, serves snapshot/stream endpoints, handles manual refresh jobs, and records telemetry.                                      |
+| Manual Refresh Job   | Backend  | A queued backend job created by a manual refresh request, tracked by job ID and status until it finishes.                                                                                           |
+| Refresh Domain       | Shared   | A named dataset that participates in the refresh system, with frontend types and a backend snapshot builder (for example `cluster-overview`). Sometimes we may use just _Domain_ as shorthand.      |
+| Snapshot             | Shared   | A point-in-time response from the backend for a specific domain and scope, including metadata (like version, timestamps, and stats) plus the data payload.                                          |
+| Snapshot Payload     | Shared   | The domain-specific data inside a snapshot's `payload` field, without the snapshot metadata around it.                                                                                              |
+| Snapshot Stats       | Shared   | The `stats` block in a snapshot that reports build timing, item counts, and batching details.                                                                                                       |
+| Stream               | Shared   | A long-lived connection where the backend pushes updates as they happen instead of the frontend repeatedly polling for new snapshots.                                                               |
+| Refresh              | Shared   | The act of getting the latest data for a domain and scope, either by fetching a new snapshot or by starting/continuing a stream.                                                                    |
+| SSE                  | Shared   | Server-Sent Events, a standard HTTP streaming format where the server keeps a connection open and sends text events to the client.                                                                  |
+| Telemetry            | Shared   | Timing, error, and delivery metrics recorded by the backend and displayed in the frontend diagnostics panel.                                                                                        |
+| Cluster ID           | Shared   | The stable identifier used to scope data to a cluster (format `filename:context`).                                                                                                                  |
+| Cluster Name         | Shared   | The display name for a cluster (the kubeconfig context name).                                                                                                                                       |
+| Scope                | Shared   | A string that describes which slice of a domain to fetch (for example a namespace or object); it is passed to snapshot and stream requests.                                                         |
+| Cluster Scope        | Shared   | A scope string prefixed with a cluster ID or cluster ID list, separated by a pipe char, so data is tied to the correct cluster(s).                                                                  |
+| Refresher            | Frontend | A frontend timer configuration (name, interval, cooldown, timeout) that tells the refresh manager when to trigger refresh work.                                                                     |
+| Refresh Manager      | Frontend | The frontend controller that owns refresher timers, reacts to app context changes, and triggers refresh callbacks; it does not fetch data itself.                                                   |
+| Refresh Context      | Frontend | The current UI selections and state (view, namespace, cluster, object panel) that the refresh manager and orchestrator use to decide what to refresh.                                               |
+| Refresh Orchestrator | Frontend | The frontend module that receives refresh callbacks, normalizes scopes, fetches snapshots from the backend, updates the refresh store, and starts/stops streams.                                    |
+| Frontend Scope       | Frontend | The scope string the frontend builds and sends with snapshot requests; it encodes the cluster ID(s) and any additional filter (like namespace or object) and is used as a key in the refresh store. |
+| Refresh Store        | Frontend | The frontend in-memory state container that caches snapshot data plus status and errors, keyed by domain and scope.                                                                                 |
 
 ### Refresh flow diagram
 
