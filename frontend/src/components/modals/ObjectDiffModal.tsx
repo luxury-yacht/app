@@ -315,7 +315,7 @@ const useObjectYamlSnapshot = (selection: CatalogItem | null, enabled: boolean) 
 };
 
 const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) => {
-  const { selectedClusterId, selectedKubeconfigs, getClusterMeta } = useKubeconfig();
+  const { selectedKubeconfigs, getClusterMeta } = useKubeconfig();
   const [isClosing, setIsClosing] = useState(false);
   const [shouldRender, setShouldRender] = useState(false);
   const [leftClusterId, setLeftClusterId] = useState('');
@@ -396,18 +396,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
       document.body.style.overflow = '';
     };
   }, [isOpen, popContext, pushContext]);
-
-  useEffect(() => {
-    if (!isOpen || !selectedClusterId) {
-      return;
-    }
-    if (!leftClusterId) {
-      setLeftClusterId(selectedClusterId);
-    }
-    if (!rightClusterId) {
-      setRightClusterId(selectedClusterId);
-    }
-  }, [isOpen, leftClusterId, rightClusterId, selectedClusterId]);
 
   useEffect(
     () => () => {
