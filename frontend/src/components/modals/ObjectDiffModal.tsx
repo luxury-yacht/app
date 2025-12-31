@@ -220,6 +220,22 @@ const buildNamespaceOptions = (namespaces: string[]): DropdownOption[] => {
   ];
 };
 
+// Fall back to payload items when the namespace list is unavailable.
+const resolveNamespaceList = (payload: CatalogSnapshotPayload | null): string[] => {
+  const namespaces = payload?.namespaces ?? [];
+  if (namespaces.length > 0) {
+    return namespaces;
+  }
+  const items = payload?.items ?? [];
+  const fromItems = new Set<string>();
+  items.forEach((item) => {
+    if (item.namespace) {
+      fromItems.add(item.namespace);
+    }
+  });
+  return Array.from(fromItems);
+};
+
 const buildKindOptions = (kinds: string[], useShortNames: boolean): DropdownOption[] => {
   const options = new Map<string, DropdownOption>();
   kinds.forEach((kind) => {
@@ -474,12 +490,18 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const rightObjectPayload = rightObjectCatalog.state.data as CatalogSnapshotPayload | null;
 
   const leftNamespaceOptions = useMemo(
-    () => buildNamespaceOptions(leftBasePayload?.namespaces ?? leftNamespacePayload?.namespaces ?? []),
-    [leftBasePayload?.namespaces, leftNamespacePayload?.namespaces]
+    () =>
+      buildNamespaceOptions(
+        resolveNamespaceList(leftBasePayload ?? leftNamespacePayload ?? null)
+      ),
+    [leftBasePayload, leftNamespacePayload]
   );
   const rightNamespaceOptions = useMemo(
-    () => buildNamespaceOptions(rightBasePayload?.namespaces ?? rightNamespacePayload?.namespaces ?? []),
-    [rightBasePayload?.namespaces, rightNamespacePayload?.namespaces]
+    () =>
+      buildNamespaceOptions(
+        resolveNamespaceList(rightBasePayload ?? rightNamespacePayload ?? null)
+      ),
+    [rightBasePayload, rightNamespacePayload]
   );
   const leftKindOptions = useMemo(() => {
     if (!leftNamespace) {
