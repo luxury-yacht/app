@@ -69,6 +69,8 @@ describe('EventStreamManager', () => {
       reset: true,
       events: [
         {
+          clusterId: 'cluster-a',
+          clusterName: 'alpha',
           kind: 'Event',
           name: 'test',
           namespace: 'default',
@@ -87,6 +89,9 @@ describe('EventStreamManager', () => {
     expect(state.status).toBe('ready');
     expect(state.data?.events).toHaveLength(1);
     expect(state.data?.events?.[0].message).toBe('Container started');
+    // Cluster metadata must be preserved so the cluster events view can filter correctly.
+    expect(state.data?.events?.[0].clusterId).toBe('cluster-a');
+    expect(state.data?.events?.[0].clusterName).toBe('alpha');
   });
 
   test('applyPayload updates namespace events state', async () => {
@@ -101,6 +106,8 @@ describe('EventStreamManager', () => {
       reset: true,
       events: [
         {
+          clusterId: 'cluster-b',
+          clusterName: 'bravo',
           kind: 'Event',
           name: 'ns-event',
           namespace: 'default',
@@ -119,6 +126,9 @@ describe('EventStreamManager', () => {
     expect(state.status).toBe('ready');
     expect(state.data?.events).toHaveLength(1);
     expect(state.data?.events?.[0].reason).toBe('Backoff');
+    // Cluster metadata must be preserved so namespace events filter per-cluster selections.
+    expect(state.data?.events?.[0].clusterId).toBe('cluster-b');
+    expect(state.data?.events?.[0].clusterName).toBe('bravo');
   });
 
   test('applyPayload ignores empty updates when no reset or error', async () => {
