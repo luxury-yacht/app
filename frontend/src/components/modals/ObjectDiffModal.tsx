@@ -35,19 +35,39 @@ interface ObjectDiffModalProps {
 const CATALOG_QUERY_LIMIT = 200;
 const CLUSTER_SCOPE_LABEL = 'cluster-scoped';
 
-const buildCatalogScope = (limit: number) => {
+const buildCatalogScope = (params: { limit: number; namespace?: string; kind?: string }) => {
   const query = new URLSearchParams();
-  query.set('limit', String(limit));
+  query.set('limit', String(params.limit));
+
+  const namespace = params.namespace?.trim();
+  if (namespace) {
+    query.append('namespace', namespace);
+  }
+
+  const kind = params.kind?.trim();
+  if (kind) {
+    query.append('kind', kind);
+  }
   return query.toString();
 };
 
-const buildCatalogDiffScope = (clusterId: string): string | null => {
-  const trimmedCluster = clusterId.trim();
+const buildCatalogDiffScope = (params: {
+  clusterId: string;
+  namespace?: string;
+  kind?: string;
+}): string | null => {
+  const trimmedCluster = params.clusterId.trim();
   if (!trimmedCluster) {
     return null;
   }
 
-  const query = buildCatalogScope(CATALOG_QUERY_LIMIT);
+  const namespaceFilter =
+    params.namespace?.trim() === CLUSTER_SCOPE ? 'cluster' : params.namespace?.trim();
+  const query = buildCatalogScope({
+    limit: CATALOG_QUERY_LIMIT,
+    namespace: namespaceFilter,
+    kind: params.kind,
+  });
   return buildClusterScope(trimmedCluster, query);
 };
 
@@ -87,29 +107,6 @@ const buildCatalogOptions = (items: CatalogItem[], useShortNames: boolean): Drop
     metadata: item,
   }));
 
-const matchesNamespaceSelection = (item: CatalogItem, namespace: string): boolean => {
-  if (!namespace) {
-    return false;
-  }
-
-  // Treat the synthetic cluster-scope value as "no namespace" for catalog entries.
-  if (namespace === CLUSTER_SCOPE) {
-    return !item.namespace;
-  }
-
-  return item.namespace?.toLowerCase() === namespace.toLowerCase();
-};
-
-const collectKindsForNamespace = (items: CatalogItem[], namespace: string): string[] => {
-  const kinds = new Set<string>();
-  items.forEach((item) => {
-    if (matchesNamespaceSelection(item, namespace)) {
-      kinds.add(item.kind);
-    }
-  });
-  return Array.from(kinds);
-};
-
 const buildNamespaceOptions = (namespaces: string[]): DropdownOption[] => {
   const options = new Map<string, DropdownOption>();
   options.set(CLUSTER_SCOPE, { value: CLUSTER_SCOPE, label: CLUSTER_SCOPE_LABEL });
@@ -137,13 +134,18 @@ const buildKindOptions = (kinds: string[], useShortNames: boolean): DropdownOpti
   return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label));
 };
 
-const useCatalogDiffSnapshot = (clusterId: string, enabled: boolean) => {
+const useCatalogDiffSnapshot = (
+  clusterId: string,
+  namespace: string | undefined,
+  kind: string | undefined,
+  enabled: boolean
+) => {
   const scope = useMemo(() => {
     if (!enabled) {
       return null;
     }
-    return buildCatalogDiffScope(clusterId);
-  }, [clusterId, enabled]);
+    return buildCatalogDiffScope({ clusterId, namespace, kind });
+  }, [clusterId, enabled, kind, namespace]);
   const effectiveScope = scope ?? INACTIVE_SCOPE;
   const state = useRefreshScopedDomain('catalog-diff', effectiveScope);
 
@@ -301,68 +303,116 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     disabled: !isOpen,
   });
 
-  const leftCatalog = useCatalogDiffSnapshot(leftClusterId, isOpen);
-  const rightCatalog = useCatalogDiffSnapshot(rightClusterId, isOpen);
+  // Use scoped catalog snapshots so namespace options remain global while kinds/objects cascade.
+  const leftBaseEnabled = isOpen && Boolean(leftClusterId);
+  const rightBaseEnabled = isOpen && Boolean(rightClusterId);
+  const leftNamespaceEnabled = leftBaseEnabled && Boolean(leftNamespace);
+  const rightNamespaceEnabled = rightBaseEnabled && Boolean(rightNamespace);
+  const leftObjectEnabled = leftNamespaceEnabled && Boolean(leftKind);
+  const rightObjectEnabled = rightNamespaceEnabled && Boolean(rightKind);
 
-  const leftCatalogPayload = leftCatalog.state.data as CatalogSnapshotPayload | null;
-  const rightCatalogPayload = rightCatalog.state.data as CatalogSnapshotPayload | null;
-  const leftCatalogItems = leftCatalogPayload?.items ?? [];
-  const rightCatalogItems = rightCatalogPayload?.items ?? [];
+  const leftBaseCatalog = useCatalogDiffSnapshot(leftClusterId, undefined, undefined, leftBaseEnabled);
+  const rightBaseCatalog = useCatalogDiffSnapshot(
+    rightClusterId,
+    undefined,
+    undefined,
+    rightBaseEnabled
+  );
+  const leftNamespaceCatalog = useCatalogDiffSnapshot(
+    leftClusterId,
+    leftNamespace || undefined,
+    undefined,
+    leftNamespaceEnabled
+  );
+  const rightNamespaceCatalog = useCatalogDiffSnapshot(
+    rightClusterId,
+    rightNamespace || undefined,
+    undefined,
+    rightNamespaceEnabled
+  );
+  const leftObjectCatalog = useCatalogDiffSnapshot(
+    leftClusterId,
+    leftNamespace || undefined,
+    leftKind || undefined,
+    leftObjectEnabled
+  );
+  const rightObjectCatalog = useCatalogDiffSnapshot(
+    rightClusterId,
+    rightNamespace || undefined,
+    rightKind || undefined,
+    rightObjectEnabled
+  );
+
+  const leftBasePayload = leftBaseCatalog.state.data as CatalogSnapshotPayload | null;
+  const rightBasePayload = rightBaseCatalog.state.data as CatalogSnapshotPayload | null;
+  const leftNamespacePayload = leftNamespaceCatalog.state.data as CatalogSnapshotPayload | null;
+  const rightNamespacePayload = rightNamespaceCatalog.state.data as CatalogSnapshotPayload | null;
+  const leftObjectPayload = leftObjectCatalog.state.data as CatalogSnapshotPayload | null;
+  const rightObjectPayload = rightObjectCatalog.state.data as CatalogSnapshotPayload | null;
+
   const leftNamespaceOptions = useMemo(
-    () => buildNamespaceOptions(leftCatalogPayload?.namespaces ?? []),
-    [leftCatalogPayload?.namespaces]
+    () => buildNamespaceOptions(leftBasePayload?.namespaces ?? leftNamespacePayload?.namespaces ?? []),
+    [leftBasePayload?.namespaces, leftNamespacePayload?.namespaces]
   );
   const rightNamespaceOptions = useMemo(
-    () => buildNamespaceOptions(rightCatalogPayload?.namespaces ?? []),
-    [rightCatalogPayload?.namespaces]
+    () => buildNamespaceOptions(rightBasePayload?.namespaces ?? rightNamespacePayload?.namespaces ?? []),
+    [rightBasePayload?.namespaces, rightNamespacePayload?.namespaces]
   );
-  // Limit kind dropdown choices to the selected namespace so the selectors cascade.
   const leftKindOptions = useMemo(() => {
     if (!leftNamespace) {
       return [];
     }
-    const kinds = collectKindsForNamespace(leftCatalogItems, leftNamespace);
-    return buildKindOptions(kinds, useShortNamesSetting);
-  }, [leftCatalogItems, leftNamespace, useShortNamesSetting]);
+    return buildKindOptions(leftNamespacePayload?.kinds ?? [], useShortNamesSetting);
+  }, [leftNamespace, leftNamespacePayload?.kinds, useShortNamesSetting]);
   const rightKindOptions = useMemo(() => {
     if (!rightNamespace) {
       return [];
     }
-    const kinds = collectKindsForNamespace(rightCatalogItems, rightNamespace);
-    return buildKindOptions(kinds, useShortNamesSetting);
-  }, [rightCatalogItems, rightNamespace, useShortNamesSetting]);
+    return buildKindOptions(rightNamespacePayload?.kinds ?? [], useShortNamesSetting);
+  }, [rightNamespace, rightNamespacePayload?.kinds, useShortNamesSetting]);
   const leftObjectOptions = useMemo(() => {
-    if (!leftNamespace || !leftKind) {
+    if (!leftObjectEnabled) {
       return [];
     }
-    const filtered = leftCatalogItems.filter(
-      (item) =>
-        matchesNamespaceSelection(item, leftNamespace) &&
-        item.kind.toLowerCase() === leftKind.toLowerCase()
-    );
-    return buildCatalogOptions(filtered, useShortNamesSetting);
-  }, [leftCatalogItems, leftKind, leftNamespace, useShortNamesSetting]);
+    return buildCatalogOptions(leftObjectPayload?.items ?? [], useShortNamesSetting);
+  }, [leftObjectEnabled, leftObjectPayload?.items, useShortNamesSetting]);
   const rightObjectOptions = useMemo(() => {
-    if (!rightNamespace || !rightKind) {
+    if (!rightObjectEnabled) {
       return [];
     }
-    const filtered = rightCatalogItems.filter(
-      (item) =>
-        matchesNamespaceSelection(item, rightNamespace) &&
-        item.kind.toLowerCase() === rightKind.toLowerCase()
-    );
-    return buildCatalogOptions(filtered, useShortNamesSetting);
-  }, [rightCatalogItems, rightKind, rightNamespace, useShortNamesSetting]);
+    return buildCatalogOptions(rightObjectPayload?.items ?? [], useShortNamesSetting);
+  }, [rightObjectEnabled, rightObjectPayload?.items, useShortNamesSetting]);
   const leftObjectMap = useMemo(
-    () => new Map(leftCatalogItems.map((item) => [item.uid, item])),
-    [leftCatalogItems]
+    () => new Map((leftObjectPayload?.items ?? []).map((item) => [item.uid, item])),
+    [leftObjectPayload?.items]
   );
   const rightObjectMap = useMemo(
-    () => new Map(rightCatalogItems.map((item) => [item.uid, item])),
-    [rightCatalogItems]
+    () => new Map((rightObjectPayload?.items ?? []).map((item) => [item.uid, item])),
+    [rightObjectPayload?.items]
   );
   const leftSelection = leftObjectUid ? leftObjectMap.get(leftObjectUid) ?? null : null;
   const rightSelection = rightObjectUid ? rightObjectMap.get(rightObjectUid) ?? null : null;
+
+  const leftNamespaceLoading =
+    leftBaseEnabled && isSnapshotLoading(leftBaseCatalog.state.status);
+  const rightNamespaceLoading =
+    rightBaseEnabled && isSnapshotLoading(rightBaseCatalog.state.status);
+  const leftKindLoading =
+    leftNamespaceEnabled && isSnapshotLoading(leftNamespaceCatalog.state.status);
+  const rightKindLoading =
+    rightNamespaceEnabled && isSnapshotLoading(rightNamespaceCatalog.state.status);
+  const leftObjectLoading =
+    leftObjectEnabled && isSnapshotLoading(leftObjectCatalog.state.status);
+  const rightObjectLoading =
+    rightObjectEnabled && isSnapshotLoading(rightObjectCatalog.state.status);
+  const leftNamespaceError = leftBaseCatalog.state.error ?? null;
+  const rightNamespaceError = rightBaseCatalog.state.error ?? null;
+  const leftKindError = leftNamespaceCatalog.state.error ?? null;
+  const rightKindError = rightNamespaceCatalog.state.error ?? null;
+  const leftObjectError = leftObjectCatalog.state.error ?? null;
+  const rightObjectError = rightObjectCatalog.state.error ?? null;
+  const leftCatalogError = leftObjectError ?? leftKindError ?? leftNamespaceError;
+  const rightCatalogError = rightObjectError ?? rightKindError ?? rightNamespaceError;
 
   const leftYaml = useObjectYamlSnapshot(leftSelection, isOpen);
   const rightYaml = useObjectYamlSnapshot(rightSelection, isOpen);
@@ -586,9 +636,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   value={leftNamespace}
                   onChange={handleLeftNamespaceChange}
                   placeholder="Select namespace"
-                  loading={isSnapshotLoading(leftCatalog.state.status)}
+                  loading={leftNamespaceLoading}
                   disabled={!leftClusterId}
-                  error={Boolean(leftCatalog.state.error)}
+                  error={Boolean(leftNamespaceError)}
                   ariaLabel="Left namespace"
                 />
               </div>
@@ -602,9 +652,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   value={leftKind}
                   onChange={handleLeftKindChange}
                   placeholder="Select kind"
-                  loading={isSnapshotLoading(leftCatalog.state.status)}
+                  loading={leftKindLoading}
                   disabled={!leftClusterId || !leftNamespace}
-                  error={Boolean(leftCatalog.state.error)}
+                  error={Boolean(leftKindError)}
                   ariaLabel="Left kind"
                 />
               </div>
@@ -618,14 +668,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   value={leftObjectUid}
                   onChange={handleLeftSelectionChange}
                   placeholder="Select object"
-                  loading={isSnapshotLoading(leftCatalog.state.status)}
+                  loading={leftObjectLoading}
                   disabled={!leftClusterId || !leftNamespace || !leftKind}
-                  error={Boolean(leftCatalog.state.error)}
+                  error={Boolean(leftObjectError)}
                   ariaLabel="Left object"
                 />
               </div>
-              {leftCatalog.state.error && (
-                <div className="object-diff-error-message">Catalog error: {leftCatalog.state.error}</div>
+              {leftCatalogError && (
+                <div className="object-diff-error-message">Catalog error: {leftCatalogError}</div>
               )}
             </div>
 
@@ -665,9 +715,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   value={rightNamespace}
                   onChange={handleRightNamespaceChange}
                   placeholder="Select namespace"
-                  loading={isSnapshotLoading(rightCatalog.state.status)}
+                  loading={rightNamespaceLoading}
                   disabled={!rightClusterId}
-                  error={Boolean(rightCatalog.state.error)}
+                  error={Boolean(rightNamespaceError)}
                   ariaLabel="Right namespace"
                 />
               </div>
@@ -681,9 +731,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   value={rightKind}
                   onChange={handleRightKindChange}
                   placeholder="Select kind"
-                  loading={isSnapshotLoading(rightCatalog.state.status)}
+                  loading={rightKindLoading}
                   disabled={!rightClusterId || !rightNamespace}
-                  error={Boolean(rightCatalog.state.error)}
+                  error={Boolean(rightKindError)}
                   ariaLabel="Right kind"
                 />
               </div>
@@ -697,15 +747,15 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   value={rightObjectUid}
                   onChange={handleRightSelectionChange}
                   placeholder="Select object"
-                  loading={isSnapshotLoading(rightCatalog.state.status)}
+                  loading={rightObjectLoading}
                   disabled={!rightClusterId || !rightNamespace || !rightKind}
-                  error={Boolean(rightCatalog.state.error)}
+                  error={Boolean(rightObjectError)}
                   ariaLabel="Right object"
                 />
               </div>
-              {rightCatalog.state.error && (
+              {rightCatalogError && (
                 <div className="object-diff-error-message">
-                  Catalog error: {rightCatalog.state.error}
+                  Catalog error: {rightCatalogError}
                 </div>
               )}
             </div>
