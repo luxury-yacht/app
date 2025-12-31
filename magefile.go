@@ -316,7 +316,6 @@ func (Test) Frontend() error {
 	if err := isNpmInstalled(); err != nil {
 		return err
 	}
-	// Use --prefix to avoid changing Mage's working directory for subsequent targets.
 	return sh.RunV("npm", "run", "test", "--prefix", cfg.FrontendDir)
 }
 
@@ -326,7 +325,6 @@ func (Test) FrontendCoverage() error {
 	if err := isNpmInstalled(); err != nil {
 		return err
 	}
-	// Use --prefix to avoid changing Mage's working directory for subsequent targets.
 	return sh.RunV("npm", "run", "test", "--prefix", cfg.FrontendDir, "--", "--coverage")
 }
 
