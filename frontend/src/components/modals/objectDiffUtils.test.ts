@@ -6,7 +6,11 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { buildIgnoredMetadataLineSet, sanitizeYamlForDiff } from './objectDiffUtils';
+import {
+  buildIgnoredMetadataLineSet,
+  maskMutedMetadataLines,
+  sanitizeYamlForDiff,
+} from './objectDiffUtils';
 
 describe('sanitizeYamlForDiff', () => {
   it('removes ignored metadata fields but retains muted fields', () => {
@@ -69,5 +73,28 @@ data:
     expect(muted.has(4)).toBe(false); // name
     expect(muted.has(11)).toBe(false); // spec
     expect(muted.has(12)).toBe(false); // spec uid (non-metadata)
+  });
+});
+
+describe('maskMutedMetadataLines', () => {
+  it('masks muted fields while preserving line count', () => {
+    const yaml = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo
+  uid: "abc"
+  resourceVersion: "123"
+  creationTimestamp: "2020-01-01T00:00:00Z"
+data:
+  key: value
+`;
+    const muted = buildIgnoredMetadataLineSet(yaml);
+    const masked = maskMutedMetadataLines(yaml, muted);
+    const maskedLines = masked.split('\n');
+    expect(maskedLines).toHaveLength(yaml.split('\n').length);
+    expect(maskedLines[4]).toBe('  uid: <muted>');
+    expect(maskedLines[5]).toBe('  resourceVersion: <muted>');
+    expect(maskedLines[6]).toBe('  creationTimestamp: <muted>');
+    expect(maskedLines[3]).toBe('  name: demo');
   });
 });

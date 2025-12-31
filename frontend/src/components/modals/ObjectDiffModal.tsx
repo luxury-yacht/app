@@ -22,7 +22,11 @@ import {
   type DiffLine,
   type DiffResult,
 } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlDiff';
-import { buildIgnoredMetadataLineSet, sanitizeYamlForDiff } from './objectDiffUtils';
+import {
+  buildIgnoredMetadataLineSet,
+  maskMutedMetadataLines,
+  sanitizeYamlForDiff,
+} from './objectDiffUtils';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '@modules/object-panel/components/ObjectPanel/constants';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
@@ -452,13 +456,29 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     () => buildIgnoredMetadataLineSet(rightYamlNormalized),
     [rightYamlNormalized]
   );
+  const leftMaskedYaml = useMemo(
+    () => maskMutedMetadataLines(leftYamlNormalized, leftMutedLines),
+    [leftMutedLines, leftYamlNormalized]
+  );
+  const rightMaskedYaml = useMemo(
+    () => maskMutedMetadataLines(rightYamlNormalized, rightMutedLines),
+    [rightMutedLines, rightYamlNormalized]
+  );
+  const leftDisplayLines = useMemo(
+    () => leftYamlNormalized.split(/\r?\n/),
+    [leftYamlNormalized]
+  );
+  const rightDisplayLines = useMemo(
+    () => rightYamlNormalized.split(/\r?\n/),
+    [rightYamlNormalized]
+  );
 
   const diffResult = useMemo<DiffResult | null>(() => {
-    if (!leftYamlNormalized || !rightYamlNormalized) {
+    if (!leftMaskedYaml || !rightMaskedYaml) {
       return null;
     }
-    return computeLineDiff(leftYamlNormalized, rightYamlNormalized);
-  }, [leftYamlNormalized, rightYamlNormalized]);
+    return computeLineDiff(leftMaskedYaml, rightMaskedYaml);
+  }, [leftMaskedYaml, rightMaskedYaml]);
 
   const diffLines = diffResult?.lines ?? [];
   const diffTruncated = diffResult?.truncated ?? false;
@@ -585,9 +605,18 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     setRightObjectUid(value);
   };
 
+  const getLineText = (lines: string[], lineNumber?: number | null): string => {
+    if (!lineNumber || lineNumber < 1) {
+      return '';
+    }
+    return lines[lineNumber - 1] ?? '';
+  };
+
   const renderDiffRow = (line: DiffLine, index: number) => {
-    const leftText = line.type === 'added' ? '' : line.value;
-    const rightText = line.type === 'removed' ? '' : line.value;
+    const leftText =
+      line.type === 'added' ? '' : getLineText(leftDisplayLines, line.leftLineNumber);
+    const rightText =
+      line.type === 'removed' ? '' : getLineText(rightDisplayLines, line.rightLineNumber);
     const leftNumber =
       line.leftLineNumber !== null && line.leftLineNumber !== undefined ? line.leftLineNumber : '';
     const rightNumber =

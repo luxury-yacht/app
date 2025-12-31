@@ -37,6 +37,40 @@ export const sanitizeYamlForDiff = (raw: string): string => {
 
 const getIndentDepth = (line: string): number => line.match(/^\s*/)?.[0].length ?? 0;
 
+// Replace muted field values with stable placeholders for diffing.
+export const maskMutedMetadataLines = (raw: string, mutedLines: Set<number>): string => {
+  if (!raw || mutedLines.size === 0) {
+    return raw;
+  }
+
+  const lines = raw.split('\n');
+  const masked = lines.map((line, index) => {
+    const lineNumber = index + 1;
+    if (!mutedLines.has(lineNumber)) {
+      return line;
+    }
+
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return line;
+    }
+
+    const indent = line.match(/^\s*/)?.[0] ?? '';
+    if (trimmed.startsWith('-')) {
+      return `${indent}- <muted>`;
+    }
+
+    const keyMatch = trimmed.match(/^([A-Za-z0-9_-]+):/);
+    if (keyMatch) {
+      return `${indent}${keyMatch[1]}: <muted>`;
+    }
+
+    return `${indent}<muted>`;
+  });
+
+  return masked.join('\n');
+};
+
 // Track which YAML line numbers fall under muted metadata fields for rendering.
 export const buildIgnoredMetadataLineSet = (raw: string): Set<number> => {
   const lines = raw.split('\n');
