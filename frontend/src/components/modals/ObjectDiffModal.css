@@ -179,6 +179,26 @@
   font-size: var(--font-size-mono);
   overflow: auto;
   max-height: 45vh;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.object-diff-table.selection-left .object-diff-cell-left,
+.object-diff-table.selection-right .object-diff-cell-right {
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+.object-diff-table.selection-left .object-diff-cell-right,
+.object-diff-table.selection-right .object-diff-cell-left {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
 }
 
 .object-diff-row {
@@ -203,6 +223,11 @@
 .object-diff-line-number {
   color: var(--color-text-tertiary);
   text-align: right;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  pointer-events: none;
 }
 
 .object-diff-line-text {
@@ -212,6 +237,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: pre;
+  user-select: inherit;
+  -webkit-user-select: inherit;
+  -moz-user-select: inherit;
+  -ms-user-select: inherit;
 }
 
 .object-diff-cell-added {

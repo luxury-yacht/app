@@ -6,6 +6,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import './modals.css';
 import './ObjectDiffModal.css';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
@@ -308,6 +309,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const [rightObjectUid, setRightObjectUid] = useState('');
   const [leftChangedAt, setLeftChangedAt] = useState<number | null>(null);
   const [rightChangedAt, setRightChangedAt] = useState<number | null>(null);
+  const [selectionSide, setSelectionSide] = useState<'left' | 'right'>('left');
   const [leftNoMatch, setLeftNoMatch] = useState(false);
   const [rightNoMatch, setRightNoMatch] = useState(false);
   const [pendingLeftMatch, setPendingLeftMatch] = useState<MatchRequest | null>(null);
@@ -923,7 +925,23 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
       );
     }
 
-    return <div className="object-diff-table">{displayDiffLines.map(renderDiffRow)}</div>;
+    return (
+      <div
+        className={`object-diff-table selection-${selectionSide}`}
+        onMouseDown={(event) => {
+          const target = event.target as HTMLElement | null;
+          if (target?.closest('.object-diff-cell-left')) {
+            flushSync(() => setSelectionSide('left'));
+            return;
+          }
+          if (target?.closest('.object-diff-cell-right')) {
+            flushSync(() => setSelectionSide('right'));
+          }
+        }}
+      >
+        {displayDiffLines.map(renderDiffRow)}
+      </div>
+    );
   };
 
   if (!shouldRender) return null;
