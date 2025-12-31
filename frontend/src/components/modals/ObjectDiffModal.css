@@ -223,7 +223,7 @@
 
 .object-diff-cell {
   display: grid;
-  grid-template-columns: 1.5rem 1fr;
+  grid-template-columns: 3rem 1fr;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-md);
   border-bottom: 1px solid var(--color-border);
@@ -245,6 +245,37 @@
   pointer-events: none;
 }
 
+.object-diff-line-gutter {
+  display: grid;
+  grid-template-columns: 0.9rem 1fr;
+  align-items: center;
+  gap: var(--spacing-xs);
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.object-diff-expand-toggle,
+.object-diff-expand-placeholder {
+  width: 0.9rem;
+  height: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.object-diff-expand-toggle {
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  font-size: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .object-diff-line-text {
   color: var(--color-text);
   display: block;
@@ -256,6 +287,14 @@
   -webkit-user-select: inherit;
   -moz-user-select: inherit;
   -ms-user-select: inherit;
+}
+
+.object-diff-cell-expanded .object-diff-line-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .object-diff-cell-added {
