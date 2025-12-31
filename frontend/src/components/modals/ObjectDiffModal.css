@@ -224,6 +224,7 @@
 .object-diff-cell {
   display: grid;
   grid-template-columns: 3rem 1fr;
+  align-items: start;
   gap: var(--spacing-sm);
   padding: var(--spacing-xs) var(--spacing-md);
   border-bottom: 1px solid var(--color-border);
@@ -238,6 +239,7 @@
 .object-diff-line-number {
   color: var(--color-text-tertiary);
   text-align: right;
+  align-self: start;
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
@@ -248,7 +250,7 @@
 .object-diff-line-gutter {
   display: grid;
   grid-template-columns: 0.9rem 1fr;
-  align-items: center;
+  align-items: start;
   gap: var(--spacing-xs);
   user-select: none;
   -webkit-user-select: none;
