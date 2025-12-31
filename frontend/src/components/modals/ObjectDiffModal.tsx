@@ -101,8 +101,11 @@ const buildSelectionLabel = (item: CatalogItem | null, useShortNames: boolean): 
   }
   const namespaceLabel = buildNamespaceLabel(item.namespace);
   const clusterLabel = item.clusterName?.trim() || item.clusterId?.trim() || '';
-  const clusterSuffix = clusterLabel ? ` (${clusterLabel})` : '';
-  return `${getDisplayKind(item.kind, useShortNames)} ${namespaceLabel}/${item.name}${clusterSuffix}`;
+  const scopePrefix = clusterLabel
+    ? `${clusterLabel}/${namespaceLabel}/${item.name}`
+    : `${namespaceLabel}/${item.name}`;
+  const kindLabel = getDisplayKind(item.kind, useShortNames);
+  return `${scopePrefix} (${kindLabel})`;
 };
 
 const isSnapshotLoading = (status: string) =>
