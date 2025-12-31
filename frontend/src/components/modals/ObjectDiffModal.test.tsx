@@ -13,6 +13,7 @@ import ObjectDiffModal from './ObjectDiffModal';
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
+  useShortcuts: vi.fn(),
   useKeyboardNavigationScope: vi.fn(),
 }));
 
@@ -38,6 +39,7 @@ const kubeconfigMocks = vi.hoisted(() => ({
 
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => shortcutMocks.useShortcut(...args),
+  useShortcuts: (...args: unknown[]) => shortcutMocks.useShortcuts(...args),
   useKeyboardContext: () => contextMocks,
   useKeyboardNavigationScope: (...args: unknown[]) =>
     shortcutMocks.useKeyboardNavigationScope(...args),
@@ -62,6 +64,7 @@ describe('ObjectDiffModal', () => {
 
   beforeEach(async () => {
     shortcutMocks.useShortcut.mockClear();
+    shortcutMocks.useShortcuts.mockClear();
     contextMocks.pushContext.mockClear();
     contextMocks.popContext.mockClear();
     refreshMocks.useRefreshScopedDomain.mockImplementation(() => ({

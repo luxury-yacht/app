@@ -113,31 +113,10 @@ NODE_VERSION=$(cat .nvmrc | tr -d 'v')
 
 ## Publishing Releases
 
-Before you release, check for dependency updates.
+Run the prerelease checks. This should surface any problems that could cause the release to fail.
 
 ```bash
-# frontend
-mage qc:npmUpdateCheck
-# If there are updates and you want to apply them...
-mage qc:npmUpdate
-
-# backend
-mage qc:goModUpdateCheck
-# If there are updates and you want to apply them...
-mage qc:goModUpdate
-```
-
-Make sure all of the linters and tests pass. Any problems will have to be fixed, or the release will fail.
-
-```bash
-# Backend (Go)
-mage qc:vet test:backend
-
-# Frontend (TypeScript)
-mage qc:lint qc:typecheck test:frontend
-
-# Dependency scan
-mage qc:trivy
+mage qc:prerelease
 ```
 
 1. Update the version in [wails.json](wails.json)

@@ -264,6 +264,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       nodeDomain,
       nodeMaintenanceDomain,
       catalogDomain,
+      catalogDiffDomain,
       clusterCRDDomain,
       clusterCustomDomain,
       clusterConfigDomain,

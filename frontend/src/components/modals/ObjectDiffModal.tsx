@@ -634,8 +634,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     return computeLineDiff(leftMaskedYaml, rightMaskedYaml);
   }, [leftMaskedYaml, rightMaskedYaml]);
 
-  const diffLines = diffResult?.lines ?? [];
-  const displayDiffLines = useMemo(() => mergeDiffLines(diffLines), [diffLines]);
+  const displayDiffLines = useMemo(() => mergeDiffLines(diffResult?.lines ?? []), [diffResult]);
   const visibleDiffLines = useMemo(() => {
     if (!showDiffOnly) {
       return displayDiffLines;

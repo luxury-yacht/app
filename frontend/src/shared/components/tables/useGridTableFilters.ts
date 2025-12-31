@@ -205,9 +205,9 @@ export function useGridTableFilters<T>({
     const namespaces = Array.from(namespaceMap.values()).sort((a, b) =>
       a.label.localeCompare(b.label)
     );
-    // Insert a non-selectable separator between cluster-scoped and namespaced entries.
+    // Insert a non-selectable separator only when the cluster-scoped option is shown.
     const namespaceSeparator =
-      namespaces.length > 0
+      clusterScopedOption && namespaces.length > 0
         ? ({
             value: '__namespace-separator__',
             label: '',
