@@ -178,6 +178,7 @@
   padding: var(--spacing-xs) var(--spacing-md);
   border-bottom: 1px solid var(--color-border);
   min-height: 1.4rem;
+  min-width: 0;
 }
 
 .object-diff-cell-left {
@@ -191,8 +192,11 @@
 
 .object-diff-line-text {
   color: var(--color-text);
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: pre;
-  overflow-wrap: anywhere;
 }
 
 .object-diff-cell-added {
