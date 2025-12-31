@@ -5,8 +5,9 @@
  * Applies theme to document and listens for system changes.
  * Also listens for theme change events from the application menu.
  */
-import React, { createContext, useContext, useEffect, ReactNode } from 'react';
-import { GetThemeInfo } from '@wailsjs/go/backend/App';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { eventBus } from '@/core/events';
+import { getThemePreference } from '@/core/settings/appPreferences';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -29,6 +30,8 @@ interface ThemeProviderProps {
 }
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
+  const [theme, setTheme] = useState<Theme>(() => getThemePreference());
+
   // Helper to detect system theme
   const detectSystemTheme = () => {
     if (typeof window !== 'undefined' && window.matchMedia) {
@@ -46,59 +49,16 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
   // Initialize theme
   useEffect(() => {
-    // Check if we have a preference in localStorage
-    const savedPreference = localStorage.getItem('app-theme-preference');
+    const preference = getThemePreference();
+    const initialTheme = preference === 'system' ? detectSystemTheme() : preference;
 
-    // Determine initial theme to apply
-    let initialTheme: string;
-    let preferenceToSave: string;
-
-    if (savedPreference) {
-      // We have a saved preference
-      preferenceToSave = savedPreference;
-      if (savedPreference === 'system') {
-        initialTheme = detectSystemTheme();
-      } else {
-        initialTheme = savedPreference; // 'light' or 'dark'
-      }
-    } else {
-      // No saved preference - default to system
-      preferenceToSave = 'system';
-      initialTheme = detectSystemTheme();
-      localStorage.setItem('app-theme-preference', 'system');
-    }
-
-    // Apply the theme immediately
+    // Apply the theme immediately for first paint.
     applyTheme(initialTheme);
-
-    // Fetch theme preference from backend (this runs whether we have localStorage or not)
-    const setupTheme = async () => {
-      try {
-        const themeInfo = await GetThemeInfo();
-        const userTheme = (themeInfo as any)?.userTheme;
-
-        // Only update if backend has an explicit preference that differs from current
-        if (userTheme && userTheme !== preferenceToSave) {
-          localStorage.setItem('app-theme-preference', userTheme);
-
-          if (userTheme === 'system') {
-            const newTheme = detectSystemTheme();
-            applyTheme(newTheme);
-          } else {
-            applyTheme(userTheme);
-          }
-        }
-      } catch (error) {
-        // Theme fetch errors are handled silently - fallback to system preference
-      }
-    };
-
-    setupTheme();
 
     // Add listener for system theme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleSystemThemeChange = (e: MediaQueryListEvent) => {
-      const currentPreference = localStorage.getItem('app-theme-preference');
+      const currentPreference = getThemePreference();
       if (currentPreference === 'system') {
         const newTheme = e.matches ? 'dark' : 'light';
         applyTheme(newTheme);
@@ -107,6 +67,12 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
 
     // Use addEventListener (modern approach)
     mediaQuery.addEventListener('change', handleSystemThemeChange);
+
+    const unsubscribeTheme = eventBus.on('settings:theme', (nextTheme) => {
+      const resolvedTheme = nextTheme === 'system' ? detectSystemTheme() : nextTheme;
+      applyTheme(resolvedTheme);
+      setTheme(nextTheme as Theme);
+    });
 
     // Listen for theme change events from menu
     const handleThemeChanged = () => {
@@ -120,13 +86,11 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     // Cleanup function
     return () => {
       mediaQuery.removeEventListener('change', handleSystemThemeChange);
+      unsubscribeTheme();
 
       runtime?.EventsOff?.('theme-changed');
     };
   }, []);
-
-  // Get current theme preference
-  const theme = (localStorage.getItem('app-theme-preference') as Theme) || 'system';
 
   return <ThemeContext.Provider value={{ theme }}>{children}</ThemeContext.Provider>;
 };

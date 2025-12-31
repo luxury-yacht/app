@@ -5,8 +5,11 @@
  * Provides shared helper functions for the frontend.
  */
 
-import { SetTheme } from '@wailsjs/go/backend/App';
-import { eventBus } from '@/core/events';
+import {
+  getThemePreference,
+  setThemePreference,
+  type ThemePreference,
+} from '@/core/settings/appPreferences';
 
 /**
  * Detects the system's preferred theme (light or dark)
@@ -38,17 +41,15 @@ const applyThemeToDocument = (theme: string): void => {
  */
 export const changeTheme = async (theme: string): Promise<void> => {
   try {
-    // Update localStorage with preference
-    localStorage.setItem('app-theme-preference', theme);
+    if (theme !== 'light' && theme !== 'dark' && theme !== 'system') {
+      throw new Error(`Invalid theme: ${theme}`);
+    }
 
-    // Update backend
-    await SetTheme(theme);
+    // Persist preference in backend and update cached state.
+    await setThemePreference(theme as ThemePreference);
 
     // Apply theme to document
     applyThemeToDocument(theme);
-
-    // Emit theme-changed event for any listeners
-    eventBus.emit('settings:theme', theme);
   } catch (error) {
     console.error('Failed to change theme:', error);
     throw error;
@@ -63,7 +64,7 @@ export const initSystemThemeListener = (): (() => void) => {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
   const handleSystemThemeChange = (_e: MediaQueryListEvent) => {
-    const preference = localStorage.getItem('app-theme-preference');
+    const preference = getThemePreference();
     if (preference === 'system' || !preference) {
       applyThemeToDocument('system');
     }

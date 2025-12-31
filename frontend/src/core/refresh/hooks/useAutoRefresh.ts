@@ -8,17 +8,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import { refreshManager } from '../RefreshManager';
 import { eventBus } from '@/core/events';
-
-const STORAGE_KEY = 'autoRefreshEnabled';
+import { getAutoRefreshEnabled, setAutoRefreshEnabled } from '@/core/settings/appPreferences';
 
 /**
  * Hook for managing auto-refresh state.
  * Provides a single source of truth for the auto-refresh setting,
- * syncing localStorage, refreshManager, and eventBus.
+ * syncing the backend preference cache, refreshManager, and eventBus.
  */
 export function useAutoRefresh() {
   const [enabled, setEnabled] = useState(() => {
-    return localStorage.getItem(STORAGE_KEY) !== 'false';
+    return getAutoRefreshEnabled();
   });
 
   // Listen for changes from other sources (e.g., command palette, other components)
@@ -37,9 +36,7 @@ export function useAutoRefresh() {
   }, [enabled]);
 
   const setAutoRefresh = useCallback((value: boolean) => {
-    setEnabled(value);
-    localStorage.setItem(STORAGE_KEY, String(value));
-    eventBus.emit('settings:auto-refresh', value);
+    setAutoRefreshEnabled(value);
   }, []);
 
   const toggle = useCallback(() => {
@@ -50,11 +47,11 @@ export function useAutoRefresh() {
 }
 
 /**
- * Initialize auto-refresh state from localStorage on app startup.
+ * Initialize auto-refresh state from persisted preferences on app startup.
  * Call this once in App.tsx to ensure refreshManager is paused if disabled.
  */
 export function initializeAutoRefresh() {
-  const enabled = localStorage.getItem(STORAGE_KEY) !== 'false';
+  const enabled = getAutoRefreshEnabled();
   if (!enabled) {
     refreshManager.pause();
   }

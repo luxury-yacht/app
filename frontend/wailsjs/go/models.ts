@@ -374,6 +374,30 @@ export namespace backend {
 	        this.notModified = source["notModified"];
 	    }
 	}
+	export class legacyLocalStoragePayload {
+	    theme?: string;
+	    useShortResourceNames?: boolean;
+	    autoRefreshEnabled?: boolean;
+	    refreshBackgroundClustersEnabled?: boolean;
+	    gridTablePersistenceMode?: string;
+	    clusterTabsOrder: string[];
+	    gridTableEntries: Record<string, Array<number>>;
+	
+	    static createFrom(source: any = {}) {
+	        return new legacyLocalStoragePayload(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.theme = source["theme"];
+	        this.useShortResourceNames = source["useShortResourceNames"];
+	        this.autoRefreshEnabled = source["autoRefreshEnabled"];
+	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
+	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
+	        this.clusterTabsOrder = source["clusterTabsOrder"];
+	        this.gridTableEntries = source["gridTableEntries"];
+	    }
+	}
 
 }
 
@@ -594,6 +618,9 @@ export namespace types {
 	    selectedKubeconfig: string;
 	    selectedKubeconfigs: string[];
 	    useShortResourceNames: boolean;
+	    autoRefreshEnabled: boolean;
+	    refreshBackgroundClustersEnabled: boolean;
+	    gridTablePersistenceMode: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -605,6 +632,9 @@ export namespace types {
 	        this.selectedKubeconfig = source["selectedKubeconfig"];
 	        this.selectedKubeconfigs = source["selectedKubeconfigs"];
 	        this.useShortResourceNames = source["useShortResourceNames"];
+	        this.autoRefreshEnabled = source["autoRefreshEnabled"];
+	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
+	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
 	    }
 	}
 	export class CRDCondition {

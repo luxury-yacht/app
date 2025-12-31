@@ -31,6 +31,10 @@ You must adhere to these at all times. If you want an exception to these rules y
 
 - `main.go` launches Wails and ties the Go backend in `backend/` to the React frontend in `frontend/`.
 
+## Documentation
+
+- Developer documentation is in `docs/development`. Any additional documentation you create must also go there.
+
 ## Testing Guidelines
 
 - Aim for at least 80% coverage for changed packages/modules; if that is not feasible, note the gap and ask for guidance.

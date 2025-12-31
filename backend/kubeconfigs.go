@@ -238,7 +238,7 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 	a.selectedKubeconfigs = normalizedStrings
 
 	if a.appSettings == nil {
-		a.appSettings = &AppSettings{Theme: "system"}
+		a.appSettings = getDefaultAppSettings()
 	}
 	a.appSettings.SelectedKubeconfigs = normalizedStrings
 
@@ -285,7 +285,7 @@ func (a *App) setBaseKubeconfig(selection kubeconfigSelection, updateSelectionLi
 	// Save the selection to app settings
 	a.logger.Debug("Saving kubeconfig selection to app settings", "KubeconfigManager")
 	if a.appSettings == nil {
-		a.appSettings = &AppSettings{Theme: "system"}
+		a.appSettings = getDefaultAppSettings()
 	}
 	a.appSettings.SelectedKubeconfig = selection.String()
 	if updateSelectionList {
@@ -322,7 +322,7 @@ func (a *App) clearKubeconfigSelection() error {
 	a.teardownRefreshSubsystem()
 
 	if a.appSettings == nil {
-		a.appSettings = &AppSettings{Theme: "system"}
+		a.appSettings = getDefaultAppSettings()
 	}
 	a.appSettings.SelectedKubeconfig = ""
 	a.appSettings.SelectedKubeconfigs = nil

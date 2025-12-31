@@ -2,6 +2,7 @@ package backend
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -280,15 +281,30 @@ func TestStartupAppliesWindowSettings(t *testing.T) {
 		runtimeWindowShow = origShow
 	})
 
-	t.Setenv("HOME", t.TempDir())
+	baseDir := t.TempDir()
+	t.Setenv("HOME", baseDir)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(baseDir, ".config"))
+	t.Setenv("APPDATA", filepath.Join(baseDir, "AppData", "Roaming"))
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	app.Ctx = ctx
 
-	configDir := filepath.Join(os.Getenv("HOME"), ".config", "luxury-yacht")
-	require.NoError(t, os.MkdirAll(configDir, 0o755))
-	settingsPath := filepath.Join(configDir, "window-settings.json")
-	require.NoError(t, os.WriteFile(settingsPath, []byte(`{"x":10,"y":20,"width":900,"height":700,"maximized":true}`), 0o644))
+	settingsPath, err := app.getSettingsFilePath()
+	require.NoError(t, err)
+	settings := &settingsFile{
+		SchemaVersion: settingsSchemaVersion,
+		UpdatedAt:     time.Now().UTC(),
+		Preferences: settingsPreferences{
+			Theme:                    "system",
+			GridTablePersistenceMode: "shared",
+		},
+		UI: settingsUI{
+			Window: WindowSettings{X: 10, Y: 20, Width: 900, Height: 700, Maximized: true},
+		},
+	}
+	bytes, err := json.Marshal(settings)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(settingsPath, bytes, 0o644))
 
 	var sizeCalled, posCalled, maxCalled, showCalled bool
 	runtimeEventsEmit = func(context.Context, string, ...interface{}) {}

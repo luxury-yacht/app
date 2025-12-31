@@ -5,7 +5,12 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import { computeClusterHash } from '@shared/components/tables/persistence/gridTablePersistence';
+import {
+  computeClusterHash,
+  deletePersistedStates,
+  getGridTablePersistenceSnapshot,
+  hydrateGridTablePersistence,
+} from '@shared/components/tables/persistence/gridTablePersistence';
 import { listRegisteredGridTableViews } from '@shared/components/tables/persistence/gridTableViewRegistry';
 
 const STORAGE_PREFIX = 'gridtable';
@@ -41,7 +46,6 @@ const parseStorageKey = (key: string): ParsedKey | null => {
 };
 
 export interface GridTableGCOptions {
-  storage?: Storage | null;
   activeClusterHashes?: string[];
   registeredViews?: string[];
 }
@@ -51,20 +55,10 @@ export interface GridTableGCResult {
   kept: string[];
 }
 
-export const runGridTableGC = (options: GridTableGCOptions = {}): GridTableGCResult => {
-  const storage =
-    options.storage ??
-    (() => {
-      try {
-        return typeof window !== 'undefined' ? window.localStorage : null;
-      } catch {
-        return null;
-      }
-    })();
-
-  if (!storage) {
-    return { removed: [], kept: [] };
-  }
+export const runGridTableGC = async (
+  options: GridTableGCOptions = {}
+): Promise<GridTableGCResult> => {
+  await hydrateGridTablePersistence();
 
   const activeHashes = new Set(
     (options.activeClusterHashes ?? []).map((value) => value?.trim()).filter(Boolean) as string[]
@@ -76,43 +70,37 @@ export const runGridTableGC = (options: GridTableGCOptions = {}): GridTableGCRes
   const removed: string[] = [];
   const kept: string[] = [];
 
-  // Copy keys first to avoid mutating while iterating storage
-  const keys = [];
-  for (let i = 0; i < storage.length; i += 1) {
-    const key = storage.key(i);
-    if (key) {
-      keys.push(key);
-    }
-  }
+  const entries = getGridTablePersistenceSnapshot();
+  const keys = Object.keys(entries);
 
   keys.forEach((key) => {
     const parsed = parseStorageKey(key);
     if (!parsed) {
-      storage.removeItem(key);
       removed.push(key);
       return;
     }
 
     if (parsed.version !== STORAGE_VERSION) {
-      storage.removeItem(key);
       removed.push(key);
       return;
     }
 
     if (registeredViews.size > 0 && !registeredViews.has(parsed.viewId)) {
-      storage.removeItem(key);
       removed.push(key);
       return;
     }
 
     if (activeHashes.size > 0 && !activeHashes.has(parsed.clusterHash)) {
-      storage.removeItem(key);
       removed.push(key);
       return;
     }
 
     kept.push(key);
   });
+
+  if (removed.length > 0) {
+    deletePersistedStates(removed);
+  }
 
   return { removed, kept };
 };

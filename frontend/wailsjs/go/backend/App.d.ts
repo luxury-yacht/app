@@ -4,6 +4,7 @@ import {backend} from '../models';
 import {context} from '../models';
 import {types} from '../models';
 import {capabilities} from '../models';
+import {json} from '../models';
 import {kubernetes} from '../models';
 import {clientset} from '../models';
 import {dynamic} from '../models';
@@ -11,6 +12,10 @@ import {versioned} from '../models';
 import {rest} from '../models';
 
 export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
+
+export function ClearAppState():Promise<void>;
+
+export function ClearGridTablePersistence():Promise<number>;
 
 export function ClearLogs():Promise<void>;
 
@@ -21,6 +26,10 @@ export function CordonNode(arg1:string,arg2:string):Promise<void>;
 export function CreateVersionedEndpoint(arg1:string,arg2:string,arg3:any,arg4:string):Promise<backend.VersionedResponse>;
 
 export function CtxOrBackground():Promise<context.Context>;
+
+export function DeleteGridTablePersistence(arg1:string):Promise<void>;
+
+export function DeleteGridTablePersistenceEntries(arg1:Array<string>):Promise<void>;
 
 export function DeleteHelmRelease(arg1:string,arg2:string,arg3:string):Promise<void>;
 
@@ -46,6 +55,8 @@ export function GetClusterRole(arg1:string):Promise<types.ClusterRoleDetails>;
 
 export function GetClusterRoleBinding(arg1:string):Promise<types.ClusterRoleBindingDetails>;
 
+export function GetClusterTabOrder():Promise<Array<string>>;
+
 export function GetConfigMap(arg1:string,arg2:string):Promise<types.ConfigMapDetails>;
 
 export function GetCronJob(arg1:string,arg2:string):Promise<types.CronJobDetails>;
@@ -57,6 +68,8 @@ export function GetDaemonSet(arg1:string,arg2:string):Promise<types.DaemonSetDet
 export function GetDeployment(arg1:string,arg2:string):Promise<types.DeploymentDetails>;
 
 export function GetEndpointSlice(arg1:string,arg2:string):Promise<types.EndpointSliceDetails>;
+
+export function GetGridTablePersistence():Promise<Record<string, json.RawMessage>>;
 
 export function GetHelmManifest(arg1:string,arg2:string):Promise<string>;
 
@@ -140,6 +153,8 @@ export function LoadWindowSettings():Promise<types.WindowSettings>;
 
 export function LogFetcher(arg1:string,arg2:types.LogFetchRequest):Promise<types.LogFetchResponse>;
 
+export function MigrateLegacyLocalStorage(arg1:backend.legacyLocalStoragePayload):Promise<void>;
+
 export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function RestartWorkload(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
@@ -152,7 +167,17 @@ export function SendShellInput(arg1:string,arg2:string):Promise<void>;
 
 export function SetApiExtensionsClient(arg1:clientset.Clientset):Promise<void>;
 
+export function SetAutoRefreshEnabled(arg1:boolean):Promise<void>;
+
+export function SetBackgroundRefreshEnabled(arg1:boolean):Promise<void>;
+
+export function SetClusterTabOrder(arg1:Array<string>):Promise<void>;
+
 export function SetDynamicClient(arg1:dynamic.Interface):Promise<void>;
+
+export function SetGridTablePersistence(arg1:string,arg2:json.RawMessage):Promise<void>;
+
+export function SetGridTablePersistenceMode(arg1:string):Promise<void>;
 
 export function SetKubeconfig(arg1:string):Promise<void>;
 

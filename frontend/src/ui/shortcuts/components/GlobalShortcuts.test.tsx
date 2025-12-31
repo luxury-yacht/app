@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { GlobalShortcuts } from './GlobalShortcuts';
 import { KeyCodes } from '../constants';
+import { resetClusterTabOrderCacheForTesting } from '@core/persistence/clusterTabOrder';
 
 const setContextMock = vi.fn();
 let latestHelpProps: { isOpen: boolean; onClose: () => void } | null = null;
@@ -125,7 +126,7 @@ describe('GlobalShortcuts', () => {
     setContextMock.mockClear();
     setSelectedKubeconfigsMock.mockClear();
     setActiveKubeconfigMock.mockClear();
-    localStorage.clear();
+    resetClusterTabOrderCacheForTesting();
     kubeconfigState.selectedKubeconfig = 'cluster-1';
     kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2'];
     isMacPlatformMock.mockReturnValue(true);

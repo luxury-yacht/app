@@ -22,6 +22,7 @@ export interface AppEvents {
   'view:reset': void;
   'view:toggle-diagnostics': void;
   'view:toggle-app-logs': void;
+  'cluster-tabs:order': string[];
 
   // Refresh events
   'refresh:state-change': { name: string; state: RefresherState };

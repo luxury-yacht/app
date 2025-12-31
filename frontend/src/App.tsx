@@ -15,6 +15,8 @@ import { eventBus } from '@/core/events';
 import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { hydrateAppPreferences } from '@/core/settings/appPreferences';
+import { migrateLegacyLocalStorage } from '@/core/settings/legacyMigration';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
@@ -47,9 +49,23 @@ function AppContent() {
     initializeUserPermissionsBootstrap(selectedClusterId);
   }, [selectedClusterId]);
 
-  // Initialize auto-refresh setting from localStorage
+  // Hydrate persisted preferences before applying refresh settings.
   useEffect(() => {
-    initializeAutoRefresh();
+    let active = true;
+    const initializePreferences = async () => {
+      try {
+        await migrateLegacyLocalStorage();
+        await hydrateAppPreferences();
+      } finally {
+        if (active) {
+          initializeAutoRefresh();
+        }
+      }
+    };
+    void initializePreferences();
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Handle backend errors from Wails runtime

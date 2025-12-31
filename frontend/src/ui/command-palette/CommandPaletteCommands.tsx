@@ -11,13 +11,13 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useTheme } from '@core/contexts/ThemeContext';
 import { refreshOrchestrator, useAutoRefresh } from '@/core/refresh';
-import { SetUseShortResourceNames } from '@wailsjs/go/backend/App';
 import { changeTheme } from '@/utils/themes';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import { eventBus } from '@/core/events';
 import { isMacPlatform } from '@/utils/platform';
+import { getUseShortResourceNames, setUseShortResourceNames } from '@/core/settings/appPreferences';
 
 export interface Command {
   id: string;
@@ -115,7 +115,7 @@ export function useCommandPaletteCommands() {
         description: 'Clear all persisted GridTable state (columns, sort, filters)',
         category: 'Application',
         action: () => {
-          clearAllGridTableState();
+          void clearAllGridTableState();
         },
         keywords: ['reset', 'grid', 'views', 'table', 'columns', 'sort'],
       },
@@ -178,18 +178,11 @@ export function useCommandPaletteCommands() {
         category: 'Application',
         action: async () => {
           // Get current state
-          const currentState = localStorage.getItem('useShortResourceNames') === 'true';
+          const currentState = getUseShortResourceNames();
           const newState = !currentState;
 
           try {
-            // Update backend setting
-            await SetUseShortResourceNames(newState);
-
-            // Update localStorage
-            localStorage.setItem('useShortResourceNames', String(newState));
-
-            // Notify components
-            eventBus.emit('settings:short-names', newState);
+            await setUseShortResourceNames(newState);
           } catch (error) {
             console.error('Failed to toggle short names:', error);
           }

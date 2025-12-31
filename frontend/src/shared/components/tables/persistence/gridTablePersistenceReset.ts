@@ -5,17 +5,10 @@
  * Handles rendering and interactions for the shared components.
  */
 
-const PREFIX = 'gridtable:';
+import { clearAllPersistedStates } from '@shared/components/tables/persistence/gridTablePersistence';
+
 type ResetListener = () => void;
 const resetListeners = new Set<ResetListener>();
-
-const getStorage = (): Storage | null => {
-  try {
-    return typeof window !== 'undefined' ? window.localStorage : null;
-  } catch {
-    return null;
-  }
-};
 
 const notifyResetAll = () => {
   resetListeners.forEach((listener) => {
@@ -27,27 +20,10 @@ const notifyResetAll = () => {
   });
 };
 
-export const clearAllGridTableState = (storage: Storage | null = getStorage()): number => {
-  if (!storage) {
-    notifyResetAll();
-    return 0;
-  }
-  const keys: string[] = [];
-  for (let i = 0; i < storage.length; i += 1) {
-    const key = storage.key(i);
-    if (key && key.startsWith(PREFIX)) {
-      keys.push(key);
-    }
-  }
-  keys.forEach((key) => {
-    try {
-      storage.removeItem(key);
-    } catch {
-      /* ignore */
-    }
-  });
+export const clearAllGridTableState = async (): Promise<number> => {
+  const removed = await clearAllPersistedStates();
   notifyResetAll();
-  return keys.length;
+  return removed;
 };
 
 export const subscribeGridTableResetAll = (listener: ResetListener): (() => void) => {

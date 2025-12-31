@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGridTablePersistence } from './useGridTablePersistence';
 import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 const stateMap: Record<string, any> = {};
 
@@ -28,6 +29,7 @@ vi.mock('./gridTablePersistence', () => {
   return {
     buildGridTableStorageKey,
     computeClusterHash: vi.fn(async () => 'clusterhash'),
+    hydrateGridTablePersistence: vi.fn(async () => undefined),
     loadPersistedState: vi.fn((key: string | null) => (key ? (stateMap[key] ?? null) : null)),
     prunePersistedState: vi.fn((state: any) => state ?? null),
     buildPersistedStateForSave: vi.fn(() => null),
@@ -39,6 +41,7 @@ vi.mock('./gridTablePersistence', () => {
 describe('useGridTablePersistence', () => {
   beforeEach(() => {
     Object.keys(stateMap).forEach((key) => delete stateMap[key]);
+    resetAppPreferencesCacheForTesting();
     setGridTablePersistenceMode('namespaced');
   });
 

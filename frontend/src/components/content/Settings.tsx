@@ -6,19 +6,23 @@
  */
 
 import { useState, useEffect } from 'react';
-import { GetThemeInfo, GetAppSettings, SetUseShortResourceNames } from '@wailsjs/go/backend/App';
+import { GetThemeInfo } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import { changeTheme, initSystemThemeListener } from '@/utils/themes';
-import { eventBus } from '@/core/events';
 import './Settings.css';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
+import {
+  hydrateAppPreferences,
+  setUseShortResourceNames as persistUseShortResourceNames,
+} from '@/core/settings/appPreferences';
 import {
   getGridTablePersistenceMode,
   setGridTablePersistenceMode,
   type GridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
+import ConfirmationModal from '@components/modals/ConfirmationModal';
 
 interface SettingsProps {
   onClose?: () => void;
@@ -32,6 +36,10 @@ function Settings({ onClose }: SettingsProps) {
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
   );
+  // Controls the confirmation modal for clearing all persisted app state.
+  const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
+  // Controls the confirmation modal for resetting view persistence.
+  const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
 
   useEffect(() => {
     loadThemeInfo();
@@ -54,15 +62,8 @@ function Settings({ onClose }: SettingsProps) {
 
   const loadAppSettings = async () => {
     try {
-      const settings = await GetAppSettings();
-      if (settings) {
-        setUseShortResourceNames(settings.useShortResourceNames || false);
-        // Store in localStorage for immediate access by other components
-        localStorage.setItem(
-          'useShortResourceNames',
-          String(settings.useShortResourceNames || false)
-        );
-      }
+      const preferences = await hydrateAppPreferences();
+      setUseShortResourceNames(preferences.useShortResourceNames);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
     }
@@ -83,12 +84,8 @@ function Settings({ onClose }: SettingsProps) {
 
   const handleShortNamesToggle = async (useShort: boolean) => {
     try {
-      await SetUseShortResourceNames(useShort);
+      await persistUseShortResourceNames(useShort);
       setUseShortResourceNames(useShort);
-      // Store in localStorage for immediate access
-      localStorage.setItem('useShortResourceNames', String(useShort));
-      // Notify components to re-render
-      eventBus.emit('settings:short-names', useShort);
     } catch (error) {
       errorHandler.handle(error, { action: 'setUseShortResourceNames', useShort });
       // Reload to show actual settings
@@ -102,8 +99,45 @@ function Settings({ onClose }: SettingsProps) {
     setGridTablePersistenceMode(mode);
   };
 
-  const handleResetAllViews = () => {
-    clearAllGridTableState();
+  const handleResetViews = async () => {
+    setIsResetViewsConfirmOpen(false);
+    await clearAllGridTableState();
+  };
+
+  // Clear persisted app state across backend files and browser storage, then reload.
+  const handleClearAllState = async () => {
+    setIsClearStateConfirmOpen(false);
+    try {
+      const clearAppState = (window as any)?.go?.backend?.App?.ClearAppState;
+      if (typeof clearAppState !== 'function') {
+        throw new Error('ClearAppState is not available');
+      }
+      await clearAppState();
+
+      await clearAllGridTableState();
+      try {
+        localStorage.clear();
+      } catch {
+        /* ignore */
+      }
+      try {
+        sessionStorage.clear();
+      } catch {
+        /* ignore */
+      }
+
+      window.location.reload();
+    } catch (error) {
+      errorHandler.handle(error, { action: 'clearAllState' });
+    }
+  };
+
+  const handleClearAllStateRequest = () => {
+    setIsClearStateConfirmOpen(true);
+  };
+
+  const handleResetViewsRequest = () => {
+    setIsResetViewsConfirmOpen(true);
   };
 
   return (
@@ -168,7 +202,7 @@ function Settings({ onClose }: SettingsProps) {
 
       <div className="settings-section">
         <h3>Auto-Refresh</h3>
-        <div className="refresh-settings">
+        <div className="settings-items">
           <div className="setting-item">
             <label htmlFor="refresh-enabled">
               <input
@@ -196,7 +230,7 @@ function Settings({ onClose }: SettingsProps) {
 
       <div className="settings-section">
         <h3>Display</h3>
-        <div className="display-settings">
+        <div className="settings-items">
           <div className="setting-item">
             <label htmlFor="short-resource-names">
               <input
@@ -212,24 +246,47 @@ function Settings({ onClose }: SettingsProps) {
       </div>
 
       <div className="settings-section">
-        <h3>View Persistence</h3>
-        <div className="setting-item">
-          <label htmlFor="persist-namespaced">
-            <input
-              type="checkbox"
-              id="persist-namespaced"
-              checked={persistenceMode === 'namespaced'}
-              onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
-            />
-            Persist state per namespaced view
-          </label>
-        </div>
-        <div className="setting-item">
-          <button type="button" className="button generic" onClick={handleResetAllViews}>
-            Reset All Views
-          </button>
+        <h3>App State</h3>
+        <div className="settings-items">
+          <div className="setting-item">
+            <label htmlFor="persist-namespaced">
+              <input
+                type="checkbox"
+                id="persist-namespaced"
+                checked={persistenceMode === 'namespaced'}
+                onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
+              />
+              Persist state per namespaced view
+            </label>
+          </div>
+          <div className="setting-item setting-actions">
+            <button type="button" className="button generic" onClick={handleResetViewsRequest}>
+              Reset Views
+            </button>
+            <button type="button" className="button generic" onClick={handleClearAllStateRequest}>
+              Factory Reset
+            </button>
+          </div>
         </div>
       </div>
+      <ConfirmationModal
+        isOpen={isResetViewsConfirmOpen}
+        title="Reset Views"
+        message="This will clear your view settings (columns/sorting/filters). Are you sure?"
+        confirmText="Confirm"
+        confirmButtonClass="warning"
+        onConfirm={handleResetViews}
+        onCancel={() => setIsResetViewsConfirmOpen(false)}
+      />
+      <ConfirmationModal
+        isOpen={isClearStateConfirmOpen}
+        title="Factory Reset"
+        message="This will clear all saved state and restart the app. Are you sure?"
+        confirmText="Confirm"
+        confirmButtonClass="danger"
+        onConfirm={handleClearAllState}
+        onCancel={() => setIsClearStateConfirmOpen(false)}
+      />
     </div>
   );
 }
