@@ -25,6 +25,8 @@ interface StreamEventPayload {
   generatedAt: number;
   reset?: boolean;
   events?: Array<{
+    clusterId?: string;
+    clusterName?: string;
     kind?: string;
     name?: string;
     namespace?: string;
@@ -182,8 +184,9 @@ class EventStreamConnection {
   };
 }
 
+// Include cluster identity in the dedupe key so multi-cluster streams don't collapse events.
 const sortKey = (entry: ClusterEventEntry | NamespaceEventSummary) =>
-  `${entry.namespace || ''}|${entry.kind || ''}|${entry.name || ''}|${entry.reason || ''}|${entry.message || ''}`;
+  `${entry.clusterId || ''}|${entry.namespace || ''}|${entry.kind || ''}|${entry.name || ''}|${entry.reason || ''}|${entry.message || ''}`;
 
 export class EventStreamManager {
   private clusterConnection: EventStreamConnection | null = null;
@@ -701,6 +704,9 @@ function transformClusterEvent(event: StreamEventItem): ClusterEventEntry {
   return {
     kind: 'Event',
     kindAlias: objectKind,
+    // Preserve cluster metadata for multi-cluster filtering and object navigation.
+    clusterId: event?.clusterId,
+    clusterName: event?.clusterName,
     name: event?.name || '',
     namespace: event?.namespace || '',
     objectNamespace: event?.objectNamespace ?? '',
@@ -720,6 +726,9 @@ function transformNamespaceEvent(event: StreamEventItem): NamespaceEventSummary 
   return {
     kind: 'Event',
     kindAlias: objectKind,
+    // Preserve cluster metadata for multi-cluster filtering and object navigation.
+    clusterId: event?.clusterId,
+    clusterName: event?.clusterName,
     name: event?.name || '',
     namespace: event?.namespace || '',
     objectNamespace: event?.objectNamespace ?? '',
