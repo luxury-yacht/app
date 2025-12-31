@@ -309,6 +309,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const [rightObjectUid, setRightObjectUid] = useState('');
   const [leftChangedAt, setLeftChangedAt] = useState<number | null>(null);
   const [rightChangedAt, setRightChangedAt] = useState<number | null>(null);
+  const [showDiffOnly, setShowDiffOnly] = useState(true);
   const [selectionSide, setSelectionSide] = useState<'left' | 'right'>('left');
   const [leftNoMatch, setLeftNoMatch] = useState(false);
   const [rightNoMatch, setRightNoMatch] = useState(false);
@@ -593,6 +594,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
 
   const diffLines = diffResult?.lines ?? [];
   const displayDiffLines = useMemo(() => mergeDiffLines(diffLines), [diffLines]);
+  const visibleDiffLines = useMemo(() => {
+    if (!showDiffOnly) {
+      return displayDiffLines;
+    }
+    return displayDiffLines.filter(
+      (line) => line.leftType !== 'context' || line.rightType !== 'context'
+    );
+  }, [displayDiffLines, showDiffOnly]);
   const diffTruncated = diffResult?.truncated ?? false;
   const leftYamlError = leftYaml.state.error ?? null;
   const rightYamlError = rightYaml.state.error ?? null;
@@ -986,7 +995,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
           selectSideText(side);
         }}
       >
-        {displayDiffLines.map(renderDiffRow)}
+        {visibleDiffLines.map(renderDiffRow)}
       </div>
     );
   };
@@ -1200,7 +1209,17 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
 
           <div className="object-diff-viewer">
             <div className="object-diff-viewer-header">
-              <div className="object-diff-viewer-title">YAML Diff</div>
+              <div className="object-diff-viewer-header-row">
+                <div className="object-diff-viewer-title">YAML Diff</div>
+                <button
+                  type="button"
+                  className="button generic object-diff-toggle"
+                  onClick={() => setShowDiffOnly((value) => !value)}
+                  disabled={!leftSelection || !rightSelection}
+                >
+                  {showDiffOnly ? 'Show All' : 'Show Diffs'}
+                </button>
+              </div>
               <div className="object-diff-viewer-subtitle">
                 Ignored fields: metadata.managedFields. Muted fields: metadata.resourceVersion,
                 metadata.creationTimestamp, metadata.uid
