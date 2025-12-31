@@ -213,9 +213,13 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 		return nil, fmt.Errorf("failed to create SPDY executor: %w", err)
 	}
 
+	// Use websocket exec when possible, but fall back to SPDY on upgrade or proxy errors.
 	executor, err := remotecommand.NewFallbackExecutor(websocketExec, spdyExecutor, func(err error) bool {
 		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create fallback executor: %w", err)
+	}
 
 	sessionCtx, sessionCancel := context.WithCancel(context.Background())
 	now := time.Now()
