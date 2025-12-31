@@ -249,7 +249,7 @@
 
 .object-diff-line-gutter {
   display: grid;
-  grid-template-columns: 0.9rem 1fr;
+  grid-template-columns: 1rem 0.7fr;
   align-items: start;
   gap: var(--spacing-xs);
   user-select: none;
@@ -260,8 +260,8 @@
 
 .object-diff-expand-toggle,
 .object-diff-expand-placeholder {
-  width: 0.9rem;
-  height: 0.9rem;
+  width: 0.1rem;
+  height: 0.5rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
