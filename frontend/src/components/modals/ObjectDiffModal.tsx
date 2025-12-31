@@ -600,8 +600,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     leftYaml.state.status === 'loading' || leftYaml.state.status === 'initialising';
   const rightYamlInitialLoading =
     rightYaml.state.status === 'loading' || rightYaml.state.status === 'initialising';
-  const isYamlRefreshing =
-    leftYaml.state.status === 'updating' || rightYaml.state.status === 'updating';
 
   // Reset change tracking when the user swaps objects.
   useEffect(() => {
@@ -1202,17 +1200,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
 
           <div className="object-diff-viewer">
             <div className="object-diff-viewer-header">
-              <div className="object-diff-viewer-title-row">
-                <div className="object-diff-viewer-title">YAML Diff</div>
-                <div
-                  className={`object-diff-refresh-indicator ${
-                    isYamlRefreshing ? 'active' : ''
-                  }`}
-                  aria-live="polite"
-                >
-                  Refreshing...
-                </div>
-              </div>
+              <div className="object-diff-viewer-title">YAML Diff</div>
               <div className="object-diff-viewer-subtitle">
                 Ignored fields: metadata.managedFields. Muted fields: metadata.resourceVersion,
                 metadata.creationTimestamp, metadata.uid

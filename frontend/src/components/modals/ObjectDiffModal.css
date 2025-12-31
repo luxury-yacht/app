@@ -100,28 +100,10 @@
   background: var(--color-bg-secondary);
 }
 
-.object-diff-viewer-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
-}
-
 .object-diff-viewer-title {
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-bold);
   color: var(--color-text);
-}
-
-.object-diff-refresh-indicator {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-}
-
-.object-diff-refresh-indicator.active {
-  opacity: 1;
 }
 
 .object-diff-viewer-subtitle {
