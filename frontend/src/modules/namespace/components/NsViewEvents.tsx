@@ -56,27 +56,45 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const useShortResourceNames = useShortNames();
 
+    // Parse the involved object reference into its type and name for display/navigation.
+    const splitEventObject = useCallback((value?: string | null) => {
+      const raw = (value ?? '').trim();
+      if (!raw || raw === '-') {
+        return { objectType: '-', objectName: '-', isLinkable: false };
+      }
+      const [objectType, objectName] = raw.split('/', 2);
+      if (!objectName) {
+        return { objectType: raw, objectName: '-', isLinkable: false };
+      }
+      return {
+        objectType: objectType || '-',
+        objectName: objectName || '-',
+        isLinkable: Boolean(objectType && objectName),
+      };
+    }, []);
+
     const handleEventClick = useCallback(
       (event: EventData) => {
         // Events don't have a direct object panel view, but we could open the related object
-        if (event.object && event.object.includes('/')) {
-          const [kind, name] = event.object.split('/');
-          const resolvedNamespace =
-            event.objectNamespace && event.objectNamespace.length > 0
-              ? event.objectNamespace
-              : event.namespace && event.namespace.length > 0
-                ? event.namespace
-                : namespace;
-          openWithObject({
-            kind,
-            name,
-            namespace: resolvedNamespace,
-            clusterId: event.clusterId ?? undefined,
-            clusterName: event.clusterName ?? undefined,
-          });
+        const parsed = splitEventObject(event.object);
+        if (!parsed.isLinkable) {
+          return;
         }
+        const resolvedNamespace =
+          event.objectNamespace && event.objectNamespace.length > 0
+            ? event.objectNamespace
+            : event.namespace && event.namespace.length > 0
+              ? event.namespace
+              : namespace;
+        openWithObject({
+          kind: parsed.objectType,
+          name: parsed.objectName,
+          namespace: resolvedNamespace,
+          clusterId: event.clusterId ?? undefined,
+          clusterName: event.clusterName ?? undefined,
+        });
       },
-      [openWithObject, namespace]
+      [openWithObject, namespace, splitEventObject]
     );
 
     const keyExtractor = useCallback(
@@ -115,10 +133,22 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
 
       baseColumns.push(
         cf.createTextColumn('source', 'Source', (event) => event.source || '-'),
-        cf.createTextColumn<EventData>('object', 'Object', (event) => event.object || '-', {
-          onClick: handleEventClick,
-          isInteractive: (event) => Boolean(event.object && event.object.includes('/')),
+        cf.createTextColumn<EventData>('objectType', 'Object Type', (event) => {
+          const parsed = splitEventObject(event.object);
+          return parsed.objectType;
         }),
+        cf.createTextColumn<EventData>(
+          'objectName',
+          'Object Name',
+          (event) => {
+            const parsed = splitEventObject(event.object);
+            return parsed.objectName;
+          },
+          {
+            onClick: handleEventClick,
+            isInteractive: (event) => splitEventObject(event.object).isLinkable,
+          }
+        ),
         cf.createTextColumn('reason', 'Reason', (event) => event.reason || '-'),
         cf.createTextColumn('message', 'Message', (event) => event.message || '-'),
         {
@@ -133,8 +163,9 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         kind: { autoWidth: true },
         type: { autoWidth: true },
         namespace: { autoWidth: true },
-        source: { autoWidth: true },
-        object: { autoWidth: true },
+        source: { autoWidth: true, maxWidth: 250 },
+        objectType: { autoWidth: true },
+        objectName: { autoWidth: true },
         reason: { autoWidth: true },
         message: { autoWidth: true },
         age: { autoWidth: true },
@@ -142,7 +173,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleEventClick, showNamespaceColumn, useShortResourceNames]);
+    }, [handleEventClick, showNamespaceColumn, splitEventObject, useShortResourceNames]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 
@@ -177,8 +208,9 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
         const items: ContextMenuItem[] = [];
 
         // Add option to view related object if available
-        if (event.object && event.object.includes('/')) {
-          const [kind] = event.object.split('/');
+        const parsed = splitEventObject(event.object);
+        if (parsed.isLinkable) {
+          const kind = parsed.objectType;
           items.push({
             label: `View ${kind}`,
             icon: '→',
@@ -188,7 +220,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
 
         return items;
       },
-      [handleEventClick]
+      [handleEventClick, splitEventObject]
     );
 
     const emptyMessage = useMemo(

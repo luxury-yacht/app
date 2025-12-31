@@ -143,7 +143,7 @@ describe('NsViewEvents', () => {
     const event = baseEvent();
     const props = await renderEventsView([event]);
 
-    const menu = props.getCustomContextMenuItems(event, 'object');
+    const menu = props.getCustomContextMenuItems(event, 'objectName');
     expect(menu).toHaveLength(1);
     expect(menu[0].label).toBe('View Pod');
 
@@ -165,10 +165,10 @@ describe('NsViewEvents', () => {
     const event = baseEvent();
     const props = await renderEventsView([event]);
 
-    const objectColumn = props.columns.find((column: any) => column.key === 'object');
-    expect(objectColumn).toBeTruthy();
+    const objectNameColumn = props.columns.find((column: any) => column.key === 'objectName');
+    expect(objectNameColumn).toBeTruthy();
 
-    const cell = objectColumn.render(event);
+    const cell = objectNameColumn.render(event);
 
     act(() => {
       cell.props.onClick({ stopPropagation: () => {} });
@@ -187,7 +187,7 @@ describe('NsViewEvents', () => {
   it('suppresses context actions when no related object provided', async () => {
     const event = baseEvent({ object: undefined });
     const props = await renderEventsView([event]);
-    const menu = props.getCustomContextMenuItems(event, 'object');
+    const menu = props.getCustomContextMenuItems(event, 'objectName');
     expect(menu).toHaveLength(0);
   });
 
@@ -211,7 +211,7 @@ describe('NsViewEvents', () => {
   it('derives namespace from objectNamespace, event namespace, or component namespace', async () => {
     const noNamespaceEvent = baseEvent({ objectNamespace: undefined, namespace: undefined });
     const props = await renderEventsView([noNamespaceEvent]);
-    const menu = props.getCustomContextMenuItems(noNamespaceEvent, 'object');
+    const menu = props.getCustomContextMenuItems(noNamespaceEvent, 'objectName');
     act(() => {
       menu[0].onClick?.();
     });
