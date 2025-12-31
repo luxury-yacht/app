@@ -35,6 +35,7 @@ interface ObjectDiffModalProps {
 
 const CATALOG_QUERY_LIMIT = 200;
 const CLUSTER_SCOPE_LABEL = 'cluster-scoped';
+const NAMESPACE_SEPARATOR_VALUE = '__namespace-separator__';
 
 const buildCatalogScope = (params: { limit: number; namespace?: string; kind?: string }) => {
   const query = new URLSearchParams();
@@ -110,7 +111,6 @@ const buildObjectOptions = (items: CatalogItem[]): DropdownOption[] =>
 
 const buildNamespaceOptions = (namespaces: string[]): DropdownOption[] => {
   const options = new Map<string, DropdownOption>();
-  options.set(CLUSTER_SCOPE, { value: CLUSTER_SCOPE, label: CLUSTER_SCOPE_LABEL });
 
   namespaces.forEach((namespace) => {
     const value = namespace.trim();
@@ -120,7 +120,18 @@ const buildNamespaceOptions = (namespaces: string[]): DropdownOption[] => {
     options.set(value.toLowerCase(), { value, label: value });
   });
 
-  return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label));
+  const sorted = Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label));
+  // Keep cluster-scoped at the top, then separate the namespaced entries.
+  const clusterOption: DropdownOption = { value: CLUSTER_SCOPE, label: CLUSTER_SCOPE_LABEL };
+  if (sorted.length === 0) {
+    return [clusterOption];
+  }
+
+  return [
+    clusterOption,
+    { value: NAMESPACE_SEPARATOR_VALUE, label: '', group: 'header' },
+    ...sorted,
+  ];
 };
 
 const buildKindOptions = (kinds: string[], useShortNames: boolean): DropdownOption[] => {

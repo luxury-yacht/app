@@ -385,12 +385,14 @@ const Dropdown: React.FC<DropdownProps> = ({
               const optionIsSelected = isSelected(option.value);
               const optionIsHighlighted = index === highlightedIndex;
               const isGroupHeader = option.group === 'header';
+              const isSeparator = isGroupHeader && option.label.trim().length === 0;
 
               return (
                 <div
                   key={option.value}
                   className={[
                     isGroupHeader ? 'dropdown-group-header' : 'dropdown-option',
+                    isSeparator && 'dropdown-separator',
                     optionIsSelected && 'selected',
                     optionIsHighlighted && 'highlighted',
                     option.disabled && 'disabled',
