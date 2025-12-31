@@ -1213,7 +1213,16 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
           <div className="object-diff-viewer">
             <div className="object-diff-viewer-header">
               <div className="object-diff-viewer-header-row">
-                <div className="object-diff-viewer-title">YAML Diff</div>
+                <div className="object-diff-viewer-title-group">
+                  <div className="object-diff-viewer-title">YAML Diff</div>
+                  <span
+                    className="object-diff-info-indicator"
+                    title="Ignored fields: metadata.managedFields. Muted fields: metadata.resourceVersion, metadata.creationTimestamp, metadata.uid."
+                    aria-label="Diff metadata field info"
+                  >
+                    i
+                  </span>
+                </div>
                 <button
                   type="button"
                   className="button generic object-diff-toggle"
@@ -1222,10 +1231,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                 >
                   {showDiffOnly ? 'Show All' : 'Show Diffs'}
                 </button>
-              </div>
-              <div className="object-diff-viewer-subtitle">
-                Ignored fields: metadata.managedFields. Muted fields: metadata.resourceVersion,
-                metadata.creationTimestamp, metadata.uid
               </div>
               {(leftChangedAt || rightChangedAt) && (
                 <div className="object-diff-change-indicator">
