@@ -124,6 +124,7 @@
 
 ### Phase 4: Migration (Legacy -> New)
 - Execute the one-time migration plan to import legacy backend files and frontend `localStorage`.
+- Log migration activity to Application Logs (legacy files detected, migration outcome, and any legacy files deleted on success).
 - Delete legacy stores only after successful migration.
 
 ### Phase 5: Backup/Restore (Secondary)
@@ -153,6 +154,7 @@
 - Backend migrates old backend files directly.
 - Frontend reads `localStorage` and sends a single migration payload to the backend via a new Wails API (e.g., `MigrateLegacyStorage`).
   - Legacy lookup should include the previous `~/.config/luxury-yacht` path on all OSes (Windows included).
+  - Emit Application Log entries for each legacy file found/missing, migration success/failure, and each legacy file deletion performed after success.
 
 ### Conflict Resolution
 - Prefer `app-preferences.json` values when present.
