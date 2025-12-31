@@ -328,7 +328,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const [rightObjectUid, setRightObjectUid] = useState('');
   const [leftChangedAt, setLeftChangedAt] = useState<number | null>(null);
   const [rightChangedAt, setRightChangedAt] = useState<number | null>(null);
-  const [showDiffOnly, setShowDiffOnly] = useState(true);
+  const [showDiffOnly, setShowDiffOnly] = useState(false);
   const [selectionSide, setSelectionSide] = useState<'left' | 'right'>('left');
   const [leftNoMatch, setLeftNoMatch] = useState(false);
   const [rightNoMatch, setRightNoMatch] = useState(false);
@@ -822,7 +822,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   };
 
   const handleLeftMatch = () => {
-    if (!leftSelection) {
+    if (!leftSelection || !leftClusterId || !rightClusterId) {
       return;
     }
     const namespace = normalizeMatchNamespace(leftSelection.namespace);
@@ -838,7 +838,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   };
 
   const handleRightMatch = () => {
-    if (!rightSelection) {
+    if (!rightSelection || !leftClusterId || !rightClusterId) {
       return;
     }
     const namespace = normalizeMatchNamespace(rightSelection.namespace);
@@ -1045,7 +1045,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                     type="button"
                     className="button generic object-diff-match"
                     onClick={handleLeftMatch}
-                    disabled={!leftSelection}
+                    disabled={!leftSelection || !leftClusterId || !rightClusterId}
                   >
                     Match
                   </button>
@@ -1135,7 +1135,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                     type="button"
                     className="button generic object-diff-match"
                     onClick={handleRightMatch}
-                    disabled={!rightSelection}
+                    disabled={!rightSelection || !leftClusterId || !rightClusterId}
                   >
                     Match
                   </button>
