@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 )
@@ -26,7 +27,10 @@ const (
 	shellMaxDuration = 8 * time.Hour
 )
 
-var spdyExecutorFactory = remotecommand.NewSPDYExecutor
+var (
+	spdyExecutorFactory      = remotecommand.NewSPDYExecutor
+	websocketExecutorFactory = remotecommand.NewWebSocketExecutor
+)
 
 type shellSession struct {
 	id        string
@@ -200,10 +204,18 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 			TTY:       true,
 		}, scheme.ParameterCodec)
 
-	executor, err := spdyExecutorFactory(deps.RestConfig, http.MethodPost, execReq.URL())
+	websocketExec, err := websocketExecutorFactory(deps.RestConfig, http.MethodGet, execReq.URL().String())
 	if err != nil {
-		return nil, fmt.Errorf("failed to build exec session: %w", err)
+		return nil, fmt.Errorf("failed to create websocket executor: %w", err)
 	}
+	spdyExecutor, err := spdyExecutorFactory(deps.RestConfig, http.MethodPost, execReq.URL())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create SPDY executor: %w", err)
+	}
+
+	executor, err := remotecommand.NewFallbackExecutor(websocketExec, spdyExecutor, func(err error) bool {
+		return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
+	})
 
 	sessionCtx, sessionCancel := context.WithCancel(context.Background())
 	now := time.Now()
