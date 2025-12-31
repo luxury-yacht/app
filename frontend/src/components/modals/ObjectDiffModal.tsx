@@ -25,6 +25,7 @@ import {
 import { sanitizeYamlForDiff } from './objectDiffUtils';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '@modules/object-panel/components/ObjectPanel/constants';
 import { getDisplayKind } from '@/utils/kindAliasMap';
+import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import { useShortNames } from '@/hooks/useShortNames';
 
 interface ObjectDiffModalProps {
@@ -99,6 +100,12 @@ const buildSelectionLabel = (item: CatalogItem | null, useShortNames: boolean): 
 
 const isSnapshotLoading = (status: string) =>
   status === 'loading' || status === 'initialising' || status === 'updating';
+
+// Format a concise, user-friendly age label for change notifications.
+const formatChangeAge = (timestamp: number): string => {
+  const age = formatAge(timestamp);
+  return age === 'now' ? 'just now' : `${age} ago`;
+};
 
 const buildCatalogOptions = (items: CatalogItem[], useShortNames: boolean): DropdownOption[] =>
   items.map((item) => ({
@@ -212,8 +219,12 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const [rightKind, setRightKind] = useState('');
   const [leftObjectUid, setLeftObjectUid] = useState('');
   const [rightObjectUid, setRightObjectUid] = useState('');
+  const [leftChangedAt, setLeftChangedAt] = useState<number | null>(null);
+  const [rightChangedAt, setRightChangedAt] = useState<number | null>(null);
   const { pushContext, popContext } = useKeyboardContext();
   const contextPushedRef = useRef(false);
+  const leftChecksumRef = useRef<string | null>(null);
+  const rightChecksumRef = useRef<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const useShortNamesSetting = useShortNames();
 
@@ -438,10 +449,48 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
 
   const diffLines = diffResult?.lines ?? [];
   const diffTruncated = diffResult?.truncated ?? false;
-  const leftYamlLoading = isSnapshotLoading(leftYaml.state.status);
-  const rightYamlLoading = isSnapshotLoading(rightYaml.state.status);
   const leftYamlError = leftYaml.state.error ?? null;
   const rightYamlError = rightYaml.state.error ?? null;
+  const leftYamlInitialLoading =
+    leftYaml.state.status === 'loading' || leftYaml.state.status === 'initialising';
+  const rightYamlInitialLoading =
+    rightYaml.state.status === 'loading' || rightYaml.state.status === 'initialising';
+  const isYamlRefreshing =
+    leftYaml.state.status === 'updating' || rightYaml.state.status === 'updating';
+
+  // Reset change tracking when the user swaps objects.
+  useEffect(() => {
+    leftChecksumRef.current = null;
+    setLeftChangedAt(null);
+  }, [leftObjectUid]);
+
+  useEffect(() => {
+    rightChecksumRef.current = null;
+    setRightChangedAt(null);
+  }, [rightObjectUid]);
+
+  // Surface change events without clearing the existing diff view.
+  useEffect(() => {
+    const checksum = leftYaml.state.checksum ?? null;
+    if (!checksum) {
+      return;
+    }
+    if (leftChecksumRef.current && leftChecksumRef.current !== checksum) {
+      setLeftChangedAt(Date.now());
+    }
+    leftChecksumRef.current = checksum;
+  }, [leftYaml.state.checksum]);
+
+  useEffect(() => {
+    const checksum = rightYaml.state.checksum ?? null;
+    if (!checksum) {
+      return;
+    }
+    if (rightChecksumRef.current && rightChecksumRef.current !== checksum) {
+      setRightChangedAt(Date.now());
+    }
+    rightChecksumRef.current = checksum;
+  }, [rightYaml.state.checksum]);
 
   const handleLeftClusterChange = (value: string | string[]) => {
     if (typeof value !== 'string') {
@@ -551,7 +600,10 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     if (!leftSelection || !rightSelection) {
       return <div className="object-diff-empty">Select objects on both sides to compare.</div>;
     }
-    if (leftYamlLoading || rightYamlLoading) {
+    if (
+      (leftYamlInitialLoading && !leftYamlNormalized) ||
+      (rightYamlInitialLoading && !rightYamlNormalized)
+    ) {
       return <div className="object-diff-empty">Loading YAML...</div>;
     }
     if (leftYamlError || rightYamlError) {
@@ -763,10 +815,40 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
 
           <div className="object-diff-viewer">
             <div className="object-diff-viewer-header">
-              <div className="object-diff-viewer-title">YAML Diff</div>
+              <div className="object-diff-viewer-title-row">
+                <div className="object-diff-viewer-title">YAML Diff</div>
+                <div
+                  className={`object-diff-refresh-indicator ${
+                    isYamlRefreshing ? 'active' : ''
+                  }`}
+                  aria-live="polite"
+                >
+                  Refreshing...
+                </div>
+              </div>
               <div className="object-diff-viewer-subtitle">
                 Fields removed: metadata.managedFields, metadata.resourceVersion
               </div>
+              {(leftChangedAt || rightChangedAt) && (
+                <div className="object-diff-change-indicator">
+                  {leftChangedAt && (
+                    <span
+                      className="object-diff-change-item"
+                      title={`Left changed ${formatFullDate(leftChangedAt)}`}
+                    >
+                      Left changed {formatChangeAge(leftChangedAt)}
+                    </span>
+                  )}
+                  {rightChangedAt && (
+                    <span
+                      className="object-diff-change-item"
+                      title={`Right changed ${formatFullDate(rightChangedAt)}`}
+                    >
+                      Right changed {formatChangeAge(rightChangedAt)}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <div className="object-diff-column-headers">
               <div className="object-diff-column-title">
