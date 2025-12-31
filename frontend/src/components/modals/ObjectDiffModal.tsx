@@ -931,9 +931,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
         : '';
     const leftType = line.leftType;
     const rightType = line.rightType;
-    const leftTitle = leftText || undefined;
-    const rightTitle = rightText || undefined;
-
     const leftMuted =
       line.leftLineNumber !== null &&
       line.leftLineNumber !== undefined &&
@@ -956,9 +953,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
             .join(' ')}
         >
           <span className="object-diff-line-number">{leftNumber}</span>
-          <span className="object-diff-line-text" title={leftTitle}>
-            {leftText}
-          </span>
+          <span className="object-diff-line-text">{leftText}</span>
         </div>
         <div
           className={[
@@ -971,9 +966,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
             .join(' ')}
         >
           <span className="object-diff-line-number">{rightNumber}</span>
-          <span className="object-diff-line-text" title={rightTitle}>
-            {rightText}
-          </span>
+          <span className="object-diff-line-text">{rightText}</span>
         </div>
       </div>
     );
