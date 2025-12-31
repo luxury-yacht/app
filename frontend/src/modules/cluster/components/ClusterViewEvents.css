@@ -3,7 +3,8 @@
 
 /* Cluster Events table layout refinements */
 .gridtable-cluster-events .grid-cell[data-column="source"] .grid-cell-content,
-.gridtable-cluster-events .grid-cell[data-column="object"] .grid-cell-content,
+.gridtable-cluster-events .grid-cell[data-column="objectType"] .grid-cell-content,
+.gridtable-cluster-events .grid-cell[data-column="objectName"] .grid-cell-content,
 .gridtable-cluster-events .grid-cell[data-column="reason"] .grid-cell-content,
 .gridtable-cluster-events .grid-cell[data-column="message"] .grid-cell-content {
   white-space: normal;
@@ -12,7 +13,8 @@
 }
 
 .gridtable-cluster-events .grid-cell[data-column="source"],
-.gridtable-cluster-events .grid-cell[data-column="object"],
+.gridtable-cluster-events .grid-cell[data-column="objectType"],
+.gridtable-cluster-events .grid-cell[data-column="objectName"],
 .gridtable-cluster-events .grid-cell[data-column="reason"],
 .gridtable-cluster-events .grid-cell[data-column="message"] {
   align-items: flex-start;

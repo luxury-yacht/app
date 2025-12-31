@@ -239,25 +239,13 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
         getClassName: (item) => (item.message ? 'event-message' : undefined),
         getTitle: (item) => (item.message ? item.message : undefined),
       }),
+      // Split the involved object into type/name columns for readability.
+      createTextColumn<EventDisplay>('objectType', 'Object Type', (item) => item.objectKind || '-'),
       createTextColumn<EventDisplay>(
-        'object',
-        'Object',
-        (item) => {
-          const scopePrefix =
-            item.objectNamespace && item.objectNamespace !== CLUSTER_SCOPE
-              ? `${item.objectNamespace}/`
-              : '';
-          return `${scopePrefix}${item.objectKind}/${item.objectName}`;
-        },
+        'objectName',
+        'Object Name',
+        (item) => item.objectName || '-',
         {
-          getClassName: () => 'event-object',
-          getTitle: (item) => {
-            const scopePrefix =
-              item.objectNamespace && item.objectNamespace !== CLUSTER_SCOPE
-                ? `${item.objectNamespace}/`
-                : '';
-            return `${scopePrefix}${item.objectKind}/${item.objectName}`;
-          },
           onClick: openRelatedObject,
           isInteractive: (item) => Boolean(item.objectKind && item.objectName),
         }
@@ -282,7 +270,8 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
       source: { width: 180, minWidth: 150, autoWidth: true },
       reason: { width: 160, minWidth: 130, autoWidth: true },
       message: { width: 320, minWidth: 260, autoWidth: true },
-      object: { width: 220, minWidth: 180, autoWidth: true },
+      objectType: { width: 160, minWidth: 130, autoWidth: true },
+      objectName: { width: 220, minWidth: 180, autoWidth: true },
       age: { width: 100, minWidth: 80 },
     };
     applyColumnSizing(base, sizing);
