@@ -22,7 +22,7 @@ import {
   type DiffLine,
   type DiffResult,
 } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlDiff';
-import { sanitizeYamlForDiff } from './objectDiffUtils';
+import { buildIgnoredMetadataLineSet, sanitizeYamlForDiff } from './objectDiffUtils';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '@modules/object-panel/components/ObjectPanel/constants';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
@@ -439,6 +439,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     () => (rightYamlRaw ? sanitizeYamlForDiff(rightYamlRaw) : ''),
     [rightYamlRaw]
   );
+  const leftMutedLines = useMemo(
+    () => buildIgnoredMetadataLineSet(leftYamlNormalized),
+    [leftYamlNormalized]
+  );
+  const rightMutedLines = useMemo(
+    () => buildIgnoredMetadataLineSet(rightYamlNormalized),
+    [rightYamlNormalized]
+  );
 
   const diffResult = useMemo<DiffResult | null>(() => {
     if (!leftYamlNormalized || !rightYamlNormalized) {
@@ -582,13 +590,40 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     const leftType = line.type === 'added' ? 'context' : line.type;
     const rightType = line.type === 'removed' ? 'context' : line.type;
 
+    const leftMuted =
+      line.leftLineNumber !== null &&
+      line.leftLineNumber !== undefined &&
+      leftMutedLines.has(line.leftLineNumber);
+    const rightMuted =
+      line.rightLineNumber !== null &&
+      line.rightLineNumber !== undefined &&
+      rightMutedLines.has(line.rightLineNumber);
+
     return (
       <div key={`diff-${index}`} className={`object-diff-row object-diff-row-${line.type}`}>
-        <div className={`object-diff-cell object-diff-cell-left object-diff-cell-${leftType}`}>
+        <div
+          className={[
+            'object-diff-cell',
+            'object-diff-cell-left',
+            `object-diff-cell-${leftType}`,
+            leftMuted ? 'object-diff-cell-muted' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
           <span className="object-diff-line-number">{leftNumber}</span>
           <span className="object-diff-line-text">{leftText}</span>
         </div>
-        <div className={`object-diff-cell object-diff-cell-right object-diff-cell-${rightType}`}>
+        <div
+          className={[
+            'object-diff-cell',
+            'object-diff-cell-right',
+            `object-diff-cell-${rightType}`,
+            rightMuted ? 'object-diff-cell-muted' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
           <span className="object-diff-line-number">{rightNumber}</span>
           <span className="object-diff-line-text">{rightText}</span>
         </div>
@@ -827,7 +862,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                 </div>
               </div>
               <div className="object-diff-viewer-subtitle">
-                Fields removed: metadata.managedFields, metadata.resourceVersion
+                Muted fields: metadata.managedFields, metadata.resourceVersion, metadata.creationTimestamp, metadata.uid
               </div>
               {(leftChangedAt || rightChangedAt) && (
                 <div className="object-diff-change-indicator">

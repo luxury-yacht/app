@@ -6,15 +6,17 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { sanitizeYamlForDiff } from './objectDiffUtils';
+import { buildIgnoredMetadataLineSet, sanitizeYamlForDiff } from './objectDiffUtils';
 
 describe('sanitizeYamlForDiff', () => {
-  it('removes managedFields and resourceVersion from metadata', () => {
+  it('retains metadata fields while normalizing YAML', () => {
     const yaml = `apiVersion: v1
 kind: ConfigMap
 metadata:
   name: demo
+  uid: "abc"
   resourceVersion: "123"
+  creationTimestamp: "2020-01-01T00:00:00Z"
   managedFields:
     - manager: kubectl
 data:
@@ -24,8 +26,10 @@ data:
     const result = sanitizeYamlForDiff(yaml);
     expect(result).toContain('name: demo');
     expect(result).toContain('data:');
-    expect(result).not.toContain('managedFields');
-    expect(result).not.toContain('resourceVersion');
+    expect(result).toContain('managedFields');
+    expect(result).toContain('resourceVersion');
+    expect(result).toContain('creationTimestamp');
+    expect(result).toContain('uid');
   });
 
   it('returns the original string when YAML parsing fails', () => {
@@ -35,5 +39,35 @@ data:
 
   it('returns an empty string for blank input', () => {
     expect(sanitizeYamlForDiff('   ')).toBe('');
+  });
+});
+
+describe('buildIgnoredMetadataLineSet', () => {
+  it('tracks ignored metadata fields and their nested lines', () => {
+    const yaml = `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo
+  uid: "abc"
+  resourceVersion: "123"
+  creationTimestamp: "2020-01-01T00:00:00Z"
+  managedFields:
+    - manager: kubectl
+      operation: Update
+spec:
+  uid: "keep-visible"
+data:
+  key: value
+`;
+    const muted = buildIgnoredMetadataLineSet(yaml);
+    expect(muted.has(5)).toBe(true); // uid
+    expect(muted.has(6)).toBe(true); // resourceVersion
+    expect(muted.has(7)).toBe(true); // creationTimestamp
+    expect(muted.has(8)).toBe(true); // managedFields
+    expect(muted.has(9)).toBe(true); // managedFields list entry
+    expect(muted.has(10)).toBe(true); // managedFields list entry
+    expect(muted.has(4)).toBe(false); // name
+    expect(muted.has(11)).toBe(false); // spec
+    expect(muted.has(12)).toBe(false); // spec uid (non-metadata)
   });
 });

@@ -213,6 +213,11 @@
   color: var(--color-error);
 }
 
+.object-diff-cell-muted .object-diff-line-text,
+.object-diff-cell-muted .object-diff-line-number {
+  color: var(--color-text-tertiary);
+}
+
 @media (max-width: 900px) {
   .object-diff-selector-grid {
     grid-template-columns: 1fr;
