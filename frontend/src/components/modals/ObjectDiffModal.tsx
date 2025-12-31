@@ -29,7 +29,10 @@ import {
   maskMutedMetadataLines,
   sanitizeYamlForDiff,
 } from './objectDiffUtils';
-import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '@modules/object-panel/components/ObjectPanel/constants';
+import {
+  CLUSTER_SCOPE,
+  INACTIVE_SCOPE,
+} from '@modules/object-panel/components/ObjectPanel/constants';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -328,6 +331,8 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const [rightObjectUid, setRightObjectUid] = useState('');
   const [leftChangedAt, setLeftChangedAt] = useState<number | null>(null);
   const [rightChangedAt, setRightChangedAt] = useState<number | null>(null);
+  const [leftYamlStable, setLeftYamlStable] = useState('');
+  const [rightYamlStable, setRightYamlStable] = useState('');
   const [showDiffOnly, setShowDiffOnly] = useState(false);
   const [selectionSide, setSelectionSide] = useState<'left' | 'right'>('left');
   const [leftNoMatch, setLeftNoMatch] = useState(false);
@@ -438,7 +443,12 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const leftObjectEnabled = leftNamespaceEnabled && Boolean(leftKind);
   const rightObjectEnabled = rightNamespaceEnabled && Boolean(rightKind);
 
-  const leftBaseCatalog = useCatalogDiffSnapshot(leftClusterId, undefined, undefined, leftBaseEnabled);
+  const leftBaseCatalog = useCatalogDiffSnapshot(
+    leftClusterId,
+    undefined,
+    undefined,
+    leftBaseEnabled
+  );
   const rightBaseCatalog = useCatalogDiffSnapshot(
     rightClusterId,
     undefined,
@@ -479,9 +489,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
 
   const leftNamespaceOptions = useMemo(
     () =>
-      buildNamespaceOptions(
-        resolveNamespaceList(leftBasePayload ?? leftNamespacePayload ?? null)
-      ),
+      buildNamespaceOptions(resolveNamespaceList(leftBasePayload ?? leftNamespacePayload ?? null)),
     [leftBasePayload, leftNamespacePayload]
   );
   const rightNamespaceOptions = useMemo(
@@ -523,19 +531,17 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     () => new Map((rightObjectPayload?.items ?? []).map((item) => [item.uid, item])),
     [rightObjectPayload?.items]
   );
-  const leftSelection = leftObjectUid ? leftObjectMap.get(leftObjectUid) ?? null : null;
-  const rightSelection = rightObjectUid ? rightObjectMap.get(rightObjectUid) ?? null : null;
+  const leftSelection = leftObjectUid ? (leftObjectMap.get(leftObjectUid) ?? null) : null;
+  const rightSelection = rightObjectUid ? (rightObjectMap.get(rightObjectUid) ?? null) : null;
 
-  const leftNamespaceLoading =
-    leftBaseEnabled && isSnapshotLoading(leftBaseCatalog.state.status);
+  const leftNamespaceLoading = leftBaseEnabled && isSnapshotLoading(leftBaseCatalog.state.status);
   const rightNamespaceLoading =
     rightBaseEnabled && isSnapshotLoading(rightBaseCatalog.state.status);
   const leftKindLoading =
     leftNamespaceEnabled && isSnapshotLoading(leftNamespaceCatalog.state.status);
   const rightKindLoading =
     rightNamespaceEnabled && isSnapshotLoading(rightNamespaceCatalog.state.status);
-  const leftObjectLoading =
-    leftObjectEnabled && isSnapshotLoading(leftObjectCatalog.state.status);
+  const leftObjectLoading = leftObjectEnabled && isSnapshotLoading(leftObjectCatalog.state.status);
   const rightObjectLoading =
     rightObjectEnabled && isSnapshotLoading(rightObjectCatalog.state.status);
   const leftNamespaceError = leftBaseCatalog.state.error ?? null;
@@ -565,13 +571,17 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const rightYamlPayload = rightYaml.state.data;
   const leftYamlRaw = leftYamlPayload?.yaml ?? '';
   const rightYamlRaw = rightYamlPayload?.yaml ?? '';
+  const leftYamlReady = leftYaml.state.status === 'ready';
+  const rightYamlReady = rightYaml.state.status === 'ready';
+  const leftYamlStableSource = leftYamlStable || leftYamlRaw;
+  const rightYamlStableSource = rightYamlStable || rightYamlRaw;
   const leftYamlNormalized = useMemo(
-    () => (leftYamlRaw ? sanitizeYamlForDiff(leftYamlRaw) : ''),
-    [leftYamlRaw]
+    () => (leftYamlStableSource ? sanitizeYamlForDiff(leftYamlStableSource) : ''),
+    [leftYamlStableSource]
   );
   const rightYamlNormalized = useMemo(
-    () => (rightYamlRaw ? sanitizeYamlForDiff(rightYamlRaw) : ''),
-    [rightYamlRaw]
+    () => (rightYamlStableSource ? sanitizeYamlForDiff(rightYamlStableSource) : ''),
+    [rightYamlStableSource]
   );
   const leftMutedLines = useMemo(
     () => buildIgnoredMetadataLineSet(leftYamlNormalized),
@@ -589,10 +599,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     () => maskMutedMetadataLines(rightYamlNormalized, rightMutedLines),
     [rightMutedLines, rightYamlNormalized]
   );
-  const leftDisplayLines = useMemo(
-    () => leftYamlNormalized.split(/\r?\n/),
-    [leftYamlNormalized]
-  );
+  const leftDisplayLines = useMemo(() => leftYamlNormalized.split(/\r?\n/), [leftYamlNormalized]);
   const rightDisplayLines = useMemo(
     () => rightYamlNormalized.split(/\r?\n/),
     [rightYamlNormalized]
@@ -627,12 +634,34 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   useEffect(() => {
     leftChecksumRef.current = null;
     setLeftChangedAt(null);
+    setLeftYamlStable('');
   }, [leftObjectUid]);
 
   useEffect(() => {
     rightChecksumRef.current = null;
     setRightChangedAt(null);
+    setRightYamlStable('');
   }, [rightObjectUid]);
+
+  useEffect(() => {
+    if (leftYamlRaw.trim()) {
+      setLeftYamlStable(leftYamlRaw);
+      return;
+    }
+    if (leftYamlReady && !leftYamlRaw.trim()) {
+      setLeftYamlStable('');
+    }
+  }, [leftYamlRaw, leftYamlReady]);
+
+  useEffect(() => {
+    if (rightYamlRaw.trim()) {
+      setRightYamlStable(rightYamlRaw);
+      return;
+    }
+    if (rightYamlReady && !rightYamlRaw.trim()) {
+      setRightYamlStable('');
+    }
+  }, [rightYamlRaw, rightYamlReady]);
 
   // Resolve pending match requests after the opposite side loads its object list.
   useEffect(() => {
@@ -657,7 +686,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
           ? !item.namespace
           : item.namespace?.toLowerCase() === pendingRightMatch.namespace.toLowerCase();
       return (
-        namespaceMatch && item.kind === pendingRightMatch.kind && item.name === pendingRightMatch.name
+        namespaceMatch &&
+        item.kind === pendingRightMatch.kind &&
+        item.name === pendingRightMatch.name
       );
     });
 
@@ -896,7 +927,9 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     const leftNumber =
       line.leftLineNumber !== null && line.leftLineNumber !== undefined ? line.leftLineNumber : '';
     const rightNumber =
-      line.rightLineNumber !== null && line.rightLineNumber !== undefined ? line.rightLineNumber : '';
+      line.rightLineNumber !== null && line.rightLineNumber !== undefined
+        ? line.rightLineNumber
+        : '';
     const leftType = line.leftType;
     const rightType = line.rightType;
     const leftTitle = leftText || undefined;
@@ -1213,9 +1246,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                 />
               </div>
               {rightCatalogError && (
-                <div className="object-diff-error-message">
-                  Catalog error: {rightCatalogError}
-                </div>
+                <div className="object-diff-error-message">Catalog error: {rightCatalogError}</div>
               )}
             </div>
           </div>
@@ -1224,7 +1255,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
             <div className="object-diff-viewer-header">
               <div className="object-diff-viewer-header-row">
                 <div className="object-diff-viewer-title-group">
-                  <div className="object-diff-viewer-title">YAML Diff</div>
+                  <div className="object-diff-viewer-title">Diff Viewer</div>
                   <span
                     className="object-diff-info-indicator"
                     title="Ignored fields: metadata.managedFields. Muted fields: metadata.resourceVersion, metadata.creationTimestamp, metadata.uid."
