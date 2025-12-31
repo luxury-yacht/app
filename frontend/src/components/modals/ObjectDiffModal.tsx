@@ -21,6 +21,7 @@ import {
   computeLineDiff,
   type DiffLine,
   type DiffResult,
+  type DiffLineType,
 } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlDiff';
 import {
   buildIgnoredMetadataLineSet,
@@ -104,6 +105,72 @@ const isSnapshotLoading = (status: string) =>
 const formatChangeAge = (timestamp: number): string => {
   const age = formatAge(timestamp);
   return age === 'now' ? 'just now' : `${age} ago`;
+};
+
+type DisplayDiffLine = DiffLine & {
+  leftType: DiffLineType;
+  rightType: DiffLineType;
+};
+
+// Merge adjacent remove/add blocks so modifications display on a single row.
+const mergeDiffLines = (lines: DiffLine[]): DisplayDiffLine[] => {
+  const merged: DisplayDiffLine[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line.type === 'context') {
+      merged.push({
+        ...line,
+        leftType: 'context',
+        rightType: 'context',
+      });
+      continue;
+    }
+
+    const removed: DiffLine[] = [];
+    const added: DiffLine[] = [];
+    while (i < lines.length && lines[i].type !== 'context') {
+      if (lines[i].type === 'removed') {
+        removed.push(lines[i]);
+      } else {
+        added.push(lines[i]);
+      }
+      i += 1;
+    }
+
+    const maxCount = Math.max(removed.length, added.length);
+    for (let idx = 0; idx < maxCount; idx += 1) {
+      const removedLine = removed[idx];
+      const addedLine = added[idx];
+      if (removedLine && addedLine) {
+        merged.push({
+          type: 'context',
+          value: '',
+          leftLineNumber: removedLine.leftLineNumber,
+          rightLineNumber: addedLine.rightLineNumber,
+          leftType: 'removed',
+          rightType: 'added',
+        });
+      } else if (removedLine) {
+        merged.push({
+          ...removedLine,
+          leftType: 'removed',
+          rightType: 'context',
+        });
+      } else if (addedLine) {
+        merged.push({
+          ...addedLine,
+          leftType: 'context',
+          rightType: 'added',
+        });
+      }
+    }
+
+    if (i < lines.length && lines[i].type === 'context') {
+      i -= 1;
+    }
+  }
+
+  return merged;
 };
 
 const buildObjectOptions = (items: CatalogItem[]): DropdownOption[] =>
@@ -481,6 +548,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   }, [leftMaskedYaml, rightMaskedYaml]);
 
   const diffLines = diffResult?.lines ?? [];
+  const displayDiffLines = useMemo(() => mergeDiffLines(diffLines), [diffLines]);
   const diffTruncated = diffResult?.truncated ?? false;
   const leftYamlError = leftYaml.state.error ?? null;
   const rightYamlError = rightYaml.state.error ?? null;
@@ -612,17 +680,15 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     return lines[lineNumber - 1] ?? '';
   };
 
-  const renderDiffRow = (line: DiffLine, index: number) => {
-    const leftText =
-      line.type === 'added' ? '' : getLineText(leftDisplayLines, line.leftLineNumber);
-    const rightText =
-      line.type === 'removed' ? '' : getLineText(rightDisplayLines, line.rightLineNumber);
+  const renderDiffRow = (line: DisplayDiffLine, index: number) => {
+    const leftText = getLineText(leftDisplayLines, line.leftLineNumber);
+    const rightText = getLineText(rightDisplayLines, line.rightLineNumber);
     const leftNumber =
       line.leftLineNumber !== null && line.leftLineNumber !== undefined ? line.leftLineNumber : '';
     const rightNumber =
       line.rightLineNumber !== null && line.rightLineNumber !== undefined ? line.rightLineNumber : '';
-    const leftType = line.type === 'added' ? 'context' : line.type;
-    const rightType = line.type === 'removed' ? 'context' : line.type;
+    const leftType = line.leftType;
+    const rightType = line.rightType;
     const leftTitle = leftText || undefined;
     const rightTitle = rightText || undefined;
 
@@ -700,7 +766,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
       );
     }
 
-    return <div className="object-diff-table">{diffLines.map(renderDiffRow)}</div>;
+    return <div className="object-diff-table">{displayDiffLines.map(renderDiffRow)}</div>;
   };
 
   if (!shouldRender) return null;
