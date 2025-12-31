@@ -320,6 +320,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const rightChecksumRef = useRef<string | null>(null);
   const leftNoMatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rightNoMatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const diffTableRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const useShortNamesSetting = useShortNames();
 
@@ -839,6 +840,36 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     return lines[lineNumber - 1] ?? '';
   };
 
+  const selectSideText = (side: 'left' | 'right') => {
+    const table = diffTableRef.current;
+    if (!table) {
+      return;
+    }
+    const selector =
+      side === 'left'
+        ? '.object-diff-cell-left .object-diff-line-text'
+        : '.object-diff-cell-right .object-diff-line-text';
+    const nodes = Array.from(table.querySelectorAll<HTMLElement>(selector));
+    if (nodes.length === 0) {
+      return;
+    }
+    const selection = window.getSelection();
+    if (!selection) {
+      return;
+    }
+    const firstNode = nodes[0].firstChild ?? nodes[0];
+    const lastNode = nodes[nodes.length - 1].firstChild ?? nodes[nodes.length - 1];
+    const range = document.createRange();
+    range.setStart(firstNode, 0);
+    if (lastNode.nodeType === Node.TEXT_NODE) {
+      range.setEnd(lastNode, lastNode.textContent?.length ?? 0);
+    } else {
+      range.setEnd(lastNode, lastNode.childNodes.length);
+    }
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
+
   const renderDiffRow = (line: DisplayDiffLine, index: number) => {
     const leftText = getLineText(leftDisplayLines, line.leftLineNumber);
     const rightText = getLineText(rightDisplayLines, line.rightLineNumber);
@@ -928,6 +959,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     return (
       <div
         className={`object-diff-table selection-${selectionSide}`}
+        ref={diffTableRef}
         onMouseDown={(event) => {
           const target = event.target as HTMLElement | null;
           if (target?.closest('.object-diff-cell-left')) {
@@ -937,6 +969,23 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
           if (target?.closest('.object-diff-cell-right')) {
             flushSync(() => setSelectionSide('right'));
           }
+        }}
+        onClick={(event) => {
+          if (event.detail !== 3) {
+            return;
+          }
+          const target = event.target as HTMLElement | null;
+          const side = target?.closest('.object-diff-cell-left')
+            ? 'left'
+            : target?.closest('.object-diff-cell-right')
+              ? 'right'
+              : null;
+          if (!side) {
+            return;
+          }
+          event.preventDefault();
+          flushSync(() => setSelectionSide(side));
+          selectSideText(side);
         }}
       >
         {displayDiffLines.map(renderDiffRow)}
