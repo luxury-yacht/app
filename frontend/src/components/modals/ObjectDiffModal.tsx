@@ -1064,7 +1064,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
             onClick={onClose}
             aria-label="Close object diff"
           >
-            x
+            ×
           </button>
         </div>
         <div className="modal-content object-diff-modal-content">
