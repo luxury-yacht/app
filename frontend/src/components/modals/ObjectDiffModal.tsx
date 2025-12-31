@@ -38,6 +38,12 @@ interface ObjectDiffModalProps {
   onClose: () => void;
 }
 
+interface MatchRequest {
+  namespace: string;
+  kind: string;
+  name: string;
+}
+
 const CATALOG_QUERY_LIMIT = 200;
 const CLUSTER_SCOPE_LABEL = 'cluster-scoped';
 const NAMESPACE_SEPARATOR_VALUE = '__namespace-separator__';
@@ -105,6 +111,11 @@ const isSnapshotLoading = (status: string) =>
 const formatChangeAge = (timestamp: number): string => {
   const age = formatAge(timestamp);
   return age === 'now' ? 'just now' : `${age} ago`;
+};
+
+const normalizeMatchNamespace = (namespace?: string | null): string => {
+  const trimmed = namespace?.trim();
+  return trimmed ? trimmed : CLUSTER_SCOPE;
 };
 
 type DisplayDiffLine = DiffLine & {
@@ -297,10 +308,16 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const [rightObjectUid, setRightObjectUid] = useState('');
   const [leftChangedAt, setLeftChangedAt] = useState<number | null>(null);
   const [rightChangedAt, setRightChangedAt] = useState<number | null>(null);
+  const [leftNoMatch, setLeftNoMatch] = useState(false);
+  const [rightNoMatch, setRightNoMatch] = useState(false);
+  const [pendingLeftMatch, setPendingLeftMatch] = useState<MatchRequest | null>(null);
+  const [pendingRightMatch, setPendingRightMatch] = useState<MatchRequest | null>(null);
   const { pushContext, popContext } = useKeyboardContext();
   const contextPushedRef = useRef(false);
   const leftChecksumRef = useRef<string | null>(null);
   const rightChecksumRef = useRef<string | null>(null);
+  const leftNoMatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rightNoMatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const useShortNamesSetting = useShortNames();
 
@@ -368,6 +385,18 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
       setRightClusterId(selectedClusterId);
     }
   }, [isOpen, leftClusterId, rightClusterId, selectedClusterId]);
+
+  useEffect(
+    () => () => {
+      if (leftNoMatchTimerRef.current) {
+        clearTimeout(leftNoMatchTimerRef.current);
+      }
+      if (rightNoMatchTimerRef.current) {
+        clearTimeout(rightNoMatchTimerRef.current);
+      }
+    },
+    []
+  );
 
   useShortcut({
     key: 'Escape',
@@ -501,6 +530,18 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const leftCatalogError = leftObjectError ?? leftKindError ?? leftNamespaceError;
   const rightCatalogError = rightObjectError ?? rightKindError ?? rightNamespaceError;
 
+  const showNoMatch = (side: 'left' | 'right') => {
+    const setMessage = side === 'left' ? setLeftNoMatch : setRightNoMatch;
+    const timerRef = side === 'left' ? leftNoMatchTimerRef : rightNoMatchTimerRef;
+    setMessage(true);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+    timerRef.current = setTimeout(() => {
+      setMessage(false);
+    }, 2000);
+  };
+
   const leftYaml = useObjectYamlSnapshot(leftSelection, isOpen);
   const rightYaml = useObjectYamlSnapshot(rightSelection, isOpen);
   const leftYamlPayload = leftYaml.state.data;
@@ -569,6 +610,90 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     rightChecksumRef.current = null;
     setRightChangedAt(null);
   }, [rightObjectUid]);
+
+  // Resolve pending match requests after the opposite side loads its object list.
+  useEffect(() => {
+    if (!pendingRightMatch || !rightObjectEnabled) {
+      return;
+    }
+    if (rightNamespace !== pendingRightMatch.namespace || rightKind !== pendingRightMatch.kind) {
+      return;
+    }
+    if (rightObjectCatalog.state.status === 'error') {
+      showNoMatch('right');
+      setPendingRightMatch(null);
+      return;
+    }
+    if (rightObjectCatalog.state.status !== 'ready') {
+      return;
+    }
+
+    const match = (rightObjectPayload?.items ?? []).find((item) => {
+      const namespaceMatch =
+        pendingRightMatch.namespace === CLUSTER_SCOPE
+          ? !item.namespace
+          : item.namespace?.toLowerCase() === pendingRightMatch.namespace.toLowerCase();
+      return (
+        namespaceMatch && item.kind === pendingRightMatch.kind && item.name === pendingRightMatch.name
+      );
+    });
+
+    if (match) {
+      setRightObjectUid(match.uid);
+    } else {
+      showNoMatch('right');
+    }
+    setPendingRightMatch(null);
+  }, [
+    pendingRightMatch,
+    rightKind,
+    rightNamespace,
+    rightObjectCatalog.state.status,
+    rightObjectEnabled,
+    rightObjectPayload?.items,
+  ]);
+
+  // Resolve pending match requests after the opposite side loads its object list.
+  useEffect(() => {
+    if (!pendingLeftMatch || !leftObjectEnabled) {
+      return;
+    }
+    if (leftNamespace !== pendingLeftMatch.namespace || leftKind !== pendingLeftMatch.kind) {
+      return;
+    }
+    if (leftObjectCatalog.state.status === 'error') {
+      showNoMatch('left');
+      setPendingLeftMatch(null);
+      return;
+    }
+    if (leftObjectCatalog.state.status !== 'ready') {
+      return;
+    }
+
+    const match = (leftObjectPayload?.items ?? []).find((item) => {
+      const namespaceMatch =
+        pendingLeftMatch.namespace === CLUSTER_SCOPE
+          ? !item.namespace
+          : item.namespace?.toLowerCase() === pendingLeftMatch.namespace.toLowerCase();
+      return (
+        namespaceMatch && item.kind === pendingLeftMatch.kind && item.name === pendingLeftMatch.name
+      );
+    });
+
+    if (match) {
+      setLeftObjectUid(match.uid);
+    } else {
+      showNoMatch('left');
+    }
+    setPendingLeftMatch(null);
+  }, [
+    leftKind,
+    leftNamespace,
+    leftObjectCatalog.state.status,
+    leftObjectEnabled,
+    leftObjectPayload?.items,
+    pendingLeftMatch,
+  ]);
 
   // Surface change events without clearing the existing diff view.
   useEffect(() => {
@@ -671,6 +796,38 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
       return;
     }
     setRightObjectUid(value);
+  };
+
+  const handleLeftMatch = () => {
+    if (!leftSelection) {
+      return;
+    }
+    const namespace = normalizeMatchNamespace(leftSelection.namespace);
+    setRightNamespace(namespace);
+    setRightKind(leftSelection.kind);
+    setRightObjectUid('');
+    setRightNoMatch(false);
+    setPendingRightMatch({
+      namespace,
+      kind: leftSelection.kind,
+      name: leftSelection.name,
+    });
+  };
+
+  const handleRightMatch = () => {
+    if (!rightSelection) {
+      return;
+    }
+    const namespace = normalizeMatchNamespace(rightSelection.namespace);
+    setLeftNamespace(namespace);
+    setLeftKind(rightSelection.kind);
+    setLeftObjectUid('');
+    setLeftNoMatch(false);
+    setPendingLeftMatch({
+      namespace,
+      kind: rightSelection.kind,
+      name: rightSelection.name,
+    });
   };
 
   const getLineText = (lines: string[], lineNumber?: number | null): string => {
@@ -796,15 +953,26 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
             <div className="object-diff-selector">
               <div className="object-diff-selector-header">
                 <span className="object-diff-selector-title">Left</span>
-                <button
-                  type="button"
-                  className="button generic object-diff-clear"
-                  onClick={() => setLeftObjectUid('')}
-                  disabled={!leftSelection}
-                >
-                  Clear
-                </button>
+                <div className="object-diff-selector-actions">
+                  <button
+                    type="button"
+                    className="button generic object-diff-match"
+                    onClick={handleLeftMatch}
+                    disabled={!leftSelection}
+                  >
+                    Match
+                  </button>
+                  <button
+                    type="button"
+                    className="button generic object-diff-clear"
+                    onClick={() => setLeftObjectUid('')}
+                    disabled={!leftSelection}
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
+              {leftNoMatch && <div className="object-diff-match-message">No match found</div>}
               <div className="object-diff-field">
                 <label className="object-diff-label" htmlFor="object-diff-left-cluster">
                   Cluster
@@ -875,15 +1043,26 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
             <div className="object-diff-selector">
               <div className="object-diff-selector-header">
                 <span className="object-diff-selector-title">Right</span>
-                <button
-                  type="button"
-                  className="button generic object-diff-clear"
-                  onClick={() => setRightObjectUid('')}
-                  disabled={!rightSelection}
-                >
-                  Clear
-                </button>
+                <div className="object-diff-selector-actions">
+                  <button
+                    type="button"
+                    className="button generic object-diff-match"
+                    onClick={handleRightMatch}
+                    disabled={!rightSelection}
+                  >
+                    Match
+                  </button>
+                  <button
+                    type="button"
+                    className="button generic object-diff-clear"
+                    onClick={() => setRightObjectUid('')}
+                    disabled={!rightSelection}
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
+              {rightNoMatch && <div className="object-diff-match-message">No match found</div>}
               <div className="object-diff-field">
                 <label className="object-diff-label" htmlFor="object-diff-right-cluster">
                   Cluster

@@ -50,6 +50,12 @@
   justify-content: space-between;
 }
 
+.object-diff-selector-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
 .object-diff-selector-title {
   font-weight: var(--font-weight-bold);
   color: var(--color-text);
@@ -58,6 +64,15 @@
 
 .object-diff-clear {
   font-size: var(--font-size-sm);
+}
+
+.object-diff-match {
+  font-size: var(--font-size-sm);
+}
+
+.object-diff-match-message {
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
 }
 
 .object-diff-label {
