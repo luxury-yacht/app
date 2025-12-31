@@ -301,10 +301,36 @@ describe('GlobalShortcuts', () => {
     await renderComponent({ onToggleDiagnostics: toggleDiagnostics });
 
     act(() => {
-      findShortcut('d').handler();
+      findShortcut('d', { ctrl: true, shift: true }).handler();
     });
 
     expect(toggleDiagnostics).toHaveBeenCalledTimes(1);
+  });
+
+  it('toggles object diff viewer via Cmd+D shortcut', async () => {
+    const toggleDiff = vi.fn();
+    isMacPlatformMock.mockReturnValue(true);
+    registeredShortcuts.length = 0;
+    await renderComponent({ onToggleObjectDiff: toggleDiff });
+
+    act(() => {
+      findShortcut('d', { meta: true }).handler();
+    });
+
+    expect(toggleDiff).toHaveBeenCalledTimes(1);
+  });
+
+  it('toggles object diff viewer via Ctrl+D shortcut', async () => {
+    const toggleDiff = vi.fn();
+    isMacPlatformMock.mockReturnValue(false);
+    registeredShortcuts.length = 0;
+    await renderComponent({ onToggleObjectDiff: toggleDiff });
+
+    act(() => {
+      findShortcut('d', { ctrl: true }).handler();
+    });
+
+    expect(toggleDiff).toHaveBeenCalledTimes(1);
   });
 
   it('invokes settings toggle when Cmd+, shortcut fires', async () => {

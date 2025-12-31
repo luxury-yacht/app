@@ -259,6 +259,23 @@
   user-select: none;
 }
 
+.dropdown-separator {
+  padding: 0;
+  margin: 4px 0;
+  border-top: 1px solid var(--color-border);
+  border-bottom: none;
+  background-color: transparent;
+}
+
+.dropdown-separator:not(:first-child) {
+  border-top: 1px solid var(--color-border);
+  margin-top: 4px;
+}
+
+.dropdown-separator .group-header-label {
+  display: none;
+}
+
 .dropdown-group-header:hover {
   background-color: var(--color-bg-secondary);
 }

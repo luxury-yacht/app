@@ -490,6 +490,14 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		}); err != nil {
 			return nil, err
 		}
+		// Use a separate catalog domain for the diff viewer to avoid scope collisions with Browse.
+		if err := snapshot.RegisterCatalogDiffDomain(registry, snapshot.CatalogConfig{
+			CatalogService:  cfg.ObjectCatalogService,
+			NamespaceGroups: cfg.ObjectCatalogNamespaces,
+			Logger:          cfg.Logger,
+		}); err != nil {
+			return nil, err
+		}
 	}
 
 	snapshotService := snapshot.NewService(registry, telemetryRecorder, clusterMeta)

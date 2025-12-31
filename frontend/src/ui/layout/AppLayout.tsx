@@ -48,6 +48,10 @@ const AboutModal = withLazyBoundary(
   () => import('@/components/modals/AboutModal'),
   'Loading about...'
 );
+const ObjectDiffModal = withLazyBoundary(
+  () => import('@/components/modals/ObjectDiffModal'),
+  'Loading diff viewer...'
+);
 const AppLogsPanel = withLazyBoundary(
   () => import('@/components/content/AppLogsPanel/AppLogsPanel'),
   'Loading app logs panel...'
@@ -283,6 +287,15 @@ export const AppLayout: React.FC = () => {
 
         <PanelErrorBoundary onClose={handleAboutClose} panelName="about">
           <AboutModal isOpen={viewState.isAboutOpen} onClose={handleAboutClose} />
+        </PanelErrorBoundary>
+        <PanelErrorBoundary
+          onClose={() => viewState.setIsObjectDiffOpen(false)}
+          panelName="object-diff"
+        >
+          <ObjectDiffModal
+            isOpen={viewState.isObjectDiffOpen}
+            onClose={() => viewState.setIsObjectDiffOpen(false)}
+          />
         </PanelErrorBoundary>
         <ErrorNotificationSystem />
         <CommandPalette commands={commands} />

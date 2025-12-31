@@ -73,6 +73,7 @@ export const DOMAIN_REFRESHER_MAP: Partial<Record<RefreshDomain, RefresherName>>
   'cluster-custom': CLUSTER_REFRESHERS.custom,
   'cluster-events': CLUSTER_REFRESHERS.events,
   catalog: CLUSTER_REFRESHERS.browse,
+  'catalog-diff': CLUSTER_REFRESHERS.catalogDiff,
   'cluster-rbac': CLUSTER_REFRESHERS.rbac,
   'cluster-storage': CLUSTER_REFRESHERS.storage,
   'namespace-workloads': NAMESPACE_REFRESHERS.workloads,

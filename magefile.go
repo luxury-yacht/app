@@ -282,6 +282,12 @@ func (QC) Reset() error {
 	return nil
 }
 
+// Runs all checks that could cause a release to fail.
+func (QC) PreRelease() error {
+	mg.SerialDeps(QC.Vet, Test.Backend, QC.LintFix, QC.Lint, QC.Typecheck, Test.Frontend, QC.Trivy)
+	return nil
+}
+
 // ===============================
 // Test Tasks
 // ===============================
@@ -310,8 +316,7 @@ func (Test) Frontend() error {
 	if err := isNpmInstalled(); err != nil {
 		return err
 	}
-	os.Chdir(cfg.FrontendDir)
-	return sh.RunV("npm", "run", "test")
+	return sh.RunV("npm", "run", "test", "--prefix", cfg.FrontendDir)
 }
 
 // Runs frontend tests with coverage
@@ -320,8 +325,7 @@ func (Test) FrontendCoverage() error {
 	if err := isNpmInstalled(); err != nil {
 		return err
 	}
-	os.Chdir(cfg.FrontendDir)
-	return sh.RunV("npm", "run", "test", "--", "--coverage")
+	return sh.RunV("npm", "run", "test", "--prefix", cfg.FrontendDir, "--", "--coverage")
 }
 
 // Runs all tests

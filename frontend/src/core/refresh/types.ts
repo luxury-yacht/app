@@ -567,6 +567,7 @@ export type RefreshDomain =
   | 'cluster-custom'
   | 'cluster-events'
   | 'catalog'
+  | 'catalog-diff'
   | 'namespace-workloads'
   | 'namespace-config'
   | 'namespace-network'
@@ -597,6 +598,7 @@ export interface DomainPayloadMap {
   'cluster-custom': ClusterCustomSnapshotPayload;
   'cluster-events': ClusterEventsSnapshotPayload;
   catalog: CatalogSnapshotPayload;
+  'catalog-diff': CatalogSnapshotPayload;
   'namespace-workloads': NamespaceWorkloadSnapshotPayload;
   'namespace-config': NamespaceConfigSnapshotPayload;
   'namespace-network': NamespaceNetworkSnapshotPayload;

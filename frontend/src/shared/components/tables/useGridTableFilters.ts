@@ -154,9 +154,9 @@ export function useGridTableFilters<T>({
     const kindMap = new Map<string, DropdownOption>();
     const namespaceMap = new Map<string, DropdownOption>();
     const includeClusterScoped = filters?.options?.includeClusterScopedSyntheticNamespace ?? false;
-    if (includeClusterScoped) {
-      namespaceMap.set('', { value: '', label: 'cluster-scoped' });
-    }
+    const clusterScopedOption = includeClusterScoped
+      ? ({ value: '', label: 'cluster-scoped' } satisfies DropdownOption)
+      : null;
 
     const addKind = (raw: string | null | undefined) => {
       if (typeof raw !== 'string') {
@@ -175,9 +175,6 @@ export function useGridTableFilters<T>({
     const addNamespace = (raw: string | null | undefined) => {
       const value = typeof raw === 'string' ? raw.trim() : '';
       if (!value || value === '—') {
-        if (includeClusterScoped) {
-          namespaceMap.set('', { value: '', label: 'cluster-scoped' });
-        }
         return;
       }
       const lower = value.toLowerCase();
@@ -208,11 +205,28 @@ export function useGridTableFilters<T>({
     const namespaces = Array.from(namespaceMap.values()).sort((a, b) =>
       a.label.localeCompare(b.label)
     );
+    // Insert a non-selectable separator only when the cluster-scoped option is shown.
+    const namespaceSeparator =
+      clusterScopedOption && namespaces.length > 0
+        ? ({
+            value: '__namespace-separator__',
+            label: '',
+            group: 'header',
+          } satisfies DropdownOption)
+        : null;
+    const namespaceOptions: DropdownOption[] = [];
+    if (clusterScopedOption) {
+      namespaceOptions.push(clusterScopedOption);
+    }
+    if (namespaceSeparator) {
+      namespaceOptions.push(namespaceSeparator);
+    }
+    namespaceOptions.push(...namespaces);
 
     return {
       searchPlaceholder,
       kinds,
-      namespaces,
+      namespaces: namespaceOptions,
       customActions,
     };
   }, [

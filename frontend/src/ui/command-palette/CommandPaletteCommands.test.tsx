@@ -23,6 +23,7 @@ const { mocks } = vi.hoisted(() => ({
     viewState: {
       setIsAboutOpen: vi.fn(),
       setIsSettingsOpen: vi.fn(),
+      setIsObjectDiffOpen: vi.fn(),
       onClusterObjectsClick: vi.fn(),
       setActiveClusterView: vi.fn(),
       navigateToNamespace: vi.fn(),

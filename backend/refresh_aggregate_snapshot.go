@@ -144,7 +144,7 @@ func (s *aggregateSnapshotService) resolveTargets(domain string, clusterIDs []st
 // isSingleClusterDomain restricts object-scoped and catalog domains to one cluster for now.
 func isSingleClusterDomain(domain string) bool {
 	switch domain {
-	case "catalog", "node-maintenance":
+	case "catalog", "catalog-diff", "node-maintenance":
 		return true
 	default:
 		return strings.HasPrefix(domain, "object-")

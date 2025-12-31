@@ -74,6 +74,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const clusterStorageDomain = useRefreshDomain('cluster-storage');
   const clusterEventsDomain = useRefreshDomain('cluster-events');
   const catalogDomain = useRefreshDomain('catalog');
+  const catalogDiffDomain = useRefreshDomain('catalog-diff');
   const namespaceWorkloadsDomain = useRefreshDomain('namespace-workloads');
   const namespaceAutoscalingDomain = useRefreshDomain('namespace-autoscaling');
   const namespaceConfigDomain = useRefreshDomain('namespace-config');
@@ -192,6 +193,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         state: catalogDomain,
       },
       {
+        domain: 'catalog-diff' as RefreshDomain,
+        label: 'Diff Catalog',
+        state: catalogDiffDomain,
+      },
+      {
         domain: 'cluster-rbac' as RefreshDomain,
         label: 'Cluster RBAC',
         state: clusterRBACDomain,
@@ -258,6 +264,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       nodeDomain,
       nodeMaintenanceDomain,
       catalogDomain,
+      catalogDiffDomain,
       clusterCRDDomain,
       clusterCustomDomain,
       clusterConfigDomain,

@@ -14,7 +14,10 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/logstream"
 )
 
-const catalogDomain = "catalog"
+const (
+	catalogDomain     = "catalog"
+	catalogDiffDomain = "catalog-diff"
+)
 
 // CatalogConfig wires dependencies for the catalog browse domain.
 type CatalogConfig struct {
@@ -48,6 +51,7 @@ type CatalogNamespaceGroup struct {
 }
 
 type catalogBuilder struct {
+	domain          string
 	catalogService  func() *objectcatalog.Service
 	namespaceGroups func() []CatalogNamespaceGroup
 	logger          logstream.Logger
@@ -63,6 +67,15 @@ type browseQueryOptions struct {
 
 // RegisterCatalogDomain registers the catalog browse domain with the registry.
 func RegisterCatalogDomain(reg *domain.Registry, cfg CatalogConfig) error {
+	return registerCatalogDomain(reg, cfg, catalogDomain)
+}
+
+// RegisterCatalogDiffDomain registers the catalog domain used by the diff viewer.
+func RegisterCatalogDiffDomain(reg *domain.Registry, cfg CatalogConfig) error {
+	return registerCatalogDomain(reg, cfg, catalogDiffDomain)
+}
+
+func registerCatalogDomain(reg *domain.Registry, cfg CatalogConfig, name string) error {
 	if reg == nil {
 		return errors.New("domain registry is required")
 	}
@@ -71,13 +84,14 @@ func RegisterCatalogDomain(reg *domain.Registry, cfg CatalogConfig) error {
 	}
 
 	builder := &catalogBuilder{
+		domain:          name,
 		catalogService:  cfg.CatalogService,
 		namespaceGroups: cfg.NamespaceGroups,
 		logger:          cfg.Logger,
 	}
 
 	return reg.Register(refresh.DomainConfig{
-		Name:          catalogDomain,
+		Name:          name,
 		BuildSnapshot: builder.Build,
 	})
 }
@@ -126,7 +140,7 @@ func (b *catalogBuilder) Build(ctx context.Context, scope string) (*refresh.Snap
 	}
 
 	snapshot := &refresh.Snapshot{
-		Domain:  catalogDomain,
+		Domain:  b.domain,
 		Scope:   scope,
 		Version: uint64(time.Now().UnixNano()),
 		Payload: payload,

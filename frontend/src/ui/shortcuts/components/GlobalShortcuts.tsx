@@ -22,6 +22,7 @@ interface GlobalShortcutsProps {
   onToggleSidebar?: () => void;
   onToggleLogsPanel?: () => void;
   onToggleSettings?: () => void;
+  onToggleObjectDiff?: () => void;
   onRefresh?: () => void;
   onToggleDiagnostics?: () => void;
   viewType?: string;
@@ -34,6 +35,7 @@ export function GlobalShortcuts({
   onToggleSidebar,
   onToggleLogsPanel,
   onToggleSettings,
+  onToggleObjectDiff,
   onRefresh,
   onToggleDiagnostics,
   viewType,
@@ -113,6 +115,12 @@ export function GlobalShortcuts({
       onToggleSettings?.();
     }
   }, [onToggleSettings, isHelpOpen, isModalAnimating]);
+
+  const handleToggleObjectDiff = useCallback(() => {
+    if (!isHelpOpen && !isModalAnimating) {
+      onToggleObjectDiff?.();
+    }
+  }, [onToggleObjectDiff, isHelpOpen, isModalAnimating]);
 
   const handleToggleDiagnostics = useCallback(() => {
     onToggleDiagnostics?.();
@@ -266,6 +274,16 @@ export function GlobalShortcuts({
     description: 'Toggle settings',
     category: 'Global',
     enabled: !!onToggleSettings,
+    view: 'global',
+  });
+
+  useShortcut({
+    key: 'd',
+    modifiers: macPlatform ? { meta: true } : { ctrl: true },
+    handler: handleToggleObjectDiff,
+    description: 'Toggle object diff viewer',
+    category: 'Global',
+    enabled: !!onToggleObjectDiff,
     view: 'global',
   });
 
