@@ -111,8 +111,7 @@ const buildSelectionLabel = (item: CatalogItem | null, useShortNames: boolean): 
   return `${scopePrefix} (${kindLabel})`;
 };
 
-const isSnapshotLoading = (status: string) =>
-  status === 'loading' || status === 'initialising' || status === 'updating';
+const isSnapshotLoading = (status: string) => status === 'loading' || status === 'initialising';
 
 // Format a concise, user-friendly age label for change notifications.
 const formatChangeAge = (timestamp: number): string => {
