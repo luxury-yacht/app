@@ -110,6 +110,16 @@ export function useCommandPaletteCommands() {
         shortcut: ['⌘', ','],
       },
       {
+        id: 'open-object-diff',
+        label: 'Diff Objects',
+        description: 'Compare Kubernetes objects in a side-by-side YAML diff',
+        category: 'Application',
+        action: () => {
+          viewState.setIsObjectDiffOpen(true);
+        },
+        keywords: ['diff', 'compare', 'yaml', 'objects', 'kubernetes'],
+      },
+      {
         id: 'reset-all-gridtable-state',
         label: 'Reset All Views',
         description: 'Clear all persisted GridTable state (columns, sort, filters)',

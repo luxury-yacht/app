@@ -42,6 +42,7 @@ const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
   [CLUSTER_REFRESHERS.custom]: { interval: 15000, cooldown: 1000, timeout: 60 },
   [CLUSTER_REFRESHERS.events]: { interval: 3000, cooldown: 1000, timeout: 10 },
   [CLUSTER_REFRESHERS.browse]: { interval: 15000, cooldown: 1500, timeout: 30 },
+  [CLUSTER_REFRESHERS.catalogDiff]: { interval: 15000, cooldown: 1500, timeout: 30 },
 
   [SYSTEM_REFRESHERS.namespaces]: { interval: 2000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.clusterOverview]: { interval: 10000, cooldown: 1000, timeout: 10 },

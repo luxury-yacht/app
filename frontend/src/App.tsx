@@ -135,6 +135,7 @@ function AppContent() {
         onToggleSidebar={viewState.toggleSidebar}
         onToggleLogsPanel={handleToggleAppLogsPanel}
         onToggleSettings={() => viewState.setIsSettingsOpen(!viewState.isSettingsOpen)}
+        onToggleObjectDiff={() => viewState.setIsObjectDiffOpen(!viewState.isObjectDiffOpen)}
         onRefresh={handleManualRefresh}
         onToggleDiagnostics={handleToggleDiagnostics}
         viewType={viewState.viewType}

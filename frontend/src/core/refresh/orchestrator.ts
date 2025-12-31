@@ -1407,6 +1407,7 @@ class RefreshOrchestrator {
 
 export const refreshOrchestrator = new RefreshOrchestrator();
 
+// Dedicated scoped catalog domain for the diff viewer to keep Browse scopes isolated.
 refreshOrchestrator.registerDomain({
   domain: 'namespaces',
   refresherName: SYSTEM_REFRESHERS.namespaces,
@@ -1511,6 +1512,14 @@ refreshOrchestrator.registerDomain({
   // Avoid using the catalog SSE stream because frequent store updates can trigger
   // nested `useSyncExternalStore` rerenders and trip React's update-depth guard.
   scopeResolver: () => refreshOrchestrator.getDomainScope('catalog') ?? 'limit=200',
+});
+
+refreshOrchestrator.registerDomain({
+  domain: 'catalog-diff',
+  refresherName: CLUSTER_REFRESHERS.catalogDiff,
+  category: 'cluster',
+  scoped: true,
+  autoStart: false,
 });
 
 refreshOrchestrator.registerDomain({

@@ -30,6 +30,7 @@ const CLUSTER_REFRESHERS = {
   custom: 'cluster-custom',
   events: 'cluster-events',
   browse: 'catalog',
+  catalogDiff: 'catalog-diff',
 } as const;
 
 const SYSTEM_REFRESHERS = {

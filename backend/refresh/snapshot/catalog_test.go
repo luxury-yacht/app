@@ -59,6 +59,7 @@ func TestCatalogBuildUsesCatalogOnly(t *testing.T) {
 	svc := seedCatalogService(t, summaries)
 
 	builder := &catalogBuilder{
+		domain:         catalogDomain,
 		catalogService: func() *objectcatalog.Service { return svc },
 	}
 
@@ -145,6 +146,7 @@ func TestCatalogBuildPreservesContinueWhenCachesReady(t *testing.T) {
 	markCatalogCachesReady(t, svc, summaries)
 
 	builder := &catalogBuilder{
+		domain:         catalogDomain,
 		catalogService: func() *objectcatalog.Service { return svc },
 	}
 
@@ -171,6 +173,7 @@ func TestCatalogBuildPreservesContinueWhenCachesReady(t *testing.T) {
 
 func TestCatalogBuildErrorsWhenServiceUnavailable(t *testing.T) {
 	builder := &catalogBuilder{
+		domain:         catalogDomain,
 		catalogService: func() *objectcatalog.Service { return nil },
 	}
 	_, err := builder.Build(context.Background(), "")
@@ -195,6 +198,7 @@ func TestCatalogBuildAddsNamespaceGroups(t *testing.T) {
 	svc := seedCatalogService(t, summaries)
 
 	builder := &catalogBuilder{
+		domain:         catalogDomain,
 		catalogService: func() *objectcatalog.Service { return svc },
 		namespaceGroups: func() []CatalogNamespaceGroup {
 			return []CatalogNamespaceGroup{

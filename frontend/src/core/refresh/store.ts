@@ -88,6 +88,7 @@ const state: RefreshStoreState = {
     'cluster-custom': createInitialDomainState(),
     'cluster-events': createInitialDomainState(),
     catalog: createInitialDomainState(),
+    'catalog-diff': createInitialDomainState(),
     'namespace-workloads': createInitialDomainState(),
     'namespace-config': createInitialDomainState(),
     'namespace-network': createInitialDomainState(),

@@ -1,0 +1,198 @@
+/* ==========================================================================
+   Object Diff Modal
+   ========================================================================== */
+
+.object-diff-modal {
+  max-width: 1200px;
+}
+
+.object-diff-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+}
+
+.object-diff-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.object-diff-selector {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+/* Keep labels and dropdowns aligned in a single row per field. */
+.object-diff-field {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.object-diff-field .object-diff-label {
+  justify-self: end;
+}
+
+.object-diff-field .dropdown {
+  width: 100%;
+}
+
+.object-diff-selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.object-diff-selector-title {
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+  font-size: var(--font-size-normal);
+}
+
+.object-diff-clear {
+  font-size: var(--font-size-sm);
+}
+
+.object-diff-label {
+  font-size: var(--font-size-normal);
+  color: var(--color-text-secondary);
+}
+
+.object-diff-error-message {
+  font-size: var(--font-size-sm);
+  color: var(--color-error);
+}
+
+.object-diff-viewer {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg);
+  display: flex;
+  flex-direction: column;
+  min-height: 260px;
+}
+
+.object-diff-viewer-header {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+}
+
+.object-diff-viewer-title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.object-diff-viewer-subtitle {
+  margin-top: var(--spacing-xs);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.object-diff-column-headers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-lg);
+  padding: var(--spacing-sm) var(--spacing-lg);
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.object-diff-column-title {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.object-diff-empty {
+  padding: var(--spacing-lg);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+}
+
+.object-diff-error {
+  color: var(--color-error);
+}
+
+.object-diff-warning {
+  color: var(--color-warning);
+}
+
+.object-diff-table {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-mono);
+  overflow: auto;
+  max-height: 45vh;
+}
+
+.object-diff-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.object-diff-cell {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+  min-height: 1.4rem;
+}
+
+.object-diff-cell-left {
+  border-right: 1px solid var(--color-border);
+}
+
+.object-diff-line-number {
+  color: var(--color-text-tertiary);
+  text-align: right;
+}
+
+.object-diff-line-text {
+  color: var(--color-text);
+  white-space: pre;
+  overflow-wrap: anywhere;
+}
+
+.object-diff-cell-added {
+  background: var(--color-success-bg);
+}
+
+.object-diff-cell-added .object-diff-line-text,
+.object-diff-cell-added .object-diff-line-number {
+  color: var(--color-success);
+}
+
+.object-diff-cell-removed {
+  background: var(--color-error-bg);
+}
+
+.object-diff-cell-removed .object-diff-line-text,
+.object-diff-cell-removed .object-diff-line-number {
+  color: var(--color-error);
+}
+
+@media (max-width: 900px) {
+  .object-diff-selector-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .object-diff-column-headers,
+  .object-diff-row {
+    grid-template-columns: 1fr;
+  }
+
+  .object-diff-cell-left {
+    border-right: none;
+  }
+}
