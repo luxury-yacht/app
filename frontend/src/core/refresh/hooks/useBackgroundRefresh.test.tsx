@@ -10,6 +10,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { useBackgroundRefresh, getBackgroundRefreshEnabled } from './useBackgroundRefresh';
 import { eventBus } from '@/core/events';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 const STORAGE_KEY = 'refreshBackgroundClustersEnabled';
 
@@ -52,6 +53,7 @@ describe('useBackgroundRefresh', () => {
   });
 
   beforeEach(() => {
+    resetAppPreferencesCacheForTesting();
     localStorage.clear();
   });
 
@@ -87,22 +89,26 @@ describe('useBackgroundRefresh', () => {
   });
 
   it('persists updates when callers toggle the setting', async () => {
-    localStorage.setItem(STORAGE_KEY, 'false');
     const { getHook, unmount } = await renderHookComponent();
 
-    act(() => {
-      getHook().setBackgroundRefresh(true);
-    });
-
-    expect(localStorage.getItem(STORAGE_KEY)).toBe('true');
     expect(getValue()).toBe('true');
+    expect(getBackgroundRefreshEnabled()).toBe(true);
 
-    act(() => {
-      getHook().toggle();
+    await act(async () => {
+      getHook().setBackgroundRefresh(false);
+      await Promise.resolve();
     });
 
-    expect(localStorage.getItem(STORAGE_KEY)).toBe('false');
     expect(getValue()).toBe('false');
+    expect(getBackgroundRefreshEnabled()).toBe(false);
+
+    await act(async () => {
+      getHook().toggle();
+      await Promise.resolve();
+    });
+
+    expect(getValue()).toBe('true');
+    expect(getBackgroundRefreshEnabled()).toBe(true);
 
     unmount();
   });

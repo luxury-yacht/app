@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useGridTablePersistence } from './useGridTablePersistence';
 import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 const stateMap: Record<string, any> = {};
 
@@ -39,6 +40,7 @@ vi.mock('./gridTablePersistence', () => {
 describe('useGridTablePersistence', () => {
   beforeEach(() => {
     Object.keys(stateMap).forEach((key) => delete stateMap[key]);
+    resetAppPreferencesCacheForTesting();
     setGridTablePersistenceMode('namespaced');
   });
 

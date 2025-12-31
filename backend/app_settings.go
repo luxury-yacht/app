@@ -29,10 +29,10 @@ type settingsFile struct {
 }
 
 type settingsPreferences struct {
-	Theme                    string          `json:"theme"`
-	UseShortResourceNames    bool            `json:"useShortResourceNames"`
-	Refresh                  settingsRefresh `json:"refresh"`
-	GridTablePersistenceMode string          `json:"gridTablePersistenceMode"`
+	Theme                    string           `json:"theme"`
+	UseShortResourceNames    bool             `json:"useShortResourceNames"`
+	Refresh                  *settingsRefresh `json:"refresh"`
+	GridTablePersistenceMode string           `json:"gridTablePersistenceMode"`
 }
 
 type settingsRefresh struct {
@@ -57,7 +57,7 @@ func defaultSettingsFile() *settingsFile {
 		UpdatedAt:     time.Now().UTC(),
 		Preferences: settingsPreferences{
 			Theme:                    "system",
-			Refresh:                  settingsRefresh{Auto: true, Background: true},
+			Refresh:                  &settingsRefresh{Auto: true, Background: true},
 			GridTablePersistenceMode: "shared",
 		},
 	}
@@ -73,6 +73,9 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.Theme == "" {
 		settings.Preferences.Theme = "system"
+	}
+	if settings.Preferences.Refresh == nil {
+		settings.Preferences.Refresh = &settingsRefresh{Auto: true, Background: true}
 	}
 	if settings.Preferences.GridTablePersistenceMode == "" {
 		settings.Preferences.GridTablePersistenceMode = "shared"
@@ -224,10 +227,13 @@ func (a *App) LoadWindowSettings() (*WindowSettings, error) {
 
 func getDefaultAppSettings() *AppSettings {
 	return &AppSettings{
-		Theme:                 "system",
-		SelectedKubeconfig:    "",
-		SelectedKubeconfigs:   nil,
-		UseShortResourceNames: false,
+		Theme:                            "system",
+		SelectedKubeconfig:               "",
+		SelectedKubeconfigs:              nil,
+		UseShortResourceNames:            false,
+		AutoRefreshEnabled:               true,
+		RefreshBackgroundClustersEnabled: true,
+		GridTablePersistenceMode:         "shared",
 	}
 }
 
@@ -238,10 +244,13 @@ func (a *App) loadAppSettings() error {
 	}
 
 	a.appSettings = &AppSettings{
-		Theme:                 settings.Preferences.Theme,
-		SelectedKubeconfig:    settings.Kubeconfig.Active,
-		SelectedKubeconfigs:   append([]string(nil), settings.Kubeconfig.Selected...),
-		UseShortResourceNames: settings.Preferences.UseShortResourceNames,
+		Theme:                            settings.Preferences.Theme,
+		SelectedKubeconfig:               settings.Kubeconfig.Active,
+		SelectedKubeconfigs:              append([]string(nil), settings.Kubeconfig.Selected...),
+		UseShortResourceNames:            settings.Preferences.UseShortResourceNames,
+		AutoRefreshEnabled:               settings.Preferences.Refresh.Auto,
+		RefreshBackgroundClustersEnabled: settings.Preferences.Refresh.Background,
+		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
 	}
 	return nil
 }
@@ -258,6 +267,12 @@ func (a *App) saveAppSettings() error {
 
 	settings.Preferences.Theme = a.appSettings.Theme
 	settings.Preferences.UseShortResourceNames = a.appSettings.UseShortResourceNames
+	if settings.Preferences.Refresh == nil {
+		settings.Preferences.Refresh = &settingsRefresh{}
+	}
+	settings.Preferences.Refresh.Auto = a.appSettings.AutoRefreshEnabled
+	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
+	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
 
 	if len(a.appSettings.SelectedKubeconfigs) > 0 {
 		settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
@@ -355,7 +370,7 @@ func (a *App) GetAppSettings() (*AppSettings, error) {
 	}
 
 	if err := a.loadAppSettings(); err != nil {
-		return &AppSettings{Theme: "system", SelectedKubeconfig: "", SelectedKubeconfigs: nil}, nil
+		return getDefaultAppSettings(), nil
 	}
 
 	return a.appSettings, nil
@@ -386,6 +401,49 @@ func (a *App) SetUseShortResourceNames(useShort bool) error {
 
 	a.logger.Info(fmt.Sprintf("Use short resource names changed to: %v", useShort), "Settings")
 	a.appSettings.UseShortResourceNames = useShort
+	return a.saveAppSettings()
+}
+
+// SetAutoRefreshEnabled persists the auto-refresh preference.
+func (a *App) SetAutoRefreshEnabled(enabled bool) error {
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(fmt.Sprintf("Auto refresh enabled changed to: %v", enabled), "Settings")
+	a.appSettings.AutoRefreshEnabled = enabled
+	return a.saveAppSettings()
+}
+
+// SetBackgroundRefreshEnabled persists the background refresh preference.
+func (a *App) SetBackgroundRefreshEnabled(enabled bool) error {
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(fmt.Sprintf("Background refresh enabled changed to: %v", enabled), "Settings")
+	a.appSettings.RefreshBackgroundClustersEnabled = enabled
+	return a.saveAppSettings()
+}
+
+// SetGridTablePersistenceMode persists the grid table persistence mode.
+func (a *App) SetGridTablePersistenceMode(mode string) error {
+	if mode != "shared" && mode != "namespaced" {
+		return fmt.Errorf("invalid grid table persistence mode: %s", mode)
+	}
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(fmt.Sprintf("Grid table persistence mode changed to: %s", mode), "Settings")
+	a.appSettings.GridTablePersistenceMode = mode
 	return a.saveAppSettings()
 }
 

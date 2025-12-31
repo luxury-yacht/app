@@ -109,10 +109,13 @@
 - Define `settings.json` and `persistence.json` structs with `schemaVersion` and `updatedAt`.
 - Wire load/save for window settings + core preferences into the new store.
 
-### Phase 2: Frontend Settings Migration
-- Replace `localStorage` usage for theme, short names, refresh toggles, and GridTable persistence mode with backend APIs.
-- Keep legacy `localStorage` reads for hydration until migration is complete.
-- Treat backend as source of truth once migration is done.
+### Phase 2: Frontend Settings Migration ✅
+- Backend support for new preferences (auto-refresh, background refresh, GridTable persistence mode) via settings store + Wails setters. ✅ (implemented)
+- Expand `AppSettings` schema/defaults to include new preference fields. ✅ (implemented)
+- Frontend preference cache + legacy hydration path to replace direct `localStorage` reads. ✅ (implemented)
+- Wire Settings, theme utilities, refresh hooks, GridTable persistence mode, and short-name consumers to the new cache. ✅ (implemented)
+- Update unit tests to align with the new preference cache behavior. ✅ (implemented)
+- Remove legacy `localStorage` writes for these preferences once migration is complete. ⏳ (pending Phase 4)
 
 ### Phase 3: UI Persistence Migration
 - Move GridTable persistence and cluster tab ordering into `persistence.json`.

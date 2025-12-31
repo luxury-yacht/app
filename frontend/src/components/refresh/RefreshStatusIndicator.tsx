@@ -10,6 +10,7 @@ import { refreshOrchestrator } from '@/core/refresh';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
 import { useConnectionStatus } from '@/core/connection/connectionStatus';
 import { eventBus } from '@/core/events';
+import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import './RefreshStatusIndicator.css';
 
 const RefreshStatusIndicator: React.FC = () => {
@@ -19,31 +20,21 @@ const RefreshStatusIndicator: React.FC = () => {
   const metricsInfo = useClusterMetricsAvailability();
 
   useEffect(() => {
-    // Check initial state from localStorage
-    const stored = localStorage.getItem('autoRefreshEnabled');
-    setIsPaused(stored === 'false');
+    setIsPaused(!getAutoRefreshEnabled());
 
     const handleRefreshStart = () => setIsRefreshing(true);
     const handleRefreshComplete = () => setIsRefreshing(false);
-
-    // Listen for settings changes
-    const handleStorageChange = () => {
-      const enabled = localStorage.getItem('autoRefreshEnabled') !== 'false';
-      setIsPaused(!enabled);
-    };
 
     const unsubStart = eventBus.on('refresh:start', handleRefreshStart);
     const unsubComplete = eventBus.on('refresh:complete', handleRefreshComplete);
     const unsubAutoRefresh = eventBus.on('settings:auto-refresh', (enabled) => {
       setIsPaused(!enabled);
     });
-    window.addEventListener('storage', handleStorageChange);
 
     return () => {
       unsubStart();
       unsubComplete();
       unsubAutoRefresh();
-      window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 

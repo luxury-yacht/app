@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { useShortNames } from './useShortNames';
 import { eventBus } from '@/core/events';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 const renderHookComponent = async () => {
   const container = document.createElement('div');
@@ -43,6 +44,7 @@ describe('useShortNames', () => {
   });
 
   beforeEach(() => {
+    resetAppPreferencesCacheForTesting();
     localStorage.clear();
   });
 
@@ -61,7 +63,7 @@ describe('useShortNames', () => {
     unmount();
   });
 
-  it('responds to custom and storage events', async () => {
+  it('responds to event bus updates', async () => {
     localStorage.setItem('useShortResourceNames', 'false');
     const { unmount } = await renderHookComponent();
 
@@ -72,16 +74,6 @@ describe('useShortNames', () => {
     });
 
     expect(getValue()).toBe('true');
-
-    act(() => {
-      const event = new StorageEvent('storage', {
-        key: 'useShortResourceNames',
-        newValue: 'false',
-      });
-      window.dispatchEvent(event);
-    });
-
-    expect(getValue()).toBe('false');
 
     unmount();
   });

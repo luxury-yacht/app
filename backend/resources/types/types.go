@@ -22,10 +22,13 @@ type WindowSettings struct {
 
 // AppSettings represents the application settings
 type AppSettings struct {
-	Theme                 string   `json:"theme"`                 // "light", "dark", or "system"
-	SelectedKubeconfig    string   `json:"selectedKubeconfig"`    // Path to the selected kubeconfig
-	SelectedKubeconfigs   []string `json:"selectedKubeconfigs"`   // Multi-cluster selections in "path:context" form
-	UseShortResourceNames bool     `json:"useShortResourceNames"` // Use short names like "po" for pods in badges/headers
+	Theme                            string   `json:"theme"`                            // "light", "dark", or "system"
+	SelectedKubeconfig               string   `json:"selectedKubeconfig"`               // Path to the selected kubeconfig
+	SelectedKubeconfigs              []string `json:"selectedKubeconfigs"`              // Multi-cluster selections in "path:context" form
+	UseShortResourceNames            bool     `json:"useShortResourceNames"`            // Use short names like "po" for pods in badges/headers
+	AutoRefreshEnabled               bool     `json:"autoRefreshEnabled"`               // Enable automatic refresh cycles
+	RefreshBackgroundClustersEnabled bool     `json:"refreshBackgroundClustersEnabled"` // Refresh inactive clusters in the background
+	GridTablePersistenceMode         string   `json:"gridTablePersistenceMode"`         // "shared" or "namespaced"
 }
 
 // ThemeInfo represents theme information to send to frontend

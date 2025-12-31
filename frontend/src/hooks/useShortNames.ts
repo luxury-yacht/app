@@ -6,6 +6,7 @@
  */
 import { useState, useEffect } from 'react';
 import { eventBus } from '@/core/events';
+import { getUseShortResourceNames } from '@/core/settings/appPreferences';
 
 /**
  * Custom hook that listens to changes in the "use short resource names" setting
@@ -13,7 +14,7 @@ import { eventBus } from '@/core/events';
  */
 export function useShortNames(): boolean {
   const [useShortNames, setUseShortNames] = useState(() => {
-    return localStorage.getItem('useShortResourceNames') === 'true';
+    return getUseShortResourceNames();
   });
 
   useEffect(() => {
@@ -22,18 +23,9 @@ export function useShortNames(): boolean {
       setUseShortNames(value);
     });
 
-    // Also listen for storage events (in case the setting changes in another tab)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'useShortResourceNames' && e.newValue !== null) {
-        setUseShortNames(e.newValue === 'true');
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-
     // Cleanup
     return () => {
       unsubscribe();
-      window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 

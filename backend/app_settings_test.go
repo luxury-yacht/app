@@ -94,9 +94,12 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
 	app.appSettings = &AppSettings{
-		Theme:                 "dark",
-		SelectedKubeconfig:    "/tmp/config",
-		UseShortResourceNames: true,
+		Theme:                            "dark",
+		SelectedKubeconfig:               "/tmp/config",
+		UseShortResourceNames:            true,
+		AutoRefreshEnabled:               false,
+		RefreshBackgroundClustersEnabled: false,
+		GridTablePersistenceMode:         "namespaced",
 	}
 
 	require.NoError(t, app.saveAppSettings())
@@ -106,6 +109,9 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.Equal(t, "dark", app.appSettings.Theme)
 	require.True(t, app.appSettings.UseShortResourceNames)
 	require.Equal(t, "/tmp/config", app.appSettings.SelectedKubeconfig)
+	require.False(t, app.appSettings.AutoRefreshEnabled)
+	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
+	require.Equal(t, "namespaced", app.appSettings.GridTablePersistenceMode)
 }
 
 func TestAppSetThemePersistsAndLogs(t *testing.T) {
@@ -151,6 +157,69 @@ func TestAppSetUseShortResourceNamesPersists(t *testing.T) {
 	last := entries[len(entries)-1]
 	require.Equal(t, "INFO", last.Level)
 	require.Contains(t, last.Message, "Use short resource names changed to: true")
+}
+
+func TestAppSetAutoRefreshEnabledPersists(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	require.NoError(t, app.SetAutoRefreshEnabled(false))
+	require.False(t, app.appSettings.AutoRefreshEnabled)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.False(t, app.appSettings.AutoRefreshEnabled)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	last := entries[len(entries)-1]
+	require.Equal(t, "INFO", last.Level)
+	require.Contains(t, last.Message, "Auto refresh enabled changed to: false")
+}
+
+func TestAppSetBackgroundRefreshEnabledPersists(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	require.NoError(t, app.SetBackgroundRefreshEnabled(false))
+	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	last := entries[len(entries)-1]
+	require.Equal(t, "INFO", last.Level)
+	require.Contains(t, last.Message, "Background refresh enabled changed to: false")
+}
+
+func TestAppSetGridTablePersistenceModePersists(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	require.NoError(t, app.SetGridTablePersistenceMode("namespaced"))
+	require.Equal(t, "namespaced", app.appSettings.GridTablePersistenceMode)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, "namespaced", app.appSettings.GridTablePersistenceMode)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	last := entries[len(entries)-1]
+	require.Equal(t, "INFO", last.Level)
+	require.Contains(t, last.Message, "Grid table persistence mode changed to: namespaced")
+}
+
+func TestAppSetGridTablePersistenceModeRejectsInvalidValues(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	err := app.SetGridTablePersistenceMode("invalid")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid grid table persistence mode")
 }
 
 func TestAppGetThemeInfoReflectsCurrentSettings(t *testing.T) {

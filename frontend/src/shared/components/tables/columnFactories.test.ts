@@ -17,6 +17,7 @@ import {
   upsertNamespaceColumn,
   type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 interface RowSample {
   id: string;
@@ -28,6 +29,7 @@ interface RowSample {
 
 describe('columnFactories', () => {
   beforeEach(() => {
+    resetAppPreferencesCacheForTesting();
     localStorage.clear();
   });
 

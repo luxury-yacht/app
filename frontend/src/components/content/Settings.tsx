@@ -6,14 +6,17 @@
  */
 
 import { useState, useEffect } from 'react';
-import { GetThemeInfo, GetAppSettings, SetUseShortResourceNames } from '@wailsjs/go/backend/App';
+import { GetThemeInfo } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import { changeTheme, initSystemThemeListener } from '@/utils/themes';
-import { eventBus } from '@/core/events';
 import './Settings.css';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
+import {
+  hydrateAppPreferences,
+  setUseShortResourceNames as persistUseShortResourceNames,
+} from '@/core/settings/appPreferences';
 import {
   getGridTablePersistenceMode,
   setGridTablePersistenceMode,
@@ -59,15 +62,8 @@ function Settings({ onClose }: SettingsProps) {
 
   const loadAppSettings = async () => {
     try {
-      const settings = await GetAppSettings();
-      if (settings) {
-        setUseShortResourceNames(settings.useShortResourceNames || false);
-        // Store in localStorage for immediate access by other components
-        localStorage.setItem(
-          'useShortResourceNames',
-          String(settings.useShortResourceNames || false)
-        );
-      }
+      const preferences = await hydrateAppPreferences();
+      setUseShortResourceNames(preferences.useShortResourceNames);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
     }
@@ -88,12 +84,8 @@ function Settings({ onClose }: SettingsProps) {
 
   const handleShortNamesToggle = async (useShort: boolean) => {
     try {
-      await SetUseShortResourceNames(useShort);
+      await persistUseShortResourceNames(useShort);
       setUseShortResourceNames(useShort);
-      // Store in localStorage for immediate access
-      localStorage.setItem('useShortResourceNames', String(useShort));
-      // Notify components to re-render
-      eventBus.emit('settings:short-names', useShort);
     } catch (error) {
       errorHandler.handle(error, { action: 'setUseShortResourceNames', useShort });
       // Reload to show actual settings

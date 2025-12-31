@@ -5,10 +5,15 @@
  * Covers key behaviors and edge cases for kindAliasMap.
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getDisplayKind, getTypeAlias } from './kindAliasMap';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 describe('kindAliasMap utility', () => {
+  beforeEach(() => {
+    resetAppPreferencesCacheForTesting();
+  });
+
   afterEach(() => {
     localStorage.removeItem('useShortResourceNames');
   });

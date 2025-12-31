@@ -12,6 +12,7 @@ import { useGridTablePersistence } from './useGridTablePersistence';
 import { clearAllGridTableState } from './gridTablePersistenceReset';
 import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 type Row = { id: string };
 
@@ -32,6 +33,7 @@ describe('useGridTablePersistence integration', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    resetAppPreferencesCacheForTesting();
     if (typeof window !== 'undefined') {
       const store = new Map<string, string>();
       const memoryStorage: Storage = {

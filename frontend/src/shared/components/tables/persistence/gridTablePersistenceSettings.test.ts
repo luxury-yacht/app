@@ -5,17 +5,21 @@
  * Covers key behaviors and edge cases for gridTablePersistenceSettings.
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   getGridTablePersistenceMode,
   setGridTablePersistenceMode,
   subscribeGridTablePersistenceMode,
   type GridTablePersistenceMode,
 } from './gridTablePersistenceSettings';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 describe('gridTablePersistenceSettings', () => {
+  beforeEach(() => {
+    resetAppPreferencesCacheForTesting();
+  });
+
   it('defaults to shared when storage is empty', () => {
-    window.localStorage.removeItem('gridtable:persistenceMode');
     expect(getGridTablePersistenceMode()).toBe('shared');
   });
 
@@ -32,6 +36,6 @@ describe('gridTablePersistenceSettings', () => {
     setGridTablePersistenceMode('shared');
     setGridTablePersistenceMode('namespaced');
     unsubscribe();
-    expect(seen).toEqual(['shared', 'namespaced']);
+    expect(seen).toEqual(['namespaced']);
   });
 });

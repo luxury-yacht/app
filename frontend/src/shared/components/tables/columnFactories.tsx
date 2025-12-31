@@ -11,6 +11,7 @@ import {
   type GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
 import ResourceBar from '@shared/components/ResourceBar';
+import { getUseShortResourceNames } from '@/core/settings/appPreferences';
 
 /**
  * Column factory functions for GridTable
@@ -349,9 +350,7 @@ export const createKindColumn = <T,>(
     }
     const baseKind = getKind(item);
     const alias = getAlias?.(item);
-    const useShortNames =
-      typeof window !== 'undefined' &&
-      window.localStorage?.getItem('useShortResourceNames') === 'true';
+    const useShortNames = getUseShortResourceNames();
     return useShortNames && alias ? alias : baseKind;
   };
 

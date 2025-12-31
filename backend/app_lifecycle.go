@@ -100,7 +100,7 @@ func (a *App) Startup(ctx context.Context) {
 
 	if err := a.loadAppSettings(); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to load app settings: %v", err), "App")
-		a.appSettings = &AppSettings{Theme: "system"}
+		a.appSettings = getDefaultAppSettings()
 		a.logger.Info("Initialized app settings with defaults", "App")
 	} else {
 		a.logger.Debug("Application settings loaded successfully", "App")
