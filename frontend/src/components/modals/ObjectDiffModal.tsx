@@ -82,12 +82,6 @@ const buildNamespaceScope = (namespace?: string) => {
   return trimmed ? trimmed : CLUSTER_SCOPE;
 };
 
-const buildCatalogLabel = (item: CatalogItem, useShortNames: boolean): string => {
-  const kindLabel = getDisplayKind(item.kind, useShortNames);
-  const namespaceLabel = buildNamespaceLabel(item.namespace);
-  return `${kindLabel} ${namespaceLabel}/${item.name}`;
-};
-
 const buildSelectionLabel = (item: CatalogItem | null, useShortNames: boolean): string => {
   if (!item) {
     return 'No object selected';
@@ -107,10 +101,10 @@ const formatChangeAge = (timestamp: number): string => {
   return age === 'now' ? 'just now' : `${age} ago`;
 };
 
-const buildCatalogOptions = (items: CatalogItem[], useShortNames: boolean): DropdownOption[] =>
+const buildObjectOptions = (items: CatalogItem[]): DropdownOption[] =>
   items.map((item) => ({
     value: item.uid,
-    label: buildCatalogLabel(item, useShortNames),
+    label: item.name,
     metadata: item,
   }));
 
@@ -385,14 +379,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     if (!leftObjectEnabled) {
       return [];
     }
-    return buildCatalogOptions(leftObjectPayload?.items ?? [], useShortNamesSetting);
-  }, [leftObjectEnabled, leftObjectPayload?.items, useShortNamesSetting]);
+    return buildObjectOptions(leftObjectPayload?.items ?? []);
+  }, [leftObjectEnabled, leftObjectPayload?.items]);
   const rightObjectOptions = useMemo(() => {
     if (!rightObjectEnabled) {
       return [];
     }
-    return buildCatalogOptions(rightObjectPayload?.items ?? [], useShortNamesSetting);
-  }, [rightObjectEnabled, rightObjectPayload?.items, useShortNamesSetting]);
+    return buildObjectOptions(rightObjectPayload?.items ?? []);
+  }, [rightObjectEnabled, rightObjectPayload?.items]);
   const leftObjectMap = useMemo(
     () => new Map((leftObjectPayload?.items ?? []).map((item) => [item.uid, item])),
     [leftObjectPayload?.items]
