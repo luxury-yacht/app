@@ -10,6 +10,10 @@ export function ClearAppState() {
   return window['go']['backend']['App']['ClearAppState']();
 }
 
+export function ClearGridTablePersistence() {
+  return window['go']['backend']['App']['ClearGridTablePersistence']();
+}
+
 export function ClearLogs() {
   return window['go']['backend']['App']['ClearLogs']();
 }
@@ -28,6 +32,14 @@ export function CreateVersionedEndpoint(arg1, arg2, arg3, arg4) {
 
 export function CtxOrBackground() {
   return window['go']['backend']['App']['CtxOrBackground']();
+}
+
+export function DeleteGridTablePersistence(arg1) {
+  return window['go']['backend']['App']['DeleteGridTablePersistence'](arg1);
+}
+
+export function DeleteGridTablePersistenceEntries(arg1) {
+  return window['go']['backend']['App']['DeleteGridTablePersistenceEntries'](arg1);
 }
 
 export function DeleteHelmRelease(arg1, arg2, arg3) {
@@ -78,6 +90,10 @@ export function GetClusterRoleBinding(arg1) {
   return window['go']['backend']['App']['GetClusterRoleBinding'](arg1);
 }
 
+export function GetClusterTabOrder() {
+  return window['go']['backend']['App']['GetClusterTabOrder']();
+}
+
 export function GetConfigMap(arg1, arg2) {
   return window['go']['backend']['App']['GetConfigMap'](arg1, arg2);
 }
@@ -100,6 +116,10 @@ export function GetDeployment(arg1, arg2) {
 
 export function GetEndpointSlice(arg1, arg2) {
   return window['go']['backend']['App']['GetEndpointSlice'](arg1, arg2);
+}
+
+export function GetGridTablePersistence() {
+  return window['go']['backend']['App']['GetGridTablePersistence']();
 }
 
 export function GetHelmManifest(arg1, arg2) {
@@ -266,6 +286,10 @@ export function LogFetcher(arg1, arg2) {
   return window['go']['backend']['App']['LogFetcher'](arg1, arg2);
 }
 
+export function MigrateLegacyLocalStorage(arg1) {
+  return window['go']['backend']['App']['MigrateLegacyLocalStorage'](arg1);
+}
+
 export function ResizeShellSession(arg1, arg2, arg3) {
   return window['go']['backend']['App']['ResizeShellSession'](arg1, arg2, arg3);
 }
@@ -290,8 +314,28 @@ export function SetApiExtensionsClient(arg1) {
   return window['go']['backend']['App']['SetApiExtensionsClient'](arg1);
 }
 
+export function SetAutoRefreshEnabled(arg1) {
+  return window['go']['backend']['App']['SetAutoRefreshEnabled'](arg1);
+}
+
+export function SetBackgroundRefreshEnabled(arg1) {
+  return window['go']['backend']['App']['SetBackgroundRefreshEnabled'](arg1);
+}
+
+export function SetClusterTabOrder(arg1) {
+  return window['go']['backend']['App']['SetClusterTabOrder'](arg1);
+}
+
 export function SetDynamicClient(arg1) {
   return window['go']['backend']['App']['SetDynamicClient'](arg1);
+}
+
+export function SetGridTablePersistence(arg1, arg2) {
+  return window['go']['backend']['App']['SetGridTablePersistence'](arg1, arg2);
+}
+
+export function SetGridTablePersistenceMode(arg1) {
+  return window['go']['backend']['App']['SetGridTablePersistenceMode'](arg1);
 }
 
 export function SetKubeconfig(arg1) {

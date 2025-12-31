@@ -258,3 +258,42 @@ func TestAppShowAboutWarnsWhenContextNil(t *testing.T) {
 	require.Equal(t, "WARN", last.Level)
 	require.Contains(t, last.Message, "Cannot show about")
 }
+
+func TestLoadSettingsFileNormalizesDefaults(t *testing.T) {
+	// Ensure missing/zero fields are normalized to defaults after load.
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	configPath, err := app.getSettingsFilePath()
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(configPath, []byte(`{"schemaVersion":0}`), 0o644))
+
+	settings, err := app.loadSettingsFile()
+	require.NoError(t, err)
+	require.Equal(t, settingsSchemaVersion, settings.SchemaVersion)
+	require.Equal(t, "system", settings.Preferences.Theme)
+	require.NotNil(t, settings.Preferences.Refresh)
+	require.True(t, settings.Preferences.Refresh.Auto)
+	require.True(t, settings.Preferences.Refresh.Background)
+	require.Equal(t, "shared", settings.Preferences.GridTablePersistenceMode)
+}
+
+func TestSaveSettingsFileOverwritesExistingData(t *testing.T) {
+	// Verify subsequent saves overwrite previous settings on disk.
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	settings, err := app.loadSettingsFile()
+	require.NoError(t, err)
+
+	settings.Preferences.Theme = "dark"
+	require.NoError(t, app.saveSettingsFile(settings))
+
+	settings.Preferences.Theme = "light"
+	require.NoError(t, app.saveSettingsFile(settings))
+
+	loaded, err := app.loadSettingsFile()
+	require.NoError(t, err)
+	require.Equal(t, "light", loaded.Preferences.Theme)
+}
