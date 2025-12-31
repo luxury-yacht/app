@@ -8,12 +8,9 @@
 import * as YAML from 'yaml';
 import { YAML_STRINGIFY_OPTIONS } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlTabConfig';
 
-const IGNORED_METADATA_FIELDS = new Set([
-  'managedFields',
-  'resourceVersion',
-  'creationTimestamp',
-  'uid',
-]);
+// Ignored fields are removed entirely; muted fields remain but render dimmed in the diff.
+const IGNORED_METADATA_FIELDS = new Set(['managedFields']);
+const MUTED_METADATA_FIELDS = new Set(['resourceVersion', 'creationTimestamp', 'uid']);
 
 export const sanitizeYamlForDiff = (raw: string): string => {
   const trimmed = raw.trim();
@@ -27,6 +24,11 @@ export const sanitizeYamlForDiff = (raw: string): string => {
       throw doc.errors[0];
     }
 
+    // Remove ignored fields that should not appear in the diff viewer.
+    IGNORED_METADATA_FIELDS.forEach((field) => {
+      doc.deleteIn(['metadata', field]);
+    });
+
     return doc.toString(YAML_STRINGIFY_OPTIONS);
   } catch {
     return raw;
@@ -35,7 +37,7 @@ export const sanitizeYamlForDiff = (raw: string): string => {
 
 const getIndentDepth = (line: string): number => line.match(/^\s*/)?.[0].length ?? 0;
 
-// Track which YAML line numbers fall under ignored metadata fields for muted rendering.
+// Track which YAML line numbers fall under muted metadata fields for rendering.
 export const buildIgnoredMetadataLineSet = (raw: string): Set<number> => {
   const lines = raw.split('\n');
   const muted = new Set<number>();
@@ -68,7 +70,7 @@ export const buildIgnoredMetadataLineSet = (raw: string): Set<number> => {
 
     if (metadataActive && !trimmed.startsWith('-')) {
       const keyMatch = trimmed.match(/^([A-Za-z0-9_-]+):/);
-      if (keyMatch && IGNORED_METADATA_FIELDS.has(keyMatch[1])) {
+      if (keyMatch && MUTED_METADATA_FIELDS.has(keyMatch[1])) {
         muted.add(lineNumber);
         ignoredActive = true;
         ignoredIndent = indent;

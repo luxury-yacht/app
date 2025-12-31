@@ -867,7 +867,8 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                 </div>
               </div>
               <div className="object-diff-viewer-subtitle">
-                Muted fields: metadata.managedFields, metadata.resourceVersion, metadata.creationTimestamp, metadata.uid
+                Ignored fields: metadata.managedFields. Muted fields: metadata.resourceVersion,
+                metadata.creationTimestamp, metadata.uid
               </div>
               {(leftChangedAt || rightChangedAt) && (
                 <div className="object-diff-change-indicator">

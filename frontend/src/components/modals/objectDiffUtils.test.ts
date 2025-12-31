@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { buildIgnoredMetadataLineSet, sanitizeYamlForDiff } from './objectDiffUtils';
 
 describe('sanitizeYamlForDiff', () => {
-  it('retains metadata fields while normalizing YAML', () => {
+  it('removes ignored metadata fields but retains muted fields', () => {
     const yaml = `apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -26,7 +26,7 @@ data:
     const result = sanitizeYamlForDiff(yaml);
     expect(result).toContain('name: demo');
     expect(result).toContain('data:');
-    expect(result).toContain('managedFields');
+    expect(result).not.toContain('managedFields');
     expect(result).toContain('resourceVersion');
     expect(result).toContain('creationTimestamp');
     expect(result).toContain('uid');
@@ -43,7 +43,7 @@ data:
 });
 
 describe('buildIgnoredMetadataLineSet', () => {
-  it('tracks ignored metadata fields and their nested lines', () => {
+  it('tracks muted metadata fields and their nested lines', () => {
     const yaml = `apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -63,9 +63,9 @@ data:
     expect(muted.has(5)).toBe(true); // uid
     expect(muted.has(6)).toBe(true); // resourceVersion
     expect(muted.has(7)).toBe(true); // creationTimestamp
-    expect(muted.has(8)).toBe(true); // managedFields
-    expect(muted.has(9)).toBe(true); // managedFields list entry
-    expect(muted.has(10)).toBe(true); // managedFields list entry
+    expect(muted.has(8)).toBe(false); // managedFields
+    expect(muted.has(9)).toBe(false); // managedFields list entry
+    expect(muted.has(10)).toBe(false); // managedFields list entry
     expect(muted.has(4)).toBe(false); // name
     expect(muted.has(11)).toBe(false); // spec
     expect(muted.has(12)).toBe(false); // spec uid (non-metadata)
