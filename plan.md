@@ -115,14 +115,14 @@
 - Frontend preference cache + legacy hydration path to replace direct `localStorage` reads. ✅ (implemented)
 - Wire Settings, theme utilities, refresh hooks, GridTable persistence mode, and short-name consumers to the new cache. ✅ (implemented)
 - Update unit tests to align with the new preference cache behavior. ✅ (implemented)
-- Remove legacy `localStorage` writes for these preferences once migration is complete. ⏳ (pending Phase 4)
+- Remove legacy `localStorage` writes for these preferences once migration is complete. ✅ (implemented)
 
 ### Phase 3: UI Persistence Migration ✅
 - Move GridTable persistence and cluster tab ordering into `persistence.json`.
 - Ensure `clusterTabs.order` uses full `path:context` selections.
 - Keep cleanup logic to prune stale entries after restore or config changes.
 
-### Phase 4: Migration (Legacy -> New)
+### Phase 4: Migration (Legacy -> New) ✅
 - Execute the one-time migration plan to import legacy backend files and frontend `localStorage`.
 - Log migration activity to Application Logs (legacy files detected, migration outcome, and any legacy files deleted on success).
 - Delete legacy stores only after successful migration.
