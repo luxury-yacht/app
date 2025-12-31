@@ -12,25 +12,11 @@ import { ShortcutHelpModal } from './ShortcutHelpModal';
 import { KeyCodes } from '../constants';
 import { isMacPlatform } from '@/utils/platform';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-
-const CLUSTER_TAB_ORDER_STORAGE_KEY = 'clusterTabs:order';
-
-const readClusterTabOrder = (): string[] => {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return [];
-  }
-  const raw = window.localStorage.getItem(CLUSTER_TAB_ORDER_STORAGE_KEY);
-  if (!raw) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
-  } catch (error) {
-    console.warn('Failed to parse cluster tab order from storage:', error);
-    return [];
-  }
-};
+import {
+  getClusterTabOrder,
+  hydrateClusterTabOrder,
+  subscribeClusterTabOrder,
+} from '@core/persistence/clusterTabOrder';
 
 interface GlobalShortcutsProps {
   onToggleSidebar?: () => void;
@@ -58,13 +44,27 @@ export function GlobalShortcuts({
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isModalAnimating, setIsModalAnimating] = useState(false);
   const { setContext } = useKeyboardContext();
-  const {
-    selectedKubeconfig,
-    selectedKubeconfigs,
-    setSelectedKubeconfigs,
-    setActiveKubeconfig,
-    getClusterMeta,
-  } = useKubeconfig();
+  const { selectedKubeconfig, selectedKubeconfigs, setSelectedKubeconfigs, setActiveKubeconfig } =
+    useKubeconfig();
+  const [clusterTabOrder, setClusterTabOrder] = useState<string[]>(() => getClusterTabOrder());
+
+  useEffect(() => {
+    let active = true;
+    const hydrate = async () => {
+      const order = await hydrateClusterTabOrder();
+      if (active) {
+        setClusterTabOrder(order);
+      }
+    };
+    void hydrate();
+    const unsubscribe = subscribeClusterTabOrder((order) => {
+      setClusterTabOrder(order);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
 
   // Update context based on current view
   useEffect(() => {
@@ -141,19 +141,19 @@ export function GlobalShortcuts({
 
   const orderedClusterSelections = useMemo(() => {
     // Follow the persisted tab order to mirror the visible cluster tabs.
-    const tabEntries = selectedKubeconfigs.map((selection) => {
-      const meta = getClusterMeta(selection);
-      return { selection, id: meta.id || selection };
-    });
+    const tabEntries = selectedKubeconfigs.map((selection) => ({
+      selection,
+      id: selection,
+    }));
     const selectionOrderIds = tabEntries.map((entry) => entry.id);
-    const persisted = readClusterTabOrder().filter((id) => selectionOrderIds.includes(id));
+    const persisted = clusterTabOrder.filter((id) => selectionOrderIds.includes(id));
     const missing = selectionOrderIds.filter((id) => !persisted.includes(id));
     const mergedOrder = [...persisted, ...missing];
     const selectionById = new Map(tabEntries.map((entry) => [entry.id, entry.selection]));
     return mergedOrder
       .map((id) => selectionById.get(id))
       .filter((selection): selection is string => Boolean(selection));
-  }, [getClusterMeta, selectedKubeconfigs]);
+  }, [clusterTabOrder, selectedKubeconfigs]);
 
   const handleSwitchClusterTab = useCallback(
     (direction: 'prev' | 'next') => {

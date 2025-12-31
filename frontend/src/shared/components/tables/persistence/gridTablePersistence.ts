@@ -114,38 +114,90 @@ export const computeClusterHash = async (clusterIdentity: string): Promise<strin
   return fallbackHash(normalized);
 };
 
-const getStorage = (): Storage | null => {
+type GridTablePersistenceMap = Record<string, GridTablePersistedState>;
+
+let persistenceCache: GridTablePersistenceMap = {};
+let hydrated = false;
+let hydrationPromise: Promise<void> | null = null;
+
+const getRuntimeApp = () => {
   if (typeof window === 'undefined') {
-    return null;
+    return undefined;
+  }
+  return (window as any)?.go?.backend?.App;
+};
+
+const normalizePersistenceMap = (entries: Record<string, unknown>): GridTablePersistenceMap => {
+  const normalized: GridTablePersistenceMap = {};
+  Object.entries(entries).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object') {
+      return;
+    }
+    const version = (value as GridTablePersistedState).version;
+    if (version !== STORAGE_VERSION) {
+      return;
+    }
+    normalized[key] = value as GridTablePersistedState;
+  });
+  return normalized;
+};
+
+const fetchGridTablePersistence = async (): Promise<GridTablePersistenceMap> => {
+  const runtimeApp = getRuntimeApp();
+  if (!runtimeApp || typeof runtimeApp.GetGridTablePersistence !== 'function') {
+    return {};
   }
   try {
-    return window.localStorage ?? null;
-  } catch {
-    return null;
+    const entries = await runtimeApp.GetGridTablePersistence();
+    if (!entries || typeof entries !== 'object') {
+      return {};
+    }
+    return normalizePersistenceMap(entries as Record<string, unknown>);
+  } catch (error) {
+    console.error('Failed to fetch grid table persistence:', error);
+    return {};
   }
 };
+
+export const hydrateGridTablePersistence = async (options?: { force?: boolean }): Promise<void> => {
+  if (hydrated && !options?.force) {
+    return;
+  }
+  if (hydrationPromise && !options?.force) {
+    await hydrationPromise;
+    return;
+  }
+
+  hydrationPromise = (async () => {
+    const runtimeApp = getRuntimeApp();
+    if (!runtimeApp || typeof runtimeApp.GetGridTablePersistence !== 'function') {
+      hydrated = true;
+      return;
+    }
+    persistenceCache = await fetchGridTablePersistence();
+    hydrated = true;
+  })();
+
+  try {
+    await hydrationPromise;
+  } finally {
+    hydrationPromise = null;
+  }
+};
+
+export const getGridTablePersistenceSnapshot = (): GridTablePersistenceMap => ({
+  ...persistenceCache,
+});
 
 export const loadPersistedState = (key: string | null): GridTablePersistedState | null => {
   if (!key) {
     return null;
   }
-  const storage = getStorage();
-  if (!storage) {
+  const state = persistenceCache[key];
+  if (!state || state.version !== STORAGE_VERSION) {
     return null;
   }
-  try {
-    const raw = storage.getItem(key);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    if (parsed && parsed.version === STORAGE_VERSION) {
-      return parsed as GridTablePersistedState;
-    }
-  } catch {
-    return null;
-  }
-  return null;
+  return state;
 };
 
 export const savePersistedState = (
@@ -155,30 +207,80 @@ export const savePersistedState = (
   if (!key || !state) {
     return;
   }
-  const storage = getStorage();
-  if (!storage) {
+
+  persistenceCache[key] = state;
+
+  const runtimeApp = getRuntimeApp();
+  if (!runtimeApp || typeof runtimeApp.SetGridTablePersistence !== 'function') {
     return;
   }
-  try {
-    storage.setItem(key, JSON.stringify(state));
-  } catch {
-    // ignore storage failures
-  }
+  void runtimeApp.SetGridTablePersistence(key, state).catch((error: unknown) => {
+    console.error('Failed to persist grid table state:', error);
+  });
 };
 
 export const clearPersistedState = (key: string | null): void => {
   if (!key) {
     return;
   }
-  const storage = getStorage();
-  if (!storage) {
+
+  delete persistenceCache[key];
+
+  const runtimeApp = getRuntimeApp();
+  if (!runtimeApp || typeof runtimeApp.DeleteGridTablePersistence !== 'function') {
     return;
   }
-  try {
-    storage.removeItem(key);
-  } catch {
-    // ignore storage failures
+  void runtimeApp.DeleteGridTablePersistence(key).catch((error: unknown) => {
+    console.error('Failed to delete grid table state:', error);
+  });
+};
+
+export const deletePersistedStates = (keys: string[]): void => {
+  if (keys.length === 0) {
+    return;
   }
+  keys.forEach((key) => {
+    delete persistenceCache[key];
+  });
+
+  const runtimeApp = getRuntimeApp();
+  if (!runtimeApp || typeof runtimeApp.DeleteGridTablePersistenceEntries !== 'function') {
+    return;
+  }
+  void runtimeApp.DeleteGridTablePersistenceEntries(keys).catch((error: unknown) => {
+    console.error('Failed to delete grid table states:', error);
+  });
+};
+
+export const clearAllPersistedStates = async (): Promise<number> => {
+  const removed = Object.keys(persistenceCache).length;
+  persistenceCache = {};
+
+  const runtimeApp = getRuntimeApp();
+  if (!runtimeApp || typeof runtimeApp.ClearGridTablePersistence !== 'function') {
+    return removed;
+  }
+
+  try {
+    const cleared = await runtimeApp.ClearGridTablePersistence();
+    return typeof cleared === 'number' ? cleared : removed;
+  } catch (error) {
+    console.error('Failed to clear grid table persistence:', error);
+    return removed;
+  }
+};
+
+// Test helper to clear cached values between runs.
+export const resetGridTablePersistenceCacheForTesting = (): void => {
+  persistenceCache = {};
+  hydrated = false;
+  hydrationPromise = null;
+};
+
+// Test helper to seed the cache without calling the backend.
+export const setGridTablePersistenceCacheForTesting = (entries: GridTablePersistenceMap): void => {
+  persistenceCache = { ...entries };
+  hydrated = true;
 };
 
 const normalizeFilterArray = (values?: string[]): string[] => {

@@ -55,8 +55,11 @@ type App struct {
 	apiExtensionsInformerFactory apiextinformers.SharedInformerFactory
 	refreshSubsystems            map[string]*system.Subsystem
 
-	objectCatalogMu        sync.Mutex
-	objectCatalogEntries   map[string]*objectCatalogEntry
+	objectCatalogMu      sync.Mutex
+	objectCatalogEntries map[string]*objectCatalogEntry
+
+	// persistenceMu guards persistence.json read/write operations.
+	persistenceMu sync.Mutex
 
 	permissionCacheMu sync.Mutex
 	permissionCaches  map[string]map[string]bool

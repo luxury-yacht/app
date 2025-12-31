@@ -10,6 +10,10 @@ import ReactDOM from 'react-dom/client';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { useGridTablePersistence } from './useGridTablePersistence';
 import { clearAllGridTableState } from './gridTablePersistenceReset';
+import {
+  getGridTablePersistenceSnapshot,
+  resetGridTablePersistenceCacheForTesting,
+} from './gridTablePersistence';
 import { setGridTablePersistenceMode } from './gridTablePersistenceSettings';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
@@ -26,46 +30,15 @@ const data: Row[] = [{ id: 'a' }];
 const keyExtractor = (row: Row) => row.id;
 
 describe('useGridTablePersistence integration', () => {
-  const originalStorageDescriptor = Object.getOwnPropertyDescriptor(
-    globalThis as any,
-    'localStorage'
-  );
-
   beforeEach(() => {
     vi.useFakeTimers();
     resetAppPreferencesCacheForTesting();
-    if (typeof window !== 'undefined') {
-      const store = new Map<string, string>();
-      const memoryStorage: Storage = {
-        getItem: (key: string) => (store.has(key) ? store.get(key)! : null),
-        setItem: (key: string, value: string) => {
-          store.set(key, String(value));
-        },
-        removeItem: (key: string) => {
-          store.delete(key);
-        },
-        clear: () => {
-          store.clear();
-        },
-        key: (index: number) => Array.from(store.keys())[index] ?? null,
-        get length() {
-          return store.size;
-        },
-      };
-      Object.defineProperty(globalThis, 'localStorage', {
-        value: memoryStorage,
-        configurable: true,
-        writable: true,
-      });
-      setGridTablePersistenceMode('namespaced');
-    }
+    resetGridTablePersistenceCacheForTesting();
+    setGridTablePersistenceMode('namespaced');
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    if (originalStorageDescriptor) {
-      Object.defineProperty(globalThis, 'localStorage', originalStorageDescriptor);
-    }
   });
 
   const Harness: React.FC<{ namespace: string }> = ({ namespace }) => {
@@ -109,27 +82,7 @@ describe('useGridTablePersistence integration', () => {
     return (globalThis as any).__LATEST_STATE__;
   };
 
-  const snapshotStorage = (): Record<string, any> => {
-    const snapshot: Record<string, any> = {};
-    if (typeof window === 'undefined' || !window.localStorage) {
-      return snapshot;
-    }
-    for (let i = 0; i < window.localStorage.length; i += 1) {
-      const key = window.localStorage.key(i);
-      if (!key) continue;
-      const value = window.localStorage.getItem(key);
-      if (!value) {
-        snapshot[key] = value;
-        continue;
-      }
-      try {
-        snapshot[key] = JSON.parse(value);
-      } catch {
-        snapshot[key] = value;
-      }
-    }
-    return snapshot;
-  };
+  const snapshotStorage = (): Record<string, any> => getGridTablePersistenceSnapshot();
 
   it('keeps column visibility scoped per namespace', async () => {
     const container = document.createElement('div');
@@ -207,7 +160,7 @@ describe('useGridTablePersistence integration', () => {
     });
 
     await act(async () => {
-      clearAllGridTableState((globalThis as any).localStorage);
+      await clearAllGridTableState();
       await Promise.resolve();
     });
 

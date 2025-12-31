@@ -99,9 +99,9 @@ function Settings({ onClose }: SettingsProps) {
     setGridTablePersistenceMode(mode);
   };
 
-  const handleResetViews = () => {
+  const handleResetViews = async () => {
     setIsResetViewsConfirmOpen(false);
-    clearAllGridTableState();
+    await clearAllGridTableState();
   };
 
   // Clear persisted app state across backend files and browser storage, then reload.
@@ -114,7 +114,7 @@ function Settings({ onClose }: SettingsProps) {
       }
       await clearAppState();
 
-      clearAllGridTableState();
+      await clearAllGridTableState();
       try {
         localStorage.clear();
       } catch {

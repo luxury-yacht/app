@@ -9,6 +9,10 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ClusterTabs from '@ui/layout/ClusterTabs';
+import {
+  resetClusterTabOrderCacheForTesting,
+  setClusterTabOrder,
+} from '@core/persistence/clusterTabOrder';
 
 type MockState = {
   selectedKubeconfigs: string[];
@@ -42,7 +46,7 @@ describe('ClusterTabs', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    localStorage.clear();
+    resetClusterTabOrderCacheForTesting();
     mockState.selectedKubeconfigs = [];
     mockState.selectedKubeconfig = '';
     mockState.setSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
@@ -71,7 +75,7 @@ describe('ClusterTabs', () => {
   });
 
   it('orders tabs by persisted drag order with selection-order fallback', async () => {
-    localStorage.setItem('clusterTabs:order', JSON.stringify(['b']));
+    setClusterTabOrder(['b']);
     mockState.selectedKubeconfigs = ['a', 'b', 'c'];
     mockState.selectedKubeconfig = 'a';
     await renderTabs();
@@ -83,7 +87,7 @@ describe('ClusterTabs', () => {
   });
 
   it('uses persisted order when available', async () => {
-    localStorage.setItem('clusterTabs:order', JSON.stringify(['b', 'a']));
+    setClusterTabOrder(['b', 'a']);
     mockState.selectedKubeconfigs = ['a', 'b'];
     mockState.selectedKubeconfig = 'a';
     await renderTabs();

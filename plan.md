@@ -117,7 +117,7 @@
 - Update unit tests to align with the new preference cache behavior. ✅ (implemented)
 - Remove legacy `localStorage` writes for these preferences once migration is complete. ⏳ (pending Phase 4)
 
-### Phase 3: UI Persistence Migration
+### Phase 3: UI Persistence Migration ✅
 - Move GridTable persistence and cluster tab ordering into `persistence.json`.
 - Ensure `clusterTabs.order` uses full `path:context` selections.
 - Keep cleanup logic to prune stale entries after restore or config changes.

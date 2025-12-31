@@ -115,7 +115,7 @@ export function useCommandPaletteCommands() {
         description: 'Clear all persisted GridTable state (columns, sort, filters)',
         category: 'Application',
         action: () => {
-          clearAllGridTableState();
+          void clearAllGridTableState();
         },
         keywords: ['reset', 'grid', 'views', 'table', 'columns', 'sort'],
       },

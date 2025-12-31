@@ -5,33 +5,13 @@
  */
 import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import {
+  getClusterTabOrder,
+  hydrateClusterTabOrder,
+  setClusterTabOrder,
+  subscribeClusterTabOrder,
+} from '@core/persistence/clusterTabOrder';
 import './ClusterTabs.css';
-
-const STORAGE_KEY = 'clusterTabs:order';
-
-const readPersistedOrder = (): string[] => {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return [];
-  }
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : [];
-  } catch (error) {
-    console.warn('Failed to parse cluster tab order from storage:', error);
-    return [];
-  }
-};
-
-const persistOrder = (order: string[]) => {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return;
-  }
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(order));
-};
 
 const ordersMatch = (left: string[], right: string[]) =>
   left.length === right.length && left.every((value, index) => value === right[index]);
@@ -62,17 +42,34 @@ const ClusterTabs: React.FC = () => {
     setActiveKubeconfig,
     getClusterMeta,
   } = useKubeconfig();
-  const [tabOrder, setTabOrder] = useState<string[]>(() => readPersistedOrder());
+  const [tabOrder, setTabOrder] = useState<string[]>(() => getClusterTabOrder());
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);
 
+  useEffect(() => {
+    let active = true;
+    const hydrate = async () => {
+      const order = await hydrateClusterTabOrder();
+      if (active) {
+        setTabOrder(order);
+      }
+    };
+    void hydrate();
+    const unsubscribe = subscribeClusterTabOrder((order) => {
+      setTabOrder(order);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
   const tabs = useMemo<ClusterTab[]>(() => {
     return selectedKubeconfigs.map((selection) => {
       const meta = getClusterMeta(selection);
-      const id = meta.id || selection;
       const label = meta.name || selection;
-      return { id, label, selection };
+      return { id: selection, label, selection };
     });
   }, [getClusterMeta, selectedKubeconfigs]);
 
@@ -89,8 +86,7 @@ const ClusterTabs: React.FC = () => {
     if (ordersMatch(mergedOrder, tabOrder)) {
       return;
     }
-    setTabOrder(mergedOrder);
-    persistOrder(mergedOrder);
+    setClusterTabOrder(mergedOrder);
   }, [mergedOrder, tabOrder]);
 
   const tabsById = useMemo(() => {
@@ -137,8 +133,7 @@ const ClusterTabs: React.FC = () => {
       }
       const nextOrder = moveTab(mergedOrder, draggingId, targetId);
       if (!ordersMatch(nextOrder, mergedOrder)) {
-        setTabOrder(nextOrder);
-        persistOrder(nextOrder);
+        setClusterTabOrder(nextOrder);
       }
       setDraggingId(null);
       setDropTargetId(null);

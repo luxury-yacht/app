@@ -29,6 +29,7 @@ vi.mock('./gridTablePersistence', () => {
   return {
     buildGridTableStorageKey,
     computeClusterHash: vi.fn(async () => 'clusterhash'),
+    hydrateGridTablePersistence: vi.fn(async () => undefined),
     loadPersistedState: vi.fn((key: string | null) => (key ? (stateMap[key] ?? null) : null)),
     prunePersistedState: vi.fn((state: any) => state ?? null),
     buildPersistedStateForSave: vi.fn(() => null),

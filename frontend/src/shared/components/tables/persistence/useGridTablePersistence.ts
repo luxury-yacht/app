@@ -16,6 +16,7 @@ import {
   buildGridTableStorageKey,
   buildPersistedStateForSave,
   computeClusterHash,
+  hydrateGridTablePersistence,
   loadPersistedState,
   prunePersistedState,
   savePersistedState,
@@ -136,34 +137,49 @@ export function useGridTablePersistence<T>({
   }, [storageKey]);
 
   useEffect(() => {
+    let active = true;
     if (!storageKey || hydrated === true) {
-      return;
+      return () => {
+        active = false;
+      };
     }
-    const persisted = loadPersistedState(storageKey);
-    const pruned = prunePersistedState(persisted, {
-      columns,
-      rows: data.length > 0 ? data : undefined,
-      keyExtractor: data.length > 0 ? keyExtractor : undefined,
-      filterOptions: {
-        ...(filterOptions ?? {}),
-        isNamespaceScoped,
-      },
-    });
 
-    if (pruned?.sort) {
-      setSortConfig(pruned.sort);
-    }
-    if (pruned?.columnVisibility) {
-      setColumnVisibility(pruned.columnVisibility);
-    }
-    if (pruned?.columnWidths) {
-      setColumnWidths(pruned.columnWidths);
-    }
-    if (pruned?.filters) {
-      setFilters(pruned.filters);
-    }
-    lastHydratedPayloadRef.current = pruned ? JSON.stringify(pruned) : '';
-    setHydrated(true);
+    const loadPersisted = async () => {
+      await hydrateGridTablePersistence();
+      if (!active) {
+        return;
+      }
+      const persisted = loadPersistedState(storageKey);
+      const pruned = prunePersistedState(persisted, {
+        columns,
+        rows: data.length > 0 ? data : undefined,
+        keyExtractor: data.length > 0 ? keyExtractor : undefined,
+        filterOptions: {
+          ...(filterOptions ?? {}),
+          isNamespaceScoped,
+        },
+      });
+
+      if (pruned?.sort) {
+        setSortConfig(pruned.sort);
+      }
+      if (pruned?.columnVisibility) {
+        setColumnVisibility(pruned.columnVisibility);
+      }
+      if (pruned?.columnWidths) {
+        setColumnWidths(pruned.columnWidths);
+      }
+      if (pruned?.filters) {
+        setFilters(pruned.filters);
+      }
+      lastHydratedPayloadRef.current = pruned ? JSON.stringify(pruned) : '';
+      setHydrated(true);
+    };
+
+    void loadPersisted();
+    return () => {
+      active = false;
+    };
   }, [storageKey, hydrated, columns, data, keyExtractor, filterOptions, isNamespaceScoped]);
 
   const resetLocalState = useCallback(() => {
