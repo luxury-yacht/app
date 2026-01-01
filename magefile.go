@@ -447,3 +447,8 @@ func (Package) Unsigned() error {
 func Release() error {
 	return mage.PublishRelease(cfg)
 }
+
+// Updates the Homebrew formula for the new release.
+func Homebrew() error {
+	return mage.PublishHomebrew(cfg)
+}
