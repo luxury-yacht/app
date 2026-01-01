@@ -54,9 +54,10 @@ func updateHomebrewTemplate(version, arm64Sha, amd64Sha string) ([]byte, error) 
 	return []byte(cask), nil
 }
 
-// buildTapCloneURL builds a clone URL, using a token if provided.
+// buildTapCloneURL builds a clone URL, using GH_TOKEN when available.
 func buildTapCloneURL(repo string) string {
-	token := os.Getenv("HOMEBREW_TAP_TOKEN")
+	// Prefer GH_TOKEN so CI can authenticate without relying on local credentials.
+	token := os.Getenv("GH_TOKEN")
 	if token == "" {
 		return fmt.Sprintf("https://github.com/%s.git", repo)
 	}
