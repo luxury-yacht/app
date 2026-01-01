@@ -184,7 +184,7 @@
 }
 
 .object-diff-column-meta {
-  color: var(--color-text-secondary);
+  color: var(--color-text-tertiary);
 }
 
 .object-diff-column-name {
@@ -201,6 +201,7 @@
   padding: var(--spacing-lg);
   color: var(--color-text-secondary);
   font-size: var(--font-size-md);
+  text-align: center;
 }
 
 .object-diff-error {
