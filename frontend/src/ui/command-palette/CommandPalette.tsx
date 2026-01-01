@@ -36,6 +36,7 @@ interface CommandPaletteProps {
 // Define category order - easily adjustable
 const CATEGORY_ORDER = [
   'Application',
+  'Settings',
   'Navigation',
   'Namespaces',
   'Kubeconfigs',

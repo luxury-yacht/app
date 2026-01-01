@@ -84,6 +84,7 @@ export function useCommandPaletteCommands() {
   );
 
   const closeTabShortcut = useMemo(() => (isMacPlatform() ? ['⌘', 'W'] : ['Ctrl', 'W']), []);
+  const diffObjectsShortcut = useMemo(() => (isMacPlatform() ? ['⌘', 'D'] : ['Ctrl', 'D']), []);
 
   const commands = useMemo(
     () => [
@@ -110,47 +111,8 @@ export function useCommandPaletteCommands() {
         shortcut: ['⌘', ','],
       },
       {
-        id: 'open-object-diff',
-        label: 'Diff Objects',
-        description: 'Compare Kubernetes objects in a side-by-side YAML diff',
-        category: 'Application',
-        action: () => {
-          viewState.setIsObjectDiffOpen(true);
-        },
-        keywords: ['diff', 'compare', 'yaml', 'objects', 'kubernetes'],
-      },
-      {
-        id: 'reset-all-gridtable-state',
-        label: 'Reset All Views',
-        description: 'Clear all persisted GridTable state (columns, sort, filters)',
-        category: 'Application',
-        action: () => {
-          void clearAllGridTableState();
-        },
-        keywords: ['reset', 'grid', 'views', 'table', 'columns', 'sort'],
-      },
-      {
-        id: 'refresh-view',
-        label: 'Refresh Current View',
-        description: 'Manually refresh the current view',
-        category: 'Application',
-        action: () => {
-          void refreshOrchestrator.triggerManualRefreshForContext();
-        },
-        keywords: ['refresh', 'reload', 'update'],
-        shortcut: ['⌘', 'R'],
-      },
-      {
-        id: 'toggle-auto-refresh',
-        label: 'Toggle Auto-Refresh',
-        description: 'Enable or disable automatic refresh',
-        category: 'Application',
-        action: toggleAutoRefresh,
-        keywords: ['auto', 'refresh', 'toggle', 'pause', 'resume', 'automatic'],
-      },
-      {
         id: 'toggle-sidebar',
-        label: 'Toggle Sidebar',
+        label: 'Show/Hide Sidebar',
         description: 'Show or hide the sidebar',
         category: 'Application',
         action: () => {
@@ -160,8 +122,19 @@ export function useCommandPaletteCommands() {
         shortcut: 'B',
       },
       {
+        id: 'open-object-diff',
+        label: 'Diff Objects',
+        description: 'Compare Kubernetes objects in a side-by-side YAML diff',
+        category: 'Application',
+        action: () => {
+          viewState.setIsObjectDiffOpen(true);
+        },
+        keywords: ['diff', 'compare', 'yaml', 'objects', 'kubernetes'],
+        shortcut: diffObjectsShortcut,
+      },
+      {
         id: 'toggle-application-logs',
-        label: 'Toggle Application Logs',
+        label: 'Application Logs Panel',
         description: 'Toggle application logs',
         category: 'Application',
         action: () => {
@@ -172,7 +145,7 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'toggle-diagnostics',
-        label: 'Toggle Diagnostics Panel',
+        label: 'Diagnostics Panel',
         description: 'Show diagnostics (refresh, permissions)',
         category: 'Application',
         action: () => {
@@ -181,11 +154,31 @@ export function useCommandPaletteCommands() {
         keywords: ['diagnostics', 'status', 'permissions', 'refresh'],
         shortcut: ['⇧', '⌃', 'D'],
       },
+
+      // Settings Commands
+      {
+        id: 'reset-all-gridtable-state',
+        label: 'Reset All Views',
+        description: 'Clear all persisted GridTable state (columns, sort, filters)',
+        category: 'Settings',
+        action: () => {
+          void clearAllGridTableState();
+        },
+        keywords: ['reset', 'grid', 'views', 'table', 'columns', 'sort'],
+      },
+      {
+        id: 'toggle-auto-refresh',
+        label: 'Toggle Auto-Refresh',
+        description: 'Enable or disable automatic refresh',
+        category: 'Settings',
+        action: toggleAutoRefresh,
+        keywords: ['auto', 'refresh', 'toggle', 'pause', 'resume', 'automatic'],
+      },
       {
         id: 'toggle-short-names',
         label: 'Toggle Short Names',
         description: 'Toggle between short and full resource type names',
-        category: 'Application',
+        category: 'Settings',
         action: async () => {
           // Get current state
           const currentState = getUseShortResourceNames();
@@ -199,13 +192,11 @@ export function useCommandPaletteCommands() {
         },
         keywords: ['short', 'names', 'abbreviations', 'types', 'resources', 'toggle'],
       },
-
-      // Theme Commands
       {
         id: 'theme-light',
         label: 'Theme - Light',
         description: `Switch to light theme${theme === 'light' ? ' (current)' : ''}`,
-        category: 'Application',
+        category: 'Settings',
         action: async () => {
           try {
             await changeTheme('light');
@@ -219,7 +210,7 @@ export function useCommandPaletteCommands() {
         id: 'theme-dark',
         label: 'Theme - Dark',
         description: `Switch to dark theme${theme === 'dark' ? ' (current)' : ''}`,
-        category: 'Application',
+        category: 'Settings',
         action: async () => {
           try {
             await changeTheme('dark');
@@ -233,7 +224,7 @@ export function useCommandPaletteCommands() {
         id: 'theme-system',
         label: 'Theme - System',
         description: `Use system theme preference${theme === 'system' ? ' (current)' : ''}`,
-        category: 'Application',
+        category: 'Settings',
         action: async () => {
           try {
             await changeTheme('system');
@@ -245,6 +236,17 @@ export function useCommandPaletteCommands() {
       },
 
       // Navigation Commands
+      {
+        id: 'refresh-view',
+        label: 'Refresh Current View',
+        description: 'Manually refresh the current view',
+        category: 'Navigation',
+        action: () => {
+          void refreshOrchestrator.triggerManualRefreshForContext();
+        },
+        keywords: ['refresh', 'reload', 'update'],
+        shortcut: ['⌘', 'R'],
+      },
       {
         id: 'close-cluster-tab',
         label: 'Close Current Cluster Tab',
@@ -501,6 +503,6 @@ export function useCommandPaletteCommands() {
     });
   }, [kubeconfigs, selectedKubeconfigs, setActiveKubeconfig, setSelectedKubeconfigs]);
 
-  // Order: Application, Navigation (including namespace views), Kubeconfigs, Namespaces
+  // Order: Application, Settings, Navigation (including namespace views), Kubeconfigs, Namespaces
   return [...commands, ...namespaceviewCommands, ...namespaceCommands, ...kubeconfigCommands];
 }
