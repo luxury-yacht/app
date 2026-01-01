@@ -29,8 +29,8 @@ describe('yamlDiff', () => {
   });
 
   it('marks the diff as truncated when exceeding the line threshold', () => {
-    const before = new Array(900).fill('before').join('\n');
-    const after = new Array(900).fill('after').join('\n');
+    const before = new Array(2001).fill('before').join('\n');
+    const after = new Array(2000).fill('after').join('\n');
     const result = computeLineDiff(before, after);
     expect(result.truncated).toBe(true);
     expect(result.lines).toHaveLength(0);

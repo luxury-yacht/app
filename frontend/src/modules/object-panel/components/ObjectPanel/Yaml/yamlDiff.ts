@@ -19,7 +19,8 @@ export interface DiffResult {
   truncated: boolean;
 }
 
-const MAX_DIFF_LINES = 800;
+// Guard against the O(n*m) diff blowing up on very large YAMLs.
+export const MAX_DIFF_LINES = 2000;
 
 const buildMatrix = (left: string[], right: string[]) => {
   const rows = left.length + 1;
@@ -43,7 +44,7 @@ export const computeLineDiff = (before: string, after: string): DiffResult => {
   const left = before.split(/\r?\n/);
   const right = after.split(/\r?\n/);
 
-  if (left.length + right.length > MAX_DIFF_LINES) {
+  if (Math.max(left.length, right.length) > MAX_DIFF_LINES) {
     return {
       lines: [],
       truncated: true,

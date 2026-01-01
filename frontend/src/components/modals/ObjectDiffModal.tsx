@@ -20,6 +20,7 @@ import { refreshOrchestrator, useRefreshScopedDomain } from '@core/refresh';
 import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
 import {
   computeLineDiff,
+  MAX_DIFF_LINES,
   type DiffLine,
   type DiffResult,
   type DiffLineType,
@@ -98,17 +99,26 @@ const buildNamespaceScope = (namespace?: string) => {
   return trimmed ? trimmed : CLUSTER_SCOPE;
 };
 
-const buildSelectionLabel = (item: CatalogItem | null, useShortNames: boolean): string => {
+const buildSelectionParts = (item: CatalogItem | null, useShortNames: boolean) => {
   if (!item) {
-    return 'No object selected';
+    return {
+      hasSelection: false,
+      clusterLabel: '',
+      namespaceLabel: '',
+      objectName: '',
+      kindLabel: '',
+    };
   }
   const namespaceLabel = buildNamespaceLabel(item.namespace);
   const clusterLabel = item.clusterName?.trim() || item.clusterId?.trim() || '';
-  const scopePrefix = clusterLabel
-    ? `${clusterLabel}/${namespaceLabel}/${item.name}`
-    : `${namespaceLabel}/${item.name}`;
   const kindLabel = getDisplayKind(item.kind, useShortNames);
-  return `${scopePrefix} (${kindLabel})`;
+  return {
+    hasSelection: true,
+    clusterLabel,
+    namespaceLabel,
+    objectName: item.name,
+    kindLabel,
+  };
 };
 
 const isSnapshotLoading = (status: string) => status === 'loading' || status === 'initialising';
@@ -1012,6 +1022,24 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     selection.addRange(range);
   };
 
+  // Render a selection label with object name emphasized and metadata muted.
+  const renderSelectionLabel = (selection: CatalogItem | null) => {
+    const parts = buildSelectionParts(selection, useShortNamesSetting);
+    if (!parts.hasSelection) {
+      return <span className="object-diff-column-meta">No object selected</span>;
+    }
+    return (
+      <>
+        {parts.clusterLabel && (
+          <span className="object-diff-column-meta">{parts.clusterLabel}/</span>
+        )}
+        <span className="object-diff-column-meta">{parts.namespaceLabel}/</span>
+        <span className="object-diff-column-name">{parts.objectName}</span>
+        <span className="object-diff-column-meta"> ({parts.kindLabel})</span>
+      </>
+    );
+  };
+
   const toggleExpandedRow = (rowIndex: number) => {
     setExpandedRows((current) => {
       const next = new Set(current);
@@ -1119,7 +1147,11 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
 
   const renderDiffContent = () => {
     if (!leftSelection || !rightSelection) {
-      return <div className="object-diff-empty">Select objects on both sides to compare.</div>;
+      return (
+        <div className="object-diff-empty object-diff-warning">
+          Select objects on both sides to compare.
+        </div>
+      );
     }
     if (
       (leftYamlInitialLoading && !leftYamlNormalized) ||
@@ -1139,9 +1171,29 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
       return <div className="object-diff-empty">YAML is not available for both objects.</div>;
     }
     if (diffTruncated) {
+      const leftLineCount = leftDisplayLines.length;
+      const rightLineCount = rightDisplayLines.length;
+      const leftTooLarge = leftLineCount > MAX_DIFF_LINES;
+      const rightTooLarge = rightLineCount > MAX_DIFF_LINES;
+      const targetName =
+        leftTooLarge && rightTooLarge
+          ? leftLineCount >= rightLineCount
+            ? leftSelection?.name
+            : rightSelection?.name
+          : leftTooLarge
+            ? leftSelection?.name
+            : rightSelection?.name;
+      const objectName = targetName?.trim() || 'Object';
       return (
         <div className="object-diff-empty object-diff-warning">
-          Diff too large to display. Refine the selections to reduce output.
+          {objectName} exceeds {MAX_DIFF_LINES} lines and cannot be diffed.
+        </div>
+      );
+    }
+    if (showDiffOnly && visibleDiffLines.length === 0) {
+      return (
+        <div className="object-diff-empty object-diff-success">
+          No diffs. Compared objects are identical.
         </div>
       );
     }
@@ -1240,7 +1292,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   value={leftClusterId}
                   onChange={handleLeftClusterChange}
                   placeholder="Select cluster"
-                  disabled={clusterOptions.length <= 1}
+                  disabled={clusterOptions.length === 0}
                   ariaLabel="Left cluster"
                 />
               </div>
@@ -1330,7 +1382,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   value={rightClusterId}
                   onChange={handleRightClusterChange}
                   placeholder="Select cluster"
-                  disabled={clusterOptions.length <= 1}
+                  disabled={clusterOptions.length === 0}
                   ariaLabel="Right cluster"
                 />
               </div>
@@ -1410,33 +1462,34 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   {showDiffOnly ? 'Show All' : 'Show Diffs'}
                 </button>
               </div>
-              {(leftChangedAt || rightChangedAt) && (
-                <div className="object-diff-change-indicator">
-                  {leftChangedAt && (
-                    <span
-                      className="object-diff-change-item"
-                      title={`Left changed ${formatFullDate(leftChangedAt)}`}
-                    >
-                      Left changed {formatChangeAge(leftChangedAt)}
-                    </span>
-                  )}
-                  {rightChangedAt && (
-                    <span
-                      className="object-diff-change-item"
-                      title={`Right changed ${formatFullDate(rightChangedAt)}`}
-                    >
-                      Right changed {formatChangeAge(rightChangedAt)}
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
             <div className="object-diff-column-headers">
               <div className="object-diff-column-title">
-                {buildSelectionLabel(leftSelection, useShortNamesSetting)}
+                <span className="object-diff-column-label">
+                  {renderSelectionLabel(leftSelection)}
+                </span>
+                {/* Show per-side update indicators alongside each selection label. */}
+                {leftChangedAt && (
+                  <span
+                    className="object-diff-column-update"
+                    title={`Left updated ${formatFullDate(leftChangedAt)}`}
+                  >
+                    Updated {formatChangeAge(leftChangedAt)}
+                  </span>
+                )}
               </div>
               <div className="object-diff-column-title">
-                {buildSelectionLabel(rightSelection, useShortNamesSetting)}
+                <span className="object-diff-column-label">
+                  {renderSelectionLabel(rightSelection)}
+                </span>
+                {rightChangedAt && (
+                  <span
+                    className="object-diff-column-update"
+                    title={`Right updated ${formatFullDate(rightChangedAt)}`}
+                  >
+                    Updated {formatChangeAge(rightChangedAt)}
+                  </span>
+                )}
               </div>
             </div>
             {renderDiffContent()}

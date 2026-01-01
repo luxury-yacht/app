@@ -75,6 +75,26 @@ func TestToggleSidebarTogglesAndEmits(t *testing.T) {
 	}
 }
 
+func TestToggleObjectDiffRequiresContext(t *testing.T) {
+	app := newUIApp(t)
+
+	err := app.ToggleObjectDiff()
+	require.Error(t, err)
+}
+
+func TestToggleObjectDiffEmits(t *testing.T) {
+	app := newUIApp(t)
+	events := []string{}
+	app.eventEmitter = func(_ context.Context, name string, _ ...interface{}) {
+		events = append(events, name)
+	}
+	app.Ctx = context.Background()
+
+	err := app.ToggleObjectDiff()
+	require.NoError(t, err)
+	require.Equal(t, []string{"toggle-object-diff"}, events)
+}
+
 func TestUpdateMenuNoContext(t *testing.T) {
 	app := newUIApp(t)
 	emitted := false

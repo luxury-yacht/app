@@ -16,14 +16,21 @@ interface WailsRuntimeEventHandlers {
   onToggleSidebar: () => void;
   onToggleAppLogs: () => void;
   onToggleDiagnostics: () => void;
+  onToggleObjectDiff: () => void;
 }
 
 /**
  * Subscribes to Wails runtime events for UI actions (menu items, etc.)
  */
 export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void {
-  const { onOpenSettings, onOpenAbout, onToggleSidebar, onToggleAppLogs, onToggleDiagnostics } =
-    handlers;
+  const {
+    onOpenSettings,
+    onOpenAbout,
+    onToggleSidebar,
+    onToggleAppLogs,
+    onToggleDiagnostics,
+    onToggleObjectDiff,
+  } = handlers;
 
   useEffect(() => {
     const runtime = window.runtime;
@@ -37,6 +44,7 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
       ['toggle-sidebar', onToggleSidebar],
       ['toggle-app-logs', onToggleAppLogs],
       ['toggle-diagnostics', onToggleDiagnostics],
+      ['toggle-object-diff', onToggleObjectDiff],
     ];
 
     eventHandlers.forEach(([event, handler]) => runtime.EventsOn?.(event, handler));
@@ -44,7 +52,14 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
     return () => {
       eventHandlers.forEach(([event]) => runtime.EventsOff?.(event));
     };
-  }, [onOpenSettings, onOpenAbout, onToggleSidebar, onToggleAppLogs, onToggleDiagnostics]);
+  }, [
+    onOpenSettings,
+    onOpenAbout,
+    onToggleSidebar,
+    onToggleAppLogs,
+    onToggleDiagnostics,
+    onToggleObjectDiff,
+  ]);
 }
 
 /**

@@ -160,6 +160,14 @@ func createViewMenu(appMenu *menu.Menu, app *App) {
 		}()
 	})
 
+	viewMenu.AddText("Diff Objects", keys.CmdOrCtrl("d"), func(_ *menu.CallbackData) {
+		go func() {
+			if err := app.ToggleObjectDiff(); err != nil {
+				println("Failed to toggle object diff:", err.Error())
+			}
+		}()
+	})
+
 	// Dynamic logs panel menu item text
 	logsText := "Show Application Logs"
 	if app.IsLogsPanelVisible() {
