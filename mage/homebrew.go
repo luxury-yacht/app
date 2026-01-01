@@ -83,13 +83,13 @@ func cloneTapRepo() (string, error) {
 func PublishHomebrew(cfg BuildConfig) error {
 	fmt.Printf("\n⚙️ Publishing the Homebrew formula for version %s...\n", cfg.Version)
 
+	// Calculate SHA256 checksums for the DMG files.
 	arm64Dmg := fmt.Sprintf("luxury-yacht-%s-macos-arm64.dmg", cfg.Version)
 	arm64Path := fmt.Sprintf("%s/%s", cfg.ArtifactsDir, arm64Dmg)
 	arm64Sha, err := getFileSha256(arm64Path)
 	if err != nil {
 		return err
 	}
-
 	amd64Dmg := fmt.Sprintf("luxury-yacht-%s-macos-amd64.dmg", cfg.Version)
 	amd64Path := fmt.Sprintf("%s/%s", cfg.ArtifactsDir, amd64Dmg)
 	amd64Sha, err := getFileSha256(amd64Path)
@@ -97,11 +97,13 @@ func PublishHomebrew(cfg BuildConfig) error {
 		return err
 	}
 
+	// Update the cask template with the new version and checksums.
 	cask, err := updateHomebrewTemplate(cfg.Version, arm64Sha, amd64Sha)
 	if err != nil {
 		return err
 	}
 
+	// Clone the tap repo.
 	fmt.Printf("\n⚙️ Cloning %s...\n", tapRepo)
 	tmpDir, err := cloneTapRepo()
 	if err != nil {
@@ -109,6 +111,7 @@ func PublishHomebrew(cfg BuildConfig) error {
 	}
 	defer os.RemoveAll(tmpDir)
 
+	// Write the updated cask file.
 	caskPath := filepath.Join(tmpDir, "casks", "luxury-yacht.rb")
 	if err := os.WriteFile(caskPath, []byte(cask), 0o644); err != nil {
 		return fmt.Errorf("failed to update cask at %s: %w", caskPath, err)
@@ -120,8 +123,10 @@ func PublishHomebrew(cfg BuildConfig) error {
 		return fmt.Errorf("failed to check tap repo status: %w", err)
 	}
 	if strings.TrimSpace(status) == "" {
-		fmt.Println("✅ Homebrew cask already up to date.")
+		fmt.Println("\n✅ Homebrew cask already up to date.")
 		return nil
+	} else {
+		fmt.Println("\n⚙️ Homebrew cask needs to be updated.")
 	}
 
 	// Make sure git user.name is set.

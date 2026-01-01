@@ -193,3 +193,25 @@ jobs:
         run: |
           export GITHUB_RUN_NUMBER="${{ github.run_number }}"
           mage release
+
+  homebrew:
+    if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
+    needs:
+      - prepare
+      - release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
+        with:
+          go-version: ${{ needs.prepare.outputs.go_version }}
+          mage-version: latest
+          setup-node: "false"
+          install-wails: "false"
+
+      - name: Update Homebrew formula
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: mage homebrew
