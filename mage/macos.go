@@ -245,6 +245,18 @@ func createDMG(archType string, version string) error {
 	return nil
 }
 
+// Builds the macOS app for a specific architecture so we can package per-arch artifacts.
+func buildMacOSForArch(cfg BuildConfig, archType string) error {
+	generateBuildManifest(cfg)
+
+	buildArgs := append([]string{}, cfg.BuildArgs...)
+	buildArgs = append(buildArgs, "--platform", fmt.Sprintf("darwin/%s", archType))
+
+	fmt.Printf("\n🛠️ Wails build args: %v\n\n", buildArgs)
+
+	return sh.RunV("wails", buildArgs...)
+}
+
 // Build the application for macOS.
 func BuildMacOS(cfg BuildConfig) error {
 	err := createMacIconfile(cfg)
@@ -309,29 +321,64 @@ func PackageMacOS(cfg BuildConfig, signed bool) error {
 		return err
 	}
 
+	archs := []string{"arm64", "amd64"}
+
 	if signed {
 		identity, appleID, appleIDPassword, appleTeamId, keychainPath := getMacOSSigningEnv()
 
-		err = signMacApp(identity, keychainPath, binDir+"/"+cfg.AppLongName+".app")
+		for _, archType := range archs {
+			archCfg := cfg
+			archCfg.ArchType = archType
+
+			// Build, sign, and package each macOS architecture separately.
+			err = buildMacOSForArch(archCfg, archType)
+			if err != nil {
+				return err
+			}
+
+			err = signMacApp(identity, keychainPath, binDir+"/"+archCfg.AppLongName+".app")
+			if err != nil {
+				return err
+			}
+
+			err = notarizeMacApp(appleID, appleIDPassword, appleTeamId, binDir+"/"+archCfg.AppLongName+".app")
+			if err != nil {
+				return err
+			}
+
+			err = stageMacApp(archCfg)
+			if err != nil {
+				return err
+			}
+
+			err = createDMG(archCfg.ArchType, archCfg.Version)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	for _, archType := range archs {
+		archCfg := cfg
+		archCfg.ArchType = archType
+
+		// Build and package each macOS architecture separately.
+		err = buildMacOSForArch(archCfg, archType)
 		if err != nil {
 			return err
 		}
 
-		err = notarizeMacApp(appleID, appleIDPassword, appleTeamId, binDir+"/"+cfg.AppLongName+".app")
+		err = stageMacApp(archCfg)
 		if err != nil {
 			return err
 		}
 
-	}
-
-	err = stageMacApp(cfg)
-	if err != nil {
-		return err
-	}
-
-	err = createDMG(cfg.ArchType, cfg.Version)
-	if err != nil {
-		return err
+		err = createDMG(archCfg.ArchType, archCfg.Version)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

@@ -402,8 +402,8 @@ func (Package) Signed() error {
 			return err
 		}
 	}
-	// Windows packaging runs its own NSIS build to produce the installer.
-	if cfg.OsType != "windows" {
+	// Only build if Linux because Windows and macOS packaging handle their own builds.
+	if cfg.OsType == "linux" {
 		mg.Deps(Build)
 	}
 
@@ -422,7 +422,8 @@ func (Package) Signed() error {
 // Packages the app without signing and notarization.
 func (Package) Unsigned() error {
 	// Windows packaging runs its own NSIS build to produce the installer.
-	if cfg.OsType != "windows" {
+	// Only build if Linux because Windows and macOS packaging handle their own builds.
+	if cfg.OsType == "linux" {
 		mg.Deps(Build)
 	}
 
