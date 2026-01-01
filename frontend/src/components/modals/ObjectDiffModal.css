@@ -183,6 +183,14 @@
   flex: 1;
 }
 
+.object-diff-column-meta {
+  color: var(--color-text-secondary);
+}
+
+.object-diff-column-name {
+  color: var(--color-text);
+}
+
 .object-diff-column-update {
   font-size: var(--font-size-xs);
   color: var(--color-text-tertiary);
@@ -201,6 +209,10 @@
 
 .object-diff-warning {
   color: var(--color-warning);
+}
+
+.object-diff-success {
+  color: var(--color-success);
 }
 
 .object-diff-table {
