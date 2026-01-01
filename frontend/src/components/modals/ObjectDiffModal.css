@@ -167,11 +167,26 @@
 }
 
 .object-diff-column-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  min-width: 0;
+}
+
+.object-diff-column-label {
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.object-diff-column-update {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
 }
 
 .object-diff-empty {

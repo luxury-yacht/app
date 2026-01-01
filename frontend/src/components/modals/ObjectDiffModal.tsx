@@ -20,6 +20,7 @@ import { refreshOrchestrator, useRefreshScopedDomain } from '@core/refresh';
 import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
 import {
   computeLineDiff,
+  MAX_DIFF_LINES,
   type DiffLine,
   type DiffResult,
   type DiffLineType,
@@ -1139,9 +1140,22 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
       return <div className="object-diff-empty">YAML is not available for both objects.</div>;
     }
     if (diffTruncated) {
+      const leftLineCount = leftDisplayLines.length;
+      const rightLineCount = rightDisplayLines.length;
+      const leftTooLarge = leftLineCount > MAX_DIFF_LINES;
+      const rightTooLarge = rightLineCount > MAX_DIFF_LINES;
+      const targetName =
+        leftTooLarge && rightTooLarge
+          ? leftLineCount >= rightLineCount
+            ? leftSelection?.name
+            : rightSelection?.name
+          : leftTooLarge
+            ? leftSelection?.name
+            : rightSelection?.name;
+      const objectName = targetName?.trim() || 'Object';
       return (
         <div className="object-diff-empty object-diff-warning">
-          Diff too large to display. Refine the selections to reduce output.
+          {objectName} exceeds {MAX_DIFF_LINES} lines and cannot be diffed.
         </div>
       );
     }
@@ -1240,7 +1254,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   value={leftClusterId}
                   onChange={handleLeftClusterChange}
                   placeholder="Select cluster"
-                  disabled={clusterOptions.length <= 1}
+                  disabled={clusterOptions.length === 0}
                   ariaLabel="Left cluster"
                 />
               </div>
@@ -1330,7 +1344,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   value={rightClusterId}
                   onChange={handleRightClusterChange}
                   placeholder="Select cluster"
-                  disabled={clusterOptions.length <= 1}
+                  disabled={clusterOptions.length === 0}
                   ariaLabel="Right cluster"
                 />
               </div>
@@ -1410,33 +1424,34 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
                   {showDiffOnly ? 'Show All' : 'Show Diffs'}
                 </button>
               </div>
-              {(leftChangedAt || rightChangedAt) && (
-                <div className="object-diff-change-indicator">
-                  {leftChangedAt && (
-                    <span
-                      className="object-diff-change-item"
-                      title={`Left changed ${formatFullDate(leftChangedAt)}`}
-                    >
-                      Left changed {formatChangeAge(leftChangedAt)}
-                    </span>
-                  )}
-                  {rightChangedAt && (
-                    <span
-                      className="object-diff-change-item"
-                      title={`Right changed ${formatFullDate(rightChangedAt)}`}
-                    >
-                      Right changed {formatChangeAge(rightChangedAt)}
-                    </span>
-                  )}
-                </div>
-              )}
             </div>
             <div className="object-diff-column-headers">
               <div className="object-diff-column-title">
-                {buildSelectionLabel(leftSelection, useShortNamesSetting)}
+                <span className="object-diff-column-label">
+                  {buildSelectionLabel(leftSelection, useShortNamesSetting)}
+                </span>
+                {/* Show per-side update indicators alongside each selection label. */}
+                {leftChangedAt && (
+                  <span
+                    className="object-diff-column-update"
+                    title={`Left updated ${formatFullDate(leftChangedAt)}`}
+                  >
+                    Updated {formatChangeAge(leftChangedAt)}
+                  </span>
+                )}
               </div>
               <div className="object-diff-column-title">
-                {buildSelectionLabel(rightSelection, useShortNamesSetting)}
+                <span className="object-diff-column-label">
+                  {buildSelectionLabel(rightSelection, useShortNamesSetting)}
+                </span>
+                {rightChangedAt && (
+                  <span
+                    className="object-diff-column-update"
+                    title={`Right updated ${formatFullDate(rightChangedAt)}`}
+                  >
+                    Updated {formatChangeAge(rightChangedAt)}
+                  </span>
+                )}
               </div>
             </div>
             {renderDiffContent()}
