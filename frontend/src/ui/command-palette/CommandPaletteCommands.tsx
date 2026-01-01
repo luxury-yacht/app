@@ -341,7 +341,15 @@ export function useCommandPaletteCommands() {
         keywords: ['cluster', 'events', 'logs', 'history'],
       },
     ],
-    [viewState, theme, openClusterTab, closeCurrentClusterTab, closeTabShortcut, toggleAutoRefresh]
+    [
+      viewState,
+      theme,
+      openClusterTab,
+      closeCurrentClusterTab,
+      closeTabShortcut,
+      toggleAutoRefresh,
+      diffObjectsShortcut,
+    ]
   );
 
   // Add namespace view navigation commands (only when a namespace is selected in the sidebar)

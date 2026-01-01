@@ -40,6 +40,16 @@ func (a *App) ToggleSidebar() error {
 	return nil
 }
 
+// ToggleObjectDiff emits an event that opens or closes the object diff modal.
+func (a *App) ToggleObjectDiff() error {
+	if a.Ctx == nil {
+		return fmt.Errorf("application context not available")
+	}
+
+	a.emitEvent("toggle-object-diff")
+	return nil
+}
+
 func (a *App) UpdateMenu() {
 	if a.Ctx == nil {
 		return

@@ -394,6 +394,10 @@ export function ToggleLogsPanel() {
   return window['go']['backend']['App']['ToggleLogsPanel']();
 }
 
+export function ToggleObjectDiff() {
+  return window['go']['backend']['App']['ToggleObjectDiff']();
+}
+
 export function ToggleSidebar() {
   return window['go']['backend']['App']['ToggleSidebar']();
 }

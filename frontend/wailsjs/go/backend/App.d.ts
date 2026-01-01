@@ -207,6 +207,8 @@ export function ToggleDiagnosticsPanel():Promise<void>;
 
 export function ToggleLogsPanel():Promise<void>;
 
+export function ToggleObjectDiff():Promise<void>;
+
 export function ToggleSidebar():Promise<void>;
 
 export function UncordonNode(arg1:string,arg2:string):Promise<void>;

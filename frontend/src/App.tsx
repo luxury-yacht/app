@@ -83,6 +83,10 @@ function AppContent() {
     eventBus.emit('view:toggle-diagnostics');
   }, []);
 
+  const handleToggleObjectDiff = useCallback(() => {
+    viewState.setIsObjectDiffOpen(!viewState.isObjectDiffOpen);
+  }, [viewState]);
+
   // Handle Wails runtime events (menu items, etc.)
   useWailsRuntimeEvents({
     onOpenSettings: () => viewState.setIsSettingsOpen(true),
@@ -90,6 +94,7 @@ function AppContent() {
     onToggleSidebar: () => viewState.toggleSidebar(),
     onToggleAppLogs: handleToggleAppLogsPanel,
     onToggleDiagnostics: handleToggleDiagnostics,
+    onToggleObjectDiff: handleToggleObjectDiff,
   });
 
   // Handle sidebar resize
