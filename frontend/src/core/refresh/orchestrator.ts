@@ -1167,8 +1167,8 @@ class RefreshOrchestrator {
   private shouldAllowRefresher(config: DomainRegistration<RefreshDomain>): boolean {
     return (
       !config.streaming ||
-      config.streaming.metricsOnly ||
-      config.streaming.pauseRefresherWhenStreaming
+      config.streaming.metricsOnly === true ||
+      config.streaming.pauseRefresherWhenStreaming === true
     );
   }
 
