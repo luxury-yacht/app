@@ -16,6 +16,8 @@ func normalizeScopeForDomain(domain, scope string) (string, error) {
 		return normalizeNamespaceScope(trimmed, "namespace-config")
 	case domainNamespaceRBAC:
 		return normalizeNamespaceScope(trimmed, "namespace-rbac")
+	case domainNamespaceQuotas:
+		return normalizeNamespaceScope(trimmed, "namespace-quotas")
 	case domainNodes:
 		if trimmed == "" || strings.EqualFold(strings.TrimSuffix(trimmed, ":"), "cluster") {
 			return "", nil

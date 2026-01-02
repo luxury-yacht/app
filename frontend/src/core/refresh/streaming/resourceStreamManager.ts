@@ -11,6 +11,8 @@ import type {
   ClusterNodeSnapshotPayload,
   NamespaceConfigSnapshotPayload,
   NamespaceConfigSummary,
+  NamespaceQuotaSummary,
+  NamespaceQuotasSnapshotPayload,
   NamespaceRBACSnapshotPayload,
   NamespaceRBACSummary,
   NamespaceWorkloadSnapshotPayload,
@@ -86,6 +88,7 @@ const isSupportedDomain = (value: string | undefined): value is ResourceDomain =
   value === 'namespace-workloads' ||
   value === 'namespace-config' ||
   value === 'namespace-rbac' ||
+  value === 'namespace-quotas' ||
   value === 'nodes';
 
 const hasMessageType = (value: unknown): value is StreamMessageType =>
@@ -197,6 +200,8 @@ export const normalizeResourceScope = (domain: ResourceDomain, scope: string): s
       return normalizeNamespaceScope(scope, 'namespace-config');
     case 'namespace-rbac':
       return normalizeNamespaceScope(scope, 'namespace-rbac');
+    case 'namespace-quotas':
+      return normalizeNamespaceScope(scope, 'namespace-quotas');
     case 'nodes':
       if (!scope || scope.trim() === '' || scope.trim().toLowerCase() === 'cluster') {
         return '';
@@ -269,6 +274,20 @@ export const sortRBACRows = (rows: NamespaceRBACSummary[]): void => {
   });
 };
 
+export const sortQuotaRows = (rows: NamespaceQuotaSummary[]): void => {
+  rows.sort((a, b) => {
+    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
+    if (ns !== 0) {
+      return ns;
+    }
+    const name = normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
+    if (name !== 0) {
+      return name;
+    }
+    return normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
+  });
+};
+
 export const sortNodeRows = (rows: ClusterNodeSnapshotEntry[]): void => {
   rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
 };
@@ -287,6 +306,9 @@ const buildConfigKey = (clusterId: string, namespace: string, kind: string, name
   `${clusterId}::${namespace}::${kind}::${name}`;
 
 const buildRBACKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
+  `${clusterId}::${namespace}::${kind}::${name}`;
+
+const buildQuotaKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
   `${clusterId}::${namespace}::${kind}::${name}`;
 
 const buildNodeKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
@@ -371,6 +393,18 @@ const buildRBACKeySet = (
   const keys = new Set<string>();
   rows.forEach((row) => {
     keys.add(buildRBACKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
+  });
+  return keys;
+};
+
+const buildQuotaKeySet = (
+  payload: NamespaceQuotasSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.resources ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(buildQuotaKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
   });
   return keys;
 };
@@ -1105,6 +1139,57 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-quotas') {
+      setDomainState('namespace-quotas', (previous) => {
+        const currentPayload = previous.data ?? { resources: [] };
+        const existingRows = currentPayload.resources ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildQuotaKey(
+              row.clusterId ?? subscription.clusterId,
+              row.namespace,
+              row.kind,
+              row.name
+            ),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildQuotaKey(
+            update.clusterId ?? subscription.clusterId,
+            update.namespace ?? '',
+            update.kind ?? '',
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as NamespaceQuotaSummary);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortQuotaRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, resources: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       setDomainState('nodes', (previous) => {
         const currentPayload = previous.data ?? { nodes: [] };
@@ -1211,6 +1296,23 @@ export class ResourceStreamManager {
         const kind = update.kind ?? row?.kind ?? '';
         const name = update.name ?? row?.name ?? '';
         const key = buildRBACKey(clusterId, namespace, kind, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
+    if (subscription.domain === 'namespace-quotas') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as NamespaceQuotaSummary | undefined;
+        const namespace = update.namespace ?? row?.namespace ?? '';
+        const kind = update.kind ?? row?.kind ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildQuotaKey(clusterId, namespace, kind, name);
         if (update.type === MESSAGE_TYPES.deleted) {
           subscription.shadowKeys.delete(key);
         } else {
@@ -1419,6 +1521,26 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-quotas') {
+      const payload = snapshot.payload as NamespaceQuotasSnapshotPayload;
+      setDomainState('namespace-quotas', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       const payload = snapshot.payload as ClusterNodeSnapshotPayload;
       setDomainState('nodes', (previous) => ({
@@ -1460,6 +1582,11 @@ export class ResourceStreamManager {
     } else if (subscription.domain === 'namespace-rbac') {
       snapshotKeys = buildRBACKeySet(
         snapshot.payload as NamespaceRBACSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'namespace-quotas') {
+      snapshotKeys = buildQuotaKeySet(
+        snapshot.payload as NamespaceQuotasSnapshotPayload | null | undefined,
         subscription.clusterId
       );
     } else if (subscription.domain === 'nodes') {
@@ -1581,6 +1708,19 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-quotas') {
+      setDomainState('namespace-quotas', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       setDomainState('nodes', (previous) => ({
         ...previous,
@@ -1636,6 +1776,16 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-quotas') {
+      setDomainState('namespace-quotas', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       setDomainState('nodes', (previous) => ({
         ...previous,
@@ -1675,6 +1825,13 @@ export class ResourceStreamManager {
       }));
     } else if (subscription.domain === 'namespace-rbac') {
       setDomainState('namespace-rbac', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
+    } else if (subscription.domain === 'namespace-quotas') {
+      setDomainState('namespace-quotas', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,

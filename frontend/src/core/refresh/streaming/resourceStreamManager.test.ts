@@ -96,6 +96,7 @@ beforeEach(() => {
   resetDomainState('namespace-workloads');
   resetDomainState('namespace-config');
   resetDomainState('namespace-rbac');
+  resetDomainState('namespace-quotas');
   resetAllScopedDomainStates('pods');
 });
 
@@ -104,6 +105,7 @@ afterEach(() => {
   resetDomainState('namespace-workloads');
   resetDomainState('namespace-config');
   resetDomainState('namespace-rbac');
+  resetDomainState('namespace-quotas');
   resetAllScopedDomainStates('pods');
   resetScopedDomainState('pods', 'cluster-a|namespace:default');
   delete (globalThis as any).WebSocket;
@@ -133,6 +135,11 @@ describe('resourceStreamManager helpers', () => {
   it('normalizes namespace rbac scopes', () => {
     expect(normalizeResourceScope('namespace-rbac', 'default')).toBe('namespace:default');
     expect(normalizeResourceScope('namespace-rbac', 'namespace:all')).toBe('namespace:all');
+  });
+
+  it('normalizes namespace quotas scopes', () => {
+    expect(normalizeResourceScope('namespace-quotas', 'default')).toBe('namespace:default');
+    expect(normalizeResourceScope('namespace-quotas', 'namespace:all')).toBe('namespace:all');
   });
 
   it('normalizes node scopes', () => {
@@ -406,6 +413,54 @@ describe('ResourceStreamManager', () => {
 
     const state = getDomainState('namespace-rbac');
     expect(state.data?.resources?.[0]?.name).toBe('role-a');
+  });
+
+  test('applies namespace quotas updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-quotas',
+      storeScope
+    );
+
+    setDomainState('namespace-quotas', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'namespace-quotas',
+        scope: 'namespace:default',
+        resourceVersion: '5',
+        name: 'quota-a',
+        namespace: 'default',
+        kind: 'ResourceQuota',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'ResourceQuota',
+          name: 'quota-a',
+          namespace: 'default',
+          details: 'Hard: 0, Used: 0',
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('namespace-quotas');
+    expect(state.data?.resources?.[0]?.name).toBe('quota-a');
   });
 
   test('resyncs on out-of-order resource versions', async () => {

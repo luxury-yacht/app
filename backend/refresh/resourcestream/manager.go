@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -37,6 +38,7 @@ const (
 	domainWorkloads       = "namespace-workloads"
 	domainNamespaceConfig = "namespace-config"
 	domainNamespaceRBAC   = "namespace-rbac"
+	domainNamespaceQuotas = "namespace-quotas"
 	domainNodes           = "nodes"
 )
 
@@ -207,6 +209,27 @@ func NewManager(factory *informer.Factory, provider metrics.Provider, logger log
 		AddFunc:    func(obj interface{}) { mgr.handleServiceAccount(obj, MessageTypeAdded) },
 		UpdateFunc: func(_, newObj interface{}) { mgr.handleServiceAccount(newObj, MessageTypeModified) },
 		DeleteFunc: func(obj interface{}) { mgr.handleServiceAccount(obj, MessageTypeDeleted) },
+	})
+
+	resourceQuotaInformer := shared.Core().V1().ResourceQuotas()
+	resourceQuotaInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleResourceQuota(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleResourceQuota(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleResourceQuota(obj, MessageTypeDeleted) },
+	})
+
+	limitRangeInformer := shared.Core().V1().LimitRanges()
+	limitRangeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleLimitRange(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleLimitRange(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleLimitRange(obj, MessageTypeDeleted) },
+	})
+
+	pdbInformer := shared.Policy().V1().PodDisruptionBudgets()
+	pdbInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handlePodDisruptionBudget(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handlePodDisruptionBudget(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handlePodDisruptionBudget(obj, MessageTypeDeleted) },
 	})
 
 	return mgr
@@ -440,6 +463,81 @@ func (m *Manager) handleServiceAccount(obj interface{}, updateType MessageType) 
 	}
 
 	m.broadcast(domainNamespaceRBAC, scopesForNamespace(serviceAccount.Namespace), update)
+}
+
+func (m *Manager) handleResourceQuota(obj interface{}, updateType MessageType) {
+	quota := resourceQuotaFromObject(obj)
+	if quota == nil {
+		return
+	}
+
+	summary := snapshot.BuildResourceQuotaSummary(m.clusterMeta, quota)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceQuotas,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: quota.ResourceVersion,
+		UID:             string(quota.UID),
+		Name:            quota.Name,
+		Namespace:       quota.Namespace,
+		Kind:            "ResourceQuota",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainNamespaceQuotas, scopesForNamespace(quota.Namespace), update)
+}
+
+func (m *Manager) handleLimitRange(obj interface{}, updateType MessageType) {
+	limit := limitRangeFromObject(obj)
+	if limit == nil {
+		return
+	}
+
+	summary := snapshot.BuildLimitRangeSummary(m.clusterMeta, limit)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceQuotas,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: limit.ResourceVersion,
+		UID:             string(limit.UID),
+		Name:            limit.Name,
+		Namespace:       limit.Namespace,
+		Kind:            "LimitRange",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainNamespaceQuotas, scopesForNamespace(limit.Namespace), update)
+}
+
+func (m *Manager) handlePodDisruptionBudget(obj interface{}, updateType MessageType) {
+	pdb := podDisruptionBudgetFromObject(obj)
+	if pdb == nil {
+		return
+	}
+
+	summary := snapshot.BuildPodDisruptionBudgetSummary(m.clusterMeta, pdb)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceQuotas,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: pdb.ResourceVersion,
+		UID:             string(pdb.UID),
+		Name:            pdb.Name,
+		Namespace:       pdb.Namespace,
+		Kind:            "PodDisruptionBudget",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainNamespaceQuotas, scopesForNamespace(pdb.Namespace), update)
 }
 
 func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
@@ -819,6 +917,12 @@ func domainPermissions(domain string) ([]permissionRequirement, bool) {
 			{group: "rbac.authorization.k8s.io", resource: "rolebindings"},
 			{group: "", resource: "serviceaccounts"},
 		}, true
+	case domainNamespaceQuotas:
+		return []permissionRequirement{
+			{group: "", resource: "resourcequotas"},
+			{group: "", resource: "limitranges"},
+			{group: "policy", resource: "poddisruptionbudgets"},
+		}, true
 	case domainNodes:
 		return []permissionRequirement{{group: "", resource: "nodes"}}, true
 	case domainWorkloads:
@@ -1018,6 +1122,39 @@ func serviceAccountFromObject(obj interface{}) *corev1.ServiceAccount {
 		return typed
 	case cache.DeletedFinalStateUnknown:
 		return serviceAccountFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func resourceQuotaFromObject(obj interface{}) *corev1.ResourceQuota {
+	switch typed := obj.(type) {
+	case *corev1.ResourceQuota:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return resourceQuotaFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func limitRangeFromObject(obj interface{}) *corev1.LimitRange {
+	switch typed := obj.(type) {
+	case *corev1.LimitRange:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return limitRangeFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func podDisruptionBudgetFromObject(obj interface{}) *policyv1.PodDisruptionBudget {
+	switch typed := obj.(type) {
+	case *policyv1.PodDisruptionBudget:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return podDisruptionBudgetFromObject(typed.Obj)
 	default:
 		return nil
 	}

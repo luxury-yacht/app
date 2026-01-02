@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 
@@ -101,6 +102,65 @@ func BuildServiceAccountSummary(meta ClusterMeta, sa *corev1.ServiceAccount) RBA
 		Details:     describeServiceAccount(sa),
 		Age:         formatAge(sa.CreationTimestamp.Time),
 	}
+}
+
+// BuildResourceQuotaSummary builds a quota row payload that matches snapshot formatting.
+func BuildResourceQuotaSummary(meta ClusterMeta, quota *corev1.ResourceQuota) QuotaSummary {
+	if quota == nil {
+		return QuotaSummary{ClusterMeta: meta, Kind: "ResourceQuota"}
+	}
+	return QuotaSummary{
+		ClusterMeta: meta,
+		Kind:        "ResourceQuota",
+		Name:        quota.Name,
+		Namespace:   quota.Namespace,
+		Details:     describeResourceQuota(quota),
+		Age:         formatAge(quota.CreationTimestamp.Time),
+	}
+}
+
+// BuildLimitRangeSummary builds a limit range row payload that matches snapshot formatting.
+func BuildLimitRangeSummary(meta ClusterMeta, limit *corev1.LimitRange) QuotaSummary {
+	if limit == nil {
+		return QuotaSummary{ClusterMeta: meta, Kind: "LimitRange"}
+	}
+	return QuotaSummary{
+		ClusterMeta: meta,
+		Kind:        "LimitRange",
+		Name:        limit.Name,
+		Namespace:   limit.Namespace,
+		Details:     describeLimitRange(limit),
+		Age:         formatAge(limit.CreationTimestamp.Time),
+	}
+}
+
+// BuildPodDisruptionBudgetSummary builds a PDB row payload that matches snapshot formatting.
+func BuildPodDisruptionBudgetSummary(meta ClusterMeta, pdb *policyv1.PodDisruptionBudget) QuotaSummary {
+	if pdb == nil {
+		return QuotaSummary{ClusterMeta: meta, Kind: "PodDisruptionBudget"}
+	}
+	summary := QuotaSummary{
+		ClusterMeta: meta,
+		Kind:        "PodDisruptionBudget",
+		Name:        pdb.Name,
+		Namespace:   pdb.Namespace,
+		Details:     describePodDisruptionBudget(pdb),
+		Age:         formatAge(pdb.CreationTimestamp.Time),
+		Status: &QuotaStatus{
+			DisruptionsAllowed: pdb.Status.DisruptionsAllowed,
+			CurrentHealthy:     pdb.Status.CurrentHealthy,
+			DesiredHealthy:     pdb.Status.DesiredHealthy,
+		},
+	}
+	if pdb.Spec.MinAvailable != nil {
+		value := pdb.Spec.MinAvailable.String()
+		summary.MinAvailable = &value
+	}
+	if pdb.Spec.MaxUnavailable != nil {
+		value := pdb.Spec.MaxUnavailable.String()
+		summary.MaxUnavailable = &value
+	}
+	return summary
 }
 
 // BuildWorkloadSummary builds a workload row payload for a single workload object.

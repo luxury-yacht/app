@@ -15,6 +15,7 @@ type ResourceStreamDomain =
   | 'namespace-workloads'
   | 'namespace-config'
   | 'namespace-rbac'
+  | 'namespace-quotas'
   | 'nodes';
 
 // Event payload types

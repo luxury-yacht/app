@@ -763,12 +763,19 @@ class RefreshOrchestrator {
 
   private isResourceStreamDomain(
     domain: RefreshDomain
-  ): domain is 'pods' | 'namespace-workloads' | 'namespace-config' | 'namespace-rbac' | 'nodes' {
+  ): domain is
+    | 'pods'
+    | 'namespace-workloads'
+    | 'namespace-config'
+    | 'namespace-rbac'
+    | 'namespace-quotas'
+    | 'nodes' {
     return (
       domain === 'pods' ||
       domain === 'namespace-workloads' ||
       domain === 'namespace-config' ||
       domain === 'namespace-rbac' ||
+      domain === 'namespace-quotas' ||
       domain === 'nodes'
     );
   }
@@ -799,6 +806,12 @@ class RefreshOrchestrator {
     if (domain === 'namespace-rbac') {
       return (
         this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'rbac'
+      );
+    }
+
+    if (domain === 'namespace-quotas') {
+      return (
+        this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'quotas'
       );
     }
 
@@ -1705,7 +1718,13 @@ class RefreshOrchestrator {
   }
 
   private handleResourceStreamDrift = (payload: {
-    domain: 'pods' | 'namespace-workloads' | 'namespace-config' | 'namespace-rbac' | 'nodes';
+    domain:
+      | 'pods'
+      | 'namespace-workloads'
+      | 'namespace-config'
+      | 'namespace-rbac'
+      | 'namespace-quotas'
+      | 'nodes';
     scope: string;
     reason: string;
   }): void => {
@@ -2096,6 +2115,12 @@ refreshOrchestrator.registerDomain({
   category: 'namespace',
   scopeResolver: () => refreshOrchestrator.getSelectedNamespace(),
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('namespace-quotas', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('namespace-quotas', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-quotas', scope),
+  },
 });
 
 refreshOrchestrator.registerDomain({

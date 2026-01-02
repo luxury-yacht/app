@@ -87,7 +87,7 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
   - [ ] `cluster-custom`
   - [ ] `namespace-network`
   - [ ] `namespace-storage`
-  - [ ] `namespace-quotas`
+  - ✅ `namespace-quotas`
   - [ ] `namespace-autoscaling`
   - [ ] `namespace-custom`
   - [ ] `namespace-helm`

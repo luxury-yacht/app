@@ -128,6 +128,40 @@ func TestManagerRBACUpdateBroadcasts(t *testing.T) {
 	}
 }
 
+func TestManagerQuotasUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainNamespaceQuotas, "namespace:default")
+	require.NoError(t, err)
+
+	quota := &corev1.ResourceQuota{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "quota-1",
+			Namespace:       "default",
+			UID:             "quota-uid",
+			ResourceVersion: "7",
+		},
+	}
+
+	manager.handleResourceQuota(quota, MessageTypeAdded)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainNamespaceQuotas, update.Domain)
+		require.Equal(t, "namespace:default", update.Scope)
+		require.Equal(t, "quota-1", update.Name)
+		require.Equal(t, "default", update.Namespace)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected quotas update to be delivered")
+	}
+}
+
 func TestManagerDropsSubscriberOnBackpressure(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
