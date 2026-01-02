@@ -66,7 +66,7 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 - ✅ Drift detection: compare item counts and key sets; if drift is detected, disable stream for that domain and fall back to snapshots.
 - ✅ Gradual enablement: start with a single domain in one view, then expand to more domains once stable.
 - ✅ In parallel, tune or disable high-frequency interval refreshers for domains moved to streaming so load reduction is realized. (ties to #8)
-- Close #8 fully by auditing all refreshers and applying visibility and view-based gating, not just the domains moved to streaming.
+- ✅ Close #8 fully by auditing all refreshers and applying visibility and view-based gating, not just the domains moved to streaming.
 
 ### Phase 4 - Validation and observability
 
