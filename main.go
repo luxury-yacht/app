@@ -89,12 +89,12 @@ func main() {
 		CSSDragValue:    "true",
 
 		// Open dev tools automatically in development
-		// OnDomReady: func(ctx context.Context) {
-		// 	runtime.WindowExecJS(ctx, "console.log('[Wails] Opening dev tools automatically');")
-		// },
-		// Debug: options.Debug{
-		// 	OpenInspectorOnStartup: true, // This opens dev tools automatically
-		// },
+		OnDomReady: func(ctx context.Context) {
+			runtime.WindowExecJS(ctx, "console.log('[Wails] Opening dev tools automatically');")
+		},
+		Debug: options.Debug{
+			OpenInspectorOnStartup: true, // This opens dev tools automatically
+		},
 	})
 
 	if err != nil {

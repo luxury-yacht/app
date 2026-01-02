@@ -51,8 +51,13 @@ import { logStreamManager } from './streaming/logStreamManager';
 import { eventStreamManager } from './streaming/eventStreamManager';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
 import { errorHandler } from '@utils/errorHandler';
+import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
 import { buildClusterScope, buildClusterScopeList, parseClusterScope } from './clusterScope';
-import { isResourceStreamingEnabled } from './featureFlags';
+import {
+  getResourceStreamingDomainAllowlist,
+  getResourceStreamingMode,
+  isResourceStreamingEnabled,
+} from './featureFlags';
 
 type DomainCategory = 'system' | 'cluster' | 'namespace';
 
@@ -83,6 +88,16 @@ const DEFAULT_AUTO_START = false;
 const CLUSTER_SCOPE = 'cluster';
 const noopStreamingCleanup = () => {};
 const RESOURCE_STREAMING_ENABLED = isResourceStreamingEnabled();
+// Keep streaming metrics refreshes aligned with the backend poll cadence.
+const STREAMING_METRICS_MIN_INTERVAL_MS = 10_000;
+
+const logInfo = (message: string): void => {
+  logAppInfo(message, 'RefreshOrchestrator');
+};
+
+const logWarning = (message: string): void => {
+  logAppWarn(message, 'RefreshOrchestrator');
+};
 
 const makeInFlightKey = (domain: RefreshDomain, scope?: string) => `${domain}::${scope ?? '*'}`;
 
@@ -109,6 +124,10 @@ class RefreshOrchestrator {
   private streamingReady = new Map<string, Promise<void>>();
   private cancelledStreaming = new Set<string>();
   private domainStreamingScopes = new Map<RefreshDomain, string>();
+  private blockedStreaming = new Set<string>();
+  private readonly resourceStreamingMode = getResourceStreamingMode();
+  private readonly resourceStreamingDomains = getResourceStreamingDomainAllowlist();
+  private lastMetricsRefreshAt = new Map<string, number>();
   private domainEnabledState = new Map<RefreshDomain, boolean>();
   private scopedEnabledState = new Map<RefreshDomain, Map<string, boolean>>();
   private domainScopeOverrides = new Map<RefreshDomain, string>();
@@ -126,6 +145,14 @@ class RefreshOrchestrator {
     eventBus.on('kubeconfig:changing', this.handleKubeconfigChanging);
     eventBus.on('kubeconfig:changed', this.handleKubeconfigChanged);
     eventBus.on('kubeconfig:selection-changed', this.handleKubeconfigSelectionChanged);
+    eventBus.on('refresh:resource-stream-drift', this.handleResourceStreamDrift);
+    // Emit a single log so operators can confirm streaming config at runtime.
+    const domains = this.resourceStreamingDomains
+      ? Array.from(this.resourceStreamingDomains).join(',')
+      : 'all';
+    logInfo(
+      `[refresh] resource streaming config enabled=${RESOURCE_STREAMING_ENABLED} mode=${this.resourceStreamingMode} domains=${domains}`
+    );
   }
 
   private getErrorNotificationKey(domain: RefreshDomain, scope?: string): string {
@@ -395,7 +422,9 @@ class RefreshOrchestrator {
           this.domainStreamingScopes.set(domain, normalizedScope);
           if (!hasActiveStream) {
             this.streamingReady.delete(readyKey);
-            resetDomainState(domain);
+            if (!this.shouldMuteResourceStreamState(domain)) {
+              resetDomainState(domain);
+            }
             this.scheduleStreamingStart(domain, normalizedScope, config.streaming, {
               scoped: false,
             });
@@ -490,6 +519,9 @@ class RefreshOrchestrator {
     scope: string,
     options: { scoped: boolean }
   ): void {
+    if (this.shouldMuteResourceStreamState(domain)) {
+      return;
+    }
     if (options.scoped) {
       setScopedDomainState(domain, scope, (previous) => ({
         ...previous,
@@ -514,6 +546,9 @@ class RefreshOrchestrator {
     message: string,
     options: { scoped: boolean }
   ): void {
+    if (this.shouldMuteResourceStreamState(domain)) {
+      return;
+    }
     if (options.scoped) {
       setScopedDomainState(domain, scope, (previous) => ({
         ...previous,
@@ -753,6 +788,51 @@ class RefreshOrchestrator {
     return domain === 'pods' || domain === 'namespace-workloads' || domain === 'nodes';
   }
 
+  private isResourceStreamingShadowMode(domain: RefreshDomain): boolean {
+    return this.isResourceStreamDomain(domain) && this.resourceStreamingMode === 'shadow';
+  }
+
+  private isResourceStreamingAllowed(domain: RefreshDomain): boolean {
+    if (!this.isResourceStreamDomain(domain)) {
+      return true;
+    }
+    if (!this.resourceStreamingDomains) {
+      return true;
+    }
+    return this.resourceStreamingDomains.has(domain);
+  }
+
+  private isResourceStreamViewActive(domain: RefreshDomain): boolean {
+    if (!this.isResourceStreamDomain(domain)) {
+      return true;
+    }
+
+    if (domain === 'pods') {
+      return (
+        this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'pods'
+      );
+    }
+
+    if (domain === 'namespace-workloads') {
+      return (
+        this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'workloads'
+      );
+    }
+
+    if (domain === 'nodes') {
+      return this.context.currentView === 'cluster' && this.context.activeClusterView === 'nodes';
+    }
+
+    return true;
+  }
+
+  private isStreamingBlocked(domain: RefreshDomain, scope?: string): boolean {
+    if (!this.isResourceStreamDomain(domain) || !scope) {
+      return false;
+    }
+    return this.blockedStreaming.has(makeInFlightKey(domain, scope));
+  }
+
   private isStreamingActive(domain: RefreshDomain, scope: string): boolean {
     return this.streamingCleanup.has(makeInFlightKey(domain, scope));
   }
@@ -765,11 +845,50 @@ class RefreshOrchestrator {
     if (!this.isResourceStreamDomain(domain)) {
       return true;
     }
+    if (!this.isResourceStreamingAllowed(domain)) {
+      return false;
+    }
+    if (!this.isResourceStreamViewActive(domain)) {
+      return false;
+    }
     const parsed = parseClusterScope(trimmed);
     if (!parsed.clusterId || parsed.isMultiCluster) {
       return false;
     }
+    if (this.isStreamingBlocked(domain, trimmed)) {
+      return false;
+    }
     return true;
+  }
+
+  private shouldUseStreamingForFetch(domain: RefreshDomain): boolean {
+    if (!this.isResourceStreamDomain(domain)) {
+      return true;
+    }
+    return this.resourceStreamingMode === 'active';
+  }
+
+  private shouldMuteResourceStreamState(domain: RefreshDomain): boolean {
+    return this.isResourceStreamingShadowMode(domain);
+  }
+
+  private shouldSkipStreamingMetricsRefresh(domain: RefreshDomain, scope?: string): boolean {
+    if (!scope) {
+      return false;
+    }
+    const key = makeInFlightKey(domain, scope);
+    const last = this.lastMetricsRefreshAt.get(key);
+    if (!last) {
+      return false;
+    }
+    return Date.now() - last < STREAMING_METRICS_MIN_INTERVAL_MS;
+  }
+
+  private recordStreamingMetricsRefresh(domain: RefreshDomain, scope?: string): void {
+    if (!scope) {
+      return;
+    }
+    this.lastMetricsRefreshAt.set(makeInFlightKey(domain, scope), Date.now());
   }
 
   private getConfig(domain: RefreshDomain): DomainRegistration<RefreshDomain> {
@@ -1048,17 +1167,22 @@ class RefreshOrchestrator {
       const normalizedScope = this.normalizeStreamingScope(domain, scope);
       const shouldStream = this.shouldStreamScope(domain, normalizedScope);
       const key = makeInFlightKey(domain, normalizedScope);
+      const useStreaming = this.shouldUseStreamingForFetch(domain);
       const hasStream =
         shouldStream &&
         (this.streamingCleanup.has(key) ||
           this.pendingStreaming.has(key) ||
           (this.domainStreamingScopes.get(domain) === normalizedScope && normalizedScope !== ''));
 
-      if (hasStream) {
+      if (hasStream && useStreaming) {
         if (options.isManual && config.streaming.refreshOnce && normalizedScope) {
           await config.streaming.refreshOnce(normalizedScope);
         }
         if (!options.isManual && config.streaming.metricsOnly) {
+          if (this.shouldSkipStreamingMetricsRefresh(domain, normalizedScope)) {
+            incrementDroppedAutoRefresh(domain);
+            return;
+          }
           await this.performFetch(domain, scope, { ...options, metricsOnly: true }, config);
         }
         return;
@@ -1084,15 +1208,19 @@ class RefreshOrchestrator {
 
     if (config.streaming) {
       const shouldStream = this.shouldStreamScope(domain, normalizedScope);
+      const useStreaming = this.shouldUseStreamingForFetch(domain);
       if (shouldStream) {
-        if (options.isManual) {
+        if (useStreaming && options.isManual) {
           await this.refreshStreamingDomainOnce(domain, normalizedScope);
           return;
         }
         this.startStreamingScope(domain, normalizedScope, config.streaming);
       }
-      if (config.streaming.metricsOnly && !options.isManual) {
+      if (config.streaming.metricsOnly && !options.isManual && useStreaming) {
         const metricsOnly = shouldStream && this.isStreamingActive(domain, normalizedScope);
+        if (metricsOnly && this.shouldSkipStreamingMetricsRefresh(domain, normalizedScope)) {
+          return;
+        }
         await this.performFetch(
           domain,
           normalizedScope,
@@ -1101,7 +1229,7 @@ class RefreshOrchestrator {
         );
         return;
       }
-      if (shouldStream) {
+      if (shouldStream && useStreaming) {
         return;
       }
     }
@@ -1247,6 +1375,9 @@ class RefreshOrchestrator {
             lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
           }));
         }
+        if (metricsOnly && !options.isManual) {
+          this.recordStreamingMetricsRefresh(domain, normalizedScope ?? '');
+        }
         this.clearRefreshError(domain, isScoped ? normalizedScope : undefined);
         return;
       }
@@ -1276,6 +1407,9 @@ class RefreshOrchestrator {
           options.isManual,
           isScoped ? normalizedScope : undefined
         );
+      }
+      if (metricsOnly && !options.isManual) {
+        this.recordStreamingMetricsRefresh(domain, normalizedScope ?? '');
       }
     } catch (error) {
       if (controller.signal.aborted) {
@@ -1603,6 +1737,38 @@ class RefreshOrchestrator {
     }
   }
 
+  private handleResourceStreamDrift = (payload: {
+    domain: 'pods' | 'namespace-workloads' | 'nodes';
+    scope: string;
+    reason: string;
+  }): void => {
+    const scope = payload.scope.trim();
+    if (!scope) {
+      return;
+    }
+    // Disable streaming for drifted scopes so snapshots remain the source of truth.
+    const domain = payload.domain as RefreshDomain;
+    const key = makeInFlightKey(domain, scope);
+    if (this.blockedStreaming.has(key)) {
+      return;
+    }
+    this.blockedStreaming.add(key);
+    this.streamingReady.delete(key);
+    this.pendingStreaming.delete(key);
+
+    const config = this.configs.get(domain);
+    if (config?.streaming) {
+      this.stopStreamingScope(domain, scope, config.streaming, false);
+      if (!config.scoped && this.domainStreamingScopes.get(domain) === scope) {
+        this.domainStreamingScopes.delete(domain);
+      }
+    }
+
+    logWarning(
+      `[refresh] resource stream drift detected domain=${domain} scope=${scope} reason=${payload.reason}`
+    );
+  };
+
   private handleResetViews = () => {
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
@@ -1611,6 +1777,8 @@ class RefreshOrchestrator {
       this.teardownInFlight(key, details);
     });
     this.domainScopeOverrides.clear();
+    this.blockedStreaming.clear();
+    this.lastMetricsRefreshAt.clear();
     this.configs.forEach((_, domain) => {
       this.resetDomain(domain);
     });
@@ -1624,6 +1792,8 @@ class RefreshOrchestrator {
       this.teardownInFlight(key, details);
     });
     this.domainScopeOverrides.clear();
+    this.blockedStreaming.clear();
+    this.lastMetricsRefreshAt.clear();
     this.configs.forEach((config, domain) => {
       const wasEnabled = this.domainEnabledState.get(domain) ?? true;
       this.suspendedDomains.set(domain, wasEnabled);
@@ -1662,7 +1832,9 @@ class RefreshOrchestrator {
       }
 
       if (nextScope) {
-        resetDomainState(domain);
+        if (!this.shouldMuteResourceStreamState(domain)) {
+          resetDomainState(domain);
+        }
         if (shouldStream) {
           this.startStreamingDomain(domain, nextScope);
           this.domainStreamingScopes.set(domain, nextScope);
@@ -1695,6 +1867,8 @@ class RefreshOrchestrator {
     invalidateRefreshBaseURL();
     this.suppressNetworkErrors(6000);
     this.suspendedDomains.clear();
+    this.blockedStreaming.clear();
+    this.lastMetricsRefreshAt.clear();
   };
 
   private handleKubeconfigSelectionChanged = () => {
@@ -1702,6 +1876,8 @@ class RefreshOrchestrator {
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
     this.suppressNetworkErrors(6000);
+    this.blockedStreaming.clear();
+    this.lastMetricsRefreshAt.clear();
   };
 }
 

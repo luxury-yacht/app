@@ -9,6 +9,8 @@
 
 interface ImportMetaEnv {
   readonly VITE_RESOURCE_STREAMING?: string;
+  readonly VITE_RESOURCE_STREAMING_MODE?: string;
+  readonly VITE_RESOURCE_STREAMING_DOMAINS?: string;
 }
 
 interface ImportMeta {

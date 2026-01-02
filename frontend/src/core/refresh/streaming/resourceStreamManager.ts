@@ -15,14 +15,25 @@ import type {
   PodSnapshotPayload,
 } from '../types';
 import { buildClusterScopeList, parseClusterScope } from '../clusterScope';
+import { getResourceStreamingMode, type ResourceStreamingMode } from '../featureFlags';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
+import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
 
 const RESOURCE_STREAM_PATH = '/api/v2/stream/resources';
 const UPDATE_COALESCE_MS = 150;
 const RESYNC_COOLDOWN_MS = 1000;
 const RESYNC_MESSAGE = 'Stream resyncing';
 const STREAM_ERROR_NOTIFY_THRESHOLD = 3;
+const DRIFT_SAMPLE_SIZE = 5;
+
+const logInfo = (message: string): void => {
+  logAppInfo(message, 'ResourceStream');
+};
+
+const logWarning = (message: string): void => {
+  logAppWarn(message, 'ResourceStream');
+};
 
 const MESSAGE_TYPES = {
   request: 'REQUEST',
@@ -229,6 +240,78 @@ const buildWorkloadKey = (
 
 const buildNodeKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
 
+type KeyDiff = {
+  missingKeys: number;
+  extraKeys: number;
+  missingSample: string[];
+  extraSample: string[];
+};
+
+const diffKeySets = (expected: Set<string>, actual: Set<string>, sampleLimit: number): KeyDiff => {
+  const missingSample: string[] = [];
+  const extraSample: string[] = [];
+  let missingKeys = 0;
+  let extraKeys = 0;
+
+  expected.forEach((key) => {
+    if (!actual.has(key)) {
+      missingKeys += 1;
+      if (missingSample.length < sampleLimit) {
+        missingSample.push(key);
+      }
+    }
+  });
+
+  actual.forEach((key) => {
+    if (!expected.has(key)) {
+      extraKeys += 1;
+      if (extraSample.length < sampleLimit) {
+        extraSample.push(key);
+      }
+    }
+  });
+
+  return { missingKeys, extraKeys, missingSample, extraSample };
+};
+
+const buildPodKeySet = (
+  payload: PodSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.pods ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(buildPodKey(row.clusterId ?? fallbackClusterId, row.namespace, row.name));
+  });
+  return keys;
+};
+
+const buildWorkloadKeySet = (
+  payload: NamespaceWorkloadSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.workloads ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(
+      buildWorkloadKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
+    );
+  });
+  return keys;
+};
+
+const buildNodeKeySet = (
+  payload: ClusterNodeSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.nodes ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(buildNodeKey(row.clusterId ?? fallbackClusterId, row.name));
+  });
+  return keys;
+};
+
 const preferMetric = (existing: string | undefined, incoming: string): string =>
   existing === undefined || existing === '' ? incoming : existing;
 
@@ -299,6 +382,9 @@ type StreamSubscription = {
   resyncInFlight: boolean;
   lastResyncAt: number;
   preserveMetrics: boolean;
+  shadowKeys: Set<string>;
+  hasBaseline: boolean;
+  driftDetected: boolean;
 };
 
 class ResourceStreamConnection {
@@ -431,12 +517,17 @@ export class ResourceStreamManager {
   private lastNotifiedErrors = new Map<string, string>();
   private consecutiveErrors = new Map<string, number>();
   private suspendedForVisibility = false;
+  private readonly mode: ResourceStreamingMode = getResourceStreamingMode();
 
   constructor() {
     eventBus.on('kubeconfig:changing', () => this.stopAll(true));
     eventBus.on('view:reset', () => this.stopAll(false));
     eventBus.on('app:visibility-hidden', () => this.suspendForVisibility());
     eventBus.on('app:visibility-visible', () => this.resumeFromVisibility());
+  }
+
+  private isShadowMode(): boolean {
+    return this.mode === 'shadow';
   }
 
   async start(domain: ResourceDomain, scope: string): Promise<void> {
@@ -512,6 +603,8 @@ export class ResourceStreamManager {
   }
 
   handleConnectionOpen(clusterId: string): void {
+    // Log when the websocket is connected so it is clear streaming is active.
+    logInfo(`[resource-stream] connection open clusterId=${clusterId} mode=${this.mode}`);
     this.clearStreamError(clusterId);
     this.subscriptions.forEach((subscription) => {
       if (subscription.clusterId !== clusterId) {
@@ -577,8 +670,15 @@ export class ResourceStreamManager {
       resyncInFlight: false,
       lastResyncAt: 0,
       preserveMetrics: true,
+      shadowKeys: new Set(),
+      hasBaseline: false,
+      driftDetected: false,
     };
     this.subscriptions.set(key, subscription);
+    // Log stream activation so testers can verify shadow vs active mode in the app logs.
+    logInfo(
+      `[resource-stream] subscription created mode=${this.mode} domain=${subscription.domain} scope=${subscription.storeScope}`
+    );
     return subscription;
   }
 
@@ -657,6 +757,9 @@ export class ResourceStreamManager {
     if (subscription.resyncInFlight) {
       return;
     }
+    if (subscription.driftDetected) {
+      return;
+    }
 
     const incomingVersion = parseResourceVersion(message.resourceVersion);
     if (!incomingVersion) {
@@ -685,6 +788,14 @@ export class ResourceStreamManager {
     }
     const updates = subscription.updateQueue.splice(0, subscription.updateQueue.length);
     const now = Date.now();
+
+    // Always update shadow keys so drift checks can compare snapshots to streamed changes.
+    this.applyShadowUpdates(subscription, updates);
+
+    if (this.isShadowMode()) {
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
 
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.storeScope, (previous) => {
@@ -829,6 +940,59 @@ export class ResourceStreamManager {
     }
   }
 
+  private applyShadowUpdates(subscription: StreamSubscription, updates: UpdateMessage[]): void {
+    if (!subscription.hasBaseline) {
+      return;
+    }
+
+    if (subscription.domain === 'pods') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as PodSnapshotEntry | undefined;
+        const namespace = update.namespace ?? row?.namespace ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildPodKey(clusterId, namespace, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
+    if (subscription.domain === 'namespace-workloads') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as NamespaceWorkloadSummary | undefined;
+        const namespace = update.namespace ?? row?.namespace ?? '';
+        const kind = update.kind ?? row?.kind ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildWorkloadKey(clusterId, namespace, kind, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
+    if (subscription.domain === 'nodes') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as ClusterNodeSnapshotEntry | undefined;
+        const name = update.name ?? row?.name ?? '';
+        const key = buildNodeKey(clusterId, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+    }
+  }
+
   // Resync clears queued updates and refreshes the snapshot after stream gaps.
   private async resyncSubscription(
     subscription: StreamSubscription,
@@ -836,6 +1000,9 @@ export class ResourceStreamManager {
     force = false
   ): Promise<void> {
     if (subscription.resyncInFlight) {
+      return;
+    }
+    if (subscription.driftDetected) {
       return;
     }
     const now = Date.now();
@@ -860,6 +1027,10 @@ export class ResourceStreamManager {
       if (notModified) {
         this.markResyncComplete(subscription);
         subscription.pendingReset = false;
+        if (subscription.driftDetected) {
+          this.unsubscribe(subscription, false);
+          return;
+        }
         this.subscribe(subscription);
         return;
       }
@@ -870,6 +1041,10 @@ export class ResourceStreamManager {
       subscription.resourceVersion =
         parseResourceVersion(snapshot.version) ?? subscription.resourceVersion;
       subscription.pendingReset = false;
+      if (subscription.driftDetected) {
+        this.unsubscribe(subscription, false);
+        return;
+      }
       this.subscribe(subscription);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -880,6 +1055,14 @@ export class ResourceStreamManager {
   }
 
   private applySnapshot(subscription: StreamSubscription, snapshot: Snapshot<any>): void {
+    // Drift detection compares streamed keys against the latest snapshot.
+    this.updateShadowBaseline(subscription, snapshot);
+
+    if (this.isShadowMode()) {
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     const generatedAt = snapshot.generatedAt || Date.now();
 
     if (subscription.domain === 'pods') {
@@ -942,8 +1125,89 @@ export class ResourceStreamManager {
     }
   }
 
+  private updateShadowBaseline(subscription: StreamSubscription, snapshot: Snapshot<any>): void {
+    let snapshotKeys: Set<string> | null = null;
+
+    if (subscription.domain === 'pods') {
+      snapshotKeys = buildPodKeySet(
+        snapshot.payload as PodSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'namespace-workloads') {
+      snapshotKeys = buildWorkloadKeySet(
+        snapshot.payload as NamespaceWorkloadSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'nodes') {
+      snapshotKeys = buildNodeKeySet(
+        snapshot.payload as ClusterNodeSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    }
+
+    if (!snapshotKeys) {
+      return;
+    }
+
+    if (subscription.hasBaseline && !subscription.driftDetected) {
+      const streamCount = subscription.shadowKeys.size;
+      const snapshotCount = snapshotKeys.size;
+      const diff = diffKeySets(snapshotKeys, subscription.shadowKeys, DRIFT_SAMPLE_SIZE);
+      if (diff.missingKeys > 0 || diff.extraKeys > 0) {
+        this.flagDrift(subscription, {
+          reason: 'snapshot mismatch',
+          streamCount,
+          snapshotCount,
+          missingKeys: diff.missingKeys,
+          extraKeys: diff.extraKeys,
+          missingSample: diff.missingSample,
+          extraSample: diff.extraSample,
+        });
+      }
+    }
+
+    subscription.shadowKeys = snapshotKeys;
+    subscription.hasBaseline = true;
+  }
+
+  private flagDrift(
+    subscription: StreamSubscription,
+    details: {
+      reason: string;
+      streamCount: number;
+      snapshotCount: number;
+      missingKeys: number;
+      extraKeys: number;
+      missingSample: string[];
+      extraSample: string[];
+    }
+  ): void {
+    if (subscription.driftDetected) {
+      return;
+    }
+    subscription.driftDetected = true;
+
+    eventBus.emit('refresh:resource-stream-drift', {
+      domain: subscription.domain,
+      scope: subscription.storeScope,
+      reason: details.reason,
+      streamCount: details.streamCount,
+      snapshotCount: details.snapshotCount,
+      missingKeys: details.missingKeys,
+      extraKeys: details.extraKeys,
+    });
+
+    logWarning(
+      `[resource-stream] drift detected domain=${subscription.domain} scope=${subscription.storeScope} reason=${details.reason} streamCount=${details.streamCount} snapshotCount=${details.snapshotCount} missingKeys=${details.missingKeys} extraKeys=${details.extraKeys}`
+    );
+  }
+
   private markResyncComplete(subscription: StreamSubscription): void {
     const now = Date.now();
+    if (this.isShadowMode()) {
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.storeScope, (previous) => ({
         ...previous,
@@ -985,6 +1249,9 @@ export class ResourceStreamManager {
 
   private markResyncing(subscription: StreamSubscription): void {
     const message = RESYNC_MESSAGE;
+    if (this.isShadowMode()) {
+      return;
+    }
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.storeScope, (previous) => ({
         ...previous,
@@ -1020,6 +1287,9 @@ export class ResourceStreamManager {
     const attempts = (this.consecutiveErrors.get(key) ?? 0) + 1;
     this.consecutiveErrors.set(key, attempts);
     const isTerminal = attempts >= STREAM_ERROR_NOTIFY_THRESHOLD;
+    if (this.isShadowMode()) {
+      return;
+    }
 
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.storeScope, (previous) => ({

@@ -4,5 +4,13 @@
  * Feature flags for refresh behavior toggles.
  */
 
-export const isResourceStreamingEnabled = (): boolean =>
-  (import.meta as any)?.env?.VITE_RESOURCE_STREAMING === 'true';
+type ResourceStreamingMode = 'active' | 'shadow';
+
+// Resource streaming is always enabled and active.
+export const isResourceStreamingEnabled = (): boolean => true;
+
+export const getResourceStreamingMode = (): ResourceStreamingMode => 'active';
+
+export const getResourceStreamingDomainAllowlist = (): Set<string> | null => null;
+
+export type { ResourceStreamingMode };
