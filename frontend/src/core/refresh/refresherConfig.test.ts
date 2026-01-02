@@ -23,7 +23,7 @@ describe('refresherConfig cadence defaults', () => {
     });
 
     expect(namespaceRefresherConfig(NAMESPACE_REFRESHERS.workloads)).toEqual({
-      interval: 2000,
+      interval: 10000,
       cooldown: 500,
       timeout: 10,
     });
@@ -31,7 +31,7 @@ describe('refresherConfig cadence defaults', () => {
 
   it('exposes expected cluster refresher timings', () => {
     expect(clusterRefresherConfig(CLUSTER_REFRESHERS.nodes)).toEqual({
-      interval: 5000,
+      interval: 10000,
       cooldown: 1000,
       timeout: 10,
     });

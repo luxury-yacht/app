@@ -63,8 +63,8 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 ### Phase 3 - Safe rollout strategy
 
 - ✅ Drift detection: compare item counts and key sets; if drift is detected, disable stream for that domain and fall back to snapshots.
-- [ ] In parallel, tune or disable high-frequency interval refreshers for domains moved to streaming so load reduction is realized. (ties to #8)
-- [ ] Close #8 fully by auditing all refreshers and applying visibility and view-based gating, not just the domains moved to streaming.
+- ✅ In parallel, tune or disable high-frequency interval refreshers for domains moved to streaming so load reduction is realized. (ties to #8)
+- ✅ Close #8 fully by auditing all refreshers and applying visibility and view-based gating, not just the domains moved to streaming. (audited: view gating via view providers/object panel hooks; visibility gating via RefreshManagerContext)
 
 ### Phase 4 - Validation and observability
 

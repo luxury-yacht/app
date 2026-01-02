@@ -22,7 +22,8 @@ export interface RefresherTiming {
 }
 
 const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
-  [NAMESPACE_REFRESHERS.workloads]: { interval: 2000, cooldown: 500, timeout: 10 },
+  // Streaming domains only poll for metrics; keep the interval aligned to the streaming cadence.
+  [NAMESPACE_REFRESHERS.workloads]: { interval: 10000, cooldown: 500, timeout: 10 },
   [NAMESPACE_REFRESHERS.config]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [NAMESPACE_REFRESHERS.network]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [NAMESPACE_REFRESHERS.rbac]: { interval: 10000, cooldown: 1000, timeout: 10 },
@@ -33,7 +34,7 @@ const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
   [NAMESPACE_REFRESHERS.custom]: { interval: 10000, cooldown: 1000, timeout: 60 },
   [NAMESPACE_REFRESHERS.helm]: { interval: 10000, cooldown: 1000, timeout: 10 },
 
-  [CLUSTER_REFRESHERS.nodes]: { interval: 5000, cooldown: 1000, timeout: 10 },
+  [CLUSTER_REFRESHERS.nodes]: { interval: 10000, cooldown: 1000, timeout: 10 },
   [CLUSTER_REFRESHERS.nodeMaintenance]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [CLUSTER_REFRESHERS.rbac]: { interval: 10000, cooldown: 1000, timeout: 10 },
   [CLUSTER_REFRESHERS.storage]: { interval: 10000, cooldown: 1000, timeout: 10 },
@@ -46,7 +47,7 @@ const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
 
   [SYSTEM_REFRESHERS.namespaces]: { interval: 2000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.clusterOverview]: { interval: 10000, cooldown: 1000, timeout: 10 },
-  [SYSTEM_REFRESHERS.unifiedPods]: { interval: 2000, cooldown: 1000, timeout: 30 },
+  [SYSTEM_REFRESHERS.unifiedPods]: { interval: 10000, cooldown: 1000, timeout: 30 },
   [SYSTEM_REFRESHERS.objectDetails]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectEvents]: { interval: 3000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectYaml]: { interval: 5000, cooldown: 1000, timeout: 10 },
