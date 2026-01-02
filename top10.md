@@ -39,7 +39,12 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 - Keep permission gating aligned with existing preflight checks; if list/watch permission is missing, do not expose the stream for that domain.
 - Implement transport consolidation in parallel (WS multiplexer or similar) to avoid per-resource connection explosion. (ties to #2)
 - Close #2 fully by making the multiplexer reusable across all watch-capable streams (resources now, events/logs later) with a single connection per cluster and standardized subscribe/unsubscribe semantics.
-  - Decision: use WS multiplexer for resource list streaming; keep SSE for logs/events initially to limit churn.
+  - ✅ Decision: use WS multiplexer for resource list streaming; keep SSE for logs/events initially to limit churn.
+  - ✅ Define new resource stream name for telemetry (for example `resources`) and a dedicated subscribe payload shape keyed by domain + scope + cluster id.
+  - ✅ Adopt explicit resync signals: send RESET for full snapshot hydration and COMPLETE when a resync is required.
+  - ✅ Backpressure policy: cap subscribers per scope and record dropped delivery counts in stream telemetry, then prompt client resync.
+  - ✅ Default caps: max 100 subscribers per scope, per-subscriber buffer 256 updates, client-side coalesce window 100-250ms, and resync on any drop.
+  - ✅ Subscribe payload (WS): `{type:"REQUEST", clusterId, domain, scope, resourceVersion, filters?}`; update payloads include `type`, `resourceVersion`, `uid`, and minimal row fields.
 
 ### Phase 2 - Frontend integration (feature-flagged)
 
