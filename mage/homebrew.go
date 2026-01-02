@@ -13,16 +13,20 @@ import (
 )
 
 const (
+	// Git user config for committing to the tap repo.
+	gitUserName  = "luxury-yacht-automation"
+	gitUserEmail = "automation@luxury-yacht.app"
+	// Homebrew tap repo info.
+	tapRepo   = "luxury-yacht/homebrew-tap"
+	tapBranch = "main"
+	// Homebrew template to be updated.
 	caskTemplate = "mage/homebrew/luxury-yacht.rb"
-	releaseRepo  = "luxury-yacht/app"
-	tapRepo      = "luxury-yacht/homebrew-tap"
-	tapBranch    = "main"
 )
 
 // Get the SHA256 checksum for a specific release asset via the GitHub API.
 // This is a public repo so no authentication is needed.
-func getShaForAsset(release string, assetName string) (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", releaseRepo, release)
+func getShaForAsset(cfg BuildConfig, assetName string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", cfg.ReleaseRepo, cfg.Version)
 
 	// Create the HTTP request.
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -72,7 +76,7 @@ func getShaForAsset(release string, assetName string) (string, error) {
 	}
 
 	// Asset not found so return an error.
-	return "", fmt.Errorf("checksum for asset %s not found in release %s", assetName, release)
+	return "", fmt.Errorf("checksum for asset %s not found in release %s", assetName, cfg.Version)
 }
 
 // Return the updated Homebrew cask template.
@@ -91,6 +95,7 @@ func updateHomebrewTemplate(version, arm64Sha, amd64Sha string) ([]byte, error) 
 	cask := r.Replace(string(template))
 
 	// Make sure all placeholders were replaced.
+	// TODO: Change this to a simple regex that looks for ${*} patterns instead of hardcoding each
 	if strings.Contains(cask, "${VERSION}") ||
 		strings.Contains(cask, "${ARM64_SHA256}") ||
 		strings.Contains(cask, "${AMD64_SHA256}") {
@@ -125,24 +130,46 @@ func cloneTapRepo() (string, error) {
 	return tmpDir, nil
 }
 
+// Make sure the git user.name and user.email are set in the tap repo
+func ensureGitUserConfig(repoDir string) error {
+	// Check if user.name is set.
+	userName, err := sh.Output("git", "-C", repoDir, "config", "user.name")
+	if err != nil || strings.TrimSpace(userName) == "" {
+		if err := sh.Run("git", "-C", repoDir, "config", "user.name", gitUserName); err != nil {
+			return fmt.Errorf("failed to set git user.name: %w", err)
+		}
+	}
+	fmt.Printf("git user.name: %s\n", userName)
+
+	// Check if user.email is set.
+	userEmail, err := sh.Output("git", "-C", repoDir, "config", "user.email")
+	if err != nil || strings.TrimSpace(userEmail) == "" {
+		if err := sh.Run("git", "-C", repoDir, "config", "user.email", gitUserEmail); err != nil {
+			return fmt.Errorf("failed to set git user.email: %w", err)
+		}
+	}
+	fmt.Printf("git user.email: %s\n", userEmail)
+
+	return nil
+}
+
 // Publish the Homebrew formula.
 func PublishHomebrew(cfg BuildConfig) error {
 	fmt.Printf("\n⚙️ Publishing the Homebrew formula for version %s...\n", cfg.Version)
 
+	// Get the checksum for the arm64 DMG.
 	arm64Dmg := fmt.Sprintf("luxury-yacht-%s-macos-arm64.dmg", cfg.Version)
+	arm64Sha, err := getShaForAsset(cfg, arm64Dmg)
+	if err != nil {
+		return err
+	}
+
+	// Get the checksum for the amd64 DMG.
 	amd64Dmg := fmt.Sprintf("luxury-yacht-%s-macos-amd64.dmg", cfg.Version)
-
-	arm64Sha, err := getShaForAsset(cfg.Version, arm64Dmg)
+	amd64Sha, err := getShaForAsset(cfg, amd64Dmg)
 	if err != nil {
 		return err
 	}
-	amd64Sha, err := getShaForAsset(cfg.Version, amd64Dmg)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("arm64 checksum:", arm64Sha)
-	fmt.Println("amd64 checksum:", amd64Sha)
 
 	// Update the cask template with the new version and checksums.
 	cask, err := updateHomebrewTemplate(cfg.Version, arm64Sha, amd64Sha)
@@ -176,23 +203,10 @@ func PublishHomebrew(cfg BuildConfig) error {
 		fmt.Println("\n⚙️ Homebrew cask needs to be updated.")
 	}
 
-	// Make sure git user.name is set.
-	userName, err := sh.Output("git", "-C", tmpDir, "config", "user.name")
-	if err != nil || strings.TrimSpace(userName) == "" {
-		if err := sh.Run("git", "-C", tmpDir, "config", "user.name", "luxury-yacht-automation"); err != nil {
-			return fmt.Errorf("failed to set git user.name: %w", err)
-		}
+	// Ensure git user config is set.
+	if err := ensureGitUserConfig(tmpDir); err != nil {
+		return err
 	}
-	fmt.Printf("git user.name: %s\n", userName)
-
-	// Make sure git user.email is set.
-	userEmail, err := sh.Output("git", "-C", tmpDir, "config", "user.email")
-	if err != nil || strings.TrimSpace(userEmail) == "" {
-		if err := sh.Run("git", "-C", tmpDir, "config", "user.email", "automation@luxury-yacht.app"); err != nil {
-			return fmt.Errorf("failed to set git user.email: %w", err)
-		}
-	}
-	fmt.Printf("git user.email: %s\n", userEmail)
 
 	// Stage and commit the changes.
 	if err := sh.Run("git", "-C", tmpDir, "add", "casks/luxury-yacht.rb"); err != nil {
