@@ -48,17 +48,17 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 ### Phase 2 - Frontend integration (feature-flagged)
 
-- Add a resource stream manager similar to the event stream manager, with:
-  - Initial snapshot fetch, then stream subscribe.
-  - ResourceVersion gating and idempotent update application.
-  - Coalescing or throttling of rapid update bursts to avoid render churn.
-  - Automatic resync on stream errors, out-of-order updates, or RESET/COMPLETE signals. (ties to #6)
-- Keep existing interval refresh logic active behind a feature flag for safe fallback.
-- Add explicit backpressure handling for stream drops (trigger a resync snapshot and log telemetry). (ties to #6)
-- Close #6 fully by adding the same drop detection and resync behavior to event streams, not just resource streams, and exposing a UI-visible "stream resyncing" state.
-- Preserve metrics freshness for pods/workloads/nodes by keeping a metrics refresh path in parallel:
-  - Decision: add a metrics-only refresh/update path and merge metrics into stream-updated rows.
-  - Ensure stream updates do not wipe existing metrics fields unless a metrics refresh has arrived.
+- ✅ Add a resource stream manager similar to the event stream manager, with:
+  - ✅ Initial snapshot fetch, then stream subscribe.
+  - ✅ ResourceVersion gating and idempotent update application.
+  - ✅ Coalescing or throttling of rapid update bursts to avoid render churn.
+  - ✅ Automatic resync on stream errors, out-of-order updates, or RESET/COMPLETE signals. (ties to #6)
+- ✅ Keep existing interval refresh logic active behind a feature flag for safe fallback.
+- ✅ Add explicit backpressure handling for stream drops (trigger a resync snapshot and log telemetry). (ties to #6)
+- ✅ Close #6 fully by adding the same drop detection and resync behavior to event streams, not just resource streams, and exposing a UI-visible "stream resyncing" state.
+- ✅ Preserve metrics freshness for pods/workloads/nodes by keeping a metrics refresh path in parallel:
+  - ✅ Decision: add a metrics-only refresh/update path and merge metrics into stream-updated rows.
+  - ✅ Ensure stream updates do not wipe existing metrics fields unless a metrics refresh has arrived.
 
 ### Phase 3 - Safe rollout strategy
 

@@ -7,9 +7,9 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/cache"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	appslisters "k8s.io/client-go/listers/apps/v1"
+	corelisters "k8s.io/client-go/listers/core/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/stretchr/testify/require"
 
@@ -116,11 +116,11 @@ func TestManagerWorkloadUpdateFromPod(t *testing.T) {
 	}
 
 	manager := &Manager{
-		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
-		logger:      noopLogger{},
-		podLister:   podListerWith(pod),
+		clusterMeta:      snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:           noopLogger{},
+		podLister:        podListerWith(pod),
 		deploymentLister: deploymentListerWith(deployment),
-		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		subscribers:      make(map[string]map[string]map[uint64]*subscription),
 	}
 
 	sub, err := manager.Subscribe(domainWorkloads, "namespace:default")
@@ -141,6 +141,52 @@ func TestManagerWorkloadUpdateFromPod(t *testing.T) {
 	}
 }
 
+func TestManagerNodeUpdateFromPod(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		nodeLister: nodeListerWith(&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            "node-a",
+				UID:             "node-uid",
+				ResourceVersion: "7",
+			},
+		}),
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainNodes, "")
+	require.NoError(t, err)
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "pod-1",
+			Namespace:       "default",
+			UID:             "pod-uid",
+			ResourceVersion: "5",
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "node-a",
+		},
+		Status: corev1.PodStatus{Phase: corev1.PodRunning},
+	}
+	manager.podLister = podListerWith(pod)
+
+	// Ensure pod changes refresh node summaries via the pod-based handler.
+	manager.handlePod(pod, MessageTypeModified)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeModified, update.Type)
+		require.Equal(t, domainNodes, update.Domain)
+		require.Equal(t, "node-a", update.Name)
+		require.Equal(t, "Node", update.Kind)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected node update to be delivered")
+	}
+}
+
 func podListerWith(pods ...*corev1.Pod) corelisters.PodLister {
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
 		cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
@@ -156,6 +202,14 @@ func podListerWith(pods ...*corev1.Pod) corelisters.PodLister {
 		_ = indexer.Add(pod)
 	}
 	return corelisters.NewPodLister(indexer)
+}
+
+func nodeListerWith(nodes ...*corev1.Node) corelisters.NodeLister {
+	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	for _, node := range nodes {
+		_ = indexer.Add(node)
+	}
+	return corelisters.NewNodeLister(indexer)
 }
 
 func deploymentListerWith(items ...*appsv1.Deployment) appslisters.DeploymentLister {

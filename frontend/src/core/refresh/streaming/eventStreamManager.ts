@@ -17,6 +17,7 @@ import type {
 import { formatAge } from '@/utils/ageFormatter';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
+import { isResourceStreamingEnabled } from '../featureFlags';
 
 interface StreamEventPayload {
   domain: string;
@@ -83,6 +84,8 @@ const CLUSTER_SCOPE = 'cluster';
 const MAX_CLUSTER_EVENTS = 200;
 const MAX_NAMESPACE_EVENTS = 200;
 const STREAM_ERROR_NOTIFY_THRESHOLD = 3;
+const STREAM_RESYNC_MESSAGE = 'Stream resyncing';
+const RESYNC_STATE_ENABLED = isResourceStreamingEnabled();
 
 class EventStreamConnection {
   private eventSource: EventSource | null = null;
@@ -394,12 +397,21 @@ export class EventStreamManager {
     const attempts = (this.consecutiveErrors.get(key) ?? 0) + 1;
     this.consecutiveErrors.set(key, attempts);
     const isTerminal = attempts >= STREAM_ERROR_NOTIFY_THRESHOLD;
+    const resyncing = RESYNC_STATE_ENABLED && !isTerminal;
 
     if (domain === CLUSTER_DOMAIN) {
       setDomainState(CLUSTER_DOMAIN, (previous) => ({
         ...previous,
-        status: isTerminal ? 'error' : previous.status === 'ready' ? 'ready' : 'updating',
-        error: isTerminal ? message : null,
+        status: isTerminal
+          ? 'error'
+          : resyncing
+            ? previous.data
+              ? 'updating'
+              : 'initialising'
+            : previous.status === 'ready'
+              ? 'ready'
+              : 'updating',
+        error: isTerminal ? message : resyncing ? STREAM_RESYNC_MESSAGE : null,
         scope,
       }));
       if (isTerminal) {
@@ -410,8 +422,16 @@ export class EventStreamManager {
     if (domain === NAMESPACE_DOMAIN) {
       setDomainState(NAMESPACE_DOMAIN, (previous) => ({
         ...previous,
-        status: isTerminal ? 'error' : previous.status === 'ready' ? 'ready' : 'updating',
-        error: isTerminal ? message : null,
+        status: isTerminal
+          ? 'error'
+          : resyncing
+            ? previous.data
+              ? 'updating'
+              : 'initialising'
+            : previous.status === 'ready'
+              ? 'ready'
+              : 'updating',
+        error: isTerminal ? message : resyncing ? STREAM_RESYNC_MESSAGE : null,
         scope,
       }));
       if (isTerminal) {

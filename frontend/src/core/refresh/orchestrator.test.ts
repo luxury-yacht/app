@@ -79,6 +79,16 @@ vi.mock('./streaming/eventStreamManager', () => ({
   eventStreamManager: eventStreamMocks,
 }));
 
+const resourceStreamMocks = vi.hoisted(() => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+  refreshOnce: vi.fn(),
+}));
+
+vi.mock('./streaming/resourceStreamManager', () => ({
+  resourceStreamManager: resourceStreamMocks,
+}));
+
 const catalogStreamMocks = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),

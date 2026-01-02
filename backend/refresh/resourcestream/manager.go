@@ -276,6 +276,7 @@ func (m *Manager) handlePod(obj interface{}, updateType MessageType) {
 	m.broadcast(domainPods, scopesForPod(summary), update)
 
 	m.handleWorkloadFromPod(pod, updateType, podUsage)
+	m.handleNodeFromPod(pod)
 }
 
 func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
@@ -449,6 +450,58 @@ func (m *Manager) handleStandalonePodWorkload(pod *corev1.Pod, updateType Messag
 	}
 
 	m.broadcast(domainWorkloads, scopesForNamespace(pod.Namespace), update)
+}
+
+func (m *Manager) handleNodeFromPod(pod *corev1.Pod) {
+	if pod == nil || pod.Spec.NodeName == "" {
+		return
+	}
+	if m.nodeLister == nil {
+		return
+	}
+
+	node, err := m.nodeLister.Get(pod.Spec.NodeName)
+	if err != nil || node == nil {
+		if err != nil {
+			m.logger.Warn(fmt.Sprintf("resource stream: resolve node %s failed: %v", pod.Spec.NodeName, err), "ResourceStream")
+			if m.telemetry != nil {
+				m.telemetry.RecordStreamError(telemetry.StreamResources, err)
+			}
+		}
+		return
+	}
+
+	// Pod changes affect node summaries (pod counts, restarts, and metrics usage).
+	pods, err := m.podsForNode(node.Name)
+	if err != nil {
+		m.logger.Warn(fmt.Sprintf("resource stream: list pods for node %s failed: %v", node.Name, err), "ResourceStream")
+		if m.telemetry != nil {
+			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
+		}
+		return
+	}
+	summary, err := snapshot.BuildNodeSummary(m.clusterMeta, node, pods, m.metrics)
+	if err != nil {
+		m.logger.Warn(fmt.Sprintf("resource stream: build node summary for %s failed: %v", node.Name, err), "ResourceStream")
+		if m.telemetry != nil {
+			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
+		}
+		return
+	}
+
+	update := Update{
+		Type:            MessageTypeModified,
+		Domain:          domainNodes,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: node.ResourceVersion,
+		UID:             string(node.UID),
+		Name:            node.Name,
+		Namespace:       node.Namespace,
+		Kind:            "Node",
+		Row:             summary,
+	}
+	m.broadcast(domainNodes, []string{""}, update)
 }
 
 func (m *Manager) podMetricsSnapshot() map[string]metrics.PodUsage {

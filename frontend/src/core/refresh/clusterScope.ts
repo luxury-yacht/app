@@ -48,6 +48,31 @@ export const stripClusterScope = (scope?: string | null): string => {
   return splitClusterScope(scope).scope;
 };
 
+export const parseClusterScope = (
+  value?: string | null
+): { clusterId: string; scope: string; isMultiCluster: boolean } => {
+  const trimmed = (value ?? '').trim();
+  if (!trimmed) {
+    return { clusterId: '', scope: '', isMultiCluster: false };
+  }
+  const { clusterId, scope } = splitClusterScope(trimmed);
+  if (!clusterId) {
+    return { clusterId: '', scope, isMultiCluster: false };
+  }
+  if (!clusterId.startsWith(CLUSTER_SCOPE_LIST_PREFIX)) {
+    return { clusterId, scope, isMultiCluster: false };
+  }
+  const rawList = clusterId.slice(CLUSTER_SCOPE_LIST_PREFIX.length);
+  const ids = rawList
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+  if (ids.length === 1) {
+    return { clusterId: ids[0], scope, isMultiCluster: false };
+  }
+  return { clusterId: '', scope, isMultiCluster: true };
+};
+
 const normalizeClusterIds = (clusterIds: Array<string | null | undefined>): string[] => {
   const seen = new Set<string>();
   const cleaned: string[] = [];
