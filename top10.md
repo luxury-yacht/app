@@ -46,14 +46,14 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
   - ✅ Default caps: max 100 subscribers per scope, per-subscriber buffer 256 updates, client-side coalesce window 100-250ms, and resync on any drop.
   - ✅ Subscribe payload (WS): `{type:"REQUEST", clusterId, domain, scope, resourceVersion, filters?}`; update payloads include `type`, `resourceVersion`, `uid`, and minimal row fields.
 
-### Phase 2 - Frontend integration (feature-flagged)
+### Phase 2 - Frontend integration (permanent streaming)
 
 - ✅ Add a resource stream manager similar to the event stream manager, with:
   - ✅ Initial snapshot fetch, then stream subscribe.
   - ✅ ResourceVersion gating and idempotent update application.
   - ✅ Coalescing or throttling of rapid update bursts to avoid render churn.
   - ✅ Automatic resync on stream errors, out-of-order updates, or RESET/COMPLETE signals. (ties to #6)
-- ✅ Keep existing interval refresh logic active behind a feature flag for safe fallback.
+- ✅ Make streaming permanent for migrated domains (no feature-flag fallback).
 - ✅ Add explicit backpressure handling for stream drops (trigger a resync snapshot and log telemetry). (ties to #6)
 - ✅ Close #6 fully by adding the same drop detection and resync behavior to event streams, not just resource streams, and exposing a UI-visible "stream resyncing" state.
 - ✅ Preserve metrics freshness for pods/workloads/nodes by keeping a metrics refresh path in parallel:
@@ -62,11 +62,9 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 ### Phase 3 - Safe rollout strategy
 
-- ✅ Shadow mode: connect to the stream and validate updates against snapshots without updating the UI.
 - ✅ Drift detection: compare item counts and key sets; if drift is detected, disable stream for that domain and fall back to snapshots.
-- ✅ Gradual enablement: start with a single domain in one view, then expand to more domains once stable.
-- ✅ In parallel, tune or disable high-frequency interval refreshers for domains moved to streaming so load reduction is realized. (ties to #8)
-- ✅ Close #8 fully by auditing all refreshers and applying visibility and view-based gating, not just the domains moved to streaming.
+- [ ] In parallel, tune or disable high-frequency interval refreshers for domains moved to streaming so load reduction is realized. (ties to #8)
+- [ ] Close #8 fully by auditing all refreshers and applying visibility and view-based gating, not just the domains moved to streaming.
 
 ### Phase 4 - Validation and observability
 
@@ -102,7 +100,6 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 ### Safety guarantees
 
-- No UI behavior change until the feature flag is enabled.
 - Automatic fallback to snapshot refresh on any stream anomaly.
 - Continue to use catalog snapshots for browse and namespace/cluster listings.
 
