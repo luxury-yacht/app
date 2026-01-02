@@ -17,7 +17,6 @@ import type {
 import { formatAge } from '@/utils/ageFormatter';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
-import { isResourceStreamingEnabled } from '../featureFlags';
 
 interface StreamEventPayload {
   domain: string;
@@ -84,7 +83,8 @@ const CLUSTER_SCOPE = 'cluster';
 const MAX_CLUSTER_EVENTS = 200;
 const MAX_NAMESPACE_EVENTS = 200;
 const STREAM_ERROR_NOTIFY_THRESHOLD = 3;
-const RESYNC_STATE_ENABLED = isResourceStreamingEnabled();
+const STREAM_RESYNC_MESSAGE = 'Stream resyncing';
+const RESYNC_STATE_ENABLED = true;
 
 class EventStreamConnection {
   private eventSource: EventSource | null = null;
@@ -408,7 +408,7 @@ export class EventStreamManager {
             : previous.status === 'ready'
               ? 'ready'
               : 'updating',
-        error: isTerminal ? message : null,
+        error: isTerminal ? message : resyncing ? STREAM_RESYNC_MESSAGE : null,
         scope,
       }));
       if (isTerminal) {
@@ -426,7 +426,7 @@ export class EventStreamManager {
             : previous.status === 'ready'
               ? 'ready'
               : 'updating',
-        error: isTerminal ? message : null,
+        error: isTerminal ? message : resyncing ? STREAM_RESYNC_MESSAGE : null,
         scope,
       }));
       if (isTerminal) {

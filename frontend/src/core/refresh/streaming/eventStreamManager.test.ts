@@ -159,7 +159,7 @@ describe('EventStreamManager', () => {
     manager.handleStreamError('cluster-events', 'cluster', 'stream disconnected');
     const clusterState = getDomainState('cluster-events');
     expect(clusterState.status).toBe('updating');
-    expect(clusterState.error).toBeNull();
+    expect(clusterState.error).toBe('Stream resyncing');
 
     manager.handleStreamError('cluster-events', 'cluster', 'stream disconnected');
     const clusterStateTerminal = getDomainState('cluster-events');

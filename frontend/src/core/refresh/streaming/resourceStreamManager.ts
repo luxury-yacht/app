@@ -15,7 +15,7 @@ import type {
   PodSnapshotPayload,
 } from '../types';
 import { buildClusterScopeList, parseClusterScope } from '../clusterScope';
-import { getResourceStreamingMode, type ResourceStreamingMode } from '../featureFlags';
+type ResourceStreamingMode = 'active' | 'shadow';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
@@ -535,7 +535,7 @@ export class ResourceStreamManager {
   private lastNotifiedErrors = new Map<string, string>();
   private consecutiveErrors = new Map<string, number>();
   private suspendedForVisibility = false;
-  private readonly mode: ResourceStreamingMode = getResourceStreamingMode();
+  private readonly mode: ResourceStreamingMode = 'active';
   private streamTelemetry = new Map<string, StreamTelemetry>();
 
   constructor() {

@@ -53,11 +53,6 @@ import { resourceStreamManager } from './streaming/resourceStreamManager';
 import { errorHandler } from '@utils/errorHandler';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
 import { buildClusterScope, buildClusterScopeList, parseClusterScope } from './clusterScope';
-import {
-  getResourceStreamingDomainAllowlist,
-  getResourceStreamingMode,
-  isResourceStreamingEnabled,
-} from './featureFlags';
 
 type DomainCategory = 'system' | 'cluster' | 'namespace';
 
@@ -87,7 +82,7 @@ type DomainFetchOptions = {
 const DEFAULT_AUTO_START = false;
 const CLUSTER_SCOPE = 'cluster';
 const noopStreamingCleanup = () => {};
-const RESOURCE_STREAMING_ENABLED = isResourceStreamingEnabled();
+const RESOURCE_STREAMING_ENABLED = true;
 // Keep streaming metrics refreshes aligned with the backend poll cadence.
 const STREAMING_METRICS_MIN_INTERVAL_MS = 10_000;
 
@@ -125,8 +120,8 @@ class RefreshOrchestrator {
   private cancelledStreaming = new Set<string>();
   private domainStreamingScopes = new Map<RefreshDomain, string>();
   private blockedStreaming = new Set<string>();
-  private readonly resourceStreamingMode = getResourceStreamingMode();
-  private readonly resourceStreamingDomains = getResourceStreamingDomainAllowlist();
+  private readonly resourceStreamingMode: 'active' | 'shadow' = 'active';
+  private readonly resourceStreamingDomains: Set<string> | null = null;
   private lastMetricsRefreshAt = new Map<string, number>();
   private domainEnabledState = new Map<RefreshDomain, boolean>();
   private scopedEnabledState = new Map<RefreshDomain, Map<string, boolean>>();
