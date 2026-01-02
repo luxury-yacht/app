@@ -1,36 +1,78 @@
 package mage
 
 import (
-	"crypto/sha256"
+	"encoding/json"
 	"fmt"
-	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/magefile/mage/sh"
 )
 
 const (
 	caskTemplate = "mage/homebrew/luxury-yacht.rb"
+	releaseRepo  = "luxury-yacht/app"
 	tapRepo      = "luxury-yacht/homebrew-tap"
 	tapBranch    = "main"
 )
 
-// Get the SHA256 checksum of a file.
-func getFileSha256(path string) (string, error) {
-	file, err := os.Open(path)
+// Get the SHA256 checksum for a specific release asset via the GitHub API.
+// This is a public repo so no authentication is needed.
+func getShaForAsset(release string, assetName string) (string, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", releaseRepo, release)
+
+	// Create the HTTP request.
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to open %s: %w", path, err)
-	}
-	defer file.Close()
-
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", fmt.Errorf("failed to read %s: %w", path, err)
+		return "", fmt.Errorf("could not create an http request: %w", err)
 	}
 
-	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+	// Set required headers.
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	// Perform the HTTP request.
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("could not perform http request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for non-200 status codes.
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("github api error: %d", resp.StatusCode)
+	}
+
+	// Parse the JSON response to find the asset with the specified name.
+	var result struct {
+		Assets []struct {
+			Name   string `json:"name"`
+			Digest string `json:"digest"`
+		} `json:"assets"`
+	}
+
+	// Read the response body.
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("could not decode http response body: %w", err)
+	}
+
+	// Search for the asset by name and return its checksum.
+	for _, asset := range result.Assets {
+		if asset.Name == assetName {
+			// The digest field is in the format "sha256:actualchecksum"
+			parts := strings.SplitN(asset.Digest, ":", 2)
+			if len(parts) == 2 && parts[0] == "sha256" {
+				return parts[1], nil
+			}
+		}
+	}
+
+	// Asset not found so return an error.
+	return "", fmt.Errorf("checksum for asset %s not found in release %s", assetName, release)
 }
 
 // Return the updated Homebrew cask template.
@@ -40,10 +82,13 @@ func updateHomebrewTemplate(version, arm64Sha, amd64Sha string) ([]byte, error) 
 		return nil, fmt.Errorf("failed to read Homebrew cask template at %s: %w", caskTemplate, err)
 	}
 
-	cask := string(template)
-	cask = strings.ReplaceAll(cask, "${VERSION}", version)
-	cask = strings.ReplaceAll(cask, "${ARM64_SHA256}", arm64Sha)
-	cask = strings.ReplaceAll(cask, "${AMD64_SHA256}", amd64Sha)
+	// Replace placeholders in the template.
+	r := strings.NewReplacer(
+		"${VERSION}", version,
+		"${ARM64_SHA256}", arm64Sha,
+		"${AMD64_SHA256}", amd64Sha,
+	)
+	cask := r.Replace(string(template))
 
 	// Make sure all placeholders were replaced.
 	if strings.Contains(cask, "${VERSION}") ||
@@ -84,19 +129,20 @@ func cloneTapRepo() (string, error) {
 func PublishHomebrew(cfg BuildConfig) error {
 	fmt.Printf("\n⚙️ Publishing the Homebrew formula for version %s...\n", cfg.Version)
 
-	// Calculate SHA256 checksums for the DMG files.
 	arm64Dmg := fmt.Sprintf("luxury-yacht-%s-macos-arm64.dmg", cfg.Version)
-	arm64Path := fmt.Sprintf("%s/%s", cfg.ArtifactsDir, arm64Dmg)
-	arm64Sha, err := getFileSha256(arm64Path)
-	if err != nil {
-		return err
-	}
 	amd64Dmg := fmt.Sprintf("luxury-yacht-%s-macos-amd64.dmg", cfg.Version)
-	amd64Path := fmt.Sprintf("%s/%s", cfg.ArtifactsDir, amd64Dmg)
-	amd64Sha, err := getFileSha256(amd64Path)
+
+	arm64Sha, err := getShaForAsset(cfg.Version, arm64Dmg)
 	if err != nil {
 		return err
 	}
+	amd64Sha, err := getShaForAsset(cfg.Version, amd64Dmg)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("arm64 checksum:", arm64Sha)
+	fmt.Println("amd64 checksum:", amd64Sha)
 
 	// Update the cask template with the new version and checksums.
 	cask, err := updateHomebrewTemplate(cfg.Version, arm64Sha, amd64Sha)
@@ -114,7 +160,7 @@ func PublishHomebrew(cfg BuildConfig) error {
 
 	// Write the updated cask file.
 	caskPath := filepath.Join(tmpDir, "casks", "luxury-yacht.rb")
-	if err := os.WriteFile(caskPath, []byte(cask), 0o644); err != nil {
+	if err := os.WriteFile(caskPath, cask, 0o644); err != nil {
 		return fmt.Errorf("failed to update cask at %s: %w", caskPath, err)
 	}
 
