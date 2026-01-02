@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -149,11 +150,15 @@ func TestNamespaceHelmBuilderAllNamespaces(t *testing.T) {
 	require.NoError(t, store.Create(releaseStaging))
 	memory.SetNamespace("")
 
+	// Factory runs concurrently per namespace, so guard the invocation counter.
 	invocations := make(map[string]int)
+	var invocationsMu sync.Mutex
 	factory := func(namespace string) (*action.Configuration, error) {
 		switch namespace {
 		case "default", "staging":
+			invocationsMu.Lock()
 			invocations[namespace]++
+			invocationsMu.Unlock()
 			memDriver := driver.NewMemory()
 			memDriver.SetNamespace(namespace)
 			copyStore := storage.Init(memDriver)
@@ -226,8 +231,13 @@ func TestNamespaceHelmBuilderAllNamespaces(t *testing.T) {
 	require.Len(t, namespaces, 2)
 	require.Contains(t, names, "app-default")
 	require.Contains(t, names, "app-staging")
-	require.Equal(t, 1, invocations["default"])
-	require.Equal(t, 1, invocations["staging"])
+	getInvocation := func(namespace string) int {
+		invocationsMu.Lock()
+		defer invocationsMu.Unlock()
+		return invocations[namespace]
+	}
+	require.Equal(t, 1, getInvocation("default"))
+	require.Equal(t, 1, getInvocation("staging"))
 }
 
 type stubKubeClient struct{}

@@ -174,12 +174,29 @@ func (s *Service) storeCache(key string, snap *refresh.Snapshot) {
 	if s.cacheTTL <= 0 || snap == nil {
 		return
 	}
+	if !s.shouldCacheSnapshot(snap) {
+		return
+	}
 	s.cacheMu.Lock()
 	s.cache[key] = cacheEntry{
 		snapshot:  snap,
 		expiresAt: time.Now().Add(s.cacheTTL),
 	}
 	s.cacheMu.Unlock()
+}
+
+func (s *Service) shouldCacheSnapshot(snap *refresh.Snapshot) bool {
+	if snap == nil {
+		return false
+	}
+	// Avoid caching partial snapshots so follow-up requests can rehydrate cleanly.
+	if snap.Stats.Truncated {
+		return false
+	}
+	if snap.Stats.TotalBatches > 0 && !snap.Stats.IsFinalBatch {
+		return false
+	}
+	return true
 }
 
 func checksumBytes(data []byte) string {

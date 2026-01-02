@@ -125,3 +125,49 @@ func TestServiceBuildCachesAndBypasses(t *testing.T) {
 		t.Fatalf("expected cache bypass to issue a new sequence")
 	}
 }
+
+func TestServiceBuildSkipsCacheForPartialSnapshots(t *testing.T) {
+	cases := []struct {
+		name  string
+		stats refresh.SnapshotStats
+	}{
+		{
+			name:  "truncated",
+			stats: refresh.SnapshotStats{Truncated: true},
+		},
+		{
+			name:  "non-final-batch",
+			stats: refresh.SnapshotStats{TotalBatches: 2, IsFinalBatch: false},
+		},
+	}
+
+	for _, testCase := range cases {
+		reg := domain.New()
+		buildCount := 0
+		if err := reg.Register(refresh.DomainConfig{
+			Name: "demo-partial-" + testCase.name,
+			BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+				buildCount++
+				return &refresh.Snapshot{
+					Domain:  "demo-partial-" + testCase.name,
+					Scope:   scope,
+					Payload: map[string]int{"items": buildCount},
+					Stats:   testCase.stats,
+				}, nil
+			},
+		}); err != nil {
+			t.Fatalf("register failed: %v", err)
+		}
+
+		service := NewService(reg, nil, ClusterMeta{})
+		if _, err := service.Build(context.Background(), "demo-partial-"+testCase.name, "scope-a"); err != nil {
+			t.Fatalf("Build returned error: %v", err)
+		}
+		if _, err := service.Build(context.Background(), "demo-partial-"+testCase.name, "scope-a"); err != nil {
+			t.Fatalf("Build returned error: %v", err)
+		}
+		if buildCount != 2 {
+			t.Fatalf("expected partial snapshot to bypass cache, got %d builds", buildCount)
+		}
+	}
+}

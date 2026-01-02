@@ -14,6 +14,8 @@ const errorHandlerMock = vi.hoisted(() => ({
   handle: vi.fn(),
 }));
 
+const createdSockets: FakeWebSocket[] = [];
+
 vi.mock('../client', () => ({
   ensureRefreshBaseURL: ensureRefreshBaseURLMock,
   fetchSnapshot: fetchSnapshotMock,
@@ -61,6 +63,7 @@ class FakeWebSocket {
 
   constructor(url: string) {
     this.url = url;
+    createdSockets.push(this);
   }
 }
 
@@ -76,6 +79,7 @@ beforeEach(() => {
   logAppInfoMock.mockClear();
   logAppWarnMock.mockClear();
   errorHandlerMock.handle.mockClear();
+  createdSockets.length = 0;
 
   if (!globalThis.window) {
     Object.defineProperty(globalThis, 'window', {
@@ -413,5 +417,133 @@ describe('ResourceStreamManager', () => {
     expect(fetchSnapshotMock).toHaveBeenCalled();
     const state = getScopedDomainState('pods', storeScope);
     expect(state.status).toBe('ready');
+  });
+
+  test('reconnects and resubscribes after socket close', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+
+    fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope: 'namespace:default',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { pods: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+    fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope: 'namespace:default',
+        version: 2,
+        checksum: 'etag-2',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: { pods: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    await manager.start('pods', storeScope);
+    await flushPromises();
+
+    const firstSocket = createdSockets[0];
+    expect(firstSocket).toBeDefined();
+    firstSocket.onopen?.(new Event('open'));
+    expect(firstSocket.send).toHaveBeenCalled();
+
+    // Advance time so the resync cooldown elapses before simulating a disconnect.
+    vi.advanceTimersByTime(1100);
+    firstSocket.onclose?.();
+
+    await flushPromises();
+    vi.advanceTimersByTime(1000);
+    await flushPromises();
+
+    const secondSocket = createdSockets[1];
+    expect(secondSocket).toBeDefined();
+    secondSocket.onopen?.(new Event('open'));
+    expect(secondSocket.send).toHaveBeenCalled();
+    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
+  });
+
+  test('recovers from stale updates after a resync', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+
+    fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'nodes',
+        scope: '',
+        version: 10,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { nodes: [{ name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' }] },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+    fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'nodes',
+        scope: '',
+        version: 11,
+        checksum: 'etag-2',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: { nodes: [{ name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' }] },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    await manager.start('nodes', storeScope);
+    await flushPromises();
+
+    vi.advanceTimersByTime(1100);
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'MODIFIED',
+        domain: 'nodes',
+        scope: '',
+        resourceVersion: '5',
+        name: 'node-a',
+        row: { name: 'node-a', status: 'Unknown', clusterId: 'cluster-a' },
+      })
+    );
+
+    await flushPromises();
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'MODIFIED',
+        domain: 'nodes',
+        scope: '',
+        resourceVersion: '12',
+        name: 'node-a',
+        row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('nodes');
+    expect(state.data?.nodes?.[0]?.status).toBe('Ready');
+    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
   });
 });
