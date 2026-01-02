@@ -16,6 +16,8 @@ type ResourceStreamDomain =
   | 'namespace-config'
   | 'namespace-network'
   | 'namespace-rbac'
+  | 'namespace-custom'
+  | 'namespace-helm'
   | 'namespace-quotas'
   | 'namespace-storage'
   | 'namespace-autoscaling'

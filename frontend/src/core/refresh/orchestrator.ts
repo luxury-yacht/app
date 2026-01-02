@@ -773,6 +773,8 @@ class RefreshOrchestrator {
     | 'namespace-config'
     | 'namespace-network'
     | 'namespace-rbac'
+    | 'namespace-custom'
+    | 'namespace-helm'
     | 'namespace-autoscaling'
     | 'namespace-quotas'
     | 'namespace-storage'
@@ -783,6 +785,8 @@ class RefreshOrchestrator {
       domain === 'namespace-config' ||
       domain === 'namespace-network' ||
       domain === 'namespace-rbac' ||
+      domain === 'namespace-custom' ||
+      domain === 'namespace-helm' ||
       domain === 'namespace-autoscaling' ||
       domain === 'namespace-quotas' ||
       domain === 'namespace-storage' ||
@@ -822,6 +826,18 @@ class RefreshOrchestrator {
     if (domain === 'namespace-rbac') {
       return (
         this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'rbac'
+      );
+    }
+
+    if (domain === 'namespace-custom') {
+      return (
+        this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'custom'
+      );
+    }
+
+    if (domain === 'namespace-helm') {
+      return (
+        this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'helm'
       );
     }
 
@@ -2224,6 +2240,14 @@ refreshOrchestrator.registerDomain({
   category: 'namespace',
   scopeResolver: () => refreshOrchestrator.getSelectedNamespace(),
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('namespace-custom', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('namespace-custom', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-custom', scope),
+    // Pause polling while streaming is active to prevent redundant refreshes.
+    pauseRefresherWhenStreaming: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({
@@ -2232,4 +2256,12 @@ refreshOrchestrator.registerDomain({
   category: 'namespace',
   scopeResolver: () => refreshOrchestrator.getSelectedNamespace(),
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('namespace-helm', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('namespace-helm', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-helm', scope),
+    // Pause polling while streaming is active to prevent redundant refreshes.
+    pauseRefresherWhenStreaming: true,
+  },
 });

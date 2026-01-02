@@ -16,8 +16,13 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	dynamicinformer "k8s.io/client-go/dynamic/dynamicinformer"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
@@ -39,15 +44,24 @@ const (
 )
 
 const (
-	domainPods             = "pods"
-	domainWorkloads        = "namespace-workloads"
-	domainNamespaceConfig  = "namespace-config"
-	domainNamespaceNetwork = "namespace-network"
-	domainNamespaceRBAC    = "namespace-rbac"
+	domainPods                 = "pods"
+	domainWorkloads            = "namespace-workloads"
+	domainNamespaceConfig      = "namespace-config"
+	domainNamespaceNetwork     = "namespace-network"
+	domainNamespaceRBAC        = "namespace-rbac"
+	domainNamespaceCustom      = "namespace-custom"
+	domainNamespaceHelm        = "namespace-helm"
 	domainNamespaceAutoscaling = "namespace-autoscaling"
-	domainNamespaceQuotas  = "namespace-quotas"
-	domainNamespaceStorage = "namespace-storage"
-	domainNodes            = "nodes"
+	domainNamespaceQuotas      = "namespace-quotas"
+	domainNamespaceStorage     = "namespace-storage"
+	domainNodes                = "nodes"
+)
+
+const (
+	helmReleaseSecretType = "helm.sh/release.v1"
+	helmReleaseNamePrefix = "sh.helm.release.v1."
+	helmReleaseOwnerLabel = "owner"
+	helmReleaseOwnerValue = "helm"
 )
 
 type subscription struct {
@@ -73,6 +87,23 @@ func (s *subscription) close(reason DropReason) {
 	})
 }
 
+type customResourceInformer struct {
+	gvr      schema.GroupVersionResource
+	kind     string
+	informer cache.SharedIndexInformer
+	stopCh   chan struct{}
+	stopOnce sync.Once
+}
+
+func (c *customResourceInformer) stop() {
+	if c == nil {
+		return
+	}
+	c.stopOnce.Do(func() {
+		close(c.stopCh)
+	})
+}
+
 type permissionChecker interface {
 	CanListResource(group, resource string) (bool, error)
 	CanWatchResource(group, resource string) (bool, error)
@@ -85,6 +116,8 @@ type Manager struct {
 	logger      logstream.Logger
 	telemetry   *telemetry.Recorder
 	permissions permissionChecker
+
+	dynamicClient dynamic.Interface
 
 	podLister        corelisters.PodLister
 	podIndexer       cache.Indexer
@@ -100,23 +133,35 @@ type Manager struct {
 	ingressLister    networklisters.IngressLister
 	policyLister     networklisters.NetworkPolicyLister
 
+	customInformerMu sync.Mutex
+	customInformers  map[string]*customResourceInformer
+
 	mu          sync.RWMutex
 	subscribers map[string]map[string]map[uint64]*subscription
 	nextID      uint64
 }
 
 // NewManager wires informer handlers into a resource stream manager.
-func NewManager(factory *informer.Factory, provider metrics.Provider, logger logstream.Logger, recorder *telemetry.Recorder, meta snapshot.ClusterMeta) *Manager {
+func NewManager(
+	factory *informer.Factory,
+	provider metrics.Provider,
+	logger logstream.Logger,
+	recorder *telemetry.Recorder,
+	meta snapshot.ClusterMeta,
+	dynamicClient dynamic.Interface,
+) *Manager {
 	if logger == nil {
 		logger = noopLogger{}
 	}
 	mgr := &Manager{
-		clusterMeta: meta,
-		metrics:     provider,
-		logger:      logger,
-		telemetry:   recorder,
-		permissions: factory,
-		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		clusterMeta:     meta,
+		metrics:         provider,
+		logger:          logger,
+		telemetry:       recorder,
+		permissions:     factory,
+		dynamicClient:   dynamicClient,
+		customInformers: make(map[string]*customResourceInformer),
+		subscribers:     make(map[string]map[string]map[uint64]*subscription),
 	}
 
 	if factory == nil {
@@ -290,7 +335,163 @@ func NewManager(factory *informer.Factory, provider metrics.Provider, logger log
 		DeleteFunc: func(obj interface{}) { mgr.handlePodDisruptionBudget(obj, MessageTypeDeleted) },
 	})
 
+	mgr.initCustomResourceInformers(factory)
+
 	return mgr
+}
+
+// Stop halts any dynamically managed informers that are not owned by the shared factory.
+func (m *Manager) Stop() {
+	if m == nil {
+		return
+	}
+	m.customInformerMu.Lock()
+	defer m.customInformerMu.Unlock()
+	for key, informer := range m.customInformers {
+		informer.stop()
+		delete(m.customInformers, key)
+	}
+}
+
+func (m *Manager) initCustomResourceInformers(factory *informer.Factory) {
+	if m == nil || m.dynamicClient == nil || factory == nil {
+		return
+	}
+	apiextFactory := factory.APIExtensionsInformerFactory()
+	if apiextFactory == nil {
+		return
+	}
+	crdInformer := apiextFactory.Apiextensions().V1().CustomResourceDefinitions()
+	crdInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { m.handleCustomResourceDefinition(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { m.handleCustomResourceDefinition(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { m.handleCustomResourceDefinition(obj, MessageTypeDeleted) },
+	})
+}
+
+func (m *Manager) handleCustomResourceDefinition(obj interface{}, updateType MessageType) {
+	crd := customResourceDefinitionFromObject(obj)
+	if crd == nil {
+		return
+	}
+	if updateType == MessageTypeDeleted {
+		m.removeCustomInformer(crd.Name)
+		return
+	}
+	m.ensureCustomInformer(crd)
+}
+
+func (m *Manager) ensureCustomInformer(crd *apiextensionsv1.CustomResourceDefinition) {
+	if m == nil || m.dynamicClient == nil || crd == nil {
+		return
+	}
+	if crd.Spec.Scope != apiextensionsv1.NamespaceScoped {
+		m.removeCustomInformer(crd.Name)
+		return
+	}
+	version := preferredCustomCRDVersion(crd)
+	if version == "" || crd.Spec.Names.Plural == "" {
+		return
+	}
+	gvr := schema.GroupVersionResource{
+		Group:    crd.Spec.Group,
+		Version:  version,
+		Resource: crd.Spec.Names.Plural,
+	}
+	kind := crd.Spec.Names.Kind
+
+	m.customInformerMu.Lock()
+	existing := m.customInformers[crd.Name]
+	if existing != nil && existing.gvr == gvr && existing.kind == kind {
+		m.customInformerMu.Unlock()
+		return
+	}
+	if existing != nil {
+		existing.stop()
+		delete(m.customInformers, crd.Name)
+	}
+
+	// Use a dynamic informer per CRD to stream namespace custom updates.
+	dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
+		m.dynamicClient,
+		gvr,
+		metav1.NamespaceAll,
+		0,
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+		nil,
+	)
+	informer := dynamicInformer.Informer()
+	info := &customResourceInformer{
+		gvr:      gvr,
+		kind:     kind,
+		informer: informer,
+		stopCh:   make(chan struct{}),
+	}
+	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { m.handleCustomResource(obj, MessageTypeAdded, info) },
+		UpdateFunc: func(_, newObj interface{}) { m.handleCustomResource(newObj, MessageTypeModified, info) },
+		DeleteFunc: func(obj interface{}) { m.handleCustomResource(obj, MessageTypeDeleted, info) },
+	})
+	m.customInformers[crd.Name] = info
+	m.customInformerMu.Unlock()
+
+	go informer.Run(info.stopCh)
+}
+
+func (m *Manager) removeCustomInformer(crdName string) {
+	if m == nil || crdName == "" {
+		return
+	}
+	m.customInformerMu.Lock()
+	defer m.customInformerMu.Unlock()
+	if informer, ok := m.customInformers[crdName]; ok {
+		informer.stop()
+		delete(m.customInformers, crdName)
+	}
+}
+
+func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, info *customResourceInformer) {
+	resource := customResourceFromObject(obj)
+	if resource == nil || info == nil {
+		return
+	}
+
+	kind := resource.GetKind()
+	if kind == "" {
+		kind = info.kind
+	}
+
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceCustom,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: resource.GetResourceVersion(),
+		UID:             string(resource.GetUID()),
+		Name:            resource.GetName(),
+		Namespace:       resource.GetNamespace(),
+		Kind:            kind,
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.kind)
+	}
+
+	m.broadcast(domainNamespaceCustom, scopesForNamespace(resource.GetNamespace()), update)
+}
+
+func preferredCustomCRDVersion(crd *apiextensionsv1.CustomResourceDefinition) string {
+	if crd == nil {
+		return ""
+	}
+	for _, version := range crd.Spec.Versions {
+		if version.Served && version.Storage {
+			return version.Name
+		}
+	}
+	if len(crd.Spec.Versions) > 0 {
+		return crd.Spec.Versions[0].Name
+	}
+	return ""
 }
 
 // Subscribe registers a new subscriber for the supplied domain/scope.
@@ -421,6 +622,7 @@ func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
 	}
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(cm.Namespace), update)
+	m.maybeBroadcastHelmRefreshFromConfigMap(cm, updateType)
 }
 
 func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
@@ -446,6 +648,51 @@ func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
 	}
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(secret.Namespace), update)
+	m.maybeBroadcastHelmRefresh(secret, updateType)
+}
+
+// Helm release updates are streamed as COMPLETE signals to trigger a snapshot resync.
+func (m *Manager) maybeBroadcastHelmRefresh(secret *corev1.Secret, updateType MessageType) {
+	if !isHelmReleaseObject(secret.Name, secret.Labels, string(secret.Type)) {
+		return
+	}
+	m.broadcastHelmRefresh(secret.Name, secret.Namespace, secret.ResourceVersion, updateType)
+}
+
+func (m *Manager) maybeBroadcastHelmRefreshFromConfigMap(cm *corev1.ConfigMap, updateType MessageType) {
+	if cm == nil {
+		return
+	}
+	if !isHelmReleaseObject(cm.Name, cm.Labels, "") {
+		return
+	}
+	m.broadcastHelmRefresh(cm.Name, cm.Namespace, cm.ResourceVersion, updateType)
+}
+
+func (m *Manager) broadcastHelmRefresh(name, namespace, resourceVersion string, updateType MessageType) {
+	reason := "helm release changed"
+	switch updateType {
+	case MessageTypeAdded:
+		reason = "helm release added"
+	case MessageTypeDeleted:
+		reason = "helm release deleted"
+	case MessageTypeModified:
+		reason = "helm release updated"
+	}
+
+	releaseName := helmReleaseName(name)
+	update := Update{
+		Type:            MessageTypeComplete,
+		Domain:          domainNamespaceHelm,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: resourceVersion,
+		Name:            releaseName,
+		Namespace:       namespace,
+		Kind:            "HelmRelease",
+		Error:           reason,
+	}
+	m.broadcast(domainNamespaceHelm, scopesForNamespace(namespace), update)
 }
 
 func (m *Manager) handleRole(obj interface{}, updateType MessageType) {
@@ -1196,6 +1443,14 @@ func domainPermissions(domain string) ([]permissionRequirement, bool) {
 			{group: "rbac.authorization.k8s.io", resource: "rolebindings"},
 			{group: "", resource: "serviceaccounts"},
 		}, true
+	case domainNamespaceCustom:
+		return []permissionRequirement{
+			{group: "apiextensions.k8s.io", resource: "customresourcedefinitions"},
+		}, true
+	case domainNamespaceHelm:
+		return []permissionRequirement{
+			{group: "", resource: "secrets"},
+		}, true
 	case domainNamespaceQuotas:
 		return []permissionRequirement{
 			{group: "", resource: "resourcequotas"},
@@ -1347,6 +1602,28 @@ func workloadFromObject(obj interface{}) (metav1.Object, string) {
 		return workloadFromObject(typed.Obj)
 	default:
 		return nil, ""
+	}
+}
+
+func customResourceDefinitionFromObject(obj interface{}) *apiextensionsv1.CustomResourceDefinition {
+	switch typed := obj.(type) {
+	case *apiextensionsv1.CustomResourceDefinition:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return customResourceDefinitionFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func customResourceFromObject(obj interface{}) *unstructured.Unstructured {
+	switch typed := obj.(type) {
+	case *unstructured.Unstructured:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return customResourceFromObject(typed.Obj)
+	default:
+		return nil
 	}
 }
 
@@ -1576,6 +1853,33 @@ func uniqueScopes(scopes []string) []string {
 		uniq = append(uniq, key)
 	}
 	return uniq
+}
+
+func isHelmReleaseObject(name string, labels map[string]string, secretType string) bool {
+	if secretType == helmReleaseSecretType {
+		return true
+	}
+	if labels != nil {
+		if strings.EqualFold(labels[helmReleaseOwnerLabel], helmReleaseOwnerValue) {
+			return true
+		}
+		if strings.EqualFold(labels[strings.ToUpper(helmReleaseOwnerLabel)], helmReleaseOwnerValue) {
+			return true
+		}
+	}
+	return strings.HasPrefix(name, helmReleaseNamePrefix)
+}
+
+func helmReleaseName(name string) string {
+	if !strings.HasPrefix(name, helmReleaseNamePrefix) {
+		return name
+	}
+	trimmed := strings.TrimPrefix(name, helmReleaseNamePrefix)
+	index := strings.LastIndex(trimmed, ".v")
+	if index <= 0 {
+		return trimmed
+	}
+	return trimmed[:index]
 }
 
 func convertPodIndexerItems(items []interface{}) []*corev1.Pod {

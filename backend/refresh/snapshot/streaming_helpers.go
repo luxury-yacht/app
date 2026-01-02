@@ -13,6 +13,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
@@ -153,6 +154,32 @@ func BuildNetworkPolicySummary(meta ClusterMeta, policy *networkingv1.NetworkPol
 		Namespace:   policy.Namespace,
 		Details:     describeNetworkPolicy(policy),
 		Age:         formatAge(policy.CreationTimestamp.Time),
+	}
+}
+
+// BuildNamespaceCustomSummary builds a custom resource row payload that matches snapshot formatting.
+func BuildNamespaceCustomSummary(
+	meta ClusterMeta,
+	resource *unstructured.Unstructured,
+	apiGroup string,
+	kindFallback string,
+) NamespaceCustomSummary {
+	if resource == nil {
+		return NamespaceCustomSummary{ClusterMeta: meta, Kind: kindFallback, APIGroup: apiGroup}
+	}
+	kind := resource.GetKind()
+	if kind == "" {
+		kind = kindFallback
+	}
+	return NamespaceCustomSummary{
+		ClusterMeta: meta,
+		Kind:        kind,
+		Name:        resource.GetName(),
+		APIGroup:    apiGroup,
+		Namespace:   resource.GetNamespace(),
+		Age:         formatAge(resource.GetCreationTimestamp().Time),
+		Labels:      resource.GetLabels(),
+		Annotations: resource.GetAnnotations(),
 	}
 }
 

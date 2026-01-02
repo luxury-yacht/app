@@ -97,6 +97,8 @@ beforeEach(() => {
   resetDomainState('namespace-config');
   resetDomainState('namespace-network');
   resetDomainState('namespace-rbac');
+  resetDomainState('namespace-custom');
+  resetDomainState('namespace-helm');
   resetDomainState('namespace-autoscaling');
   resetDomainState('namespace-quotas');
   resetDomainState('namespace-storage');
@@ -109,6 +111,8 @@ afterEach(() => {
   resetDomainState('namespace-config');
   resetDomainState('namespace-network');
   resetDomainState('namespace-rbac');
+  resetDomainState('namespace-custom');
+  resetDomainState('namespace-helm');
   resetDomainState('namespace-autoscaling');
   resetDomainState('namespace-quotas');
   resetDomainState('namespace-storage');
@@ -146,6 +150,16 @@ describe('resourceStreamManager helpers', () => {
   it('normalizes namespace rbac scopes', () => {
     expect(normalizeResourceScope('namespace-rbac', 'default')).toBe('namespace:default');
     expect(normalizeResourceScope('namespace-rbac', 'namespace:all')).toBe('namespace:all');
+  });
+
+  it('normalizes namespace custom scopes', () => {
+    expect(normalizeResourceScope('namespace-custom', 'default')).toBe('namespace:default');
+    expect(normalizeResourceScope('namespace-custom', 'namespace:all')).toBe('namespace:all');
+  });
+
+  it('normalizes namespace helm scopes', () => {
+    expect(normalizeResourceScope('namespace-helm', 'default')).toBe('namespace:default');
+    expect(normalizeResourceScope('namespace-helm', 'namespace:all')).toBe('namespace:all');
   });
 
   it('normalizes namespace autoscaling scopes', () => {
@@ -482,6 +496,106 @@ describe('ResourceStreamManager', () => {
 
     const state = getDomainState('namespace-rbac');
     expect(state.data?.resources?.[0]?.name).toBe('role-a');
+  });
+
+  test('applies namespace custom updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-custom',
+      storeScope
+    );
+
+    setDomainState('namespace-custom', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'namespace-custom',
+        scope: 'namespace:default',
+        resourceVersion: '4',
+        name: 'widget-a',
+        namespace: 'default',
+        kind: 'Widget',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'Widget',
+          name: 'widget-a',
+          namespace: 'default',
+          apiGroup: 'example.com',
+          age: '1m',
+          labels: { app: 'demo' },
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('namespace-custom');
+    expect(state.data?.resources?.[0]?.name).toBe('widget-a');
+  });
+
+  test('applies namespace helm updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-helm',
+      storeScope
+    );
+
+    setDomainState('namespace-helm', () => ({
+      status: 'ready',
+      data: { releases: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'namespace-helm',
+        scope: 'namespace:default',
+        resourceVersion: '4',
+        name: 'release-a',
+        namespace: 'default',
+        kind: 'HelmRelease',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          name: 'release-a',
+          namespace: 'default',
+          chart: 'demo-1.0.0',
+          appVersion: '1.0.0',
+          status: 'deployed',
+          revision: 1,
+          updated: '2024-01-01T00:00:00Z',
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('namespace-helm');
+    expect(state.data?.releases?.[0]?.name).toBe('release-a');
   });
 
   test('applies namespace autoscaling updates', () => {

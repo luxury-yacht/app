@@ -9,6 +9,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -235,6 +237,87 @@ func TestManagerStorageUpdateBroadcasts(t *testing.T) {
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected storage update to be delivered")
+	}
+}
+
+func TestManagerCustomUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainNamespaceCustom, "namespace:default")
+	require.NoError(t, err)
+
+	resource := &unstructured.Unstructured{}
+	resource.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "example.com",
+		Version: "v1",
+		Kind:    "Widget",
+	})
+	resource.SetName("widget-1")
+	resource.SetNamespace("default")
+	resource.SetUID("widget-uid")
+	resource.SetResourceVersion("2")
+	resource.SetCreationTimestamp(metav1.NewTime(time.Now().Add(-time.Minute)))
+
+	info := &customResourceInformer{
+		gvr:  schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+		kind: "Widget",
+	}
+
+	manager.handleCustomResource(resource, MessageTypeAdded, info)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainNamespaceCustom, update.Domain)
+		require.Equal(t, "namespace:default", update.Scope)
+		require.Equal(t, "widget-1", update.Name)
+		require.Equal(t, "default", update.Namespace)
+		require.Equal(t, "Widget", update.Kind)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected custom update to be delivered")
+	}
+}
+
+func TestManagerHelmUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainNamespaceHelm, "namespace:default")
+	require.NoError(t, err)
+
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "sh.helm.release.v1.demo.v1",
+			Namespace:       "default",
+			UID:             "helm-uid",
+			ResourceVersion: "5",
+			Labels: map[string]string{
+				"owner": "helm",
+			},
+		},
+		Type: corev1.SecretType(helmReleaseSecretType),
+	}
+
+	manager.handleSecret(secret, MessageTypeModified)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeComplete, update.Type)
+		require.Equal(t, domainNamespaceHelm, update.Domain)
+		require.Equal(t, "namespace:default", update.Scope)
+		require.Equal(t, "demo", update.Name)
+		require.Equal(t, "default", update.Namespace)
+		require.Equal(t, "HelmRelease", update.Kind)
+	default:
+		t.Fatal("expected helm update to be delivered")
 	}
 }
 

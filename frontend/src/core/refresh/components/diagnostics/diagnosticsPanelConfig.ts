@@ -96,6 +96,8 @@ export const DOMAIN_STREAM_MAP: Partial<Record<RefreshDomain, string>> = {
   'namespace-config': 'resources',
   'namespace-network': 'resources',
   'namespace-rbac': 'resources',
+  'namespace-custom': 'resources',
+  'namespace-helm': 'resources',
   'namespace-autoscaling': 'resources',
   'namespace-quotas': 'resources',
   'namespace-storage': 'resources',

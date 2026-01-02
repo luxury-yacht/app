@@ -18,6 +18,10 @@ func normalizeScopeForDomain(domain, scope string) (string, error) {
 		return normalizeNamespaceScope(trimmed, "namespace-network")
 	case domainNamespaceRBAC:
 		return normalizeNamespaceScope(trimmed, "namespace-rbac")
+	case domainNamespaceCustom:
+		return normalizeNamespaceScope(trimmed, "namespace-custom")
+	case domainNamespaceHelm:
+		return normalizeNamespaceScope(trimmed, "namespace-helm")
 	case domainNamespaceQuotas:
 		return normalizeNamespaceScope(trimmed, "namespace-quotas")
 	case domainNamespaceStorage:

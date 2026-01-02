@@ -528,7 +528,14 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	}
 	mux.Handle("/api/v2/stream/events", eventHandler)
 
-	resourceManager := resourcestream.NewManager(informerFactory, metricsProvider, cfg.Logger, telemetryRecorder, clusterMeta)
+	resourceManager := resourcestream.NewManager(
+		informerFactory,
+		metricsProvider,
+		cfg.Logger,
+		telemetryRecorder,
+		clusterMeta,
+		cfg.DynamicClient,
+	)
 	resourceHandler, err := resourcestream.NewHandler(resourceManager, cfg.Logger, telemetryRecorder, clusterMeta)
 	if err != nil {
 		return nil, err

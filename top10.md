@@ -89,8 +89,8 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
   - ✅ `namespace-storage` (pause refresher when streaming)
   - ✅ `namespace-quotas` (pause refresher when streaming)
   - ✅ `namespace-autoscaling` (pause refresher when streaming)
-  - [ ] `namespace-custom` (pause refresher when streaming)
-  - [ ] `namespace-helm` (pause refresher when streaming)
+  - ✅ `namespace-custom` (pause refresher when streaming)
+  - ✅ `namespace-helm` (pause refresher when streaming)
 - [ ] For each selected domain:
   - [ ] Add informer-driven update emission in the backend with minimal row payloads and resourceVersion tracking.
   - [ ] Add client-side merge/update logic and drift detection for the new domain in the resource stream manager.

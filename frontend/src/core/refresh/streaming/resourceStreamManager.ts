@@ -13,6 +13,10 @@ import type {
   NamespaceAutoscalingSummary,
   NamespaceConfigSnapshotPayload,
   NamespaceConfigSummary,
+  NamespaceCustomSnapshotPayload,
+  NamespaceCustomSummary,
+  NamespaceHelmSnapshotPayload,
+  NamespaceHelmSummary,
   NamespaceNetworkSnapshotPayload,
   NamespaceNetworkSummary,
   NamespaceQuotaSummary,
@@ -95,6 +99,8 @@ const isSupportedDomain = (value: string | undefined): value is ResourceDomain =
   value === 'namespace-config' ||
   value === 'namespace-network' ||
   value === 'namespace-rbac' ||
+  value === 'namespace-custom' ||
+  value === 'namespace-helm' ||
   value === 'namespace-autoscaling' ||
   value === 'namespace-quotas' ||
   value === 'namespace-storage' ||
@@ -211,6 +217,10 @@ export const normalizeResourceScope = (domain: ResourceDomain, scope: string): s
       return normalizeNamespaceScope(scope, 'namespace-network');
     case 'namespace-rbac':
       return normalizeNamespaceScope(scope, 'namespace-rbac');
+    case 'namespace-custom':
+      return normalizeNamespaceScope(scope, 'namespace-custom');
+    case 'namespace-helm':
+      return normalizeNamespaceScope(scope, 'namespace-helm');
     case 'namespace-autoscaling':
       return normalizeNamespaceScope(scope, 'namespace-autoscaling');
     case 'namespace-quotas':
@@ -303,6 +313,36 @@ export const sortNetworkRows = (rows: NamespaceNetworkSummary[]): void => {
   });
 };
 
+// Keep custom rows ordered to match snapshot sorting.
+export const sortCustomRows = (rows: NamespaceCustomSummary[]): void => {
+  rows.sort((a, b) => {
+    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
+    if (ns !== 0) {
+      return ns;
+    }
+    const group = normalizeSortKey(a.apiGroup).localeCompare(normalizeSortKey(b.apiGroup));
+    if (group !== 0) {
+      return group;
+    }
+    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
+    if (kind !== 0) {
+      return kind;
+    }
+    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
+  });
+};
+
+// Keep helm rows ordered to match snapshot sorting.
+export const sortHelmRows = (rows: NamespaceHelmSummary[]): void => {
+  rows.sort((a, b) => {
+    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
+    if (ns !== 0) {
+      return ns;
+    }
+    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
+  });
+};
+
 // Keep autoscaling rows ordered to match snapshot sorting.
 export const sortAutoscalingRows = (rows: NamespaceAutoscalingSummary[]): void => {
   rows.sort((a, b) => {
@@ -364,6 +404,12 @@ const buildNetworkKey = (
   kind: string,
   name: string
 ): string => `${clusterId}::${namespace}::${kind}::${name}`;
+
+const buildCustomKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
+  `${clusterId}::${namespace}::${kind}::${name}`;
+
+const buildHelmKey = (clusterId: string, namespace: string, name: string): string =>
+  `${clusterId}::${namespace}::${name}`;
 
 // Include kind so autoscaling entries remain distinct if multiple autoscaler types land later.
 const buildAutoscalingKey = (
@@ -479,6 +525,30 @@ const buildNetworkKeySet = (
     keys.add(
       buildNetworkKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
     );
+  });
+  return keys;
+};
+
+const buildCustomKeySet = (
+  payload: NamespaceCustomSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.resources ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(buildCustomKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
+  });
+  return keys;
+};
+
+const buildHelmKeySet = (
+  payload: NamespaceHelmSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.releases ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(buildHelmKey(row.clusterId ?? fallbackClusterId, row.namespace, row.name));
   });
   return keys;
 };
@@ -1304,6 +1374,102 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-custom') {
+      setDomainState('namespace-custom', (previous) => {
+        const currentPayload = previous.data ?? { resources: [] };
+        const existingRows = currentPayload.resources ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildCustomKey(
+              row.clusterId ?? subscription.clusterId,
+              row.namespace,
+              row.kind,
+              row.name
+            ),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildCustomKey(
+            update.clusterId ?? subscription.clusterId,
+            update.namespace ?? '',
+            update.kind ?? '',
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as NamespaceCustomSummary);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortCustomRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, resources: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'namespace-helm') {
+      setDomainState('namespace-helm', (previous) => {
+        const currentPayload = previous.data ?? { releases: [] };
+        const existingRows = currentPayload.releases ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildHelmKey(row.clusterId ?? subscription.clusterId, row.namespace, row.name),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildHelmKey(
+            update.clusterId ?? subscription.clusterId,
+            update.namespace ?? '',
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as NamespaceHelmSummary);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortHelmRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, releases: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'namespace-autoscaling') {
       setDomainState('namespace-autoscaling', (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
@@ -1589,6 +1755,39 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-custom') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as NamespaceCustomSummary | undefined;
+        const namespace = update.namespace ?? row?.namespace ?? '';
+        const kind = update.kind ?? row?.kind ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildCustomKey(clusterId, namespace, kind, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
+    if (subscription.domain === 'namespace-helm') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as NamespaceHelmSummary | undefined;
+        const namespace = update.namespace ?? row?.namespace ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildHelmKey(clusterId, namespace, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
     if (subscription.domain === 'namespace-autoscaling') {
       updates.forEach((update) => {
         const clusterId = update.clusterId ?? subscription.clusterId;
@@ -1859,6 +2058,46 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-custom') {
+      const payload = snapshot.payload as NamespaceCustomSnapshotPayload;
+      setDomainState('namespace-custom', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'namespace-helm') {
+      const payload = snapshot.payload as NamespaceHelmSnapshotPayload;
+      setDomainState('namespace-helm', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'namespace-autoscaling') {
       const payload = snapshot.payload as NamespaceAutoscalingSnapshotPayload;
       setDomainState('namespace-autoscaling', (previous) => ({
@@ -1965,6 +2204,16 @@ export class ResourceStreamManager {
     } else if (subscription.domain === 'namespace-rbac') {
       snapshotKeys = buildRBACKeySet(
         snapshot.payload as NamespaceRBACSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'namespace-custom') {
+      snapshotKeys = buildCustomKeySet(
+        snapshot.payload as NamespaceCustomSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'namespace-helm') {
+      snapshotKeys = buildHelmKeySet(
+        snapshot.payload as NamespaceHelmSnapshotPayload | null | undefined,
         subscription.clusterId
       );
     } else if (subscription.domain === 'namespace-autoscaling') {
@@ -2114,6 +2363,32 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-custom') {
+      setDomainState('namespace-custom', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'namespace-helm') {
+      setDomainState('namespace-helm', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'namespace-autoscaling') {
       setDomainState('namespace-autoscaling', (previous) => ({
         ...previous,
@@ -2218,6 +2493,26 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-custom') {
+      setDomainState('namespace-custom', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
+    if (subscription.domain === 'namespace-helm') {
+      setDomainState('namespace-helm', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
     if (subscription.domain === 'namespace-autoscaling') {
       setDomainState('namespace-autoscaling', (previous) => ({
         ...previous,
@@ -2294,6 +2589,20 @@ export class ResourceStreamManager {
       }));
     } else if (subscription.domain === 'namespace-rbac') {
       setDomainState('namespace-rbac', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
+    } else if (subscription.domain === 'namespace-custom') {
+      setDomainState('namespace-custom', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
+    } else if (subscription.domain === 'namespace-helm') {
+      setDomainState('namespace-helm', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
