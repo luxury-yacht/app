@@ -70,11 +70,11 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 ### Phase 4 - Validation and observability
 
-- Add unit tests for update merge logic, resourceVersion gating, and reset handling.
-- Add integration tests for disconnect/reconnect and stale update recovery.
-- Track telemetry for stream drops, resync frequency, and snapshot fallbacks.
-- Add lightweight snapshot caching to lower the cost of initial loads and resyncs. (ties to #3)
-- Close #3 fully by expanding snapshot caching to all snapshot domains, with explicit invalidation rules and a bounded TTL.
+- ✅ Add unit tests for update merge logic, resourceVersion gating, and reset handling.
+- ✅ Add integration tests for disconnect/reconnect and stale update recovery.
+- ✅ Track telemetry for stream drops, resync frequency, and snapshot fallbacks.
+- ✅ Add lightweight snapshot caching to lower the cost of initial loads and resyncs. (ties to #3)
+- ✅ Close #3 fully by expanding snapshot caching to all snapshot domains, with explicit invalidation rules and a bounded TTL.
 
 ### Safety guarantees
 
@@ -85,5 +85,5 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 ### Diagnostics + Logs panel follow-through (no layout changes)
 
 - Keep Application Logs behavior unchanged unless log streaming moves to the shared transport; if it does, retain the same status transitions (loading/updating/ready/error) and error messaging paths.
-- Extend Diagnostics rows (not summary cards) to reflect resource stream telemetry by wiring stream stats into existing row fields (`telemetryStatus`, `telemetryTooltip`, `dropped`, `lastUpdated`) in the `baseRows` builder.
-- Add a domain-to-stream mapping alongside `DOMAIN_REFRESHER_MAP` to select the correct `telemetrySummary.streams` entry per domain.
+- ✅ Extend Diagnostics rows (not summary cards) to reflect resource stream telemetry by wiring stream stats into existing row fields (`telemetryStatus`, `telemetryTooltip`, `dropped`, `lastUpdated`) in the `baseRows` builder.
+- ✅ Add a domain-to-stream mapping alongside `DOMAIN_REFRESHER_MAP` to select the correct `telemetrySummary.streams` entry per domain.

@@ -531,6 +531,15 @@ describe('DiagnosticsPanel component', () => {
           lastEvent: now - 3000,
         },
         {
+          name: 'resources',
+          activeSessions: 1,
+          totalMessages: 15,
+          droppedMessages: 0,
+          errorCount: 0,
+          lastConnect: now - 4000,
+          lastEvent: now - 1500,
+        },
+        {
           name: 'catalog',
           activeSessions: 3,
           totalMessages: 20,

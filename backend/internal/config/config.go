@@ -22,6 +22,9 @@ const (
 	// RefreshRequestTimeout is the HTTP timeout used by refresh API clients.
 	RefreshRequestTimeout = 30 * time.Second
 
+	// SnapshotCacheTTL controls how long snapshot builds are cached to avoid redundant work.
+	SnapshotCacheTTL = 1 * time.Second
+
 	// ClusterVersionCacheTTL controls how long the cluster version lookup is cached.
 	ClusterVersionCacheTTL = 10 * time.Minute
 

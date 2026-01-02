@@ -236,7 +236,8 @@ func (m *Manager) processManualJob(parent context.Context, job *ManualRefreshJob
 		job.Error = manualErr.Error()
 	} else if m.snapshotService != nil {
 		snapshot, snapErr := retryManualOperation(ctx, config.ManualJobMaxAttempts, config.ManualJobRetryDelay, func(callCtx context.Context) (*Snapshot, error) {
-			return m.snapshotService.Build(callCtx, job.Domain, job.Scope)
+			// Manual refreshes should bypass snapshot caching so UI receives fresh data.
+			return m.snapshotService.Build(WithCacheBypass(callCtx), job.Domain, job.Scope)
 		})
 		if snapErr != nil {
 			job.State = JobStateFailed

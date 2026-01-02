@@ -21,6 +21,7 @@ import type {
   CatalogSnapshotPayload,
 } from '../types';
 import { refreshManager } from '../RefreshManager';
+import { resourceStreamManager } from '../streaming/resourceStreamManager';
 import { useShortcut, useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { fetchTelemetrySummary } from '../client';
@@ -45,6 +46,7 @@ import {
   STALE_THRESHOLD_MS,
   CLUSTER_SCOPE,
   DOMAIN_REFRESHER_MAP,
+  DOMAIN_STREAM_MAP,
   PRIORITY_DOMAINS,
   getScopedFeaturesForView,
   resolveDomainNamespace,
@@ -284,20 +286,37 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     ]
   );
 
+  const resourceStreamStats = resourceStreamManager.getTelemetrySummary();
   const rows = useMemo<DiagnosticsRow[]>(() => {
     const prioritySet = new Set(PRIORITY_DOMAINS);
 
     const baseRows = domainStates.map<DiagnosticsRow>(({ domain, state, label, hasMetrics }) => {
       const hasMetricsFlag = Boolean(hasMetrics);
       const telemetryInfo = telemetrySummary?.snapshots.find((entry) => entry.domain === domain);
-      const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
+      const streamName = DOMAIN_STREAM_MAP[domain];
+      const streamTelemetry = streamName
+        ? telemetrySummary?.streams.find((entry) => entry.name === streamName)
+        : undefined;
+      const isResourceStreamDomain = streamName === 'resources';
+      const streamLastEvent = isResourceStreamDomain ? streamTelemetry?.lastEvent : 0;
+      const baseLastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
+      const lastUpdated = (() => {
+        const combined = Math.max(baseLastUpdated ?? 0, streamLastEvent ?? 0);
+        return combined > 0 ? combined : undefined;
+      })();
       const isStale = lastUpdated ? Date.now() - lastUpdated > STALE_THRESHOLD_MS : false;
       const metricsInfo: (NodeMetricsInfo | ClusterOverviewMetrics) | undefined = hasMetricsFlag
         ? (state.data as any)?.metrics
         : undefined;
-      const telemetryLastUpdatedInfo = telemetryInfo?.lastUpdated
-        ? formatLastUpdated(telemetryInfo.lastUpdated)
-        : null;
+      const telemetryLastUpdatedInfo = (() => {
+        if (streamLastEvent && streamLastEvent > 0) {
+          return formatLastUpdated(streamLastEvent);
+        }
+        if (telemetryInfo?.lastUpdated) {
+          return formatLastUpdated(telemetryInfo.lastUpdated);
+        }
+        return null;
+      })();
       const durationLabel = telemetryInfo?.lastDurationMs
         ? `${telemetryInfo.lastDurationMs} ms`
         : '—';
@@ -305,7 +324,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const telemetryFailure = telemetryInfo?.failureCount;
       const telemetryLastError = telemetryInfo?.lastError?.trim() ?? '';
       const combinedError = telemetryLastError || state.error || '—';
-      const telemetryStatus = (() => {
+      const snapshotTelemetryStatus = (() => {
         if (!telemetrySummary) {
           return '—';
         }
@@ -316,6 +335,43 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           ? `Error (${telemetryInfo.failureCount})`
           : `Success (${telemetryInfo.successCount})`;
       })();
+      const streamTelemetryStatus =
+        isResourceStreamDomain && streamTelemetry
+          ? streamTelemetry.errorCount > 0
+            ? `Stream Error (${streamTelemetry.errorCount})`
+            : streamTelemetry.droppedMessages > 0
+              ? `Stream Dropped (${streamTelemetry.droppedMessages})`
+              : 'Stream OK'
+          : null;
+      const telemetryStatus = streamTelemetryStatus
+        ? `${snapshotTelemetryStatus} • ${streamTelemetryStatus}`
+        : snapshotTelemetryStatus;
+      const streamDropped = isResourceStreamDomain ? (streamTelemetry?.droppedMessages ?? 0) : 0;
+      const telemetryTooltipParts: string[] = [];
+      if (telemetryLastError) {
+        telemetryTooltipParts.push(telemetryLastError);
+      }
+      if (isResourceStreamDomain && streamTelemetry) {
+        telemetryTooltipParts.push(`Stream delivered: ${streamTelemetry.totalMessages}`);
+        telemetryTooltipParts.push(`Stream dropped: ${streamTelemetry.droppedMessages}`);
+        if (streamTelemetry.lastError) {
+          telemetryTooltipParts.push(`Stream error: ${streamTelemetry.lastError}`);
+        }
+        if (resourceStreamStats.resyncCount > 0) {
+          telemetryTooltipParts.push(`Stream resyncs: ${resourceStreamStats.resyncCount}`);
+        }
+        if (resourceStreamStats.fallbackCount > 0) {
+          telemetryTooltipParts.push(`Stream fallbacks: ${resourceStreamStats.fallbackCount}`);
+        }
+        if (resourceStreamStats.lastResyncReason) {
+          telemetryTooltipParts.push(`Last resync: ${resourceStreamStats.lastResyncReason}`);
+        }
+        if (resourceStreamStats.lastFallbackReason) {
+          telemetryTooltipParts.push(`Last fallback: ${resourceStreamStats.lastFallbackReason}`);
+        }
+      }
+      const telemetryTooltip =
+        telemetryTooltipParts.length > 0 ? telemetryTooltipParts.join('\n') : undefined;
       const successCount = metricsInfo?.successCount ?? (hasMetricsFlag ? 0 : undefined);
       const failureCount = metricsInfo?.failureCount ?? (hasMetricsFlag ? 0 : undefined);
       const metricsStatus = hasMetricsFlag
@@ -438,11 +494,11 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         interval: intervalLabel,
         lastUpdated: telemetryLastUpdatedInfo?.display ?? lastUpdatedInfo.display,
         lastUpdatedTooltip: telemetryLastUpdatedInfo?.tooltip ?? lastUpdatedInfo.tooltip,
-        dropped: state.droppedAutoRefreshes,
+        dropped: state.droppedAutoRefreshes + streamDropped,
         stale: isStale,
         error: combinedError,
         telemetryStatus,
-        telemetryTooltip: telemetryLastError || undefined,
+        telemetryTooltip,
         metricsStatus,
         metricsTooltip,
         metricsStale: metricsInfo?.stale,
@@ -955,6 +1011,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     clusterEventsDomain,
     namespaceEventsDomain,
     telemetrySummary,
+    resourceStreamStats,
   ]);
 
   const filteredRows = useMemo(() => rows.filter((row) => row.status !== 'idle'), [rows]);

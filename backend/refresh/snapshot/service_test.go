@@ -77,3 +77,51 @@ func TestServiceBuildRecordsFailure(t *testing.T) {
 		t.Fatalf("expected error telemetry, got %+v", summary.Snapshots[0])
 	}
 }
+
+func TestServiceBuildCachesAndBypasses(t *testing.T) {
+	reg := domain.New()
+	buildCount := 0
+	if err := reg.Register(refresh.DomainConfig{
+		Name: "demo-cache",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			buildCount++
+			return &refresh.Snapshot{
+				Domain:  "demo-cache",
+				Scope:   scope,
+				Payload: map[string]int{"items": buildCount},
+				Stats:   refresh.SnapshotStats{TotalItems: 1},
+			}, nil
+		},
+	}); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	service := NewService(reg, nil, ClusterMeta{})
+
+	snap1, err := service.Build(context.Background(), "demo-cache", "scope-a")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	snap2, err := service.Build(context.Background(), "demo-cache", "scope-a")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+
+	if buildCount != 1 {
+		t.Fatalf("expected cached snapshot to reuse build, got %d builds", buildCount)
+	}
+	if snap1.Sequence != snap2.Sequence {
+		t.Fatalf("expected cached snapshot to preserve sequence")
+	}
+
+	snap3, err := service.Build(refresh.WithCacheBypass(context.Background()), "demo-cache", "scope-a")
+	if err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	if buildCount != 2 {
+		t.Fatalf("expected cache bypass to rebuild snapshot, got %d builds", buildCount)
+	}
+	if snap3.Sequence == snap2.Sequence {
+		t.Fatalf("expected cache bypass to issue a new sequence")
+	}
+}

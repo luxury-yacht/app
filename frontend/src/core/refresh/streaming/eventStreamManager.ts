@@ -84,7 +84,6 @@ const CLUSTER_SCOPE = 'cluster';
 const MAX_CLUSTER_EVENTS = 200;
 const MAX_NAMESPACE_EVENTS = 200;
 const STREAM_ERROR_NOTIFY_THRESHOLD = 3;
-const STREAM_RESYNC_MESSAGE = 'Stream resyncing';
 const RESYNC_STATE_ENABLED = isResourceStreamingEnabled();
 
 class EventStreamConnection {
@@ -405,13 +404,11 @@ export class EventStreamManager {
         status: isTerminal
           ? 'error'
           : resyncing
-            ? previous.data
-              ? 'updating'
-              : 'initialising'
+            ? 'updating'
             : previous.status === 'ready'
               ? 'ready'
               : 'updating',
-        error: isTerminal ? message : resyncing ? STREAM_RESYNC_MESSAGE : null,
+        error: isTerminal ? message : null,
         scope,
       }));
       if (isTerminal) {
@@ -425,13 +422,11 @@ export class EventStreamManager {
         status: isTerminal
           ? 'error'
           : resyncing
-            ? previous.data
-              ? 'updating'
-              : 'initialising'
+            ? 'updating'
             : previous.status === 'ready'
               ? 'ready'
               : 'updating',
-        error: isTerminal ? message : resyncing ? STREAM_RESYNC_MESSAGE : null,
+        error: isTerminal ? message : null,
         scope,
       }));
       if (isTerminal) {

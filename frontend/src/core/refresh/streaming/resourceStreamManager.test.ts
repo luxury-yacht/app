@@ -4,9 +4,41 @@
  * Test suite for resource stream helpers.
  */
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 
+const ensureRefreshBaseURLMock = vi.hoisted(() => vi.fn(async () => 'http://127.0.0.1:0'));
+const fetchSnapshotMock = vi.hoisted(() => vi.fn());
+const logAppInfoMock = vi.hoisted(() => vi.fn());
+const logAppWarnMock = vi.hoisted(() => vi.fn());
+const errorHandlerMock = vi.hoisted(() => ({
+  handle: vi.fn(),
+}));
+
+vi.mock('../client', () => ({
+  ensureRefreshBaseURL: ensureRefreshBaseURLMock,
+  fetchSnapshot: fetchSnapshotMock,
+}));
+
+vi.mock('@utils/errorHandler', () => ({
+  errorHandler: errorHandlerMock,
+}));
+
+vi.mock('@/core/logging/appLogClient', () => ({
+  logAppInfo: logAppInfoMock,
+  logAppWarn: logAppWarnMock,
+}));
+
+import { buildClusterScopeList } from '../clusterScope';
 import {
+  getDomainState,
+  getScopedDomainState,
+  resetAllScopedDomainStates,
+  resetDomainState,
+  resetScopedDomainState,
+  setScopedDomainState,
+} from '../store';
+import {
+  ResourceStreamManager,
   mergeNodeMetricsRow,
   mergePodMetricsRow,
   mergeWorkloadMetricsRow,
@@ -15,6 +47,59 @@ import {
   sortPodRows,
   sortWorkloadRows,
 } from './resourceStreamManager';
+
+class FakeWebSocket {
+  static OPEN = 1;
+  readyState = FakeWebSocket.OPEN;
+  onopen: ((event?: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  url: string;
+  send = vi.fn();
+  close = vi.fn();
+
+  constructor(url: string) {
+    this.url = url;
+  }
+}
+
+const flushPromises = async () => {
+  await Promise.resolve();
+  await Promise.resolve();
+};
+
+beforeEach(() => {
+  ensureRefreshBaseURLMock.mockReset();
+  ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
+  fetchSnapshotMock.mockReset();
+  logAppInfoMock.mockClear();
+  logAppWarnMock.mockClear();
+  errorHandlerMock.handle.mockClear();
+
+  if (!globalThis.window) {
+    Object.defineProperty(globalThis, 'window', {
+      value: {},
+      writable: true,
+    });
+  }
+  (window as any).setTimeout = globalThis.setTimeout;
+  (window as any).clearTimeout = globalThis.clearTimeout;
+  (globalThis as any).WebSocket = FakeWebSocket;
+
+  resetDomainState('nodes');
+  resetDomainState('namespace-workloads');
+  resetAllScopedDomainStates('pods');
+});
+
+afterEach(() => {
+  resetDomainState('nodes');
+  resetDomainState('namespace-workloads');
+  resetAllScopedDomainStates('pods');
+  resetScopedDomainState('pods', 'cluster-a|namespace:default');
+  delete (globalThis as any).WebSocket;
+  vi.useRealTimers();
+});
 
 describe('resourceStreamManager helpers', () => {
   it('normalizes pod scopes', () => {
@@ -143,5 +228,190 @@ describe('resourceStreamManager helpers', () => {
     const rows = [{ name: 'node-b' }, { name: 'node-a' }];
     sortNodeRows(rows as any);
     expect(rows.map((row) => row.name)).toEqual(['node-a', 'node-b']);
+  });
+});
+
+describe('ResourceStreamManager', () => {
+  test('applies pod updates and preserves metrics', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'pods',
+      storeScope
+    );
+
+    const existing = {
+      clusterId: 'cluster-a',
+      name: 'pod-a',
+      namespace: 'default',
+      node: 'node-a',
+      status: 'Running',
+      ready: '1/1',
+      restarts: 0,
+      age: '1m',
+      ownerKind: 'Deployment',
+      ownerName: 'web',
+      cpuRequest: '10m',
+      cpuLimit: '20m',
+      cpuUsage: '50m',
+      memRequest: '10Mi',
+      memLimit: '20Mi',
+      memUsage: '40Mi',
+    };
+
+    setScopedDomainState('pods', storeScope, () => ({
+      status: 'ready',
+      data: { pods: [existing] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'MODIFIED',
+        domain: 'pods',
+        scope: 'namespace:default',
+        resourceVersion: '2',
+        name: 'pod-a',
+        namespace: 'default',
+        row: { ...existing, status: 'Pending', cpuUsage: '5m', memUsage: '8Mi' },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getScopedDomainState('pods', storeScope);
+    expect(state.data?.pods?.[0]?.cpuUsage).toBe('50m');
+    expect(state.data?.pods?.[0]?.memUsage).toBe('40Mi');
+    expect(state.data?.pods?.[0]?.status).toBe('Pending');
+  });
+
+  test('resyncs on out-of-order resource versions', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'nodes',
+      storeScope
+    );
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'nodes',
+        scope: '',
+        resourceVersion: '10',
+        row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
+      })
+    );
+    vi.advanceTimersByTime(200);
+
+    fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'nodes',
+        scope: '',
+        version: 11,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { nodes: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'MODIFIED',
+        domain: 'nodes',
+        scope: '',
+        resourceVersion: '5',
+        row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
+      })
+    );
+
+    await flushPromises();
+
+    expect(fetchSnapshotMock).toHaveBeenCalled();
+    const state = getDomainState('nodes');
+    expect(state.status).toBe('ready');
+    expect(state.data?.nodes).toEqual([]);
+  });
+
+  test('resyncs on reset messages', async () => {
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-workloads',
+      storeScope
+    );
+
+    fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'namespace-workloads',
+        scope: 'namespace:default',
+        version: 9,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { workloads: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'RESET',
+        domain: 'namespace-workloads',
+        scope: 'namespace:default',
+      })
+    );
+
+    await flushPromises();
+
+    expect(fetchSnapshotMock).toHaveBeenCalled();
+  });
+
+  test('resyncs after connection errors', async () => {
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'pods',
+      storeScope
+    );
+
+    fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope: 'namespace:default',
+        version: 4,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { pods: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    manager.handleConnectionError('cluster-a', 'connection lost');
+
+    await flushPromises();
+
+    expect(fetchSnapshotMock).toHaveBeenCalled();
+    const state = getScopedDomainState('pods', storeScope);
+    expect(state.status).toBe('ready');
   });
 });

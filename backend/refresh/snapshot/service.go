@@ -4,34 +4,61 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/singleflight"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
-// Service builds snapshots through registered domain builders and applies simple caching via singleflight.
+// Service builds snapshots through registered domain builders and applies short-lived caching via singleflight.
 type Service struct {
 	registry  *domain.Registry
 	telemetry *telemetry.Recorder
 	group     singleflight.Group
 	sequence  uint64
 	cluster   ClusterMeta
+	cacheMu   sync.RWMutex
+	cache     map[string]cacheEntry
+	cacheTTL  time.Duration
+}
+
+type cacheEntry struct {
+	snapshot  *refresh.Snapshot
+	expiresAt time.Time
 }
 
 // NewService returns a Service for the provided registry.
 func NewService(reg *domain.Registry, recorder *telemetry.Recorder, meta ClusterMeta) *Service {
-	return &Service{registry: reg, telemetry: recorder, cluster: meta}
+	return &Service{
+		registry:  reg,
+		telemetry: recorder,
+		cluster:   meta,
+		cache:     make(map[string]cacheEntry),
+		cacheTTL:  config.SnapshotCacheTTL,
+	}
 }
 
 // Build returns a snapshot for the requested domain/scope.
 func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh.Snapshot, error) {
 	ctx = WithClusterMeta(ctx, s.cluster)
-	value, err, _ := s.group.Do(fmt.Sprintf("%s:%s", domainName, scope), func() (interface{}, error) {
+	cacheKey := s.cacheKey(domainName, scope)
+	if !refresh.HasCacheBypass(ctx) {
+		if cached := s.loadCache(cacheKey); cached != nil {
+			return cached, nil
+		}
+	}
+	value, err, _ := s.group.Do(cacheKey, func() (interface{}, error) {
+		if !refresh.HasCacheBypass(ctx) {
+			if cached := s.loadCache(cacheKey); cached != nil {
+				return cached, nil
+			}
+		}
 		start := time.Now()
 		snap, buildErr := s.registry.Build(ctx, domainName, scope)
 		duration := time.Since(start)
@@ -78,6 +105,7 @@ func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh
 			snap.Stats.IsFinalBatch,
 			snap.Stats.TimeToFirstRowMs,
 		)
+		s.storeCache(cacheKey, snap)
 		return snap, nil
 	})
 	if err != nil {
@@ -117,6 +145,41 @@ func (s *Service) recordTelemetry(
 		isFinal,
 		timeToFirstRowMs,
 	)
+}
+
+func (s *Service) cacheKey(domainName, scope string) string {
+	return fmt.Sprintf("%s:%s", domainName, scope)
+}
+
+func (s *Service) loadCache(key string) *refresh.Snapshot {
+	if s.cacheTTL <= 0 {
+		return nil
+	}
+	s.cacheMu.RLock()
+	entry, ok := s.cache[key]
+	s.cacheMu.RUnlock()
+	if !ok {
+		return nil
+	}
+	if time.Now().After(entry.expiresAt) {
+		s.cacheMu.Lock()
+		delete(s.cache, key)
+		s.cacheMu.Unlock()
+		return nil
+	}
+	return entry.snapshot
+}
+
+func (s *Service) storeCache(key string, snap *refresh.Snapshot) {
+	if s.cacheTTL <= 0 || snap == nil {
+		return
+	}
+	s.cacheMu.Lock()
+	s.cache[key] = cacheEntry{
+		snapshot:  snap,
+		expiresAt: time.Now().Add(s.cacheTTL),
+	}
+	s.cacheMu.Unlock()
 }
 
 func checksumBytes(data []byte) string {

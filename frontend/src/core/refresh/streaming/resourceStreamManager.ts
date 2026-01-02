@@ -387,6 +387,24 @@ type StreamSubscription = {
   driftDetected: boolean;
 };
 
+export type ResourceStreamTelemetrySummary = {
+  resyncCount: number;
+  fallbackCount: number;
+  lastResyncAt?: number;
+  lastResyncReason?: string;
+  lastFallbackAt?: number;
+  lastFallbackReason?: string;
+};
+
+type StreamTelemetry = {
+  resyncCount: number;
+  fallbackCount: number;
+  lastResyncAt?: number;
+  lastResyncReason?: string;
+  lastFallbackAt?: number;
+  lastFallbackReason?: string;
+};
+
 class ResourceStreamConnection {
   private socket: WebSocket | null = null;
   private attempt = 0;
@@ -518,6 +536,7 @@ export class ResourceStreamManager {
   private consecutiveErrors = new Map<string, number>();
   private suspendedForVisibility = false;
   private readonly mode: ResourceStreamingMode = getResourceStreamingMode();
+  private streamTelemetry = new Map<string, StreamTelemetry>();
 
   constructor() {
     eventBus.on('kubeconfig:changing', () => this.stopAll(true));
@@ -528,6 +547,29 @@ export class ResourceStreamManager {
 
   private isShadowMode(): boolean {
     return this.mode === 'shadow';
+  }
+
+  // Aggregate stream telemetry so diagnostics can display resync/fallback activity.
+  getTelemetrySummary(): ResourceStreamTelemetrySummary {
+    const summary: ResourceStreamTelemetrySummary = {
+      resyncCount: 0,
+      fallbackCount: 0,
+    };
+
+    this.streamTelemetry.forEach((stats) => {
+      summary.resyncCount += stats.resyncCount;
+      summary.fallbackCount += stats.fallbackCount;
+      if (stats.lastResyncAt && stats.lastResyncAt > (summary.lastResyncAt ?? 0)) {
+        summary.lastResyncAt = stats.lastResyncAt;
+        summary.lastResyncReason = stats.lastResyncReason;
+      }
+      if (stats.lastFallbackAt && stats.lastFallbackAt > (summary.lastFallbackAt ?? 0)) {
+        summary.lastFallbackAt = stats.lastFallbackAt;
+        summary.lastFallbackReason = stats.lastFallbackReason;
+      }
+    });
+
+    return summary;
   }
 
   async start(domain: ResourceDomain, scope: string): Promise<void> {
@@ -993,10 +1035,46 @@ export class ResourceStreamManager {
     }
   }
 
+  // Track resync activity so diagnostics can surface stream health.
+  private recordResync(subscription: StreamSubscription, reason: string): void {
+    if (!this.shouldTrackResync(reason)) {
+      return;
+    }
+    const stats = this.ensureStreamTelemetry(subscription);
+    stats.resyncCount += 1;
+    stats.lastResyncAt = Date.now();
+    stats.lastResyncReason = reason;
+  }
+
+  // Track snapshot fallbacks when drift forces streaming to stop.
+  private recordFallback(subscription: StreamSubscription, reason: string): void {
+    const stats = this.ensureStreamTelemetry(subscription);
+    stats.fallbackCount += 1;
+    stats.lastFallbackAt = Date.now();
+    stats.lastFallbackReason = reason;
+  }
+
+  private shouldTrackResync(reason: string): boolean {
+    return reason !== 'initial' && reason !== 'manual refresh';
+  }
+
+  private ensureStreamTelemetry(subscription: StreamSubscription): StreamTelemetry {
+    const existing = this.streamTelemetry.get(subscription.key);
+    if (existing) {
+      return existing;
+    }
+    const stats: StreamTelemetry = {
+      resyncCount: 0,
+      fallbackCount: 0,
+    };
+    this.streamTelemetry.set(subscription.key, stats);
+    return stats;
+  }
+
   // Resync clears queued updates and refreshes the snapshot after stream gaps.
   private async resyncSubscription(
     subscription: StreamSubscription,
-    _reason: string,
+    reason: string,
     force = false
   ): Promise<void> {
     if (subscription.resyncInFlight) {
@@ -1015,6 +1093,7 @@ export class ResourceStreamManager {
     }
     subscription.resyncInFlight = true;
     subscription.lastResyncAt = now;
+    this.recordResync(subscription, reason);
     this.markResyncing(subscription);
     if (subscription.updateTimer !== null) {
       window.clearTimeout(subscription.updateTimer);
@@ -1185,6 +1264,7 @@ export class ResourceStreamManager {
     if (subscription.driftDetected) {
       return;
     }
+    this.recordFallback(subscription, details.reason);
     subscription.driftDetected = true;
 
     eventBus.emit('refresh:resource-stream-drift', {
@@ -1349,6 +1429,7 @@ export class ResourceStreamManager {
     this.connections.clear();
     this.lastNotifiedErrors.clear();
     this.consecutiveErrors.clear();
+    this.streamTelemetry.clear();
   }
 }
 
