@@ -56,6 +56,43 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 	}
 }
 
+func TestManagerConfigUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainNamespaceConfig, "namespace:default")
+	require.NoError(t, err)
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "cfg-1",
+			Namespace:       "default",
+			UID:             "cfg-uid",
+			ResourceVersion: "9",
+		},
+		Data: map[string]string{
+			"key": "value",
+		},
+	}
+
+	manager.handleConfigMap(cm, MessageTypeAdded)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainNamespaceConfig, update.Domain)
+		require.Equal(t, "namespace:default", update.Scope)
+		require.Equal(t, "cfg-1", update.Name)
+		require.Equal(t, "default", update.Namespace)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected config update to be delivered")
+	}
+}
+
 func TestManagerDropsSubscriberOnBackpressure(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},

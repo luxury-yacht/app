@@ -32,9 +32,10 @@ const (
 )
 
 const (
-	domainPods      = "pods"
-	domainWorkloads = "namespace-workloads"
-	domainNodes     = "nodes"
+	domainPods            = "pods"
+	domainWorkloads       = "namespace-workloads"
+	domainNamespaceConfig = "namespace-config"
+	domainNodes           = "nodes"
 )
 
 type subscription struct {
@@ -118,6 +119,20 @@ func NewManager(factory *informer.Factory, provider metrics.Provider, logger log
 		AddFunc:    func(obj interface{}) { mgr.handlePod(obj, MessageTypeAdded) },
 		UpdateFunc: func(_, newObj interface{}) { mgr.handlePod(newObj, MessageTypeModified) },
 		DeleteFunc: func(obj interface{}) { mgr.handlePod(obj, MessageTypeDeleted) },
+	})
+
+	configMapInformer := shared.Core().V1().ConfigMaps()
+	configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleConfigMap(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleConfigMap(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleConfigMap(obj, MessageTypeDeleted) },
+	})
+
+	secretInformer := shared.Core().V1().Secrets()
+	secretInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleSecret(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleSecret(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleSecret(obj, MessageTypeDeleted) },
 	})
 
 	nodeInformer := shared.Core().V1().Nodes()
@@ -277,6 +292,56 @@ func (m *Manager) handlePod(obj interface{}, updateType MessageType) {
 
 	m.handleWorkloadFromPod(pod, updateType, podUsage)
 	m.handleNodeFromPod(pod)
+}
+
+func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
+	cm := configMapFromObject(obj)
+	if cm == nil {
+		return
+	}
+
+	summary := snapshot.BuildConfigMapSummary(m.clusterMeta, cm)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceConfig,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: cm.ResourceVersion,
+		UID:             string(cm.UID),
+		Name:            cm.Name,
+		Namespace:       cm.Namespace,
+		Kind:            "ConfigMap",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainNamespaceConfig, scopesForNamespace(cm.Namespace), update)
+}
+
+func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
+	secret := secretFromObject(obj)
+	if secret == nil {
+		return
+	}
+
+	summary := snapshot.BuildSecretSummary(m.clusterMeta, secret)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceConfig,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: secret.ResourceVersion,
+		UID:             string(secret.UID),
+		Name:            secret.Name,
+		Namespace:       secret.Namespace,
+		Kind:            "Secret",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainNamespaceConfig, scopesForNamespace(secret.Namespace), update)
 }
 
 func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
@@ -645,6 +710,11 @@ func domainPermissions(domain string) ([]permissionRequirement, bool) {
 	switch domain {
 	case domainPods:
 		return []permissionRequirement{{group: "", resource: "pods"}}, true
+	case domainNamespaceConfig:
+		return []permissionRequirement{
+			{group: "", resource: "configmaps"},
+			{group: "", resource: "secrets"},
+		}, true
 	case domainNodes:
 		return []permissionRequirement{{group: "", resource: "nodes"}}, true
 	case domainWorkloads:
@@ -789,6 +859,28 @@ func nodeFromObject(obj interface{}) *corev1.Node {
 		return typed
 	case cache.DeletedFinalStateUnknown:
 		return nodeFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func configMapFromObject(obj interface{}) *corev1.ConfigMap {
+	switch typed := obj.(type) {
+	case *corev1.ConfigMap:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return configMapFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func secretFromObject(obj interface{}) *corev1.Secret {
+	switch typed := obj.(type) {
+	case *corev1.Secret:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return secretFromObject(typed.Obj)
 	default:
 		return nil
 	}

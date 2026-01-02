@@ -93,6 +93,7 @@ export const DOMAIN_REFRESHER_MAP: Partial<Record<RefreshDomain, RefresherName>>
 export const DOMAIN_STREAM_MAP: Partial<Record<RefreshDomain, string>> = {
   pods: 'resources',
   'namespace-workloads': 'resources',
+  'namespace-config': 'resources',
   nodes: 'resources',
   'cluster-events': 'events',
   'namespace-events': 'events',

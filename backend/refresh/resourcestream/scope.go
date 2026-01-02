@@ -12,6 +12,8 @@ func normalizeScopeForDomain(domain, scope string) (string, error) {
 		return normalizePodScope(trimmed)
 	case domainWorkloads:
 		return normalizeNamespaceScope(trimmed, "namespace-workloads")
+	case domainNamespaceConfig:
+		return normalizeNamespaceScope(trimmed, "namespace-config")
 	case domainNodes:
 		if trimmed == "" || strings.EqualFold(strings.TrimSuffix(trimmed, ":"), "cluster") {
 			return "", nil

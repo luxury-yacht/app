@@ -37,6 +37,7 @@ import {
   resetAllScopedDomainStates,
   resetDomainState,
   resetScopedDomainState,
+  setDomainState,
   setScopedDomainState,
 } from '../store';
 import {
@@ -93,12 +94,14 @@ beforeEach(() => {
 
   resetDomainState('nodes');
   resetDomainState('namespace-workloads');
+  resetDomainState('namespace-config');
   resetAllScopedDomainStates('pods');
 });
 
 afterEach(() => {
   resetDomainState('nodes');
   resetDomainState('namespace-workloads');
+  resetDomainState('namespace-config');
   resetAllScopedDomainStates('pods');
   resetScopedDomainState('pods', 'cluster-a|namespace:default');
   delete (globalThis as any).WebSocket;
@@ -118,6 +121,11 @@ describe('resourceStreamManager helpers', () => {
   it('normalizes namespace workload scopes', () => {
     expect(normalizeResourceScope('namespace-workloads', 'default')).toBe('namespace:default');
     expect(normalizeResourceScope('namespace-workloads', 'namespace:all')).toBe('namespace:all');
+  });
+
+  it('normalizes namespace config scopes', () => {
+    expect(normalizeResourceScope('namespace-config', 'default')).toBe('namespace:default');
+    expect(normalizeResourceScope('namespace-config', 'namespace:all')).toBe('namespace:all');
   });
 
   it('normalizes node scopes', () => {
@@ -294,6 +302,55 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.pods?.[0]?.cpuUsage).toBe('50m');
     expect(state.data?.pods?.[0]?.memUsage).toBe('40Mi');
     expect(state.data?.pods?.[0]?.status).toBe('Pending');
+  });
+
+  test('applies namespace config updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-config',
+      storeScope
+    );
+
+    setDomainState('namespace-config', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'namespace-config',
+        scope: 'namespace:default',
+        resourceVersion: '3',
+        name: 'config-a',
+        namespace: 'default',
+        kind: 'ConfigMap',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'ConfigMap',
+          typeAlias: 'CM',
+          name: 'config-a',
+          namespace: 'default',
+          data: 2,
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('namespace-config');
+    expect(state.data?.resources?.[0]?.name).toBe('config-a');
   });
 
   test('resyncs on out-of-order resource versions', async () => {

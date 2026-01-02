@@ -763,8 +763,13 @@ class RefreshOrchestrator {
 
   private isResourceStreamDomain(
     domain: RefreshDomain
-  ): domain is 'pods' | 'namespace-workloads' | 'nodes' {
-    return domain === 'pods' || domain === 'namespace-workloads' || domain === 'nodes';
+  ): domain is 'pods' | 'namespace-workloads' | 'namespace-config' | 'nodes' {
+    return (
+      domain === 'pods' ||
+      domain === 'namespace-workloads' ||
+      domain === 'namespace-config' ||
+      domain === 'nodes'
+    );
   }
 
   private isResourceStreamViewActive(domain: RefreshDomain): boolean {
@@ -781,6 +786,12 @@ class RefreshOrchestrator {
     if (domain === 'namespace-workloads') {
       return (
         this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'workloads'
+      );
+    }
+
+    if (domain === 'namespace-config') {
+      return (
+        this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'config'
       );
     }
 
@@ -1687,7 +1698,7 @@ class RefreshOrchestrator {
   }
 
   private handleResourceStreamDrift = (payload: {
-    domain: 'pods' | 'namespace-workloads' | 'nodes';
+    domain: 'pods' | 'namespace-workloads' | 'namespace-config' | 'nodes';
     scope: string;
     reason: string;
   }): void => {
@@ -2026,6 +2037,12 @@ refreshOrchestrator.registerDomain({
   category: 'namespace',
   scopeResolver: () => refreshOrchestrator.getSelectedNamespace(),
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('namespace-config', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('namespace-config', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-config', scope),
+  },
 });
 
 refreshOrchestrator.registerDomain({

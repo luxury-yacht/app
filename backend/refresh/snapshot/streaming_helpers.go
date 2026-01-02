@@ -25,6 +25,38 @@ func BuildPodSummary(meta ClusterMeta, pod *corev1.Pod, usage map[string]metrics
 	return buildPodSummary(meta, pod, usage, rsMap)
 }
 
+// BuildConfigMapSummary builds a config map row payload that matches snapshot formatting.
+func BuildConfigMapSummary(meta ClusterMeta, cm *corev1.ConfigMap) ConfigSummary {
+	if cm == nil {
+		return ConfigSummary{ClusterMeta: meta, Kind: "ConfigMap", TypeAlias: "CM"}
+	}
+	return ConfigSummary{
+		ClusterMeta: meta,
+		Kind:        "ConfigMap",
+		TypeAlias:   "CM",
+		Name:        cm.Name,
+		Namespace:   cm.Namespace,
+		Data:        len(cm.Data) + len(cm.BinaryData),
+		Age:         formatAge(cm.CreationTimestamp.Time),
+	}
+}
+
+// BuildSecretSummary builds a secret row payload that matches snapshot formatting.
+func BuildSecretSummary(meta ClusterMeta, secret *corev1.Secret) ConfigSummary {
+	if secret == nil {
+		return ConfigSummary{ClusterMeta: meta, Kind: "Secret"}
+	}
+	return ConfigSummary{
+		ClusterMeta: meta,
+		Kind:        "Secret",
+		TypeAlias:   secretTypeAlias(secret),
+		Name:        secret.Name,
+		Namespace:   secret.Namespace,
+		Data:        len(secret.Data) + len(secret.StringData),
+		Age:         formatAge(secret.CreationTimestamp.Time),
+	}
+}
+
 // BuildWorkloadSummary builds a workload row payload for a single workload object.
 func BuildWorkloadSummary(meta ClusterMeta, obj interface{}, pods []*corev1.Pod, usage map[string]metrics.PodUsage) (WorkloadSummary, error) {
 	podsByOwner := make(map[string][]*corev1.Pod)
