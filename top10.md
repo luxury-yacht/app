@@ -76,6 +76,30 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 - ✅ Add lightweight snapshot caching to lower the cost of initial loads and resyncs. (ties to #3)
 - ✅ Close #3 fully by expanding snapshot caching to all snapshot domains, with explicit invalidation rules and a bounded TTL.
 
+### Phase 5 - Domain migration expansion (remaining snapshot-based lists)
+
+- [ ] Inventory remaining snapshot domains and classify by list semantics (cluster vs namespace, single vs scoped list, metrics-bearing vs static).
+- [ ] Prioritize migration order based on churn and UX impact (for example: `cluster-overview`, `cluster-rbac`, `cluster-storage`, `cluster-config`, `cluster-crds`, `cluster-custom`, `namespace-config`, `namespace-network`, `namespace-rbac`, `namespace-storage`, `namespace-quotas`, `namespace-autoscaling`, `namespace-custom`, `namespace-helm`).
+- [ ] For each selected domain:
+  - [ ] Add informer-driven update emission in the backend with minimal row payloads and resourceVersion tracking.
+  - [ ] Add client-side merge/update logic and drift detection for the new domain in the resource stream manager.
+  - [ ] Register telemetry mapping and diagnostics coverage for the domain.
+  - [ ] Add unit tests for merge logic + resync triggers, and integration tests for reconnects.
+- [ ] Keep catalog browse and object catalog-driven listings on snapshot flows unless explicitly re-scoped (ties to #7).
+- [ ] After each domain migration, reduce or disable its polling refresher to realize load reductions (ties to #8).
+
+### Phase 6 - Multi-cluster streaming (nodes first, then other resource domains)
+
+- [ ] Remove the single-cluster restriction by allowing a multi-cluster scope to fan out into per-cluster subscriptions.
+- [ ] Maintain a shared aggregate store scope for multi-cluster views so updates from each cluster merge into the same UI list.
+- [ ] Track resourceVersion, resync, and drift detection per cluster so a resync in one cluster does not reset other clusters.
+- [ ] Ensure node keys are cluster-scoped (`clusterId + name`) so deletes and updates are isolated per cluster.
+- [ ] Extend the same multi-cluster fan-out behavior to pods and namespace-workloads once nodes are stable.
+- [ ] Add multi-cluster tests:
+  - [ ] Merge updates from two clusters into one aggregated list without clobbering.
+  - [ ] Resync and error isolation per cluster.
+  - [ ] Metrics-only refresh path preserves existing metrics while stream updates apply.
+
 ### Safety guarantees
 
 - No UI behavior change until the feature flag is enabled.
