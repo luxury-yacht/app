@@ -27,8 +27,8 @@ import (
 
 const (
 	maxSubscribersPerScope = 100
-	subscriberBufferSize  = 256
-	podNodeIndexName      = "pods:node"
+	subscriberBufferSize   = 256
+	podNodeIndexName       = "pods:node"
 )
 
 const (
@@ -38,10 +38,10 @@ const (
 )
 
 type subscription struct {
-	ch     chan Update
-	drops  chan DropReason
+	ch      chan Update
+	drops   chan DropReason
 	created time.Time
-	once   sync.Once
+	once    sync.Once
 }
 
 func (s *subscription) close(reason DropReason) {
@@ -73,7 +73,7 @@ type Manager struct {
 	telemetry   *telemetry.Recorder
 	permissions permissionChecker
 
-	podLister          corelisters.PodLister
+	podLister        corelisters.PodLister
 	podIndexer       cache.Indexer
 	nodeLister       corelisters.NodeLister
 	rsLister         appslisters.ReplicaSetLister
@@ -215,8 +215,8 @@ func (m *Manager) Subscribe(domain, scope string) (*Subscription, error) {
 
 	id := atomic.AddUint64(&m.nextID, 1)
 	sub := &subscription{
-		ch:     make(chan Update, subscriberBufferSize),
-		drops:  make(chan DropReason, 1),
+		ch:      make(chan Update, subscriberBufferSize),
+		drops:   make(chan DropReason, 1),
 		created: time.Now(),
 	}
 	subs[id] = sub
