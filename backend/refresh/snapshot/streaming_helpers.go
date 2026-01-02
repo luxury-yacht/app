@@ -6,8 +6,11 @@ import (
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	appslisters "k8s.io/client-go/listers/apps/v1"
@@ -101,6 +104,107 @@ func BuildServiceAccountSummary(meta ClusterMeta, sa *corev1.ServiceAccount) RBA
 		Namespace:   sa.Namespace,
 		Details:     describeServiceAccount(sa),
 		Age:         formatAge(sa.CreationTimestamp.Time),
+	}
+}
+
+// BuildServiceNetworkSummary builds a service row payload that matches snapshot formatting.
+func BuildServiceNetworkSummary(
+	meta ClusterMeta,
+	svc *corev1.Service,
+	slices []*discoveryv1.EndpointSlice,
+) NetworkSummary {
+	if svc == nil {
+		return NetworkSummary{ClusterMeta: meta, Kind: "Service"}
+	}
+	return NetworkSummary{
+		ClusterMeta: meta,
+		Kind:        "Service",
+		Name:        svc.Name,
+		Namespace:   svc.Namespace,
+		Details:     describeService(svc, slices),
+		Age:         formatAge(svc.CreationTimestamp.Time),
+	}
+}
+
+// BuildIngressNetworkSummary builds an ingress row payload that matches snapshot formatting.
+func BuildIngressNetworkSummary(meta ClusterMeta, ing *networkingv1.Ingress) NetworkSummary {
+	if ing == nil {
+		return NetworkSummary{ClusterMeta: meta, Kind: "Ingress"}
+	}
+	return NetworkSummary{
+		ClusterMeta: meta,
+		Kind:        "Ingress",
+		Name:        ing.Name,
+		Namespace:   ing.Namespace,
+		Details:     describeIngress(ing),
+		Age:         formatAge(ing.CreationTimestamp.Time),
+	}
+}
+
+// BuildNetworkPolicySummary builds a network policy row payload that matches snapshot formatting.
+func BuildNetworkPolicySummary(meta ClusterMeta, policy *networkingv1.NetworkPolicy) NetworkSummary {
+	if policy == nil {
+		return NetworkSummary{ClusterMeta: meta, Kind: "NetworkPolicy"}
+	}
+	return NetworkSummary{
+		ClusterMeta: meta,
+		Kind:        "NetworkPolicy",
+		Name:        policy.Name,
+		Namespace:   policy.Namespace,
+		Details:     describeNetworkPolicy(policy),
+		Age:         formatAge(policy.CreationTimestamp.Time),
+	}
+}
+
+// BuildEndpointSliceSummary builds an endpoint slice row payload that matches snapshot formatting.
+func BuildEndpointSliceSummary(
+	meta ClusterMeta,
+	namespace string,
+	serviceName string,
+	slices []*discoveryv1.EndpointSlice,
+) NetworkSummary {
+	return NetworkSummary{
+		ClusterMeta: meta,
+		Kind:        "EndpointSlice",
+		Name:        serviceName,
+		Namespace:   namespace,
+		Details:     describeEndpointSlices(slices),
+		Age:         formatAge(earliestSliceCreation(slices)),
+	}
+}
+
+// BuildHPASummary builds an HPA row payload that matches snapshot formatting.
+func BuildHPASummary(meta ClusterMeta, hpa *autoscalingv1.HorizontalPodAutoscaler) AutoscalingSummary {
+	if hpa == nil {
+		return AutoscalingSummary{ClusterMeta: meta, Kind: "HorizontalPodAutoscaler"}
+	}
+	return AutoscalingSummary{
+		ClusterMeta: meta,
+		Kind:        "HorizontalPodAutoscaler",
+		Name:        hpa.Name,
+		Namespace:   hpa.Namespace,
+		Target:      describeHPATarget(hpa),
+		Min:         minReplicas(hpa),
+		Max:         hpa.Spec.MaxReplicas,
+		Current:     hpa.Status.CurrentReplicas,
+		Age:         formatAge(hpa.CreationTimestamp.Time),
+	}
+}
+
+// BuildPVCStorageSummary builds a PVC row payload that matches snapshot formatting.
+func BuildPVCStorageSummary(meta ClusterMeta, pvc *corev1.PersistentVolumeClaim) StorageSummary {
+	if pvc == nil {
+		return StorageSummary{ClusterMeta: meta, Kind: "PersistentVolumeClaim"}
+	}
+	return StorageSummary{
+		ClusterMeta:  meta,
+		Kind:         "PersistentVolumeClaim",
+		Name:         pvc.Name,
+		Namespace:    pvc.Namespace,
+		Capacity:     pvcCapacity(pvc),
+		Status:       string(pvc.Status.Phase),
+		StorageClass: storageClassName(pvc),
+		Age:          formatAge(pvc.CreationTimestamp.Time),
 	}
 }
 

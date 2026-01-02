@@ -14,8 +14,11 @@ type ResourceStreamDomain =
   | 'pods'
   | 'namespace-workloads'
   | 'namespace-config'
+  | 'namespace-network'
   | 'namespace-rbac'
   | 'namespace-quotas'
+  | 'namespace-storage'
+  | 'namespace-autoscaling'
   | 'nodes';
 
 // Event payload types

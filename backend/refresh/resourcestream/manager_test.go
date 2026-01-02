@@ -5,6 +5,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -159,6 +160,125 @@ func TestManagerQuotasUpdateBroadcasts(t *testing.T) {
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected quotas update to be delivered")
+	}
+}
+
+func TestManagerNetworkUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainNamespaceNetwork, "namespace:default")
+	require.NoError(t, err)
+
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "svc-1",
+			Namespace:       "default",
+			UID:             "svc-uid",
+			ResourceVersion: "3",
+		},
+		Spec: corev1.ServiceSpec{
+			Type:      corev1.ServiceTypeClusterIP,
+			ClusterIP: "10.0.0.1",
+		},
+	}
+
+	manager.handleService(service, MessageTypeAdded)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainNamespaceNetwork, update.Domain)
+		require.Equal(t, "namespace:default", update.Scope)
+		require.Equal(t, "svc-1", update.Name)
+		require.Equal(t, "default", update.Namespace)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected network update to be delivered")
+	}
+}
+
+func TestManagerStorageUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainNamespaceStorage, "namespace:default")
+	require.NoError(t, err)
+
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "pvc-1",
+			Namespace:       "default",
+			UID:             "pvc-uid",
+			ResourceVersion: "2",
+		},
+		Status: corev1.PersistentVolumeClaimStatus{
+			Phase: corev1.ClaimBound,
+		},
+	}
+
+	manager.handlePersistentVolumeClaim(pvc, MessageTypeAdded)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainNamespaceStorage, update.Domain)
+		require.Equal(t, "namespace:default", update.Scope)
+		require.Equal(t, "pvc-1", update.Name)
+		require.Equal(t, "default", update.Namespace)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected storage update to be delivered")
+	}
+}
+
+func TestManagerAutoscalingUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainNamespaceAutoscaling, "namespace:default")
+	require.NoError(t, err)
+
+	hpa := &autoscalingv1.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "hpa-1",
+			Namespace:       "default",
+			UID:             "hpa-uid",
+			ResourceVersion: "3",
+		},
+		Spec: autoscalingv1.HorizontalPodAutoscalerSpec{
+			MaxReplicas: 3,
+			ScaleTargetRef: autoscalingv1.CrossVersionObjectReference{
+				Kind: "Deployment",
+				Name: "app",
+			},
+		},
+		Status: autoscalingv1.HorizontalPodAutoscalerStatus{
+			CurrentReplicas: 2,
+		},
+	}
+
+	manager.handleHPA(hpa, MessageTypeAdded)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainNamespaceAutoscaling, update.Domain)
+		require.Equal(t, "namespace:default", update.Scope)
+		require.Equal(t, "hpa-1", update.Name)
+		require.Equal(t, "default", update.Namespace)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected autoscaling update to be delivered")
 	}
 }
 

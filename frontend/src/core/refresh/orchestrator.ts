@@ -12,7 +12,7 @@ import {
   type Snapshot,
   type SnapshotStats,
 } from './client';
-import { eventBus } from '@/core/events';
+import { eventBus, type AppEvents } from '@/core/events';
 import { refreshManager, type RefreshContext } from './RefreshManager';
 import {
   CLUSTER_REFRESHERS,
@@ -771,15 +771,21 @@ class RefreshOrchestrator {
     | 'pods'
     | 'namespace-workloads'
     | 'namespace-config'
+    | 'namespace-network'
     | 'namespace-rbac'
+    | 'namespace-autoscaling'
     | 'namespace-quotas'
+    | 'namespace-storage'
     | 'nodes' {
     return (
       domain === 'pods' ||
       domain === 'namespace-workloads' ||
       domain === 'namespace-config' ||
+      domain === 'namespace-network' ||
       domain === 'namespace-rbac' ||
+      domain === 'namespace-autoscaling' ||
       domain === 'namespace-quotas' ||
+      domain === 'namespace-storage' ||
       domain === 'nodes'
     );
   }
@@ -807,15 +813,34 @@ class RefreshOrchestrator {
       );
     }
 
+    if (domain === 'namespace-network') {
+      return (
+        this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'network'
+      );
+    }
+
     if (domain === 'namespace-rbac') {
       return (
         this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'rbac'
       );
     }
 
+    if (domain === 'namespace-autoscaling') {
+      return (
+        this.context.currentView === 'namespace' &&
+        this.context.activeNamespaceView === 'autoscaling'
+      );
+    }
+
     if (domain === 'namespace-quotas') {
       return (
         this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'quotas'
+      );
+    }
+
+    if (domain === 'namespace-storage') {
+      return (
+        this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'storage'
       );
     }
 
@@ -1759,17 +1784,9 @@ class RefreshOrchestrator {
     }
   }
 
-  private handleResourceStreamDrift = (payload: {
-    domain:
-      | 'pods'
-      | 'namespace-workloads'
-      | 'namespace-config'
-      | 'namespace-rbac'
-      | 'namespace-quotas'
-      | 'nodes';
-    scope: string;
-    reason: string;
-  }): void => {
+  private handleResourceStreamDrift = (
+    payload: AppEvents['refresh:resource-stream-drift']
+  ): void => {
     const scope = payload.scope.trim();
     if (!scope) {
       return;
@@ -2119,6 +2136,13 @@ refreshOrchestrator.registerDomain({
   category: 'namespace',
   scopeResolver: () => refreshOrchestrator.getSelectedNamespace(),
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('namespace-network', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('namespace-network', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-network', scope),
+    pauseRefresherWhenStreaming: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({
@@ -2141,6 +2165,13 @@ refreshOrchestrator.registerDomain({
   category: 'namespace',
   scopeResolver: () => refreshOrchestrator.getSelectedNamespace(),
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('namespace-storage', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('namespace-storage', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-storage', scope),
+    pauseRefresherWhenStreaming: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({
@@ -2149,6 +2180,14 @@ refreshOrchestrator.registerDomain({
   category: 'namespace',
   scopeResolver: () => refreshOrchestrator.getSelectedNamespace(),
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('namespace-autoscaling', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('namespace-autoscaling', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-autoscaling', scope),
+    // Pause polling while streaming is healthy to avoid redundant refreshes.
+    pauseRefresherWhenStreaming: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({

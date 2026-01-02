@@ -85,10 +85,10 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
   - [ ] `cluster-config` (pause refresher when streaming)
   - [ ] `cluster-crds` (pause refresher when streaming)
   - [ ] `cluster-custom` (pause refresher when streaming)
-  - [ ] `namespace-network` (pause refresher when streaming)
-  - [ ] `namespace-storage` (pause refresher when streaming)
+  - ✅ `namespace-network` (pause refresher when streaming)
+  - ✅ `namespace-storage` (pause refresher when streaming)
   - ✅ `namespace-quotas` (pause refresher when streaming)
-  - [ ] `namespace-autoscaling` (pause refresher when streaming)
+  - ✅ `namespace-autoscaling` (pause refresher when streaming)
   - [ ] `namespace-custom` (pause refresher when streaming)
   - [ ] `namespace-helm` (pause refresher when streaming)
 - [ ] For each selected domain:

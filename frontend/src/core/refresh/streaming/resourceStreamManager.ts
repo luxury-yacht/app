@@ -9,12 +9,18 @@ import { setDomainState, setScopedDomainState } from '../store';
 import type {
   ClusterNodeSnapshotEntry,
   ClusterNodeSnapshotPayload,
+  NamespaceAutoscalingSnapshotPayload,
+  NamespaceAutoscalingSummary,
   NamespaceConfigSnapshotPayload,
   NamespaceConfigSummary,
+  NamespaceNetworkSnapshotPayload,
+  NamespaceNetworkSummary,
   NamespaceQuotaSummary,
   NamespaceQuotasSnapshotPayload,
   NamespaceRBACSnapshotPayload,
   NamespaceRBACSummary,
+  NamespaceStorageSnapshotPayload,
+  NamespaceStorageSummary,
   NamespaceWorkloadSnapshotPayload,
   NamespaceWorkloadSummary,
   PodSnapshotEntry,
@@ -87,8 +93,11 @@ const isSupportedDomain = (value: string | undefined): value is ResourceDomain =
   value === 'pods' ||
   value === 'namespace-workloads' ||
   value === 'namespace-config' ||
+  value === 'namespace-network' ||
   value === 'namespace-rbac' ||
+  value === 'namespace-autoscaling' ||
   value === 'namespace-quotas' ||
+  value === 'namespace-storage' ||
   value === 'nodes';
 
 const hasMessageType = (value: unknown): value is StreamMessageType =>
@@ -198,10 +207,16 @@ export const normalizeResourceScope = (domain: ResourceDomain, scope: string): s
       return normalizeNamespaceScope(scope, 'namespace-workloads');
     case 'namespace-config':
       return normalizeNamespaceScope(scope, 'namespace-config');
+    case 'namespace-network':
+      return normalizeNamespaceScope(scope, 'namespace-network');
     case 'namespace-rbac':
       return normalizeNamespaceScope(scope, 'namespace-rbac');
+    case 'namespace-autoscaling':
+      return normalizeNamespaceScope(scope, 'namespace-autoscaling');
     case 'namespace-quotas':
       return normalizeNamespaceScope(scope, 'namespace-quotas');
+    case 'namespace-storage':
+      return normalizeNamespaceScope(scope, 'namespace-storage');
     case 'nodes':
       if (!scope || scope.trim() === '' || scope.trim().toLowerCase() === 'cluster') {
         return '';
@@ -274,6 +289,31 @@ export const sortRBACRows = (rows: NamespaceRBACSummary[]): void => {
   });
 };
 
+export const sortNetworkRows = (rows: NamespaceNetworkSummary[]): void => {
+  rows.sort((a, b) => {
+    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
+    if (ns !== 0) {
+      return ns;
+    }
+    const name = normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
+    if (name !== 0) {
+      return name;
+    }
+    return normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
+  });
+};
+
+// Keep autoscaling rows ordered to match snapshot sorting.
+export const sortAutoscalingRows = (rows: NamespaceAutoscalingSummary[]): void => {
+  rows.sort((a, b) => {
+    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
+    if (ns !== 0) {
+      return ns;
+    }
+    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
+  });
+};
+
 export const sortQuotaRows = (rows: NamespaceQuotaSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
@@ -285,6 +325,16 @@ export const sortQuotaRows = (rows: NamespaceQuotaSummary[]): void => {
       return name;
     }
     return normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
+  });
+};
+
+export const sortStorageRows = (rows: NamespaceStorageSummary[]): void => {
+  rows.sort((a, b) => {
+    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
+    if (ns !== 0) {
+      return ns;
+    }
+    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
   });
 };
 
@@ -308,8 +358,30 @@ const buildConfigKey = (clusterId: string, namespace: string, kind: string, name
 const buildRBACKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
   `${clusterId}::${namespace}::${kind}::${name}`;
 
+const buildNetworkKey = (
+  clusterId: string,
+  namespace: string,
+  kind: string,
+  name: string
+): string => `${clusterId}::${namespace}::${kind}::${name}`;
+
+// Include kind so autoscaling entries remain distinct if multiple autoscaler types land later.
+const buildAutoscalingKey = (
+  clusterId: string,
+  namespace: string,
+  kind: string,
+  name: string
+): string => `${clusterId}::${namespace}::${kind}::${name}`;
+
 const buildQuotaKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
   `${clusterId}::${namespace}::${kind}::${name}`;
+
+const buildStorageKey = (
+  clusterId: string,
+  namespace: string,
+  kind: string,
+  name: string
+): string => `${clusterId}::${namespace}::${kind}::${name}`;
 
 const buildNodeKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
 
@@ -397,6 +469,34 @@ const buildRBACKeySet = (
   return keys;
 };
 
+const buildNetworkKeySet = (
+  payload: NamespaceNetworkSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.resources ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(
+      buildNetworkKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
+    );
+  });
+  return keys;
+};
+
+const buildAutoscalingKeySet = (
+  payload: NamespaceAutoscalingSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.resources ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(
+      buildAutoscalingKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
+    );
+  });
+  return keys;
+};
+
 const buildQuotaKeySet = (
   payload: NamespaceQuotasSnapshotPayload | null | undefined,
   fallbackClusterId: string
@@ -405,6 +505,20 @@ const buildQuotaKeySet = (
   const keys = new Set<string>();
   rows.forEach((row) => {
     keys.add(buildQuotaKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
+  });
+  return keys;
+};
+
+const buildStorageKeySet = (
+  payload: NamespaceStorageSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.resources ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(
+      buildStorageKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
+    );
   });
   return keys;
 };
@@ -1088,6 +1202,57 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-network') {
+      setDomainState('namespace-network', (previous) => {
+        const currentPayload = previous.data ?? { resources: [] };
+        const existingRows = currentPayload.resources ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildNetworkKey(
+              row.clusterId ?? subscription.clusterId,
+              row.namespace,
+              row.kind,
+              row.name
+            ),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildNetworkKey(
+            update.clusterId ?? subscription.clusterId,
+            update.namespace ?? '',
+            update.kind ?? '',
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as NamespaceNetworkSummary);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortNetworkRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, resources: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'namespace-rbac') {
       setDomainState('namespace-rbac', (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
@@ -1139,6 +1304,57 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-autoscaling') {
+      setDomainState('namespace-autoscaling', (previous) => {
+        const currentPayload = previous.data ?? { resources: [] };
+        const existingRows = currentPayload.resources ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildAutoscalingKey(
+              row.clusterId ?? subscription.clusterId,
+              row.namespace,
+              row.kind,
+              row.name
+            ),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildAutoscalingKey(
+            update.clusterId ?? subscription.clusterId,
+            update.namespace ?? '',
+            update.kind ?? '',
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as NamespaceAutoscalingSummary);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortAutoscalingRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, resources: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'namespace-quotas') {
       setDomainState('namespace-quotas', (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
@@ -1174,6 +1390,57 @@ export class ResourceStreamManager {
 
         const nextRows = Array.from(byKey.values());
         sortQuotaRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, resources: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'namespace-storage') {
+      setDomainState('namespace-storage', (previous) => {
+        const currentPayload = previous.data ?? { resources: [] };
+        const existingRows = currentPayload.resources ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildStorageKey(
+              row.clusterId ?? subscription.clusterId,
+              row.namespace,
+              row.kind,
+              row.name
+            ),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildStorageKey(
+            update.clusterId ?? subscription.clusterId,
+            update.namespace ?? '',
+            update.kind ?? '',
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as NamespaceStorageSummary);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortStorageRows(nextRows);
         return {
           ...previous,
           status: 'ready',
@@ -1288,6 +1555,23 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-network') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as NamespaceNetworkSummary | undefined;
+        const namespace = update.namespace ?? row?.namespace ?? '';
+        const kind = update.kind ?? row?.kind ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildNetworkKey(clusterId, namespace, kind, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
     if (subscription.domain === 'namespace-rbac') {
       updates.forEach((update) => {
         const clusterId = update.clusterId ?? subscription.clusterId;
@@ -1305,6 +1589,23 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-autoscaling') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as NamespaceAutoscalingSummary | undefined;
+        const namespace = update.namespace ?? row?.namespace ?? '';
+        const kind = update.kind ?? row?.kind ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildAutoscalingKey(clusterId, namespace, kind, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
     if (subscription.domain === 'namespace-quotas') {
       updates.forEach((update) => {
         const clusterId = update.clusterId ?? subscription.clusterId;
@@ -1313,6 +1614,23 @@ export class ResourceStreamManager {
         const kind = update.kind ?? row?.kind ?? '';
         const name = update.name ?? row?.name ?? '';
         const key = buildQuotaKey(clusterId, namespace, kind, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
+    if (subscription.domain === 'namespace-storage') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as NamespaceStorageSummary | undefined;
+        const namespace = update.namespace ?? row?.namespace ?? '';
+        const kind = update.kind ?? row?.kind ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildStorageKey(clusterId, namespace, kind, name);
         if (update.type === MESSAGE_TYPES.deleted) {
           subscription.shadowKeys.delete(key);
         } else {
@@ -1501,6 +1819,26 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-network') {
+      const payload = snapshot.payload as NamespaceNetworkSnapshotPayload;
+      setDomainState('namespace-network', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'namespace-rbac') {
       const payload = snapshot.payload as NamespaceRBACSnapshotPayload;
       setDomainState('namespace-rbac', (previous) => ({
@@ -1521,9 +1859,49 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-autoscaling') {
+      const payload = snapshot.payload as NamespaceAutoscalingSnapshotPayload;
+      setDomainState('namespace-autoscaling', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'namespace-quotas') {
       const payload = snapshot.payload as NamespaceQuotasSnapshotPayload;
       setDomainState('namespace-quotas', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'namespace-storage') {
+      const payload = snapshot.payload as NamespaceStorageSnapshotPayload;
+      setDomainState('namespace-storage', (previous) => ({
         ...previous,
         status: 'ready',
         data: payload,
@@ -1579,14 +1957,29 @@ export class ResourceStreamManager {
         snapshot.payload as NamespaceConfigSnapshotPayload | null | undefined,
         subscription.clusterId
       );
+    } else if (subscription.domain === 'namespace-network') {
+      snapshotKeys = buildNetworkKeySet(
+        snapshot.payload as NamespaceNetworkSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
     } else if (subscription.domain === 'namespace-rbac') {
       snapshotKeys = buildRBACKeySet(
         snapshot.payload as NamespaceRBACSnapshotPayload | null | undefined,
         subscription.clusterId
       );
+    } else if (subscription.domain === 'namespace-autoscaling') {
+      snapshotKeys = buildAutoscalingKeySet(
+        snapshot.payload as NamespaceAutoscalingSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
     } else if (subscription.domain === 'namespace-quotas') {
       snapshotKeys = buildQuotaKeySet(
         snapshot.payload as NamespaceQuotasSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'namespace-storage') {
+      snapshotKeys = buildStorageKeySet(
+        snapshot.payload as NamespaceStorageSnapshotPayload | null | undefined,
         subscription.clusterId
       );
     } else if (subscription.domain === 'nodes') {
@@ -1695,6 +2088,19 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-network') {
+      setDomainState('namespace-network', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'namespace-rbac') {
       setDomainState('namespace-rbac', (previous) => ({
         ...previous,
@@ -1708,8 +2114,34 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-autoscaling') {
+      setDomainState('namespace-autoscaling', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'namespace-quotas') {
       setDomainState('namespace-quotas', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'namespace-storage') {
+      setDomainState('namespace-storage', (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -1766,6 +2198,16 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-network') {
+      setDomainState('namespace-network', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
     if (subscription.domain === 'namespace-rbac') {
       setDomainState('namespace-rbac', (previous) => ({
         ...previous,
@@ -1776,8 +2218,28 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-autoscaling') {
+      setDomainState('namespace-autoscaling', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
     if (subscription.domain === 'namespace-quotas') {
       setDomainState('namespace-quotas', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
+    if (subscription.domain === 'namespace-storage') {
+      setDomainState('namespace-storage', (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -1823,6 +2285,13 @@ export class ResourceStreamManager {
         error: isTerminal ? message : previous.error,
         scope: subscription.storeScope,
       }));
+    } else if (subscription.domain === 'namespace-network') {
+      setDomainState('namespace-network', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
     } else if (subscription.domain === 'namespace-rbac') {
       setDomainState('namespace-rbac', (previous) => ({
         ...previous,
@@ -1830,8 +2299,22 @@ export class ResourceStreamManager {
         error: isTerminal ? message : previous.error,
         scope: subscription.storeScope,
       }));
+    } else if (subscription.domain === 'namespace-autoscaling') {
+      setDomainState('namespace-autoscaling', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
     } else if (subscription.domain === 'namespace-quotas') {
       setDomainState('namespace-quotas', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
+    } else if (subscription.domain === 'namespace-storage') {
+      setDomainState('namespace-storage', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,

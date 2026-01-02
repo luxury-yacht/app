@@ -9,8 +9,11 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +21,8 @@ import (
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
+	discoverylisters "k8s.io/client-go/listers/discovery/v1"
+	networklisters "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/refresh/informer"
@@ -34,12 +39,15 @@ const (
 )
 
 const (
-	domainPods            = "pods"
-	domainWorkloads       = "namespace-workloads"
-	domainNamespaceConfig = "namespace-config"
-	domainNamespaceRBAC   = "namespace-rbac"
-	domainNamespaceQuotas = "namespace-quotas"
-	domainNodes           = "nodes"
+	domainPods             = "pods"
+	domainWorkloads        = "namespace-workloads"
+	domainNamespaceConfig  = "namespace-config"
+	domainNamespaceNetwork = "namespace-network"
+	domainNamespaceRBAC    = "namespace-rbac"
+	domainNamespaceAutoscaling = "namespace-autoscaling"
+	domainNamespaceQuotas  = "namespace-quotas"
+	domainNamespaceStorage = "namespace-storage"
+	domainNodes            = "nodes"
 )
 
 type subscription struct {
@@ -81,12 +89,16 @@ type Manager struct {
 	podLister        corelisters.PodLister
 	podIndexer       cache.Indexer
 	nodeLister       corelisters.NodeLister
+	serviceLister    corelisters.ServiceLister
+	sliceLister      discoverylisters.EndpointSliceLister
 	rsLister         appslisters.ReplicaSetLister
 	deploymentLister appslisters.DeploymentLister
 	statefulLister   appslisters.StatefulSetLister
 	daemonLister     appslisters.DaemonSetLister
 	jobLister        batchlisters.JobLister
 	cronJobLister    batchlisters.CronJobLister
+	ingressLister    networklisters.IngressLister
+	policyLister     networklisters.NetworkPolicyLister
 
 	mu          sync.RWMutex
 	subscribers map[string]map[string]map[uint64]*subscription
@@ -137,6 +149,52 @@ func NewManager(factory *informer.Factory, provider metrics.Provider, logger log
 		AddFunc:    func(obj interface{}) { mgr.handleSecret(obj, MessageTypeAdded) },
 		UpdateFunc: func(_, newObj interface{}) { mgr.handleSecret(newObj, MessageTypeModified) },
 		DeleteFunc: func(obj interface{}) { mgr.handleSecret(obj, MessageTypeDeleted) },
+	})
+
+	serviceInformer := shared.Core().V1().Services()
+	mgr.serviceLister = serviceInformer.Lister()
+	serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleService(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleService(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleService(obj, MessageTypeDeleted) },
+	})
+
+	sliceInformer := shared.Discovery().V1().EndpointSlices()
+	mgr.sliceLister = sliceInformer.Lister()
+	sliceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleEndpointSlice(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleEndpointSlice(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleEndpointSlice(obj, MessageTypeDeleted) },
+	})
+
+	ingressInformer := shared.Networking().V1().Ingresses()
+	mgr.ingressLister = ingressInformer.Lister()
+	ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleIngress(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleIngress(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleIngress(obj, MessageTypeDeleted) },
+	})
+
+	policyInformer := shared.Networking().V1().NetworkPolicies()
+	mgr.policyLister = policyInformer.Lister()
+	policyInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleNetworkPolicy(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleNetworkPolicy(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleNetworkPolicy(obj, MessageTypeDeleted) },
+	})
+
+	pvcInformer := shared.Core().V1().PersistentVolumeClaims()
+	pvcInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handlePersistentVolumeClaim(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handlePersistentVolumeClaim(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handlePersistentVolumeClaim(obj, MessageTypeDeleted) },
+	})
+
+	hpaInformer := shared.Autoscaling().V1().HorizontalPodAutoscalers()
+	hpaInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleHPA(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleHPA(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleHPA(obj, MessageTypeDeleted) },
 	})
 
 	nodeInformer := shared.Core().V1().Nodes()
@@ -463,6 +521,220 @@ func (m *Manager) handleServiceAccount(obj interface{}, updateType MessageType) 
 	}
 
 	m.broadcast(domainNamespaceRBAC, scopesForNamespace(serviceAccount.Namespace), update)
+}
+
+func (m *Manager) handleService(obj interface{}, updateType MessageType) {
+	service := serviceFromObject(obj)
+	if service == nil {
+		return
+	}
+
+	slices, err := m.listEndpointSlicesForService(service.Namespace, service.Name)
+	if err != nil {
+		m.logger.Warn(
+			fmt.Sprintf("resource stream: list endpoint slices for service %s/%s failed: %v", service.Namespace, service.Name, err),
+			"ResourceStream",
+		)
+		if m.telemetry != nil {
+			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
+		}
+		return
+	}
+
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceNetwork,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: service.ResourceVersion,
+		UID:             string(service.UID),
+		Name:            service.Name,
+		Namespace:       service.Namespace,
+		Kind:            "Service",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = snapshot.BuildServiceNetworkSummary(m.clusterMeta, service, slices)
+	}
+
+	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), update)
+}
+
+func (m *Manager) handleEndpointSlice(obj interface{}, updateType MessageType) {
+	slice := endpointSliceFromObject(obj)
+	if slice == nil {
+		return
+	}
+	serviceName := ""
+	if slice.Labels != nil {
+		serviceName = strings.TrimSpace(slice.Labels[discoveryv1.LabelServiceName])
+	}
+	if serviceName == "" {
+		return
+	}
+
+	slices, err := m.listEndpointSlicesForService(slice.Namespace, serviceName)
+	if err != nil {
+		m.logger.Warn(
+			fmt.Sprintf("resource stream: list endpoint slices for service %s/%s failed: %v", slice.Namespace, serviceName, err),
+			"ResourceStream",
+		)
+		if m.telemetry != nil {
+			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
+		}
+		return
+	}
+
+	if len(slices) == 0 {
+		update := Update{
+			Type:            MessageTypeDeleted,
+			Domain:          domainNamespaceNetwork,
+			ClusterID:       m.clusterMeta.ClusterID,
+			ClusterName:     m.clusterMeta.ClusterName,
+			ResourceVersion: slice.ResourceVersion,
+			UID:             string(slice.UID),
+			Name:            serviceName,
+			Namespace:       slice.Namespace,
+			Kind:            "EndpointSlice",
+		}
+		m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
+	} else {
+		summary := snapshot.BuildEndpointSliceSummary(m.clusterMeta, slice.Namespace, serviceName, slices)
+		eventType := updateType
+		if eventType == MessageTypeDeleted {
+			eventType = MessageTypeModified
+		}
+		update := Update{
+			Type:            eventType,
+			Domain:          domainNamespaceNetwork,
+			ClusterID:       m.clusterMeta.ClusterID,
+			ClusterName:     m.clusterMeta.ClusterName,
+			ResourceVersion: slice.ResourceVersion,
+			UID:             string(slice.UID),
+			Name:            serviceName,
+			Namespace:       slice.Namespace,
+			Kind:            "EndpointSlice",
+			Row:             summary,
+		}
+		m.broadcast(domainNamespaceNetwork, scopesForNamespace(slice.Namespace), update)
+	}
+
+	if m.serviceLister == nil {
+		return
+	}
+	service, err := m.serviceLister.Services(slice.Namespace).Get(serviceName)
+	if err != nil || service == nil {
+		return
+	}
+	serviceSummary := snapshot.BuildServiceNetworkSummary(m.clusterMeta, service, slices)
+	serviceUpdate := Update{
+		Type:            MessageTypeModified,
+		Domain:          domainNamespaceNetwork,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: slice.ResourceVersion,
+		UID:             string(service.UID),
+		Name:            service.Name,
+		Namespace:       service.Namespace,
+		Kind:            "Service",
+		Row:             serviceSummary,
+	}
+	m.broadcast(domainNamespaceNetwork, scopesForNamespace(service.Namespace), serviceUpdate)
+}
+
+func (m *Manager) handleIngress(obj interface{}, updateType MessageType) {
+	ingress := ingressFromObject(obj)
+	if ingress == nil {
+		return
+	}
+
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceNetwork,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: ingress.ResourceVersion,
+		UID:             string(ingress.UID),
+		Name:            ingress.Name,
+		Namespace:       ingress.Namespace,
+		Kind:            "Ingress",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = snapshot.BuildIngressNetworkSummary(m.clusterMeta, ingress)
+	}
+
+	m.broadcast(domainNamespaceNetwork, scopesForNamespace(ingress.Namespace), update)
+}
+
+func (m *Manager) handleNetworkPolicy(obj interface{}, updateType MessageType) {
+	policy := networkPolicyFromObject(obj)
+	if policy == nil {
+		return
+	}
+
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceNetwork,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: policy.ResourceVersion,
+		UID:             string(policy.UID),
+		Name:            policy.Name,
+		Namespace:       policy.Namespace,
+		Kind:            "NetworkPolicy",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = snapshot.BuildNetworkPolicySummary(m.clusterMeta, policy)
+	}
+
+	m.broadcast(domainNamespaceNetwork, scopesForNamespace(policy.Namespace), update)
+}
+
+func (m *Manager) handlePersistentVolumeClaim(obj interface{}, updateType MessageType) {
+	pvc := persistentVolumeClaimFromObject(obj)
+	if pvc == nil {
+		return
+	}
+
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceStorage,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: pvc.ResourceVersion,
+		UID:             string(pvc.UID),
+		Name:            pvc.Name,
+		Namespace:       pvc.Namespace,
+		Kind:            "PersistentVolumeClaim",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = snapshot.BuildPVCStorageSummary(m.clusterMeta, pvc)
+	}
+
+	m.broadcast(domainNamespaceStorage, scopesForNamespace(pvc.Namespace), update)
+}
+
+func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
+	hpa := hpaFromObject(obj)
+	if hpa == nil {
+		return
+	}
+
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceAutoscaling,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: hpa.ResourceVersion,
+		UID:             string(hpa.UID),
+		Name:            hpa.Name,
+		Namespace:       hpa.Namespace,
+		Kind:            "HorizontalPodAutoscaler",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = snapshot.BuildHPASummary(m.clusterMeta, hpa)
+	}
+
+	m.broadcast(domainNamespaceAutoscaling, scopesForNamespace(hpa.Namespace), update)
 }
 
 func (m *Manager) handleResourceQuota(obj interface{}, updateType MessageType) {
@@ -911,6 +1183,13 @@ func domainPermissions(domain string) ([]permissionRequirement, bool) {
 			{group: "", resource: "configmaps"},
 			{group: "", resource: "secrets"},
 		}, true
+	case domainNamespaceNetwork:
+		return []permissionRequirement{
+			{group: "", resource: "services"},
+			{group: "discovery.k8s.io", resource: "endpointslices"},
+			{group: "networking.k8s.io", resource: "ingresses"},
+			{group: "networking.k8s.io", resource: "networkpolicies"},
+		}, true
 	case domainNamespaceRBAC:
 		return []permissionRequirement{
 			{group: "rbac.authorization.k8s.io", resource: "roles"},
@@ -922,6 +1201,14 @@ func domainPermissions(domain string) ([]permissionRequirement, bool) {
 			{group: "", resource: "resourcequotas"},
 			{group: "", resource: "limitranges"},
 			{group: "policy", resource: "poddisruptionbudgets"},
+		}, true
+	case domainNamespaceStorage:
+		return []permissionRequirement{
+			{group: "", resource: "persistentvolumeclaims"},
+		}, true
+	case domainNamespaceAutoscaling:
+		return []permissionRequirement{
+			{group: "autoscaling", resource: "horizontalpodautoscalers"},
 		}, true
 	case domainNodes:
 		return []permissionRequirement{{group: "", resource: "nodes"}}, true
@@ -997,6 +1284,19 @@ func (m *Manager) listPods(namespace string) ([]*corev1.Pod, error) {
 		return m.podLister.List(labels.Everything())
 	}
 	return m.podLister.Pods(namespace).List(labels.Everything())
+}
+
+func (m *Manager) listEndpointSlicesForService(namespace, service string) ([]*discoveryv1.EndpointSlice, error) {
+	if m.sliceLister == nil {
+		return []*discoveryv1.EndpointSlice{}, nil
+	}
+	selector := labels.SelectorFromSet(map[string]string{
+		discoveryv1.LabelServiceName: service,
+	})
+	if namespace == "" {
+		return m.sliceLister.List(selector)
+	}
+	return m.sliceLister.EndpointSlices(namespace).List(selector)
 }
 
 func (m *Manager) lookupWorkload(kind, namespace, name string) (metav1.Object, error) {
@@ -1122,6 +1422,72 @@ func serviceAccountFromObject(obj interface{}) *corev1.ServiceAccount {
 		return typed
 	case cache.DeletedFinalStateUnknown:
 		return serviceAccountFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func serviceFromObject(obj interface{}) *corev1.Service {
+	switch typed := obj.(type) {
+	case *corev1.Service:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return serviceFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func endpointSliceFromObject(obj interface{}) *discoveryv1.EndpointSlice {
+	switch typed := obj.(type) {
+	case *discoveryv1.EndpointSlice:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return endpointSliceFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func ingressFromObject(obj interface{}) *networkingv1.Ingress {
+	switch typed := obj.(type) {
+	case *networkingv1.Ingress:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return ingressFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func networkPolicyFromObject(obj interface{}) *networkingv1.NetworkPolicy {
+	switch typed := obj.(type) {
+	case *networkingv1.NetworkPolicy:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return networkPolicyFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func persistentVolumeClaimFromObject(obj interface{}) *corev1.PersistentVolumeClaim {
+	switch typed := obj.(type) {
+	case *corev1.PersistentVolumeClaim:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return persistentVolumeClaimFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func hpaFromObject(obj interface{}) *autoscalingv1.HorizontalPodAutoscaler {
+	switch typed := obj.(type) {
+	case *autoscalingv1.HorizontalPodAutoscaler:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return hpaFromObject(typed.Obj)
 	default:
 		return nil
 	}

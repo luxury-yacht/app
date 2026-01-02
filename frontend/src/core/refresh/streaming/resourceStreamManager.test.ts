@@ -95,8 +95,11 @@ beforeEach(() => {
   resetDomainState('nodes');
   resetDomainState('namespace-workloads');
   resetDomainState('namespace-config');
+  resetDomainState('namespace-network');
   resetDomainState('namespace-rbac');
+  resetDomainState('namespace-autoscaling');
   resetDomainState('namespace-quotas');
+  resetDomainState('namespace-storage');
   resetAllScopedDomainStates('pods');
 });
 
@@ -104,8 +107,11 @@ afterEach(() => {
   resetDomainState('nodes');
   resetDomainState('namespace-workloads');
   resetDomainState('namespace-config');
+  resetDomainState('namespace-network');
   resetDomainState('namespace-rbac');
+  resetDomainState('namespace-autoscaling');
   resetDomainState('namespace-quotas');
+  resetDomainState('namespace-storage');
   resetAllScopedDomainStates('pods');
   resetScopedDomainState('pods', 'cluster-a|namespace:default');
   delete (globalThis as any).WebSocket;
@@ -132,14 +138,29 @@ describe('resourceStreamManager helpers', () => {
     expect(normalizeResourceScope('namespace-config', 'namespace:all')).toBe('namespace:all');
   });
 
+  it('normalizes namespace network scopes', () => {
+    expect(normalizeResourceScope('namespace-network', 'default')).toBe('namespace:default');
+    expect(normalizeResourceScope('namespace-network', 'namespace:all')).toBe('namespace:all');
+  });
+
   it('normalizes namespace rbac scopes', () => {
     expect(normalizeResourceScope('namespace-rbac', 'default')).toBe('namespace:default');
     expect(normalizeResourceScope('namespace-rbac', 'namespace:all')).toBe('namespace:all');
   });
 
+  it('normalizes namespace autoscaling scopes', () => {
+    expect(normalizeResourceScope('namespace-autoscaling', 'default')).toBe('namespace:default');
+    expect(normalizeResourceScope('namespace-autoscaling', 'namespace:all')).toBe('namespace:all');
+  });
+
   it('normalizes namespace quotas scopes', () => {
     expect(normalizeResourceScope('namespace-quotas', 'default')).toBe('namespace:default');
     expect(normalizeResourceScope('namespace-quotas', 'namespace:all')).toBe('namespace:all');
+  });
+
+  it('normalizes namespace storage scopes', () => {
+    expect(normalizeResourceScope('namespace-storage', 'default')).toBe('namespace:default');
+    expect(normalizeResourceScope('namespace-storage', 'namespace:all')).toBe('namespace:all');
   });
 
   it('normalizes node scopes', () => {
@@ -367,6 +388,54 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.resources?.[0]?.name).toBe('config-a');
   });
 
+  test('applies namespace network updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-network',
+      storeScope
+    );
+
+    setDomainState('namespace-network', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'namespace-network',
+        scope: 'namespace:default',
+        resourceVersion: '4',
+        name: 'svc-a',
+        namespace: 'default',
+        kind: 'Service',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'Service',
+          name: 'svc-a',
+          namespace: 'default',
+          details: 'Type: ClusterIP',
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('namespace-network');
+    expect(state.data?.resources?.[0]?.name).toBe('svc-a');
+  });
+
   test('applies namespace rbac updates', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
@@ -415,6 +484,57 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.resources?.[0]?.name).toBe('role-a');
   });
 
+  test('applies namespace autoscaling updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-autoscaling',
+      storeScope
+    );
+
+    setDomainState('namespace-autoscaling', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'namespace-autoscaling',
+        scope: 'namespace:default',
+        resourceVersion: '4',
+        name: 'hpa-a',
+        namespace: 'default',
+        kind: 'HorizontalPodAutoscaler',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'HorizontalPodAutoscaler',
+          name: 'hpa-a',
+          namespace: 'default',
+          target: 'Deployment/web',
+          min: 1,
+          max: 4,
+          current: 2,
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('namespace-autoscaling');
+    expect(state.data?.resources?.[0]?.name).toBe('hpa-a');
+  });
+
   test('applies namespace quotas updates', () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
@@ -461,6 +581,56 @@ describe('ResourceStreamManager', () => {
 
     const state = getDomainState('namespace-quotas');
     expect(state.data?.resources?.[0]?.name).toBe('quota-a');
+  });
+
+  test('applies namespace storage updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-storage',
+      storeScope
+    );
+
+    setDomainState('namespace-storage', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'namespace-storage',
+        scope: 'namespace:default',
+        resourceVersion: '6',
+        name: 'pvc-a',
+        namespace: 'default',
+        kind: 'PersistentVolumeClaim',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'PersistentVolumeClaim',
+          name: 'pvc-a',
+          namespace: 'default',
+          capacity: '1Gi',
+          status: 'Bound',
+          storageClass: 'standard',
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('namespace-storage');
+    expect(state.data?.resources?.[0]?.name).toBe('pvc-a');
   });
 
   test('resyncs on out-of-order resource versions', async () => {
