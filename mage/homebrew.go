@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -95,10 +96,9 @@ func updateHomebrewTemplate(version, arm64Sha, amd64Sha string) ([]byte, error) 
 	cask := r.Replace(string(template))
 
 	// Make sure all placeholders were replaced.
-	// TODO: Change this to a simple regex that looks for ${*} patterns instead of hardcoding each
-	if strings.Contains(cask, "${VERSION}") ||
-		strings.Contains(cask, "${ARM64_SHA256}") ||
-		strings.Contains(cask, "${AMD64_SHA256}") {
+	placeholders := regexp.MustCompile(`\$\{[^}]*\}`)
+	if placeholders.MatchString(cask) {
+		fmt.Println(string(cask))
 		return nil, fmt.Errorf("homebrew cask template still contains placeholders after replacement")
 	}
 	return []byte(cask), nil
@@ -171,12 +171,6 @@ func PublishHomebrew(cfg BuildConfig) error {
 		return err
 	}
 
-	// Update the cask template with the new version and checksums.
-	cask, err := updateHomebrewTemplate(cfg.Version, arm64Sha, amd64Sha)
-	if err != nil {
-		return err
-	}
-
 	// Clone the tap repo.
 	fmt.Printf("\n⚙️ Cloning %s...\n", tapRepo)
 	tmpDir, err := cloneTapRepo()
@@ -184,6 +178,12 @@ func PublishHomebrew(cfg BuildConfig) error {
 		return err
 	}
 	defer os.RemoveAll(tmpDir)
+
+	// Update the cask template with the new version and checksums.
+	cask, err := updateHomebrewTemplate(cfg.Version, arm64Sha, amd64Sha)
+	if err != nil {
+		return err
+	}
 
 	// Write the updated cask file.
 	caskPath := filepath.Join(tmpDir, "casks", "luxury-yacht.rb")
