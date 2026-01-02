@@ -27,9 +27,9 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 ### Phase 0 - Design + scoping (no behavior change)
 
-- Select initial target domains with clear list semantics and high churn (for example pods or deployments).
-- Define the update payload shape: event type (add/modify/delete), resourceVersion, object UID, and minimal metadata needed to update UI state.
-- Document invariants and fallbacks: if update ordering or resourceVersion monotonicity cannot be guaranteed, force a snapshot refresh.
+- ✅ Select initial target domains: pods, namespace-workloads, nodes (high-churn lists with clear row semantics and metrics-bearing to validate the metrics-only refresh path).
+- ✅ Define the update payload shape: domain, scope, cluster meta, event type (ADDED/MODIFIED/DELETED/RESET/COMPLETE), resourceVersion, uid, name, namespace, kind, and the minimal list-row fields needed to update UI state without full rehydrate.
+- ✅ Document invariants and fallbacks: require monotonic resourceVersion per scope; if missing/older RV, out-of-order update, backlog drop, or COMPLETE signal, trigger a snapshot resync and resume streaming.
 
 ### Phase 1 - Backend streaming foundation
 
