@@ -10,13 +10,27 @@ New to Luxury Yacht? Read the [primer](docs/primer.md)!
 
 Go to the [Releases](https://github.com/luxury-yacht/app/releases) page to download the latest version.
 
-- The macOS package is a standard DMG
-- Linux has `.deb` and `.rpm` packages
-- The Windows package is a zipped executable. Note that these are unsigned, so may be flagged as untrusted. Given the cost of a code-signing certificate, they will likely remain unsigned.
+Packages are available for `amd64 (x86_64)` and `arm64 (aarch64)`. Be sure to download the correct package for your architecture.
+
+### macOS
+Uses a standard DMG. Open the DMG and drag to `Applications`.
+
+Can also be installed via [Homebrew](https://brew.sh).
+
+```sh
+brew tap luxury-yacht/tap
+brew install --cask luxury-yacht
+```
+
+### Linux
+Install via `.deb` or `.rpm` package.
+
+### Windows
+Uses a standard installer. Note that these are unsigned, so will require extra confirmation steps to run. Given the cost of a code-signing certificate, these will likely remain unsigned.
 
 ### Building from Source
 
-If you prefer to build the app from source, see the Development section below.
+If you prefer to build the app from source, see the Development section.
 
 ## Development
 
