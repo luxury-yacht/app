@@ -61,6 +61,8 @@ type StreamingRegistration = {
   stop?: (scope: string, options?: { reset?: boolean }) => void;
   refreshOnce?: (scope: string) => Promise<void>;
   metricsOnly?: boolean;
+  // Pause scheduled polling while streaming is active; resume polling as a fallback when it stops.
+  pauseRefresherWhenStreaming?: boolean;
 };
 
 type DomainRegistration<K extends RefreshDomain> = {
@@ -216,7 +218,7 @@ class RefreshOrchestrator {
   }
 
   registerDomain<K extends RefreshDomain>(config: DomainRegistration<K>): void {
-    const allowRefresher = !config.streaming || config.streaming.metricsOnly;
+    const allowRefresher = this.shouldAllowRefresher(config);
     const existing = this.configs.get(config.domain);
     if (existing) {
       if (!existing.scoped) {
@@ -332,7 +334,7 @@ class RefreshOrchestrator {
 
   setDomainEnabled(domain: RefreshDomain, enabled: boolean): void {
     const config = this.getConfig(domain);
-    const allowRefresher = !config.streaming || config.streaming.metricsOnly;
+    const allowRefresher = this.shouldAllowRefresher(config);
 
     if (config.scoped) {
       const scopedState = this.scopedEnabledState.get(domain) ?? new Map<string, boolean>();
@@ -394,6 +396,7 @@ class RefreshOrchestrator {
         } else {
           refreshManager.disable(config.refresherName);
         }
+        this.updateRefresherForStreaming(domain);
         return;
       }
       if (enabled) {
@@ -434,6 +437,7 @@ class RefreshOrchestrator {
       } else {
         refreshManager.disable(config.refresherName);
       }
+      this.updateRefresherForStreaming(domain);
       return;
     }
 
@@ -614,7 +618,7 @@ class RefreshOrchestrator {
 
   setScopedDomainEnabled(domain: RefreshDomain, scope: string, enabled: boolean): void {
     const config = this.getConfig(domain);
-    const allowRefresher = !config.streaming || config.streaming.metricsOnly;
+    const allowRefresher = this.shouldAllowRefresher(config);
     if (!config.scoped) {
       throw new Error(`Domain "${domain}" is not scoped`);
     }
@@ -873,6 +877,33 @@ class RefreshOrchestrator {
     this.lastMetricsRefreshAt.set(makeInFlightKey(domain, scope), Date.now());
   }
 
+  private hasActiveStreaming(domain: RefreshDomain): boolean {
+    const prefix = `${domain}::`;
+    for (const key of this.streamingCleanup.keys()) {
+      if (key.startsWith(prefix)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Pause polling when streaming is active for domains that don't need metrics refreshes.
+  private updateRefresherForStreaming(domain: RefreshDomain): void {
+    const config = this.configs.get(domain);
+    if (!config?.streaming?.pauseRefresherWhenStreaming || config.scoped) {
+      return;
+    }
+    if (!this.isDomainEnabledInternal(domain)) {
+      refreshManager.disable(config.refresherName);
+      return;
+    }
+    if (this.hasActiveStreaming(domain)) {
+      refreshManager.disable(config.refresherName);
+      return;
+    }
+    refreshManager.enable(config.refresherName);
+  }
+
   private getConfig(domain: RefreshDomain): DomainRegistration<RefreshDomain> {
     const config = this.configs.get(domain);
     if (!config) {
@@ -954,6 +985,7 @@ class RefreshOrchestrator {
         if (!this.scopedDomains.has(domain)) {
           this.domainStreamingScopes.set(domain, scope);
         }
+        this.updateRefresherForStreaming(domain);
       })
       .catch((error) => {
         this.pendingStreaming.delete(key);
@@ -962,6 +994,7 @@ class RefreshOrchestrator {
         this.setStreamingErrorState(domain, scope, message, {
           scoped: this.scopedDomains.has(domain),
         });
+        this.updateRefresherForStreaming(domain);
       });
 
     return startPromise.then(() => undefined).catch(() => undefined);
@@ -1008,6 +1041,7 @@ class RefreshOrchestrator {
     if (reset) {
       resetScopedDomainState(domain, scope);
     }
+    this.updateRefresherForStreaming(domain);
   }
 
   private isNamespaceContextActive(context: RefreshContext = this.context): boolean {
@@ -1128,6 +1162,14 @@ class RefreshOrchestrator {
     }
 
     throw new Error(`Unsupported refresher category: ${config.category}`);
+  }
+
+  private shouldAllowRefresher(config: DomainRegistration<RefreshDomain>): boolean {
+    return (
+      !config.streaming ||
+      config.streaming.metricsOnly ||
+      config.streaming.pauseRefresherWhenStreaming
+    );
   }
 
   private async fetchDomain<K extends RefreshDomain>(
@@ -2120,6 +2162,7 @@ refreshOrchestrator.registerDomain({
     stop: (scope, options) =>
       resourceStreamManager.stop('namespace-quotas', scope, options?.reset ?? false),
     refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-quotas', scope),
+    pauseRefresherWhenStreaming: true,
   },
 });
 

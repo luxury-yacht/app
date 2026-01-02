@@ -79,18 +79,18 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 - [ ] Inventory remaining snapshot domains and classify by list semantics (cluster vs namespace, single vs scoped list, metrics-bearing vs static).
 - [ ] Prioritize migration order based on churn and UX impact.
 - [ ] Remaining domains (track completion):
-  - [ ] `cluster-overview`
-  - [ ] `cluster-rbac`
-  - [ ] `cluster-storage`
-  - [ ] `cluster-config`
-  - [ ] `cluster-crds`
-  - [ ] `cluster-custom`
-  - [ ] `namespace-network`
-  - [ ] `namespace-storage`
-  - ✅ `namespace-quotas`
-  - [ ] `namespace-autoscaling`
-  - [ ] `namespace-custom`
-  - [ ] `namespace-helm`
+  - [ ] `cluster-overview` (keep polling; includes metrics)
+  - [ ] `cluster-rbac` (pause refresher when streaming)
+  - [ ] `cluster-storage` (pause refresher when streaming)
+  - [ ] `cluster-config` (pause refresher when streaming)
+  - [ ] `cluster-crds` (pause refresher when streaming)
+  - [ ] `cluster-custom` (pause refresher when streaming)
+  - [ ] `namespace-network` (pause refresher when streaming)
+  - [ ] `namespace-storage` (pause refresher when streaming)
+  - ✅ `namespace-quotas` (pause refresher when streaming)
+  - [ ] `namespace-autoscaling` (pause refresher when streaming)
+  - [ ] `namespace-custom` (pause refresher when streaming)
+  - [ ] `namespace-helm` (pause refresher when streaming)
 - [ ] For each selected domain:
   - [ ] Add informer-driven update emission in the backend with minimal row payloads and resourceVersion tracking.
   - [ ] Add client-side merge/update logic and drift detection for the new domain in the resource stream manager.
@@ -110,6 +110,7 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
   - [ ] Merge updates from two clusters into one aggregated list without clobbering.
   - [ ] Resync and error isolation per cluster.
   - [ ] Metrics-only refresh path preserves existing metrics while stream updates apply.
+  - [ ] Close node single-cluster limitation (support multi-cluster streaming for nodes).
 
 ### Safety guarantees
 
