@@ -95,6 +95,7 @@ beforeEach(() => {
   resetDomainState('nodes');
   resetDomainState('namespace-workloads');
   resetDomainState('namespace-config');
+  resetDomainState('namespace-rbac');
   resetAllScopedDomainStates('pods');
 });
 
@@ -102,6 +103,7 @@ afterEach(() => {
   resetDomainState('nodes');
   resetDomainState('namespace-workloads');
   resetDomainState('namespace-config');
+  resetDomainState('namespace-rbac');
   resetAllScopedDomainStates('pods');
   resetScopedDomainState('pods', 'cluster-a|namespace:default');
   delete (globalThis as any).WebSocket;
@@ -126,6 +128,11 @@ describe('resourceStreamManager helpers', () => {
   it('normalizes namespace config scopes', () => {
     expect(normalizeResourceScope('namespace-config', 'default')).toBe('namespace:default');
     expect(normalizeResourceScope('namespace-config', 'namespace:all')).toBe('namespace:all');
+  });
+
+  it('normalizes namespace rbac scopes', () => {
+    expect(normalizeResourceScope('namespace-rbac', 'default')).toBe('namespace:default');
+    expect(normalizeResourceScope('namespace-rbac', 'namespace:all')).toBe('namespace:all');
   });
 
   it('normalizes node scopes', () => {
@@ -351,6 +358,54 @@ describe('ResourceStreamManager', () => {
 
     const state = getDomainState('namespace-config');
     expect(state.data?.resources?.[0]?.name).toBe('config-a');
+  });
+
+  test('applies namespace rbac updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'namespace-rbac',
+      storeScope
+    );
+
+    setDomainState('namespace-rbac', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'namespace-rbac',
+        scope: 'namespace:default',
+        resourceVersion: '4',
+        name: 'role-a',
+        namespace: 'default',
+        kind: 'Role',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'Role',
+          name: 'role-a',
+          namespace: 'default',
+          details: 'Rules: 1',
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('namespace-rbac');
+    expect(state.data?.resources?.[0]?.name).toBe('role-a');
   });
 
   test('resyncs on out-of-order resource versions', async () => {

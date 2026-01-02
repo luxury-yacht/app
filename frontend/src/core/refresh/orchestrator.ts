@@ -763,11 +763,12 @@ class RefreshOrchestrator {
 
   private isResourceStreamDomain(
     domain: RefreshDomain
-  ): domain is 'pods' | 'namespace-workloads' | 'namespace-config' | 'nodes' {
+  ): domain is 'pods' | 'namespace-workloads' | 'namespace-config' | 'namespace-rbac' | 'nodes' {
     return (
       domain === 'pods' ||
       domain === 'namespace-workloads' ||
       domain === 'namespace-config' ||
+      domain === 'namespace-rbac' ||
       domain === 'nodes'
     );
   }
@@ -792,6 +793,12 @@ class RefreshOrchestrator {
     if (domain === 'namespace-config') {
       return (
         this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'config'
+      );
+    }
+
+    if (domain === 'namespace-rbac') {
+      return (
+        this.context.currentView === 'namespace' && this.context.activeNamespaceView === 'rbac'
       );
     }
 
@@ -1698,7 +1705,7 @@ class RefreshOrchestrator {
   }
 
   private handleResourceStreamDrift = (payload: {
-    domain: 'pods' | 'namespace-workloads' | 'namespace-config' | 'nodes';
+    domain: 'pods' | 'namespace-workloads' | 'namespace-config' | 'namespace-rbac' | 'nodes';
     scope: string;
     reason: string;
   }): void => {
@@ -2059,6 +2066,12 @@ refreshOrchestrator.registerDomain({
   category: 'namespace',
   scopeResolver: () => refreshOrchestrator.getSelectedNamespace(),
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('namespace-rbac', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('namespace-rbac', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-rbac', scope),
+  },
 });
 
 refreshOrchestrator.registerDomain({

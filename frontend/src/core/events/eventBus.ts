@@ -10,7 +10,12 @@
 
 import type { RefresherState } from '@/core/refresh/RefreshManager';
 
-type ResourceStreamDomain = 'pods' | 'namespace-workloads' | 'namespace-config' | 'nodes';
+type ResourceStreamDomain =
+  | 'pods'
+  | 'namespace-workloads'
+  | 'namespace-config'
+  | 'namespace-rbac'
+  | 'nodes';
 
 // Event payload types
 export interface AppEvents {

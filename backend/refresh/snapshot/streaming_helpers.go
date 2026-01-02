@@ -8,6 +8,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
@@ -54,6 +55,51 @@ func BuildSecretSummary(meta ClusterMeta, secret *corev1.Secret) ConfigSummary {
 		Namespace:   secret.Namespace,
 		Data:        len(secret.Data) + len(secret.StringData),
 		Age:         formatAge(secret.CreationTimestamp.Time),
+	}
+}
+
+// BuildRoleSummary builds a role row payload that matches snapshot formatting.
+func BuildRoleSummary(meta ClusterMeta, role *rbacv1.Role) RBACSummary {
+	if role == nil {
+		return RBACSummary{ClusterMeta: meta, Kind: "Role"}
+	}
+	return RBACSummary{
+		ClusterMeta: meta,
+		Kind:        "Role",
+		Name:        role.Name,
+		Namespace:   role.Namespace,
+		Details:     describeRole(role),
+		Age:         formatAge(role.CreationTimestamp.Time),
+	}
+}
+
+// BuildRoleBindingSummary builds a role binding row payload that matches snapshot formatting.
+func BuildRoleBindingSummary(meta ClusterMeta, binding *rbacv1.RoleBinding) RBACSummary {
+	if binding == nil {
+		return RBACSummary{ClusterMeta: meta, Kind: "RoleBinding"}
+	}
+	return RBACSummary{
+		ClusterMeta: meta,
+		Kind:        "RoleBinding",
+		Name:        binding.Name,
+		Namespace:   binding.Namespace,
+		Details:     describeRoleBinding(binding),
+		Age:         formatAge(binding.CreationTimestamp.Time),
+	}
+}
+
+// BuildServiceAccountSummary builds a service account row payload that matches snapshot formatting.
+func BuildServiceAccountSummary(meta ClusterMeta, sa *corev1.ServiceAccount) RBACSummary {
+	if sa == nil {
+		return RBACSummary{ClusterMeta: meta, Kind: "ServiceAccount"}
+	}
+	return RBACSummary{
+		ClusterMeta: meta,
+		Kind:        "ServiceAccount",
+		Name:        sa.Name,
+		Namespace:   sa.Namespace,
+		Details:     describeServiceAccount(sa),
+		Age:         formatAge(sa.CreationTimestamp.Time),
 	}
 }
 

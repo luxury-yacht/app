@@ -11,6 +11,8 @@ import type {
   ClusterNodeSnapshotPayload,
   NamespaceConfigSnapshotPayload,
   NamespaceConfigSummary,
+  NamespaceRBACSnapshotPayload,
+  NamespaceRBACSummary,
   NamespaceWorkloadSnapshotPayload,
   NamespaceWorkloadSummary,
   PodSnapshotEntry,
@@ -18,7 +20,7 @@ import type {
 } from '../types';
 import { buildClusterScopeList, parseClusterScope } from '../clusterScope';
 import { errorHandler } from '@utils/errorHandler';
-import { eventBus } from '@/core/events';
+import { eventBus, type AppEvents } from '@/core/events';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
 
 const RESOURCE_STREAM_PATH = '/api/v2/stream/resources';
@@ -48,7 +50,9 @@ const MESSAGE_TYPES = {
   deleted: 'DELETED',
 } as const;
 
-type ResourceDomain = 'pods' | 'namespace-workloads' | 'namespace-config' | 'nodes';
+// Keep stream domain literals aligned with the event bus payload contract.
+type ResourceStreamDomain = AppEvents['refresh:resource-stream-drift']['domain'];
+type ResourceDomain = ResourceStreamDomain;
 
 type StreamMessageType = (typeof MESSAGE_TYPES)[keyof typeof MESSAGE_TYPES];
 
@@ -81,6 +85,7 @@ const isSupportedDomain = (value: string | undefined): value is ResourceDomain =
   value === 'pods' ||
   value === 'namespace-workloads' ||
   value === 'namespace-config' ||
+  value === 'namespace-rbac' ||
   value === 'nodes';
 
 const hasMessageType = (value: unknown): value is StreamMessageType =>
@@ -190,6 +195,8 @@ export const normalizeResourceScope = (domain: ResourceDomain, scope: string): s
       return normalizeNamespaceScope(scope, 'namespace-workloads');
     case 'namespace-config':
       return normalizeNamespaceScope(scope, 'namespace-config');
+    case 'namespace-rbac':
+      return normalizeNamespaceScope(scope, 'namespace-rbac');
     case 'nodes':
       if (!scope || scope.trim() === '' || scope.trim().toLowerCase() === 'cluster') {
         return '';
@@ -248,6 +255,20 @@ export const sortConfigRows = (rows: NamespaceConfigSummary[]): void => {
   });
 };
 
+export const sortRBACRows = (rows: NamespaceRBACSummary[]): void => {
+  rows.sort((a, b) => {
+    const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
+    if (ns !== 0) {
+      return ns;
+    }
+    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
+    if (kind !== 0) {
+      return kind;
+    }
+    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
+  });
+};
+
 export const sortNodeRows = (rows: ClusterNodeSnapshotEntry[]): void => {
   rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
 };
@@ -263,6 +284,9 @@ const buildWorkloadKey = (
 ): string => `${clusterId}::${namespace}::${kind}::${name}`;
 
 const buildConfigKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
+  `${clusterId}::${namespace}::${kind}::${name}`;
+
+const buildRBACKey = (clusterId: string, namespace: string, kind: string, name: string): string =>
   `${clusterId}::${namespace}::${kind}::${name}`;
 
 const buildNodeKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
@@ -335,6 +359,18 @@ const buildConfigKeySet = (
   const keys = new Set<string>();
   rows.forEach((row) => {
     keys.add(buildConfigKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
+  });
+  return keys;
+};
+
+const buildRBACKeySet = (
+  payload: NamespaceRBACSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.resources ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(buildRBACKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name));
   });
   return keys;
 };
@@ -1018,6 +1054,57 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-rbac') {
+      setDomainState('namespace-rbac', (previous) => {
+        const currentPayload = previous.data ?? { resources: [] };
+        const existingRows = currentPayload.resources ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildRBACKey(
+              row.clusterId ?? subscription.clusterId,
+              row.namespace,
+              row.kind,
+              row.name
+            ),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildRBACKey(
+            update.clusterId ?? subscription.clusterId,
+            update.namespace ?? '',
+            update.kind ?? '',
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as NamespaceRBACSummary);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortRBACRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, resources: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       setDomainState('nodes', (previous) => {
         const currentPayload = previous.data ?? { nodes: [] };
@@ -1107,6 +1194,23 @@ export class ResourceStreamManager {
         const kind = update.kind ?? row?.kind ?? '';
         const name = update.name ?? row?.name ?? '';
         const key = buildConfigKey(clusterId, namespace, kind, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
+    if (subscription.domain === 'namespace-rbac') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as NamespaceRBACSummary | undefined;
+        const namespace = update.namespace ?? row?.namespace ?? '';
+        const kind = update.kind ?? row?.kind ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildRBACKey(clusterId, namespace, kind, name);
         if (update.type === MESSAGE_TYPES.deleted) {
           subscription.shadowKeys.delete(key);
         } else {
@@ -1295,6 +1399,26 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-rbac') {
+      const payload = snapshot.payload as NamespaceRBACSnapshotPayload;
+      setDomainState('namespace-rbac', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       const payload = snapshot.payload as ClusterNodeSnapshotPayload;
       setDomainState('nodes', (previous) => ({
@@ -1331,6 +1455,11 @@ export class ResourceStreamManager {
     } else if (subscription.domain === 'namespace-config') {
       snapshotKeys = buildConfigKeySet(
         snapshot.payload as NamespaceConfigSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'namespace-rbac') {
+      snapshotKeys = buildRBACKeySet(
+        snapshot.payload as NamespaceRBACSnapshotPayload | null | undefined,
         subscription.clusterId
       );
     } else if (subscription.domain === 'nodes') {
@@ -1439,6 +1568,19 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-rbac') {
+      setDomainState('namespace-rbac', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       setDomainState('nodes', (previous) => ({
         ...previous,
@@ -1484,6 +1626,16 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'namespace-rbac') {
+      setDomainState('namespace-rbac', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       setDomainState('nodes', (previous) => ({
         ...previous,
@@ -1516,6 +1668,13 @@ export class ResourceStreamManager {
       }));
     } else if (subscription.domain === 'namespace-config') {
       setDomainState('namespace-config', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
+    } else if (subscription.domain === 'namespace-rbac') {
+      setDomainState('namespace-rbac', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,

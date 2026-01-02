@@ -94,6 +94,7 @@ export const DOMAIN_STREAM_MAP: Partial<Record<RefreshDomain, string>> = {
   pods: 'resources',
   'namespace-workloads': 'resources',
   'namespace-config': 'resources',
+  'namespace-rbac': 'resources',
   nodes: 'resources',
   'cluster-events': 'events',
   'namespace-events': 'events',

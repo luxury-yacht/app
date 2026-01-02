@@ -6,6 +6,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
@@ -90,6 +91,40 @@ func TestManagerConfigUpdateBroadcasts(t *testing.T) {
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected config update to be delivered")
+	}
+}
+
+func TestManagerRBACUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainNamespaceRBAC, "namespace:default")
+	require.NoError(t, err)
+
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "role-1",
+			Namespace:       "default",
+			UID:             "role-uid",
+			ResourceVersion: "4",
+		},
+	}
+
+	manager.handleRole(role, MessageTypeAdded)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainNamespaceRBAC, update.Domain)
+		require.Equal(t, "namespace:default", update.Scope)
+		require.Equal(t, "role-1", update.Name)
+		require.Equal(t, "default", update.Namespace)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected rbac update to be delivered")
 	}
 }
 

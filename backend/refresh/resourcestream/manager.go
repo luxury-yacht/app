@@ -11,6 +11,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	appslisters "k8s.io/client-go/listers/apps/v1"
@@ -35,6 +36,7 @@ const (
 	domainPods            = "pods"
 	domainWorkloads       = "namespace-workloads"
 	domainNamespaceConfig = "namespace-config"
+	domainNamespaceRBAC   = "namespace-rbac"
 	domainNodes           = "nodes"
 )
 
@@ -184,6 +186,27 @@ func NewManager(factory *informer.Factory, provider metrics.Provider, logger log
 		AddFunc:    func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeAdded) },
 		UpdateFunc: func(_, newObj interface{}) { mgr.handleWorkload(newObj, MessageTypeModified) },
 		DeleteFunc: func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeDeleted) },
+	})
+
+	roleInformer := shared.Rbac().V1().Roles()
+	roleInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleRole(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleRole(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleRole(obj, MessageTypeDeleted) },
+	})
+
+	bindingInformer := shared.Rbac().V1().RoleBindings()
+	bindingInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleRoleBinding(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleRoleBinding(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleRoleBinding(obj, MessageTypeDeleted) },
+	})
+
+	serviceAccountInformer := shared.Core().V1().ServiceAccounts()
+	serviceAccountInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleServiceAccount(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleServiceAccount(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleServiceAccount(obj, MessageTypeDeleted) },
 	})
 
 	return mgr
@@ -342,6 +365,81 @@ func (m *Manager) handleSecret(obj interface{}, updateType MessageType) {
 	}
 
 	m.broadcast(domainNamespaceConfig, scopesForNamespace(secret.Namespace), update)
+}
+
+func (m *Manager) handleRole(obj interface{}, updateType MessageType) {
+	role := roleFromObject(obj)
+	if role == nil {
+		return
+	}
+
+	summary := snapshot.BuildRoleSummary(m.clusterMeta, role)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceRBAC,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: role.ResourceVersion,
+		UID:             string(role.UID),
+		Name:            role.Name,
+		Namespace:       role.Namespace,
+		Kind:            "Role",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainNamespaceRBAC, scopesForNamespace(role.Namespace), update)
+}
+
+func (m *Manager) handleRoleBinding(obj interface{}, updateType MessageType) {
+	binding := roleBindingFromObject(obj)
+	if binding == nil {
+		return
+	}
+
+	summary := snapshot.BuildRoleBindingSummary(m.clusterMeta, binding)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceRBAC,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: binding.ResourceVersion,
+		UID:             string(binding.UID),
+		Name:            binding.Name,
+		Namespace:       binding.Namespace,
+		Kind:            "RoleBinding",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainNamespaceRBAC, scopesForNamespace(binding.Namespace), update)
+}
+
+func (m *Manager) handleServiceAccount(obj interface{}, updateType MessageType) {
+	serviceAccount := serviceAccountFromObject(obj)
+	if serviceAccount == nil {
+		return
+	}
+
+	summary := snapshot.BuildServiceAccountSummary(m.clusterMeta, serviceAccount)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainNamespaceRBAC,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: serviceAccount.ResourceVersion,
+		UID:             string(serviceAccount.UID),
+		Name:            serviceAccount.Name,
+		Namespace:       serviceAccount.Namespace,
+		Kind:            "ServiceAccount",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainNamespaceRBAC, scopesForNamespace(serviceAccount.Namespace), update)
 }
 
 func (m *Manager) handleNode(obj interface{}, updateType MessageType) {
@@ -715,6 +813,12 @@ func domainPermissions(domain string) ([]permissionRequirement, bool) {
 			{group: "", resource: "configmaps"},
 			{group: "", resource: "secrets"},
 		}, true
+	case domainNamespaceRBAC:
+		return []permissionRequirement{
+			{group: "rbac.authorization.k8s.io", resource: "roles"},
+			{group: "rbac.authorization.k8s.io", resource: "rolebindings"},
+			{group: "", resource: "serviceaccounts"},
+		}, true
 	case domainNodes:
 		return []permissionRequirement{{group: "", resource: "nodes"}}, true
 	case domainWorkloads:
@@ -881,6 +985,39 @@ func secretFromObject(obj interface{}) *corev1.Secret {
 		return typed
 	case cache.DeletedFinalStateUnknown:
 		return secretFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func roleFromObject(obj interface{}) *rbacv1.Role {
+	switch typed := obj.(type) {
+	case *rbacv1.Role:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return roleFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func roleBindingFromObject(obj interface{}) *rbacv1.RoleBinding {
+	switch typed := obj.(type) {
+	case *rbacv1.RoleBinding:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return roleBindingFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func serviceAccountFromObject(obj interface{}) *corev1.ServiceAccount {
+	switch typed := obj.(type) {
+	case *corev1.ServiceAccount:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return serviceAccountFromObject(typed.Obj)
 	default:
 		return nil
 	}
