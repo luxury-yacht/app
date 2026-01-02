@@ -77,7 +77,20 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 ### Phase 5 - Domain migration expansion (remaining snapshot-based lists)
 
 - [ ] Inventory remaining snapshot domains and classify by list semantics (cluster vs namespace, single vs scoped list, metrics-bearing vs static).
-- [ ] Prioritize migration order based on churn and UX impact (for example: `cluster-overview`, `cluster-rbac`, `cluster-storage`, `cluster-config`, `cluster-crds`, `cluster-custom`, `namespace-config`, `namespace-network`, `namespace-rbac`, `namespace-storage`, `namespace-quotas`, `namespace-autoscaling`, `namespace-custom`, `namespace-helm`).
+- [ ] Prioritize migration order based on churn and UX impact.
+- [ ] Remaining domains (track completion):
+  - [ ] `cluster-overview`
+  - [ ] `cluster-rbac`
+  - [ ] `cluster-storage`
+  - [ ] `cluster-config`
+  - [ ] `cluster-crds`
+  - [ ] `cluster-custom`
+  - [ ] `namespace-network`
+  - [ ] `namespace-storage`
+  - [ ] `namespace-quotas`
+  - [ ] `namespace-autoscaling`
+  - [ ] `namespace-custom`
+  - [ ] `namespace-helm`
 - [ ] For each selected domain:
   - [ ] Add informer-driven update emission in the backend with minimal row payloads and resourceVersion tracking.
   - [ ] Add client-side merge/update logic and drift detection for the new domain in the resource stream manager.
