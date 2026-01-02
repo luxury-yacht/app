@@ -15,7 +15,6 @@ import type {
   PodSnapshotPayload,
 } from '../types';
 import { buildClusterScopeList, parseClusterScope } from '../clusterScope';
-type ResourceStreamingMode = 'active' | 'shadow';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
@@ -535,7 +534,6 @@ export class ResourceStreamManager {
   private lastNotifiedErrors = new Map<string, string>();
   private consecutiveErrors = new Map<string, number>();
   private suspendedForVisibility = false;
-  private readonly mode: ResourceStreamingMode = 'active';
   private streamTelemetry = new Map<string, StreamTelemetry>();
 
   constructor() {
@@ -543,10 +541,6 @@ export class ResourceStreamManager {
     eventBus.on('view:reset', () => this.stopAll(false));
     eventBus.on('app:visibility-hidden', () => this.suspendForVisibility());
     eventBus.on('app:visibility-visible', () => this.resumeFromVisibility());
-  }
-
-  private isShadowMode(): boolean {
-    return this.mode === 'shadow';
   }
 
   // Aggregate stream telemetry so diagnostics can display resync/fallback activity.
@@ -646,7 +640,7 @@ export class ResourceStreamManager {
 
   handleConnectionOpen(clusterId: string): void {
     // Log when the websocket is connected so it is clear streaming is active.
-    logInfo(`[resource-stream] connection open clusterId=${clusterId} mode=${this.mode}`);
+    logInfo(`[resource-stream] connection open clusterId=${clusterId}`);
     this.clearStreamError(clusterId);
     this.subscriptions.forEach((subscription) => {
       if (subscription.clusterId !== clusterId) {
@@ -717,9 +711,8 @@ export class ResourceStreamManager {
       driftDetected: false,
     };
     this.subscriptions.set(key, subscription);
-    // Log stream activation so testers can verify shadow vs active mode in the app logs.
     logInfo(
-      `[resource-stream] subscription created mode=${this.mode} domain=${subscription.domain} scope=${subscription.storeScope}`
+      `[resource-stream] subscription created domain=${subscription.domain} scope=${subscription.storeScope}`
     );
     return subscription;
   }
@@ -833,11 +826,6 @@ export class ResourceStreamManager {
 
     // Always update shadow keys so drift checks can compare snapshots to streamed changes.
     this.applyShadowUpdates(subscription, updates);
-
-    if (this.isShadowMode()) {
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
 
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.storeScope, (previous) => {
@@ -1137,11 +1125,6 @@ export class ResourceStreamManager {
     // Drift detection compares streamed keys against the latest snapshot.
     this.updateShadowBaseline(subscription, snapshot);
 
-    if (this.isShadowMode()) {
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
     const generatedAt = snapshot.generatedAt || Date.now();
 
     if (subscription.domain === 'pods') {
@@ -1284,10 +1267,6 @@ export class ResourceStreamManager {
 
   private markResyncComplete(subscription: StreamSubscription): void {
     const now = Date.now();
-    if (this.isShadowMode()) {
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.storeScope, (previous) => ({
         ...previous,
@@ -1329,9 +1308,6 @@ export class ResourceStreamManager {
 
   private markResyncing(subscription: StreamSubscription): void {
     const message = RESYNC_MESSAGE;
-    if (this.isShadowMode()) {
-      return;
-    }
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.storeScope, (previous) => ({
         ...previous,
@@ -1367,9 +1343,6 @@ export class ResourceStreamManager {
     const attempts = (this.consecutiveErrors.get(key) ?? 0) + 1;
     this.consecutiveErrors.set(key, attempts);
     const isTerminal = attempts >= STREAM_ERROR_NOTIFY_THRESHOLD;
-    if (this.isShadowMode()) {
-      return;
-    }
 
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.storeScope, (previous) => ({

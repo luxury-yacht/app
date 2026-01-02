@@ -82,7 +82,6 @@ type DomainFetchOptions = {
 const DEFAULT_AUTO_START = false;
 const CLUSTER_SCOPE = 'cluster';
 const noopStreamingCleanup = () => {};
-const RESOURCE_STREAMING_ENABLED = true;
 // Keep streaming metrics refreshes aligned with the backend poll cadence.
 const STREAMING_METRICS_MIN_INTERVAL_MS = 10_000;
 
@@ -120,8 +119,6 @@ class RefreshOrchestrator {
   private cancelledStreaming = new Set<string>();
   private domainStreamingScopes = new Map<RefreshDomain, string>();
   private blockedStreaming = new Set<string>();
-  private readonly resourceStreamingMode: 'active' | 'shadow' = 'active';
-  private readonly resourceStreamingDomains: Set<string> | null = null;
   private lastMetricsRefreshAt = new Map<string, number>();
   private domainEnabledState = new Map<RefreshDomain, boolean>();
   private scopedEnabledState = new Map<RefreshDomain, Map<string, boolean>>();
@@ -142,12 +139,7 @@ class RefreshOrchestrator {
     eventBus.on('kubeconfig:selection-changed', this.handleKubeconfigSelectionChanged);
     eventBus.on('refresh:resource-stream-drift', this.handleResourceStreamDrift);
     // Emit a single log so operators can confirm streaming config at runtime.
-    const domains = this.resourceStreamingDomains
-      ? Array.from(this.resourceStreamingDomains).join(',')
-      : 'all';
-    logInfo(
-      `[refresh] resource streaming config enabled=${RESOURCE_STREAMING_ENABLED} mode=${this.resourceStreamingMode} domains=${domains}`
-    );
+    logInfo('[refresh] resource streaming enabled (mode=active, domains=all)');
   }
 
   private getErrorNotificationKey(domain: RefreshDomain, scope?: string): string {
@@ -417,9 +409,7 @@ class RefreshOrchestrator {
           this.domainStreamingScopes.set(domain, normalizedScope);
           if (!hasActiveStream) {
             this.streamingReady.delete(readyKey);
-            if (!this.shouldMuteResourceStreamState(domain)) {
-              resetDomainState(domain);
-            }
+            resetDomainState(domain);
             this.scheduleStreamingStart(domain, normalizedScope, config.streaming, {
               scoped: false,
             });
@@ -514,9 +504,6 @@ class RefreshOrchestrator {
     scope: string,
     options: { scoped: boolean }
   ): void {
-    if (this.shouldMuteResourceStreamState(domain)) {
-      return;
-    }
     if (options.scoped) {
       setScopedDomainState(domain, scope, (previous) => ({
         ...previous,
@@ -541,9 +528,6 @@ class RefreshOrchestrator {
     message: string,
     options: { scoped: boolean }
   ): void {
-    if (this.shouldMuteResourceStreamState(domain)) {
-      return;
-    }
     if (options.scoped) {
       setScopedDomainState(domain, scope, (previous) => ({
         ...previous,
@@ -783,20 +767,6 @@ class RefreshOrchestrator {
     return domain === 'pods' || domain === 'namespace-workloads' || domain === 'nodes';
   }
 
-  private isResourceStreamingShadowMode(domain: RefreshDomain): boolean {
-    return this.isResourceStreamDomain(domain) && this.resourceStreamingMode === 'shadow';
-  }
-
-  private isResourceStreamingAllowed(domain: RefreshDomain): boolean {
-    if (!this.isResourceStreamDomain(domain)) {
-      return true;
-    }
-    if (!this.resourceStreamingDomains) {
-      return true;
-    }
-    return this.resourceStreamingDomains.has(domain);
-  }
-
   private isResourceStreamViewActive(domain: RefreshDomain): boolean {
     if (!this.isResourceStreamDomain(domain)) {
       return true;
@@ -840,9 +810,6 @@ class RefreshOrchestrator {
     if (!this.isResourceStreamDomain(domain)) {
       return true;
     }
-    if (!this.isResourceStreamingAllowed(domain)) {
-      return false;
-    }
     if (!this.isResourceStreamViewActive(domain)) {
       return false;
     }
@@ -854,17 +821,6 @@ class RefreshOrchestrator {
       return false;
     }
     return true;
-  }
-
-  private shouldUseStreamingForFetch(domain: RefreshDomain): boolean {
-    if (!this.isResourceStreamDomain(domain)) {
-      return true;
-    }
-    return this.resourceStreamingMode === 'active';
-  }
-
-  private shouldMuteResourceStreamState(domain: RefreshDomain): boolean {
-    return this.isResourceStreamingShadowMode(domain);
   }
 
   private shouldSkipStreamingMetricsRefresh(domain: RefreshDomain, scope?: string): boolean {
@@ -1162,14 +1118,13 @@ class RefreshOrchestrator {
       const normalizedScope = this.normalizeStreamingScope(domain, scope);
       const shouldStream = this.shouldStreamScope(domain, normalizedScope);
       const key = makeInFlightKey(domain, normalizedScope);
-      const useStreaming = this.shouldUseStreamingForFetch(domain);
       const hasStream =
         shouldStream &&
         (this.streamingCleanup.has(key) ||
           this.pendingStreaming.has(key) ||
           (this.domainStreamingScopes.get(domain) === normalizedScope && normalizedScope !== ''));
 
-      if (hasStream && useStreaming) {
+      if (hasStream) {
         if (options.isManual && config.streaming.refreshOnce && normalizedScope) {
           await config.streaming.refreshOnce(normalizedScope);
         }
@@ -1203,15 +1158,14 @@ class RefreshOrchestrator {
 
     if (config.streaming) {
       const shouldStream = this.shouldStreamScope(domain, normalizedScope);
-      const useStreaming = this.shouldUseStreamingForFetch(domain);
       if (shouldStream) {
-        if (useStreaming && options.isManual) {
+        if (options.isManual) {
           await this.refreshStreamingDomainOnce(domain, normalizedScope);
           return;
         }
         this.startStreamingScope(domain, normalizedScope, config.streaming);
       }
-      if (config.streaming.metricsOnly && !options.isManual && useStreaming) {
+      if (config.streaming.metricsOnly && !options.isManual) {
         const metricsOnly = shouldStream && this.isStreamingActive(domain, normalizedScope);
         if (metricsOnly && this.shouldSkipStreamingMetricsRefresh(domain, normalizedScope)) {
           return;
@@ -1224,7 +1178,7 @@ class RefreshOrchestrator {
         );
         return;
       }
-      if (shouldStream && useStreaming) {
+      if (shouldStream) {
         return;
       }
     }
@@ -1827,9 +1781,7 @@ class RefreshOrchestrator {
       }
 
       if (nextScope) {
-        if (!this.shouldMuteResourceStreamState(domain)) {
-          resetDomainState(domain);
-        }
+        resetDomainState(domain);
         if (shouldStream) {
           this.startStreamingDomain(domain, nextScope);
           this.domainStreamingScopes.set(domain, nextScope);
@@ -1903,17 +1855,12 @@ refreshOrchestrator.registerDomain({
   refresherName: CLUSTER_REFRESHERS.nodes,
   category: 'cluster',
   autoStart: false,
-  ...(RESOURCE_STREAMING_ENABLED
-    ? {
-        streaming: {
-          start: (scope) => resourceStreamManager.start('nodes', scope),
-          stop: (scope, options) =>
-            resourceStreamManager.stop('nodes', scope, options?.reset ?? false),
-          refreshOnce: (scope) => resourceStreamManager.refreshOnce('nodes', scope),
-          metricsOnly: true,
-        },
-      }
-    : {}),
+  streaming: {
+    start: (scope) => resourceStreamManager.start('nodes', scope),
+    stop: (scope, options) => resourceStreamManager.stop('nodes', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('nodes', scope),
+    metricsOnly: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({
@@ -1930,17 +1877,12 @@ refreshOrchestrator.registerDomain({
   category: 'system',
   scoped: true,
   autoStart: false,
-  ...(RESOURCE_STREAMING_ENABLED
-    ? {
-        streaming: {
-          start: (scope) => resourceStreamManager.start('pods', scope),
-          stop: (scope, options) =>
-            resourceStreamManager.stop('pods', scope, options?.reset ?? false),
-          refreshOnce: (scope) => resourceStreamManager.refreshOnce('pods', scope),
-          metricsOnly: true,
-        },
-      }
-    : {}),
+  streaming: {
+    start: (scope) => resourceStreamManager.start('pods', scope),
+    stop: (scope, options) => resourceStreamManager.stop('pods', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('pods', scope),
+    metricsOnly: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({
@@ -2069,17 +2011,13 @@ refreshOrchestrator.registerDomain({
   category: 'namespace',
   scopeResolver: () => refreshOrchestrator.getSelectedNamespace(),
   autoStart: false,
-  ...(RESOURCE_STREAMING_ENABLED
-    ? {
-        streaming: {
-          start: (scope) => resourceStreamManager.start('namespace-workloads', scope),
-          stop: (scope, options) =>
-            resourceStreamManager.stop('namespace-workloads', scope, options?.reset ?? false),
-          refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-workloads', scope),
-          metricsOnly: true,
-        },
-      }
-    : {}),
+  streaming: {
+    start: (scope) => resourceStreamManager.start('namespace-workloads', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('namespace-workloads', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-workloads', scope),
+    metricsOnly: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({
