@@ -33,12 +33,12 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 ### Phase 1 - Backend streaming foundation
 
-- Extend the refresh subsystem with a resource update stream per domain/scope.
-- Use informer event handlers to emit updates with resourceVersion and object identity.
-- Add stream health signals: heartbeat, RESET or COMPLETE markers for resync, and backpressure handling (buffer limits + telemetry on drops). (ties to #6)
-- Keep permission gating aligned with existing preflight checks; if list/watch permission is missing, do not expose the stream for that domain.
-- Implement transport consolidation in parallel (WS multiplexer or similar) to avoid per-resource connection explosion. (ties to #2)
-- Close #2 fully by making the multiplexer reusable across all watch-capable streams (resources now, events/logs later) with a single connection per cluster and standardized subscribe/unsubscribe semantics.
+- ✅ Extend the refresh subsystem with a resource update stream per domain/scope.
+- ✅ Use informer event handlers to emit updates with resourceVersion and object identity.
+- ✅ Add stream health signals: heartbeat, RESET or COMPLETE markers for resync, and backpressure handling (buffer limits + telemetry on drops). (ties to #6)
+- ✅ Keep permission gating aligned with existing preflight checks; if list/watch permission is missing, do not expose the stream for that domain.
+- ✅ Implement transport consolidation in parallel (WS multiplexer or similar) to avoid per-resource connection explosion. (ties to #2)
+- ✅ Close #2 fully by making the multiplexer reusable across all watch-capable streams (resources now, events/logs later) with a single connection per cluster and standardized subscribe/unsubscribe semantics.
   - ✅ Decision: use WS multiplexer for resource list streaming; keep SSE for logs/events initially to limit churn.
   - ✅ Define new resource stream name for telemetry (for example `resources`) and a dedicated subscribe payload shape keyed by domain + scope + cluster id.
   - ✅ Adopt explicit resync signals: send RESET for full snapshot hydration and COMPLETE when a resync is required.

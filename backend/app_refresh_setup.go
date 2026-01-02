@@ -161,11 +161,13 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	)
 	aggregateLogs := newAggregateLogStreamHandler(subsystems)
 	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
+	aggregateResources := newAggregateResourceStreamHandler(subsystems)
 	mux := http.NewServeMux()
 	api.NewServer(hostSubsystem.Registry, aggregateService, aggregateQueue, hostSubsystem.Telemetry).Register(mux)
 	mux.Handle("/api/v2/stream/events", aggregateEvents)
 	mux.Handle("/api/v2/stream/logs", aggregateLogs)
 	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)
+	mux.Handle("/api/v2/stream/resources", aggregateResources)
 	mux.Handle("/", hostSubsystem.Handler)
 
 	if a.listenLoopback == nil {

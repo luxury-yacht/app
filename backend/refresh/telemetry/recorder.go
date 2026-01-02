@@ -367,7 +367,7 @@ func (r *Recorder) SnapshotSummary() Summary {
 	return out
 }
 
-// StreamStatus captures health metrics for streaming transports (events/logs).
+// StreamStatus captures health metrics for streaming transports (events/logs/resources).
 type StreamStatus struct {
 	Name            string `json:"name"`
 	ActiveSessions  int    `json:"activeSessions"`
@@ -384,6 +384,7 @@ const (
 	StreamEvents  = "events"
 	StreamLogs    = "object-logs"
 	StreamCatalog = "catalog"
+	StreamResources = "resources"
 )
 
 // RecordStreamConnect increments the active session count for a stream.

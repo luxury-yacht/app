@@ -22,6 +22,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/logstream"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
@@ -65,6 +66,7 @@ type Subsystem struct {
 	SnapshotService  refresh.SnapshotService
 	ManualQueue      refresh.ManualQueue
 	EventStream      *eventstream.Manager
+	ResourceStream   *resourcestream.Manager
 	ClusterMeta      snapshot.ClusterMeta
 }
 
@@ -526,6 +528,13 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	}
 	mux.Handle("/api/v2/stream/events", eventHandler)
 
+	resourceManager := resourcestream.NewManager(informerFactory, metricsProvider, cfg.Logger, telemetryRecorder, clusterMeta)
+	resourceHandler, err := resourcestream.NewHandler(resourceManager, cfg.Logger, telemetryRecorder, clusterMeta)
+	if err != nil {
+		return nil, err
+	}
+	mux.Handle("/api/v2/stream/resources", resourceHandler)
+
 	if cfg.ObjectCatalogService != nil {
 		catalogHandler := snapshot.NewCatalogStreamHandler(cfg.ObjectCatalogService, cfg.Logger, telemetryRecorder, clusterMeta)
 		mux.Handle("/api/v2/stream/catalog", catalogHandler)
@@ -542,6 +551,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		SnapshotService:  snapshotService,
 		ManualQueue:      queue,
 		EventStream:      eventManager,
+		ResourceStream:   resourceManager,
 		ClusterMeta:      clusterMeta,
 	}, nil
 }
