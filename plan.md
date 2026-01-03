@@ -67,7 +67,7 @@ If you have suggestions on how to do your job better for this task, let me know.
 
 1. Add watch-based invalidation to the backend response cache for object details/YAML/helm so TTL-only caching does not serve stale data under churn (backend/response_cache.go:11; backend/object_detail_provider.go:94; backend/object_yaml.go:114).
 2. Add resume tokens/server-side buffering for resource streams to avoid full resyncs on drops; today COMPLETE/RESET forces resyncs with no resume path (backend/refresh/streammux/handler.go:266; backend/refresh/resourcestream/manager.go:1586; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1091).
-3. Pause polling refreshers when event streams are active to cut 3s interval load; event domains stream but do not set pauseRefresherWhenStreaming (frontend/src/core/refresh/orchestrator.ts:2325; frontend/src/core/refresh/orchestrator.ts:2446; frontend/src/core/refresh/refresherConfig.ts:24).
+3. ✅ Pause polling refreshers when event streams are active to cut 3s interval load; event domains stream but do not set pauseRefresherWhenStreaming (frontend/src/core/refresh/orchestrator.ts:2325; frontend/src/core/refresh/orchestrator.ts:2446; frontend/src/core/refresh/refresherConfig.ts:24).
 4. Increase SnapshotCacheTTL or add invalidation to avoid rebuild churn; current TTL is 1s (backend/internal/config/config.go:25; backend/refresh/snapshot/service.go:19).
 5. Cap the resource-stream updateQueue (and resync/fallback on overflow) to prevent unbounded memory growth during bursts (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1312; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1323).
 6. Add jitter to resource stream reconnect backoff to avoid thundering-herd reconnects after shared outages (frontend/src/core/refresh/streaming/resourceStreamManager.ts:970).
@@ -81,7 +81,7 @@ Scope note: Large-scale changes are #2 (resource-stream resume tokens/buffering)
 Sequencing note: Batch only small, same-subsystem items. Suggested groupings: (a) Streaming hardening: #5 (queue cap) + #6 (jittered reconnect) together, then #2 separately; (b) Permissions lifecycle: #7 + #8 together; (c) Caching: #1 + #4 together only if #4 adds invalidation, otherwise handle #4 alone; (d) Events: #3 alone and #10 alone; #9 alone.
 
 Suggested implementation order:
-1. Batch A: #3 (pause polling while events stream).
+1. ✅ Batch A: #3 (pause polling while events stream).
 2. Batch B: #5 + #6 (resource stream queue cap + jittered reconnect).
 3. Batch C: #10 (event stream total/truncated metadata).
 4. Batch D: #7 + #8 (permission cache expiry + periodic revalidation/teardown).

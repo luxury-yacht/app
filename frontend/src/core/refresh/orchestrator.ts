@@ -2331,6 +2331,8 @@ refreshOrchestrator.registerDomain({
     start: (scope) => eventStreamManager.startCluster(scope),
     stop: (scope, options) => eventStreamManager.stopCluster(scope, options?.reset ?? false),
     refreshOnce: (scope) => eventStreamManager.refreshCluster(scope),
+    // Pause polling while streaming is active to reduce redundant refreshes.
+    pauseRefresherWhenStreaming: true,
   },
 });
 
@@ -2452,6 +2454,8 @@ refreshOrchestrator.registerDomain({
     start: (scope) => eventStreamManager.startNamespace(scope),
     stop: (scope, options) => eventStreamManager.stopNamespace(scope, options?.reset ?? false),
     refreshOnce: (scope) => eventStreamManager.refreshNamespace(scope),
+    // Pause polling while streaming is active to reduce redundant refreshes.
+    pauseRefresherWhenStreaming: true,
   },
 });
 
