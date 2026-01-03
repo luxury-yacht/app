@@ -71,8 +71,8 @@ If you have suggestions on how to do your job better for this task, let me know.
 4. Increase SnapshotCacheTTL or add invalidation to avoid rebuild churn; current TTL is 1s (backend/internal/config/config.go:25; backend/refresh/snapshot/service.go:19).
 5. ✅ Cap the resource-stream updateQueue (and resync/fallback on overflow) to prevent unbounded memory growth during bursts (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1312; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1323).
 6. ✅ Add jitter to resource stream reconnect backoff to avoid thundering-herd reconnects after shared outages (frontend/src/core/refresh/streaming/resourceStreamManager.ts:979).
-7. Add expiry/eviction to the informer factory's legacy permission cache so stale allow/deny decisions do not persist when runtime SSAR fails (backend/refresh/informer/factory.go:323; backend/refresh/informer/factory.go:336).
-8. Periodically revalidate permissions and stop informers/streams when revoked, rather than only gating at registration time (backend/refresh/system/manager.go:93; backend/refresh/informer/factory.go:315; backend/refresh/permissions/checker.go:34).
+7. ✅ Add expiry/eviction to the informer factory's legacy permission cache so stale allow/deny decisions do not persist when runtime SSAR fails (backend/refresh/informer/factory.go:330; backend/refresh/informer/factory.go:390; backend/refresh/informer/factory.go:476).
+8. ✅ Periodically revalidate permissions and stop informers/streams when revoked, rather than only gating at registration time (backend/refresh/system/permission_revalidator.go:15; backend/refresh/system/permission_revalidator.go:44; backend/app_refresh_setup.go:147).
 9. Add caching or watch-based collection for object-events to avoid re-listing on every refresh (backend/refresh/snapshot/object_events.go:63; backend/refresh/snapshot/object_events.go:73).
 10. ✅ Include total/truncated metadata in event stream payloads so UI can report truncation accurately under the 500-item cap (backend/refresh/eventstream/handler.go:107; frontend/src/core/refresh/streaming/eventStreamManager.ts:407; backend/refresh/snapshot/event_limits.go:3).
 
@@ -84,7 +84,7 @@ Suggested implementation order:
 1. ✅ Batch A: #3 (pause polling while events stream).
 2. ✅ Batch B: #5 + #6 (resource stream queue cap + jittered reconnect).
 3. ✅ Batch C: #10 (event stream total/truncated metadata).
-4. Batch D: #7 + #8 (permission cache expiry + periodic revalidation/teardown).
+4. ✅ Batch D: #7 + #8 (permission cache expiry + periodic revalidation/teardown).
 5. Batch E: #1 (watch-based invalidation for response cache).
 6. Batch F: #4 (snapshot cache TTL tweak) or #1 + #4 together if #4 adds invalidation.
 7. Batch G: #9 (object-events caching or watch-based collection).

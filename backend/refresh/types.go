@@ -20,6 +20,8 @@ type Manager struct {
 	manualQueue     ManualQueue
 	mu              sync.RWMutex
 	started         bool
+	// runCancel stops informers/metrics/manual queue without requiring callers to hold the parent cancel.
+	runCancel context.CancelFunc
 }
 
 // Registry abstracts domain registration for snapshots.
@@ -139,11 +141,16 @@ func (m *Manager) Start(ctx context.Context) error {
 		m.mu.Unlock()
 		return nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	runCtx, cancel := context.WithCancel(ctx)
 	m.started = true
+	m.runCancel = cancel
 	m.mu.Unlock()
 
 	if m.informerHub != nil {
-		if err := m.informerHub.Start(ctx); err != nil {
+		if err := m.informerHub.Start(runCtx); err != nil {
 			return err
 		}
 	}
@@ -155,7 +162,7 @@ func (m *Manager) Start(ctx context.Context) error {
 					log.Printf("[refresh] panic in metrics poller: %v", r)
 				}
 			}()
-			if err := m.metricsPoller.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			if err := m.metricsPoller.Start(runCtx); err != nil && !errors.Is(err, context.Canceled) {
 				log.Printf("[refresh] metrics poller stopped with error: %v", err)
 			}
 		}()
@@ -168,7 +175,7 @@ func (m *Manager) Start(ctx context.Context) error {
 					log.Printf("[refresh] panic in manual queue: %v", r)
 				}
 			}()
-			m.runManualQueue(ctx)
+			m.runManualQueue(runCtx)
 		}()
 	}
 
@@ -183,7 +190,14 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	m.started = false
+	cancel := m.runCancel
+	m.runCancel = nil
 	m.mu.Unlock()
+
+	// Cancelling the run context stops informer factories and pollers that rely on it.
+	if cancel != nil {
+		cancel()
+	}
 
 	var firstErr error
 	if m.metricsPoller != nil {

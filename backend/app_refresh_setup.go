@@ -144,6 +144,8 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 				a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), "Refresh")
 			}
 		}(manager)
+		// Keep permission grants fresh; revoke access stops refresh informers/streams.
+		subsystem.StartPermissionRevalidation(ctx)
 	}
 
 	// Wrap the base refresh API with aggregate services for multi-cluster domains.

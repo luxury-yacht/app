@@ -151,7 +151,7 @@ func TestRuntimePermissionFallbackUsesLegacyCache(t *testing.T) {
 	checker := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
 		return false, context.DeadlineExceeded
 	})
-	factory.permissionCache["/pods/list"] = true
+	factory.storeLegacyPermission("/pods/list", true)
 	factory.ConfigureRuntimePermissions(checker, logger)
 
 	allowed, err := factory.CanListResource("", "pods")
@@ -168,10 +168,35 @@ func TestRuntimePermissionFallbackUsesLegacyCache(t *testing.T) {
 	}
 }
 
+func TestLegacyPermissionCacheExpires(t *testing.T) {
+	client := fake.NewClientset()
+	now := time.Now()
+	factory := newMinimalFactory(client)
+	factory.permissionCacheTTL = time.Minute
+	factory.permissionNow = func() time.Time { return now }
+
+	factory.storeLegacyPermission("/pods/list", true)
+	if allowed, ok := factory.readLegacyPermission("/pods/list"); !ok || !allowed {
+		t.Fatalf("expected legacy permission to be cached")
+	}
+
+	now = now.Add(2 * time.Minute)
+	if _, ok := factory.readLegacyPermission("/pods/list"); ok {
+		t.Fatalf("expected legacy permission cache to expire")
+	}
+
+	if snapshot := factory.PermissionCacheSnapshot(); snapshot != nil {
+		t.Fatalf("expected expired cache to be evicted")
+	}
+}
+
 func newMinimalFactory(client kubernetes.Interface) *Factory {
 	return &Factory{
-		kubeClient:      client,
-		permissionCache: make(map[string]bool),
+		kubeClient:         client,
+		permissionCache:    make(map[string]permissionCacheEntry),
+		permissionAllowed:  make(map[string]struct{}),
+		permissionCacheTTL: time.Minute,
+		permissionNow:      time.Now,
 	}
 }
 

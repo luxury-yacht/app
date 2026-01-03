@@ -1156,7 +1156,8 @@ describe('ResourceStreamManager', () => {
     firstSocket.onclose?.();
 
     await flushPromises();
-    vi.advanceTimersByTime(1000);
+    // Allow jittered reconnect delay to elapse.
+    vi.advanceTimersByTime(1500);
     await flushPromises();
 
     const secondSocket = createdSockets[1];
