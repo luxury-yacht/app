@@ -31,6 +31,7 @@ type ClientMessage struct {
 	Domain          string      `json:"domain,omitempty"`
 	Scope           string      `json:"scope,omitempty"`
 	ResourceVersion string      `json:"resourceVersion,omitempty"`
+	ResumeToken     string      `json:"resumeToken,omitempty"`
 }
 
 // ServerMessage is the envelope sent back to websocket clients.
@@ -41,6 +42,7 @@ type ServerMessage struct {
 	Domain          string      `json:"domain,omitempty"`
 	Scope           string      `json:"scope,omitempty"`
 	ResourceVersion string      `json:"resourceVersion,omitempty"`
+	Sequence        string      `json:"sequence,omitempty"`
 	UID             string      `json:"uid,omitempty"`
 	Name            string      `json:"name,omitempty"`
 	Namespace       string      `json:"namespace,omitempty"`

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +34,7 @@ type wsConn interface {
 type Adapter interface {
 	NormalizeScope(domain, scope string) (string, error)
 	Subscribe(domain, scope string) (*Subscription, error)
+	Resume(domain, scope string, since uint64) ([]ServerMessage, bool)
 }
 
 // Config captures the dependencies for a websocket stream multiplexer.
@@ -205,7 +207,27 @@ func (s *session) handleSubscribe(msg ClientMessage) {
 	key := subscriptionKey(msg.Domain, normalized)
 	s.storeSubscription(key, sub)
 
-	if s.sendReset {
+	resumeToken := parseResumeToken(msg.ResumeToken)
+	resumeUpdates := []ServerMessage(nil)
+	resumeOK := false
+	resumeHighWater := uint64(0)
+	if resumeToken > 0 {
+		resumeUpdates, resumeOK = s.adapter.Resume(msg.Domain, normalized, resumeToken)
+		if !resumeOK {
+			s.logger.Warn(fmt.Sprintf("stream mux: resume token expired for %s/%s", msg.Domain, normalized), "StreamMux")
+		}
+		if resumeOK && len(resumeUpdates) > 0 {
+			// Track the highest buffered sequence to skip duplicates from live delivery.
+			resumeHighWater = resumeToken
+			for _, update := range resumeUpdates {
+				if sequence, ok := parseSequence(update.Sequence); ok && sequence > resumeHighWater {
+					resumeHighWater = sequence
+				}
+			}
+		}
+	}
+
+	if s.sendReset && !resumeOK {
 		s.enqueue(ServerMessage{
 			Type:        MessageTypeReset,
 			Domain:      msg.Domain,
@@ -215,7 +237,13 @@ func (s *session) handleSubscribe(msg ClientMessage) {
 		})
 	}
 
-	go s.forwardSubscription(sub)
+	if resumeOK && len(resumeUpdates) > 0 {
+		for _, update := range resumeUpdates {
+			s.enqueue(update)
+		}
+	}
+
+	go s.forwardSubscription(sub, resumeHighWater)
 }
 
 func (s *session) handleCancel(msg ClientMessage) {
@@ -251,12 +279,18 @@ func (s *session) storeSubscription(key string, sub *Subscription) {
 	s.subs[key] = sub
 }
 
-func (s *session) forwardSubscription(sub *Subscription) {
+func (s *session) forwardSubscription(sub *Subscription, resumeHighWater uint64) {
 	for {
 		select {
 		case update, ok := <-sub.Updates:
 			if !ok {
 				return
+			}
+			if resumeHighWater > 0 {
+				// Skip updates already replayed from the resume buffer.
+				if sequence, ok := parseSequence(update.Sequence); ok && sequence <= resumeHighWater {
+					continue
+				}
 			}
 			s.enqueue(update)
 		case reason, ok := <-sub.Drops:
@@ -339,4 +373,29 @@ func (s *session) sendError(domain, scope, message string) {
 
 func subscriptionKey(domain, scope string) string {
 	return strings.TrimSpace(domain) + "|" + strings.TrimSpace(scope)
+}
+
+// parseResumeToken converts client tokens into sequence numbers, defaulting to zero on errors.
+func parseResumeToken(value string) uint64 {
+	token, ok := parseSequence(value)
+	if !ok {
+		return 0
+	}
+	return token
+}
+
+// parseSequence parses a stream sequence, returning false for empty or invalid input.
+func parseSequence(value string) (uint64, bool) {
+	if value == "" {
+		return 0, false
+	}
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return 0, false
+	}
+	token, err := strconv.ParseUint(trimmed, 10, 64)
+	if err != nil {
+		return 0, false
+	}
+	return token, true
 }

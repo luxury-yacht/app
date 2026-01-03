@@ -104,6 +104,8 @@ func TestManagerRBACUpdateBroadcasts(t *testing.T) {
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:      noopLogger{},
 		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
 	}
 
 	sub, err := manager.Subscribe(domainNamespaceRBAC, "namespace:default")
@@ -131,6 +133,45 @@ func TestManagerRBACUpdateBroadcasts(t *testing.T) {
 	default:
 		t.Fatal("expected rbac update to be delivered")
 	}
+}
+
+func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
+	}
+	// Create a subscriber so the resume buffer is active for this scope.
+	sub, err := manager.Subscribe(domainPods, "namespace:default")
+	require.NoError(t, err)
+	defer sub.Cancel()
+
+	first := Update{
+		Type:            MessageTypeAdded,
+		Domain:          domainPods,
+		ClusterID:       "c1",
+		ClusterName:     "cluster",
+		ResourceVersion: "1",
+		UID:             "pod-1",
+		Name:            "pod-1",
+		Namespace:       "default",
+		Kind:            "Pod",
+	}
+	second := first
+	second.ResourceVersion = "2"
+	second.UID = "pod-2"
+	second.Name = "pod-2"
+
+	manager.broadcast(domainPods, []string{"namespace:default"}, first)
+	manager.broadcast(domainPods, []string{"namespace:default"}, second)
+
+	updates, ok := manager.Resume(domainPods, "namespace:default", 1)
+	require.True(t, ok)
+	require.Len(t, updates, 1)
+	require.Equal(t, "2", updates[0].Sequence)
+	require.Equal(t, "pod-2", updates[0].Name)
 }
 
 func TestManagerClusterRBACUpdateBroadcasts(t *testing.T) {

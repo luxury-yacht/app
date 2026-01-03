@@ -28,3 +28,11 @@ func (a *Adapter) Subscribe(domain, scope string) (*streammux.Subscription, erro
 	}
 	return a.manager.Subscribe(domain, scope)
 }
+
+// Resume returns buffered updates after the provided resume token.
+func (a *Adapter) Resume(domain, scope string, since uint64) ([]streammux.ServerMessage, bool) {
+	if a.manager == nil {
+		return nil, false
+	}
+	return a.manager.Resume(domain, scope, since)
+}

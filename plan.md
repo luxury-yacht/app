@@ -66,7 +66,7 @@ If you have suggestions on how to do your job better for this task, let me know.
 ## Top 10 Most Important/Impactful Changes
 
 1. ✅ Add watch-based invalidation to the backend response cache for object details/YAML/helm so TTL-only caching does not serve stale data under churn (backend/response_cache_invalidation.go:22; backend/response_cache_invalidation.go:108; backend/app_refresh_setup.go:77).
-2. Add resume tokens/server-side buffering for resource streams to avoid full resyncs on drops; today COMPLETE/RESET forces resyncs with no resume path (backend/refresh/streammux/handler.go:266; backend/refresh/resourcestream/manager.go:1586; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1091).
+2. ✅ Add resume tokens/server-side buffering for resource streams to avoid full resyncs on drops; today COMPLETE/RESET forces resyncs with no resume path (backend/refresh/streammux/handler.go:210; backend/refresh/resourcestream/manager.go:1734; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1272).
 3. ✅ Pause polling refreshers when event streams are active to cut 3s interval load; event domains stream but do not set pauseRefresherWhenStreaming (frontend/src/core/refresh/orchestrator.ts:2325; frontend/src/core/refresh/orchestrator.ts:2446; frontend/src/core/refresh/refresherConfig.ts:24).
 4. ✅ Increase SnapshotCacheTTL to reduce rebuild churn while preserving short-lived caching (backend/internal/config/config.go:25; backend/refresh/snapshot/service.go:19).
 5. ✅ Cap the resource-stream updateQueue (and resync/fallback on overflow) to prevent unbounded memory growth during bursts (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1312; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1323).
@@ -88,7 +88,7 @@ Suggested implementation order:
 5. ✅ Batch E: #1 (watch-based invalidation for response cache).
 6. ✅ Batch F: #4 (snapshot cache TTL tweak) or #1 + #4 together if #4 adds invalidation.
 7. ✅ Batch G: #9 (object-events caching or watch-based collection).
-8. Batch H: #2 (resource stream resume tokens/buffering).
+8. ✅ Batch H: #2 (resource stream resume tokens/buffering).
 
 ### Plan Summary
 

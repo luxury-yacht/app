@@ -1109,6 +1109,39 @@ describe('ResourceStreamManager', () => {
     expect(state.status).toBe('ready');
   });
 
+  test('does not resync on connection error when resume sequence exists', async () => {
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('pods', storeScope);
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'pods',
+        scope: 'namespace:default',
+        resourceVersion: '1',
+        sequence: '1',
+        uid: 'pod-1',
+        name: 'pod-1',
+        namespace: 'default',
+        kind: 'Pod',
+        row: {
+          name: 'pod-1',
+          namespace: 'default',
+        },
+      })
+    );
+
+    manager.handleConnectionError('cluster-a', 'connection lost');
+
+    await flushPromises();
+
+    expect(fetchSnapshotMock).not.toHaveBeenCalled();
+  });
+
   test('reconnects and resubscribes after socket close', async () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;

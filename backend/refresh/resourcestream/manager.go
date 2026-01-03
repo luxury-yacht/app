@@ -3,6 +3,7 @@ package resourcestream
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -43,6 +44,8 @@ const (
 	maxSubscribersPerScope = 100
 	subscriberBufferSize   = 256
 	podNodeIndexName       = "pods:node"
+	// resumeBufferSize caps buffered updates per domain/scope for stream resumption.
+	resumeBufferSize = 1000
 )
 
 const (
@@ -77,6 +80,68 @@ type subscription struct {
 	drops   chan DropReason
 	created time.Time
 	once    sync.Once
+}
+
+// bufferedUpdate tags an update with a sequence for resume tokens.
+type bufferedUpdate struct {
+	sequence uint64
+	update   Update
+}
+
+// updateBuffer stores a fixed-size ring of updates for stream resumption.
+type updateBuffer struct {
+	items []bufferedUpdate
+	start int
+	count int
+	max   int
+}
+
+// newUpdateBuffer allocates a resume buffer capped at the requested size.
+func newUpdateBuffer(max int) *updateBuffer {
+	return &updateBuffer{
+		items: make([]bufferedUpdate, max),
+		max:   max,
+	}
+}
+
+// add inserts an update, evicting the oldest when the buffer is full.
+func (b *updateBuffer) add(update bufferedUpdate) {
+	if b.max == 0 {
+		return
+	}
+	if b.count < b.max {
+		index := (b.start + b.count) % b.max
+		b.items[index] = update
+		b.count++
+		return
+	}
+	b.items[b.start] = update
+	b.start = (b.start + 1) % b.max
+}
+
+// since returns updates newer than the provided sequence, or false if too old.
+func (b *updateBuffer) since(sequence uint64) ([]bufferedUpdate, bool) {
+	if b.count == 0 {
+		return nil, false
+	}
+	oldest := b.items[b.start].sequence
+	latestIndex := (b.start + b.count - 1) % b.max
+	latest := b.items[latestIndex].sequence
+	if sequence < oldest {
+		return nil, false
+	}
+	if sequence >= latest {
+		return []bufferedUpdate{}, true
+	}
+	updates := make([]bufferedUpdate, 0, b.count)
+	for i := 0; i < b.count; i++ {
+		index := (b.start + i) % b.max
+		item := b.items[index]
+		if item.sequence > sequence {
+			updates = append(updates, item)
+		}
+	}
+	return updates, true
 }
 
 func (s *subscription) close(reason DropReason) {
@@ -148,6 +213,8 @@ type Manager struct {
 	mu          sync.RWMutex
 	subscribers map[string]map[string]map[uint64]*subscription
 	nextID      uint64
+	buffers     map[string]*updateBuffer
+	sequences   map[string]uint64
 }
 
 // NewManager wires informer handlers into a resource stream manager.
@@ -171,6 +238,8 @@ func NewManager(
 		dynamicClient:   dynamicClient,
 		customInformers: make(map[string]*customResourceInformer),
 		subscribers:     make(map[string]map[string]map[uint64]*subscription),
+		buffers:         make(map[string]*updateBuffer),
+		sequences:       make(map[string]uint64),
 	}
 
 	if factory == nil {
@@ -677,6 +746,30 @@ func (m *Manager) Subscribe(domain, scope string) (*Subscription, error) {
 		Drops:   sub.drops,
 		Cancel:  cancel,
 	}, nil
+}
+
+// Resume returns buffered updates after the provided sequence token.
+func (m *Manager) Resume(domain, scope string, since uint64) ([]Update, bool) {
+	if m == nil || since == 0 {
+		return nil, false
+	}
+	key := bufferKey(domain, scope)
+	m.mu.RLock()
+	buffer := m.buffers[key]
+	if buffer == nil {
+		m.mu.RUnlock()
+		return nil, false
+	}
+	updates, ok := buffer.since(since)
+	m.mu.RUnlock()
+	if !ok {
+		return nil, false
+	}
+	results := make([]Update, 0, len(updates))
+	for _, item := range updates {
+		results = append(results, item.update)
+	}
+	return results, true
 }
 
 func (m *Manager) handlePod(obj interface{}, updateType MessageType) {
@@ -1589,10 +1682,9 @@ func (m *Manager) broadcast(domain string, scopes []string, update Update) {
 		dropped := 0
 		closedCount := 0
 
-		items := m.snapshotSubscribers(domain, scope)
+		scopedUpdate, items := m.prepareBroadcast(domain, scope, update)
 		for _, item := range items {
-			update.Scope = scope
-			sent, closed := m.trySend(item.sub, update)
+			sent, closed := m.trySend(item.sub, scopedUpdate)
 			if closed {
 				closedCount++
 				go m.dropSubscriber(domain, scope, item.id, item.sub, DropReasonClosed)
@@ -1621,15 +1713,28 @@ func (m *Manager) broadcast(domain string, scopes []string, update Update) {
 	}
 }
 
-func (m *Manager) snapshotSubscribers(domain, scope string) []struct {
+func (m *Manager) prepareBroadcast(domain, scope string, update Update) (Update, []struct {
 	id  uint64
 	sub *subscription
-} {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	scopedUpdate := update
+	scopedUpdate.Scope = scope
+
 	scopeSubs := m.subscribers[domain][scope]
+	key := bufferKey(domain, scope)
+	_, bufferExists := m.buffers[key]
+	if len(scopeSubs) > 0 || bufferExists {
+		// Buffer updates only when there are active or recent subscribers for this scope.
+		sequence := m.nextSequenceLocked(domain, scope)
+		scopedUpdate.Sequence = strconv.FormatUint(sequence, 10)
+		buffer := m.bufferLocked(domain, scope)
+		buffer.add(bufferedUpdate{sequence: sequence, update: scopedUpdate})
+	}
 	if len(scopeSubs) == 0 {
-		return nil
+		return scopedUpdate, nil
 	}
 	items := make([]struct {
 		id  uint64
@@ -1641,7 +1746,30 @@ func (m *Manager) snapshotSubscribers(domain, scope string) []struct {
 			sub *subscription
 		}{id: id, sub: sub})
 	}
-	return items
+	return scopedUpdate, items
+}
+
+func (m *Manager) nextSequenceLocked(domain, scope string) uint64 {
+	key := bufferKey(domain, scope)
+	if m.sequences == nil {
+		m.sequences = make(map[string]uint64)
+	}
+	next := m.sequences[key] + 1
+	m.sequences[key] = next
+	return next
+}
+
+func (m *Manager) bufferLocked(domain, scope string) *updateBuffer {
+	key := bufferKey(domain, scope)
+	if m.buffers == nil {
+		m.buffers = make(map[string]*updateBuffer)
+	}
+	buffer := m.buffers[key]
+	if buffer == nil {
+		buffer = newUpdateBuffer(resumeBufferSize)
+		m.buffers[key] = buffer
+	}
+	return buffer
 }
 
 func (m *Manager) dropSubscriber(domain, scope string, id uint64, sub *subscription, reason DropReason) {
@@ -2246,6 +2374,10 @@ func uniqueScopes(scopes []string) []string {
 		uniq = append(uniq, key)
 	}
 	return uniq
+}
+
+func bufferKey(domain, scope string) string {
+	return strings.TrimSpace(domain) + "|" + strings.TrimSpace(scope)
 }
 
 func isHelmReleaseObject(name string, labels map[string]string, secretType string) bool {

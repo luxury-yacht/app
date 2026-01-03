@@ -88,6 +88,7 @@ type ClientMessage = {
   domain: ResourceDomain;
   scope: string;
   resourceVersion?: string;
+  resumeToken?: string;
 };
 
 type ServerMessage = {
@@ -97,6 +98,7 @@ type ServerMessage = {
   domain?: string;
   scope?: string;
   resourceVersion?: string;
+  sequence?: string;
   uid?: string;
   name?: string;
   namespace?: string;
@@ -165,6 +167,9 @@ const parseResourceVersion = (value?: string | number): bigint | null => {
     return null;
   }
 };
+
+// Stream sequence parsing mirrors resourceVersion semantics for resume tokens.
+const parseStreamSequence = (value?: string | number): bigint | null => parseResourceVersion(value);
 
 const normalizeNamespaceScope = (scope: string, label: string): string => {
   const value = scope.trim();
@@ -839,6 +844,8 @@ type StreamSubscription = {
   clusterId: string;
   clusterName?: string;
   resourceVersion?: bigint;
+  // Track the last stream sequence applied so we can resume after reconnects.
+  lastSequence?: bigint;
   updateQueue: UpdateMessage[];
   updateTimer: number | null;
   pendingReset: boolean;
@@ -1119,6 +1126,14 @@ export class ResourceStreamManager {
         return;
       }
       this.subscribe(subscription);
+      if (
+        subscription.lastSequence &&
+        !subscription.resyncInFlight &&
+        !subscription.driftDetected
+      ) {
+        // Clear resync state when a resume-capable stream reconnects.
+        this.markResyncComplete(subscription);
+      }
     });
   }
 
@@ -1128,7 +1143,9 @@ export class ResourceStreamManager {
         return;
       }
       this.markResyncing(subscription);
-      void this.resyncSubscription(subscription, message);
+      if (!subscription.lastSequence) {
+        void this.resyncSubscription(subscription, message);
+      }
     });
   }
 
@@ -1255,7 +1272,10 @@ export class ResourceStreamManager {
 
   private subscribe(subscription: StreamSubscription): void {
     const connection = this.getConnection(subscription.clusterId);
-    subscription.pendingReset = true;
+    const resumeToken = subscription.lastSequence
+      ? subscription.lastSequence.toString()
+      : undefined;
+    subscription.pendingReset = !resumeToken;
     connection.send({
       type: MESSAGE_TYPES.request,
       clusterId: subscription.clusterId,
@@ -1264,6 +1284,7 @@ export class ResourceStreamManager {
       resourceVersion: subscription.resourceVersion
         ? subscription.resourceVersion.toString()
         : undefined,
+      resumeToken,
     });
   }
 
@@ -1314,6 +1335,13 @@ export class ResourceStreamManager {
       return;
     }
     subscription.resourceVersion = incomingVersion;
+    const incomingSequence = parseStreamSequence(message.sequence);
+    if (
+      incomingSequence &&
+      (!subscription.lastSequence || incomingSequence > subscription.lastSequence)
+    ) {
+      subscription.lastSequence = incomingSequence;
+    }
 
     subscription.updateQueue.push(message);
     if (subscription.updateQueue.length > MAX_UPDATE_QUEUE) {
@@ -2440,6 +2468,7 @@ export class ResourceStreamManager {
       subscription.updateTimer = null;
     }
     subscription.updateQueue = [];
+    subscription.lastSequence = undefined;
 
     try {
       const { snapshot, notModified } = await fetchSnapshotForSubscription(subscription);
