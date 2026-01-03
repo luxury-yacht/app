@@ -69,6 +69,25 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 9. ✅ [Incremental] Event retention differs sharply (Headlamp default 2000, Luxury Yacht 200); caps now raised to 500 for cluster/namespace/object events to reduce truncation without changing the streaming model. Evidence: `headlamp/frontend/src/lib/k8s/event.ts:51`, `backend/refresh/snapshot/event_limits.go:3`, `backend/refresh/snapshot/cluster_events.go:111`.
 10. [Incremental] Catalog SSE has explicit backpressure drop behavior for slow consumers; if SSE is reintroduced for browse, the UI must handle missed updates by re-fetching snapshots when readiness or dropped updates are detected. Evidence: `backend/objectcatalog/streaming.go:151`, `backend/refresh/snapshot/catalog_stream.go:91`.
 
+#### Permission Handling
+
+- Phase 0: Audit + scope mapping
+  Identify every permission‑gated domain and where the cached permissions are read (e.g., refresh subsystem setup and informer factory). Document the exact gate points and which API verbs/resources they cover so we
+  can verify parity after the change.
+- Phase 1: Introduce a runtime permission checker with TTL cache
+  Implement a single backend permission checker that: - Performs SSAR checks per request with a short TTL cache keyed by cluster selection + verb + resource. - Falls back to the last cached decision on transient failures/timeouts (so we don’t flap to “denied” on network blips). - Uses existing selection scoping to prevent cross‑cluster leakage.
+- Phase 2: Dual‑path validation (no feature flags)
+  Run the new SSAR path in parallel with the existing cached permissions only for diagnostics: - Log mismatches between cached preflight and SSAR results. - Do not change behavior yet, only observe.
+  This keeps the current behavior intact while we validate correctness.
+- Phase 3: Cutover to SSAR results
+  Switch the permission gates to trust the SSAR checker (still cached by TTL). Keep the old permission cache as a fallback for error handling only (timeouts/SSR failures), and log when that fallback is used.
+- Phase 4: Cleanup
+  Once mismatch logs show stability, remove the legacy permission cache usage from the refresh subsystem setup and factory paths.
+- Testing & safety checks
+  - Unit tests for the permission checker cache: hit/miss, TTL expiry, error fallback, and cluster‑scoped keys.
+  - Domain‑level tests verifying “permission denied” snapshots still surface correctly.
+  - Coverage target ≥ 80% for the new permission checker package.
+
 ## Confidence Boosters (evaluation hygiene)
 
 - Anchor every subsystem finding to at least 3 concrete line references per app (done and expanded below).
