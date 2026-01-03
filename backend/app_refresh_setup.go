@@ -74,6 +74,8 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		if err != nil {
 			return err
 		}
+		// Watch informer updates to invalidate cached detail/YAML/helm responses.
+		a.registerResponseCacheInvalidation(subsystem, selectionKey)
 
 		if hostClusterID != "" {
 			subsystems[hostClusterID] = subsystem
@@ -121,6 +123,8 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			if err != nil {
 				return err
 			}
+			// Watch informer updates to invalidate cached detail/YAML/helm responses.
+			a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
 
 			subsystems[clusterMeta.ID] = subsystem
 			clusterOrder = append(clusterOrder, clusterMeta.ID)
