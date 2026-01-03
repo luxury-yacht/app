@@ -63,6 +63,19 @@ If you have suggestions on how to do your job better for this task, let me know.
 9. Luxury Yacht's RefreshManager enforces timeouts/cooldowns/backoff across domains; Headlamp uses per-request AbortController timeouts. Impact: Luxury Yacht can contain repeated failures per domain, while Headlamp is request-scoped (frontend/src/core/refresh/RefreshManager.ts:634; headlamp/frontend/src/lib/k8s/api/v1/clusterRequests.ts:122).
 10. Luxury Yacht enforces per-scope subscriber caps and drops slow subscribers for streams; Headlamp multiplexer debounces unsubscribes but does not enforce stream backpressure at the client layer. Impact: Luxury Yacht limits memory growth at the cost of resync churn (backend/refresh/eventstream/manager.go:18; backend/refresh/resourcestream/manager.go:635; headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:220).
 
+## Top 10 Most Important/Impactful Changes
+
+1. Add watch-based invalidation to the backend response cache for object details/YAML/helm so TTL-only caching does not serve stale data under churn (backend/response_cache.go:11; backend/object_detail_provider.go:94; backend/object_yaml.go:114).
+2. Add resume tokens/server-side buffering for resource streams to avoid full resyncs on drops; today COMPLETE/RESET forces resyncs with no resume path (backend/refresh/streammux/handler.go:266; backend/refresh/resourcestream/manager.go:1586; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1091).
+3. Pause polling refreshers when event streams are active to cut 3s interval load; event domains stream but do not set pauseRefresherWhenStreaming (frontend/src/core/refresh/orchestrator.ts:2325; frontend/src/core/refresh/orchestrator.ts:2446; frontend/src/core/refresh/refresherConfig.ts:24).
+4. Increase SnapshotCacheTTL or add invalidation to avoid rebuild churn; current TTL is 1s (backend/internal/config/config.go:25; backend/refresh/snapshot/service.go:19).
+5. Cap the resource-stream updateQueue (and resync/fallback on overflow) to prevent unbounded memory growth during bursts (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1312; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1323).
+6. Add jitter to resource stream reconnect backoff to avoid thundering-herd reconnects after shared outages (frontend/src/core/refresh/streaming/resourceStreamManager.ts:970).
+7. Add expiry/eviction to the informer factory's legacy permission cache so stale allow/deny decisions do not persist when runtime SSAR fails (backend/refresh/informer/factory.go:323; backend/refresh/informer/factory.go:336).
+8. Periodically revalidate permissions and stop informers/streams when revoked, rather than only gating at registration time (backend/refresh/system/manager.go:93; backend/refresh/informer/factory.go:315; backend/refresh/permissions/checker.go:34).
+9. Add caching or watch-based collection for object-events to avoid re-listing on every refresh (backend/refresh/snapshot/object_events.go:63; backend/refresh/snapshot/object_events.go:73).
+10. Include total/truncated metadata in event stream payloads so UI can report truncation accurately under the 500-item cap (backend/refresh/eventstream/handler.go:107; frontend/src/core/refresh/streaming/eventStreamManager.ts:405; backend/refresh/snapshot/event_limits.go:3).
+
 ### Plan Summary
 
 The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch strategy, caching/state, metrics/events pipelines, error handling, and performance. It traces resource, metrics, and event flows end-to-end with evidence and highlights where Luxury Yacht relied on interval snapshots and SSE, with resource streaming and snapshot caching now closing key gaps while Headlamp continues to lean on watch-driven incremental updates, backend response caching, and per-request authorization checks. The evaluation also calls out stability risks (polling load, backpressure, permission drift) and performance opportunities (watch-based updates, caching, multiplexing), with specific line references for both apps.
@@ -281,9 +294,9 @@ Luxury Yacht:
 
 ## Recommendations for Luxury Yacht (stability/perf)
 
-- Evaluate adopting a backend response cache with watch-based invalidation for non-informer endpoints (object details/YAML/helm) to reduce repeated API hits (headlamp/backend/pkg/k8cache/cacheStore.go:203; headlamp/backend/pkg/k8cache/cacheInvalidation.go:164).
-- Explore resourceVersion gating or COMPLETE/resync semantics for streaming payloads to minimize stale/duplicate updates (headlamp/backend/cmd/multiplexer.go:639; headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43).
-- Consider per-request SSAR gating for snapshot builds to handle runtime permission changes more gracefully; runtime SSAR with TTL now covers informer gating (headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/permissions/checker.go:58).
+- Extend the existing response cache with watch-based invalidation (and/or tune TTLs) for non-informer endpoints (object details/YAML/helm) to reduce repeated API hits under churn (headlamp/backend/pkg/k8cache/cacheInvalidation.go:164; backend/response_cache.go:11; backend/internal/config/config.go:28).
+- Resource streams already gate on resourceVersion and resync on RESET/COMPLETE; consider resume tokens or server-side buffering to avoid full resyncs on drops (headlamp/backend/cmd/multiplexer.go:639; backend/refresh/streammux/handler.go:266; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1091).
+- Consider per-request SSAR gating for snapshot builds to handle runtime permission changes more gracefully; runtime SSAR with TTL now covers informer gating (headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/permissions/checker.go:34).
 
 ## Comparison Tables
 
@@ -396,10 +409,10 @@ Luxury Yacht:
 
 ## Top 5 performance improvement opportunities (with evidence)
 
-1. Implement a response cache with watch-based invalidation for non-informer endpoints (object details/YAML/helm) to reduce API traffic, similar to Headlamp (headlamp/backend/pkg/k8cache/cacheStore.go:203; headlamp/backend/pkg/k8cache/cacheInvalidation.go:164).
-2. Add resume tokens or tighter resourceVersion gating for resource streams to avoid full resyncs on RESET/COMPLETE; event streams already use resume IDs (backend/refresh/streammux/handler.go:208; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1091; frontend/src/core/refresh/streaming/eventStreamManager.ts:94).
-3. Pause polling refreshers when streaming is active for event/namespace domains to reduce 2-3s interval load (frontend/src/core/refresh/orchestrator.ts:972; frontend/src/core/refresh/orchestrator.ts:2325; frontend/src/core/refresh/refresherConfig.ts:24).
-4. Extend snapshot caching with longer TTL or invalidation to reduce rebuilds for heavy domains; Headlamp caches GETs for 10 minutes (backend/refresh/snapshot/service.go:19; headlamp/backend/pkg/k8cache/cacheStore.go:203).
+1. Add watch-based invalidation to the existing response cache (object details/YAML/helm) to reduce stale reads while keeping TTL short (headlamp/backend/pkg/k8cache/cacheInvalidation.go:164; backend/response_cache.go:11; backend/internal/config/config.go:28).
+2. Add resume tokens or server-side buffering for resource streams to avoid full resyncs on RESET/COMPLETE; client already gates by resourceVersion and event streams already use resume IDs (backend/refresh/streammux/handler.go:208; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1091; frontend/src/core/refresh/streaming/eventStreamManager.ts:94).
+3. Pause polling refreshers when event streams are active (cluster-events/namespace-events) to reduce 2-3s interval load (frontend/src/core/refresh/orchestrator.ts:2325; frontend/src/core/refresh/orchestrator.ts:2446; frontend/src/core/refresh/refresherConfig.ts:24).
+4. Extend snapshot caching with longer TTL or invalidation to reduce rebuilds for heavy domains; current snapshot cache TTL is 1s (backend/refresh/snapshot/service.go:19; backend/internal/config/config.go:25).
 5. For remaining polling-only domains, consider incremental list caches (Headlamp's React Query + watch updates) to reduce full payload replacements (headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:232; headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/store.ts:13).
 
 ## Medium-level concerns and handling approach
