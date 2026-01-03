@@ -599,7 +599,7 @@ func TestManagerAutoscalingUpdateBroadcasts(t *testing.T) {
 	}
 }
 
-func TestManagerDropsSubscriberOnBackpressure(t *testing.T) {
+func TestManagerBackpressureTriggersReset(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
 		logger:      noopLogger{},
@@ -624,13 +624,24 @@ func TestManagerDropsSubscriberOnBackpressure(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		select {
-		case reason := <-sub.Drops:
-			return reason == DropReasonBackpressure
-		default:
-			return false
+		for i := 0; i < subscriberBufferSize+1; i++ {
+			select {
+			case msg := <-sub.Updates:
+				if msg.Type == MessageTypeReset {
+					return true
+				}
+			default:
+				return false
+			}
 		}
+		return false
 	}, time.Second, 10*time.Millisecond)
+
+	select {
+	case reason := <-sub.Drops:
+		t.Fatalf("unexpected drop: %s", reason)
+	default:
+	}
 }
 
 func TestManagerWorkloadUpdateFromPod(t *testing.T) {

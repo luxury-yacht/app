@@ -80,6 +80,8 @@ type subscription struct {
 	drops   chan DropReason
 	created time.Time
 	once    sync.Once
+	// resyncing is set when backpressure triggers a RESET for this subscriber.
+	resyncing uint32
 }
 
 // bufferedUpdate tags an update with a sequence for resume tokens.
@@ -158,6 +160,17 @@ func (s *subscription) close(reason DropReason) {
 		close(s.drops)
 		close(s.ch)
 	})
+}
+
+func (s *subscription) isResyncing() bool {
+	return s != nil && atomic.LoadUint32(&s.resyncing) == 1
+}
+
+func (s *subscription) markResyncing() bool {
+	if s == nil {
+		return false
+	}
+	return atomic.CompareAndSwapUint32(&s.resyncing, 0, 1)
 }
 
 type customResourceInformer struct {
@@ -1676,34 +1689,49 @@ func (m *Manager) broadcast(domain string, scopes []string, update Update) {
 		return
 	}
 
-	// Fan-out updates per scope and drop subscribers that fall behind to force resyncs.
+	// Fan-out updates per scope and trigger a RESET when subscribers fall behind.
 	for _, scope := range uniqueScopes(scopes) {
 		delivered := 0
-		dropped := 0
+		backpressureResets := 0
+		backpressureDrops := 0
 		closedCount := 0
 
 		scopedUpdate, items := m.prepareBroadcast(domain, scope, update)
 		for _, item := range items {
-			sent, closed := m.trySend(item.sub, scopedUpdate)
+			if item.sub.isResyncing() {
+				continue
+			}
+			sent, closed, reset := m.trySend(item.sub, scopedUpdate)
 			if closed {
 				closedCount++
 				go m.dropSubscriber(domain, scope, item.id, item.sub, DropReasonClosed)
+				continue
+			}
+			if reset {
+				backpressureResets++
 				continue
 			}
 			if sent {
 				delivered++
 				continue
 			}
-			dropped++
+			backpressureDrops++
 			go m.dropSubscriber(domain, scope, item.id, item.sub, DropReasonBackpressure)
 		}
 
 		if m.telemetry != nil {
-			m.telemetry.RecordStreamDelivery(telemetry.StreamResources, delivered, dropped)
-			if dropped > 0 {
+			backpressureEvents := backpressureResets + backpressureDrops
+			m.telemetry.RecordStreamDelivery(telemetry.StreamResources, delivered, backpressureEvents)
+			if backpressureEvents > 0 {
 				m.telemetry.RecordStreamError(
 					telemetry.StreamResources,
-					fmt.Errorf("resource stream backlog dropped %d subscriber(s) for %s/%s", dropped, domain, scope),
+					fmt.Errorf(
+						"resource stream backlog reset %d subscriber(s) and dropped %d subscriber(s) for %s/%s",
+						backpressureResets,
+						backpressureDrops,
+						domain,
+						scope,
+					),
 				)
 			}
 		}
@@ -1791,18 +1819,46 @@ func (m *Manager) dropSubscriber(domain, scope string, id uint64, sub *subscript
 	sub.close(reason)
 }
 
-func (m *Manager) trySend(sub *subscription, update Update) (sent bool, closed bool) {
+func (m *Manager) trySend(sub *subscription, update Update) (sent bool, closed bool, reset bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			closed = true
 			sent = false
+			reset = false
 		}
 	}()
 	select {
 	case sub.ch <- update:
-		return true, false
+		return true, false, false
 	default:
-		return false, false
+		if m.triggerResync(sub, update) {
+			return false, false, true
+		}
+		return false, false, false
+	}
+}
+
+func (m *Manager) triggerResync(sub *subscription, update Update) bool {
+	if sub == nil {
+		return false
+	}
+	reset := Update{
+		Type:        MessageTypeReset,
+		ClusterID:   update.ClusterID,
+		ClusterName: update.ClusterName,
+		Domain:      update.Domain,
+		Scope:       update.Scope,
+	}
+	// Drop the oldest update to make room for the RESET signal.
+	select {
+	case <-sub.ch:
+	default:
+	}
+	select {
+	case sub.ch <- reset:
+		return sub.markResyncing()
+	default:
+		return false
 	}
 }
 
