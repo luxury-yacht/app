@@ -64,32 +64,10 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 4. ✅ [Incremental] Headlamp’s response cache with watch-driven invalidation reduces API traffic for repeated GETs, while Luxury Yacht lacked a similar cache for non-informer endpoints (object details/YAML/helm); a short-lived response cache now covers detail/YAML/helm fetches without UI changes. Evidence: `headlamp/backend/cmd/server.go:183`, `headlamp/backend/pkg/k8cache/cacheStore.go:203`, `headlamp/backend/pkg/k8cache/cacheInvalidation.go:164`, `backend/response_cache.go:9`, `backend/fetch_helpers.go:31`, `backend/object_yaml.go:98`, `backend/object_detail_provider.go:79`.
 5. ✅ [Fundamental] Permission handling diverges: Luxury Yacht preflights and caches permissions at subsystem setup, while Headlamp checks SSAR per request with cached clientsets; moving to runtime SSAR or expiring permission caches is a significant behavioral shift. Evidence: `backend/refresh/system/manager.go:93`, `backend/refresh/informer/factory.go:306`, `headlamp/backend/pkg/k8cache/authorization.go:119`.
 6. ✅ [Incremental] Event streaming drops slow subscribers and has no resume tokens; reconnects rely on fresh snapshots and caps, which risks data gaps during bursts. Resume tokens + snapshot fallback now reduce gaps and improve reliability. Evidence: `backend/refresh/eventstream/manager.go:67`, `backend/refresh/eventstream/handler.go:118`, `backend/refresh_aggregate_eventstream.go:118`, `frontend/src/core/refresh/streaming/eventStreamManager.ts:142`.
-7. [Fundamental] Catalog browse intentionally avoids SSE updates due to React update-depth risks; making browse safely stream would require reworking store update patterns and UI rendering. Evidence: `frontend/src/core/refresh/orchestrator.ts:1506`.
+7. ✅ [Fundamental] Catalog browse previously avoided SSE due to React update-depth risks; browse now streams with debounced merge + snapshot fallback to make streaming safe. Evidence: `frontend/src/core/refresh/orchestrator.ts:2225`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:262`, `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:1`.
 8. ✅ [Incremental] High-frequency refresh intervals (2-3s) across multiple domains can cause contention and timeouts; resource streaming now pauses those refreshers while healthy to reduce load. Evidence: `frontend/src/core/refresh/refresherConfig.ts:24`, `frontend/src/core/refresh/orchestrator.ts:982`, `frontend/src/core/refresh/streaming/resourceStreamManager.ts:1084`.
 9. ✅ [Incremental] Event retention differs sharply (Headlamp default 2000, Luxury Yacht 200); caps now raised to 500 for cluster/namespace/object events to reduce truncation without changing the streaming model. Evidence: `headlamp/frontend/src/lib/k8s/event.ts:51`, `backend/refresh/snapshot/event_limits.go:3`, `backend/refresh/snapshot/cluster_events.go:111`.
-10. [Incremental] Catalog SSE has explicit backpressure drop behavior for slow consumers; if SSE is reintroduced for browse, the UI must handle missed updates by re-fetching snapshots when readiness or dropped updates are detected. Evidence: `backend/objectcatalog/streaming.go:151`, `backend/refresh/snapshot/catalog_stream.go:91`.
-
-#### Catalog Browse Streaming Plan (#7)
-
-- Phase 0: ✅ Baseline + guardrails
-  - ✅ Capture current browse data flow (snapshot fetch, store updates, render triggers) with evidence. Evidence: `frontend/src/modules/browse/components/BrowseView.tsx:296`, `frontend/src/modules/browse/components/BrowseView.tsx:479`, `frontend/src/modules/browse/components/BrowseView.tsx:493`, `frontend/src/modules/browse/components/BrowseView.tsx:510`, `frontend/src/core/refresh/orchestrator.ts:1493`, `frontend/src/core/refresh/store.ts:166`, `frontend/src/core/refresh/client.ts:119`.
-  - ✅ Add a lightweight diagnostics hook to count browse update frequency and render depth warnings (no UI changes). Evidence: `frontend/src/core/refresh/diagnostics/useCatalogDiagnostics.ts:1`, `frontend/src/modules/browse/components/BrowseView.tsx:296`, `frontend/src/modules/namespace/components/NsViewObjects.tsx:256`.
-- Phase 1: ✅ Streaming data model + safety envelope
-  - ✅ Define a stream-safe browse payload envelope: batch sequence, full/partial flag, truncation, and cache-ready status. Evidence: `backend/refresh/snapshot/catalog_stream.go:126`, `backend/refresh/snapshot/catalog_stream.go:174`, `frontend/src/core/refresh/types.ts:295`.
-  - ✅ Introduce a stream merge layer that applies catalog diffs to a normalized store with bounded batch size and queueing. Evidence: `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:1`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:18`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:252`.
-  - ✅ Ensure the object catalog remains the source of truth for namespaces/cluster listings. Evidence: `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:57`, `backend/refresh/snapshot/catalog.go:99`.
-- Phase 2: ✅ React update-depth protection
-  - ✅ Move browse updates behind a debounced scheduler (frame or 100–250ms window). Evidence: `frontend/src/core/refresh/streaming/catalogStreamManager.ts:262`.
-  - ✅ Add a hard cap on per-tick updates and fallback to snapshot refresh when exceeded. Evidence: `frontend/src/core/refresh/streaming/catalogStreamManager.ts:21`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:330`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:335`.
-  - ✅ Track last-applied stream sequence to avoid reprocessing stale batches. Evidence: `frontend/src/core/refresh/streaming/catalogStreamManager.ts:83`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:287`.
-- Phase 3: ✅ SSE wiring + backpressure handling
-  - ✅ Reintroduce catalog SSE for browse with explicit handling of dropped batches. Evidence: `frontend/src/core/refresh/orchestrator.ts:2225`, `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:135`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:330`.
-  - ✅ On stream gaps or cache-not-ready, trigger a snapshot refresh and reset stream sequence. Evidence: `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:135`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:334`, `frontend/src/core/refresh/orchestrator.ts:1311`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:181`.
-  - ✅ Keep snapshot polling as a fallback path for offline/recovery states. Evidence: `frontend/src/core/refresh/orchestrator.ts:2233`, `frontend/src/modules/browse/components/BrowseView.tsx:483`, `frontend/src/modules/namespace/components/NsViewObjects.tsx:410`.
-- Phase 4: ✅ Validation + rollout checks
-  - ✅ Add tests for stream merge, batch caps, and fallback triggers. Evidence: `frontend/src/core/refresh/streaming/catalogStreamMerge.test.ts:1`, `frontend/src/core/refresh/streaming/catalogStreamManager.test.ts:405`.
-  - ✅ Verify no React update-depth warnings under synthetic high-volume changes. Evidence: `frontend/src/core/refresh/streaming/catalogStreamManager.test.ts:357`, `frontend/src/core/refresh/streaming/catalogStreamMerge.test.ts:34`.
-  - ✅ Confirm diagnostics panel reflects streaming vs snapshot state and any backpressure resets. Evidence: `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts:92`, `frontend/src/core/refresh/components/DiagnosticsPanel.test.ts:566`.
+10. ✅ [Incremental] Catalog SSE has explicit backpressure drop behavior for slow consumers; browse streaming now detects drops/gaps or cache-not-ready states and triggers snapshot refresh fallback. Evidence: `backend/objectcatalog/streaming.go:151`, `backend/refresh/snapshot/catalog_stream.go:126`, `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:135`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:330`.
 
 ## Confidence Boosters (evaluation hygiene)
 
@@ -146,7 +124,7 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 - Snapshot API uses checksum-based ETag; frontend uses If-None-Match and caches refresh base URL, and backend serves short-lived cached snapshots to avoid rebuilds (backend/refresh/api/server.go:77; backend/refresh/snapshot/service.go:19; frontend/src/core/refresh/client.ts:119).
 - Refresh store maintains per-domain snapshot state (version/checksum/etag, timestamps, errors) and scoped entries (frontend/src/core/refresh/store.ts:13).
-- Object catalog supports pagination/batching and an SSE stream, while browse explicitly avoids SSE to prevent React update-depth issues (backend/refresh/snapshot/catalog.go:99; backend/refresh/snapshot/catalog_stream.go:32; frontend/src/core/refresh/orchestrator.ts:1506).
+- Object catalog supports pagination/batching and an SSE stream; browse now consumes SSE with debounced, merge-queued updates plus snapshot fallback on gaps/drops to avoid update-depth issues (backend/refresh/snapshot/catalog.go:99; backend/refresh/snapshot/catalog_stream.go:126; frontend/src/core/refresh/orchestrator.ts:2225; frontend/src/core/refresh/streaming/catalogStreamManager.ts:262).
 - Event stream manager caps events per scope and dedupes entries via a stable key (frontend/src/core/refresh/streaming/eventStreamManager.ts:83; frontend/src/core/refresh/streaming/eventStreamManager.ts:187).
 
 ## Metrics/events pipeline (collection, aggregation, streaming)
@@ -190,7 +168,7 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 ### Luxury Yacht
 
 - Snapshot API includes batch/latency stats and ETag, enabling cache-aware clients (backend/refresh/api/server.go:77; backend/refresh/snapshot/catalog.go:142).
-- Catalog SSE exists but browse avoids it due to React update-depth risk; relies on manual/interval refresh for browse (frontend/src/core/refresh/orchestrator.ts:1506).
+- Catalog SSE drives browse updates with debounced application and snapshot fallback to avoid update-depth risks (frontend/src/core/refresh/orchestrator.ts:2225; frontend/src/core/refresh/streaming/catalogStreamManager.ts:262; frontend/src/core/refresh/streaming/catalogStreamManager.ts:330).
 - Event stream caps events (200) per scope to prevent memory growth (frontend/src/core/refresh/streaming/eventStreamManager.ts:83).
 - Several refreshers run at 2-3 second intervals, but resource streaming now pauses those refreshers while healthy, reducing interval load (frontend/src/core/refresh/refresherConfig.ts:24; frontend/src/core/refresh/orchestrator.ts:982).
 
@@ -232,7 +210,7 @@ Luxury Yacht:
 - Resource streams use a WebSocket multiplexer with per-cluster subscriptions and resync on RESET/COMPLETE (backend/refresh/resourcestream/handler.go:13; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1084).
 - Events stream over SSE with initial snapshot, keepalive pings, and heartbeat timeout monitoring (backend/refresh/eventstream/handler.go:71; backend/refresh/eventstream/handler.go:118; backend/refresh/eventstream/handler.go:160).
 - Event stream backpressure drops slow subscribers and caps subscribers per scope (backend/refresh/eventstream/manager.go:18; backend/refresh/eventstream/manager.go:67; backend/refresh/eventstream/manager.go:164).
-- Catalog SSE uses streaming updates with subscriber buffers that can drop updates for slow consumers (backend/objectcatalog/streaming.go:151; backend/objectcatalog/streaming.go:169).
+- Catalog SSE uses streaming updates with subscriber buffers that can drop updates for slow consumers; UI responds by triggering snapshot fallback on gaps/drops or cache-not-ready states (backend/objectcatalog/streaming.go:151; frontend/src/core/refresh/streaming/catalogStreamMerge.ts:135; frontend/src/core/refresh/streaming/catalogStreamManager.ts:330).
 
 ### Store/cache (local state, selectors, derived views)
 
@@ -416,7 +394,7 @@ Luxury Yacht:
 
 1. ✅ High-frequency polling across many domains (2-3s) is mitigated for streaming domains via resource streaming + polling pause, reducing refresh contention (frontend/src/core/refresh/refresherConfig.ts:24; frontend/src/core/refresh/orchestrator.ts:982; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1084).
 2. Event stream backpressure can drop subscribers and events during bursts; frontend also caps stored events to 200 (backend/refresh/eventstream/manager.go:67; frontend/src/core/refresh/streaming/eventStreamManager.ts:83).
-3. Catalog browse intentionally avoids SSE due to React update-depth issues, which can lead to stale browse data between refreshes (frontend/src/core/refresh/orchestrator.ts:1506).
+3. ✅ Catalog browse now streams with debounced updates plus snapshot fallback on gaps/cache-not-ready, reducing staleness between refreshes (frontend/src/core/refresh/orchestrator.ts:2225; frontend/src/core/refresh/streaming/catalogStreamManager.ts:262; frontend/src/core/refresh/streaming/catalogStreamManager.ts:330).
 4. Permission gating is performed during subsystem setup; if permissions change at runtime, domains may remain enabled/disabled until rebuild (backend/refresh/system/manager.go:93), whereas Headlamp checks SSAR per request (headlamp/backend/pkg/k8cache/authorization.go:119).
 5. Snapshot refreshes are full recomputations per domain for non-streaming domains; if a refresh fails, the domain stalls until the next interval/cooldown (frontend/src/core/refresh/RefreshManager.ts:634). Headlamp applies incremental updates with resourceVersion gating (headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43).
 
@@ -434,5 +412,5 @@ Luxury Yacht:
 2. Refresh callbacks are executed in a single `Promise.all`, so one slow or stuck callback can block a refresh until timeout; ensure all refresh callbacks honor AbortSignal and add telemetry to identify slow domains (frontend/src/core/refresh/RefreshManager.ts:715; frontend/src/core/refresh/RefreshManager.ts:634).
 3. Permission cache in informer factory never expires, so permission changes require a rebuild to re-evaluate; add a TTL or a forced re-check when domains report permission errors (backend/refresh/informer/factory.go:306; backend/refresh/informer/factory.go:344).
 4. ✅ Event stream backpressure drops subscribers when channels fill; resume tokens + snapshot fallback now cover reconnect gaps (backend/refresh/eventstream/manager.go:164; backend/refresh/eventstream/handler.go:118; backend/refresh_aggregate_eventstream.go:118; frontend/src/core/refresh/streaming/eventStreamManager.ts:142).
-5. Catalog browse intentionally avoids SSE, which can lead to stale browse lists between interval refreshes; use diagnostics to expose staleness and consider a manual refresh hint when catalog health is degraded (frontend/src/core/refresh/orchestrator.ts:1506; backend/objectcatalog/service.go:1888).
-6. Object catalog streaming drops updates for slow subscribers; ensure the UI gracefully handles missed streaming updates by re-requesting a snapshot when readiness flips or when dropped updates are detected (backend/objectcatalog/streaming.go:151; backend/refresh/snapshot/catalog_stream.go:91).
+5. ✅ Catalog browse now streams with debounced updates; diagnostics log update-rate warnings and snapshot fallback handles gaps/cache-not-ready (frontend/src/core/refresh/streaming/catalogStreamManager.ts:262; frontend/src/core/refresh/diagnostics/useCatalogDiagnostics.ts:1; frontend/src/core/refresh/streaming/catalogStreamManager.ts:330).
+6. ✅ Object catalog streaming drops updates for slow subscribers; UI now re-requests snapshots when gaps/drops or cache-not-ready states are detected (backend/objectcatalog/streaming.go:151; frontend/src/core/refresh/streaming/catalogStreamMerge.ts:135; frontend/src/core/refresh/streaming/catalogStreamManager.ts:330).
