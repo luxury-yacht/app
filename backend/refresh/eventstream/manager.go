@@ -251,7 +251,7 @@ func (m *Manager) broadcast(scope string, entry Entry) {
 	closedCount := 0
 	for _, item := range items {
 		sub := item.sub
-		sent, closed := m.trySend(sub, streamEvent)
+		sent, closed, dropped := m.trySend(sub, streamEvent)
 		if closed {
 			closedCount++
 			go m.dropSubscriber(scope, item.id, sub)
@@ -259,10 +259,12 @@ func (m *Manager) broadcast(scope string, entry Entry) {
 		}
 		if sent {
 			delivered++
+			if dropped {
+				backlogDrops++
+			}
 			continue
 		}
-		m.logger.Warn("eventstream: subscriber channel full; dropping", "EventStream")
-		backlogDrops++
+		m.logger.Warn("eventstream: subscriber channel full after drop attempt; closing", "EventStream")
 		go m.dropSubscriber(scope, item.id, sub)
 	}
 	m.recordDelivery(scope, delivered, backlogDrops, closedCount)
@@ -276,7 +278,7 @@ func (m *Manager) recordDelivery(scope string, delivered, backlogDrops, closed i
 	if backlogDrops > 0 {
 		m.telemetry.RecordStreamError(
 			telemetry.StreamEvents,
-			fmt.Errorf("dropped %d subscriber(s) due to backlog", backlogDrops),
+			fmt.Errorf("dropped %d event(s) due to backlog", backlogDrops),
 		)
 	}
 }
@@ -322,18 +324,30 @@ func (m *Manager) dropSubscriber(scope string, id uint64, sub *subscription) {
 	sub.Close()
 }
 
-func (m *Manager) trySend(sub *subscription, entry StreamEvent) (sent bool, closed bool) {
+func (m *Manager) trySend(sub *subscription, entry StreamEvent) (sent bool, closed bool, dropped bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			closed = true
 			sent = false
+			dropped = false
 		}
 	}()
 	select {
 	case sub.ch <- entry:
-		return true, false
+		return true, false, false
 	default:
-		return false, false
+		// Drop the oldest pending event so slow subscribers keep the stream open.
+		select {
+		case <-sub.ch:
+			dropped = true
+		default:
+		}
+		select {
+		case sub.ch <- entry:
+			return true, false, dropped
+		default:
+			return false, false, dropped
+		}
 	}
 }
 
