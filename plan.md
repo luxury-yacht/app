@@ -359,6 +359,7 @@ Luxury Yacht:
 ## Recommendations for Luxury Yacht (stability/perf)
 
 Remaining gap-closing work (see stability/performance lists below for evidence):
+
 - Incremental list caching for polling-only domains (Performance #1).
 - Optional parity: per-request SSAR gating for snapshot builds to match Headlamp's per-request checks (headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/permissions/checker.go:34).
 
@@ -380,3 +381,20 @@ None.
 ## Performance improvement opportunities (remaining, with evidence)
 
 1. ⏳ For remaining polling-only domains, consider incremental list caches (Headlamp's React Query + watch updates) to reduce full payload replacements (headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:232; headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/store.ts:13). Impact: high. Effort: high.
+
+## Polling-only (non-streaming) domains
+
+With the current backend, none of the polling‑only domains can use streaming without adding new stream sources or changing semantics.
+
+Evidence: the only SSE endpoints wired are /api/v2/stream/resources, /api/v2/stream/events, /api/v2/stream/logs, and /api/v2/stream/catalog (backend/refresh/system/manager.go). The orchestrator only attaches
+streaming for domains backed by those endpoints (frontend/src/core/refresh/orchestrator.ts).
+
+Per polling‑only domain:
+
+- namespaces: no resource stream support for namespaces today; would require adding namespaces to the resource stream backend and frontend.
+- cluster-overview: derived/aggregated payload; would require a new aggregator from node/pod streams or a new stream endpoint.
+- node-maintenance: snapshot is sourced from the local store; no stream endpoint.
+- object-details, object-yaml, object-helm-manifest, object-helm-values: per‑object GETs; no stream endpoint and no list/watch semantics today.
+- object-events: could theoretically be derived from the existing event stream, but event stream entries are raw events without the snapshot’s aggregation fields (counts, timestamps), so it would be a behavioral
+  change (backend/refresh/eventstream/manager.go).
+- catalog-diff: explicitly kept on snapshot/manual refresh flow; streaming would conflict with the current guidance in the frontend refresh notes (frontend/src/core/refresh/orchestrator.ts).
