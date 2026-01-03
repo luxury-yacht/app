@@ -71,9 +71,9 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 #### Catalog Browse Streaming Plan (#7)
 
-- Phase 0: Baseline + guardrails
-  - Capture current browse data flow (snapshot fetch, store updates, render triggers) with evidence.
-  - Add a lightweight diagnostics hook to count browse update frequency and render depth warnings (no UI changes).
+- Phase 0: ✅ Baseline + guardrails
+  - ✅ Capture current browse data flow (snapshot fetch, store updates, render triggers) with evidence. Evidence: `frontend/src/modules/browse/components/BrowseView.tsx:296`, `frontend/src/modules/browse/components/BrowseView.tsx:479`, `frontend/src/modules/browse/components/BrowseView.tsx:493`, `frontend/src/modules/browse/components/BrowseView.tsx:510`, `frontend/src/core/refresh/orchestrator.ts:1493`, `frontend/src/core/refresh/store.ts:166`, `frontend/src/core/refresh/client.ts:119`.
+  - ✅ Add a lightweight diagnostics hook to count browse update frequency and render depth warnings (no UI changes). Evidence: `frontend/src/core/refresh/diagnostics/useCatalogDiagnostics.ts:1`, `frontend/src/modules/browse/components/BrowseView.tsx:296`, `frontend/src/modules/namespace/components/NsViewObjects.tsx:256`.
 - Phase 1: Streaming data model + safety envelope
   - Define a stream-safe browse payload envelope: batch sequence, full/partial flag, truncation, and cache-ready status.
   - Introduce a stream merge layer that applies catalog diffs to a normalized store with bounded batch size and queueing.
