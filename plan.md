@@ -358,27 +358,30 @@ Luxury Yacht:
 
 ## Recommendations for Luxury Yacht (stability/perf)
 
-- Extend the existing response cache with watch-based invalidation (and/or tune TTLs) for non-informer endpoints (object details/YAML/helm) to reduce repeated API hits under churn (headlamp/backend/pkg/k8cache/cacheInvalidation.go:164; backend/response_cache.go:11; backend/internal/config/config.go:28).
-- Resource streams already gate on resourceVersion and resync on RESET/COMPLETE; consider resume tokens or server-side buffering to avoid full resyncs on drops (headlamp/backend/cmd/multiplexer.go:639; backend/refresh/streammux/handler.go:266; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1091).
-- Consider per-request SSAR gating for snapshot builds to handle runtime permission changes more gracefully; runtime SSAR with TTL now covers informer gating (headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/permissions/checker.go:34).
+Remaining gap-closing work (see stability/performance lists below for evidence):
+- Event stream backpressure handling (Stability #1).
+- Resource stream resync storm mitigation (Stability #2).
+- Snapshot refresh failure stall reduction (Stability #3).
+- Refresh callback isolation (Stability #4).
+- Incremental list caching for polling-only domains (Performance #1).
+- Stream mux session-wide drops when the outgoing buffer fills (Stability #5).
+- Evict/expire stream resume buffers when scopes are no longer subscribed (Stability #6, Performance #2).
+- Add TTL/invalidation for GVR discovery caching on CRD changes (Stability #7).
+- Extend response cache invalidation to cover dynamic/custom resource YAML (Stability #8).
+- Optional parity: per-request SSAR gating for snapshot builds to match Headlamp's per-request checks (headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/permissions/checker.go:34).
 
-## Top 5 stability risks (with evidence)
+## Stability risks (remaining, with evidence)
 
 1. ⏳ Event stream backpressure can drop subscribers; resume buffers are finite and the frontend caps stored events to 500, so reconnects can fall back to full snapshots under sustained churn (backend/refresh/eventstream/manager.go:18; backend/refresh/eventstream/handler.go:73; frontend/src/core/refresh/streaming/eventStreamManager.ts:83).
 2. ⚠️ Resource stream backpressure drops subscribers and emits COMPLETE, which triggers full resyncs; repeated drops can cascade into resync storms (partially mitigated by resume tokens, buffering, queue caps, and jittered reconnects) (backend/refresh/resourcestream/manager.go:1586; backend/refresh/streammux/handler.go:266; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1091).
-3. ✅ Permission gating is primed during subsystem setup and re-checked via runtime SSAR with TTL when informers register; fallback cache entries can persist until rebuild if SSAR calls fail (backend/refresh/system/manager.go:93; backend/refresh/informer/factory.go:323; backend/refresh/permissions/checker.go:34).
-4. ⏳ Snapshot refreshes are full recomputations per domain for non-streaming domains; if a refresh fails, the domain stalls until the next interval/cooldown (frontend/src/core/refresh/RefreshManager.ts:634; backend/refresh/snapshot/service.go:19; frontend/src/core/refresh/refresherConfig.ts:24).
-5. ⏳ Refresh callbacks run in a single Promise.all; one slow callback can block the entire refresh until timeout, delaying UI updates (frontend/src/core/refresh/RefreshManager.ts:705; frontend/src/core/refresh/RefreshManager.ts:634).
+3. ⏳ Snapshot refreshes are full recomputations per domain for non-streaming domains; if a refresh fails, the domain stalls until the next interval/cooldown (frontend/src/core/refresh/RefreshManager.ts:634; backend/refresh/snapshot/service.go:19; frontend/src/core/refresh/refresherConfig.ts:24).
+4. ⏳ Refresh callbacks run in a single Promise.all; one slow callback can block the entire refresh until timeout, delaying UI updates (frontend/src/core/refresh/RefreshManager.ts:705; frontend/src/core/refresh/RefreshManager.ts:634).
+5. ⏳ Stream mux closes the entire websocket session when the shared outgoing buffer fills, so one hot subscription can drop all scopes and force resyncs (backend/refresh/streammux/handler.go:21; backend/refresh/streammux/handler.go:315).
+6. ⏳ Resume buffers for resource/event streams are retained even when no subscribers remain for a scope, which can grow memory over time in long-lived sessions (backend/refresh/resourcestream/manager.go:213; backend/refresh/resourcestream/manager.go:1762; backend/refresh/eventstream/manager.go:100; backend/refresh/eventstream/manager.go:293).
+7. ⏳ GVR discovery caching has no TTL or invalidation path, so CRD changes can leave stale GVR data for object YAML/apply requests (backend/object_yaml.go:21; backend/object_yaml.go:65; backend/object_yaml.go:83).
+8. ⏳ Response cache invalidation only wires to built-in informers/CRDs, while object YAML caching keys are generic per kind; custom resources can remain stale until TTL expires (backend/response_cache_invalidation.go:22; backend/response_cache_invalidation.go:44; backend/object_yaml.go:102).
 
-## Top 5 performance improvement opportunities (with evidence)
+## Performance improvement opportunities (remaining, with evidence)
 
-1. ✅ Add watch-based invalidation to the existing response cache (object details/YAML/helm) to reduce stale reads while keeping TTL short (headlamp/backend/pkg/k8cache/cacheInvalidation.go:164; backend/response_cache.go:11; backend/internal/config/config.go:28).
-2. ✅ Add resume tokens or server-side buffering for resource streams to avoid full resyncs on RESET/COMPLETE; client already gates by resourceVersion and event streams already use resume IDs (backend/refresh/streammux/handler.go:208; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1091; frontend/src/core/refresh/streaming/eventStreamManager.ts:94).
-3. ✅ Pause polling refreshers when event streams are active (cluster-events/namespace-events) to reduce 2-3s interval load (frontend/src/core/refresh/orchestrator.ts:2325; frontend/src/core/refresh/orchestrator.ts:2446; frontend/src/core/refresh/refresherConfig.ts:24).
-4. ✅ Extend snapshot caching with longer TTL or invalidation to reduce rebuilds for heavy domains; current snapshot cache TTL is 1s (backend/refresh/snapshot/service.go:19; backend/internal/config/config.go:25).
-5. ⏳ For remaining polling-only domains, consider incremental list caches (Headlamp's React Query + watch updates) to reduce full payload replacements (headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:232; headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/store.ts:13).
-
-## Medium-level concerns and handling approach
-
-1. Refresh callbacks are executed in a single `Promise.all`, so one slow or stuck callback can block a refresh until timeout; ensure all refresh callbacks honor AbortSignal and add telemetry to identify slow domains (frontend/src/core/refresh/RefreshManager.ts:715; frontend/src/core/refresh/RefreshManager.ts:634).
-2. Runtime SSAR decisions now have a TTL, but the informer factory still retains a fallback permission cache with no expiry; if SSAR calls fail, stale allow/deny can persist until rebuild. Consider forcing a refresh on repeated permission errors (backend/refresh/permissions/checker.go:58; backend/refresh/informer/factory.go:335; backend/internal/config/config.go:35).
+1. ⏳ For remaining polling-only domains, consider incremental list caches (Headlamp's React Query + watch updates) to reduce full payload replacements (headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:232; headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/store.ts:13).
+2. ⏳ Evict/expire stream resume buffers for scopes with no active subscribers to keep memory bounded under churn (backend/refresh/resourcestream/manager.go:213; backend/refresh/resourcestream/manager.go:1762; backend/refresh/eventstream/manager.go:100; backend/refresh/eventstream/manager.go:293).
