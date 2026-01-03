@@ -152,6 +152,7 @@ func (m *Manager) Subscribe(scope string) (<-chan StreamEvent, context.CancelFun
 			}
 			if len(subs) == 0 {
 				delete(m.subscribers, scope)
+				m.clearScopeStateLocked(scope)
 			}
 		}
 	}
@@ -226,10 +227,19 @@ func (m *Manager) handleEvent(obj interface{}) {
 
 func (m *Manager) broadcast(scope string, entry Entry) {
 	m.mu.Lock()
-	sequence := m.nextSequenceLocked(scope)
-	buffer := m.bufferLocked(scope)
-	buffer.add(bufferedEvent{sequence: sequence, entry: entry})
 	subscribers := m.subscribers[scope]
+	buffer := m.buffers[scope]
+	// Only keep resume buffers when active or recent subscribers exist.
+	shouldBuffer := len(subscribers) > 0 || buffer != nil
+	var sequence uint64
+	if shouldBuffer {
+		sequence = m.nextSequenceLocked(scope)
+		if buffer == nil {
+			buffer = newEventBuffer(resumeBufferSize)
+			m.buffers[scope] = buffer
+		}
+		buffer.add(bufferedEvent{sequence: sequence, entry: entry})
+	}
 	items := make([]struct {
 		id  uint64
 		sub *subscription
@@ -267,10 +277,10 @@ func (m *Manager) broadcast(scope string, entry Entry) {
 		m.logger.Warn("eventstream: subscriber channel full after drop attempt; closing", "EventStream")
 		go m.dropSubscriber(scope, item.id, sub)
 	}
-	m.recordDelivery(scope, delivered, backlogDrops, closedCount)
+	m.recordDelivery(delivered, backlogDrops)
 }
 
-func (m *Manager) recordDelivery(scope string, delivered, backlogDrops, closed int) {
+func (m *Manager) recordDelivery(delivered, backlogDrops int) {
 	if m.telemetry == nil {
 		return
 	}
@@ -292,18 +302,6 @@ func (m *Manager) nextSequenceLocked(scope string) uint64 {
 	return next
 }
 
-func (m *Manager) bufferLocked(scope string) *eventBuffer {
-	if scope == "" {
-		scope = "cluster"
-	}
-	buffer := m.buffers[scope]
-	if buffer == nil {
-		buffer = newEventBuffer(resumeBufferSize)
-		m.buffers[scope] = buffer
-	}
-	return buffer
-}
-
 func (m *Manager) dropSubscriber(scope string, id uint64, sub *subscription) {
 	m.mu.Lock()
 	subs, ok := m.subscribers[scope]
@@ -319,9 +317,20 @@ func (m *Manager) dropSubscriber(scope string, id uint64, sub *subscription) {
 	delete(subs, id)
 	if len(subs) == 0 {
 		delete(m.subscribers, scope)
+		m.clearScopeStateLocked(scope)
 	}
 	m.mu.Unlock()
 	sub.Close()
+}
+
+// clearScopeStateLocked removes resume state for scopes without subscribers.
+func (m *Manager) clearScopeStateLocked(scope string) {
+	if m.buffers != nil {
+		delete(m.buffers, scope)
+	}
+	if m.sequences != nil {
+		delete(m.sequences, scope)
+	}
 }
 
 func (m *Manager) trySend(sub *subscription, entry StreamEvent) (sent bool, closed bool, dropped bool) {

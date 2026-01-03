@@ -190,18 +190,29 @@ func TestHandlerResumesFromSince(t *testing.T) {
 		}, nil
 	})
 
-	manager.broadcast("cluster", Entry{
-		Kind:            "Event",
-		Name:            "first",
-		ObjectNamespace: "default",
-		Message:         "first message",
+	manager.mu.Lock()
+	buffer := newEventBuffer(2)
+	buffer.add(bufferedEvent{
+		sequence: 1,
+		entry: Entry{
+			Kind:            "Event",
+			Name:            "first",
+			ObjectNamespace: "default",
+			Message:         "first message",
+		},
 	})
-	manager.broadcast("cluster", Entry{
-		Kind:            "Event",
-		Name:            "second",
-		ObjectNamespace: "default",
-		Message:         "second message",
+	buffer.add(bufferedEvent{
+		sequence: 2,
+		entry: Entry{
+			Kind:            "Event",
+			Name:            "second",
+			ObjectNamespace: "default",
+			Message:         "second message",
+		},
 	})
+	manager.buffers["cluster"] = buffer
+	manager.sequences["cluster"] = 2
+	manager.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

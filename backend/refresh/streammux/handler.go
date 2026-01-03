@@ -316,8 +316,39 @@ func (s *session) enqueue(msg ServerMessage) {
 	select {
 	case s.outgoing <- msg:
 	default:
-		s.logger.Warn("stream mux: outgoing buffer full, closing connection", "StreamMux")
-		s.shutdown()
+		s.handleBackpressure(msg)
+	}
+}
+
+func (s *session) handleBackpressure(msg ServerMessage) {
+	if msg.Type == MessageTypeHeartbeat {
+		s.logger.Warn("stream mux: outgoing buffer full, dropping heartbeat", "StreamMux")
+		return
+	}
+
+	// Drop the oldest message and issue a RESET so only the hot scope resyncs.
+	select {
+	case <-s.outgoing:
+	default:
+	}
+
+	if msg.Domain == "" || msg.Scope == "" {
+		s.logger.Warn("stream mux: outgoing buffer full, dropping message", "StreamMux")
+		return
+	}
+
+	reset := ServerMessage{
+		Type:        MessageTypeReset,
+		Domain:      msg.Domain,
+		Scope:       msg.Scope,
+		ClusterID:   s.clusterID,
+		ClusterName: s.clusterName,
+	}
+	select {
+	case s.outgoing <- reset:
+		s.logger.Warn(fmt.Sprintf("stream mux: outgoing buffer full, issued reset for %s/%s", msg.Domain, msg.Scope), "StreamMux")
+	default:
+		s.logger.Warn("stream mux: outgoing buffer full, dropping message", "StreamMux")
 	}
 }
 

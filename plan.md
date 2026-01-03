@@ -360,27 +360,24 @@ Luxury Yacht:
 
 Remaining gap-closing work (see stability/performance lists below for evidence):
 - Incremental list caching for polling-only domains (Performance #1).
-- Stream mux session-wide drops when the outgoing buffer fills (Stability #3).
-- Evict/expire stream resume buffers when scopes are no longer subscribed (Stability #4, Performance #2).
-- Add TTL/invalidation for GVR discovery caching on CRD changes (Stability #5).
-- Extend response cache invalidation to cover dynamic/custom resource YAML (Stability #6).
+- Add TTL/invalidation for GVR discovery caching on CRD changes (Stability #1).
+- Extend response cache invalidation to cover dynamic/custom resource YAML (Stability #2).
 - Optional parity: per-request SSAR gating for snapshot builds to match Headlamp's per-request checks (headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/permissions/checker.go:34).
 
 ## Stability risks (remaining, with evidence)
 
-1. ⏳ Stream mux closes the entire websocket session when the shared outgoing buffer fills, so one hot subscription can drop all scopes and force resyncs (backend/refresh/streammux/handler.go:21; backend/refresh/streammux/handler.go:315). Impact: high. Effort: med.
-2. ⏳ Resume buffers for resource/event streams are retained even when no subscribers remain for a scope, which can grow memory over time in long-lived sessions (backend/refresh/resourcestream/manager.go:213; backend/refresh/resourcestream/manager.go:1762; backend/refresh/eventstream/manager.go:100; backend/refresh/eventstream/manager.go:293). Impact: med. Effort: low.
-3. ⏳ GVR discovery caching has no TTL or invalidation path, so CRD changes can leave stale GVR data for object YAML/apply requests (backend/object_yaml.go:21; backend/object_yaml.go:65; backend/object_yaml.go:83). Impact: med. Effort: med.
-4. ⏳ Response cache invalidation only wires to built-in informers/CRDs, while object YAML caching keys are generic per kind; custom resources can remain stale until TTL expires (backend/response_cache_invalidation.go:22; backend/response_cache_invalidation.go:44; backend/object_yaml.go:102). Impact: med. Effort: med.
+1. ⏳ GVR discovery caching has no TTL or invalidation path, so CRD changes can leave stale GVR data for object YAML/apply requests (backend/object_yaml.go:21; backend/object_yaml.go:65; backend/object_yaml.go:83). Impact: med. Effort: med.
+2. ⏳ Response cache invalidation only wires to built-in informers/CRDs, while object YAML caching keys are generic per kind; custom resources can remain stale until TTL expires (backend/response_cache_invalidation.go:22; backend/response_cache_invalidation.go:44; backend/object_yaml.go:102). Impact: med. Effort: med.
 
 ## Stability risks (completed)
 
 1. ✅ Snapshot refresh cooldown now triggers an immediate auto retry after errors, avoiding stalls until the next interval tick (frontend/src/core/refresh/RefreshManager.ts:832; frontend/src/core/refresh/RefreshManager.ts:845).
 2. ✅ Refresh callbacks now isolate subscriber failures so one slow callback does not fail the entire refresh cycle (frontend/src/core/refresh/RefreshManager.ts:713; frontend/src/core/refresh/RefreshManager.ts:803).
-3. ✅ Event stream backpressure now drops the oldest queued event before closing the subscriber, reducing forced resyncs under bursty load (backend/refresh/eventstream/manager.go:249; backend/refresh/eventstream/manager.go:327).
-4. ✅ Resource stream backpressure now issues a RESET to resync slow subscribers instead of immediately dropping them, reducing resubscribe storms (backend/refresh/resourcestream/manager.go:1687; backend/refresh/resourcestream/manager.go:1841).
+3. ✅ Stream mux now drops the oldest outgoing message and issues a RESET for the hot scope instead of closing the entire session (backend/refresh/streammux/handler.go:315; backend/refresh/streammux/handler.go:349).
+4. ✅ Stream resume buffers are evicted when scopes have no subscribers, preventing unbounded growth (backend/refresh/eventstream/manager.go:331; backend/refresh/resourcestream/manager.go:745).
+5. ✅ Event stream backpressure now drops the oldest queued event before closing the subscriber, reducing forced resyncs under bursty load (backend/refresh/eventstream/manager.go:348; backend/refresh/eventstream/manager.go:366).
+6. ✅ Resource stream backpressure now issues a RESET to resync slow subscribers instead of immediately dropping them, reducing resubscribe storms (backend/refresh/resourcestream/manager.go:1835; backend/refresh/resourcestream/manager.go:1865).
 
 ## Performance improvement opportunities (remaining, with evidence)
 
 1. ⏳ For remaining polling-only domains, consider incremental list caches (Headlamp's React Query + watch updates) to reduce full payload replacements (headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:232; headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/store.ts:13). Impact: high. Effort: high.
-2. ⏳ Evict/expire stream resume buffers for scopes with no active subscribers to keep memory bounded under churn (backend/refresh/resourcestream/manager.go:213; backend/refresh/resourcestream/manager.go:1762; backend/refresh/eventstream/manager.go:100; backend/refresh/eventstream/manager.go:293). Impact: low. Effort: low.

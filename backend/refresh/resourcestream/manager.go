@@ -742,6 +742,7 @@ func (m *Manager) Subscribe(domain, scope string) (*Subscription, error) {
 					delete(scopeSubs, id)
 					if len(scopeSubs) == 0 {
 						delete(domainSubs, normalized)
+						m.clearScopeStateLocked(domain, normalized)
 					}
 					sub.close(DropReasonClosed)
 				}
@@ -1800,6 +1801,17 @@ func (m *Manager) bufferLocked(domain, scope string) *updateBuffer {
 	return buffer
 }
 
+// clearScopeStateLocked removes resume state for scopes without subscribers.
+func (m *Manager) clearScopeStateLocked(domain, scope string) {
+	key := bufferKey(domain, scope)
+	if m.buffers != nil {
+		delete(m.buffers, key)
+	}
+	if m.sequences != nil {
+		delete(m.sequences, key)
+	}
+}
+
 func (m *Manager) dropSubscriber(domain, scope string, id uint64, sub *subscription, reason DropReason) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -1812,6 +1824,7 @@ func (m *Manager) dropSubscriber(domain, scope string, id uint64, sub *subscript
 	delete(scopeSubs, id)
 	if len(scopeSubs) == 0 {
 		delete(m.subscribers[domain], scope)
+		m.clearScopeStateLocked(domain, scope)
 	}
 	if len(m.subscribers[domain]) == 0 {
 		delete(m.subscribers, domain)

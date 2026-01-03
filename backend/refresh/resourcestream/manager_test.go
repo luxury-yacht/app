@@ -174,6 +174,41 @@ func TestManagerResumeReturnsBufferedUpdates(t *testing.T) {
 	require.Equal(t, "pod-2", updates[0].Name)
 }
 
+func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*updateBuffer),
+		sequences:   make(map[string]uint64),
+	}
+
+	sub, err := manager.Subscribe(domainPods, "namespace:default")
+	require.NoError(t, err)
+
+	update := Update{
+		Type:            MessageTypeAdded,
+		Domain:          domainPods,
+		ClusterID:       "c1",
+		ClusterName:     "cluster",
+		ResourceVersion: "1",
+		UID:             "pod-1",
+		Name:            "pod-1",
+		Namespace:       "default",
+		Kind:            "Pod",
+	}
+	manager.broadcast(domainPods, []string{"namespace:default"}, update)
+
+	key := bufferKey(domainPods, "namespace:default")
+	require.Contains(t, manager.buffers, key)
+	require.Contains(t, manager.sequences, key)
+
+	sub.Cancel()
+
+	require.NotContains(t, manager.buffers, key)
+	require.NotContains(t, manager.sequences, key)
+}
+
 func TestManagerClusterRBACUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
