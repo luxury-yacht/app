@@ -28,11 +28,18 @@ func normalizeScopeForDomain(domain, scope string) (string, error) {
 		return normalizeNamespaceScope(trimmed, "namespace-storage")
 	case domainNamespaceAutoscaling:
 		return normalizeNamespaceScope(trimmed, "namespace-autoscaling")
+	case domainClusterRBAC:
+		return normalizeClusterScope(trimmed, "cluster-rbac")
+	case domainClusterStorage:
+		return normalizeClusterScope(trimmed, "cluster-storage")
+	case domainClusterConfig:
+		return normalizeClusterScope(trimmed, "cluster-config")
+	case domainClusterCRDs:
+		return normalizeClusterScope(trimmed, "cluster-crds")
+	case domainClusterCustom:
+		return normalizeClusterScope(trimmed, "cluster-custom")
 	case domainNodes:
-		if trimmed == "" || strings.EqualFold(strings.TrimSuffix(trimmed, ":"), "cluster") {
-			return "", nil
-		}
-		return "", fmt.Errorf("nodes stream does not accept scope %q", scope)
+		return normalizeClusterScope(trimmed, "nodes")
 	default:
 		return "", fmt.Errorf("unsupported resource stream domain %q", domain)
 	}
@@ -88,6 +95,14 @@ func normalizeNamespaceScope(scope, domain string) (string, error) {
 		return "namespace:all", nil
 	}
 	return fmt.Sprintf("namespace:%s", value), nil
+}
+
+// Cluster-scoped streams always use an empty scope.
+func normalizeClusterScope(scope, domain string) (string, error) {
+	if scope == "" || strings.EqualFold(strings.TrimSuffix(scope, ":"), "cluster") {
+		return "", nil
+	}
+	return "", fmt.Errorf("%s stream does not accept scope %q", domain, scope)
 }
 
 func isAllNamespace(value string) bool {

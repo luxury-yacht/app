@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -13,6 +14,8 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	appslisters "k8s.io/client-go/listers/apps/v1"
 
@@ -177,6 +180,157 @@ func BuildNamespaceCustomSummary(
 		Name:        resource.GetName(),
 		APIGroup:    apiGroup,
 		Namespace:   resource.GetNamespace(),
+		Age:         formatAge(resource.GetCreationTimestamp().Time),
+		Labels:      resource.GetLabels(),
+		Annotations: resource.GetAnnotations(),
+	}
+}
+
+// BuildClusterRoleSummary builds a cluster role row payload that matches snapshot formatting.
+func BuildClusterRoleSummary(meta ClusterMeta, role *rbacv1.ClusterRole) ClusterRBACEntry {
+	if role == nil {
+		return ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRole"}
+	}
+	return ClusterRBACEntry{
+		ClusterMeta: meta,
+		Kind:        "ClusterRole",
+		Name:        role.Name,
+		Details:     describeClusterRole(role),
+		Age:         formatAge(role.CreationTimestamp.Time),
+		TypeAlias:   "CR",
+	}
+}
+
+// BuildClusterRoleBindingSummary builds a cluster role binding row payload that matches snapshot formatting.
+func BuildClusterRoleBindingSummary(meta ClusterMeta, binding *rbacv1.ClusterRoleBinding) ClusterRBACEntry {
+	if binding == nil {
+		return ClusterRBACEntry{ClusterMeta: meta, Kind: "ClusterRoleBinding"}
+	}
+	return ClusterRBACEntry{
+		ClusterMeta: meta,
+		Kind:        "ClusterRoleBinding",
+		Name:        binding.Name,
+		Details:     describeClusterRoleBinding(binding),
+		Age:         formatAge(binding.CreationTimestamp.Time),
+		TypeAlias:   "CRB",
+	}
+}
+
+// BuildClusterStorageSummary builds a persistent volume row payload that matches snapshot formatting.
+func BuildClusterStorageSummary(meta ClusterMeta, pv *corev1.PersistentVolume) ClusterStorageEntry {
+	if pv == nil {
+		return ClusterStorageEntry{ClusterMeta: meta, Kind: "PersistentVolume"}
+	}
+	return ClusterStorageEntry{
+		ClusterMeta:  meta,
+		Kind:         "PersistentVolume",
+		Name:         pv.Name,
+		StorageClass: pv.Spec.StorageClassName,
+		Capacity:     formatStorageCapacity(pv),
+		AccessModes:  formatAccessModes(pv.Spec.AccessModes),
+		Status:       string(pv.Status.Phase),
+		Claim:        formatClaimRef(pv.Spec.ClaimRef),
+		Age:          formatAge(pv.CreationTimestamp.Time),
+	}
+}
+
+// BuildClusterStorageClassSummary builds a storage class entry that matches snapshot formatting.
+func BuildClusterStorageClassSummary(meta ClusterMeta, sc *storagev1.StorageClass) ClusterConfigEntry {
+	if sc == nil {
+		return ClusterConfigEntry{ClusterMeta: meta, Kind: "StorageClass"}
+	}
+	return ClusterConfigEntry{
+		ClusterMeta: meta,
+		Kind:        "StorageClass",
+		Name:        sc.Name,
+		Details:     sc.Provisioner,
+		IsDefault:   isDefaultClass(sc.Annotations),
+		Age:         formatAge(sc.CreationTimestamp.Time),
+	}
+}
+
+// BuildClusterIngressClassSummary builds an ingress class entry that matches snapshot formatting.
+func BuildClusterIngressClassSummary(meta ClusterMeta, ic *networkingv1.IngressClass) ClusterConfigEntry {
+	if ic == nil {
+		return ClusterConfigEntry{ClusterMeta: meta, Kind: "IngressClass"}
+	}
+	return ClusterConfigEntry{
+		ClusterMeta: meta,
+		Kind:        "IngressClass",
+		Name:        ic.Name,
+		Details:     ic.Spec.Controller,
+		IsDefault:   isDefaultClass(ic.Annotations),
+		Age:         formatAge(ic.CreationTimestamp.Time),
+	}
+}
+
+// BuildClusterValidatingWebhookSummary builds a validating webhook entry that matches snapshot formatting.
+func BuildClusterValidatingWebhookSummary(
+	meta ClusterMeta,
+	webhook *admissionregistrationv1.ValidatingWebhookConfiguration,
+) ClusterConfigEntry {
+	if webhook == nil {
+		return ClusterConfigEntry{ClusterMeta: meta, Kind: "ValidatingWebhookConfiguration"}
+	}
+	return ClusterConfigEntry{
+		ClusterMeta: meta,
+		Kind:        "ValidatingWebhookConfiguration",
+		Name:        webhook.Name,
+		Details:     webhookDetails(len(webhook.Webhooks)),
+		Age:         formatAge(webhook.CreationTimestamp.Time),
+	}
+}
+
+// BuildClusterMutatingWebhookSummary builds a mutating webhook entry that matches snapshot formatting.
+func BuildClusterMutatingWebhookSummary(
+	meta ClusterMeta,
+	webhook *admissionregistrationv1.MutatingWebhookConfiguration,
+) ClusterConfigEntry {
+	if webhook == nil {
+		return ClusterConfigEntry{ClusterMeta: meta, Kind: "MutatingWebhookConfiguration"}
+	}
+	return ClusterConfigEntry{
+		ClusterMeta: meta,
+		Kind:        "MutatingWebhookConfiguration",
+		Name:        webhook.Name,
+		Details:     webhookDetails(len(webhook.Webhooks)),
+		Age:         formatAge(webhook.CreationTimestamp.Time),
+	}
+}
+
+// BuildClusterCRDSummary builds a CRD row payload that matches snapshot formatting.
+func BuildClusterCRDSummary(meta ClusterMeta, crd *apiextensionsv1.CustomResourceDefinition) ClusterCRDEntry {
+	if crd == nil {
+		return ClusterCRDEntry{ClusterMeta: meta, Kind: "CustomResourceDefinition"}
+	}
+	return ClusterCRDEntry{
+		ClusterMeta: meta,
+		Kind:        "CustomResourceDefinition",
+		Name:        crd.Name,
+		Group:       crd.Spec.Group,
+		Scope:       string(crd.Spec.Scope),
+		Details:     describeCRDVersions(crd),
+		Age:         formatAge(crd.CreationTimestamp.Time),
+		TypeAlias:   "CRD",
+	}
+}
+
+// BuildClusterCustomSummary builds a cluster custom resource row payload that matches snapshot formatting.
+func BuildClusterCustomSummary(
+	meta ClusterMeta,
+	resource *unstructured.Unstructured,
+	apiGroup string,
+	kindFallback string,
+) ClusterCustomSummary {
+	if resource == nil {
+		return ClusterCustomSummary{ClusterMeta: meta, Kind: kindFallback, APIGroup: apiGroup}
+	}
+	kind := resourceKind(resource, kindFallback)
+	return ClusterCustomSummary{
+		ClusterMeta: meta,
+		Kind:        kind,
+		Name:        resource.GetName(),
+		APIGroup:    apiGroup,
 		Age:         formatAge(resource.GetCreationTimestamp().Time),
 		Labels:      resource.GetLabels(),
 		Annotations: resource.GetAnnotations(),

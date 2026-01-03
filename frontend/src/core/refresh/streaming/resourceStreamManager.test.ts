@@ -102,6 +102,11 @@ beforeEach(() => {
   resetDomainState('namespace-autoscaling');
   resetDomainState('namespace-quotas');
   resetDomainState('namespace-storage');
+  resetDomainState('cluster-rbac');
+  resetDomainState('cluster-storage');
+  resetDomainState('cluster-config');
+  resetDomainState('cluster-crds');
+  resetDomainState('cluster-custom');
   resetAllScopedDomainStates('pods');
 });
 
@@ -116,6 +121,11 @@ afterEach(() => {
   resetDomainState('namespace-autoscaling');
   resetDomainState('namespace-quotas');
   resetDomainState('namespace-storage');
+  resetDomainState('cluster-rbac');
+  resetDomainState('cluster-storage');
+  resetDomainState('cluster-config');
+  resetDomainState('cluster-crds');
+  resetDomainState('cluster-custom');
   resetAllScopedDomainStates('pods');
   resetScopedDomainState('pods', 'cluster-a|namespace:default');
   delete (globalThis as any).WebSocket;
@@ -181,6 +191,14 @@ describe('resourceStreamManager helpers', () => {
     expect(normalizeResourceScope('nodes', '')).toBe('');
     expect(normalizeResourceScope('nodes', 'cluster')).toBe('');
     expect(() => normalizeResourceScope('nodes', 'namespace:default')).toThrow();
+  });
+
+  it('normalizes cluster scopes', () => {
+    expect(normalizeResourceScope('cluster-rbac', '')).toBe('');
+    expect(normalizeResourceScope('cluster-storage', 'cluster')).toBe('');
+    expect(normalizeResourceScope('cluster-config', '')).toBe('');
+    expect(normalizeResourceScope('cluster-crds', 'cluster')).toBe('');
+    expect(normalizeResourceScope('cluster-custom', '')).toBe('');
   });
 
   it('preserves pod metrics when requested', () => {
@@ -745,6 +763,244 @@ describe('ResourceStreamManager', () => {
 
     const state = getDomainState('namespace-storage');
     expect(state.data?.resources?.[0]?.name).toBe('pvc-a');
+  });
+
+  test('applies cluster rbac updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'cluster-rbac',
+      storeScope
+    );
+
+    setDomainState('cluster-rbac', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'cluster-rbac',
+        scope: '',
+        resourceVersion: '7',
+        name: 'cluster-role',
+        kind: 'ClusterRole',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'ClusterRole',
+          name: 'cluster-role',
+          details: 'Rules: 1',
+          age: '1m',
+          typeAlias: 'CR',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('cluster-rbac');
+    expect(state.data?.resources?.[0]?.name).toBe('cluster-role');
+  });
+
+  test('applies cluster storage updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'cluster-storage',
+      storeScope
+    );
+
+    setDomainState('cluster-storage', () => ({
+      status: 'ready',
+      data: { volumes: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'cluster-storage',
+        scope: '',
+        resourceVersion: '7',
+        name: 'pv-a',
+        kind: 'PersistentVolume',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'PersistentVolume',
+          name: 'pv-a',
+          capacity: '1Gi',
+          accessModes: 'ReadWriteOnce',
+          status: 'Bound',
+          claim: 'default/app',
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('cluster-storage');
+    expect(state.data?.volumes?.[0]?.name).toBe('pv-a');
+  });
+
+  test('applies cluster config updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'cluster-config',
+      storeScope
+    );
+
+    setDomainState('cluster-config', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'cluster-config',
+        scope: '',
+        resourceVersion: '7',
+        name: 'standard',
+        kind: 'StorageClass',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'StorageClass',
+          name: 'standard',
+          details: 'kubernetes.io/aws-ebs',
+          isDefault: true,
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('cluster-config');
+    expect(state.data?.resources?.[0]?.name).toBe('standard');
+  });
+
+  test('applies cluster crds updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'cluster-crds',
+      storeScope
+    );
+
+    setDomainState('cluster-crds', () => ({
+      status: 'ready',
+      data: { definitions: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'cluster-crds',
+        scope: '',
+        resourceVersion: '7',
+        name: 'widgets.example.com',
+        kind: 'CustomResourceDefinition',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'CustomResourceDefinition',
+          name: 'widgets.example.com',
+          group: 'example.com',
+          scope: 'Namespaced',
+          details: 'Versions: v1',
+          age: '1m',
+          typeAlias: 'CRD',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('cluster-crds');
+    expect(state.data?.definitions?.[0]?.name).toBe('widgets.example.com');
+  });
+
+  test('applies cluster custom updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    (manager as unknown as { ensureSubscription: (...args: unknown[]) => void }).ensureSubscription(
+      'cluster-custom',
+      storeScope
+    );
+
+    setDomainState('cluster-custom', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'cluster-custom',
+        scope: '',
+        resourceVersion: '7',
+        name: 'cluster-widget',
+        kind: 'Widget',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'Widget',
+          name: 'cluster-widget',
+          apiGroup: 'example.com',
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('cluster-custom');
+    expect(state.data?.resources?.[0]?.name).toBe('cluster-widget');
   });
 
   test('resyncs on out-of-order resource versions', async () => {

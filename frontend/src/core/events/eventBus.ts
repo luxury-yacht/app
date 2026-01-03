@@ -21,6 +21,11 @@ type ResourceStreamDomain =
   | 'namespace-quotas'
   | 'namespace-storage'
   | 'namespace-autoscaling'
+  | 'cluster-rbac'
+  | 'cluster-storage'
+  | 'cluster-config'
+  | 'cluster-crds'
+  | 'cluster-custom'
   | 'nodes';
 
 // Event payload types

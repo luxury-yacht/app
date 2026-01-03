@@ -8,6 +8,8 @@ import (
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -131,6 +133,39 @@ func TestManagerRBACUpdateBroadcasts(t *testing.T) {
 	}
 }
 
+func TestManagerClusterRBACUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainClusterRBAC, "")
+	require.NoError(t, err)
+
+	role := &rbacv1.ClusterRole{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "cluster-role-1",
+			UID:             "cr-uid",
+			ResourceVersion: "10",
+		},
+	}
+
+	manager.handleClusterRole(role, MessageTypeAdded)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainClusterRBAC, update.Domain)
+		require.Equal(t, "", update.Scope)
+		require.Equal(t, "cluster-role-1", update.Name)
+		require.Equal(t, "ClusterRole", update.Kind)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected cluster rbac update to be delivered")
+	}
+}
+
 func TestManagerQuotasUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
@@ -203,6 +238,40 @@ func TestManagerNetworkUpdateBroadcasts(t *testing.T) {
 	}
 }
 
+func TestManagerClusterConfigUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainClusterConfig, "")
+	require.NoError(t, err)
+
+	storageClass := &storagev1.StorageClass{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "fast",
+			UID:             "sc-uid",
+			ResourceVersion: "2",
+		},
+		Provisioner: "kubernetes.io/no-provisioner",
+	}
+
+	manager.handleStorageClass(storageClass, MessageTypeAdded)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainClusterConfig, update.Domain)
+		require.Equal(t, "", update.Scope)
+		require.Equal(t, "fast", update.Name)
+		require.Equal(t, "StorageClass", update.Kind)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected cluster config update to be delivered")
+	}
+}
+
 func TestManagerStorageUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
@@ -237,6 +306,42 @@ func TestManagerStorageUpdateBroadcasts(t *testing.T) {
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected storage update to be delivered")
+	}
+}
+
+func TestManagerClusterStorageUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainClusterStorage, "")
+	require.NoError(t, err)
+
+	pv := &corev1.PersistentVolume{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "pv-1",
+			UID:             "pv-uid",
+			ResourceVersion: "5",
+		},
+		Status: corev1.PersistentVolumeStatus{
+			Phase: corev1.VolumeBound,
+		},
+	}
+
+	manager.handlePersistentVolume(pv, MessageTypeAdded)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainClusterStorage, update.Domain)
+		require.Equal(t, "", update.Scope)
+		require.Equal(t, "pv-1", update.Name)
+		require.Equal(t, "PersistentVolume", update.Kind)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected cluster storage update to be delivered")
 	}
 }
 
@@ -280,6 +385,94 @@ func TestManagerCustomUpdateBroadcasts(t *testing.T) {
 		require.NotNil(t, update.Row)
 	default:
 		t.Fatal("expected custom update to be delivered")
+	}
+}
+
+func TestManagerClusterCustomUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainClusterCustom, "")
+	require.NoError(t, err)
+
+	resource := &unstructured.Unstructured{}
+	resource.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "example.com",
+		Version: "v1",
+		Kind:    "Widget",
+	})
+	resource.SetName("widget-cluster")
+	resource.SetUID("widget-cluster-uid")
+	resource.SetResourceVersion("2")
+	resource.SetCreationTimestamp(metav1.NewTime(time.Now().Add(-time.Minute)))
+
+	info := &customResourceInformer{
+		gvr:    schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+		kind:   "Widget",
+		domain: domainClusterCustom,
+	}
+
+	manager.handleCustomResource(resource, MessageTypeAdded, info)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainClusterCustom, update.Domain)
+		require.Equal(t, "", update.Scope)
+		require.Equal(t, "widget-cluster", update.Name)
+		require.Equal(t, "Widget", update.Kind)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected cluster custom update to be delivered")
+	}
+}
+
+func TestManagerClusterCRDUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainClusterCRDs, "")
+	require.NoError(t, err)
+
+	crd := &apiextensionsv1.CustomResourceDefinition{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "widgets.example.com",
+			UID:             "crd-uid",
+			ResourceVersion: "8",
+		},
+		Spec: apiextensionsv1.CustomResourceDefinitionSpec{
+			Group: "example.com",
+			Names: apiextensionsv1.CustomResourceDefinitionNames{
+				Plural: "widgets",
+				Kind:   "Widget",
+			},
+			Scope: apiextensionsv1.NamespaceScoped,
+			Versions: []apiextensionsv1.CustomResourceDefinitionVersion{{
+				Name:    "v1",
+				Served:  true,
+				Storage: true,
+			}},
+		},
+	}
+
+	manager.handleClusterCRD(crd, MessageTypeAdded)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainClusterCRDs, update.Domain)
+		require.Equal(t, "", update.Scope)
+		require.Equal(t, "widgets.example.com", update.Name)
+		require.Equal(t, "CustomResourceDefinition", update.Kind)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected cluster CRD update to be delivered")
 	}
 }
 

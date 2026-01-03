@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -16,6 +17,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -54,7 +56,13 @@ const (
 	domainNamespaceAutoscaling = "namespace-autoscaling"
 	domainNamespaceQuotas      = "namespace-quotas"
 	domainNamespaceStorage     = "namespace-storage"
-	domainNodes                = "nodes"
+	// Cluster-scoped domains stream resources without namespace scopes.
+	domainClusterRBAC    = "cluster-rbac"
+	domainClusterStorage = "cluster-storage"
+	domainClusterConfig  = "cluster-config"
+	domainClusterCRDs    = "cluster-crds"
+	domainClusterCustom  = "cluster-custom"
+	domainNodes          = "nodes"
 )
 
 const (
@@ -90,6 +98,7 @@ func (s *subscription) close(reason DropReason) {
 type customResourceInformer struct {
 	gvr      schema.GroupVersionResource
 	kind     string
+	domain   string
 	informer cache.SharedIndexInformer
 	stopCh   chan struct{}
 	stopOnce sync.Once
@@ -335,6 +344,56 @@ func NewManager(
 		DeleteFunc: func(obj interface{}) { mgr.handlePodDisruptionBudget(obj, MessageTypeDeleted) },
 	})
 
+	// Cluster-scoped informers drive the cluster tab streaming domains.
+	clusterRoleInformer := shared.Rbac().V1().ClusterRoles()
+	clusterRoleInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleClusterRole(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleClusterRole(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleClusterRole(obj, MessageTypeDeleted) },
+	})
+
+	clusterRoleBindingInformer := shared.Rbac().V1().ClusterRoleBindings()
+	clusterRoleBindingInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleClusterRoleBinding(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleClusterRoleBinding(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleClusterRoleBinding(obj, MessageTypeDeleted) },
+	})
+
+	pvInformer := shared.Core().V1().PersistentVolumes()
+	pvInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handlePersistentVolume(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handlePersistentVolume(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handlePersistentVolume(obj, MessageTypeDeleted) },
+	})
+
+	storageClassInformer := shared.Storage().V1().StorageClasses()
+	storageClassInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleStorageClass(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleStorageClass(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleStorageClass(obj, MessageTypeDeleted) },
+	})
+
+	ingressClassInformer := shared.Networking().V1().IngressClasses()
+	ingressClassInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleIngressClass(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleIngressClass(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleIngressClass(obj, MessageTypeDeleted) },
+	})
+
+	validatingWebhookInformer := shared.Admissionregistration().V1().ValidatingWebhookConfigurations()
+	validatingWebhookInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleValidatingWebhook(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleValidatingWebhook(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleValidatingWebhook(obj, MessageTypeDeleted) },
+	})
+
+	mutatingWebhookInformer := shared.Admissionregistration().V1().MutatingWebhookConfigurations()
+	mutatingWebhookInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    func(obj interface{}) { mgr.handleMutatingWebhook(obj, MessageTypeAdded) },
+		UpdateFunc: func(_, newObj interface{}) { mgr.handleMutatingWebhook(newObj, MessageTypeModified) },
+		DeleteFunc: func(obj interface{}) { mgr.handleMutatingWebhook(obj, MessageTypeDeleted) },
+	})
+
 	mgr.initCustomResourceInformers(factory)
 
 	return mgr
@@ -374,6 +433,8 @@ func (m *Manager) handleCustomResourceDefinition(obj interface{}, updateType Mes
 	if crd == nil {
 		return
 	}
+	// CRD updates feed both the cluster CRD stream and custom resource informers.
+	m.handleClusterCRD(obj, updateType)
 	if updateType == MessageTypeDeleted {
 		m.removeCustomInformer(crd.Name)
 		return
@@ -385,7 +446,16 @@ func (m *Manager) ensureCustomInformer(crd *apiextensionsv1.CustomResourceDefini
 	if m == nil || m.dynamicClient == nil || crd == nil {
 		return
 	}
-	if crd.Spec.Scope != apiextensionsv1.NamespaceScoped {
+	customDomain := domainNamespaceCustom
+	namespace := metav1.NamespaceAll
+	switch crd.Spec.Scope {
+	case apiextensionsv1.NamespaceScoped:
+		customDomain = domainNamespaceCustom
+		namespace = metav1.NamespaceAll
+	case apiextensionsv1.ClusterScoped:
+		customDomain = domainClusterCustom
+		namespace = ""
+	default:
 		m.removeCustomInformer(crd.Name)
 		return
 	}
@@ -402,7 +472,7 @@ func (m *Manager) ensureCustomInformer(crd *apiextensionsv1.CustomResourceDefini
 
 	m.customInformerMu.Lock()
 	existing := m.customInformers[crd.Name]
-	if existing != nil && existing.gvr == gvr && existing.kind == kind {
+	if existing != nil && existing.gvr == gvr && existing.kind == kind && existing.domain == customDomain {
 		m.customInformerMu.Unlock()
 		return
 	}
@@ -411,11 +481,11 @@ func (m *Manager) ensureCustomInformer(crd *apiextensionsv1.CustomResourceDefini
 		delete(m.customInformers, crd.Name)
 	}
 
-	// Use a dynamic informer per CRD to stream namespace custom updates.
+	// Use a dynamic informer per CRD to stream custom resource updates.
 	dynamicInformer := dynamicinformer.NewFilteredDynamicInformer(
 		m.dynamicClient,
 		gvr,
-		metav1.NamespaceAll,
+		namespace,
 		0,
 		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 		nil,
@@ -424,6 +494,7 @@ func (m *Manager) ensureCustomInformer(crd *apiextensionsv1.CustomResourceDefini
 	info := &customResourceInformer{
 		gvr:      gvr,
 		kind:     kind,
+		domain:   customDomain,
 		informer: informer,
 		stopCh:   make(chan struct{}),
 	}
@@ -460,10 +531,14 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 	if kind == "" {
 		kind = info.kind
 	}
+	domain := info.domain
+	if domain == "" {
+		domain = domainNamespaceCustom
+	}
 
 	update := Update{
 		Type:            updateType,
-		Domain:          domainNamespaceCustom,
+		Domain:          domain,
 		ClusterID:       m.clusterMeta.ClusterID,
 		ClusterName:     m.clusterMeta.ClusterName,
 		ResourceVersion: resource.GetResourceVersion(),
@@ -473,10 +548,44 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 		Kind:            kind,
 	}
 	if updateType != MessageTypeDeleted {
-		update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.kind)
+		if domain == domainClusterCustom {
+			update.Row = snapshot.BuildClusterCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.kind)
+		} else {
+			update.Row = snapshot.BuildNamespaceCustomSummary(m.clusterMeta, resource, info.gvr.Group, info.kind)
+		}
 	}
 
-	m.broadcast(domainNamespaceCustom, scopesForNamespace(resource.GetNamespace()), update)
+	if domain == domainClusterCustom {
+		m.broadcast(domain, scopesForCluster(), update)
+		return
+	}
+	m.broadcast(domain, scopesForNamespace(resource.GetNamespace()), update)
+}
+
+// Cluster CRD updates keep the CRD list aligned with snapshot formatting.
+func (m *Manager) handleClusterCRD(obj interface{}, updateType MessageType) {
+	crd := customResourceDefinitionFromObject(obj)
+	if crd == nil {
+		return
+	}
+
+	summary := snapshot.BuildClusterCRDSummary(m.clusterMeta, crd)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainClusterCRDs,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: crd.ResourceVersion,
+		UID:             string(crd.UID),
+		Name:            crd.Name,
+		Namespace:       crd.Namespace,
+		Kind:            "CustomResourceDefinition",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainClusterCRDs, scopesForCluster(), update)
 }
 
 func preferredCustomCRDVersion(crd *apiextensionsv1.CustomResourceDefinition) string {
@@ -770,6 +879,57 @@ func (m *Manager) handleServiceAccount(obj interface{}, updateType MessageType) 
 	m.broadcast(domainNamespaceRBAC, scopesForNamespace(serviceAccount.Namespace), update)
 }
 
+// Cluster RBAC updates target the cluster scope only.
+func (m *Manager) handleClusterRole(obj interface{}, updateType MessageType) {
+	role := clusterRoleFromObject(obj)
+	if role == nil {
+		return
+	}
+
+	summary := snapshot.BuildClusterRoleSummary(m.clusterMeta, role)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainClusterRBAC,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: role.ResourceVersion,
+		UID:             string(role.UID),
+		Name:            role.Name,
+		Namespace:       role.Namespace,
+		Kind:            "ClusterRole",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainClusterRBAC, scopesForCluster(), update)
+}
+
+func (m *Manager) handleClusterRoleBinding(obj interface{}, updateType MessageType) {
+	binding := clusterRoleBindingFromObject(obj)
+	if binding == nil {
+		return
+	}
+
+	summary := snapshot.BuildClusterRoleBindingSummary(m.clusterMeta, binding)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainClusterRBAC,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: binding.ResourceVersion,
+		UID:             string(binding.UID),
+		Name:            binding.Name,
+		Namespace:       binding.Namespace,
+		Kind:            "ClusterRoleBinding",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainClusterRBAC, scopesForCluster(), update)
+}
+
 func (m *Manager) handleService(obj interface{}, updateType MessageType) {
 	service := serviceFromObject(obj)
 	if service == nil {
@@ -936,6 +1096,107 @@ func (m *Manager) handleNetworkPolicy(obj interface{}, updateType MessageType) {
 	m.broadcast(domainNamespaceNetwork, scopesForNamespace(policy.Namespace), update)
 }
 
+// Cluster configuration updates stream shared cluster resources.
+func (m *Manager) handleStorageClass(obj interface{}, updateType MessageType) {
+	storageClass := storageClassFromObject(obj)
+	if storageClass == nil {
+		return
+	}
+
+	summary := snapshot.BuildClusterStorageClassSummary(m.clusterMeta, storageClass)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainClusterConfig,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: storageClass.ResourceVersion,
+		UID:             string(storageClass.UID),
+		Name:            storageClass.Name,
+		Namespace:       storageClass.Namespace,
+		Kind:            "StorageClass",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainClusterConfig, scopesForCluster(), update)
+}
+
+func (m *Manager) handleIngressClass(obj interface{}, updateType MessageType) {
+	ingressClass := ingressClassFromObject(obj)
+	if ingressClass == nil {
+		return
+	}
+
+	summary := snapshot.BuildClusterIngressClassSummary(m.clusterMeta, ingressClass)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainClusterConfig,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: ingressClass.ResourceVersion,
+		UID:             string(ingressClass.UID),
+		Name:            ingressClass.Name,
+		Namespace:       ingressClass.Namespace,
+		Kind:            "IngressClass",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainClusterConfig, scopesForCluster(), update)
+}
+
+func (m *Manager) handleValidatingWebhook(obj interface{}, updateType MessageType) {
+	webhook := validatingWebhookFromObject(obj)
+	if webhook == nil {
+		return
+	}
+
+	summary := snapshot.BuildClusterValidatingWebhookSummary(m.clusterMeta, webhook)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainClusterConfig,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: webhook.ResourceVersion,
+		UID:             string(webhook.UID),
+		Name:            webhook.Name,
+		Namespace:       webhook.Namespace,
+		Kind:            "ValidatingWebhookConfiguration",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainClusterConfig, scopesForCluster(), update)
+}
+
+func (m *Manager) handleMutatingWebhook(obj interface{}, updateType MessageType) {
+	webhook := mutatingWebhookFromObject(obj)
+	if webhook == nil {
+		return
+	}
+
+	summary := snapshot.BuildClusterMutatingWebhookSummary(m.clusterMeta, webhook)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainClusterConfig,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: webhook.ResourceVersion,
+		UID:             string(webhook.UID),
+		Name:            webhook.Name,
+		Namespace:       webhook.Namespace,
+		Kind:            "MutatingWebhookConfiguration",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainClusterConfig, scopesForCluster(), update)
+}
+
 func (m *Manager) handlePersistentVolumeClaim(obj interface{}, updateType MessageType) {
 	pvc := persistentVolumeClaimFromObject(obj)
 	if pvc == nil {
@@ -958,6 +1219,32 @@ func (m *Manager) handlePersistentVolumeClaim(obj interface{}, updateType Messag
 	}
 
 	m.broadcast(domainNamespaceStorage, scopesForNamespace(pvc.Namespace), update)
+}
+
+// Persistent volumes belong to the cluster storage domain.
+func (m *Manager) handlePersistentVolume(obj interface{}, updateType MessageType) {
+	pv := persistentVolumeFromObject(obj)
+	if pv == nil {
+		return
+	}
+
+	summary := snapshot.BuildClusterStorageSummary(m.clusterMeta, pv)
+	update := Update{
+		Type:            updateType,
+		Domain:          domainClusterStorage,
+		ClusterID:       m.clusterMeta.ClusterID,
+		ClusterName:     m.clusterMeta.ClusterName,
+		ResourceVersion: pv.ResourceVersion,
+		UID:             string(pv.UID),
+		Name:            pv.Name,
+		Namespace:       pv.Namespace,
+		Kind:            "PersistentVolume",
+	}
+	if updateType != MessageTypeDeleted {
+		update.Row = summary
+	}
+
+	m.broadcast(domainClusterStorage, scopesForCluster(), update)
 }
 
 func (m *Manager) handleHPA(obj interface{}, updateType MessageType) {
@@ -1465,6 +1752,30 @@ func domainPermissions(domain string) ([]permissionRequirement, bool) {
 		return []permissionRequirement{
 			{group: "autoscaling", resource: "horizontalpodautoscalers"},
 		}, true
+	case domainClusterRBAC:
+		return []permissionRequirement{
+			{group: "rbac.authorization.k8s.io", resource: "clusterroles"},
+			{group: "rbac.authorization.k8s.io", resource: "clusterrolebindings"},
+		}, true
+	case domainClusterStorage:
+		return []permissionRequirement{
+			{group: "", resource: "persistentvolumes"},
+		}, true
+	case domainClusterConfig:
+		return []permissionRequirement{
+			{group: "storage.k8s.io", resource: "storageclasses"},
+			{group: "networking.k8s.io", resource: "ingressclasses"},
+			{group: "admissionregistration.k8s.io", resource: "validatingwebhookconfigurations"},
+			{group: "admissionregistration.k8s.io", resource: "mutatingwebhookconfigurations"},
+		}, true
+	case domainClusterCRDs:
+		return []permissionRequirement{
+			{group: "apiextensions.k8s.io", resource: "customresourcedefinitions"},
+		}, true
+	case domainClusterCustom:
+		return []permissionRequirement{
+			{group: "apiextensions.k8s.io", resource: "customresourcedefinitions"},
+		}, true
 	case domainNodes:
 		return []permissionRequirement{{group: "", resource: "nodes"}}, true
 	case domainWorkloads:
@@ -1693,6 +2004,28 @@ func roleBindingFromObject(obj interface{}) *rbacv1.RoleBinding {
 	}
 }
 
+func clusterRoleFromObject(obj interface{}) *rbacv1.ClusterRole {
+	switch typed := obj.(type) {
+	case *rbacv1.ClusterRole:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return clusterRoleFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func clusterRoleBindingFromObject(obj interface{}) *rbacv1.ClusterRoleBinding {
+	switch typed := obj.(type) {
+	case *rbacv1.ClusterRoleBinding:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return clusterRoleBindingFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
 func serviceAccountFromObject(obj interface{}) *corev1.ServiceAccount {
 	switch typed := obj.(type) {
 	case *corev1.ServiceAccount:
@@ -1737,6 +2070,17 @@ func ingressFromObject(obj interface{}) *networkingv1.Ingress {
 	}
 }
 
+func ingressClassFromObject(obj interface{}) *networkingv1.IngressClass {
+	switch typed := obj.(type) {
+	case *networkingv1.IngressClass:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return ingressClassFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
 func networkPolicyFromObject(obj interface{}) *networkingv1.NetworkPolicy {
 	switch typed := obj.(type) {
 	case *networkingv1.NetworkPolicy:
@@ -1748,12 +2092,56 @@ func networkPolicyFromObject(obj interface{}) *networkingv1.NetworkPolicy {
 	}
 }
 
+func storageClassFromObject(obj interface{}) *storagev1.StorageClass {
+	switch typed := obj.(type) {
+	case *storagev1.StorageClass:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return storageClassFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func validatingWebhookFromObject(obj interface{}) *admissionregistrationv1.ValidatingWebhookConfiguration {
+	switch typed := obj.(type) {
+	case *admissionregistrationv1.ValidatingWebhookConfiguration:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return validatingWebhookFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func mutatingWebhookFromObject(obj interface{}) *admissionregistrationv1.MutatingWebhookConfiguration {
+	switch typed := obj.(type) {
+	case *admissionregistrationv1.MutatingWebhookConfiguration:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return mutatingWebhookFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
 func persistentVolumeClaimFromObject(obj interface{}) *corev1.PersistentVolumeClaim {
 	switch typed := obj.(type) {
 	case *corev1.PersistentVolumeClaim:
 		return typed
 	case cache.DeletedFinalStateUnknown:
 		return persistentVolumeClaimFromObject(typed.Obj)
+	default:
+		return nil
+	}
+}
+
+func persistentVolumeFromObject(obj interface{}) *corev1.PersistentVolume {
+	switch typed := obj.(type) {
+	case *corev1.PersistentVolume:
+		return typed
+	case cache.DeletedFinalStateUnknown:
+		return persistentVolumeFromObject(typed.Obj)
 	default:
 		return nil
 	}
@@ -1829,6 +2217,11 @@ func scopesForPod(summary snapshot.PodSummary) []string {
 		scopes = append(scopes, fmt.Sprintf("workload:%s:%s:%s", summary.Namespace, summary.OwnerKind, summary.OwnerName))
 	}
 	return scopes
+}
+
+// Cluster-scoped domains always use the empty scope key.
+func scopesForCluster() []string {
+	return []string{""}
 }
 
 func scopesForNamespace(namespace string) []string {

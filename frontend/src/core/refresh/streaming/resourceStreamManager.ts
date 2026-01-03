@@ -9,6 +9,16 @@ import { setDomainState, setScopedDomainState } from '../store';
 import type {
   ClusterNodeSnapshotEntry,
   ClusterNodeSnapshotPayload,
+  ClusterConfigEntry,
+  ClusterConfigSnapshotPayload,
+  ClusterCRDEntry,
+  ClusterCRDSnapshotPayload,
+  ClusterCustomEntry,
+  ClusterCustomSnapshotPayload,
+  ClusterRBACEntry,
+  ClusterRBACSnapshotPayload,
+  ClusterStorageEntry,
+  ClusterStorageSnapshotPayload,
   NamespaceAutoscalingSnapshotPayload,
   NamespaceAutoscalingSummary,
   NamespaceConfigSnapshotPayload,
@@ -104,6 +114,11 @@ const isSupportedDomain = (value: string | undefined): value is ResourceDomain =
   value === 'namespace-autoscaling' ||
   value === 'namespace-quotas' ||
   value === 'namespace-storage' ||
+  value === 'cluster-rbac' ||
+  value === 'cluster-storage' ||
+  value === 'cluster-config' ||
+  value === 'cluster-crds' ||
+  value === 'cluster-custom' ||
   value === 'nodes';
 
 const hasMessageType = (value: unknown): value is StreamMessageType =>
@@ -227,6 +242,15 @@ export const normalizeResourceScope = (domain: ResourceDomain, scope: string): s
       return normalizeNamespaceScope(scope, 'namespace-quotas');
     case 'namespace-storage':
       return normalizeNamespaceScope(scope, 'namespace-storage');
+    case 'cluster-rbac':
+    case 'cluster-storage':
+    case 'cluster-config':
+    case 'cluster-crds':
+    case 'cluster-custom':
+      if (!scope || scope.trim() === '' || scope.trim().toLowerCase() === 'cluster') {
+        return '';
+      }
+      throw new Error(`cluster stream does not accept scope ${scope}`);
     case 'nodes':
       if (!scope || scope.trim() === '' || scope.trim().toLowerCase() === 'cluster') {
         return '';
@@ -378,6 +402,45 @@ export const sortStorageRows = (rows: NamespaceStorageSummary[]): void => {
   });
 };
 
+// Keep cluster tab rows ordered to match snapshot sorting.
+export const sortClusterRBACRows = (rows: ClusterRBACEntry[]): void => {
+  rows.sort((a, b) => {
+    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
+    if (kind !== 0) {
+      return kind;
+    }
+    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
+  });
+};
+
+export const sortClusterStorageRows = (rows: ClusterStorageEntry[]): void => {
+  rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
+};
+
+export const sortClusterConfigRows = (rows: ClusterConfigEntry[]): void => {
+  rows.sort((a, b) => {
+    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
+    if (kind !== 0) {
+      return kind;
+    }
+    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
+  });
+};
+
+export const sortClusterCRDRows = (rows: ClusterCRDEntry[]): void => {
+  rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
+};
+
+export const sortClusterCustomRows = (rows: ClusterCustomEntry[]): void => {
+  rows.sort((a, b) => {
+    const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
+    if (kind !== 0) {
+      return kind;
+    }
+    return normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name));
+  });
+};
+
 export const sortNodeRows = (rows: ClusterNodeSnapshotEntry[]): void => {
   rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
 };
@@ -428,6 +491,19 @@ const buildStorageKey = (
   kind: string,
   name: string
 ): string => `${clusterId}::${namespace}::${kind}::${name}`;
+
+const buildClusterRBACKey = (clusterId: string, kind: string, name: string): string =>
+  `${clusterId}::${kind}::${name}`;
+
+const buildClusterStorageKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
+
+const buildClusterConfigKey = (clusterId: string, kind: string, name: string): string =>
+  `${clusterId}::${kind}::${name}`;
+
+const buildClusterCRDKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
+
+const buildClusterCustomKey = (clusterId: string, kind: string, name: string): string =>
+  `${clusterId}::${kind}::${name}`;
 
 const buildNodeKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
 
@@ -589,6 +665,66 @@ const buildStorageKeySet = (
     keys.add(
       buildStorageKey(row.clusterId ?? fallbackClusterId, row.namespace, row.kind, row.name)
     );
+  });
+  return keys;
+};
+
+const buildClusterRBACKeySet = (
+  payload: ClusterRBACSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.resources ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(buildClusterRBACKey(row.clusterId ?? fallbackClusterId, row.kind, row.name));
+  });
+  return keys;
+};
+
+const buildClusterStorageKeySet = (
+  payload: ClusterStorageSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.volumes ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(buildClusterStorageKey(row.clusterId ?? fallbackClusterId, row.name));
+  });
+  return keys;
+};
+
+const buildClusterConfigKeySet = (
+  payload: ClusterConfigSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.resources ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(buildClusterConfigKey(row.clusterId ?? fallbackClusterId, row.kind, row.name));
+  });
+  return keys;
+};
+
+const buildClusterCRDKeySet = (
+  payload: ClusterCRDSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.definitions ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(buildClusterCRDKey(row.clusterId ?? fallbackClusterId, row.name));
+  });
+  return keys;
+};
+
+const buildClusterCustomKeySet = (
+  payload: ClusterCustomSnapshotPayload | null | undefined,
+  fallbackClusterId: string
+): Set<string> => {
+  const rows = payload?.resources ?? [];
+  const keys = new Set<string>();
+  rows.forEach((row) => {
+    keys.add(buildClusterCustomKey(row.clusterId ?? fallbackClusterId, row.kind, row.name));
   });
   return keys;
 };
@@ -1623,6 +1759,229 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'cluster-rbac') {
+      setDomainState('cluster-rbac', (previous) => {
+        const currentPayload = previous.data ?? { resources: [] };
+        const existingRows = currentPayload.resources ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildClusterRBACKey(row.clusterId ?? subscription.clusterId, row.kind, row.name),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildClusterRBACKey(
+            update.clusterId ?? subscription.clusterId,
+            update.kind ?? '',
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as ClusterRBACEntry);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortClusterRBACRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, resources: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-storage') {
+      setDomainState('cluster-storage', (previous) => {
+        const currentPayload = previous.data ?? { volumes: [] };
+        const existingRows = currentPayload.volumes ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildClusterStorageKey(row.clusterId ?? subscription.clusterId, row.name),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildClusterStorageKey(
+            update.clusterId ?? subscription.clusterId,
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as ClusterStorageEntry);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortClusterStorageRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, volumes: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-config') {
+      setDomainState('cluster-config', (previous) => {
+        const currentPayload = previous.data ?? { resources: [] };
+        const existingRows = currentPayload.resources ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildClusterConfigKey(row.clusterId ?? subscription.clusterId, row.kind, row.name),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildClusterConfigKey(
+            update.clusterId ?? subscription.clusterId,
+            update.kind ?? '',
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as ClusterConfigEntry);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortClusterConfigRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, resources: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-crds') {
+      setDomainState('cluster-crds', (previous) => {
+        const currentPayload = previous.data ?? { definitions: [] };
+        const existingRows = currentPayload.definitions ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildClusterCRDKey(row.clusterId ?? subscription.clusterId, row.name),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildClusterCRDKey(
+            update.clusterId ?? subscription.clusterId,
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as ClusterCRDEntry);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortClusterCRDRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, definitions: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-custom') {
+      setDomainState('cluster-custom', (previous) => {
+        const currentPayload = previous.data ?? { resources: [] };
+        const existingRows = currentPayload.resources ?? [];
+        const byKey = new Map(
+          existingRows.map((row) => [
+            buildClusterCustomKey(row.clusterId ?? subscription.clusterId, row.kind, row.name),
+            row,
+          ])
+        );
+
+        updates.forEach((update) => {
+          const key = buildClusterCustomKey(
+            update.clusterId ?? subscription.clusterId,
+            update.kind ?? '',
+            update.name ?? ''
+          );
+          if (update.type === MESSAGE_TYPES.deleted) {
+            byKey.delete(key);
+            return;
+          }
+          if (!update.row) {
+            return;
+          }
+          byKey.set(key, update.row as ClusterCustomEntry);
+        });
+
+        const nextRows = Array.from(byKey.values());
+        sortClusterCustomRows(nextRows);
+        return {
+          ...previous,
+          status: 'ready',
+          data: { ...currentPayload, resources: nextRows },
+          stats: updateStats(previous.stats, nextRows.length),
+          lastUpdated: now,
+          lastAutoRefresh: now,
+          error: null,
+          isManual: false,
+          scope: subscription.storeScope,
+        };
+      });
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       setDomainState('nodes', (previous) => {
         const currentPayload = previous.data ?? { nodes: [] };
@@ -1830,6 +2189,84 @@ export class ResourceStreamManager {
         const kind = update.kind ?? row?.kind ?? '';
         const name = update.name ?? row?.name ?? '';
         const key = buildStorageKey(clusterId, namespace, kind, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
+    if (subscription.domain === 'cluster-rbac') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as ClusterRBACEntry | undefined;
+        const kind = update.kind ?? row?.kind ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildClusterRBACKey(clusterId, kind, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
+    if (subscription.domain === 'cluster-storage') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as ClusterStorageEntry | undefined;
+        const name = update.name ?? row?.name ?? '';
+        const key = buildClusterStorageKey(clusterId, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
+    if (subscription.domain === 'cluster-config') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as ClusterConfigEntry | undefined;
+        const kind = update.kind ?? row?.kind ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildClusterConfigKey(clusterId, kind, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
+    if (subscription.domain === 'cluster-crds') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as ClusterCRDEntry | undefined;
+        const name = update.name ?? row?.name ?? '';
+        const key = buildClusterCRDKey(clusterId, name);
+        if (update.type === MESSAGE_TYPES.deleted) {
+          subscription.shadowKeys.delete(key);
+        } else {
+          subscription.shadowKeys.add(key);
+        }
+      });
+      return;
+    }
+
+    if (subscription.domain === 'cluster-custom') {
+      updates.forEach((update) => {
+        const clusterId = update.clusterId ?? subscription.clusterId;
+        const row = update.row as ClusterCustomEntry | undefined;
+        const kind = update.kind ?? row?.kind ?? '';
+        const name = update.name ?? row?.name ?? '';
+        const key = buildClusterCustomKey(clusterId, kind, name);
         if (update.type === MESSAGE_TYPES.deleted) {
           subscription.shadowKeys.delete(key);
         } else {
@@ -2158,6 +2595,106 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'cluster-rbac') {
+      const payload = snapshot.payload as ClusterRBACSnapshotPayload;
+      setDomainState('cluster-rbac', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-storage') {
+      const payload = snapshot.payload as ClusterStorageSnapshotPayload;
+      setDomainState('cluster-storage', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-config') {
+      const payload = snapshot.payload as ClusterConfigSnapshotPayload;
+      setDomainState('cluster-config', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-crds') {
+      const payload = snapshot.payload as ClusterCRDSnapshotPayload;
+      setDomainState('cluster-crds', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-custom') {
+      const payload = snapshot.payload as ClusterCustomSnapshotPayload;
+      setDomainState('cluster-custom', (previous) => ({
+        ...previous,
+        status: 'ready',
+        data: payload,
+        stats: snapshot.stats ?? null,
+        version: snapshot.version,
+        checksum: snapshot.checksum,
+        etag: snapshot.checksum ?? previous.etag,
+        lastUpdated: generatedAt,
+        lastAutoRefresh: generatedAt,
+        error: null,
+        isManual: false,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       const payload = snapshot.payload as ClusterNodeSnapshotPayload;
       setDomainState('nodes', (previous) => ({
@@ -2229,6 +2766,31 @@ export class ResourceStreamManager {
     } else if (subscription.domain === 'namespace-storage') {
       snapshotKeys = buildStorageKeySet(
         snapshot.payload as NamespaceStorageSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'cluster-rbac') {
+      snapshotKeys = buildClusterRBACKeySet(
+        snapshot.payload as ClusterRBACSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'cluster-storage') {
+      snapshotKeys = buildClusterStorageKeySet(
+        snapshot.payload as ClusterStorageSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'cluster-config') {
+      snapshotKeys = buildClusterConfigKeySet(
+        snapshot.payload as ClusterConfigSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'cluster-crds') {
+      snapshotKeys = buildClusterCRDKeySet(
+        snapshot.payload as ClusterCRDSnapshotPayload | null | undefined,
+        subscription.clusterId
+      );
+    } else if (subscription.domain === 'cluster-custom') {
+      snapshotKeys = buildClusterCustomKeySet(
+        snapshot.payload as ClusterCustomSnapshotPayload | null | undefined,
         subscription.clusterId
       );
     } else if (subscription.domain === 'nodes') {
@@ -2428,6 +2990,71 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'cluster-rbac') {
+      setDomainState('cluster-rbac', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-storage') {
+      setDomainState('cluster-storage', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-config') {
+      setDomainState('cluster-config', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-crds') {
+      setDomainState('cluster-crds', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
+    if (subscription.domain === 'cluster-custom') {
+      setDomainState('cluster-custom', (previous) => ({
+        ...previous,
+        status: previous.data ? 'ready' : 'idle',
+        error: null,
+        lastUpdated: previous.lastUpdated ?? now,
+        lastAutoRefresh: now,
+        scope: subscription.storeScope,
+      }));
+      this.clearStreamError(subscription.clusterId);
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       setDomainState('nodes', (previous) => ({
         ...previous,
@@ -2543,6 +3170,56 @@ export class ResourceStreamManager {
       return;
     }
 
+    if (subscription.domain === 'cluster-rbac') {
+      setDomainState('cluster-rbac', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
+    if (subscription.domain === 'cluster-storage') {
+      setDomainState('cluster-storage', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
+    if (subscription.domain === 'cluster-config') {
+      setDomainState('cluster-config', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
+    if (subscription.domain === 'cluster-crds') {
+      setDomainState('cluster-crds', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
+    if (subscription.domain === 'cluster-custom') {
+      setDomainState('cluster-custom', (previous) => ({
+        ...previous,
+        status: previous.data ? 'updating' : 'initialising',
+        error: message,
+        scope: subscription.storeScope,
+      }));
+      return;
+    }
+
     if (subscription.domain === 'nodes') {
       setDomainState('nodes', (previous) => ({
         ...previous,
@@ -2603,6 +3280,41 @@ export class ResourceStreamManager {
       }));
     } else if (subscription.domain === 'namespace-helm') {
       setDomainState('namespace-helm', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
+    } else if (subscription.domain === 'cluster-rbac') {
+      setDomainState('cluster-rbac', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
+    } else if (subscription.domain === 'cluster-storage') {
+      setDomainState('cluster-storage', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
+    } else if (subscription.domain === 'cluster-config') {
+      setDomainState('cluster-config', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
+    } else if (subscription.domain === 'cluster-crds') {
+      setDomainState('cluster-crds', (previous) => ({
+        ...previous,
+        status: isTerminal ? 'error' : previous.status,
+        error: isTerminal ? message : previous.error,
+        scope: subscription.storeScope,
+      }));
+    } else if (subscription.domain === 'cluster-custom') {
+      setDomainState('cluster-custom', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,

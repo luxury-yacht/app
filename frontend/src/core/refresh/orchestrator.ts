@@ -778,6 +778,11 @@ class RefreshOrchestrator {
     | 'namespace-autoscaling'
     | 'namespace-quotas'
     | 'namespace-storage'
+    | 'cluster-rbac'
+    | 'cluster-storage'
+    | 'cluster-config'
+    | 'cluster-crds'
+    | 'cluster-custom'
     | 'nodes' {
     return (
       domain === 'pods' ||
@@ -790,6 +795,11 @@ class RefreshOrchestrator {
       domain === 'namespace-autoscaling' ||
       domain === 'namespace-quotas' ||
       domain === 'namespace-storage' ||
+      domain === 'cluster-rbac' ||
+      domain === 'cluster-storage' ||
+      domain === 'cluster-config' ||
+      domain === 'cluster-crds' ||
+      domain === 'cluster-custom' ||
       domain === 'nodes'
     );
   }
@@ -862,6 +872,26 @@ class RefreshOrchestrator {
 
     if (domain === 'nodes') {
       return this.context.currentView === 'cluster' && this.context.activeClusterView === 'nodes';
+    }
+
+    if (domain === 'cluster-rbac') {
+      return this.context.currentView === 'cluster' && this.context.activeClusterView === 'rbac';
+    }
+
+    if (domain === 'cluster-storage') {
+      return this.context.currentView === 'cluster' && this.context.activeClusterView === 'storage';
+    }
+
+    if (domain === 'cluster-config') {
+      return this.context.currentView === 'cluster' && this.context.activeClusterView === 'config';
+    }
+
+    if (domain === 'cluster-crds') {
+      return this.context.currentView === 'cluster' && this.context.activeClusterView === 'crds';
+    }
+
+    if (domain === 'cluster-custom') {
+      return this.context.currentView === 'cluster' && this.context.activeClusterView === 'custom';
     }
 
     return true;
@@ -1908,6 +1938,15 @@ class RefreshOrchestrator {
     if (domain === 'nodes') {
       return buildClusterScopeList(this.getSelectedClusterIds(), '');
     }
+    if (
+      domain === 'cluster-rbac' ||
+      domain === 'cluster-storage' ||
+      domain === 'cluster-config' ||
+      domain === 'cluster-crds' ||
+      domain === 'cluster-custom'
+    ) {
+      return buildClusterScopeList(this.getSelectedClusterIds(), '');
+    }
     if (domain === 'cluster-events') {
       return buildClusterScopeList(this.getSelectedClusterIds(), CLUSTER_SCOPE);
     }
@@ -2074,6 +2113,14 @@ refreshOrchestrator.registerDomain({
   refresherName: CLUSTER_REFRESHERS.rbac,
   category: 'cluster',
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('cluster-rbac', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('cluster-rbac', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('cluster-rbac', scope),
+    // Pause polling while streaming is active to prevent redundant refreshes.
+    pauseRefresherWhenStreaming: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({
@@ -2081,6 +2128,14 @@ refreshOrchestrator.registerDomain({
   refresherName: CLUSTER_REFRESHERS.storage,
   category: 'cluster',
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('cluster-storage', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('cluster-storage', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('cluster-storage', scope),
+    // Pause polling while streaming is active to prevent redundant refreshes.
+    pauseRefresherWhenStreaming: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({
@@ -2088,6 +2143,14 @@ refreshOrchestrator.registerDomain({
   refresherName: CLUSTER_REFRESHERS.config,
   category: 'cluster',
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('cluster-config', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('cluster-config', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('cluster-config', scope),
+    // Pause polling while streaming is active to prevent redundant refreshes.
+    pauseRefresherWhenStreaming: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({
@@ -2095,6 +2158,14 @@ refreshOrchestrator.registerDomain({
   refresherName: CLUSTER_REFRESHERS.crds,
   category: 'cluster',
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('cluster-crds', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('cluster-crds', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('cluster-crds', scope),
+    // Pause polling while streaming is active to prevent redundant refreshes.
+    pauseRefresherWhenStreaming: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({
@@ -2102,6 +2173,14 @@ refreshOrchestrator.registerDomain({
   refresherName: CLUSTER_REFRESHERS.custom,
   category: 'cluster',
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('cluster-custom', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('cluster-custom', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('cluster-custom', scope),
+    // Pause polling while streaming is active to prevent redundant refreshes.
+    pauseRefresherWhenStreaming: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({
