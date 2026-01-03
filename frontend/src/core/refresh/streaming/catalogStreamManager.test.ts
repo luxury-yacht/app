@@ -13,6 +13,8 @@ const errorHandlerMock = vi.hoisted(() => ({
   handle: vi.fn(),
 }));
 
+const FLUSH_DELAY_MS = 120;
+
 vi.mock('../client', () => ({
   ensureRefreshBaseURL: ensureRefreshBaseURLMock,
 }));
@@ -137,6 +139,7 @@ describe('catalogStreamManager', () => {
   });
 
   it('opens an EventSource stream and applies snapshot payloads', async () => {
+    vi.useFakeTimers();
     const manager = await importManager();
     const cleanup = await manager.start(' limit=50 ');
 
@@ -155,8 +158,7 @@ describe('catalogStreamManager', () => {
       ),
     } as MessageEvent);
 
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
 
     const state = getDomainState('catalog');
     expect(state.status).toBe('ready');
@@ -192,6 +194,7 @@ describe('catalogStreamManager', () => {
   });
 
   it('merges partial stream updates by uid', async () => {
+    vi.useFakeTimers();
     const manager = await importManager();
     await manager.start('limit=50');
 
@@ -244,8 +247,7 @@ describe('catalogStreamManager', () => {
       ),
     } as MessageEvent);
 
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
 
     const state = getDomainState('catalog');
     const mergedItems = state.data?.items ?? [];
@@ -343,45 +345,52 @@ describe('catalogStreamManager', () => {
     globalThis.window = originalWindow;
   });
 
-  it('updates catalog state via Promise fallback when queueMicrotask is unavailable', async () => {
+  it('debounces catalog stream updates before applying', async () => {
+    vi.useFakeTimers();
     const manager = await importManager();
     await manager.start('continue=token');
 
+    const initialSnapshot = createSnapshot();
     setDomainState('catalog', () => ({
       status: 'ready',
-      data: createSnapshot(),
+      data: initialSnapshot,
       stats: { itemCount: 1, buildDurationMs: 10 },
       error: null,
       droppedAutoRefreshes: 0,
       scope: 'continue=token',
     }));
 
-    const originalQueueMicrotask = globalThis.queueMicrotask;
-    (globalThis as any).queueMicrotask = undefined;
-
+    const updatedSnapshot = {
+      ...initialSnapshot,
+      items: [{ ...initialSnapshot.items[0], name: 'api-v2' }],
+    };
     MockEventSource.instances[0].onmessage?.({
       data: JSON.stringify(
         createStreamEvent({
-          snapshot: createSnapshot(),
+          snapshot: updatedSnapshot,
           stats: { itemCount: 2, buildDurationMs: 15 },
-          reset: true,
+          reset: false,
           ready: false,
+          cacheReady: false,
+          truncated: false,
+          snapshotMode: 'partial',
           generatedAt: 1700000005000,
           sequence: 2,
         })
       ),
     } as MessageEvent);
 
-    await Promise.resolve();
-    await Promise.resolve();
+    const preState = getDomainState('catalog');
+    expect(preState.data?.items?.[0]?.name).toBe('api');
+
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
 
     const state = getDomainState('catalog');
     expect(state.status).toBe('updating');
     expect(state.scope).toBe('continue=token');
     expect(state.stats?.itemCount).toBe(2);
     expect(state.lastUpdated).toBe(1700000005000);
-
-    globalThis.queueMicrotask = originalQueueMicrotask;
+    expect(state.data?.items?.[0]?.name).toBe('api-v2');
   });
 
   it('suppresses error notifications immediately after kubeconfig changes', async () => {

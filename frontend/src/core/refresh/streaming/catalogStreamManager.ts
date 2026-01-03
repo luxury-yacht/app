@@ -6,11 +6,14 @@
  */
 
 import { ensureRefreshBaseURL } from '../client';
+import { refreshManager } from '../RefreshManager';
+import { CLUSTER_REFRESHERS } from '../refresherTypes';
 import { resetDomainState, setDomainState } from '../store';
 import type { CatalogStreamEventPayload } from '../types';
 import type { CatalogStreamMergeResult } from './catalogStreamMerge';
 import { CatalogStreamMergeQueue } from './catalogStreamMerge';
 import { errorHandler } from '@utils/errorHandler';
+import { logAppWarn } from '@/core/logging/appLogClient';
 import { eventBus } from '@/core/events';
 
 type CatalogStreamEvent = CatalogStreamEventPayload;
@@ -18,6 +21,10 @@ type CatalogStreamEvent = CatalogStreamEventPayload;
 // Bound work per tick to avoid nested update bursts.
 const CATALOG_STREAM_BATCH_SIZE = 3;
 const CATALOG_STREAM_MAX_PENDING = 40;
+// Debounce stream application to avoid render storms.
+const CATALOG_STREAM_FLUSH_MS = 120;
+// Throttle snapshot fallbacks during sustained bursts.
+const CATALOG_STREAM_FALLBACK_COOLDOWN_MS = 5000;
 
 function isValidCatalogStreamEvent(data: unknown): data is CatalogStreamEvent {
   if (typeof data !== 'object' || data === null) {
@@ -80,7 +87,9 @@ class CatalogStreamManager {
   private suppressErrorsUntil = 0;
   private suspendedForVisibility = false;
   private suspendedScope: string | null = null;
-  private flushScheduled = false;
+  private flushTimer: number | null = null;
+  private lastAppliedSequence = 0;
+  private lastFallbackAt = 0;
   private mergeQueue = new CatalogStreamMergeQueue({
     maxBatchSize: CATALOG_STREAM_BATCH_SIZE,
     maxPending: CATALOG_STREAM_MAX_PENDING,
@@ -136,7 +145,9 @@ class CatalogStreamManager {
     this.scope = scope.trim();
     this.attempt = 0;
     this.mergeQueue.reset();
-    this.flushScheduled = false;
+    this.clearFlushTimer();
+    this.lastAppliedSequence = 0;
+    this.lastFallbackAt = 0;
     const session = this.bumpSession();
     await this.openStream(session);
     return () => this.stop(false);
@@ -146,7 +157,7 @@ class CatalogStreamManager {
     this.closed = true;
     this.bumpSession();
     this.attempt = 0;
-    this.flushScheduled = false;
+    this.clearFlushTimer();
     this.mergeQueue.reset();
     if (reset) {
       this.suppressErrorsUntil = Date.now() + 2000;
@@ -177,7 +188,8 @@ class CatalogStreamManager {
     this.closed = false;
     this.attempt = 0;
     this.mergeQueue.reset();
-    this.flushScheduled = false;
+    this.clearFlushTimer();
+    this.lastAppliedSequence = 0;
     const session = this.bumpSession();
     await this.openStream(session);
   }
@@ -250,13 +262,12 @@ class CatalogStreamManager {
   };
 
   private scheduleFlush(session: number): void {
-    if (this.flushScheduled) {
+    if (this.flushTimer !== null) {
       return;
     }
-    this.flushScheduled = true;
 
-    const flush = () => {
-      this.flushScheduled = false;
+    this.flushTimer = window.setTimeout(() => {
+      this.flushTimer = null;
       if (this.closed || session !== this.session) {
         return;
       }
@@ -268,19 +279,17 @@ class CatalogStreamManager {
       if (this.mergeQueue.hasPending()) {
         this.scheduleFlush(session);
       }
-    };
-
-    if (typeof queueMicrotask === 'function') {
-      queueMicrotask(flush);
-    } else {
-      Promise.resolve().then(flush);
-    }
+    }, CATALOG_STREAM_FLUSH_MS);
   }
 
   private applyMergedState(session: number, result: CatalogStreamMergeResult): void {
     if (this.closed || session !== this.session) {
       return;
     }
+    if (result.sequence <= this.lastAppliedSequence) {
+      return;
+    }
+    this.lastAppliedSequence = result.sequence;
 
     const scope = this.scope;
     const ready = result.ready;
@@ -317,6 +326,30 @@ class CatalogStreamManager {
         scope: scope ?? previous.scope,
       };
     });
+
+    if (result.droppedEvents > 0) {
+      this.triggerSnapshotFallback('stream overflow', result);
+    }
+  }
+
+  private triggerSnapshotFallback(reason: string, result: CatalogStreamMergeResult): void {
+    const now = Date.now();
+    if (now - this.lastFallbackAt < CATALOG_STREAM_FALLBACK_COOLDOWN_MS) {
+      return;
+    }
+    this.lastFallbackAt = now;
+    void refreshManager.triggerManualRefresh(CLUSTER_REFRESHERS.browse);
+    logAppWarn(
+      `Catalog stream fallback (${reason}): dropped=${result.droppedEvents}, seq=${result.sequence}`,
+      'CatalogStream'
+    );
+  }
+
+  private clearFlushTimer(): void {
+    if (this.flushTimer !== null) {
+      window.clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
   }
 
   private handleError(session: number, event?: Event): void {

@@ -78,10 +78,10 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
   - ✅ Define a stream-safe browse payload envelope: batch sequence, full/partial flag, truncation, and cache-ready status. Evidence: `backend/refresh/snapshot/catalog_stream.go:126`, `backend/refresh/snapshot/catalog_stream.go:174`, `frontend/src/core/refresh/types.ts:295`.
   - ✅ Introduce a stream merge layer that applies catalog diffs to a normalized store with bounded batch size and queueing. Evidence: `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:1`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:18`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:252`.
   - ✅ Ensure the object catalog remains the source of truth for namespaces/cluster listings. Evidence: `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:57`, `backend/refresh/snapshot/catalog.go:99`.
-- Phase 2: React update-depth protection
-  - Move browse updates behind a debounced scheduler (frame or 100–250ms window).
-  - Add a hard cap on per-tick updates and fallback to snapshot refresh when exceeded.
-  - Track last-applied stream sequence to avoid reprocessing stale batches.
+- Phase 2: ✅ React update-depth protection
+  - ✅ Move browse updates behind a debounced scheduler (frame or 100–250ms window). Evidence: `frontend/src/core/refresh/streaming/catalogStreamManager.ts:262`.
+  - ✅ Add a hard cap on per-tick updates and fallback to snapshot refresh when exceeded. Evidence: `frontend/src/core/refresh/streaming/catalogStreamManager.ts:21`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:330`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:335`.
+  - ✅ Track last-applied stream sequence to avoid reprocessing stale batches. Evidence: `frontend/src/core/refresh/streaming/catalogStreamManager.ts:83`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:287`.
 - Phase 3: SSE wiring + backpressure handling
   - Reintroduce catalog SSE for browse with explicit handling of dropped batches.
   - On stream gaps or cache-not-ready, trigger a snapshot refresh and reset stream sequence.
