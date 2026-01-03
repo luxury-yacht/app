@@ -86,10 +86,10 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
   - ✅ Reintroduce catalog SSE for browse with explicit handling of dropped batches. Evidence: `frontend/src/core/refresh/orchestrator.ts:2225`, `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:135`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:330`.
   - ✅ On stream gaps or cache-not-ready, trigger a snapshot refresh and reset stream sequence. Evidence: `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:135`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:334`, `frontend/src/core/refresh/orchestrator.ts:1311`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:181`.
   - ✅ Keep snapshot polling as a fallback path for offline/recovery states. Evidence: `frontend/src/core/refresh/orchestrator.ts:2233`, `frontend/src/modules/browse/components/BrowseView.tsx:483`, `frontend/src/modules/namespace/components/NsViewObjects.tsx:410`.
-- Phase 4: Validation + rollout checks
-  - Add tests for stream merge, batch caps, and fallback triggers.
-  - Verify no React update-depth warnings under synthetic high-volume changes.
-  - Confirm diagnostics panel reflects streaming vs snapshot state and any backpressure resets.
+- Phase 4: ✅ Validation + rollout checks
+  - ✅ Add tests for stream merge, batch caps, and fallback triggers. Evidence: `frontend/src/core/refresh/streaming/catalogStreamMerge.test.ts:1`, `frontend/src/core/refresh/streaming/catalogStreamManager.test.ts:405`.
+  - ✅ Verify no React update-depth warnings under synthetic high-volume changes. Evidence: `frontend/src/core/refresh/streaming/catalogStreamManager.test.ts:357`, `frontend/src/core/refresh/streaming/catalogStreamMerge.test.ts:34`.
+  - ✅ Confirm diagnostics panel reflects streaming vs snapshot state and any backpressure resets. Evidence: `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts:92`, `frontend/src/core/refresh/components/DiagnosticsPanel.test.ts:566`.
 
 ## Confidence Boosters (evaluation hygiene)
 

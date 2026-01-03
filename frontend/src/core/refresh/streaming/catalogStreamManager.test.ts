@@ -13,6 +13,10 @@ const errorHandlerMock = vi.hoisted(() => ({
   handle: vi.fn(),
 }));
 
+const refreshManagerMock = vi.hoisted(() => ({
+  triggerManualRefresh: vi.fn(),
+}));
+
 const FLUSH_DELAY_MS = 120;
 
 vi.mock('../client', () => ({
@@ -21,6 +25,10 @@ vi.mock('../client', () => ({
 
 vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
+}));
+
+vi.mock('../RefreshManager', () => ({
+  refreshManager: refreshManagerMock,
 }));
 
 import { getDomainState, resetDomainState, setDomainState } from '../store';
@@ -126,6 +134,7 @@ describe('catalogStreamManager', () => {
     ensureRefreshBaseURLMock.mockReset();
     ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
     errorHandlerMock.handle.mockReset();
+    refreshManagerMock.triggerManualRefresh.mockReset();
     resetDomainState('catalog');
     const module = await import('./catalogStreamManager');
     module.catalogStreamManager.stop(true);
@@ -391,6 +400,57 @@ describe('catalogStreamManager', () => {
     expect(state.stats?.itemCount).toBe(2);
     expect(state.lastUpdated).toBe(1700000005000);
     expect(state.data?.items?.[0]?.name).toBe('api-v2');
+  });
+
+  it('triggers snapshot fallback when the stream reports sequence gaps', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Date, 'now').mockReturnValue(10000);
+    const manager = await importManager();
+    await manager.start('limit=50');
+
+    refreshManagerMock.triggerManualRefresh.mockReset();
+
+    MockEventSource.instances[0].onmessage?.({
+      data: JSON.stringify(
+        createStreamEvent({
+          sequence: 1,
+        })
+      ),
+    } as MessageEvent);
+
+    MockEventSource.instances[0].onmessage?.({
+      data: JSON.stringify(
+        createStreamEvent({
+          sequence: 3,
+        })
+      ),
+    } as MessageEvent);
+
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
+
+    expect(refreshManagerMock.triggerManualRefresh).toHaveBeenCalledWith('catalog');
+  });
+
+  it('triggers snapshot fallback when the catalog cache is not ready', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Date, 'now').mockReturnValue(10000);
+    const manager = await importManager();
+    await manager.start('limit=50');
+
+    refreshManagerMock.triggerManualRefresh.mockReset();
+
+    MockEventSource.instances[0].onmessage?.({
+      data: JSON.stringify(
+        createStreamEvent({
+          cacheReady: false,
+          sequence: 1,
+        })
+      ),
+    } as MessageEvent);
+
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
+
+    expect(refreshManagerMock.triggerManualRefresh).toHaveBeenCalledWith('catalog');
   });
 
   it('suppresses error notifications immediately after kubeconfig changes', async () => {

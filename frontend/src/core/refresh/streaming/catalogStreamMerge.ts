@@ -214,17 +214,19 @@ export class CatalogStreamMergeQueue {
 
     const batch = this.pending.splice(0, this.options.maxBatchSize);
     let output: CatalogStreamMergeResult | null = null;
+    let droppedEvents = 0;
 
     for (const event of batch) {
       const applied = applyStreamEvent(this.state, event);
       this.state = applied.state;
       if (applied.result) {
+        droppedEvents += applied.result.droppedEvents;
         output = applied.result;
       }
     }
 
-    if (output && this.droppedEvents > 0) {
-      output.droppedEvents += this.droppedEvents;
+    if (output) {
+      output.droppedEvents = droppedEvents + this.droppedEvents;
       this.droppedEvents = 0;
     }
 
