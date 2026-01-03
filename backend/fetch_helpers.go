@@ -29,16 +29,25 @@ var fetchRetrySleep = time.Sleep
 var contextSleep = timeutil.SleepWithContext
 
 // FetchResource executes the supplied fetch function, wrapping any error with
-// additional diagnostic information. The cacheKey parameter is retained for
-// compatibility with legacy callers but no longer drives any caching.
+// additional diagnostic information. It uses a short-lived response cache for
+// non-informer GETs to avoid repeated requests for the same resource.
 func FetchResource[T any](
 	a *App,
-	_ string,
+	cacheKey string,
 	resourceKind string,
 	identifier string,
 	fetchFunc func() (T, error),
 ) (T, error) {
 	var zero T
+	if a != nil {
+		if cached, ok := a.responseCacheLookup("", cacheKey); ok {
+			if typed, ok := cached.(T); ok {
+				return typed, nil
+			}
+			// Cached value was the wrong type; evict and refetch.
+			a.responseCacheDelete("", cacheKey)
+		}
+	}
 	ctx := a.CtxOrBackground()
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
 		var cancel context.CancelFunc
@@ -58,6 +67,9 @@ func FetchResource[T any](
 		return zero, errorcapture.Enhance(err)
 	}
 
+	if a != nil {
+		a.responseCacheStore("", cacheKey, result)
+	}
 	return result, nil
 }
 

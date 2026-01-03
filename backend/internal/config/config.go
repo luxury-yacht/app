@@ -25,6 +25,13 @@ const (
 	// SnapshotCacheTTL controls how long snapshot builds are cached to avoid redundant work.
 	SnapshotCacheTTL = 1 * time.Second
 
+	// ResponseCacheTTL controls how long non-informer resource GETs are cached.
+	// Keep this short to reduce staleness while still cutting repeated requests.
+	ResponseCacheTTL = 10 * time.Second
+
+	// ResponseCacheMaxEntries caps the number of cached GET responses before eviction.
+	ResponseCacheMaxEntries = 512
+
 	// ClusterVersionCacheTTL controls how long the cluster version lookup is cached.
 	ClusterVersionCacheTTL = 10 * time.Minute
 

@@ -26,20 +26,22 @@ var defaultLoopbackListener = func() (net.Listener, error) {
 
 // App provides the backend façade exposed to Wails.
 type App struct {
-	Ctx                     context.Context
-	client                  kubernetes.Interface
-	apiextensionsClient     apiextensionsclientset.Interface
-	dynamicClient           dynamic.Interface
-	metricsClient           *metricsclient.Clientset
-	restConfig              *rest.Config
-	selectedKubeconfig      string
-	selectedContext         string
-	selectedKubeconfigs     []string
-	availableKubeconfigs    []KubeconfigInfo
-	windowSettings          *WindowSettings
-	appSettings             *AppSettings
-	logger                  *Logger
-	versionCache            *versioning.Cache
+	Ctx                  context.Context
+	client               kubernetes.Interface
+	apiextensionsClient  apiextensionsclientset.Interface
+	dynamicClient        dynamic.Interface
+	metricsClient        *metricsclient.Clientset
+	restConfig           *rest.Config
+	selectedKubeconfig   string
+	selectedContext      string
+	selectedKubeconfigs  []string
+	availableKubeconfigs []KubeconfigInfo
+	windowSettings       *WindowSettings
+	appSettings          *AppSettings
+	logger               *Logger
+	versionCache         *versioning.Cache
+	// responseCache stores short-lived detail/YAML/helm GET responses.
+	responseCache           *responseCache
 	sidebarVisible          bool
 	diagnosticsPanelVisible bool
 	logsPanelVisible        bool
@@ -101,6 +103,7 @@ func NewApp() *App {
 	app := &App{
 		logger:               NewLogger(1000),
 		versionCache:         versioning.NewCache(),
+		responseCache:        newDefaultResponseCache(),
 		sidebarVisible:       true,
 		logsPanelVisible:     false,
 		permissionCaches:     make(map[string]map[string]bool),

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -118,6 +119,24 @@ func TestGetObjectYAMLNamespacedResource(t *testing.T) {
 	}
 	if !strings.Contains(yamlStr, "name: demo-pod") || !strings.Contains(yamlStr, "namespace: demo") {
 		t.Fatalf("unexpected YAML output:\n%s", yamlStr)
+	}
+}
+
+func TestGetObjectYAMLUsesCacheWhenAvailable(t *testing.T) {
+	resetGVRCache()
+	app := newTestAppWithDefaults(t)
+	app.responseCache = newResponseCache(time.Minute, 10)
+	registerTestCluster(app, testClusterID)
+
+	cacheKey := objectYAMLCacheKey("Pod", "default", "cached-pod")
+	app.responseCacheStore(testClusterID, cacheKey, "cached-yaml")
+
+	yamlStr, err := app.GetObjectYAML(testClusterID, "Pod", "default", "cached-pod")
+	if err != nil {
+		t.Fatalf("GetObjectYAML returned error: %v", err)
+	}
+	if yamlStr != "cached-yaml" {
+		t.Fatalf("expected cached YAML, got %q", yamlStr)
 	}
 }
 

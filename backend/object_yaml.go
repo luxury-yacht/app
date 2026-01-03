@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/cachekeys"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -95,7 +96,38 @@ func (a *App) GetObjectYAML(clusterID, resourceKind, namespace, name string) (st
 	if err != nil {
 		return "", err
 	}
-	return getObjectYAMLWithDependencies(deps, selectionKey, resourceKind, namespace, name)
+	return a.getObjectYAMLWithCache(deps, selectionKey, resourceKind, namespace, name)
+}
+
+func objectYAMLCacheKey(resourceKind, namespace, name string) string {
+	return cachekeys.Build("object-yaml-"+strings.ToLower(strings.TrimSpace(resourceKind)), namespace, name)
+}
+
+// getObjectYAMLWithCache wraps object YAML retrieval with a short-lived response cache.
+func (a *App) getObjectYAMLWithCache(
+	deps common.Dependencies,
+	selectionKey string,
+	resourceKind, namespace, name string,
+) (string, error) {
+	if a != nil {
+		cacheKey := objectYAMLCacheKey(resourceKind, namespace, name)
+		if cached, ok := a.responseCacheLookup(selectionKey, cacheKey); ok {
+			if yamlText, ok := cached.(string); ok {
+				return yamlText, nil
+			}
+			a.responseCacheDelete(selectionKey, cacheKey)
+		}
+	}
+
+	yamlText, err := getObjectYAMLWithDependencies(deps, selectionKey, resourceKind, namespace, name)
+	if err != nil {
+		return "", err
+	}
+
+	if a != nil {
+		a.responseCacheStore(selectionKey, objectYAMLCacheKey(resourceKind, namespace, name), yamlText)
+	}
+	return yamlText, nil
 }
 
 // getObjectYAMLWithDependencies fetches object YAML using the supplied cluster-scoped dependencies.
