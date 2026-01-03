@@ -69,6 +69,28 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 9. ✅ [Incremental] Event retention differs sharply (Headlamp default 2000, Luxury Yacht 200); caps now raised to 500 for cluster/namespace/object events to reduce truncation without changing the streaming model. Evidence: `headlamp/frontend/src/lib/k8s/event.ts:51`, `backend/refresh/snapshot/event_limits.go:3`, `backend/refresh/snapshot/cluster_events.go:111`.
 10. [Incremental] Catalog SSE has explicit backpressure drop behavior for slow consumers; if SSE is reintroduced for browse, the UI must handle missed updates by re-fetching snapshots when readiness or dropped updates are detected. Evidence: `backend/objectcatalog/streaming.go:151`, `backend/refresh/snapshot/catalog_stream.go:91`.
 
+#### Catalog Browse Streaming Plan (#7)
+
+- Phase 0: Baseline + guardrails
+  - Capture current browse data flow (snapshot fetch, store updates, render triggers) with evidence.
+  - Add a lightweight diagnostics hook to count browse update frequency and render depth warnings (no UI changes).
+- Phase 1: Streaming data model + safety envelope
+  - Define a stream-safe browse payload envelope: batch sequence, full/partial flag, truncation, and cache-ready status.
+  - Introduce a stream merge layer that applies catalog diffs to a normalized store with bounded batch size and queueing.
+  - Ensure the object catalog remains the source of truth for namespaces/cluster listings.
+- Phase 2: React update-depth protection
+  - Move browse updates behind a debounced scheduler (frame or 100–250ms window).
+  - Add a hard cap on per-tick updates and fallback to snapshot refresh when exceeded.
+  - Track last-applied stream sequence to avoid reprocessing stale batches.
+- Phase 3: SSE wiring + backpressure handling
+  - Reintroduce catalog SSE for browse with explicit handling of dropped batches.
+  - On stream gaps or cache-not-ready, trigger a snapshot refresh and reset stream sequence.
+  - Keep snapshot polling as a fallback path for offline/recovery states.
+- Phase 4: Validation + rollout checks
+  - Add tests for stream merge, batch caps, and fallback triggers.
+  - Verify no React update-depth warnings under synthetic high-volume changes.
+  - Confirm diagnostics panel reflects streaming vs snapshot state and any backpressure resets.
+
 ## Confidence Boosters (evaluation hygiene)
 
 - Anchor every subsystem finding to at least 3 concrete line references per app (done and expanded below).
