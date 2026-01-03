@@ -122,12 +122,16 @@ const isSupportedDomain = (value: string | undefined): value is ResourceDomain =
   value === 'nodes';
 
 const isMultiClusterDomain = (domain: ResourceDomain): boolean =>
+  domain === 'pods' ||
+  domain === 'namespace-workloads' ||
   domain === 'nodes' ||
   domain === 'cluster-rbac' ||
   domain === 'cluster-storage' ||
   domain === 'cluster-config' ||
   domain === 'cluster-crds' ||
   domain === 'cluster-custom';
+
+const isMultiClusterScope = (scope: string): boolean => parseClusterScopeList(scope).isMultiCluster;
 
 const hasMessageType = (value: unknown): value is StreamMessageType =>
   typeof value === 'string' && Object.values(MESSAGE_TYPES).includes(value as StreamMessageType);
@@ -1227,16 +1231,6 @@ export class ResourceStreamManager {
     return { clusterIds: parsed.clusterIds, normalizedScope, reportScope };
   }
 
-  private hasMultiClusterSubscriptions(domain: ResourceDomain): boolean {
-    const clusters = new Set<string>();
-    this.subscriptions.forEach((subscription) => {
-      if (subscription.domain === domain) {
-        clusters.add(subscription.clusterId);
-      }
-    });
-    return clusters.size > 1;
-  }
-
   private subscriptionKey(clusterId: string, domain: ResourceDomain, scope: string): string {
     return `${clusterId}::${domain}::${scope}`;
   }
@@ -1336,7 +1330,7 @@ export class ResourceStreamManager {
     this.applyShadowUpdates(subscription, updates);
 
     if (subscription.domain === 'pods') {
-      setScopedDomainState('pods', subscription.storeScope, (previous) => {
+      setScopedDomainState('pods', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { pods: [] };
         const existingRows = currentPayload.pods ?? [];
         const byKey = new Map(
@@ -2475,40 +2469,62 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'pods') {
       const payload = snapshot.payload as PodSnapshotPayload;
-      setScopedDomainState('pods', subscription.storeScope, (previous) => ({
-        ...previous,
-        status: 'ready',
-        data: payload,
-        stats: snapshot.stats ?? null,
-        version: snapshot.version,
-        checksum: snapshot.checksum,
-        etag: snapshot.checksum ?? previous.etag,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: generatedAt,
-        error: null,
-        isManual: false,
-        scope: subscription.reportScope,
-      }));
+      // Multi-cluster snapshots must merge per-cluster rows into the shared scope.
+      const shouldMerge = isMultiClusterScope(subscription.reportScope);
+      setScopedDomainState('pods', subscription.reportScope, (previous) => {
+        const incoming = payload.pods ?? [];
+        const merged = shouldMerge
+          ? mergeClusterRows(previous.data?.pods, incoming, subscription.clusterId)
+          : incoming;
+        if (shouldMerge) {
+          sortPodRows(merged);
+        }
+        return {
+          ...previous,
+          status: 'ready',
+          data: shouldMerge ? { ...payload, pods: merged } : payload,
+          stats: updateStats(snapshot.stats ?? previous.stats ?? null, merged.length),
+          version: snapshot.version,
+          checksum: snapshot.checksum,
+          etag: snapshot.checksum ?? previous.etag,
+          lastUpdated: generatedAt,
+          lastAutoRefresh: generatedAt,
+          error: null,
+          isManual: false,
+          scope: subscription.reportScope,
+        };
+      });
       this.clearStreamError(subscription.clusterId);
       return;
     }
 
     if (subscription.domain === 'namespace-workloads') {
       const payload = snapshot.payload as NamespaceWorkloadSnapshotPayload;
-      setDomainState('namespace-workloads', (previous) => ({
-        ...previous,
-        status: 'ready',
-        data: payload,
-        stats: snapshot.stats ?? null,
-        version: snapshot.version,
-        checksum: snapshot.checksum,
-        etag: snapshot.checksum ?? previous.etag,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: generatedAt,
-        error: null,
-        isManual: false,
-        scope: subscription.reportScope,
-      }));
+      // Multi-cluster snapshots must merge per-cluster rows into the shared scope.
+      const shouldMerge = isMultiClusterScope(subscription.reportScope);
+      setDomainState('namespace-workloads', (previous) => {
+        const incoming = payload.workloads ?? [];
+        const merged = shouldMerge
+          ? mergeClusterRows(previous.data?.workloads, incoming, subscription.clusterId)
+          : incoming;
+        if (shouldMerge) {
+          sortWorkloadRows(merged);
+        }
+        return {
+          ...previous,
+          status: 'ready',
+          data: shouldMerge ? { ...payload, workloads: merged } : payload,
+          stats: updateStats(snapshot.stats ?? previous.stats ?? null, merged.length),
+          version: snapshot.version,
+          checksum: snapshot.checksum,
+          etag: snapshot.checksum ?? previous.etag,
+          lastUpdated: generatedAt,
+          lastAutoRefresh: generatedAt,
+          error: null,
+          isManual: false,
+          scope: subscription.reportScope,
+        };
+      });
       this.clearStreamError(subscription.clusterId);
       return;
     }
@@ -2675,7 +2691,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'cluster-rbac') {
       const payload = snapshot.payload as ClusterRBACSnapshotPayload;
-      const shouldMerge = this.hasMultiClusterSubscriptions('cluster-rbac');
+      const shouldMerge = isMultiClusterScope(subscription.reportScope);
       setDomainState('cluster-rbac', (previous) => {
         const incoming = payload.resources ?? [];
         const merged = shouldMerge
@@ -2705,7 +2721,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'cluster-storage') {
       const payload = snapshot.payload as ClusterStorageSnapshotPayload;
-      const shouldMerge = this.hasMultiClusterSubscriptions('cluster-storage');
+      const shouldMerge = isMultiClusterScope(subscription.reportScope);
       setDomainState('cluster-storage', (previous) => {
         const incoming = payload.volumes ?? [];
         const merged = shouldMerge
@@ -2735,7 +2751,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'cluster-config') {
       const payload = snapshot.payload as ClusterConfigSnapshotPayload;
-      const shouldMerge = this.hasMultiClusterSubscriptions('cluster-config');
+      const shouldMerge = isMultiClusterScope(subscription.reportScope);
       setDomainState('cluster-config', (previous) => {
         const incoming = payload.resources ?? [];
         const merged = shouldMerge
@@ -2765,7 +2781,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'cluster-crds') {
       const payload = snapshot.payload as ClusterCRDSnapshotPayload;
-      const shouldMerge = this.hasMultiClusterSubscriptions('cluster-crds');
+      const shouldMerge = isMultiClusterScope(subscription.reportScope);
       setDomainState('cluster-crds', (previous) => {
         const incoming = payload.definitions ?? [];
         const merged = shouldMerge
@@ -2795,7 +2811,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'cluster-custom') {
       const payload = snapshot.payload as ClusterCustomSnapshotPayload;
-      const shouldMerge = this.hasMultiClusterSubscriptions('cluster-custom');
+      const shouldMerge = isMultiClusterScope(subscription.reportScope);
       setDomainState('cluster-custom', (previous) => {
         const incoming = payload.resources ?? [];
         const merged = shouldMerge
@@ -2825,7 +2841,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'nodes') {
       const payload = snapshot.payload as ClusterNodeSnapshotPayload;
-      const shouldMerge = this.hasMultiClusterSubscriptions('nodes');
+      const shouldMerge = isMultiClusterScope(subscription.reportScope);
       setDomainState('nodes', (previous) => {
         const incoming = payload.nodes ?? [];
         const merged = shouldMerge
@@ -2999,7 +3015,7 @@ export class ResourceStreamManager {
   private markResyncComplete(subscription: StreamSubscription): void {
     const now = Date.now();
     if (subscription.domain === 'pods') {
-      setScopedDomainState('pods', subscription.storeScope, (previous) => ({
+      setScopedDomainState('pods', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3209,7 +3225,7 @@ export class ResourceStreamManager {
   private markResyncing(subscription: StreamSubscription): void {
     const message = RESYNC_MESSAGE;
     if (subscription.domain === 'pods') {
-      setScopedDomainState('pods', subscription.storeScope, (previous) => ({
+      setScopedDomainState('pods', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3375,7 +3391,7 @@ export class ResourceStreamManager {
     const isTerminal = attempts >= STREAM_ERROR_NOTIFY_THRESHOLD;
 
     if (subscription.domain === 'pods') {
-      setScopedDomainState('pods', subscription.storeScope, (previous) => ({
+      setScopedDomainState('pods', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,

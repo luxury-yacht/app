@@ -77,12 +77,15 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 ### Phase 5 - Domain migration expansion (remaining snapshot-based lists)
 
 - ✅ Inventory remaining snapshot domains and classify by list semantics (cluster vs namespace, single vs scoped list, metrics-bearing vs static).
-  - Snapshot-only list domains (intentional polling): `cluster-overview` (cluster-scoped, metrics-bearing summary), `node-maintenance` (cluster-scoped action status).
-  - Snapshot-only object/detail domains (scoped detail views): `object-details`, `object-events`, `object-yaml`, `object-helm-manifest`, `object-helm-values`, `object-logs`.
+  - Snapshot-only list domains (intentional polling): `namespaces` (system list; catalog source of truth), `cluster-overview` (cluster-scoped, metrics-bearing summary), `node-maintenance` (cluster-scoped action status).
+  - Snapshot-only object/detail domains (scoped detail views): `object-details`, `object-events`, `object-yaml`, `object-helm-manifest`, `object-helm-values`.
+  - Streamed non-resource domains (out of Phase 5 list migration): `object-logs` (log stream).
   - Catalog domains (object catalog-driven): `catalog`, `catalog-diff` (remain snapshot/manual by design).
-- ✅ Prioritize migration order based on churn and UX impact (no remaining list domains to migrate after cluster/namespace list coverage; polling-only domains above remain out of scope).
+- ✅ Prioritize migration order based on churn and UX impact (no remaining list domains to migrate; snapshot-only domains above remain out of scope by design).
 - ✅ Remaining domains (track completion):
+  - ✅ `namespaces` (keep polling; catalog source of truth)
   - ✅ `cluster-overview` (keep polling; includes metrics)
+  - ✅ `node-maintenance` (keep polling; action status)
   - ✅ `cluster-rbac` (pause refresher when streaming)
   - ✅ `cluster-storage` (pause refresher when streaming)
   - ✅ `cluster-config` (pause refresher when streaming)
@@ -94,7 +97,7 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
   - ✅ `namespace-autoscaling` (pause refresher when streaming)
   - ✅ `namespace-custom` (pause refresher when streaming)
   - ✅ `namespace-helm` (pause refresher when streaming)
-- ✅ For each selected domain:
+- ✅ For each selected streaming list domain:
   - ✅ Add informer-driven update emission in the backend with minimal row payloads and resourceVersion tracking (`backend/refresh/resourcestream/manager.go`).
   - ✅ Add client-side merge/update logic and drift detection for the new domain in the resource stream manager (`frontend/src/core/refresh/streaming/resourceStreamManager.ts`).
   - ✅ Register telemetry mapping and diagnostics coverage for the domain (`frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts`).
@@ -106,13 +109,13 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 - ✅ Remove the single-cluster restriction by allowing a multi-cluster scope to fan out into per-cluster subscriptions.
 - ✅ Maintain a shared aggregate store scope for multi-cluster views so updates from each cluster merge into the same UI list.
-- [ ] Track resourceVersion, resync, and drift detection per cluster so a resync in one cluster does not reset other clusters.
+- ✅ Track resourceVersion, resync, and drift detection per cluster so a resync in one cluster does not reset other clusters.
 - ✅ Ensure node keys are cluster-scoped (`clusterId + name`) so deletes and updates are isolated per cluster.
-- [ ] Extend the same multi-cluster fan-out behavior to pods and namespace-workloads once nodes are stable.
+- ✅ Extend the same multi-cluster fan-out behavior to pods and namespace-workloads once nodes are stable.
 - [ ] Add multi-cluster tests:
-  - [ ] Merge updates from two clusters into one aggregated list without clobbering.
-  - [ ] Resync and error isolation per cluster.
-  - [ ] Metrics-only refresh path preserves existing metrics while stream updates apply.
+  - ✅ Merge updates from two clusters into one aggregated list without clobbering.
+  - ✅ Resync and error isolation per cluster.
+  - ✅ Metrics-only refresh path preserves existing metrics while stream updates apply.
   - ✅ Close node single-cluster limitation (support multi-cluster streaming for nodes).
 
 ### Safety guarantees

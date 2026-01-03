@@ -17,9 +17,11 @@ import {
   markPendingRequest,
   resetDomainState,
   setDomainState,
+  setScopedDomainState,
 } from './store';
 import { refreshOrchestrator } from './orchestrator';
 import { CLUSTER_REFRESHERS, NAMESPACE_REFRESHERS, SYSTEM_REFRESHERS } from './refresherTypes';
+import { buildClusterScopeList } from './clusterScope';
 
 const refreshManagerMocks = vi.hoisted(() => ({
   subscribeMock: vi.fn(),
@@ -1186,6 +1188,147 @@ describe('refreshOrchestrator', () => {
     await subscriber?.(true, new AbortController().signal);
 
     expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
+  });
+
+  it('fans out multi-cluster metrics-only pod refreshes and preserves existing rows', async () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'pods',
+      refresherName: SYSTEM_REFRESHERS.unifiedPods,
+      category: 'system',
+      scoped: true,
+      autoStart: false,
+      streaming: {
+        start: (scope: string) => resourceStreamMocks.start(scope),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          resourceStreamMocks.stop(scope, options),
+        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
+        metricsOnly: true,
+      },
+    });
+
+    refreshOrchestrator.updateContext({
+      currentView: 'namespace',
+      activeNamespaceView: 'pods',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+
+    refreshOrchestrator.setScopedDomainEnabled('pods', 'namespace:default', true);
+
+    const reportScope = buildClusterScopeList(['cluster-a', 'cluster-b'], 'namespace:default');
+    setScopedDomainState('pods', reportScope, () => ({
+      status: 'ready',
+      data: {
+        pods: [
+          {
+            clusterId: 'cluster-a',
+            name: 'pod-a',
+            namespace: 'default',
+            status: 'Running',
+            ready: '1/1',
+            restarts: 0,
+            age: '1m',
+            ownerKind: 'Deployment',
+            ownerName: 'web',
+            node: 'node-a',
+            cpuRequest: '10m',
+            cpuLimit: '20m',
+            cpuUsage: '50m',
+            memRequest: '10Mi',
+            memLimit: '20Mi',
+            memUsage: '40Mi',
+          },
+          {
+            clusterId: 'cluster-b',
+            name: 'pod-b',
+            namespace: 'default',
+            status: 'Running',
+            ready: '1/1',
+            restarts: 0,
+            age: '2m',
+            ownerKind: 'Deployment',
+            ownerName: 'api',
+            node: 'node-b',
+            cpuRequest: '10m',
+            cpuLimit: '20m',
+            cpuUsage: '60m',
+            memRequest: '10Mi',
+            memLimit: '20Mi',
+            memUsage: '50Mi',
+          },
+        ],
+      },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: reportScope,
+    }));
+
+    await refreshOrchestrator.startStreamingDomain('pods', 'namespace:default');
+
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope: 'namespace:default',
+        version: 1,
+        checksum: 'etag-a',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          pods: [
+            {
+              clusterId: 'cluster-a',
+              name: 'pod-a',
+              namespace: 'default',
+              status: 'Pending',
+              cpuUsage: '5m',
+              memUsage: '6Mi',
+            },
+          ],
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      etag: 'etag-a',
+      notModified: false,
+    });
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope: 'namespace:default',
+        version: 1,
+        checksum: 'etag-b',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          pods: [
+            {
+              clusterId: 'cluster-b',
+              name: 'pod-b',
+              namespace: 'default',
+              status: 'Pending',
+              cpuUsage: '7m',
+              memUsage: '8Mi',
+            },
+          ],
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      etag: 'etag-b',
+      notModified: false,
+    });
+
+    await refreshOrchestrator.fetchScopedDomain('pods', 'namespace:default', { isManual: false });
+
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(2);
+    const scopes = clientMocks.fetchSnapshotMock.mock.calls.map((call) => call[1]?.scope).sort();
+    expect(scopes).toEqual(['cluster-a|namespace:default', 'cluster-b|namespace:default']);
+
+    const state = getScopedDomainState('pods', reportScope);
+    const podA = state.data?.pods?.find((pod) => pod.clusterId === 'cluster-a');
+    const podB = state.data?.pods?.find((pod) => pod.clusterId === 'cluster-b');
+    expect(podA?.cpuUsage).toBe('5m');
+    expect(podA?.status).toBe('Running');
+    expect(podB?.cpuUsage).toBe('7m');
+    expect(podB?.status).toBe('Running');
   });
 
   it('handles global reset and kubeconfig transitions by cancelling inflight work', () => {
