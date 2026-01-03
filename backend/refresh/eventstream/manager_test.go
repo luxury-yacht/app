@@ -48,12 +48,15 @@ func TestManagerBroadcastsToSubscribers(t *testing.T) {
 	select {
 	case <-time.After(2 * time.Second):
 		t.Fatalf("timed out waiting for event")
-	case entry, ok := <-ach:
+	case streamEvent, ok := <-ach:
 		if !ok {
 			t.Fatalf("subscription channel closed")
 		}
-		if entry.Name != "test-event" || entry.Namespace != "default" {
-			t.Fatalf("unexpected entry: %+v", entry)
+		if streamEvent.Sequence == 0 {
+			t.Fatalf("expected sequence to be set")
+		}
+		if streamEvent.Entry.Name != "test-event" || streamEvent.Entry.Namespace != "default" {
+			t.Fatalf("unexpected entry: %+v", streamEvent.Entry)
 		}
 	}
 }

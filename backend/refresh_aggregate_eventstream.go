@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -18,11 +20,14 @@ import (
 
 // eventStreamSubscriber provides the subscription surface needed for aggregation.
 type eventStreamSubscriber interface {
-	Subscribe(scope string) (<-chan eventstream.Entry, context.CancelFunc)
+	Subscribe(scope string) (<-chan eventstream.StreamEvent, context.CancelFunc)
 }
 
 // aggregateKeepAliveInterval matches the per-cluster event stream keep-alive cadence.
 const aggregateKeepAliveInterval = 15 * time.Second
+
+// aggregateResumeBufferSize caps stored events per aggregate scope for resume tokens.
+const aggregateResumeBufferSize = 2000
 
 // aggregateEventStreamHandler merges event streams across multiple clusters.
 type aggregateEventStreamHandler struct {
@@ -32,6 +37,9 @@ type aggregateEventStreamHandler struct {
 	clusterOrder    []string
 	telemetry       *telemetry.Recorder
 	logger          eventstream.Logger
+	buffers         map[string]*aggregateEventBuffer
+	sequences       map[string]uint64
+	mu              sync.Mutex
 }
 
 // aggregateEventScope stores the parsed scope data for event stream routing.
@@ -63,6 +71,8 @@ func newAggregateEventStreamHandler(
 		clusterOrder:    clusterOrder,
 		telemetry:       recorder,
 		logger:          logger,
+		buffers:         make(map[string]*aggregateEventBuffer),
+		sequences:       make(map[string]uint64),
 	}
 }
 
@@ -109,40 +119,61 @@ func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		defer h.telemetry.RecordStreamDisconnect(streamName)
 	}
 
-	snapshotScope := refresh.JoinClusterScope(params.ClusterToken, params.SnapshotScope)
-	snapshotPayload, err := h.snapshotService.Build(ctx, params.Domain, snapshotScope)
-	if err != nil {
-		if h.telemetry != nil {
-			h.telemetry.RecordStreamError(streamName, err)
-		}
-		h.logger.Warn(fmt.Sprintf("eventstream: initial snapshot failed: %v", err), "EventStream")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	sequence := uint64(1)
-	initialEvents := convertAggregateSnapshot(snapshotPayload)
-	payload := eventstream.Payload{
-		Domain:      params.Domain,
-		Scope:       params.ScopeKey,
-		Sequence:    sequence,
-		GeneratedAt: time.Now().UnixMilli(),
-		Reset:       true,
-		Events:      initialEvents,
-	}
-	sequence++
-	if err := writeEventPayload(w, f, payload); err != nil {
-		if h.telemetry != nil {
-			h.telemetry.RecordStreamError(streamName, err)
+	resumeID := parseAggregateResumeID(r)
+	resumeEvents, resumeOK := h.bufferSince(params.ScopeKey, resumeID)
+	if resumeID == 0 || !resumeOK {
+		snapshotScope := refresh.JoinClusterScope(params.ClusterToken, params.SnapshotScope)
+		snapshotPayload, err := h.snapshotService.Build(ctx, params.Domain, snapshotScope)
+		if err != nil {
+			if h.telemetry != nil {
+				h.telemetry.RecordStreamError(streamName, err)
+			}
+			h.logger.Warn(fmt.Sprintf("eventstream: initial snapshot failed: %v", err), "EventStream")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		return
-	}
-	if h.telemetry != nil {
-		h.telemetry.RecordStreamDelivery(streamName, len(initialEvents), 0)
+
+		initialEvents := convertAggregateSnapshot(snapshotPayload)
+		payload := eventstream.Payload{
+			Domain:      params.Domain,
+			Scope:       params.ScopeKey,
+			Sequence:    h.nextAggregateSequence(params.ScopeKey),
+			GeneratedAt: time.Now().UnixMilli(),
+			Reset:       true,
+			Events:      initialEvents,
+		}
+		if err := writeEventPayload(w, f, payload); err != nil {
+			if h.telemetry != nil {
+				h.telemetry.RecordStreamError(streamName, err)
+			}
+			return
+		}
+		if h.telemetry != nil {
+			h.telemetry.RecordStreamDelivery(streamName, len(initialEvents), 0)
+		}
+	} else if len(resumeEvents) > 0 {
+		for _, item := range resumeEvents {
+			payload := eventstream.Payload{
+				Domain:      params.Domain,
+				Scope:       params.ScopeKey,
+				Sequence:    item.Sequence,
+				GeneratedAt: time.Now().UnixMilli(),
+				Events:      []eventstream.Entry{item.Entry},
+			}
+			if err := writeEventPayload(w, f, payload); err != nil {
+				if h.telemetry != nil {
+					h.telemetry.RecordStreamError(streamName, err)
+				}
+				return
+			}
+		}
+		if h.telemetry != nil {
+			h.telemetry.RecordStreamDelivery(streamName, len(resumeEvents), 0)
+		}
 	}
 
 	entryCh := make(chan streamEntry, 256)
@@ -181,6 +212,8 @@ func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 			return
 		case entry := <-entryCh:
 			lastDelivery = time.Now()
+			sequence := h.nextAggregateSequence(params.ScopeKey)
+			h.bufferAggregateEvent(params.ScopeKey, sequence, entry.entry)
 			payload := eventstream.Payload{
 				Domain:      params.Domain,
 				Scope:       params.ScopeKey,
@@ -188,7 +221,6 @@ func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 				GeneratedAt: time.Now().UnixMilli(),
 				Events:      []eventstream.Entry{h.decorateEntry(entry)},
 			}
-			sequence++
 			if err := writeEventPayload(w, f, payload); err != nil {
 				if h.telemetry != nil {
 					h.telemetry.RecordStreamError(streamName, err)
@@ -226,24 +258,81 @@ type streamEntry struct {
 func (h *aggregateEventStreamHandler) forwardEntries(
 	ctx context.Context,
 	clusterID string,
-	ch <-chan eventstream.Entry,
+	ch <-chan eventstream.StreamEvent,
 	out chan<- streamEntry,
 ) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case entry, ok := <-ch:
+		case event, ok := <-ch:
 			if !ok {
 				return
 			}
 			select {
-			case out <- streamEntry{clusterID: clusterID, entry: entry}:
+			case out <- streamEntry{clusterID: clusterID, entry: event.Entry}:
 			case <-ctx.Done():
 				return
 			}
 		}
 	}
+}
+
+type aggregateBufferItem struct {
+	Sequence uint64
+	Entry    eventstream.Entry
+}
+
+type aggregateEventBuffer struct {
+	items []aggregateBufferItem
+	start int
+	count int
+	max   int
+}
+
+func newAggregateEventBuffer(max int) *aggregateEventBuffer {
+	return &aggregateEventBuffer{
+		items: make([]aggregateBufferItem, max),
+		max:   max,
+	}
+}
+
+func (b *aggregateEventBuffer) add(item aggregateBufferItem) {
+	if b.max == 0 {
+		return
+	}
+	if b.count < b.max {
+		index := (b.start + b.count) % b.max
+		b.items[index] = item
+		b.count++
+		return
+	}
+	b.items[b.start] = item
+	b.start = (b.start + 1) % b.max
+}
+
+func (b *aggregateEventBuffer) since(sequence uint64) ([]aggregateBufferItem, bool) {
+	if b.count == 0 {
+		return nil, false
+	}
+	oldest := b.items[b.start].Sequence
+	latestIndex := (b.start + b.count - 1) % b.max
+	latest := b.items[latestIndex].Sequence
+	if sequence < oldest {
+		return nil, false
+	}
+	if sequence >= latest {
+		return []aggregateBufferItem{}, true
+	}
+	out := make([]aggregateBufferItem, 0, b.count)
+	for i := 0; i < b.count; i++ {
+		index := (b.start + i) % b.max
+		item := b.items[index]
+		if item.Sequence > sequence {
+			out = append(out, item)
+		}
+	}
+	return out, true
 }
 
 // resolveTargets selects the clusters to stream from based on the requested IDs.
@@ -402,6 +491,72 @@ func applyEventCORS(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+func (h *aggregateEventStreamHandler) nextAggregateSequence(scope string) uint64 {
+	if scope == "" {
+		scope = "cluster"
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	next := h.sequences[scope] + 1
+	h.sequences[scope] = next
+	return next
+}
+
+func (h *aggregateEventStreamHandler) bufferAggregateEvent(
+	scope string,
+	sequence uint64,
+	entry eventstream.Entry,
+) {
+	if scope == "" {
+		scope = "cluster"
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	buffer := h.buffers[scope]
+	if buffer == nil {
+		buffer = newAggregateEventBuffer(aggregateResumeBufferSize)
+		h.buffers[scope] = buffer
+	}
+	buffer.add(aggregateBufferItem{Sequence: sequence, Entry: entry})
+}
+
+func (h *aggregateEventStreamHandler) bufferSince(
+	scope string,
+	sequence uint64,
+) ([]aggregateBufferItem, bool) {
+	if sequence == 0 {
+		return nil, false
+	}
+	if scope == "" {
+		scope = "cluster"
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	buffer := h.buffers[scope]
+	if buffer == nil {
+		return nil, false
+	}
+	return buffer.since(sequence)
+}
+
+func parseAggregateResumeID(r *http.Request) uint64 {
+	if r == nil {
+		return 0
+	}
+	raw := strings.TrimSpace(r.URL.Query().Get("since"))
+	if raw == "" {
+		raw = strings.TrimSpace(r.Header.Get("Last-Event-ID"))
+	}
+	if raw == "" {
+		return 0
+	}
+	parsed, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return parsed
 }
 
 // noopLogger is used when no logger is supplied.

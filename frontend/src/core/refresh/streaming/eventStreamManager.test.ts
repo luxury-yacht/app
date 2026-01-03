@@ -462,6 +462,60 @@ describe('EventStreamManager', () => {
     expect(ensureRefreshBaseURLMock).toHaveBeenCalledTimes(3);
   });
 
+  test('reconnect includes resume token when available', async () => {
+    vi.useFakeTimers();
+    Object.assign(window, {
+      setTimeout: globalThis.setTimeout,
+      clearTimeout: globalThis.clearTimeout,
+    });
+
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: any) => void> = {};
+      url: string;
+      constructor(url: string) {
+        this.url = url;
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: any) => void) {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(): void {}
+      close(): void {}
+      emit(type: string, evt?: any) {
+        this.listeners[type]?.(evt);
+      }
+    }
+
+    (globalThis as any).EventSource = MockEventSource as any;
+
+    ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
+
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+
+    await manager.startCluster();
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    const payload = {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 41,
+      generatedAt: Date.now(),
+      events: [],
+    };
+    MockEventSource.instances[0]?.emit('event', {
+      data: JSON.stringify(payload),
+      lastEventId: '41',
+    });
+
+    MockEventSource.instances[0]?.emit('error');
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockEventSource.instances[1]?.url).toContain('since=41');
+  });
+
   test('deduplicates stream error notifications and clears after reconnect', async () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();

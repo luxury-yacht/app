@@ -1,10 +1,12 @@
 package eventstream
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -68,51 +70,100 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer h.telemetry.RecordStreamDisconnect(streamName)
 	}
 
-	snapshotPayload, err := h.service.Build(r.Context(), params.Domain, params.SnapshotScope)
-	if err != nil {
-		if h.telemetry != nil {
-			h.telemetry.RecordStreamError(streamName, err)
+	// Prefer resume tokens to avoid full snapshot rebuilds after reconnects.
+	resumeID := parseResumeID(r)
+	var resumeEvents []StreamEvent
+	resumeOK := false
+	if resumeID > 0 {
+		resumeEvents, resumeOK = h.manager.Resume(params.ScopeKey, resumeID)
+		if !resumeOK {
+			err := fmt.Errorf("eventstream: resume token expired for domain=%s scope=%s", params.Domain, params.ScopeKey)
+			if h.telemetry != nil {
+				h.telemetry.RecordStreamError(streamName, err)
+			}
+			h.logger.Warn(err.Error(), "EventStream")
 		}
-		h.logger.Warn(fmt.Sprintf("eventstream: initial snapshot failed: %v", err), "EventStream")
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	sequence := uint64(1)
-	initialEvents := convertSnapshot(snapshotPayload)
-	payload := Payload{
-		Domain:      params.Domain,
-		Scope:       params.ScopeKey,
-		Sequence:    sequence,
-		GeneratedAt: time.Now().UnixMilli(),
-		Reset:       true,
-		Events:      initialEvents,
-	}
-	h.logger.Info(
-		fmt.Sprintf(
-			"eventstream: sending initial payload domain=%s scope=%s events=%d",
-			payload.Domain,
-			payload.Scope,
-			len(initialEvents),
-		),
-		"EventStream",
+	var (
+		entries <-chan StreamEvent
+		cancel  context.CancelFunc
 	)
-	sequence++
-	if err := writeEvent(w, f, payload); err != nil {
-		if h.telemetry != nil {
-			h.telemetry.RecordStreamError(streamName, err)
+	if resumeID == 0 || !resumeOK {
+		snapshotPayload, err := h.service.Build(r.Context(), params.Domain, params.SnapshotScope)
+		if err != nil {
+			if h.telemetry != nil {
+				h.telemetry.RecordStreamError(streamName, err)
+			}
+			h.logger.Warn(fmt.Sprintf("eventstream: initial snapshot failed: %v", err), "EventStream")
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		return
-	}
-	if h.telemetry != nil {
-		h.telemetry.RecordStreamDelivery(streamName, len(initialEvents), 0)
-	}
 
-	entries, cancel := h.manager.Subscribe(params.ScopeKey)
+		initialEvents := convertSnapshot(snapshotPayload)
+		payload := Payload{
+			Domain:      params.Domain,
+			Scope:       params.ScopeKey,
+			Sequence:    h.manager.NextSequence(params.ScopeKey),
+			GeneratedAt: time.Now().UnixMilli(),
+			Reset:       true,
+			Events:      initialEvents,
+		}
+		h.logger.Info(
+			fmt.Sprintf(
+				"eventstream: sending initial payload domain=%s scope=%s events=%d",
+				payload.Domain,
+				payload.Scope,
+				len(initialEvents),
+			),
+			"EventStream",
+		)
+		if err := writeEvent(w, f, payload); err != nil {
+			if h.telemetry != nil {
+				h.telemetry.RecordStreamError(streamName, err)
+			}
+			return
+		}
+		if h.telemetry != nil {
+			h.telemetry.RecordStreamDelivery(streamName, len(initialEvents), 0)
+		}
+		entries, cancel = h.manager.Subscribe(params.ScopeKey)
+	} else {
+		entries, cancel = h.manager.Subscribe(params.ScopeKey)
+		if len(resumeEvents) > 0 {
+			h.logger.Info(
+				fmt.Sprintf(
+					"eventstream: resuming payloads domain=%s scope=%s events=%d",
+					params.Domain,
+					params.ScopeKey,
+					len(resumeEvents),
+				),
+				"EventStream",
+			)
+			for _, streamEvent := range resumeEvents {
+				payload := Payload{
+					Domain:      params.Domain,
+					Scope:       params.ScopeKey,
+					Sequence:    streamEvent.Sequence,
+					GeneratedAt: time.Now().UnixMilli(),
+					Events:      []Entry{streamEvent.Entry},
+				}
+				if err := writeEvent(w, f, payload); err != nil {
+					if h.telemetry != nil {
+						h.telemetry.RecordStreamError(streamName, err)
+					}
+					return
+				}
+			}
+			if h.telemetry != nil {
+				h.telemetry.RecordStreamDelivery(streamName, len(resumeEvents), 0)
+			}
+		}
+	}
 	defer cancel()
 
 	keepAlive := time.NewTicker(keepAliveInterval)
@@ -125,7 +176,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
-		case entry, ok := <-entries:
+		case streamEvent, ok := <-entries:
 			if !ok {
 				h.logger.Info("eventstream: subscriber channel closed", "EventStream")
 				return
@@ -134,11 +185,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			payload := Payload{
 				Domain:      params.Domain,
 				Scope:       params.ScopeKey,
-				Sequence:    sequence,
+				Sequence:    streamEvent.Sequence,
 				GeneratedAt: time.Now().UnixMilli(),
-				Events:      []Entry{entry},
+				Events:      []Entry{streamEvent.Entry},
 			}
-			sequence++
 			if err := writeEvent(w, f, payload); err != nil {
 				if h.telemetry != nil {
 					h.telemetry.RecordStreamError(streamName, err)
@@ -153,7 +203,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					"eventstream: published event domain=%s scope=%s reason=%s",
 					payload.Domain,
 					payload.Scope,
-					entry.Reason,
+					streamEvent.Entry.Reason,
 				),
 				"EventStream",
 			)
@@ -282,4 +332,22 @@ func applyCORS(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+func parseResumeID(r *http.Request) uint64 {
+	if r == nil {
+		return 0
+	}
+	raw := strings.TrimSpace(r.URL.Query().Get("since"))
+	if raw == "" {
+		raw = strings.TrimSpace(r.Header.Get("Last-Event-ID"))
+	}
+	if raw == "" {
+		return 0
+	}
+	parsed, err := strconv.ParseUint(raw, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return parsed
 }

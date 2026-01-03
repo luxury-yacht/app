@@ -91,6 +91,8 @@ class EventStreamConnection {
   private retryTimer: number | null = null;
   private closed = false;
   private attempt = 0;
+  // Track the last SSE id so reconnects can request a resume window.
+  private lastEventId: string | null = null;
 
   constructor(
     private readonly domain: typeof CLUSTER_DOMAIN | typeof NAMESPACE_DOMAIN,
@@ -116,6 +118,9 @@ class EventStreamConnection {
       this.eventSource.close();
       this.eventSource = null;
     }
+    if (reset) {
+      this.lastEventId = null;
+    }
     this.manager.markIdle(this.domain, this.scope, reset);
   }
 
@@ -128,6 +133,10 @@ class EventStreamConnection {
 
       const url = new URL('/api/v2/stream/events', baseURL);
       url.searchParams.set('scope', this.scope);
+      const resumeId = this.getResumeId();
+      if (resumeId) {
+        url.searchParams.set('since', resumeId);
+      }
 
       const eventSource = new EventSource(url.toString());
       this.eventSource = eventSource;
@@ -171,6 +180,7 @@ class EventStreamConnection {
       if (parsed.scope !== this.scope || parsed.domain !== this.domain) {
         return;
       }
+      this.rememberEventId(event, parsed);
       this.manager.applyPayload(this.domain, this.scope, parsed);
     } catch (error) {
       console.error('Failed to parse event stream payload', error);
@@ -184,6 +194,28 @@ class EventStreamConnection {
     this.manager.handleStreamError(this.domain, this.scope, 'Event stream connection lost');
     this.scheduleReconnect();
   };
+
+  private getResumeId(): string | null {
+    if (!this.lastEventId) {
+      return null;
+    }
+    const parsed = Number(this.lastEventId);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return null;
+    }
+    return String(parsed);
+  }
+
+  private rememberEventId(event: MessageEvent, payload: StreamEventPayload): void {
+    const raw = event.lastEventId?.trim();
+    if (raw) {
+      this.lastEventId = raw;
+      return;
+    }
+    if (typeof payload.sequence === 'number' && Number.isFinite(payload.sequence)) {
+      this.lastEventId = String(payload.sequence);
+    }
+  }
 }
 
 // Include cluster identity in the dedupe key so multi-cluster streams don't collapse events.

@@ -11,7 +11,7 @@ func TestNoopLoggerMethods(t *testing.T) {
 }
 
 func TestSubscriptionCloseIdempotent(t *testing.T) {
-	sub := &subscription{ch: make(chan Entry)}
+	sub := &subscription{ch: make(chan StreamEvent)}
 	sub.Close()
 	sub.Close()
 	if _, ok := <-sub.ch; ok {

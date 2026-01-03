@@ -28,10 +28,10 @@ func (f *flushRecorder) Flush() {}
 type stubEventManager struct {
 	mu    sync.Mutex
 	scope string
-	ch    chan eventstream.Entry
+	ch    chan eventstream.StreamEvent
 }
 
-func (m *stubEventManager) Subscribe(scope string) (<-chan eventstream.Entry, context.CancelFunc) {
+func (m *stubEventManager) Subscribe(scope string) (<-chan eventstream.StreamEvent, context.CancelFunc) {
 	m.mu.Lock()
 	m.scope = scope
 	m.mu.Unlock()
@@ -55,8 +55,8 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 		},
 	}
 
-	managerA := &stubEventManager{ch: make(chan eventstream.Entry, 1)}
-	managerB := &stubEventManager{ch: make(chan eventstream.Entry, 1)}
+	managerA := &stubEventManager{ch: make(chan eventstream.StreamEvent, 1)}
+	managerB := &stubEventManager{ch: make(chan eventstream.StreamEvent, 1)}
 	handlers := map[string]eventStreamSubscriber{
 		"cluster-a": managerA,
 		"cluster-b": managerB,
@@ -93,8 +93,8 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 	require.Equal(t, "cluster", managerB.scope)
 	managerB.mu.Unlock()
 
-	managerA.ch <- eventstream.Entry{Message: "event-a"}
-	managerB.ch <- eventstream.Entry{Message: "event-b"}
+	managerA.ch <- eventstream.StreamEvent{Entry: eventstream.Entry{Message: "event-a"}, Sequence: 2}
+	managerB.ch <- eventstream.StreamEvent{Entry: eventstream.Entry{Message: "event-b"}, Sequence: 3}
 
 	require.Eventually(t, func() bool {
 		body := rec.Body.String()
@@ -103,6 +103,125 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 			strings.Contains(body, `"clusterId":"cluster-a"`) &&
 			strings.Contains(body, `"clusterId":"cluster-b"`)
 	}, time.Second, 10*time.Millisecond)
+}
+
+func TestAggregateEventStreamResumesFromBuffer(t *testing.T) {
+	buildCalls := 0
+	service := stubSnapshotService{
+		build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+			buildCalls++
+			return &refresh.Snapshot{
+				Domain: domain,
+				Payload: snapshot.ClusterEventsSnapshot{
+					Events: []snapshot.ClusterEventEntry{{
+						ClusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
+						Message:     "snapshot message",
+					}},
+				},
+			}, nil
+		},
+	}
+
+	managerA := &stubEventManager{ch: make(chan eventstream.StreamEvent, 1)}
+	handlers := map[string]eventStreamSubscriber{
+		"cluster-a": managerA,
+	}
+	meta := map[string]snapshot.ClusterMeta{
+		"cluster-a": {ClusterID: "cluster-a", ClusterName: "alpha"},
+	}
+	handler := newAggregateEventStreamHandler(
+		service,
+		handlers,
+		meta,
+		[]string{"cluster-a"},
+		nil,
+		noopLogger{},
+	)
+
+	scopeKey := "clusters=cluster-a|cluster"
+	handler.buffers[scopeKey] = newAggregateEventBuffer(aggregateResumeBufferSize)
+	handler.buffers[scopeKey].add(aggregateBufferItem{Sequence: 1, Entry: eventstream.Entry{Message: "older"}})
+	handler.buffers[scopeKey].add(aggregateBufferItem{Sequence: 2, Entry: eventstream.Entry{Message: "buffered"}})
+	handler.sequences[scopeKey] = 2
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/events?scope=clusters=cluster-a|cluster&since=1", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		handler.ServeHTTP(rec, req)
+	}()
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(rec.Body.String(), "buffered")
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, 0, buildCalls)
+
+	cancel()
+	wg.Wait()
+}
+
+func TestAggregateEventStreamFallsBackToSnapshotWhenResumeTooOld(t *testing.T) {
+	buildCalls := 0
+	service := stubSnapshotService{
+		build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+			buildCalls++
+			return &refresh.Snapshot{
+				Domain: domain,
+				Payload: snapshot.ClusterEventsSnapshot{
+					Events: []snapshot.ClusterEventEntry{{
+						ClusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
+						Message:     "snapshot fallback",
+					}},
+				},
+			}, nil
+		},
+	}
+
+	managerA := &stubEventManager{ch: make(chan eventstream.StreamEvent, 1)}
+	handlers := map[string]eventStreamSubscriber{
+		"cluster-a": managerA,
+	}
+	meta := map[string]snapshot.ClusterMeta{
+		"cluster-a": {ClusterID: "cluster-a", ClusterName: "alpha"},
+	}
+	handler := newAggregateEventStreamHandler(
+		service,
+		handlers,
+		meta,
+		[]string{"cluster-a"},
+		nil,
+		noopLogger{},
+	)
+
+	scopeKey := "clusters=cluster-a|cluster"
+	handler.buffers[scopeKey] = newAggregateEventBuffer(1)
+	handler.buffers[scopeKey].add(aggregateBufferItem{Sequence: 5, Entry: eventstream.Entry{Message: "buffered"}})
+	handler.sequences[scopeKey] = 5
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/stream/events?scope=clusters=cluster-a|cluster&since=1", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		handler.ServeHTTP(rec, req)
+	}()
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(rec.Body.String(), "snapshot fallback")
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, 1, buildCalls)
+
+	cancel()
+	wg.Wait()
 }
 
 func TestApplyEventCORSAcceptsOptionsRequests(t *testing.T) {

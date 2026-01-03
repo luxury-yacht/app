@@ -37,6 +37,12 @@ type Entry struct {
 	CreatedAt       int64  `json:"createdAt"`
 }
 
+// StreamEvent wraps an Entry with its stream sequence identifier.
+type StreamEvent struct {
+	Entry    Entry
+	Sequence uint64
+}
+
 // Payload is the SSE envelope delivered to clients.
 type Payload struct {
 	Domain      string  `json:"domain"`
@@ -50,7 +56,7 @@ type Payload struct {
 
 // subscription represents a single consumer of streaming events.
 type subscription struct {
-	ch        chan Entry
+	ch        chan StreamEvent
 	created   time.Time
 	closeOnce sync.Once
 }
