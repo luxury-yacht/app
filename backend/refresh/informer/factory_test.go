@@ -2,6 +2,8 @@ package informer
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +13,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
+
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
 
 func TestNewFactoryRegistersPodNodeIndex(t *testing.T) {
@@ -139,9 +143,75 @@ func TestProcessPendingClusterInformersSkipsWithoutPermissions(t *testing.T) {
 	}
 }
 
+func TestPermissionAuditLogsMismatchOnce(t *testing.T) {
+	client := fake.NewClientset()
+	client.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		review := &authorizationv1.SelfSubjectAccessReview{
+			Status: authorizationv1.SubjectAccessReviewStatus{Allowed: false},
+		}
+		return true, review, nil
+	})
+
+	factory := newMinimalFactory(client)
+	logger := &captureLogger{}
+	checker := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
+		return true, nil
+	})
+	factory.ConfigurePermissionAudit(checker, logger)
+
+	allowed, err := factory.CanListResource("", "pods")
+	if err != nil {
+		t.Fatalf("CanListResource returned error: %v", err)
+	}
+	if allowed {
+		t.Fatalf("expected cached permission to deny")
+	}
+	if logger.countWarningsContaining("permission mismatch") != 1 {
+		t.Fatalf("expected one mismatch warning, got %d", len(logger.warnings))
+	}
+
+	allowed, err = factory.CanListResource("", "pods")
+	if err != nil {
+		t.Fatalf("CanListResource returned error: %v", err)
+	}
+	if allowed {
+		t.Fatalf("expected cached permission to deny on second call")
+	}
+	if logger.countWarningsContaining("permission mismatch") != 1 {
+		t.Fatalf("expected mismatch warning to be de-duplicated")
+	}
+}
+
 func newMinimalFactory(client kubernetes.Interface) *Factory {
 	return &Factory{
 		kubeClient:      client,
 		permissionCache: make(map[string]bool),
 	}
+}
+
+type captureLogger struct {
+	mu       sync.Mutex
+	warnings []string
+}
+
+func (c *captureLogger) Debug(string, ...string) {}
+func (c *captureLogger) Info(string, ...string)  {}
+func (c *captureLogger) Error(string, ...string) {}
+
+func (c *captureLogger) Warn(message string, _ ...string) {
+	c.mu.Lock()
+	c.warnings = append(c.warnings, message)
+	c.mu.Unlock()
+}
+
+func (c *captureLogger) countWarningsContaining(match string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	count := 0
+	for _, msg := range c.warnings {
+		if strings.Contains(msg, match) {
+			count++
+		}
+	}
+	return count
 }

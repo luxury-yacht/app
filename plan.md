@@ -88,10 +88,10 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
     - cluster-events: list `core/events` (permission denied domain on failure).
   - Informer factory permission cache gates cluster informer registration and is persisted per cluster selection.
   - Resource stream domain gates require list+watch per domain via `permissionChecker`: `backend/refresh/resourcestream/manager.go:1681`.
-- Phase 1: Introduce a runtime permission checker with TTL cache
-  Implement a single backend permission checker that: - Performs SSAR checks per request with a short TTL cache keyed by cluster selection + verb + resource. - Falls back to the last cached decision on transient failures/timeouts (so we don’t flap to “denied” on network blips). - Uses existing selection scoping to prevent cross‑cluster leakage.
-- Phase 2: Dual‑path validation (no feature flags)
-  Run the new SSAR path in parallel with the existing cached permissions only for diagnostics: - Log mismatches between cached preflight and SSAR results. - Do not change behavior yet, only observe. This keeps the current behavior intact while we validate correctness.
+- ✅ Phase 1: Introduce a runtime permission checker with TTL cache
+  Implemented a backend permission checker that performs SSAR checks with a short TTL cache keyed by cluster selection + verb + resource and falls back to the last cached decision on transient failures/timeouts (evidence: `backend/refresh/permissions/checker.go:30`, `backend/internal/config/config.go:34`, `backend/refresh/system/manager.go:97`). Tests cover cache, TTL expiry, transient fallback, and key scoping (`backend/refresh/permissions/checker_test.go:9`).
+- ✅ Phase 2: Dual‑path validation (no feature flags)
+  Runtime SSAR checks now run alongside cached permission checks and log mismatches without changing behavior (evidence: `backend/refresh/informer/factory.go:86`, `backend/refresh/informer/factory.go:373`, `backend/refresh/informer/factory_test.go:113`).
 - Phase 3: Cutover to SSAR results
   Switch the permission gates to trust the SSAR checker (still cached by TTL). Keep the old permission cache as a fallback for error handling only (timeouts/SSR failures), and log when that fallback is used.
 - Phase 4: Cleanup

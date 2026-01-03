@@ -20,6 +20,8 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh/logstream"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
 
 // Factory wraps the shared informer factory used by the refresh subsystem.
@@ -41,6 +43,11 @@ type Factory struct {
 	permissionCache map[string]bool
 	permissionMu    sync.RWMutex
 	permissionGroup singleflight.Group
+
+	permissionAudit       *permissions.Checker
+	permissionAuditLogger logstream.Logger
+	permissionAuditMu     sync.Mutex
+	permissionAuditLogged map[string]bool
 }
 
 const podNodeIndexName = "pods:node"
@@ -70,6 +77,18 @@ func (f *Factory) CanWatchResource(group, resource string) (bool, error) {
 		return false, fmt.Errorf("informer factory not initialised")
 	}
 	return f.checkResourceVerb(group, resource, "watch")
+}
+
+// ConfigurePermissionAudit enables runtime SSAR audit logging without changing decisions.
+func (f *Factory) ConfigurePermissionAudit(checker *permissions.Checker, logger logstream.Logger) {
+	if f == nil {
+		return
+	}
+	f.permissionAudit = checker
+	f.permissionAuditLogger = logger
+	if f.permissionAuditLogged == nil {
+		f.permissionAuditLogged = make(map[string]bool)
+	}
 }
 
 // New returns a new informer Factory with the provided resync period.
@@ -308,6 +327,7 @@ func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) 
 	f.permissionMu.RLock()
 	if allowed, ok := f.permissionCache[key]; ok {
 		f.permissionMu.RUnlock()
+		f.auditPermission(group, resource, verb, allowed, nil)
 		return allowed, nil
 	}
 	f.permissionMu.RUnlock()
@@ -350,7 +370,47 @@ func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) 
 	}
 
 	allowed, _ := value.(bool)
+	f.auditPermission(group, resource, verb, allowed, nil)
 	return allowed, nil
+}
+
+func (f *Factory) auditPermission(group, resource, verb string, cachedAllowed bool, cachedErr error) {
+	if f == nil || f.permissionAudit == nil || cachedErr != nil {
+		return
+	}
+
+	decision, err := f.permissionAudit.Can(context.Background(), group, resource, verb)
+	if err != nil {
+		return
+	}
+
+	if decision.Allowed == cachedAllowed {
+		return
+	}
+
+	key := fmt.Sprintf("%s/%s/%s", group, resource, verb)
+	f.permissionAuditMu.Lock()
+	if f.permissionAuditLogged[key] {
+		f.permissionAuditMu.Unlock()
+		return
+	}
+	f.permissionAuditLogged[key] = true
+	f.permissionAuditMu.Unlock()
+
+	message := fmt.Sprintf(
+		"permission mismatch for %s/%s verb %s (cached=%t runtime=%t source=%s)",
+		group,
+		resource,
+		verb,
+		cachedAllowed,
+		decision.Allowed,
+		decision.Source,
+	)
+	if f.permissionAuditLogger != nil {
+		f.permissionAuditLogger.Warn(message, "Permissions")
+	} else {
+		klog.V(1).Info(message)
+	}
 }
 
 func (f *Factory) PrimePermissions(ctx context.Context, requests []PermissionRequest) error {

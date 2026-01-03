@@ -32,6 +32,12 @@ const (
 	// ResponseCacheMaxEntries caps the number of cached GET responses before eviction.
 	ResponseCacheMaxEntries = 512
 
+	// PermissionCacheTTL controls how long SSAR permission decisions are cached.
+	PermissionCacheTTL = 2 * time.Minute
+
+	// PermissionCheckTimeout bounds SelfSubjectAccessReview calls.
+	PermissionCheckTimeout = 5 * time.Second
+
 	// ClusterVersionCacheTTL controls how long the cluster version lookup is cached.
 	ClusterVersionCacheTTL = 10 * time.Minute
 

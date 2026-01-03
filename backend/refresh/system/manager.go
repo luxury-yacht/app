@@ -22,6 +22,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/logstream"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -62,6 +63,7 @@ type Subsystem struct {
 	PermissionIssues []PermissionIssue
 	PermissionCache  map[string]bool
 	InformerFactory  *informer.Factory
+	RuntimePerms     *permissions.Checker
 	Registry         *domain.Registry
 	SnapshotService  refresh.SnapshotService
 	ManualQueue      refresh.ManualQueue
@@ -91,6 +93,8 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	registry := domain.New()
 	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, cfg.PermissionCache)
+	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
+	informerFactory.ConfigurePermissionAudit(runtimePerms, cfg.Logger)
 
 	preflight := []informer.PermissionRequest{
 		{Group: "metrics.k8s.io", Resource: "nodes", Verb: "list"},
@@ -554,6 +558,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		PermissionIssues: permissionIssues,
 		PermissionCache:  informerFactory.PermissionCacheSnapshot(),
 		InformerFactory:  informerFactory,
+		RuntimePerms:     runtimePerms,
 		Registry:         registry,
 		SnapshotService:  snapshotService,
 		ManualQueue:      queue,
