@@ -58,7 +58,7 @@ func TestSetupRefreshSubsystemRequiresContext(t *testing.T) {
 	require.Nil(t, cache)
 }
 
-func TestSetupRefreshSubsystemStoresPermissionCache(t *testing.T) {
+func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -79,10 +79,9 @@ func TestSetupRefreshSubsystemStoresPermissionCache(t *testing.T) {
 	newRefreshSubsystemWithServices = func(cfg system.Config) (*system.Subsystem, error) {
 		capturedCfg = cfg
 		return &system.Subsystem{
-			Manager:         manager,
-			Handler:         handler,
-			Telemetry:       telemetry.NewRecorder(),
-			PermissionCache: map[string]bool{"watch": true},
+			Manager:   manager,
+			Handler:   handler,
+			Telemetry: telemetry.NewRecorder(),
 		}, nil
 	}
 	defer func() { newRefreshSubsystemWithServices = original }()
@@ -97,12 +96,10 @@ func TestSetupRefreshSubsystemStoresPermissionCache(t *testing.T) {
 	require.NotNil(t, app.refreshCancel)
 	require.NotEmpty(t, app.refreshBaseURL)
 
-	require.NotNil(t, cache)
-	require.Equal(t, map[string]bool{"watch": true}, cache)
+	require.Nil(t, cache)
 
 	stored := app.getPermissionCache("selection")
-	require.NotNil(t, stored)
-	require.Equal(t, map[string]bool{"watch": true}, stored)
+	require.Nil(t, stored)
 
 	require.Equal(t, fakeClient, capturedCfg.KubernetesClient)
 	require.Equal(t, app.metricsClient, capturedCfg.MetricsClient)
@@ -111,7 +108,6 @@ func TestSetupRefreshSubsystemStoresPermissionCache(t *testing.T) {
 	require.Equal(t, app.dynamicClient, capturedCfg.DynamicClient)
 	require.NotNil(t, capturedCfg.HelmFactory)
 	require.NotNil(t, capturedCfg.ObjectDetailsProvider)
-	require.Equal(t, initialCache, capturedCfg.PermissionCache)
 
 	require.NotNil(t, app.telemetryRecorder)
 	summary := app.telemetryRecorder.SnapshotSummary()

@@ -94,8 +94,8 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
   Runtime SSAR checks now run alongside cached permission checks and log mismatches without changing behavior (evidence: `backend/refresh/informer/factory.go:86`, `backend/refresh/informer/factory.go:373`, `backend/refresh/informer/factory_test.go:113`).
 - ✅ Phase 3: Cutover to SSAR results
   Permission gates now use the runtime SSAR checker with TTL cache and fall back to the legacy cache only on runtime errors, logging fallback usage (evidence: `backend/refresh/informer/factory.go:86`, `backend/refresh/informer/factory.go:112`, `backend/refresh/informer/factory.go:168`).
-- Phase 4: Cleanup
-  Once mismatch logs show stability, remove the legacy permission cache usage from the refresh subsystem setup and factory paths.
+- ✅ Phase 4: Cleanup
+  Removed legacy permission cache wiring from refresh subsystem setup; permission caches are no longer passed or persisted (evidence: `backend/app_refresh_setup.go:60`, `backend/app_kubernetes_client.go:107`, `backend/refresh/system/manager.go:94`, `backend/app_lifecycle_test.go:61`).
 - Testing & safety checks
   - Unit tests for the permission checker cache: hit/miss, TTL expiry, error fallback, and cluster‑scoped keys.
   - Domain‑level tests verifying “permission denied” snapshots still surface correctly.

@@ -63,6 +63,7 @@ type App struct {
 	// persistenceMu guards persistence.json read/write operations.
 	persistenceMu sync.Mutex
 
+	// permissionCacheMu and permissionCaches are retained for legacy callers/tests.
 	permissionCacheMu sync.Mutex
 	permissionCaches  map[string]map[string]bool
 

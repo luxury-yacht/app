@@ -200,6 +200,7 @@ func TestCurrentSelectionKey(t *testing.T) {
 	require.Equal(t, "", app.currentSelectionKey())
 }
 
+// Legacy permission cache behavior retained for compatibility.
 func TestPermissionCacheRoundTrip(t *testing.T) {
 	app := newUIApp(t)
 	cache := map[string]bool{"get": true}

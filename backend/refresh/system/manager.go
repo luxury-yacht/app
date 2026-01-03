@@ -47,7 +47,6 @@ type Config struct {
 	HelmFactory             snapshot.HelmActionFactory
 	ObjectDetailsProvider   snapshot.ObjectDetailProvider
 	Logger                  logstream.Logger
-	PermissionCache         map[string]bool
 	ObjectCatalogEnabled    func() bool
 	ObjectCatalogService    func() *objectcatalog.Service
 	ObjectCatalogNamespaces func() []snapshot.CatalogNamespaceGroup
@@ -61,7 +60,6 @@ type Subsystem struct {
 	Handler          http.Handler
 	Telemetry        *telemetry.Recorder
 	PermissionIssues []PermissionIssue
-	PermissionCache  map[string]bool
 	InformerFactory  *informer.Factory
 	RuntimePerms     *permissions.Checker
 	Registry         *domain.Registry
@@ -84,7 +82,7 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 		subsystem.Handler,
 		subsystem.Telemetry,
 		subsystem.PermissionIssues,
-		subsystem.PermissionCache,
+		nil,
 		subsystem.InformerFactory,
 		nil
 }
@@ -92,7 +90,7 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 // NewSubsystemWithServices returns a fully wired refresh subsystem.
 func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	registry := domain.New()
-	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, cfg.PermissionCache)
+	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, nil)
 	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
 	informerFactory.ConfigureRuntimePermissions(runtimePerms, cfg.Logger)
 
@@ -556,7 +554,6 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		Handler:          mux,
 		Telemetry:        telemetryRecorder,
 		PermissionIssues: permissionIssues,
-		PermissionCache:  informerFactory.PermissionCacheSnapshot(),
 		InformerFactory:  informerFactory,
 		RuntimePerms:     runtimePerms,
 		Registry:         registry,

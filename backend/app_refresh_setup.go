@@ -63,7 +63,6 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			HelmFactory:           a.helmActionFactory(),
 			ObjectDetailsProvider: a.objectDetailProvider(),
 			Logger:                a.logger,
-			PermissionCache:       permissionCache,
 			ObjectCatalogService: func() *objectcatalog.Service {
 				return a.objectCatalogServiceForCluster(catalogClusterID)
 			},
@@ -108,7 +107,6 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 				HelmFactory:           a.helmActionFactoryForSelection(selection),
 				ObjectDetailsProvider: a.objectDetailProvider(),
 				Logger:                a.logger,
-				PermissionCache:       a.getPermissionCache(clusterMeta.ID),
 				ClusterID:             clusterMeta.ID,
 				ClusterName:           clusterMeta.Name,
 			}
@@ -202,7 +200,8 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		}
 	}()
 
-	return hostSubsystem.PermissionCache, nil
+	_ = permissionCache
+	return nil, nil
 }
 
 // buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.
@@ -215,14 +214,6 @@ func (a *App) buildRefreshSubsystem(cfg system.Config, cacheKey string) (*system
 
 	if len(subsystem.PermissionIssues) > 0 {
 		a.handlePermissionIssues(subsystem.PermissionIssues)
-	}
-	if subsystem.PermissionCache != nil {
-		if cacheKey == "" {
-			cacheKey = cfg.ClusterID
-		}
-		if cacheKey != "" {
-			a.setPermissionCache(cacheKey, subsystem.PermissionCache)
-		}
 	}
 	return subsystem, nil
 }
