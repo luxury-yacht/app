@@ -222,6 +222,9 @@ type Manager struct {
 
 	customInformerMu sync.Mutex
 	customInformers  map[string]*customResourceInformer
+	// customInvalidator evicts cached YAML/details when custom resources change.
+	customInvalidatorMu sync.RWMutex
+	customInvalidator   func(kind, namespace, name string)
 
 	mu          sync.RWMutex
 	subscribers map[string]map[string]map[uint64]*subscription
@@ -494,6 +497,26 @@ func (m *Manager) Stop() {
 	}
 }
 
+// SetCustomResourceCacheInvalidator registers a cache eviction callback for custom resources.
+func (m *Manager) SetCustomResourceCacheInvalidator(invalidator func(kind, namespace, name string)) {
+	if m == nil {
+		return
+	}
+	m.customInvalidatorMu.Lock()
+	m.customInvalidator = invalidator
+	m.customInvalidatorMu.Unlock()
+}
+
+func (m *Manager) invalidateCustomResourceCache(kind, namespace, name string) {
+	m.customInvalidatorMu.RLock()
+	invalidator := m.customInvalidator
+	m.customInvalidatorMu.RUnlock()
+	if invalidator == nil {
+		return
+	}
+	invalidator(kind, namespace, name)
+}
+
 func (m *Manager) initCustomResourceInformers(factory *informer.Factory) {
 	if m == nil || m.dynamicClient == nil || factory == nil {
 		return
@@ -616,6 +639,10 @@ func (m *Manager) handleCustomResource(obj interface{}, updateType MessageType, 
 	domain := info.domain
 	if domain == "" {
 		domain = domainNamespaceCustom
+	}
+	if kind != "" && resource.GetName() != "" {
+		// Invalidate cached YAML/details on custom resource updates.
+		m.invalidateCustomResourceCache(kind, resource.GetNamespace(), resource.GetName())
 	}
 
 	update := Update{

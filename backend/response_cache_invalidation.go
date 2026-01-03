@@ -39,6 +39,15 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	a.registerPolicyInvalidation(shared, selectionKey)
 	a.registerAdmissionInvalidation(shared, selectionKey)
 	a.registerAPIExtensionsInvalidation(subsystem.InformerFactory.APIExtensionsInformerFactory(), selectionKey)
+	if subsystem.ResourceStream != nil {
+		// Use custom resource stream updates to evict cached YAML for dynamic resources.
+		subsystem.ResourceStream.SetCustomResourceCacheInvalidator(func(kind, namespace, name string) {
+			if kind == "" || name == "" {
+				return
+			}
+			a.invalidateResponseCache(selectionKey, kind, namespace, name)
+		})
+	}
 }
 
 func (a *App) registerCoreInvalidation(shared informers.SharedInformerFactory, selectionKey string) {
@@ -102,7 +111,20 @@ func (a *App) registerAPIExtensionsInvalidation(shared apiextensionsinformers.Sh
 	if shared == nil {
 		return
 	}
-	a.addResponseCacheInvalidationHandler(shared.Apiextensions().V1().CustomResourceDefinitions().Informer(), selectionKey, "CustomResourceDefinition")
+	informer := shared.Apiextensions().V1().CustomResourceDefinitions().Informer()
+	a.addResponseCacheInvalidationHandler(informer, selectionKey, "CustomResourceDefinition")
+	// Clear cached discovery data whenever CRDs change to avoid stale GVR lookups.
+	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: func(obj interface{}) {
+			clearGVRCache()
+		},
+		UpdateFunc: func(_, newObj interface{}) {
+			clearGVRCache()
+		},
+		DeleteFunc: func(obj interface{}) {
+			clearGVRCache()
+		},
+	})
 }
 
 // addResponseCacheInvalidationHandler evicts cached responses when an informer update arrives.

@@ -360,14 +360,11 @@ Luxury Yacht:
 
 Remaining gap-closing work (see stability/performance lists below for evidence):
 - Incremental list caching for polling-only domains (Performance #1).
-- Add TTL/invalidation for GVR discovery caching on CRD changes (Stability #1).
-- Extend response cache invalidation to cover dynamic/custom resource YAML (Stability #2).
 - Optional parity: per-request SSAR gating for snapshot builds to match Headlamp's per-request checks (headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/permissions/checker.go:34).
 
 ## Stability risks (remaining, with evidence)
 
-1. ⏳ GVR discovery caching has no TTL or invalidation path, so CRD changes can leave stale GVR data for object YAML/apply requests (backend/object_yaml.go:21; backend/object_yaml.go:65; backend/object_yaml.go:83). Impact: med. Effort: med.
-2. ⏳ Response cache invalidation only wires to built-in informers/CRDs, while object YAML caching keys are generic per kind; custom resources can remain stale until TTL expires (backend/response_cache_invalidation.go:22; backend/response_cache_invalidation.go:44; backend/object_yaml.go:102). Impact: med. Effort: med.
+None.
 
 ## Stability risks (completed)
 
@@ -377,6 +374,8 @@ Remaining gap-closing work (see stability/performance lists below for evidence):
 4. ✅ Stream resume buffers are evicted when scopes have no subscribers, preventing unbounded growth (backend/refresh/eventstream/manager.go:331; backend/refresh/resourcestream/manager.go:745).
 5. ✅ Event stream backpressure now drops the oldest queued event before closing the subscriber, reducing forced resyncs under bursty load (backend/refresh/eventstream/manager.go:348; backend/refresh/eventstream/manager.go:366).
 6. ✅ Resource stream backpressure now issues a RESET to resync slow subscribers instead of immediately dropping them, reducing resubscribe storms (backend/refresh/resourcestream/manager.go:1835; backend/refresh/resourcestream/manager.go:1865).
+7. ✅ GVR discovery caching now expires entries and is cleared on CRD changes, preventing stale GVR lookups for YAML/apply paths (backend/object_yaml.go:56; backend/response_cache_invalidation.go:116).
+8. ✅ Custom resource stream updates now evict cached YAML responses for dynamic resources, preventing stale YAML payloads for CRDs (backend/response_cache_invalidation.go:42; backend/refresh/resourcestream/manager.go:643).
 
 ## Performance improvement opportunities (remaining, with evidence)
 

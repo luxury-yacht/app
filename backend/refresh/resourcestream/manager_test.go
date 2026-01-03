@@ -464,6 +464,47 @@ func TestManagerCustomUpdateBroadcasts(t *testing.T) {
 	}
 }
 
+func TestManagerCustomUpdateInvalidatesCache(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	_, err := manager.Subscribe(domainNamespaceCustom, "namespace:default")
+	require.NoError(t, err)
+
+	var called bool
+	var gotKind, gotNamespace, gotName string
+	manager.SetCustomResourceCacheInvalidator(func(kind, namespace, name string) {
+		called = true
+		gotKind = kind
+		gotNamespace = namespace
+		gotName = name
+	})
+
+	resource := &unstructured.Unstructured{}
+	resource.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "example.com",
+		Version: "v1",
+		Kind:    "Widget",
+	})
+	resource.SetName("widget-1")
+	resource.SetNamespace("default")
+
+	info := &customResourceInformer{
+		gvr:  schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+		kind: "Widget",
+	}
+
+	manager.handleCustomResource(resource, MessageTypeModified, info)
+
+	require.True(t, called)
+	require.Equal(t, "Widget", gotKind)
+	require.Equal(t, "default", gotNamespace)
+	require.Equal(t, "widget-1", gotName)
+}
+
 func TestManagerClusterCustomUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
