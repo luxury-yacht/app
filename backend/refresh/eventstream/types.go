@@ -51,6 +51,8 @@ type Payload struct {
 	GeneratedAt int64   `json:"generatedAt"`
 	Reset       bool    `json:"reset,omitempty"`
 	Events      []Entry `json:"events,omitempty"`
+	Total       int     `json:"total,omitempty"`
+	Truncated   bool    `json:"truncated,omitempty"`
 	Error       string  `json:"error,omitempty"`
 }
 

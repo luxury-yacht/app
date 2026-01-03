@@ -39,6 +39,8 @@ interface StreamEventPayload {
     age?: string;
     createdAt?: number;
   }>;
+  total?: number;
+  truncated?: boolean;
   error?: string;
 }
 
@@ -65,6 +67,14 @@ function isValidStreamEventPayload(data: unknown): data is StreamEventPayload {
   }
 
   if (obj.error !== undefined && typeof obj.error !== 'string') {
+    return false;
+  }
+
+  if (obj.total !== undefined && typeof obj.total !== 'number') {
+    return false;
+  }
+
+  if (obj.truncated !== undefined && typeof obj.truncated !== 'boolean') {
     return false;
   }
 
@@ -397,6 +407,8 @@ export class EventStreamManager {
   applyPayload(domain: string, scope: string, payload: StreamEventPayload): void {
     const generatedAt = payload.generatedAt || Date.now();
     const events = payload.events ?? [];
+    const payloadTotal = typeof payload.total === 'number' ? payload.total : undefined;
+    const payloadTruncated = typeof payload.truncated === 'boolean' ? payload.truncated : undefined;
     if (!payload.reset && events.length === 0 && !payload.error) {
       return;
     }
@@ -405,8 +417,11 @@ export class EventStreamManager {
       const { items, total, truncated } = payload.reset
         ? mergeEvents([], incoming, MAX_CLUSTER_EVENTS)
         : mergeEvents(this.clusterEvents, incoming, MAX_CLUSTER_EVENTS);
+      const resolvedTotal =
+        payloadTotal !== undefined ? Math.max(payloadTotal, items.length) : total;
+      const resolvedTruncated = payloadTruncated !== undefined ? payloadTruncated : truncated;
       this.clusterEvents = items.map(normalizeClusterEntry);
-      this.clusterEventMeta = { total, truncated };
+      this.clusterEventMeta = { total: resolvedTotal, truncated: resolvedTruncated };
       this.scheduleClusterStateUpdate(generatedAt, payload.error ?? null);
       return;
     }
@@ -417,8 +432,11 @@ export class EventStreamManager {
       const { items, total, truncated } = payload.reset
         ? mergeEvents([], incoming, MAX_NAMESPACE_EVENTS)
         : mergeEvents(existing, incoming, MAX_NAMESPACE_EVENTS);
+      const resolvedTotal =
+        payloadTotal !== undefined ? Math.max(payloadTotal, items.length) : total;
+      const resolvedTruncated = payloadTruncated !== undefined ? payloadTruncated : truncated;
       this.namespaceEvents.set(scope, items.map(normalizeNamespaceEntry));
-      this.namespaceEventMeta.set(scope, { total, truncated });
+      this.namespaceEventMeta.set(scope, { total: resolvedTotal, truncated: resolvedTruncated });
       this.scheduleNamespaceStateUpdate(scope, generatedAt, payload.error ?? null);
     }
   }

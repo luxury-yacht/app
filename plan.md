@@ -74,7 +74,7 @@ If you have suggestions on how to do your job better for this task, let me know.
 7. Add expiry/eviction to the informer factory's legacy permission cache so stale allow/deny decisions do not persist when runtime SSAR fails (backend/refresh/informer/factory.go:323; backend/refresh/informer/factory.go:336).
 8. Periodically revalidate permissions and stop informers/streams when revoked, rather than only gating at registration time (backend/refresh/system/manager.go:93; backend/refresh/informer/factory.go:315; backend/refresh/permissions/checker.go:34).
 9. Add caching or watch-based collection for object-events to avoid re-listing on every refresh (backend/refresh/snapshot/object_events.go:63; backend/refresh/snapshot/object_events.go:73).
-10. Include total/truncated metadata in event stream payloads so UI can report truncation accurately under the 500-item cap (backend/refresh/eventstream/handler.go:107; frontend/src/core/refresh/streaming/eventStreamManager.ts:405; backend/refresh/snapshot/event_limits.go:3).
+10. ✅ Include total/truncated metadata in event stream payloads so UI can report truncation accurately under the 500-item cap (backend/refresh/eventstream/handler.go:107; frontend/src/core/refresh/streaming/eventStreamManager.ts:407; backend/refresh/snapshot/event_limits.go:3).
 
 Scope note: Large-scale changes are #2 (resource-stream resume tokens/buffering), #8 (permission revalidation with informer/stream teardown), and #1/#9 if they add watch-based invalidation or watch-based event collection rather than simple TTL/cache tuning. #4 is only large-scale if it introduces invalidation logic instead of a TTL tweak.
 
@@ -83,7 +83,7 @@ Sequencing note: Batch only small, same-subsystem items. Suggested groupings: (a
 Suggested implementation order:
 1. ✅ Batch A: #3 (pause polling while events stream).
 2. ✅ Batch B: #5 + #6 (resource stream queue cap + jittered reconnect).
-3. Batch C: #10 (event stream total/truncated metadata).
+3. ✅ Batch C: #10 (event stream total/truncated metadata).
 4. Batch D: #7 + #8 (permission cache expiry + periodic revalidation/teardown).
 5. Batch E: #1 (watch-based invalidation for response cache).
 6. Batch F: #4 (snapshot cache TTL tweak) or #1 + #4 together if #4 adds invalidation.

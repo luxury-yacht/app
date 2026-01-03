@@ -105,6 +105,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		initialEvents := convertSnapshot(snapshotPayload)
+		totalItems := len(initialEvents)
+		if snapshotPayload.Stats.TotalItems > totalItems {
+			totalItems = snapshotPayload.Stats.TotalItems
+		}
 		payload := Payload{
 			Domain:      params.Domain,
 			Scope:       params.ScopeKey,
@@ -112,6 +116,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			GeneratedAt: time.Now().UnixMilli(),
 			Reset:       true,
 			Events:      initialEvents,
+		}
+		if totalItems > 0 {
+			payload.Total = totalItems
+		}
+		if snapshotPayload.Stats.Truncated {
+			payload.Truncated = true
 		}
 		h.logger.Info(
 			fmt.Sprintf(
