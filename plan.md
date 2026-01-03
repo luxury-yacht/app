@@ -62,44 +62,12 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 2. ✅ [Fundamental] A generalized watch streaming transport (WS multiplexer or equivalent) is required to support #1 at scale; Headlamp multiplexes watches over a single WS and resubscribes on reconnect, and Luxury Yacht now multiplexes resource streams (events/logs remain SSE). Evidence: `headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:60`, `headlamp/backend/cmd/multiplexer.go:389`, `backend/refresh/resourcestream/handler.go:26`, `frontend/src/core/refresh/streaming/resourceStreamManager.ts:1084`.
 3. ✅ [Incremental] Snapshot ETag checks happen after a full snapshot build on cache misses, so 304 responses alone do not save backend work; short-lived snapshot caching now reduces redundant builds. Evidence: `backend/refresh/api/server.go:71`, `backend/refresh/snapshot/service.go:19`, `backend/refresh/snapshot/service.go:47`.
 4. ✅ [Incremental] Headlamp’s response cache with watch-driven invalidation reduces API traffic for repeated GETs, while Luxury Yacht lacked a similar cache for non-informer endpoints (object details/YAML/helm); a short-lived response cache now covers detail/YAML/helm fetches without UI changes. Evidence: `headlamp/backend/cmd/server.go:183`, `headlamp/backend/pkg/k8cache/cacheStore.go:203`, `headlamp/backend/pkg/k8cache/cacheInvalidation.go:164`, `backend/response_cache.go:9`, `backend/fetch_helpers.go:31`, `backend/object_yaml.go:98`, `backend/object_detail_provider.go:79`.
-5. [Fundamental] Permission handling diverges: Luxury Yacht preflights and caches permissions at subsystem setup, while Headlamp checks SSAR per request with cached clientsets; moving to runtime SSAR or expiring permission caches is a significant behavioral shift. Evidence: `backend/refresh/system/manager.go:93`, `backend/refresh/informer/factory.go:306`, `headlamp/backend/pkg/k8cache/authorization.go:119`.
+5. ✅ [Fundamental] Permission handling diverges: Luxury Yacht preflights and caches permissions at subsystem setup, while Headlamp checks SSAR per request with cached clientsets; moving to runtime SSAR or expiring permission caches is a significant behavioral shift. Evidence: `backend/refresh/system/manager.go:93`, `backend/refresh/informer/factory.go:306`, `headlamp/backend/pkg/k8cache/authorization.go:119`.
 6. ✅ [Incremental] Event streaming drops slow subscribers and has no resume tokens; reconnects rely on fresh snapshots and caps, which risks data gaps during bursts. Resume tokens + snapshot fallback now reduce gaps and improve reliability. Evidence: `backend/refresh/eventstream/manager.go:67`, `backend/refresh/eventstream/handler.go:118`, `backend/refresh_aggregate_eventstream.go:118`, `frontend/src/core/refresh/streaming/eventStreamManager.ts:142`.
 7. [Fundamental] Catalog browse intentionally avoids SSE updates due to React update-depth risks; making browse safely stream would require reworking store update patterns and UI rendering. Evidence: `frontend/src/core/refresh/orchestrator.ts:1506`.
 8. ✅ [Incremental] High-frequency refresh intervals (2-3s) across multiple domains can cause contention and timeouts; resource streaming now pauses those refreshers while healthy to reduce load. Evidence: `frontend/src/core/refresh/refresherConfig.ts:24`, `frontend/src/core/refresh/orchestrator.ts:982`, `frontend/src/core/refresh/streaming/resourceStreamManager.ts:1084`.
 9. ✅ [Incremental] Event retention differs sharply (Headlamp default 2000, Luxury Yacht 200); caps now raised to 500 for cluster/namespace/object events to reduce truncation without changing the streaming model. Evidence: `headlamp/frontend/src/lib/k8s/event.ts:51`, `backend/refresh/snapshot/event_limits.go:3`, `backend/refresh/snapshot/cluster_events.go:111`.
 10. [Incremental] Catalog SSE has explicit backpressure drop behavior for slow consumers; if SSE is reintroduced for browse, the UI must handle missed updates by re-fetching snapshots when readiness or dropped updates are detected. Evidence: `backend/objectcatalog/streaming.go:151`, `backend/refresh/snapshot/catalog_stream.go:91`.
-
-#### Permission Handling
-
-- ✅ Phase 0: Audit + scope mapping
-  Identify every permission‑gated domain and where the cached permissions are read (e.g., refresh subsystem setup and informer factory). Document the exact gate points and which API verbs/resources they cover so we can verify parity after the change.
-  Gate points + cached permission reads (evidence: `backend/refresh/system/manager.go:95`, `backend/refresh/informer/factory.go:303`, `backend/app_refresh_setup.go:52`, `backend/app.go:150`):
-  - Refresh subsystem preflight + domain registration gates:
-    - metrics-poller: list `metrics.k8s.io/nodes` + `metrics.k8s.io/pods` (disabled if either denied).
-    - namespace-rbac: list `rbac.authorization.k8s.io/roles` + `rolebindings` (permission denied domain on failure).
-    - namespace-custom: list `apiextensions.k8s.io/customresourcedefinitions` (permission denied domain on failure).
-    - nodes: list/watch `core/nodes` + `core/pods` (list-only fallback; permission denied if list denied).
-    - cluster-overview: list/watch `core/nodes`, `core/pods`, `core/namespaces` (list-only fallback; permission denied if list denied).
-    - cluster-rbac: list/watch `rbac.authorization.k8s.io/clusterroles` + `clusterrolebindings` (permission denied domain on failure).
-    - cluster-storage: list/watch `core/persistentvolumes` (permission denied domain on failure).
-    - cluster-config: list `storage.k8s.io/storageclasses`, `networking.k8s.io/ingressclasses`, `admissionregistration.k8s.io/validatingwebhookconfigurations`, `admissionregistration.k8s.io/mutatingwebhookconfigurations` (permission denied on failure; partial include flags when some allowed).
-    - cluster-crds: list/watch `apiextensions.k8s.io/customresourcedefinitions` (permission denied domain on failure).
-    - cluster-custom: list `apiextensions.k8s.io/customresourcedefinitions` (permission denied domain on failure).
-    - cluster-events: list `core/events` (permission denied domain on failure).
-  - Informer factory permission cache gates cluster informer registration and is persisted per cluster selection.
-  - Resource stream domain gates require list+watch per domain via `permissionChecker`: `backend/refresh/resourcestream/manager.go:1681`.
-- ✅ Phase 1: Introduce a runtime permission checker with TTL cache
-  Implemented a backend permission checker that performs SSAR checks with a short TTL cache keyed by cluster selection + verb + resource and falls back to the last cached decision on transient failures/timeouts (evidence: `backend/refresh/permissions/checker.go:30`, `backend/internal/config/config.go:34`, `backend/refresh/system/manager.go:97`). Tests cover cache, TTL expiry, transient fallback, and key scoping (`backend/refresh/permissions/checker_test.go:9`).
-- ✅ Phase 2: Dual‑path validation (no feature flags)
-  Runtime SSAR checks now run alongside cached permission checks and log mismatches without changing behavior (evidence: `backend/refresh/informer/factory.go:86`, `backend/refresh/informer/factory.go:373`, `backend/refresh/informer/factory_test.go:113`).
-- ✅ Phase 3: Cutover to SSAR results
-  Permission gates now use the runtime SSAR checker with TTL cache and fall back to the legacy cache only on runtime errors, logging fallback usage (evidence: `backend/refresh/informer/factory.go:86`, `backend/refresh/informer/factory.go:112`, `backend/refresh/informer/factory.go:168`).
-- ✅ Phase 4: Cleanup
-  Removed legacy permission cache wiring from refresh subsystem setup; permission caches are no longer passed or persisted (evidence: `backend/app_refresh_setup.go:60`, `backend/app_kubernetes_client.go:107`, `backend/refresh/system/manager.go:94`, `backend/app_lifecycle_test.go:61`).
-- Testing & safety checks
-  - Unit tests for the permission checker cache: hit/miss, TTL expiry, error fallback, and cluster‑scoped keys.
-  - Domain‑level tests verifying “permission denied” snapshots still surface correctly.
-  - Coverage target ≥ 80% for the new permission checker package.
 
 ## Confidence Boosters (evaluation hygiene)
 
