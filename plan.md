@@ -71,14 +71,27 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 #### Permission Handling
 
-- Phase 0: Audit + scope mapping
-  Identify every permission‑gated domain and where the cached permissions are read (e.g., refresh subsystem setup and informer factory). Document the exact gate points and which API verbs/resources they cover so we
-  can verify parity after the change.
+- ✅ Phase 0: Audit + scope mapping
+  Identify every permission‑gated domain and where the cached permissions are read (e.g., refresh subsystem setup and informer factory). Document the exact gate points and which API verbs/resources they cover so we can verify parity after the change.
+  Gate points + cached permission reads (evidence: `backend/refresh/system/manager.go:95`, `backend/refresh/informer/factory.go:303`, `backend/app_refresh_setup.go:52`, `backend/app.go:150`):
+  - Refresh subsystem preflight + domain registration gates:
+    - metrics-poller: list `metrics.k8s.io/nodes` + `metrics.k8s.io/pods` (disabled if either denied).
+    - namespace-rbac: list `rbac.authorization.k8s.io/roles` + `rolebindings` (permission denied domain on failure).
+    - namespace-custom: list `apiextensions.k8s.io/customresourcedefinitions` (permission denied domain on failure).
+    - nodes: list/watch `core/nodes` + `core/pods` (list-only fallback; permission denied if list denied).
+    - cluster-overview: list/watch `core/nodes`, `core/pods`, `core/namespaces` (list-only fallback; permission denied if list denied).
+    - cluster-rbac: list/watch `rbac.authorization.k8s.io/clusterroles` + `clusterrolebindings` (permission denied domain on failure).
+    - cluster-storage: list/watch `core/persistentvolumes` (permission denied domain on failure).
+    - cluster-config: list `storage.k8s.io/storageclasses`, `networking.k8s.io/ingressclasses`, `admissionregistration.k8s.io/validatingwebhookconfigurations`, `admissionregistration.k8s.io/mutatingwebhookconfigurations` (permission denied on failure; partial include flags when some allowed).
+    - cluster-crds: list/watch `apiextensions.k8s.io/customresourcedefinitions` (permission denied domain on failure).
+    - cluster-custom: list `apiextensions.k8s.io/customresourcedefinitions` (permission denied domain on failure).
+    - cluster-events: list `core/events` (permission denied domain on failure).
+  - Informer factory permission cache gates cluster informer registration and is persisted per cluster selection.
+  - Resource stream domain gates require list+watch per domain via `permissionChecker`: `backend/refresh/resourcestream/manager.go:1681`.
 - Phase 1: Introduce a runtime permission checker with TTL cache
   Implement a single backend permission checker that: - Performs SSAR checks per request with a short TTL cache keyed by cluster selection + verb + resource. - Falls back to the last cached decision on transient failures/timeouts (so we don’t flap to “denied” on network blips). - Uses existing selection scoping to prevent cross‑cluster leakage.
 - Phase 2: Dual‑path validation (no feature flags)
-  Run the new SSAR path in parallel with the existing cached permissions only for diagnostics: - Log mismatches between cached preflight and SSAR results. - Do not change behavior yet, only observe.
-  This keeps the current behavior intact while we validate correctness.
+  Run the new SSAR path in parallel with the existing cached permissions only for diagnostics: - Log mismatches between cached preflight and SSAR results. - Do not change behavior yet, only observe. This keeps the current behavior intact while we validate correctness.
 - Phase 3: Cutover to SSAR results
   Switch the permission gates to trust the SSAR checker (still cached by TTL). Keep the old permission cache as a fallback for error handling only (timeouts/SSR failures), and log when that fallback is used.
 - Phase 4: Cleanup
