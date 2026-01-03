@@ -146,6 +146,38 @@ describe('RefreshManager scheduling and state handling', () => {
     await vi.advanceTimersByTimeAsync(250);
     expect(refreshManager.getState(AUTO_NAME)?.status).toBe('idle');
   });
+
+  it('retries auto refresh after cooldown when an attempt fails', async () => {
+    vi.useFakeTimers();
+    const callback = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw new Error('boom');
+      })
+      .mockImplementation(() => {});
+
+    refreshManager.register({
+      name: AUTO_NAME,
+      interval: 1_000,
+      cooldown: 200,
+      timeout: 2,
+      resource: 'ns-workloads',
+      enabled: false,
+    });
+    refreshManager.subscribe(AUTO_NAME, callback);
+    const instance = unsafeRefreshManager.refreshers.get(AUTO_NAME)!;
+    instance.isEnabled = true;
+    instance.state.status = 'idle';
+
+    await unsafeRefreshManager.refreshSingle(AUTO_NAME, false).catch(() => {});
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(refreshManager.getState(AUTO_NAME)?.status).toBe('cooldown');
+
+    await vi.advanceTimersByTimeAsync(200);
+    await Promise.resolve();
+    expect(callback).toHaveBeenCalledTimes(2);
+    expect(refreshManager.getState(AUTO_NAME)?.status).toBe('cooldown');
+  });
 });
 
 describe('RefreshManager registration lifecycle', () => {

@@ -662,7 +662,7 @@ class RefreshManager {
       eventBus.emit('refresh:complete', { name, isManual, success: true });
 
       // Enter cooldown
-      this.enterCooldown(name, instance, isManual);
+      this.enterCooldown(name, instance, isManual, false);
     } catch (error) {
       // Clear timeout timer
       if (instance.timeoutTimer) {
@@ -703,7 +703,7 @@ class RefreshManager {
       // Refresh failed - error stored in state
 
       // Still enter cooldown to prevent rapid retries
-      this.enterCooldown(name, instance, isManual);
+      this.enterCooldown(name, instance, isManual, true);
     } finally {
       instance.refreshPromise = undefined;
     }
@@ -726,7 +726,12 @@ class RefreshManager {
   /**
    * Enter cooldown period after refresh
    */
-  private enterCooldown(name: RefresherName, instance: RefresherInstance, isManual: boolean): void {
+  private enterCooldown(
+    name: RefresherName,
+    instance: RefresherInstance,
+    isManual: boolean,
+    hadError: boolean
+  ): void {
     instance.state.status = 'cooldown';
     this.emitStateChange(name);
 
@@ -749,6 +754,10 @@ class RefreshManager {
         // Update next refresh time
         instance.state.nextRefreshTime = new Date(Date.now() + instance.config.interval);
         this.emitStateChange(name);
+        if (hadError) {
+          // Retry immediately after cooldown so errors don't stall until the next interval tick.
+          void this.refreshSingle(name, false);
+        }
       }
     }, cooldownMs);
   }
