@@ -292,12 +292,19 @@ export interface CatalogSnapshotPayload extends ClusterMeta {
   firstBatchLatencyMs?: number;
 }
 
+// Indicates whether the catalog stream payload is a full replacement or a partial update.
+export type CatalogStreamSnapshotMode = 'full' | 'partial';
+
 export interface CatalogStreamEventPayload {
   reset?: boolean;
   ready?: boolean;
+  cacheReady: boolean;
+  truncated: boolean;
+  snapshotMode: CatalogStreamSnapshotMode;
   snapshot: CatalogSnapshotPayload;
   stats: SnapshotStats;
   generatedAt: number;
+  sequence: number;
 }
 
 export interface PodSnapshotEntry extends ClusterMeta {

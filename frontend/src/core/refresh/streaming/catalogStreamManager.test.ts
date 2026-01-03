@@ -75,6 +75,19 @@ const createEmptySnapshot = () => ({
   isFinal: true,
 });
 
+const createStreamEvent = (overrides: Partial<Record<string, unknown>> = {}) => ({
+  snapshot: createSnapshot(),
+  stats: { itemCount: 1, buildDurationMs: 12 },
+  reset: true,
+  ready: true,
+  cacheReady: true,
+  truncated: false,
+  snapshotMode: 'full',
+  generatedAt: 1700000000000,
+  sequence: 1,
+  ...overrides,
+});
+
 const setupWindow = () => {
   if (!globalThis.window) {
     Object.defineProperty(globalThis, 'window', {
@@ -135,13 +148,11 @@ describe('catalogStreamManager', () => {
     const snapshot = createSnapshot();
 
     MockEventSource.instances[0].onmessage?.({
-      data: JSON.stringify({
-        snapshot,
-        stats: { itemCount: 1, buildDurationMs: 12 },
-        reset: true,
-        ready: true,
-        generatedAt: 1700000000000,
-      }),
+      data: JSON.stringify(
+        createStreamEvent({
+          snapshot,
+        })
+      ),
     } as MessageEvent);
 
     await Promise.resolve();
@@ -178,6 +189,71 @@ describe('catalogStreamManager', () => {
     expect(state.status).toBe('idle');
     expect(state.data).toBeNull();
     expect(MockEventSource.instances[0].closed).toBe(true);
+  });
+
+  it('merges partial stream updates by uid', async () => {
+    const manager = await importManager();
+    await manager.start('limit=50');
+
+    const initialSnapshot = createSnapshot();
+    const updatedItem = { ...initialSnapshot.items[0], name: 'api-v2' };
+    const newItem = {
+      kind: 'Service',
+      group: '',
+      version: 'v1',
+      resource: 'services',
+      namespace: 'team-a',
+      name: 'web',
+      uid: 'uid-2',
+      resourceVersion: '2',
+      creationTimestamp: '2024-01-02T00:00:00Z',
+      scope: 'Namespace' as const,
+    };
+    const partialSnapshot = {
+      ...initialSnapshot,
+      items: [updatedItem, newItem],
+      total: 2,
+      resourceCount: 2,
+      batchSize: 2,
+      totalBatches: 1,
+      isFinal: false,
+    };
+
+    MockEventSource.instances[0].onmessage?.({
+      data: JSON.stringify(
+        createStreamEvent({
+          snapshot: initialSnapshot,
+          sequence: 1,
+        })
+      ),
+    } as MessageEvent);
+
+    MockEventSource.instances[0].onmessage?.({
+      data: JSON.stringify(
+        createStreamEvent({
+          snapshot: partialSnapshot,
+          stats: { itemCount: 2, buildDurationMs: 12 },
+          reset: false,
+          ready: false,
+          cacheReady: false,
+          truncated: false,
+          snapshotMode: 'partial',
+          generatedAt: 1700000001000,
+          sequence: 2,
+        })
+      ),
+    } as MessageEvent);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const state = getDomainState('catalog');
+    const mergedItems = state.data?.items ?? [];
+    const byUid = new Map(mergedItems.map((item) => [item.uid, item]));
+    expect(mergedItems).toHaveLength(2);
+    expect(byUid.get('uid-1')?.name).toBe('api-v2');
+    expect(byUid.get('uid-2')?.name).toBe('web');
+    expect(state.status).toBe('updating');
   });
 
   it('retries with backoff when EventSource fails to initialise', async () => {
@@ -284,13 +360,16 @@ describe('catalogStreamManager', () => {
     (globalThis as any).queueMicrotask = undefined;
 
     MockEventSource.instances[0].onmessage?.({
-      data: JSON.stringify({
-        snapshot: createSnapshot(),
-        stats: { itemCount: 2, buildDurationMs: 15 },
-        reset: true,
-        ready: false,
-        generatedAt: 1700000005000,
-      }),
+      data: JSON.stringify(
+        createStreamEvent({
+          snapshot: createSnapshot(),
+          stats: { itemCount: 2, buildDurationMs: 15 },
+          reset: true,
+          ready: false,
+          generatedAt: 1700000005000,
+          sequence: 2,
+        })
+      ),
     } as MessageEvent);
 
     await Promise.resolve();
