@@ -100,8 +100,6 @@ func (a *App) teardownRefreshSubsystem() {
 	a.apiExtensionsInformerFactory = nil
 	a.refreshBaseURL = ""
 	clearGVRCache()
-	// Legacy permission caches are unused; retain clearing for safety.
-	a.clearPermissionCaches()
 }
 
 func (a *App) handlePermissionIssues(issues []system.PermissionIssue) {

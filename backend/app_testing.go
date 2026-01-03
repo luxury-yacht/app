@@ -18,7 +18,7 @@ func (a *App) InitializeForTesting(ctx context.Context, client kubernetes.Interf
 		a.logger = NewLogger(1000)
 	}
 	if client != nil {
-		if _, err := a.setupRefreshSubsystem(client, a.currentSelectionKey(), nil); err != nil {
+		if err := a.setupRefreshSubsystem(client, a.currentSelectionKey()); err != nil {
 			a.logger.Warn(fmt.Sprintf("Failed to initialize refresh subsystem in tests: %v", err), "Refresh")
 		} else {
 			a.startObjectCatalog()

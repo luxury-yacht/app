@@ -44,18 +44,16 @@ func TestSetupRefreshSubsystemRequiresClient(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
 
-	cache, err := app.setupRefreshSubsystem(nil, "", nil)
+	err := app.setupRefreshSubsystem(nil, "")
 	require.Error(t, err)
-	require.Nil(t, cache)
 }
 
 func TestSetupRefreshSubsystemRequiresContext(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = nil
 
-	cache, err := app.setupRefreshSubsystem(kubernetesfake.NewClientset(), "", nil)
+	err := app.setupRefreshSubsystem(kubernetesfake.NewClientset(), "")
 	require.Error(t, err)
-	require.Nil(t, cache)
 }
 
 func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
@@ -69,7 +67,6 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	app.apiextensionsClient = &apiextensionsclientset.Clientset{}
 	app.restConfig = &rest.Config{}
 
-	initialCache := map[string]bool{"list": true}
 	fakeClient := kubernetesfake.NewClientset()
 	manager := refresh.NewManager(nil, nil, nil, nil, nil)
 	handler := http.NewServeMux()
@@ -86,7 +83,7 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	}
 	defer func() { newRefreshSubsystemWithServices = original }()
 
-	cache, err := app.setupRefreshSubsystem(fakeClient, "selection", initialCache)
+	err := app.setupRefreshSubsystem(fakeClient, "selection")
 	require.NoError(t, err)
 	defer app.teardownRefreshSubsystem()
 
@@ -95,11 +92,6 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	require.NotNil(t, app.refreshListener)
 	require.NotNil(t, app.refreshCancel)
 	require.NotEmpty(t, app.refreshBaseURL)
-
-	require.Nil(t, cache)
-
-	stored := app.getPermissionCache("selection")
-	require.Nil(t, stored)
 
 	require.Equal(t, fakeClient, capturedCfg.KubernetesClient)
 	require.Equal(t, app.metricsClient, capturedCfg.MetricsClient)

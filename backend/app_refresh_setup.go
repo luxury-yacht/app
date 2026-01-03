@@ -17,12 +17,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKey string, permissionCache map[string]bool) (map[string]bool, error) {
+func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKey string) error {
 	if kubeClient == nil {
-		return nil, errors.New("kubernetes client is nil")
+		return errors.New("kubernetes client is nil")
 	}
 	if a.Ctx == nil {
-		return nil, errors.New("application context not initialised")
+		return errors.New("application context not initialised")
 	}
 
 	selections, err := a.selectedKubeconfigSelections()
@@ -72,7 +72,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			ClusterName:             clusterMeta.Name,
 		}, selectionKey)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if hostClusterID != "" {
@@ -83,17 +83,17 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	} else {
 		// Align the client pool to the selected cluster set before building managers.
 		if err := a.syncClusterClientPool(selections); err != nil {
-			return nil, err
+			return err
 		}
 
 		for _, selection := range selections {
 			clusterMeta := a.clusterMetaForSelection(selection)
 			if clusterMeta.ID == "" {
-				return nil, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
+				return fmt.Errorf("cluster identifier missing for selection %s", selection.String())
 			}
 			clients := a.clusterClientsForID(clusterMeta.ID)
 			if clients == nil {
-				return nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
+				return fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
 			}
 
 			cfg := system.Config{
@@ -119,7 +119,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 
 			subsystem, err := a.buildRefreshSubsystem(cfg, clusterMeta.ID)
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			subsystems[clusterMeta.ID] = subsystem
@@ -131,7 +131,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	}
 
 	if hostSubsystem == nil {
-		return nil, errors.New("refresh subsystem not initialised")
+		return errors.New("refresh subsystem not initialised")
 	}
 
 	for _, subsystem := range subsystems {
@@ -174,7 +174,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 
 	listener, err := a.listenLoopback()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	srv := &http.Server{Handler: mux}
@@ -200,8 +200,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		}
 	}()
 
-	_ = permissionCache
-	return nil, nil
+	return nil
 }
 
 // buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.

@@ -14,11 +14,10 @@ import (
 func newTestAppWithDefaults(t *testing.T) *App {
 	t.Helper()
 	return &App{
-		logger:           NewLogger(100),
-		eventEmitter:     func(context.Context, string, ...interface{}) {},
-		permissionCaches: make(map[string]map[string]bool),
-		sidebarVisible:   true,
-		listenLoopback:   defaultLoopbackListener,
+		logger:         NewLogger(100),
+		eventEmitter:   func(context.Context, string, ...interface{}) {},
+		sidebarVisible: true,
+		listenLoopback: defaultLoopbackListener,
 	}
 }
 

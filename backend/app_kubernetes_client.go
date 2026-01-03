@@ -102,7 +102,7 @@ func (a *App) initKubernetesClient() (err error) {
 	a.registerSelectedClusterClient()
 
 	selectionKey := a.currentSelectionKey()
-	_, err = a.setupRefreshSubsystem(clientset, selectionKey, nil)
+	err = a.setupRefreshSubsystem(clientset, selectionKey)
 	if err != nil {
 		a.logger.Error(fmt.Sprintf("Failed to initialise refresh subsystem: %v", err), "Refresh")
 		a.client = nil
