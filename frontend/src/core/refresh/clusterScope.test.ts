@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildClusterScope,
   buildClusterScopeList,
+  parseClusterScopeList,
   parseClusterScope,
   stripClusterScope,
 } from './clusterScope';
@@ -75,6 +76,42 @@ describe('clusterScope helpers', () => {
     expect(parsed).toEqual({
       clusterId: 'cluster-a',
       scope: '',
+      isMultiCluster: false,
+    });
+  });
+
+  it('parses cluster scope lists with multiple clusters', () => {
+    const parsed = parseClusterScopeList('clusters=cluster-a,cluster-b|namespace:default');
+    expect(parsed).toEqual({
+      clusterIds: ['cluster-a', 'cluster-b'],
+      scope: 'namespace:default',
+      isMultiCluster: true,
+    });
+  });
+
+  it('parses single-cluster scope lists', () => {
+    const parsed = parseClusterScopeList('clusters=cluster-a|');
+    expect(parsed).toEqual({
+      clusterIds: ['cluster-a'],
+      scope: '',
+      isMultiCluster: false,
+    });
+  });
+
+  it('parses cluster-prefixed scopes into a single cluster list', () => {
+    const parsed = parseClusterScopeList('cluster-a|namespace:default');
+    expect(parsed).toEqual({
+      clusterIds: ['cluster-a'],
+      scope: 'namespace:default',
+      isMultiCluster: false,
+    });
+  });
+
+  it('returns empty cluster lists when no prefix is present', () => {
+    const parsed = parseClusterScopeList('namespace:default');
+    expect(parsed).toEqual({
+      clusterIds: [],
+      scope: 'namespace:default',
       isMultiCluster: false,
     });
   });

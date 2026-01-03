@@ -40,7 +40,7 @@ import type {
   PodSnapshotEntry,
   PodSnapshotPayload,
 } from '../types';
-import { buildClusterScopeList, parseClusterScope } from '../clusterScope';
+import { buildClusterScopeList, parseClusterScopeList } from '../clusterScope';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus, type AppEvents } from '@/core/events';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
@@ -120,6 +120,14 @@ const isSupportedDomain = (value: string | undefined): value is ResourceDomain =
   value === 'cluster-crds' ||
   value === 'cluster-custom' ||
   value === 'nodes';
+
+const isMultiClusterDomain = (domain: ResourceDomain): boolean =>
+  domain === 'nodes' ||
+  domain === 'cluster-rbac' ||
+  domain === 'cluster-storage' ||
+  domain === 'cluster-config' ||
+  domain === 'cluster-crds' ||
+  domain === 'cluster-custom';
 
 const hasMessageType = (value: unknown): value is StreamMessageType =>
   typeof value === 'string' && Object.values(MESSAGE_TYPES).includes(value as StreamMessageType);
@@ -797,10 +805,28 @@ const updateStats = (stats: SnapshotStats | null, itemCount: number): SnapshotSt
   return { ...stats, itemCount };
 };
 
+// Merge cluster payloads by replacing rows for a single cluster id.
+const mergeClusterRows = <T extends { clusterId?: string | null }>(
+  existing: T[] | null | undefined,
+  incoming: T[] | null | undefined,
+  clusterId: string
+): T[] => {
+  const targetCluster = clusterId.trim();
+  const next = (existing ?? []).filter((row) => {
+    const rowCluster = (row.clusterId ?? targetCluster).trim();
+    return rowCluster !== targetCluster;
+  });
+  if (incoming && incoming.length > 0) {
+    next.push(...incoming);
+  }
+  return next;
+};
+
 type StreamSubscription = {
   key: string;
   domain: ResourceDomain;
   storeScope: string;
+  reportScope: string;
   normalizedScope: string;
   clusterId: string;
   clusterName?: string;
@@ -1000,24 +1026,30 @@ export class ResourceStreamManager {
     if (typeof window === 'undefined') {
       return;
     }
-    const subscription = this.ensureSubscription(domain, scope);
-    await this.resyncSubscription(subscription, 'initial');
+    const subscriptions = this.ensureSubscriptions(domain, scope);
+    await Promise.all(
+      subscriptions.map((subscription) => this.resyncSubscription(subscription, 'initial'))
+    );
   }
 
   stop(domain: ResourceDomain, scope: string, reset = false): void {
-    const subscription = this.getSubscription(domain, scope);
-    if (!subscription) {
+    const subscriptions = this.getSubscriptions(domain, scope);
+    if (subscriptions.length === 0) {
       return;
     }
-    this.unsubscribe(subscription, reset);
+    subscriptions.forEach((subscription) => this.unsubscribe(subscription, reset));
   }
 
   async refreshOnce(domain: ResourceDomain, scope: string): Promise<void> {
     if (typeof window === 'undefined') {
       return;
     }
-    const subscription = this.ensureSubscription(domain, scope);
-    await this.resyncSubscription(subscription, 'manual refresh', true);
+    const subscriptions = this.ensureSubscriptions(domain, scope);
+    await Promise.all(
+      subscriptions.map((subscription) =>
+        this.resyncSubscription(subscription, 'manual refresh', true)
+      )
+    );
   }
 
   handleMessage(clusterId: string, raw: string): void {
@@ -1110,26 +1142,36 @@ export class ResourceStreamManager {
     });
   }
 
-  private ensureSubscription(domain: ResourceDomain, scope: string): StreamSubscription {
-    const parsed = parseClusterScope(scope);
-    if (!parsed.clusterId || parsed.isMultiCluster) {
-      throw new Error('Resource streaming requires a single cluster scope');
-    }
-    const normalizedScope = normalizeResourceScope(domain, parsed.scope);
-    const storeScope = buildClusterScopeList([parsed.clusterId], normalizedScope);
-    const key = this.subscriptionKey(parsed.clusterId, domain, normalizedScope);
+  private ensureSubscriptions(domain: ResourceDomain, scope: string): StreamSubscription[] {
+    const { clusterIds, normalizedScope, reportScope } = this.resolveSubscriptionScope(
+      domain,
+      scope
+    );
+    return clusterIds.map((clusterId) =>
+      this.ensureSubscriptionForCluster(domain, clusterId, normalizedScope, reportScope)
+    );
+  }
 
+  private ensureSubscriptionForCluster(
+    domain: ResourceDomain,
+    clusterId: string,
+    normalizedScope: string,
+    reportScope: string
+  ): StreamSubscription {
+    const key = this.subscriptionKey(clusterId, domain, normalizedScope);
     const existing = this.subscriptions.get(key);
     if (existing) {
       return existing;
     }
 
+    const storeScope = buildClusterScopeList([clusterId], normalizedScope);
     const subscription: StreamSubscription = {
       key,
       domain,
       storeScope,
+      reportScope,
       normalizedScope,
-      clusterId: parsed.clusterId,
+      clusterId,
       updateQueue: [],
       updateTimer: null,
       pendingReset: false,
@@ -1147,16 +1189,52 @@ export class ResourceStreamManager {
     return subscription;
   }
 
-  private getSubscription(domain: ResourceDomain, scope: string): StreamSubscription | null {
-    const parsed = parseClusterScope(scope);
-    if (!parsed.clusterId || parsed.isMultiCluster) {
-      return null;
+  private getSubscriptions(domain: ResourceDomain, scope: string): StreamSubscription[] {
+    const parsed = parseClusterScopeList(scope);
+    if (parsed.clusterIds.length === 0) {
+      return [];
+    }
+    if (parsed.isMultiCluster && !isMultiClusterDomain(domain)) {
+      return [];
+    }
+    let normalizedScope = '';
+    try {
+      normalizedScope = normalizeResourceScope(domain, parsed.scope);
+    } catch (_err) {
+      return [];
+    }
+
+    return parsed.clusterIds
+      .map((clusterId) =>
+        this.subscriptions.get(this.subscriptionKey(clusterId, domain, normalizedScope))
+      )
+      .filter((subscription): subscription is StreamSubscription => Boolean(subscription));
+  }
+
+  private resolveSubscriptionScope(
+    domain: ResourceDomain,
+    scope: string
+  ): { clusterIds: string[]; normalizedScope: string; reportScope: string } {
+    const parsed = parseClusterScopeList(scope);
+    if (parsed.clusterIds.length === 0) {
+      throw new Error('Resource streaming requires a cluster scope');
+    }
+    if (parsed.isMultiCluster && !isMultiClusterDomain(domain)) {
+      throw new Error('Resource streaming requires a single cluster scope');
     }
     const normalizedScope = normalizeResourceScope(domain, parsed.scope);
-    return (
-      this.subscriptions.get(this.subscriptionKey(parsed.clusterId, domain, normalizedScope)) ??
-      null
-    );
+    const reportScope = buildClusterScopeList(parsed.clusterIds, normalizedScope);
+    return { clusterIds: parsed.clusterIds, normalizedScope, reportScope };
+  }
+
+  private hasMultiClusterSubscriptions(domain: ResourceDomain): boolean {
+    const clusters = new Set<string>();
+    this.subscriptions.forEach((subscription) => {
+      if (subscription.domain === domain) {
+        clusters.add(subscription.clusterId);
+      }
+    });
+    return clusters.size > 1;
   }
 
   private subscriptionKey(clusterId: string, domain: ResourceDomain, scope: string): string {
@@ -1297,7 +1375,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1350,7 +1428,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1401,7 +1479,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1452,7 +1530,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1503,7 +1581,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1554,7 +1632,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1599,7 +1677,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1650,7 +1728,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1701,7 +1779,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1752,7 +1830,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1797,7 +1875,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1841,7 +1919,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1886,7 +1964,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1930,7 +2008,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -1975,7 +2053,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -2018,7 +2096,7 @@ export class ResourceStreamManager {
           lastAutoRefresh: now,
           error: null,
           isManual: false,
-          scope: subscription.storeScope,
+          scope: subscription.reportScope,
         };
       });
       this.clearStreamError(subscription.clusterId);
@@ -2409,7 +2487,7 @@ export class ResourceStreamManager {
         lastAutoRefresh: generatedAt,
         error: null,
         isManual: false,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2429,7 +2507,7 @@ export class ResourceStreamManager {
         lastAutoRefresh: generatedAt,
         error: null,
         isManual: false,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2449,7 +2527,7 @@ export class ResourceStreamManager {
         lastAutoRefresh: generatedAt,
         error: null,
         isManual: false,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2469,7 +2547,7 @@ export class ResourceStreamManager {
         lastAutoRefresh: generatedAt,
         error: null,
         isManual: false,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2489,7 +2567,7 @@ export class ResourceStreamManager {
         lastAutoRefresh: generatedAt,
         error: null,
         isManual: false,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2509,7 +2587,7 @@ export class ResourceStreamManager {
         lastAutoRefresh: generatedAt,
         error: null,
         isManual: false,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2529,7 +2607,7 @@ export class ResourceStreamManager {
         lastAutoRefresh: generatedAt,
         error: null,
         isManual: false,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2549,7 +2627,7 @@ export class ResourceStreamManager {
         lastAutoRefresh: generatedAt,
         error: null,
         isManual: false,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2569,7 +2647,7 @@ export class ResourceStreamManager {
         lastAutoRefresh: generatedAt,
         error: null,
         isManual: false,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2589,7 +2667,7 @@ export class ResourceStreamManager {
         lastAutoRefresh: generatedAt,
         error: null,
         isManual: false,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2597,120 +2675,180 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'cluster-rbac') {
       const payload = snapshot.payload as ClusterRBACSnapshotPayload;
-      setDomainState('cluster-rbac', (previous) => ({
-        ...previous,
-        status: 'ready',
-        data: payload,
-        stats: snapshot.stats ?? null,
-        version: snapshot.version,
-        checksum: snapshot.checksum,
-        etag: snapshot.checksum ?? previous.etag,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: generatedAt,
-        error: null,
-        isManual: false,
-        scope: subscription.storeScope,
-      }));
+      const shouldMerge = this.hasMultiClusterSubscriptions('cluster-rbac');
+      setDomainState('cluster-rbac', (previous) => {
+        const incoming = payload.resources ?? [];
+        const merged = shouldMerge
+          ? mergeClusterRows(previous.data?.resources, incoming, subscription.clusterId)
+          : incoming;
+        if (shouldMerge) {
+          sortClusterRBACRows(merged);
+        }
+        return {
+          ...previous,
+          status: 'ready',
+          data: shouldMerge ? { ...payload, resources: merged } : payload,
+          stats: updateStats(snapshot.stats ?? previous.stats ?? null, merged.length),
+          version: snapshot.version,
+          checksum: snapshot.checksum,
+          etag: snapshot.checksum ?? previous.etag,
+          lastUpdated: generatedAt,
+          lastAutoRefresh: generatedAt,
+          error: null,
+          isManual: false,
+          scope: subscription.reportScope,
+        };
+      });
       this.clearStreamError(subscription.clusterId);
       return;
     }
 
     if (subscription.domain === 'cluster-storage') {
       const payload = snapshot.payload as ClusterStorageSnapshotPayload;
-      setDomainState('cluster-storage', (previous) => ({
-        ...previous,
-        status: 'ready',
-        data: payload,
-        stats: snapshot.stats ?? null,
-        version: snapshot.version,
-        checksum: snapshot.checksum,
-        etag: snapshot.checksum ?? previous.etag,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: generatedAt,
-        error: null,
-        isManual: false,
-        scope: subscription.storeScope,
-      }));
+      const shouldMerge = this.hasMultiClusterSubscriptions('cluster-storage');
+      setDomainState('cluster-storage', (previous) => {
+        const incoming = payload.volumes ?? [];
+        const merged = shouldMerge
+          ? mergeClusterRows(previous.data?.volumes, incoming, subscription.clusterId)
+          : incoming;
+        if (shouldMerge) {
+          sortClusterStorageRows(merged);
+        }
+        return {
+          ...previous,
+          status: 'ready',
+          data: shouldMerge ? { ...payload, volumes: merged } : payload,
+          stats: updateStats(snapshot.stats ?? previous.stats ?? null, merged.length),
+          version: snapshot.version,
+          checksum: snapshot.checksum,
+          etag: snapshot.checksum ?? previous.etag,
+          lastUpdated: generatedAt,
+          lastAutoRefresh: generatedAt,
+          error: null,
+          isManual: false,
+          scope: subscription.reportScope,
+        };
+      });
       this.clearStreamError(subscription.clusterId);
       return;
     }
 
     if (subscription.domain === 'cluster-config') {
       const payload = snapshot.payload as ClusterConfigSnapshotPayload;
-      setDomainState('cluster-config', (previous) => ({
-        ...previous,
-        status: 'ready',
-        data: payload,
-        stats: snapshot.stats ?? null,
-        version: snapshot.version,
-        checksum: snapshot.checksum,
-        etag: snapshot.checksum ?? previous.etag,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: generatedAt,
-        error: null,
-        isManual: false,
-        scope: subscription.storeScope,
-      }));
+      const shouldMerge = this.hasMultiClusterSubscriptions('cluster-config');
+      setDomainState('cluster-config', (previous) => {
+        const incoming = payload.resources ?? [];
+        const merged = shouldMerge
+          ? mergeClusterRows(previous.data?.resources, incoming, subscription.clusterId)
+          : incoming;
+        if (shouldMerge) {
+          sortClusterConfigRows(merged);
+        }
+        return {
+          ...previous,
+          status: 'ready',
+          data: shouldMerge ? { ...payload, resources: merged } : payload,
+          stats: updateStats(snapshot.stats ?? previous.stats ?? null, merged.length),
+          version: snapshot.version,
+          checksum: snapshot.checksum,
+          etag: snapshot.checksum ?? previous.etag,
+          lastUpdated: generatedAt,
+          lastAutoRefresh: generatedAt,
+          error: null,
+          isManual: false,
+          scope: subscription.reportScope,
+        };
+      });
       this.clearStreamError(subscription.clusterId);
       return;
     }
 
     if (subscription.domain === 'cluster-crds') {
       const payload = snapshot.payload as ClusterCRDSnapshotPayload;
-      setDomainState('cluster-crds', (previous) => ({
-        ...previous,
-        status: 'ready',
-        data: payload,
-        stats: snapshot.stats ?? null,
-        version: snapshot.version,
-        checksum: snapshot.checksum,
-        etag: snapshot.checksum ?? previous.etag,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: generatedAt,
-        error: null,
-        isManual: false,
-        scope: subscription.storeScope,
-      }));
+      const shouldMerge = this.hasMultiClusterSubscriptions('cluster-crds');
+      setDomainState('cluster-crds', (previous) => {
+        const incoming = payload.definitions ?? [];
+        const merged = shouldMerge
+          ? mergeClusterRows(previous.data?.definitions, incoming, subscription.clusterId)
+          : incoming;
+        if (shouldMerge) {
+          sortClusterCRDRows(merged);
+        }
+        return {
+          ...previous,
+          status: 'ready',
+          data: shouldMerge ? { ...payload, definitions: merged } : payload,
+          stats: updateStats(snapshot.stats ?? previous.stats ?? null, merged.length),
+          version: snapshot.version,
+          checksum: snapshot.checksum,
+          etag: snapshot.checksum ?? previous.etag,
+          lastUpdated: generatedAt,
+          lastAutoRefresh: generatedAt,
+          error: null,
+          isManual: false,
+          scope: subscription.reportScope,
+        };
+      });
       this.clearStreamError(subscription.clusterId);
       return;
     }
 
     if (subscription.domain === 'cluster-custom') {
       const payload = snapshot.payload as ClusterCustomSnapshotPayload;
-      setDomainState('cluster-custom', (previous) => ({
-        ...previous,
-        status: 'ready',
-        data: payload,
-        stats: snapshot.stats ?? null,
-        version: snapshot.version,
-        checksum: snapshot.checksum,
-        etag: snapshot.checksum ?? previous.etag,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: generatedAt,
-        error: null,
-        isManual: false,
-        scope: subscription.storeScope,
-      }));
+      const shouldMerge = this.hasMultiClusterSubscriptions('cluster-custom');
+      setDomainState('cluster-custom', (previous) => {
+        const incoming = payload.resources ?? [];
+        const merged = shouldMerge
+          ? mergeClusterRows(previous.data?.resources, incoming, subscription.clusterId)
+          : incoming;
+        if (shouldMerge) {
+          sortClusterCustomRows(merged);
+        }
+        return {
+          ...previous,
+          status: 'ready',
+          data: shouldMerge ? { ...payload, resources: merged } : payload,
+          stats: updateStats(snapshot.stats ?? previous.stats ?? null, merged.length),
+          version: snapshot.version,
+          checksum: snapshot.checksum,
+          etag: snapshot.checksum ?? previous.etag,
+          lastUpdated: generatedAt,
+          lastAutoRefresh: generatedAt,
+          error: null,
+          isManual: false,
+          scope: subscription.reportScope,
+        };
+      });
       this.clearStreamError(subscription.clusterId);
       return;
     }
 
     if (subscription.domain === 'nodes') {
       const payload = snapshot.payload as ClusterNodeSnapshotPayload;
-      setDomainState('nodes', (previous) => ({
-        ...previous,
-        status: 'ready',
-        data: payload,
-        stats: snapshot.stats ?? null,
-        version: snapshot.version,
-        checksum: snapshot.checksum,
-        etag: snapshot.checksum ?? previous.etag,
-        lastUpdated: generatedAt,
-        lastAutoRefresh: generatedAt,
-        error: null,
-        isManual: false,
-        scope: subscription.storeScope,
-      }));
+      const shouldMerge = this.hasMultiClusterSubscriptions('nodes');
+      setDomainState('nodes', (previous) => {
+        const incoming = payload.nodes ?? [];
+        const merged = shouldMerge
+          ? mergeClusterRows(previous.data?.nodes, incoming, subscription.clusterId)
+          : incoming;
+        if (shouldMerge) {
+          sortNodeRows(merged);
+        }
+        return {
+          ...previous,
+          status: 'ready',
+          data: shouldMerge ? { ...payload, nodes: merged } : payload,
+          stats: updateStats(snapshot.stats ?? previous.stats ?? null, merged.length),
+          version: snapshot.version,
+          checksum: snapshot.checksum,
+          etag: snapshot.checksum ?? previous.etag,
+          lastUpdated: generatedAt,
+          lastAutoRefresh: generatedAt,
+          error: null,
+          isManual: false,
+          scope: subscription.reportScope,
+        };
+      });
       this.clearStreamError(subscription.clusterId);
     }
   }
@@ -2845,7 +2983,7 @@ export class ResourceStreamManager {
 
     eventBus.emit('refresh:resource-stream-drift', {
       domain: subscription.domain,
-      scope: subscription.storeScope,
+      scope: subscription.reportScope,
       reason: details.reason,
       streamCount: details.streamCount,
       snapshotCount: details.snapshotCount,
@@ -2854,7 +2992,7 @@ export class ResourceStreamManager {
     });
 
     logWarning(
-      `[resource-stream] drift detected domain=${subscription.domain} scope=${subscription.storeScope} reason=${details.reason} streamCount=${details.streamCount} snapshotCount=${details.snapshotCount} missingKeys=${details.missingKeys} extraKeys=${details.extraKeys}`
+      `[resource-stream] drift detected domain=${subscription.domain} scope=${subscription.reportScope} reason=${details.reason} streamCount=${details.streamCount} snapshotCount=${details.snapshotCount} missingKeys=${details.missingKeys} extraKeys=${details.extraKeys}`
     );
   }
 
@@ -2867,7 +3005,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2880,7 +3018,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2893,7 +3031,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2906,7 +3044,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2919,7 +3057,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2932,7 +3070,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2945,7 +3083,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2958,7 +3096,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2971,7 +3109,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2984,7 +3122,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -2997,7 +3135,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -3010,7 +3148,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -3023,7 +3161,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -3036,7 +3174,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -3049,7 +3187,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
       return;
@@ -3062,7 +3200,7 @@ export class ResourceStreamManager {
         error: null,
         lastUpdated: previous.lastUpdated ?? now,
         lastAutoRefresh: now,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       this.clearStreamError(subscription.clusterId);
     }
@@ -3075,7 +3213,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3085,7 +3223,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3095,7 +3233,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3105,7 +3243,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3115,7 +3253,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3125,7 +3263,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3135,7 +3273,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3145,7 +3283,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3155,7 +3293,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3165,7 +3303,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3175,7 +3313,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3185,7 +3323,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3195,7 +3333,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3205,7 +3343,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3215,7 +3353,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
       return;
     }
@@ -3225,7 +3363,7 @@ export class ResourceStreamManager {
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     }
   }
@@ -3241,112 +3379,112 @@ export class ResourceStreamManager {
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-workloads') {
       setDomainState('namespace-workloads', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-config') {
       setDomainState('namespace-config', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-network') {
       setDomainState('namespace-network', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-rbac') {
       setDomainState('namespace-rbac', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-custom') {
       setDomainState('namespace-custom', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-helm') {
       setDomainState('namespace-helm', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'cluster-rbac') {
       setDomainState('cluster-rbac', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'cluster-storage') {
       setDomainState('cluster-storage', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'cluster-config') {
       setDomainState('cluster-config', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'cluster-crds') {
       setDomainState('cluster-crds', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'cluster-custom') {
       setDomainState('cluster-custom', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-autoscaling') {
       setDomainState('namespace-autoscaling', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-quotas') {
       setDomainState('namespace-quotas', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-storage') {
       setDomainState('namespace-storage', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'nodes') {
       setDomainState('nodes', (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
-        scope: subscription.storeScope,
+        scope: subscription.reportScope,
       }));
     }
 

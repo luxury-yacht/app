@@ -76,41 +76,44 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 ### Phase 5 - Domain migration expansion (remaining snapshot-based lists)
 
-- [ ] Inventory remaining snapshot domains and classify by list semantics (cluster vs namespace, single vs scoped list, metrics-bearing vs static).
-- [ ] Prioritize migration order based on churn and UX impact.
-- [ ] Remaining domains (track completion):
-  - [ ] `cluster-overview` (keep polling; includes metrics)
-  - [ ] `cluster-rbac` (pause refresher when streaming)
-  - [ ] `cluster-storage` (pause refresher when streaming)
-  - [ ] `cluster-config` (pause refresher when streaming)
-  - [ ] `cluster-crds` (pause refresher when streaming)
-  - [ ] `cluster-custom` (pause refresher when streaming)
+- ✅ Inventory remaining snapshot domains and classify by list semantics (cluster vs namespace, single vs scoped list, metrics-bearing vs static).
+  - Snapshot-only list domains (intentional polling): `cluster-overview` (cluster-scoped, metrics-bearing summary), `node-maintenance` (cluster-scoped action status).
+  - Snapshot-only object/detail domains (scoped detail views): `object-details`, `object-events`, `object-yaml`, `object-helm-manifest`, `object-helm-values`, `object-logs`.
+  - Catalog domains (object catalog-driven): `catalog`, `catalog-diff` (remain snapshot/manual by design).
+- ✅ Prioritize migration order based on churn and UX impact (no remaining list domains to migrate after cluster/namespace list coverage; polling-only domains above remain out of scope).
+- ✅ Remaining domains (track completion):
+  - ✅ `cluster-overview` (keep polling; includes metrics)
+  - ✅ `cluster-rbac` (pause refresher when streaming)
+  - ✅ `cluster-storage` (pause refresher when streaming)
+  - ✅ `cluster-config` (pause refresher when streaming)
+  - ✅ `cluster-crds` (pause refresher when streaming)
+  - ✅ `cluster-custom` (pause refresher when streaming)
   - ✅ `namespace-network` (pause refresher when streaming)
   - ✅ `namespace-storage` (pause refresher when streaming)
   - ✅ `namespace-quotas` (pause refresher when streaming)
   - ✅ `namespace-autoscaling` (pause refresher when streaming)
   - ✅ `namespace-custom` (pause refresher when streaming)
   - ✅ `namespace-helm` (pause refresher when streaming)
-- [ ] For each selected domain:
-  - [ ] Add informer-driven update emission in the backend with minimal row payloads and resourceVersion tracking.
-  - [ ] Add client-side merge/update logic and drift detection for the new domain in the resource stream manager.
-  - [ ] Register telemetry mapping and diagnostics coverage for the domain.
-  - [ ] Add unit tests for merge logic + resync triggers, and integration tests for reconnects.
-- [ ] Keep catalog browse and object catalog-driven listings on snapshot flows unless explicitly re-scoped (ties to #7).
-- [ ] After each domain migration, reduce or disable its polling refresher to realize load reductions (ties to #8).
+- ✅ For each selected domain:
+  - ✅ Add informer-driven update emission in the backend with minimal row payloads and resourceVersion tracking (`backend/refresh/resourcestream/manager.go`).
+  - ✅ Add client-side merge/update logic and drift detection for the new domain in the resource stream manager (`frontend/src/core/refresh/streaming/resourceStreamManager.ts`).
+  - ✅ Register telemetry mapping and diagnostics coverage for the domain (`frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts`).
+  - ✅ Add unit tests for merge logic + resync triggers, and integration tests for reconnects (`frontend/src/core/refresh/streaming/resourceStreamManager.test.ts`).
+- ✅ Keep catalog browse and object catalog-driven listings on snapshot flows unless explicitly re-scoped (ties to #7).
+- ✅ After each domain migration, reduce or disable its polling refresher to realize load reductions (ties to #8).
 
 ### Phase 6 - Multi-cluster streaming (nodes first, then other resource domains)
 
-- [ ] Remove the single-cluster restriction by allowing a multi-cluster scope to fan out into per-cluster subscriptions.
-- [ ] Maintain a shared aggregate store scope for multi-cluster views so updates from each cluster merge into the same UI list.
+- ✅ Remove the single-cluster restriction by allowing a multi-cluster scope to fan out into per-cluster subscriptions.
+- ✅ Maintain a shared aggregate store scope for multi-cluster views so updates from each cluster merge into the same UI list.
 - [ ] Track resourceVersion, resync, and drift detection per cluster so a resync in one cluster does not reset other clusters.
-- [ ] Ensure node keys are cluster-scoped (`clusterId + name`) so deletes and updates are isolated per cluster.
+- ✅ Ensure node keys are cluster-scoped (`clusterId + name`) so deletes and updates are isolated per cluster.
 - [ ] Extend the same multi-cluster fan-out behavior to pods and namespace-workloads once nodes are stable.
 - [ ] Add multi-cluster tests:
   - [ ] Merge updates from two clusters into one aggregated list without clobbering.
   - [ ] Resync and error isolation per cluster.
   - [ ] Metrics-only refresh path preserves existing metrics while stream updates apply.
-  - [ ] Close node single-cluster limitation (support multi-cluster streaming for nodes).
+  - ✅ Close node single-cluster limitation (support multi-cluster streaming for nodes).
 
 ### Safety guarantees
 

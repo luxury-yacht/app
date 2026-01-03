@@ -87,6 +87,36 @@ const normalizeClusterIds = (clusterIds: Array<string | null | undefined>): stri
   return cleaned;
 };
 
+const parseClusterIdList = (value: string): string[] => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+  const rawList = trimmed.startsWith(CLUSTER_SCOPE_LIST_PREFIX)
+    ? trimmed.slice(CLUSTER_SCOPE_LIST_PREFIX.length)
+    : trimmed;
+  return normalizeClusterIds(rawList.split(','));
+};
+
+// parseClusterScopeList extracts the cluster list from a scope prefix.
+export const parseClusterScopeList = (
+  value?: string | null
+): { clusterIds: string[]; scope: string; isMultiCluster: boolean } => {
+  const trimmed = (value ?? '').trim();
+  if (!trimmed) {
+    return { clusterIds: [], scope: '', isMultiCluster: false };
+  }
+  const { clusterId, scope } = splitClusterScope(trimmed);
+  if (!clusterId) {
+    return { clusterIds: [], scope, isMultiCluster: false };
+  }
+  const clusterIds = parseClusterIdList(clusterId);
+  if (clusterIds.length <= 1) {
+    return { clusterIds, scope, isMultiCluster: false };
+  }
+  return { clusterIds, scope, isMultiCluster: true };
+};
+
 // buildClusterScopeList prefixes scope with a list of cluster IDs for multi-cluster refreshes.
 export const buildClusterScopeList = (
   clusterIds: Array<string | null | undefined>,

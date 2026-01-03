@@ -52,7 +52,12 @@ import { eventStreamManager } from './streaming/eventStreamManager';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
 import { errorHandler } from '@utils/errorHandler';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
-import { buildClusterScope, buildClusterScopeList, parseClusterScope } from './clusterScope';
+import {
+  buildClusterScope,
+  buildClusterScopeList,
+  parseClusterScope,
+  parseClusterScopeList,
+} from './clusterScope';
 
 type DomainCategory = 'system' | 'cluster' | 'namespace';
 
@@ -804,6 +809,17 @@ class RefreshOrchestrator {
     );
   }
 
+  private isMultiClusterStreamDomain(domain: RefreshDomain): boolean {
+    return (
+      domain === 'nodes' ||
+      domain === 'cluster-rbac' ||
+      domain === 'cluster-storage' ||
+      domain === 'cluster-config' ||
+      domain === 'cluster-crds' ||
+      domain === 'cluster-custom'
+    );
+  }
+
   private isResourceStreamViewActive(domain: RefreshDomain): boolean {
     if (!this.isResourceStreamDomain(domain)) {
       return true;
@@ -919,8 +935,11 @@ class RefreshOrchestrator {
     if (!this.isResourceStreamViewActive(domain)) {
       return false;
     }
-    const parsed = parseClusterScope(trimmed);
-    if (!parsed.clusterId || parsed.isMultiCluster) {
+    const parsed = parseClusterScopeList(trimmed);
+    if (parsed.clusterIds.length === 0) {
+      return false;
+    }
+    if (parsed.isMultiCluster && !this.isMultiClusterStreamDomain(domain)) {
       return false;
     }
     if (this.isStreamingBlocked(domain, trimmed)) {
@@ -2222,6 +2241,8 @@ refreshOrchestrator.registerDomain({
     stop: (scope, options) =>
       resourceStreamManager.stop('namespace-config', scope, options?.reset ?? false),
     refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-config', scope),
+    // Pause polling while streaming is active to prevent redundant refreshes.
+    pauseRefresherWhenStreaming: true,
   },
 });
 
@@ -2251,6 +2272,8 @@ refreshOrchestrator.registerDomain({
     stop: (scope, options) =>
       resourceStreamManager.stop('namespace-rbac', scope, options?.reset ?? false),
     refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespace-rbac', scope),
+    // Pause polling while streaming is active to prevent redundant refreshes.
+    pauseRefresherWhenStreaming: true,
   },
 });
 
