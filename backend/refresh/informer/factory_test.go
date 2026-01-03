@@ -143,42 +143,28 @@ func TestProcessPendingClusterInformersSkipsWithoutPermissions(t *testing.T) {
 	}
 }
 
-func TestPermissionAuditLogsMismatchOnce(t *testing.T) {
+func TestRuntimePermissionFallbackUsesLegacyCache(t *testing.T) {
 	client := fake.NewClientset()
-	client.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
-		review := &authorizationv1.SelfSubjectAccessReview{
-			Status: authorizationv1.SubjectAccessReviewStatus{Allowed: false},
-		}
-		return true, review, nil
-	})
 
 	factory := newMinimalFactory(client)
 	logger := &captureLogger{}
 	checker := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
-		return true, nil
+		return false, context.DeadlineExceeded
 	})
-	factory.ConfigurePermissionAudit(checker, logger)
+	factory.permissionCache["/pods/list"] = true
+	factory.ConfigureRuntimePermissions(checker, logger)
 
 	allowed, err := factory.CanListResource("", "pods")
 	if err != nil {
 		t.Fatalf("CanListResource returned error: %v", err)
 	}
 	if allowed {
-		t.Fatalf("expected cached permission to deny")
+		// ok
+	} else {
+		t.Fatalf("expected fallback to allow based on legacy cache")
 	}
-	if logger.countWarningsContaining("permission mismatch") != 1 {
-		t.Fatalf("expected one mismatch warning, got %d", len(logger.warnings))
-	}
-
-	allowed, err = factory.CanListResource("", "pods")
-	if err != nil {
-		t.Fatalf("CanListResource returned error: %v", err)
-	}
-	if allowed {
-		t.Fatalf("expected cached permission to deny on second call")
-	}
-	if logger.countWarningsContaining("permission mismatch") != 1 {
-		t.Fatalf("expected mismatch warning to be de-duplicated")
+	if logger.countWarningsContaining("permission fallback") == 0 {
+		t.Fatalf("expected fallback warning to be logged")
 	}
 }
 

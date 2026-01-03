@@ -44,10 +44,8 @@ type Factory struct {
 	permissionMu    sync.RWMutex
 	permissionGroup singleflight.Group
 
-	permissionAudit       *permissions.Checker
-	permissionAuditLogger logstream.Logger
-	permissionAuditMu     sync.Mutex
-	permissionAuditLogged map[string]bool
+	runtimePermissions *permissions.Checker
+	runtimeLogger      logstream.Logger
 }
 
 const podNodeIndexName = "pods:node"
@@ -79,16 +77,13 @@ func (f *Factory) CanWatchResource(group, resource string) (bool, error) {
 	return f.checkResourceVerb(group, resource, "watch")
 }
 
-// ConfigurePermissionAudit enables runtime SSAR audit logging without changing decisions.
-func (f *Factory) ConfigurePermissionAudit(checker *permissions.Checker, logger logstream.Logger) {
+// ConfigureRuntimePermissions sets the runtime permission checker used for gating.
+func (f *Factory) ConfigureRuntimePermissions(checker *permissions.Checker, logger logstream.Logger) {
 	if f == nil {
 		return
 	}
-	f.permissionAudit = checker
-	f.permissionAuditLogger = logger
-	if f.permissionAuditLogged == nil {
-		f.permissionAuditLogged = make(map[string]bool)
-	}
+	f.runtimePermissions = checker
+	f.runtimeLogger = logger
 }
 
 // New returns a new informer Factory with the provided resync period.
@@ -324,10 +319,22 @@ func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) 
 
 	key := fmt.Sprintf("%s/%s/%s", group, resource, verb)
 
+	if f.runtimePermissions != nil {
+		decision, err := f.runtimePermissions.Can(context.Background(), group, resource, verb)
+		if err == nil {
+			f.storeLegacyPermission(key, decision.Allowed)
+			return decision.Allowed, nil
+		}
+		if allowed, ok := f.readLegacyPermission(key); ok {
+			f.logRuntimeFallback(group, resource, verb, err)
+			return allowed, nil
+		}
+		return false, err
+	}
+
 	f.permissionMu.RLock()
 	if allowed, ok := f.permissionCache[key]; ok {
 		f.permissionMu.RUnlock()
-		f.auditPermission(group, resource, verb, allowed, nil)
 		return allowed, nil
 	}
 	f.permissionMu.RUnlock()
@@ -370,44 +377,35 @@ func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) 
 	}
 
 	allowed, _ := value.(bool)
-	f.auditPermission(group, resource, verb, allowed, nil)
 	return allowed, nil
 }
 
-func (f *Factory) auditPermission(group, resource, verb string, cachedAllowed bool, cachedErr error) {
-	if f == nil || f.permissionAudit == nil || cachedErr != nil {
+func (f *Factory) readLegacyPermission(key string) (bool, bool) {
+	f.permissionMu.RLock()
+	allowed, ok := f.permissionCache[key]
+	f.permissionMu.RUnlock()
+	return allowed, ok
+}
+
+func (f *Factory) storeLegacyPermission(key string, allowed bool) {
+	f.permissionMu.Lock()
+	f.permissionCache[key] = allowed
+	f.permissionMu.Unlock()
+}
+
+func (f *Factory) logRuntimeFallback(group, resource, verb string, err error) {
+	if err == nil {
 		return
 	}
-
-	decision, err := f.permissionAudit.Can(context.Background(), group, resource, verb)
-	if err != nil {
-		return
-	}
-
-	if decision.Allowed == cachedAllowed {
-		return
-	}
-
-	key := fmt.Sprintf("%s/%s/%s", group, resource, verb)
-	f.permissionAuditMu.Lock()
-	if f.permissionAuditLogged[key] {
-		f.permissionAuditMu.Unlock()
-		return
-	}
-	f.permissionAuditLogged[key] = true
-	f.permissionAuditMu.Unlock()
-
 	message := fmt.Sprintf(
-		"permission mismatch for %s/%s verb %s (cached=%t runtime=%t source=%s)",
+		"permission fallback for %s/%s verb %s due to runtime error: %v",
 		group,
 		resource,
 		verb,
-		cachedAllowed,
-		decision.Allowed,
-		decision.Source,
+		err,
 	)
-	if f.permissionAuditLogger != nil {
-		f.permissionAuditLogger.Warn(message, "Permissions")
+	if f.runtimeLogger != nil {
+		f.runtimeLogger.Warn(message, "Permissions")
 	} else {
 		klog.V(1).Info(message)
 	}

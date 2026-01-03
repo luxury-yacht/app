@@ -92,8 +92,8 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
   Implemented a backend permission checker that performs SSAR checks with a short TTL cache keyed by cluster selection + verb + resource and falls back to the last cached decision on transient failures/timeouts (evidence: `backend/refresh/permissions/checker.go:30`, `backend/internal/config/config.go:34`, `backend/refresh/system/manager.go:97`). Tests cover cache, TTL expiry, transient fallback, and key scoping (`backend/refresh/permissions/checker_test.go:9`).
 - ✅ Phase 2: Dual‑path validation (no feature flags)
   Runtime SSAR checks now run alongside cached permission checks and log mismatches without changing behavior (evidence: `backend/refresh/informer/factory.go:86`, `backend/refresh/informer/factory.go:373`, `backend/refresh/informer/factory_test.go:113`).
-- Phase 3: Cutover to SSAR results
-  Switch the permission gates to trust the SSAR checker (still cached by TTL). Keep the old permission cache as a fallback for error handling only (timeouts/SSR failures), and log when that fallback is used.
+- ✅ Phase 3: Cutover to SSAR results
+  Permission gates now use the runtime SSAR checker with TTL cache and fall back to the legacy cache only on runtime errors, logging fallback usage (evidence: `backend/refresh/informer/factory.go:86`, `backend/refresh/informer/factory.go:112`, `backend/refresh/informer/factory.go:168`).
 - Phase 4: Cleanup
   Once mismatch logs show stability, remove the legacy permission cache usage from the refresh subsystem setup and factory paths.
 - Testing & safety checks

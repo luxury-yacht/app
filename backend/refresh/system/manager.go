@@ -94,7 +94,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	registry := domain.New()
 	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, cfg.PermissionCache)
 	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
-	informerFactory.ConfigurePermissionAudit(runtimePerms, cfg.Logger)
+	informerFactory.ConfigureRuntimePermissions(runtimePerms, cfg.Logger)
 
 	preflight := []informer.PermissionRequest{
 		{Group: "metrics.k8s.io", Resource: "nodes", Verb: "list"},
