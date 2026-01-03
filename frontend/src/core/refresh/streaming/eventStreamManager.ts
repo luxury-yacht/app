@@ -80,8 +80,8 @@ const CLUSTER_DOMAIN = 'cluster-events' as const;
 const NAMESPACE_DOMAIN = 'namespace-events' as const;
 const CLUSTER_SCOPE = 'cluster';
 
-const MAX_CLUSTER_EVENTS = 200;
-const MAX_NAMESPACE_EVENTS = 200;
+const MAX_CLUSTER_EVENTS = 500;
+const MAX_NAMESPACE_EVENTS = 500;
 const STREAM_ERROR_NOTIFY_THRESHOLD = 3;
 const STREAM_RESYNC_MESSAGE = 'Stream resyncing';
 const RESYNC_STATE_ENABLED = true;
