@@ -132,6 +132,10 @@ const applyStreamEvent = (
     return { state, result: null };
   }
 
+  const gapCount =
+    state.lastSequence > 0 && event.sequence > state.lastSequence + 1
+      ? event.sequence - state.lastSequence - 1
+      : 0;
   const ready = event.ready ?? event.snapshot.isFinal;
   const baseSnapshot = mergeSnapshotMeta(state.snapshot, event.snapshot);
   const isFullSnapshot = event.snapshotMode === 'full' || Boolean(event.reset);
@@ -172,7 +176,7 @@ const applyStreamEvent = (
       generatedAt: event.generatedAt,
       sequence: event.sequence,
       reset: Boolean(event.reset),
-      droppedEvents: 0,
+      droppedEvents: gapCount,
     },
   };
 };
@@ -220,7 +224,7 @@ export class CatalogStreamMergeQueue {
     }
 
     if (output && this.droppedEvents > 0) {
-      output.droppedEvents = this.droppedEvents;
+      output.droppedEvents += this.droppedEvents;
       this.droppedEvents = 0;
     }
 

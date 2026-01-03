@@ -16,7 +16,7 @@ import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary'
 import * as cf from '@shared/components/tables/columnFactories';
 import { useTableSort } from '@/hooks/useTableSort';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
-import { refreshManager, refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
+import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -409,7 +409,6 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
 
   useEffect(() => {
     refreshOrchestrator.setDomainEnabled('catalog', true);
-    refreshManager.disable('catalog');
     return () => {
       refreshOrchestrator.setDomainEnabled('catalog', false);
     };

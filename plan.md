@@ -82,10 +82,10 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
   - ✅ Move browse updates behind a debounced scheduler (frame or 100–250ms window). Evidence: `frontend/src/core/refresh/streaming/catalogStreamManager.ts:262`.
   - ✅ Add a hard cap on per-tick updates and fallback to snapshot refresh when exceeded. Evidence: `frontend/src/core/refresh/streaming/catalogStreamManager.ts:21`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:330`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:335`.
   - ✅ Track last-applied stream sequence to avoid reprocessing stale batches. Evidence: `frontend/src/core/refresh/streaming/catalogStreamManager.ts:83`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:287`.
-- Phase 3: SSE wiring + backpressure handling
-  - Reintroduce catalog SSE for browse with explicit handling of dropped batches.
-  - On stream gaps or cache-not-ready, trigger a snapshot refresh and reset stream sequence.
-  - Keep snapshot polling as a fallback path for offline/recovery states.
+- Phase 3: ✅ SSE wiring + backpressure handling
+  - ✅ Reintroduce catalog SSE for browse with explicit handling of dropped batches. Evidence: `frontend/src/core/refresh/orchestrator.ts:2225`, `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:135`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:330`.
+  - ✅ On stream gaps or cache-not-ready, trigger a snapshot refresh and reset stream sequence. Evidence: `frontend/src/core/refresh/streaming/catalogStreamMerge.ts:135`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:334`, `frontend/src/core/refresh/orchestrator.ts:1311`, `frontend/src/core/refresh/streaming/catalogStreamManager.ts:181`.
+  - ✅ Keep snapshot polling as a fallback path for offline/recovery states. Evidence: `frontend/src/core/refresh/orchestrator.ts:2233`, `frontend/src/modules/browse/components/BrowseView.tsx:483`, `frontend/src/modules/namespace/components/NsViewObjects.tsx:410`.
 - Phase 4: Validation + rollout checks
   - Add tests for stream merge, batch caps, and fallback triggers.
   - Verify no React update-depth warnings under synthetic high-volume changes.

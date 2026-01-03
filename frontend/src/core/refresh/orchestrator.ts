@@ -50,6 +50,7 @@ import type {
 import { logStreamManager } from './streaming/logStreamManager';
 import { eventStreamManager } from './streaming/eventStreamManager';
 import { resourceStreamManager } from './streaming/resourceStreamManager';
+import { catalogStreamManager } from './streaming/catalogStreamManager';
 import { errorHandler } from '@utils/errorHandler';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
 import {
@@ -2226,10 +2227,15 @@ refreshOrchestrator.registerDomain({
   refresherName: CLUSTER_REFRESHERS.browse,
   category: 'cluster',
   autoStart: false,
-  // Browse v2 drives catalog snapshots via explicit scopes + manual refreshes.
-  // Avoid using the catalog SSE stream because frequent store updates can trigger
-  // nested `useSyncExternalStore` rerenders and trip React's update-depth guard.
+  // Browse scopes still drive snapshots; streaming updates are debounced to avoid
+  // triggering React update-depth errors.
   scopeResolver: () => refreshOrchestrator.getDomainScope('catalog') ?? 'limit=200',
+  streaming: {
+    start: (scope) => catalogStreamManager.start(scope),
+    stop: (_scope, options) => catalogStreamManager.stop(options?.reset ?? false),
+    refreshOnce: (scope) => catalogStreamManager.refreshOnce(scope),
+    pauseRefresherWhenStreaming: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({

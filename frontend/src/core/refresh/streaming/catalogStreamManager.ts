@@ -330,6 +330,10 @@ class CatalogStreamManager {
     if (result.droppedEvents > 0) {
       this.triggerSnapshotFallback('stream overflow', result);
     }
+
+    if (!result.cacheReady) {
+      this.triggerSnapshotFallback('cache not ready', result);
+    }
   }
 
   private triggerSnapshotFallback(reason: string, result: CatalogStreamMergeResult): void {
