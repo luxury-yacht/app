@@ -48,13 +48,22 @@ export interface RefresherState {
 
 export type RefreshCallback = (isManual: boolean, signal: AbortSignal) => void | Promise<void>;
 
+type RefreshCallbackOutcome =
+  | { status: 'fulfilled' }
+  | { status: 'rejected'; error: Error; timedOut: boolean };
+
+type RefreshExecutionSummary = {
+  successCount: number;
+  failures: Array<{ error: Error; timedOut: boolean }>;
+};
+
 interface RefresherInstance {
   config: Refresher;
   state: RefresherState;
   intervalTimer?: number; // Browser returns number from setInterval
   cooldownTimer?: number; // Browser returns number from setTimeout
   timeoutTimer?: number; // Browser returns number from setTimeout
-  refreshPromise?: Promise<void>;
+  refreshPromise?: Promise<RefreshExecutionSummary>;
   abortController?: AbortController;
   isEnabled: boolean;
 }
@@ -631,26 +640,21 @@ class RefreshManager {
     // Notify subscribers
     const callbacks = this.subscribers.get(name) || new Set();
 
-    // Set up timeout
-    const timeoutPromise = new Promise<void>((_, reject) => {
-      instance.timeoutTimer = window.setTimeout(() => {
-        reject(new Error(`Refresh timeout after ${instance.config.timeout} seconds`));
-      }, instance.config.timeout * 1000);
-    });
-
     // Perform refresh with abort signal
-    const refreshPromise = this.executeRefresh(callbacks, isManual, abortController.signal);
+    const refreshPromise = this.executeRefresh(
+      callbacks,
+      isManual,
+      abortController.signal,
+      instance.config.timeout
+    );
 
     // Store the promise for potential cancellation
-    instance.refreshPromise = Promise.race([refreshPromise, timeoutPromise]);
+    instance.refreshPromise = refreshPromise;
 
     try {
-      await instance.refreshPromise;
-
-      // Success - clear timeout timer
-      if (instance.timeoutTimer) {
-        clearTimeout(instance.timeoutTimer);
-        instance.timeoutTimer = undefined;
+      const { successCount, failures } = await instance.refreshPromise;
+      if (failures.length > 0 && successCount === 0) {
+        throw failures[0].error;
       }
 
       // Update state
@@ -664,12 +668,6 @@ class RefreshManager {
       // Enter cooldown
       this.enterCooldown(name, instance, isManual, false);
     } catch (error) {
-      // Clear timeout timer
-      if (instance.timeoutTimer) {
-        clearTimeout(instance.timeoutTimer);
-        instance.timeoutTimer = undefined;
-      }
-
       // Check if this was an intentional abort, not a real error
       const wasAborted =
         abortController.signal.aborted || (error instanceof Error && error.name === 'AbortError');
@@ -715,12 +713,100 @@ class RefreshManager {
   private async executeRefresh(
     callbacks: Set<RefreshCallback>,
     isManual: boolean,
-    signal: AbortSignal
-  ): Promise<void> {
+    signal: AbortSignal,
+    timeoutSeconds: number
+  ): Promise<{ successCount: number; failures: Array<{ error: Error; timedOut: boolean }> }> {
+    if (callbacks.size === 0) {
+      return { successCount: 0, failures: [] };
+    }
+
+    // Isolate callback failures so a single slow subscriber does not fail the entire refresh.
     const promises = Array.from(callbacks).map((callback) =>
-      Promise.resolve(callback(isManual, signal))
+      this.runCallbackWithTimeout(callback, isManual, signal, timeoutSeconds)
     );
-    await Promise.all(promises);
+    const results = await Promise.all(promises);
+
+    if (signal.aborted) {
+      throw this.createAbortError();
+    }
+
+    const failures: Array<{ error: Error; timedOut: boolean }> = [];
+    let successCount = 0;
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        successCount += 1;
+      } else {
+        failures.push({ error: result.error, timedOut: result.timedOut });
+      }
+    }
+
+    return { successCount, failures };
+  }
+
+  private async runCallbackWithTimeout(
+    callback: RefreshCallback,
+    isManual: boolean,
+    signal: AbortSignal,
+    timeoutSeconds: number
+  ): Promise<RefreshCallbackOutcome> {
+    if (signal.aborted) {
+      return { status: 'rejected', error: this.createAbortError(), timedOut: false };
+    }
+
+    const controller = new AbortController();
+    const handleAbort = () => controller.abort();
+    signal.addEventListener('abort', handleAbort, { once: true });
+
+    const timeoutMs = timeoutSeconds * 1000;
+    let timeoutId: number | undefined;
+    const timeoutPromise = new Promise<RefreshCallbackOutcome>((resolve) => {
+      timeoutId = window.setTimeout(() => {
+        controller.abort();
+        signal.removeEventListener('abort', handleAbort);
+        resolve({
+          status: 'rejected',
+          error: new Error(`Refresh timeout after ${timeoutSeconds} seconds`),
+          timedOut: true,
+        });
+      }, timeoutMs);
+    });
+
+    let callbackResult: void | Promise<void>;
+    try {
+      callbackResult = callback(isManual, controller.signal);
+    } catch (error) {
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+      signal.removeEventListener('abort', handleAbort);
+      return {
+        status: 'rejected',
+        error: error instanceof Error ? error : new Error(String(error)),
+        timedOut: false,
+      };
+    }
+
+    const callbackPromise = Promise.resolve(callbackResult)
+      .then(() => ({ status: 'fulfilled' as const }))
+      .catch((error) => ({
+        status: 'rejected' as const,
+        error: error instanceof Error ? error : new Error(String(error)),
+        timedOut: false,
+      }))
+      .finally(() => {
+        if (timeoutId !== undefined) {
+          window.clearTimeout(timeoutId);
+        }
+        signal.removeEventListener('abort', handleAbort);
+      });
+
+    return Promise.race([callbackPromise, timeoutPromise]);
+  }
+
+  private createAbortError(): Error {
+    const error = new Error('Aborted');
+    error.name = 'AbortError';
+    return error;
   }
 
   /**

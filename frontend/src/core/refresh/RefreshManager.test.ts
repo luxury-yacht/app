@@ -147,6 +147,34 @@ describe('RefreshManager scheduling and state handling', () => {
     expect(refreshManager.getState(AUTO_NAME)?.status).toBe('idle');
   });
 
+  it('isolates subscriber failures when another callback succeeds', async () => {
+    vi.useFakeTimers();
+    const successCallback = vi.fn();
+    const failingCallback = vi.fn(() => {
+      throw new Error('boom');
+    });
+
+    refreshManager.register({
+      name: AUTO_NAME,
+      interval: 1_000,
+      cooldown: 250,
+      timeout: 2,
+      resource: 'ns-workloads',
+      enabled: false,
+    });
+    refreshManager.subscribe(AUTO_NAME, failingCallback);
+    refreshManager.subscribe(AUTO_NAME, successCallback);
+
+    await refreshManager.triggerManualRefresh(AUTO_NAME);
+
+    const state = refreshManager.getState(AUTO_NAME)!;
+    expect(successCallback).toHaveBeenCalledTimes(1);
+    expect(failingCallback).toHaveBeenCalledTimes(1);
+    expect(state.error).toBeNull();
+    expect(state.consecutiveErrors).toBe(0);
+    expect(state.status).toBe('cooldown');
+  });
+
   it('retries auto refresh after cooldown when an attempt fails', async () => {
     vi.useFakeTimers();
     const callback = vi
@@ -566,6 +594,11 @@ describe('RefreshManager pause and cancellation integration', () => {
   it('cancels in-flight refreshes when kubeconfig changes', async () => {
     vi.useFakeTimers();
     const emitSpy = vi.spyOn(eventBus, 'emit');
+    const subscriber = vi.fn((_isManual: boolean, signal: AbortSignal) => {
+      return new Promise<void>((resolve) => {
+        signal.addEventListener('abort', () => resolve(), { once: true });
+      });
+    });
 
     refreshManager.register({
       name: NAME,
@@ -574,6 +607,7 @@ describe('RefreshManager pause and cancellation integration', () => {
       timeout: 2,
       resource: 'ns-actions',
     });
+    refreshManager.subscribe(NAME, subscriber);
 
     await Promise.resolve();
 
@@ -584,7 +618,7 @@ describe('RefreshManager pause and cancellation integration', () => {
     eventBus.emit('kubeconfig:changing', '');
     await refreshPromise.catch(() => {});
 
-    expect(refreshManager.getState(NAME)?.status).toBe('cooldown');
+    expect(refreshManager.getState(NAME)?.status).toBe('idle');
     expect(emitSpy.mock.calls.some(([event]) => event === 'refresh:state-change')).toBe(true);
     emitSpy.mockRestore();
   });
@@ -1294,9 +1328,10 @@ describe('RefreshManager guard paths and helpers', () => {
   });
 
   it('refreshSingle skips auto refreshes during global pause', async () => {
-    const name = register('global-pause');
+    const name = register('global-pause', { enabled: false });
     refreshManager.pause();
     const instance = unsafeRefreshManager.refreshers.get(name)!;
+    instance.isEnabled = true;
     instance.state.status = 'paused';
 
     await unsafeRefreshManager.refreshSingle(name, false);
@@ -1306,8 +1341,9 @@ describe('RefreshManager guard paths and helpers', () => {
   });
 
   it('refreshSingle skips auto refreshes when the refresher is paused', async () => {
-    const name = register('paused-state');
+    const name = register('paused-state', { enabled: false });
     const instance = unsafeRefreshManager.refreshers.get(name)!;
+    instance.isEnabled = true;
     instance.state.status = 'paused';
 
     await unsafeRefreshManager.refreshSingle(name, false);
@@ -1316,10 +1352,11 @@ describe('RefreshManager guard paths and helpers', () => {
   });
 
   it('refreshSingle returns when an auto refresh collides with an in-flight refresh', async () => {
-    const name = register('collision');
+    const name = register('collision', { enabled: false });
     const instance = unsafeRefreshManager.refreshers.get(name)!;
+    instance.isEnabled = true;
     instance.state.status = 'refreshing';
-    instance.refreshPromise = Promise.resolve();
+    instance.refreshPromise = Promise.resolve({ successCount: 0, failures: [] });
 
     await unsafeRefreshManager.refreshSingle(name, false);
 
@@ -1332,7 +1369,7 @@ describe('RefreshManager guard paths and helpers', () => {
     const instance = unsafeRefreshManager.refreshers.get(name)!;
     instance.state.status = 'refreshing';
     instance.abortController = new AbortController();
-    instance.refreshPromise = Promise.resolve();
+    instance.refreshPromise = Promise.resolve({ successCount: 0, failures: [] });
     const subscriber = vi.fn();
     refreshManager.subscribe(name, subscriber);
 
