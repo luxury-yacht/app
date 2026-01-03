@@ -51,6 +51,10 @@ const RESYNC_COOLDOWN_MS = 1000;
 const RESYNC_MESSAGE = 'Stream resyncing';
 const STREAM_ERROR_NOTIFY_THRESHOLD = 3;
 const DRIFT_SAMPLE_SIZE = 5;
+// Cap queued updates to avoid unbounded memory growth under bursty streams.
+const MAX_UPDATE_QUEUE = 1000;
+// Add jitter to reconnect backoff to avoid thundering-herd reconnects.
+const RECONNECT_JITTER_FACTOR = 0.2;
 
 const logInfo = (message: string): void => {
   logAppInfo(message, 'ResourceStream');
@@ -972,7 +976,9 @@ class ResourceStreamConnection {
       return;
     }
     this.clearReconnect();
-    const delay = Math.min(30_000, 1000 * Math.pow(2, this.attempt));
+    const baseDelay = Math.min(30_000, 1000 * Math.pow(2, this.attempt));
+    const jitter = 1 + (Math.random() * 2 - 1) * RECONNECT_JITTER_FACTOR;
+    const delay = Math.max(0, Math.round(baseDelay * jitter));
     this.attempt += 1;
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = null;
@@ -1310,6 +1316,12 @@ export class ResourceStreamManager {
     subscription.resourceVersion = incomingVersion;
 
     subscription.updateQueue.push(message);
+    if (subscription.updateQueue.length > MAX_UPDATE_QUEUE) {
+      // Drop the backlog and force a resync so we don't apply stale updates.
+      subscription.updateQueue = [];
+      void this.resyncSubscription(subscription, 'update backlog overflow', true);
+      return;
+    }
     if (subscription.updateTimer !== null) {
       return;
     }

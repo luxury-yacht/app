@@ -69,8 +69,8 @@ If you have suggestions on how to do your job better for this task, let me know.
 2. Add resume tokens/server-side buffering for resource streams to avoid full resyncs on drops; today COMPLETE/RESET forces resyncs with no resume path (backend/refresh/streammux/handler.go:266; backend/refresh/resourcestream/manager.go:1586; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1091).
 3. ✅ Pause polling refreshers when event streams are active to cut 3s interval load; event domains stream but do not set pauseRefresherWhenStreaming (frontend/src/core/refresh/orchestrator.ts:2325; frontend/src/core/refresh/orchestrator.ts:2446; frontend/src/core/refresh/refresherConfig.ts:24).
 4. Increase SnapshotCacheTTL or add invalidation to avoid rebuild churn; current TTL is 1s (backend/internal/config/config.go:25; backend/refresh/snapshot/service.go:19).
-5. Cap the resource-stream updateQueue (and resync/fallback on overflow) to prevent unbounded memory growth during bursts (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1312; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1323).
-6. Add jitter to resource stream reconnect backoff to avoid thundering-herd reconnects after shared outages (frontend/src/core/refresh/streaming/resourceStreamManager.ts:970).
+5. ✅ Cap the resource-stream updateQueue (and resync/fallback on overflow) to prevent unbounded memory growth during bursts (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1312; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1323).
+6. ✅ Add jitter to resource stream reconnect backoff to avoid thundering-herd reconnects after shared outages (frontend/src/core/refresh/streaming/resourceStreamManager.ts:979).
 7. Add expiry/eviction to the informer factory's legacy permission cache so stale allow/deny decisions do not persist when runtime SSAR fails (backend/refresh/informer/factory.go:323; backend/refresh/informer/factory.go:336).
 8. Periodically revalidate permissions and stop informers/streams when revoked, rather than only gating at registration time (backend/refresh/system/manager.go:93; backend/refresh/informer/factory.go:315; backend/refresh/permissions/checker.go:34).
 9. Add caching or watch-based collection for object-events to avoid re-listing on every refresh (backend/refresh/snapshot/object_events.go:63; backend/refresh/snapshot/object_events.go:73).
@@ -82,7 +82,7 @@ Sequencing note: Batch only small, same-subsystem items. Suggested groupings: (a
 
 Suggested implementation order:
 1. ✅ Batch A: #3 (pause polling while events stream).
-2. Batch B: #5 + #6 (resource stream queue cap + jittered reconnect).
+2. ✅ Batch B: #5 + #6 (resource stream queue cap + jittered reconnect).
 3. Batch C: #10 (event stream total/truncated metadata).
 4. Batch D: #7 + #8 (permission cache expiry + periodic revalidation/teardown).
 5. Batch E: #1 (watch-based invalidation for response cache).
