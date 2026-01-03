@@ -23,7 +23,7 @@ const (
 	RefreshRequestTimeout = 30 * time.Second
 
 	// SnapshotCacheTTL controls how long snapshot builds are cached to avoid redundant work.
-	SnapshotCacheTTL = 1 * time.Second
+	SnapshotCacheTTL = 5 * time.Second
 
 	// ResponseCacheTTL controls how long non-informer resource GETs are cached.
 	// Keep this short to reduce staleness while still cutting repeated requests.

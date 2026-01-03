@@ -364,7 +364,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 			return nil, err
 		}
 	}
-	if err := snapshot.RegisterObjectEventsDomain(registry, cfg.KubernetesClient); err != nil {
+	if err := snapshot.RegisterObjectEventsDomain(registry, cfg.KubernetesClient, informerFactory.SharedInformerFactory()); err != nil {
 		return nil, err
 	}
 
