@@ -266,7 +266,7 @@ Per polling-only domain:
 
 ### Recommendations for Luxury Yacht (stability/perf)
 
-1. Data fetch layer: add permission-aware gating for cached detail/YAML/helm responses so cached data does not outlive RBAC changes, mirroring Headlamp's SSAR-before-cache behavior (headlamp/backend/cmd/server.go:214; headlamp/backend/pkg/k8cache/authorization.go:119; backend/object_detail_provider.go:94; backend/refresh/permissions/checker.go:57).
+1. ✅ Data fetch layer: add permission-aware gating for cached detail/YAML/helm responses so cached data does not outlive RBAC changes, mirroring Headlamp's SSAR-before-cache behavior (headlamp/backend/cmd/server.go:214; headlamp/backend/pkg/k8cache/authorization.go:119; backend/object_detail_provider.go:94; backend/refresh/permissions/checker.go:57).
 
    - Work items:
      - Add a permission check before serving cached detail/YAML/helm entries and evict on deny (backend/object_detail_provider.go:94; backend/response_cache.go:39; backend/refresh/permissions/checker.go:115).

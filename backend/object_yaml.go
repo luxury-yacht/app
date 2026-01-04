@@ -162,7 +162,10 @@ func (a *App) getObjectYAMLWithCache(
 		cacheKey := objectYAMLCacheKey(resourceKind, namespace, name)
 		if cached, ok := a.responseCacheLookup(selectionKey, cacheKey); ok {
 			if yamlText, ok := cached.(string); ok {
-				return yamlText, nil
+				// Avoid serving cached YAML when permission checks deny access.
+				if a.canServeCachedResponse(deps.Context, deps, selectionKey, resourceKind, namespace, name) {
+					return yamlText, nil
+				}
 			}
 			a.responseCacheDelete(selectionKey, cacheKey)
 		}

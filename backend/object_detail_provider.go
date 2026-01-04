@@ -93,11 +93,14 @@ func (p *objectDetailProvider) FetchHelmManifest(ctx context.Context, namespace,
 	if p != nil && p.app != nil {
 		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, manifestCacheKey); ok {
 			if manifest, ok := cached.(string); ok {
-				revision, err := p.helmReleaseRevisionWithCache(resolved, service, namespace, name)
-				if err != nil {
-					return manifest, 0, nil
+				// Avoid serving cached Helm data when permission checks deny access.
+				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, "HelmManifest", namespace, name) {
+					revision, err := p.helmReleaseRevisionWithCache(resolved, service, namespace, name)
+					if err != nil {
+						return manifest, 0, nil
+					}
+					return manifest, revision, nil
 				}
-				return manifest, revision, nil
 			}
 			p.app.responseCacheDelete(resolved.selectionKey, manifestCacheKey)
 		}
@@ -135,11 +138,14 @@ func (p *objectDetailProvider) FetchHelmValues(ctx context.Context, namespace, n
 	if p != nil && p.app != nil {
 		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, valuesCacheKey); ok {
 			if values, ok := cached.(map[string]interface{}); ok {
-				revision, err := p.helmReleaseRevisionWithCache(resolved, service, namespace, name)
-				if err != nil {
-					return values, 0, nil
+				// Avoid serving cached Helm data when permission checks deny access.
+				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, "HelmValues", namespace, name) {
+					revision, err := p.helmReleaseRevisionWithCache(resolved, service, namespace, name)
+					if err != nil {
+						return values, 0, nil
+					}
+					return values, revision, nil
 				}
-				return values, revision, nil
 			}
 			p.app.responseCacheDelete(resolved.selectionKey, valuesCacheKey)
 		}
@@ -164,7 +170,11 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, kind, nam
 		cacheKey := objectDetailCacheKey(kind, namespace, name)
 		if p != nil && p.app != nil {
 			if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
-				return cached, "", nil
+				// Avoid serving cached details when permission checks deny access.
+				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, kind, namespace, name) {
+					return cached, "", nil
+				}
+				p.app.responseCacheDelete(resolved.selectionKey, cacheKey)
 			}
 		}
 		detail, version, err := fetchObjectDetailsWithDependencies(resolved.deps, kind, namespace, name)
@@ -288,7 +298,10 @@ func (p *objectDetailProvider) helmReleaseRevisionWithCache(
 	if p != nil && p.app != nil {
 		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, detailsCacheKey); ok {
 			if details, ok := cached.(*HelmReleaseDetails); ok && details != nil {
-				return details.Revision, nil
+				// Avoid serving cached Helm data when permission checks deny access.
+				if p.app.canServeCachedResponse(resolved.deps.Context, resolved.deps, resolved.selectionKey, "HelmRelease", namespace, name) {
+					return details.Revision, nil
+				}
 			}
 			p.app.responseCacheDelete(resolved.selectionKey, detailsCacheKey)
 		}
