@@ -42,8 +42,7 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 - Anchor every subsystem finding to at least 3 concrete line references per app (done and expanded below).
 - Cross-check numeric thresholds (timeouts, intervals, limits, subscriber caps) against constants files to avoid inference (headlamp/frontend/src/lib/k8s/api/v1/constants.ts:26; frontend/src/core/refresh/refresherConfig.ts:24; backend/refresh/snapshot/event_limits.go:3; backend/refresh/eventstream/manager.go:18).
 - Trace request scheduling end-to-end for resources, metrics, events and call out where work is frontend vs backend.
-- Validate streaming reconnection/backoff behavior and resume-token coverage (Headlamp multiplexer does not implement resume tokens; Luxury Yacht events use SSE resume IDs) (headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:275; frontend/src/core/refresh/streaming/eventStreamManager.ts:94; backend/refresh/eventstream/handler.go:73).
-- Confirm object catalog remains source of truth for namespace/cluster listings and browse snapshots (backend/app_object_catalog.go:148; backend/refresh/snapshot/catalog.go:99).
+- Validate streaming reconnection/backoff behavior and resume-token coverage (Headlamp multiplexer does not implement resume tokens; Luxury Yacht events use SSE resume IDs) (headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:132; frontend/src/core/refresh/streaming/eventStreamManager.ts:104; backend/refresh/eventstream/handler.go:73).
 
 ## 1. Resource Data Fetch (API client, request scheduling)
 
@@ -55,9 +54,9 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 
 ### Luxury Yacht
 
-- Frontend loads snapshots via `fetchSnapshot` from the refresh server, with ETag support and retry logic for network errors (frontend/src/core/refresh/client.ts:61; backend/refresh/api/server.go:53).
-- Backend builds snapshots from informers across registered domains (namespace/cluster/object/etc.) via the refresh subsystem and registry (backend/refresh/system/manager.go:90; backend/refresh/informer/factory.go:75).
-- Manual refresh jobs execute with retry/backoff and enforce a request timeout (backend/refresh/types.go:228; backend/refresh/types.go:231; backend/refresh/types.go:266).
+- Frontend loads snapshots via `fetchSnapshot` from the refresh server, with ETag support and retry logic for network errors (frontend/src/core/refresh/client.ts:119; frontend/src/core/refresh/client.ts:142; backend/refresh/api/server.go:77).
+- Backend builds snapshots from informers across registered domains (namespace/cluster/object/etc.) via the refresh subsystem and registry (backend/refresh/system/manager.go:92; backend/refresh/informer/factory.go:101).
+- Manual refresh jobs execute with retry/backoff and enforce a request timeout (backend/refresh/types.go:242; backend/refresh/types.go:245; backend/refresh/types.go:281).
 
 ### Key differences
 
@@ -70,7 +69,7 @@ The plan compares Headlamp and Luxury Yacht across data loading, refresh/watch s
 | -------------------- | ----------------------------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Primary request path | Frontend `clusterFetch` / `clusterRequest` to backend proxy | Frontend `fetchSnapshot` to refresh server          | headlamp/frontend/src/lib/k8s/api/v2/fetch.ts:75; frontend/src/core/refresh/client.ts:119                                |
 | Response shaping     | React Query list mapping to KubeObject                      | Backend snapshot payloads                           | headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:64; backend/refresh/system/manager.go:90                       |
-| Cache signal         | Response cache TTL (10 min, when enabled)                   | Snapshot ETag/Checksum + short-lived snapshot cache | headlamp/backend/pkg/k8cache/cacheStore.go:203; backend/refresh/api/server.go:77; backend/refresh/snapshot/service.go:19 |
+| Cache signal         | Response cache TTL (10 min, when enabled)                   | Snapshot ETag/Checksum + short-lived snapshot cache | headlamp/backend/pkg/k8cache/cacheStore.go:203; backend/refresh/api/server.go:77; backend/refresh/snapshot/service.go:72 |
 
 ### Data flow trace (resources)
 
@@ -82,7 +81,7 @@ Headlamp:
 Luxury Yacht:
 
 1. UI RefreshOrchestrator -> `fetchSnapshot` -> refresh server `/api/v2/snapshots/{domain}` -> snapshot service built from informer caches -> snapshot payload -> refresh store update (frontend/src/core/refresh/client.ts:119; backend/refresh/api/server.go:53; backend/refresh/system/manager.go:90; frontend/src/core/refresh/store.ts:13).
-2. UI ResourceStreamManager -> WebSocket `/api/v2/stream/resources` -> resource stream multiplexer -> backend resource stream manager -> incremental updates merged into refresh store with resync on RESET/COMPLETE (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1084; backend/refresh/system/manager.go:543; backend/refresh/resourcestream/handler.go:13).
+2. UI ResourceStreamManager -> WebSocket `/api/v2/stream/resources` -> resource stream multiplexer -> backend resource stream manager -> incremental updates merged into refresh store with resync on RESET/COMPLETE (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1094; backend/refresh/system/manager.go:543; backend/refresh/resourcestream/handler.go:13).
 
 ## 2. Watch/Streaming & Refresh Strategy (resources)
 
@@ -94,23 +93,23 @@ Luxury Yacht:
 
 ### Luxury Yacht
 
-- RefreshManager schedules per-domain intervals with manual interruption, timeouts, and exponential backoff cooldown on errors (frontend/src/core/refresh/RefreshManager.ts:571).
+- RefreshManager schedules per-domain intervals with manual interruption, timeouts, and exponential backoff cooldown on errors (frontend/src/core/refresh/RefreshManager.ts:381; frontend/src/core/refresh/RefreshManager.ts:597; frontend/src/core/refresh/RefreshManager.ts:815).
 - Domain refresh intervals are configured (2-15 seconds) per refresher (frontend/src/core/refresh/refresherConfig.ts:24).
-- Resource list domains stream over the WS multiplexer with per-cluster subscriptions, resync on RESET/COMPLETE, and polling paused while streaming is healthy for domains configured with pauseRefresherWhenStreaming (backend/refresh/resourcestream/manager.go:66; frontend/src/core/refresh/streaming/resourceStreamManager.ts:987; frontend/src/core/refresh/orchestrator.ts:981).
-- Informer factories resync at a configured interval and block on cache sync (backend/refresh/informer/factory.go:75; backend/refresh/informer/factory.go:163).
+- Resource list domains stream over the WS multiplexer with per-cluster subscriptions, resync on RESET/COMPLETE, and polling paused while streaming is healthy for domains configured with pauseRefresherWhenStreaming (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1182; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1094; frontend/src/core/refresh/orchestrator.ts:1038; backend/refresh/resourcestream/manager.go:1885).
+- Informer factories resync at a configured interval and block on cache sync (backend/refresh/informer/factory.go:101; backend/refresh/informer/factory.go:191).
 
 ### Key differences
 
 - Headlamp: resource lists update via watch streams over a WebSocket multiplexer with resourceVersion gating and COMPLETE signals (headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:124; headlamp/backend/cmd/multiplexer.go:639).
-- Luxury Yacht: resource list domains stream over a WS multiplexer with per-cluster subscriptions and resync on RESET/COMPLETE; polling pauses while streams are healthy for domains configured to pause (backend/refresh/resourcestream/handler.go:13; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1084; frontend/src/core/refresh/orchestrator.ts:982).
+- Luxury Yacht: resource list domains stream over a WS multiplexer with per-cluster subscriptions and resync on RESET/COMPLETE; polling pauses while streams are healthy for domains configured to pause (backend/refresh/resourcestream/handler.go:13; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1094; frontend/src/core/refresh/orchestrator.ts:1038).
 
 ### Comparison table
 
 | Aspect             | Headlamp                           | Luxury Yacht                                                                    | Evidence                                                                                                                                                                  |
 | ------------------ | ---------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Watch transport    | WebSocket multiplexer (single WS)  | Resource stream WS multiplexer for lists + SSE for events/logs                  | headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:61; backend/refresh/resourcestream/handler.go:13                                                                      |
-| Update model       | ResourceVersion-gated list updates | Streamed incremental updates with resync + polling pause for configured domains | headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1084; frontend/src/core/refresh/orchestrator.ts:982     |
-| Reconnect strategy | Heartbeat ping + reconnect         | Resource stream resync on RESET/COMPLETE + SSE reconnect with backoff           | headlamp/backend/cmd/multiplexer.go:389; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1084; frontend/src/core/refresh/streaming/eventStreamManager.ts:142 |
+| Update model       | ResourceVersion-gated list updates | Streamed incremental updates with resync + polling pause for configured domains | headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1094; frontend/src/core/refresh/orchestrator.ts:1038     |
+| Reconnect strategy | Heartbeat ping + reconnect         | Resource stream resync on RESET/COMPLETE + SSE reconnect with backoff           | headlamp/backend/cmd/multiplexer.go:389; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1094; frontend/src/core/refresh/streaming/eventStreamManager.ts:163 |
 
 ## 3. Store/Cache & Invalidation
 
@@ -124,25 +123,25 @@ Luxury Yacht:
 
 ### Luxury Yacht
 
-- Snapshot API uses checksum-based ETag; frontend uses If-None-Match and caches refresh base URL, and backend serves short-lived cached snapshots to avoid rebuilds (backend/refresh/api/server.go:77; backend/refresh/snapshot/service.go:19; frontend/src/core/refresh/client.ts:119).
+- Snapshot API uses checksum-based ETag; frontend uses If-None-Match and caches refresh base URL, and backend serves short-lived cached snapshots to avoid rebuilds (backend/refresh/api/server.go:77; frontend/src/core/refresh/client.ts:44; frontend/src/core/refresh/client.ts:131; backend/refresh/snapshot/service.go:72).
 - Refresh store maintains per-domain snapshot state (version/checksum/etag, timestamps, errors) and scoped entries (frontend/src/core/refresh/store.ts:13).
-- Object catalog supports pagination/batching and an SSE stream; browse now consumes SSE with debounced, merge-queued updates plus snapshot fallback on gaps/drops to avoid update-depth issues (backend/refresh/snapshot/catalog.go:99; backend/refresh/snapshot/catalog_stream.go:126; frontend/src/core/refresh/orchestrator.ts:2225; frontend/src/core/refresh/streaming/catalogStreamManager.ts:262).
+- Object catalog supports pagination/batching and an SSE stream; browse now consumes SSE with debounced, merge-queued updates plus snapshot fallback on gaps/drops to avoid update-depth issues (backend/refresh/snapshot/catalog.go:165; backend/refresh/snapshot/catalog_stream.go:126; frontend/src/core/refresh/streaming/catalogStreamManager.ts:255; frontend/src/core/refresh/streaming/catalogStreamManager.ts:330).
 - Response cache stores short-lived detail/YAML/helm GET payloads and is invalidated by informer updates (backend/response_cache.go:11; backend/response_cache_invalidation.go:22).
-- Snapshot builds are deduplicated with singleflight and cached with a short TTL (backend/refresh/snapshot/service.go:19; backend/refresh/snapshot/service.go:47).
-- Per-request SSAR gating now applies to snapshot builds to avoid permission drift (backend/refresh/snapshot/service.go:55; backend/refresh/snapshot/permission_checks.go:79).
+- Snapshot builds are deduplicated with singleflight and cached with a short TTL (backend/refresh/snapshot/service.go:20; backend/refresh/snapshot/service.go:72).
+- Per-request SSAR gating now applies to snapshot builds to avoid permission drift (backend/refresh/snapshot/service.go:79; backend/refresh/snapshot/permission_checks.go:110).
 
 ### Key differences
 
 - Headlamp: backend response cache (TTL + watch invalidation) plus React Query list caches (headlamp/backend/pkg/k8cache/cacheStore.go:203; headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:242).
-- Luxury Yacht: snapshot store + ETag/Checksum + short-lived snapshot cache, plus detail/YAML/helm response cache with informer-driven invalidation; object catalog caches and SSE stream (frontend/src/core/refresh/store.ts:13; backend/refresh/snapshot/service.go:19; backend/response_cache.go:11; backend/response_cache_invalidation.go:22; backend/refresh/snapshot/catalog_stream.go:32).
+- Luxury Yacht: snapshot store + ETag/Checksum + short-lived snapshot cache, plus detail/YAML/helm response cache with informer-driven invalidation; object catalog caches and SSE stream (frontend/src/core/refresh/store.ts:13; backend/refresh/snapshot/service.go:72; backend/response_cache.go:11; backend/response_cache_invalidation.go:22; backend/refresh/snapshot/catalog_stream.go:126).
 
 ### Comparison table
 
 | Aspect            | Headlamp                                      | Luxury Yacht                                                                         | Evidence                                                                                                                                                                          |
 | ----------------- | --------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Backend cache     | HTTP response cache (TTL + invalidation)      | Snapshot ETag + short-lived snapshot cache + store + detail/YAML/helm response cache | headlamp/backend/pkg/k8cache/cacheStore.go:203; backend/refresh/snapshot/service.go:19; backend/response_cache.go:11; frontend/src/core/refresh/store.ts:13                       |
+| Backend cache     | HTTP response cache (TTL + invalidation)      | Snapshot ETag + short-lived snapshot cache + store + detail/YAML/helm response cache | headlamp/backend/pkg/k8cache/cacheStore.go:203; backend/refresh/snapshot/service.go:72; backend/response_cache.go:11; frontend/src/core/refresh/store.ts:13                       |
 | Invalidation      | Dynamic informer invalidation + non-GET purge | Refresh intervals + manual refresh + response cache invalidation on informer updates | headlamp/backend/pkg/k8cache/cacheInvalidation.go:55; frontend/src/core/refresh/refresherConfig.ts:24; backend/response_cache_invalidation.go:22                                  |
-| Permission gating | SSAR per request with cached clientsets       | Runtime SSAR checks for informers + per-request SSAR gating for snapshot builds      | headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/snapshot/service.go:55; backend/refresh/snapshot/permission_checks.go:79 |
+| Permission gating | SSAR per request with cached clientsets       | Runtime SSAR checks for informers + per-request SSAR gating for snapshot builds      | headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/snapshot/service.go:79; backend/refresh/snapshot/permission_checks.go:110 |
 
 ## 4. Metrics Pipeline
 
@@ -192,20 +191,20 @@ Luxury Yacht:
 - Cluster/namespace events are sorted by timestamp, limited to 500, and include warnings on truncation (backend/refresh/snapshot/event_limits.go:3; backend/refresh/snapshot/cluster_events.go:71; backend/refresh/snapshot/cluster_events.go:111; backend/refresh/snapshot/namespace_events.go:117).
 - Object events use fieldSelector filtering and limit to 500 (backend/refresh/snapshot/object_events.go:73; backend/refresh/snapshot/object_events.go:94; backend/refresh/snapshot/event_limits.go:5).
 - Event pipeline is informer -> eventstream manager -> SSE handler with initial snapshot + incremental updates (backend/refresh/eventstream/manager.go:34; backend/refresh/eventstream/handler.go:71).
-- Event stream manager caps to 500 items, dedupes by composite key, and uses exponential reconnect backoff on the frontend (frontend/src/core/refresh/streaming/eventStreamManager.ts:83; frontend/src/core/refresh/streaming/eventStreamManager.ts:363; frontend/src/core/refresh/streaming/eventStreamManager.ts:745; frontend/src/core/refresh/streaming/eventStreamManager.ts:142).
+- Event stream manager caps to 500 items, dedupes by composite key, and uses exponential reconnect backoff on the frontend (frontend/src/core/refresh/streaming/eventStreamManager.ts:93; frontend/src/core/refresh/streaming/eventStreamManager.ts:231; frontend/src/core/refresh/streaming/eventStreamManager.ts:163).
 
 ### Key differences
 
 - Headlamp: events are KubeObjects with list+watch and a 2000 item limit; object events use fieldSelector (headlamp/frontend/src/lib/k8s/event.ts:44; headlamp/frontend/src/lib/k8s/event.ts:141).
-- Luxury Yacht: events stream over SSE with initial snapshot + incremental entries and a 500 item cap (backend/refresh/eventstream/handler.go:71; frontend/src/core/refresh/streaming/eventStreamManager.ts:83).
+- Luxury Yacht: events stream over SSE with initial snapshot + incremental entries and a 500 item cap (backend/refresh/eventstream/handler.go:71; frontend/src/core/refresh/streaming/eventStreamManager.ts:93).
 
 ### Comparison table
 
 | Aspect   | Headlamp                            | Luxury Yacht                   | Evidence                                                                                                           |
 | -------- | ----------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
 | Source   | K8s Event list + watch              | Informer + SSE stream          | headlamp/frontend/src/lib/k8s/event.ts:44; backend/refresh/eventstream/handler.go:71                               |
-| Limits   | Max 2000 events                     | Max 500 events (frontend cap)  | headlamp/frontend/src/lib/k8s/event.ts:51; frontend/src/core/refresh/streaming/eventStreamManager.ts:83            |
-| Delivery | Watch updates applied to list cache | SSE payloads merged into store | headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/streaming/eventStreamManager.ts:363 |
+| Limits   | Max 2000 events                     | Max 500 events (frontend cap)  | headlamp/frontend/src/lib/k8s/event.ts:51; frontend/src/core/refresh/streaming/eventStreamManager.ts:93            |
+| Delivery | Watch updates applied to list cache | SSE payloads merged into store | headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/streaming/eventStreamManager.ts:407 |
 
 ### Data flow trace (events)
 
@@ -215,7 +214,7 @@ Headlamp:
 
 Luxury Yacht:
 
-1. Frontend `EventStreamManager` opens EventSource -> `/api/v2/stream/events` -> backend builds initial snapshot + subscribes to informer events -> SSE payloads -> frontend merges and caps events (backend/refresh/eventstream/handler.go:71; backend/refresh/eventstream/manager.go:34; frontend/src/core/refresh/streaming/eventStreamManager.ts:363).
+1. Frontend `EventStreamManager` opens EventSource -> `/api/v2/stream/events` -> backend builds initial snapshot + subscribes to informer events -> SSE payloads -> frontend merges and caps events (backend/refresh/eventstream/handler.go:71; backend/refresh/eventstream/manager.go:34; frontend/src/core/refresh/streaming/eventStreamManager.ts:407).
 
 ## 6. Cross-cutting: Error Handling & Backoff
 
@@ -228,9 +227,9 @@ Luxury Yacht:
 
 ### Luxury Yacht
 
-- Snapshot fetch retries network errors with exponential delay and invalidates base URL after failures (frontend/src/core/refresh/client.ts:142).
-- RefreshManager enforces timeouts, aborts, and exponential backoff cooldown on errors (frontend/src/core/refresh/RefreshManager.ts:634).
-- Event stream reconnects with exponential backoff and error thresholds for notifications (frontend/src/core/refresh/streaming/eventStreamManager.ts:142; frontend/src/core/refresh/streaming/eventStreamManager.ts:392).
+- Snapshot fetch retries network errors with exponential delay and invalidates base URL after failures (frontend/src/core/refresh/client.ts:142; frontend/src/core/refresh/client.ts:166).
+- RefreshManager enforces timeouts, aborts, and exponential backoff cooldown on errors (frontend/src/core/refresh/RefreshManager.ts:644; frontend/src/core/refresh/RefreshManager.ts:815).
+- Event stream reconnects with exponential backoff and error thresholds for notifications (frontend/src/core/refresh/streaming/eventStreamManager.ts:163; frontend/src/core/refresh/streaming/eventStreamManager.ts:444).
 - Metrics poller uses rate limiting and exponential backoff with jitter (backend/refresh/metrics/poller.go:181; backend/refresh/metrics/poller.go:260).
 
 ## 7. Cross-cutting: Performance Considerations
@@ -244,15 +243,15 @@ Luxury Yacht:
 ### Luxury Yacht
 
 - Snapshot API includes batch/latency stats and ETag, enabling cache-aware clients (backend/refresh/api/server.go:77; backend/refresh/snapshot/catalog.go:142).
-- Catalog SSE drives browse updates with debounced application and snapshot fallback to avoid update-depth risks (frontend/src/core/refresh/orchestrator.ts:2225; frontend/src/core/refresh/streaming/catalogStreamManager.ts:262; frontend/src/core/refresh/streaming/catalogStreamManager.ts:330).
-- Event stream caps events (500) per scope to prevent memory growth (frontend/src/core/refresh/streaming/eventStreamManager.ts:83).
-- Several refreshers run at 2-3 second intervals; resource streaming now pauses refreshers for non-metrics list domains while healthy, reducing interval load (events, namespaces, and metrics-only domains still poll) (frontend/src/core/refresh/refresherConfig.ts:24; frontend/src/core/refresh/orchestrator.ts:982).
+- Catalog SSE drives browse updates with debounced application and snapshot fallback to avoid update-depth risks (backend/refresh/snapshot/catalog_stream.go:126; frontend/src/core/refresh/streaming/catalogStreamManager.ts:255; frontend/src/core/refresh/streaming/catalogStreamManager.ts:330).
+- Event stream caps events (500) per scope to prevent memory growth (frontend/src/core/refresh/streaming/eventStreamManager.ts:93).
+- Several refreshers run at 2-3 second intervals; resource streaming now pauses refreshers for non-metrics list domains while healthy, reducing interval load (events, namespaces, and metrics-only domains still poll) (frontend/src/core/refresh/refresherConfig.ts:24; frontend/src/core/refresh/orchestrator.ts:1038).
 
 ## 8. Streaming Coverage (polling-only domains)
 
 With the current backend, none of the polling-only domains can use streaming without adding new stream sources or changing semantics.
 
-Evidence: the only SSE endpoints wired are /api/v2/stream/resources, /api/v2/stream/events, /api/v2/stream/logs, and /api/v2/stream/catalog (backend/refresh/system/manager.go). The orchestrator only attaches streaming for domains backed by those endpoints (frontend/src/core/refresh/orchestrator.ts).
+Evidence: the only SSE endpoints wired are /api/v2/stream/resources, /api/v2/stream/events, /api/v2/stream/logs, and /api/v2/stream/catalog (backend/refresh/system/manager.go:516). The orchestrator only attaches streaming for domains backed by those endpoints (frontend/src/core/refresh/orchestrator.ts:2267; frontend/src/core/refresh/orchestrator.ts:2341; frontend/src/core/refresh/orchestrator.ts:2354; frontend/src/core/refresh/orchestrator.ts:2453).
 
 Per polling-only domain:
 
@@ -260,8 +259,8 @@ Per polling-only domain:
 - cluster-overview: derived/aggregated payload; would require a new aggregator from node/pod streams or a new stream endpoint.
 - node-maintenance: snapshot is sourced from the local store; no stream endpoint.
 - object-details, object-yaml, object-helm-manifest, object-helm-values: per-object GETs; no stream endpoint and no list/watch semantics today.
-- object-events: could theoretically be derived from the existing event stream, but event stream entries are raw events without the snapshot’s aggregation fields (counts, timestamps), so it would be a behavioral change (backend/refresh/eventstream/manager.go).
-- catalog-diff: explicitly kept on snapshot/manual refresh flow; streaming would conflict with the current guidance in the frontend refresh notes (frontend/src/core/refresh/orchestrator.ts).
+- object-events: could theoretically be derived from the existing event stream, but event stream entries are raw events without the snapshot’s aggregation fields (counts, timestamps), so it would be a behavioral change (backend/refresh/eventstream/types.go:23).
+- catalog-diff: kept on snapshot/manual refresh flow (no streaming registration) (frontend/src/core/refresh/orchestrator.ts:2370).
 
 ## 9. Recommendations & Status
 
