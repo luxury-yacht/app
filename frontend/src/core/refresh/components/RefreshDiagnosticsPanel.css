@@ -87,6 +87,81 @@
   overflow: auto;
 }
 
+.diagnostics-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
+.diagnostics-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0 0.5rem;
+  color: var(--color-text-secondary);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.diagnostics-section-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.diagnostics-section-title {
+  font-weight: 600;
+  color: var(--color-text);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.82rem;
+}
+
+.diagnostics-section-subtitle {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.diagnostics-section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.diagnostics-section-toggle {
+  padding: 0.25rem 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  font-size: 0.72rem;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.diagnostics-streams {
+  border-top: 1px solid var(--color-border);
+}
+
+.diagnostics-streams-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  padding: 0 0.5rem;
+}
+
+.diagnostics-streams-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+}
+
 .diagnostics-table {
   width: 100%;
   border-collapse: collapse;

@@ -20,6 +20,7 @@ import type {
 } from '@/core/capabilities/types';
 import type { PermissionStatus } from '@/core/capabilities/bootstrap';
 import type { DomainSnapshotState } from '../store';
+import { resourceStreamManager } from '../streaming/resourceStreamManager';
 
 const fetchTelemetrySummaryMock = vi.hoisted(() =>
   vi.fn<() => Promise<TelemetrySummary>>(async () => {
@@ -561,6 +562,17 @@ describe('DiagnosticsPanel component', () => {
       ],
     };
 
+    const resourceStreamSpy = vi
+      .spyOn(resourceStreamManager, 'getTelemetrySummary')
+      .mockReturnValue({
+        resyncCount: 2,
+        fallbackCount: 1,
+        lastResyncAt: now - 1200,
+        lastResyncReason: 'reset',
+        lastFallbackAt: now - 2400,
+        lastFallbackReason: 'gap detected',
+      });
+
     fetchTelemetrySummaryMock.mockResolvedValueOnce(telemetrySummary);
 
     const catalogState = createReadyState({
@@ -627,6 +639,84 @@ describe('DiagnosticsPanel component', () => {
     expect(logPrimary?.textContent).toContain('Scopes: 2');
     expect(logPrimary?.textContent).toContain('Sessions: 1');
     expect(logPrimary?.textContent).toContain('Delivered: 9');
+
+    const streamsSection = rendered.container.querySelector('.diagnostics-streams');
+    expect(streamsSection?.textContent).toContain('Streams');
+    expect(streamsSection?.textContent).toContain('Resources');
+    const streamRows = streamsSection?.querySelectorAll('tbody tr') ?? [];
+    expect(streamRows).toHaveLength(4);
+    const resourcesRow = Array.from(streamRows).find((row) =>
+      row.textContent?.includes('Resources')
+    );
+    const cells = resourcesRow?.querySelectorAll('td') ?? [];
+    expect(cells[5]?.textContent?.trim()).toBe('2');
+    expect(cells[6]?.textContent?.trim()).toBe('1');
+
+    await rendered.unmount();
+    resourceStreamSpy.mockRestore();
+  });
+
+  test('filters stream rows using the stream toggles', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
+    const now = Date.now();
+
+    fetchTelemetrySummaryMock.mockResolvedValueOnce({
+      snapshots: [],
+      metrics: {
+        lastCollected: now,
+        lastDurationMs: 200,
+        consecutiveFailures: 0,
+        successCount: 1,
+        failureCount: 0,
+        active: true,
+      },
+      streams: [
+        {
+          name: 'resources',
+          activeSessions: 1,
+          totalMessages: 5,
+          droppedMessages: 0,
+          errorCount: 0,
+          lastConnect: now - 1000,
+          lastEvent: now - 500,
+        },
+        {
+          name: 'events',
+          activeSessions: 2,
+          totalMessages: 10,
+          droppedMessages: 1,
+          errorCount: 0,
+          lastConnect: now - 1200,
+          lastEvent: now - 700,
+        },
+      ],
+    });
+
+    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+
+    await flushAsync();
+    await flushAsync();
+
+    const streamsSection = rendered.container.querySelector('.diagnostics-streams');
+    const filters = streamsSection?.querySelectorAll<HTMLLabelElement>(
+      '.diagnostics-streams-filter'
+    );
+    const resourcesFilter = Array.from(filters ?? []).find((label) =>
+      label.textContent?.includes('Resources')
+    );
+    const resourcesCheckbox = resourcesFilter?.querySelector<HTMLInputElement>('input');
+    expect(resourcesCheckbox).toBeDefined();
+
+    await act(async () => {
+      resourcesCheckbox?.click();
+    });
+
+    const streamRows = streamsSection?.querySelectorAll('tbody tr') ?? [];
+    expect(Array.from(streamRows).some((row) => row.textContent?.includes('Resources'))).toBe(
+      false
+    );
 
     await rendered.unmount();
   });

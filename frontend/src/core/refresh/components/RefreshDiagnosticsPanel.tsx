@@ -39,6 +39,7 @@ import { useNamespace } from '@/modules/namespace/contexts/NamespaceContext';
 import {
   type DiagnosticsRow,
   type DiagnosticsPanelProps,
+  type DiagnosticsStreamRow,
   type CapabilityDescriptorActivityDetails,
   formatInterval,
   formatLastUpdated,
@@ -53,11 +54,22 @@ import {
 } from './diagnostics';
 import { DiagnosticsSummaryCards } from './diagnostics/DiagnosticsSummaryCards';
 import { DiagnosticsTable } from './diagnostics/DiagnosticsTable';
+import { DiagnosticsStreamsTable } from './diagnostics/DiagnosticsStreamsTable';
 import { CapabilityChecksTable } from './diagnostics/CapabilityChecksTable';
 import { PermissionsTable } from './diagnostics/PermissionsTable';
 
 // Re-export for backwards compatibility
 export { resolveDomainNamespace } from './diagnostics';
+
+// Stream labels shown in the diagnostics streams section.
+const STREAM_LABELS: Record<string, string> = {
+  resources: 'Resources',
+  events: 'Events',
+  catalog: 'Catalog',
+  'object-logs': 'Object Logs',
+};
+
+const STREAM_ORDER = ['resources', 'events', 'catalog', 'object-logs'];
 
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isOpen }) => {
   useTabStyles();
@@ -97,6 +109,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const { selectedNamespace } = useNamespace();
   const [showAllPermissions, setShowAllPermissions] = useState(false);
   const [diagnosticsClock, setDiagnosticsClock] = useState(() => Date.now());
+  const [streamFilters, setStreamFilters] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    STREAM_ORDER.forEach((name) => {
+      initial[name] = true;
+    });
+    return initial;
+  });
 
   useEffect(() => {
     if (!isOpen) {
@@ -284,6 +303,53 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespaceRBACDomain,
       namespaceStorageDomain,
     ]
+  );
+
+  const streamOptions = useMemo(() => {
+    const names = new Set(STREAM_ORDER);
+    telemetrySummary?.streams?.forEach((stream) => names.add(stream.name));
+    const orderedNames = [
+      ...STREAM_ORDER,
+      ...Array.from(names)
+        .filter((name) => !STREAM_ORDER.includes(name))
+        .sort((a, b) => a.localeCompare(b)),
+    ];
+    return orderedNames.map((name) => ({
+      name,
+      label: STREAM_LABELS[name] ?? name,
+    }));
+  }, [telemetrySummary]);
+
+  useEffect(() => {
+    setStreamFilters((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      streamOptions.forEach((option) => {
+        if (!(option.name in next)) {
+          next[option.name] = true;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [streamOptions]);
+
+  const toggleStreamFilter = useCallback((name: string) => {
+    setStreamFilters((prev) => ({
+      ...prev,
+      [name]: !prev[name],
+    }));
+  }, []);
+
+  const setAllStreamFilters = useCallback(
+    (value: boolean) => {
+      const next: Record<string, boolean> = {};
+      streamOptions.forEach((option) => {
+        next[option.name] = value;
+      });
+      setStreamFilters(next);
+    },
+    [streamOptions]
   );
 
   const resourceStreamStats = resourceStreamManager.getTelemetrySummary();
@@ -1014,6 +1080,95 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     resourceStreamStats,
   ]);
 
+  // Build stream telemetry rows for the dedicated diagnostics section.
+  const streamRows = useMemo<DiagnosticsStreamRow[]>(() => {
+    if (!telemetrySummary?.streams?.length) {
+      return [];
+    }
+    return telemetrySummary.streams
+      .map((stream) => {
+        const label = STREAM_LABELS[stream.name] ?? stream.name;
+        const lastConnectInfo = formatLastUpdated(
+          stream.lastConnect > 0 ? stream.lastConnect : undefined
+        );
+        const lastEventInfo = formatLastUpdated(
+          stream.lastEvent > 0 ? stream.lastEvent : undefined
+        );
+        const isResourceStream = stream.name === 'resources';
+        const lastResyncInfo = resourceStreamStats.lastResyncAt
+          ? formatLastUpdated(resourceStreamStats.lastResyncAt)
+          : null;
+        const lastFallbackInfo = resourceStreamStats.lastFallbackAt
+          ? formatLastUpdated(resourceStreamStats.lastFallbackAt)
+          : null;
+        const resyncsTooltip = (() => {
+          if (!isResourceStream) {
+            return undefined;
+          }
+          if (resourceStreamStats.lastResyncReason && lastResyncInfo?.tooltip) {
+            return `${resourceStreamStats.lastResyncReason} (${lastResyncInfo.tooltip})`;
+          }
+          if (resourceStreamStats.lastResyncReason) {
+            return resourceStreamStats.lastResyncReason;
+          }
+          if (lastResyncInfo?.tooltip) {
+            return `Last resync ${lastResyncInfo.tooltip}`;
+          }
+          return undefined;
+        })();
+        const fallbacksTooltip = (() => {
+          if (!isResourceStream) {
+            return undefined;
+          }
+          if (resourceStreamStats.lastFallbackReason && lastFallbackInfo?.tooltip) {
+            return `${resourceStreamStats.lastFallbackReason} (${lastFallbackInfo.tooltip})`;
+          }
+          if (resourceStreamStats.lastFallbackReason) {
+            return resourceStreamStats.lastFallbackReason;
+          }
+          if (lastFallbackInfo?.tooltip) {
+            return `Last fallback ${lastFallbackInfo.tooltip}`;
+          }
+          return undefined;
+        })();
+        return {
+          rowKey: stream.name,
+          label,
+          sessions: stream.activeSessions,
+          delivered: stream.totalMessages,
+          dropped: stream.droppedMessages,
+          errors: stream.errorCount,
+          resyncs: isResourceStream ? resourceStreamStats.resyncCount : null,
+          resyncsTooltip,
+          fallbacks: isResourceStream ? resourceStreamStats.fallbackCount : null,
+          fallbacksTooltip,
+          lastConnect: lastConnectInfo.display,
+          lastConnectTooltip: lastConnectInfo.tooltip,
+          lastEvent: lastEventInfo.display,
+          lastEventTooltip: lastEventInfo.tooltip,
+          lastError: stream.lastError?.trim() || '—',
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [resourceStreamStats, telemetrySummary]);
+
+  const filteredStreamRows = useMemo(
+    () => streamRows.filter((row) => streamFilters[row.rowKey] !== false),
+    [streamFilters, streamRows]
+  );
+
+  const streamSummary = useMemo(() => {
+    if (streamRows.length === 0) {
+      return 'No stream telemetry available';
+    }
+    const sessionTotal = filteredStreamRows.reduce((acc, row) => acc + row.sessions, 0);
+    const visible =
+      filteredStreamRows.length === streamRows.length
+        ? `${streamRows.length} streams`
+        : `${filteredStreamRows.length}/${streamRows.length} streams`;
+    return `${visible} • Sessions: ${sessionTotal}`;
+  }, [filteredStreamRows, streamRows]);
+
   const filteredRows = useMemo(() => rows.filter((row) => row.status !== 'idle'), [rows]);
   const { capabilityBatchRows, capabilityDescriptorIndex } = useMemo(() => {
     const descriptorIndex = new Map<string, CapabilityDescriptorActivityDetails>();
@@ -1489,6 +1644,55 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         logSummary={logSummary}
       />
       <DiagnosticsTable rows={filteredRows} />
+      <div className="diagnostics-section diagnostics-streams">
+        <div className="diagnostics-section-header">
+          <div className="diagnostics-section-title-group">
+            <span className="diagnostics-section-title">Streams</span>
+            <span className="diagnostics-section-subtitle">{streamSummary}</span>
+          </div>
+          <div className="diagnostics-section-actions">
+            <button
+              className="diagnostics-section-toggle"
+              type="button"
+              onClick={() => setAllStreamFilters(true)}
+            >
+              All
+            </button>
+            <button
+              className="diagnostics-section-toggle"
+              type="button"
+              onClick={() => setAllStreamFilters(false)}
+            >
+              None
+            </button>
+          </div>
+        </div>
+        {streamOptions.length > 0 ? (
+          <div className="diagnostics-streams-filters">
+            {streamOptions.map((option) => {
+              const checked = streamFilters[option.name] !== false;
+              return (
+                <label key={option.name} className="diagnostics-streams-filter">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleStreamFilter(option.name)}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        ) : null}
+        <DiagnosticsStreamsTable
+          rows={filteredStreamRows}
+          emptyMessage={
+            streamRows.length === 0
+              ? 'Stream telemetry is not available yet.'
+              : 'No streams match current filters.'
+          }
+        />
+      </div>
     </>
   );
 
