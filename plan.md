@@ -247,20 +247,20 @@ Luxury Yacht:
 ### Store/cache differences
 
 - Headlamp: backend response cache (TTL + watch invalidation) plus React Query list caches (headlamp/backend/pkg/k8cache/cacheStore.go:203; headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:242).
-- Luxury Yacht: snapshot store + ETag/Checksum + short-lived snapshot cache; object catalog caches and SSE stream (frontend/src/core/refresh/store.ts:13; backend/refresh/snapshot/service.go:19; backend/refresh/snapshot/catalog_stream.go:32).
+- Luxury Yacht: snapshot store + ETag/Checksum + short-lived snapshot cache, plus detail/YAML/helm response cache with informer-driven invalidation; object catalog caches and SSE stream (frontend/src/core/refresh/store.ts:13; backend/refresh/snapshot/service.go:19; backend/response_cache.go:11; backend/response_cache_invalidation.go:22; backend/refresh/snapshot/catalog_stream.go:32).
 
 ### Store/cache comparison table
 
 | Aspect            | Headlamp                                      | Luxury Yacht                                                       | Evidence                                                                                                                           |
 | ----------------- | --------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Backend cache     | HTTP response cache (TTL + invalidation)      | Snapshot ETag + short-lived snapshot cache + store                 | headlamp/backend/pkg/k8cache/cacheStore.go:203; backend/refresh/snapshot/service.go:19; frontend/src/core/refresh/store.ts:13      |
-| Invalidation      | Dynamic informer invalidation + non-GET purge | Refresh intervals + manual refresh                                 | headlamp/backend/pkg/k8cache/cacheInvalidation.go:55; frontend/src/core/refresh/refresherConfig.ts:24                              |
-| Permission gating | SSAR per request with cached clientsets       | Runtime SSAR checks with TTL for informer gating (primed at setup) | headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/permissions/checker.go:58 |
+| Backend cache     | HTTP response cache (TTL + invalidation)      | Snapshot ETag + short-lived snapshot cache + store + detail/YAML/helm response cache | headlamp/backend/pkg/k8cache/cacheStore.go:203; backend/refresh/snapshot/service.go:19; backend/response_cache.go:11; frontend/src/core/refresh/store.ts:13 |
+| Invalidation      | Dynamic informer invalidation + non-GET purge | Refresh intervals + manual refresh + response cache invalidation on informer updates | headlamp/backend/pkg/k8cache/cacheInvalidation.go:55; frontend/src/core/refresh/refresherConfig.ts:24; backend/response_cache_invalidation.go:22 |
+| Permission gating | SSAR per request with cached clientsets       | Runtime SSAR checks for informers + per-request SSAR gating for snapshot builds      | headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/snapshot/service.go:55; backend/refresh/snapshot/permission_checks.go:79 |
 
 Evidence:
 
 - Headlamp: headlamp/backend/pkg/k8cache/cacheStore.go:203; headlamp/backend/pkg/k8cache/cacheInvalidation.go:55; headlamp/backend/pkg/k8cache/authorization.go:119.
-- Luxury Yacht: backend/refresh/snapshot/service.go:19; frontend/src/core/refresh/store.ts:13; frontend/src/core/refresh/refresherConfig.ts:24; backend/refresh/system/manager.go:93.
+- Luxury Yacht: backend/refresh/snapshot/service.go:19; backend/response_cache.go:11; backend/response_cache_invalidation.go:22; frontend/src/core/refresh/store.ts:13; frontend/src/core/refresh/refresherConfig.ts:24; backend/refresh/system/manager.go:93; backend/refresh/snapshot/permission_checks.go:79.
 
 ### Resources data flow traces
 
