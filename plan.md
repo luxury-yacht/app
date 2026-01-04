@@ -108,7 +108,7 @@ Luxury Yacht:
 | Aspect             | Headlamp                           | Luxury Yacht                                                                    | Evidence                                                                                                                                                                  |
 | ------------------ | ---------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Watch transport    | WebSocket multiplexer (single WS)  | Resource stream WS multiplexer for lists + SSE for events/logs                  | headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:61; backend/refresh/resourcestream/handler.go:13                                                                      |
-| Update model       | ResourceVersion-gated list updates | Streamed incremental updates with resync + polling pause for configured domains | headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1094; frontend/src/core/refresh/orchestrator.ts:1038     |
+| Update model       | ResourceVersion-gated list updates | Streamed incremental updates with resync + polling pause for configured domains | headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1094; frontend/src/core/refresh/orchestrator.ts:1038    |
 | Reconnect strategy | Heartbeat ping + reconnect         | Resource stream resync on RESET/COMPLETE + SSE reconnect with backoff           | headlamp/backend/cmd/multiplexer.go:389; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1094; frontend/src/core/refresh/streaming/eventStreamManager.ts:163 |
 
 ## 3. Store/Cache & Invalidation
@@ -137,10 +137,10 @@ Luxury Yacht:
 
 ### Comparison table
 
-| Aspect            | Headlamp                                      | Luxury Yacht                                                                         | Evidence                                                                                                                                                                          |
-| ----------------- | --------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Backend cache     | HTTP response cache (TTL + invalidation)      | Snapshot ETag + short-lived snapshot cache + store + detail/YAML/helm response cache | headlamp/backend/pkg/k8cache/cacheStore.go:203; backend/refresh/snapshot/service.go:72; backend/response_cache.go:11; frontend/src/core/refresh/store.ts:13                       |
-| Invalidation      | Dynamic informer invalidation + non-GET purge | Refresh intervals + manual refresh + response cache invalidation on informer updates | headlamp/backend/pkg/k8cache/cacheInvalidation.go:55; frontend/src/core/refresh/refresherConfig.ts:24; backend/response_cache_invalidation.go:22                                  |
+| Aspect            | Headlamp                                      | Luxury Yacht                                                                         | Evidence                                                                                                                                                                           |
+| ----------------- | --------------------------------------------- | ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend cache     | HTTP response cache (TTL + invalidation)      | Snapshot ETag + short-lived snapshot cache + store + detail/YAML/helm response cache | headlamp/backend/pkg/k8cache/cacheStore.go:203; backend/refresh/snapshot/service.go:72; backend/response_cache.go:11; frontend/src/core/refresh/store.ts:13                        |
+| Invalidation      | Dynamic informer invalidation + non-GET purge | Refresh intervals + manual refresh + response cache invalidation on informer updates | headlamp/backend/pkg/k8cache/cacheInvalidation.go:55; frontend/src/core/refresh/refresherConfig.ts:24; backend/response_cache_invalidation.go:22                                   |
 | Permission gating | SSAR per request with cached clientsets       | Runtime SSAR checks for informers + per-request SSAR gating for snapshot builds      | headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/snapshot/service.go:79; backend/refresh/snapshot/permission_checks.go:110 |
 
 ## 4. Metrics Pipeline
@@ -266,4 +266,86 @@ Per polling-only domain:
 
 ### Recommendations for Luxury Yacht (stability/perf)
 
-None, pending second passes.
+1. Data fetch layer: add permission-aware gating for cached detail/YAML/helm responses so cached data does not outlive RBAC changes, mirroring Headlamp's SSAR-before-cache behavior (headlamp/backend/cmd/server.go:214; headlamp/backend/pkg/k8cache/authorization.go:119; backend/object_detail_provider.go:94; backend/refresh/permissions/checker.go:57).
+
+   - Work items:
+     - Add a permission check before serving cached detail/YAML/helm entries and evict on deny (backend/object_detail_provider.go:94; backend/response_cache.go:39; backend/refresh/permissions/checker.go:115).
+     - Reuse the permission checker used by snapshot builds, or wire a checker into the detail provider context (backend/refresh/snapshot/service.go:151; backend/refresh/permissions/checker.go:57).
+     - Add tests that simulate permission revocation and ensure cached responses are not served (backend/response_cache_invalidation_test.go:13).
+   - Effort: Medium.
+   - Risk: Medium.
+
+2. Watch/stream handlers: debounce or linger stream unsubscribe operations to reduce churn during rapid view changes, similar to Headlamp's multiplexer debounce (headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:240; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1052).
+
+   - Work items:
+     - Add a short unsubscribe debounce in the resource stream manager, keyed by domain/scope, to coalesce rapid stop/start cycles (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1052).
+     - Track pending unsubscribes and cancel if a resubscribe arrives within the debounce window (headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:240).
+     - Add telemetry or logging for churn to validate impact (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1120).
+   - Effort: Low to Medium.
+   - Risk: Low.
+
+3. Store/cache and invalidation: add an initial-sync guard or age filter for response cache invalidation to avoid evicting caches during informer warm-up, mirroring Headlamp's 1-minute age filter/skip list (headlamp/backend/pkg/k8cache/cacheInvalidation.go:106; headlamp/backend/pkg/k8cache/cacheInvalidation.go:248; backend/response_cache_invalidation.go:130).
+
+   - Work items:
+     - Gate invalidation handlers on informer sync readiness or object age to avoid early churn (backend/response_cache_invalidation.go:130; backend/refresh/informer/factory.go:191).
+     - Add a skip list for resources that should not invalidate cached detail/YAML (headlamp/backend/pkg/k8cache/cacheInvalidation.go:106).
+     - Add tests for warm-up and skip behavior (backend/response_cache_invalidation_test.go:13).
+   - Effort: Medium.
+   - Risk: Medium.
+
+4. Metrics pipeline: make metrics polling demand-driven (start/stop based on active views) to reduce background load, similar to Headlamp's per-call polling loop, instead of always-on backend polling (headlamp/frontend/src/lib/k8s/api/v1/metricsApi.ts:33; backend/refresh/types.go:137; backend/refresh/types.go:158).
+
+   - Work items:
+     - Track active metrics consumers in the refresh manager and call start/stop on the backend poller based on usage (frontend/src/core/refresh/RefreshManager.ts:554; backend/refresh/types.go:137).
+     - Keep the backoff/rate limit logic but gate Start on active demand (backend/refresh/metrics/poller.go:74; backend/refresh/types.go:158).
+     - Surface poller metadata in telemetry so UI can show active vs idle status (backend/refresh/metrics/poller.go:138; backend/refresh/telemetry/recorder.go:49).
+   - Effort: Medium.
+   - Risk: Medium.
+
+5. Events ingestion: make event limits configurable (per user/cluster) like Headlamp's adjustable Event.maxLimit, instead of fixed constants (headlamp/frontend/src/lib/k8s/event.ts:51; headlamp/frontend/src/lib/k8s/event.ts:60; backend/refresh/snapshot/event_limits.go:3).
+
+   - Work items:
+     - Add config-driven limits for cluster/namespace/object event snapshots (backend/refresh/snapshot/event_limits.go:3).
+     - Thread limits through snapshot builders and stream managers (backend/refresh/snapshot/cluster_events.go:77; frontend/src/core/refresh/streaming/eventStreamManager.ts:93).
+     - Add tests to validate limit overrides (backend/refresh/snapshot/cluster_events_test.go).
+   - Effort: Low to Medium.
+   - Risk: Low.
+
+6. Error handling/backoff: return structured permission-denied error payloads (Status-like) for snapshot/stream responses to improve UI diagnostics, similar to Headlamp's AuthErrResponse, instead of plain string errors (headlamp/backend/pkg/k8cache/authErrResp.go:23; backend/refresh/errors.go:5).
+
+   - Work items:
+     - Define a response shape for permission errors in the refresh API and SSE payloads (backend/refresh/errors.go:5; backend/refresh/api/server.go:71).
+     - Update frontend error handling to surface structured details where available (frontend/src/core/refresh/client.ts:180).
+     - Add tests for permission-denied responses (backend/refresh/errors_test.go:5).
+   - Effort: Medium.
+   - Risk: Medium.
+
+7. Performance considerations: evaluate consolidating resource stream connections into a single multiplexed WebSocket to reduce socket count, similar to Headlamp's single multiplexer socket vs per-cluster connections in Luxury Yacht (headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:61; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1266).
+
+   - Work items:
+     - Prototype a single-connection stream mux for resource streams using the existing streammux handler (backend/refresh/streammux/handler.go:315).
+     - Update ResourceStreamManager to reuse one socket across clusters and domains (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1266).
+     - Add telemetry for connection counts and backlog resets to compare before/after (backend/refresh/streammux/handler.go:323).
+   - Effort: High.
+   - Risk: High.
+
+8. Streaming coverage: add streaming for namespaces and cluster-overview using list/watch-style sources, similar to Headlamp's watch-driven list updates, to reduce polling-only domains (headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:492; frontend/src/core/refresh/orchestrator.ts:2246; frontend/src/core/refresh/orchestrator.ts:2254).
+   - Work items:
+     - Add namespaces to the resource stream domains and register streaming in the orchestrator (backend/refresh/resourcestream/manager.go:52; frontend/src/core/refresh/orchestrator.ts:2246).
+     - Derive cluster-overview updates from node/pod stream updates or add a dedicated stream endpoint (frontend/src/core/refresh/orchestrator.ts:2254; backend/refresh/system/manager.go:533).
+     - Add diagnostics for stream health and fallback behavior (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1019).
+   - Effort: High.
+   - Risk: Medium.
+
+### Prioritization matrix (impact vs effort)
+
+| Recommendation                            | Impact         | Effort | Risk   | Priority |
+| ----------------------------------------- | -------------- | ------ | ------ | -------- |
+| 1) Permission-aware response cache gating | High           | Medium | Medium | P1       |
+| 2) Debounced stream unsubscribe           | Medium         | Low    | Low    | P2       |
+| 3) Response cache invalidation guard      | Medium         | Medium | Medium | P2       |
+| 4) Demand-driven metrics polling          | Medium         | Medium | Medium | P2       |
+| 5) Configurable event limits              | Low to Medium  | Low    | Low    | P3       |
+| 6) Structured permission-denied payloads  | Medium         | Medium | Medium | P2       |
+| 7) Consolidated stream connections        | Medium to High | High   | High   | P3       |
+| 8) Streaming for namespaces/overview      | Medium         | High   | Medium | P3       |
