@@ -90,6 +90,7 @@ Luxury Yacht:
 - `useKubeObjectList` starts watches only when `refetchInterval` is unset; it uses list resourceVersions and avoids re-establishing watches when list updates (headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:400).
 - Frontend WebSocket multiplexer uses one connection, debounces unsubscribe, tracks COMPLETE messages, and only resubscribes after a future successful connect (no automatic reconnect loop) (headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:77; headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:261; headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:275).
 - Backend multiplexer maintains per-cluster watch connections with heartbeat pings and reconnects on failure; sends COMPLETE when resourceVersion changes (headlamp/backend/cmd/multiplexer.go:389; headlamp/backend/cmd/multiplexer.go:639).
+- Backend multiplexer dialer enforces a 45-second WebSocket handshake timeout when connecting to cluster watch sockets (headlamp/backend/cmd/multiplexer.go:350; headlamp/backend/cmd/multiplexer.go:358).
 
 ### Luxury Yacht
 
@@ -97,6 +98,7 @@ Luxury Yacht:
 - Domain refresh intervals are configured (2-15 seconds) per refresher (frontend/src/core/refresh/refresherConfig.ts:24).
 - Resource list domains stream over the WS multiplexer with per-cluster subscriptions, resync on RESET/COMPLETE, and polling paused while streaming is healthy for domains configured with pauseRefresherWhenStreaming (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1182; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1094; frontend/src/core/refresh/orchestrator.ts:1038; backend/refresh/resourcestream/manager.go:1885).
 - Informer factories resync at a configured interval and block on cache sync (backend/refresh/informer/factory.go:101; backend/refresh/informer/factory.go:191).
+- Stream mux uses the default websocket upgrader without a configured handshake timeout (backend/refresh/streammux/handler.go:86; backend/refresh/streammux/handler.go:99).
 
 ### Key differences
 

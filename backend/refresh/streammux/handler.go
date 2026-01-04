@@ -20,8 +20,9 @@ import (
 )
 
 const (
-	writeTimeout   = 10 * time.Second
-	outgoingBuffer = 512
+	writeTimeout     = 10 * time.Second
+	handshakeTimeout = 45 * time.Second
+	outgoingBuffer   = 512
 )
 
 type wsConn interface {
@@ -96,7 +97,9 @@ func NewHandler(cfg Config) (*Handler, error) {
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
-			CheckOrigin:     func(r *http.Request) bool { return true },
+			// Prevent slow or stalled websocket upgrades from hanging indefinitely.
+			HandshakeTimeout: handshakeTimeout,
+			CheckOrigin:      func(r *http.Request) bool { return true },
 		},
 	}, nil
 }

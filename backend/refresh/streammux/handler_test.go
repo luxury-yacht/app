@@ -14,6 +14,15 @@ func (stubConn) WriteJSON(interface{}) error      { return nil }
 func (stubConn) SetWriteDeadline(time.Time) error { return nil }
 func (stubConn) Close() error                     { return nil }
 
+// stubAdapter satisfies the stream Adapter interface for tests.
+type stubAdapter struct{}
+
+func (stubAdapter) NormalizeScope(_, scope string) (string, error) { return scope, nil }
+func (stubAdapter) Subscribe(_, _ string) (*Subscription, error)   { return nil, nil }
+func (stubAdapter) Resume(_, _ string, _ uint64) ([]ServerMessage, bool) {
+	return nil, false
+}
+
 func TestSessionBackpressureKeepsSessionOpenAndResetsScope(t *testing.T) {
 	session := newSession(stubConn{}, nil, noopLogger{}, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
 	for i := 0; i < outgoingBuffer; i++ {
@@ -64,5 +73,18 @@ func TestSessionSendErrorIncludesPermissionDetails(t *testing.T) {
 	}
 	if msg.ErrorDetails.Details.Domain != "pods" || msg.ErrorDetails.Details.Resource != "core/pods" {
 		t.Fatalf("unexpected error details: %+v", msg.ErrorDetails.Details)
+	}
+}
+
+func TestHandlerSetsHandshakeTimeout(t *testing.T) {
+	handler, err := NewHandler(Config{
+		Adapter:    stubAdapter{},
+		StreamName: "resources",
+	})
+	if err != nil {
+		t.Fatalf("unexpected handler error: %v", err)
+	}
+	if handler.upgrader.HandshakeTimeout != handshakeTimeout {
+		t.Fatalf("expected handshake timeout %v, got %v", handshakeTimeout, handler.upgrader.HandshakeTimeout)
 	}
 }
