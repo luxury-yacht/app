@@ -19,8 +19,6 @@ import type {
   ClusterRBACSnapshotPayload,
   ClusterStorageEntry,
   ClusterStorageSnapshotPayload,
-  NamespaceSnapshotPayload,
-  NamespaceSummary,
   NamespaceAutoscalingSnapshotPayload,
   NamespaceAutoscalingSummary,
   NamespaceConfigSnapshotPayload,
@@ -117,7 +115,6 @@ type ServerMessage = {
 type UpdateMessage = ServerMessage & { domain: ResourceDomain; scope: string };
 
 const isSupportedDomain = (value: string | undefined): value is ResourceDomain =>
-  value === 'namespaces' ||
   value === 'pods' ||
   value === 'namespace-workloads' ||
   value === 'namespace-config' ||
@@ -136,7 +133,6 @@ const isSupportedDomain = (value: string | undefined): value is ResourceDomain =
   value === 'nodes';
 
 const isMultiClusterDomain = (domain: ResourceDomain): boolean =>
-  domain === 'namespaces' ||
   domain === 'pods' ||
   domain === 'namespace-workloads' ||
   domain === 'nodes' ||
@@ -272,11 +268,6 @@ export const normalizeResourceScope = (domain: ResourceDomain, scope: string): s
       return normalizeNamespaceScope(scope, 'namespace-quotas');
     case 'namespace-storage':
       return normalizeNamespaceScope(scope, 'namespace-storage');
-    case 'namespaces':
-      if (!scope || scope.trim() === '' || scope.trim().toLowerCase() === 'cluster') {
-        return '';
-      }
-      throw new Error(`namespaces stream does not accept scope ${scope}`);
     case 'cluster-rbac':
     case 'cluster-storage':
     case 'cluster-config':
@@ -476,16 +467,9 @@ export const sortClusterCustomRows = (rows: ClusterCustomEntry[]): void => {
   });
 };
 
-// Keep namespace rows ordered to match snapshot sorting.
-export const sortNamespaceRows = (rows: NamespaceSummary[]): void => {
-  rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
-};
-
 export const sortNodeRows = (rows: ClusterNodeSnapshotEntry[]): void => {
   rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
 };
-
-const buildNamespaceKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
 
 const buildPodKey = (clusterId: string, namespace: string, name: string): string =>
   `${clusterId}::${namespace}::${name}`;
@@ -548,18 +532,6 @@ const buildClusterCustomKey = (clusterId: string, kind: string, name: string): s
   `${clusterId}::${kind}::${name}`;
 
 const buildNodeKey = (clusterId: string, name: string): string => `${clusterId}::${name}`;
-
-const buildNamespaceKeySet = (
-  payload: NamespaceSnapshotPayload | null | undefined,
-  fallbackClusterId: string
-): Set<string> => {
-  const rows = payload?.namespaces ?? [];
-  const keys = new Set<string>();
-  rows.forEach((row) => {
-    keys.add(buildNamespaceKey(row.clusterId ?? fallbackClusterId, row.name));
-  });
-  return keys;
-};
 
 type KeyDiff = {
   missingKeys: number;
@@ -1450,49 +1422,6 @@ export class ResourceStreamManager {
     // Always update shadow keys so drift checks can compare snapshots to streamed changes.
     this.applyShadowUpdates(subscription, updates);
 
-    if (subscription.domain === 'namespaces') {
-      setDomainState('namespaces', (previous) => {
-        const currentPayload = previous.data ?? { namespaces: [] };
-        const existingRows = currentPayload.namespaces ?? [];
-        const byKey = new Map(
-          existingRows.map((row) => [
-            buildNamespaceKey(row.clusterId ?? subscription.clusterId, row.name),
-            row,
-          ])
-        );
-
-        updates.forEach((update) => {
-          const row = update.row as NamespaceSummary | undefined;
-          const name = update.name ?? row?.name ?? '';
-          const key = buildNamespaceKey(update.clusterId ?? subscription.clusterId, name);
-          if (update.type === MESSAGE_TYPES.deleted) {
-            byKey.delete(key);
-            return;
-          }
-          if (!row) {
-            return;
-          }
-          byKey.set(key, row);
-        });
-
-        const nextRows = Array.from(byKey.values());
-        sortNamespaceRows(nextRows);
-        return {
-          ...previous,
-          status: 'ready',
-          data: { ...currentPayload, namespaces: nextRows },
-          stats: updateStats(previous.stats, nextRows.length),
-          lastUpdated: now,
-          lastAutoRefresh: now,
-          error: null,
-          isManual: false,
-          scope: subscription.reportScope,
-        };
-      });
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { pods: [] };
@@ -2266,21 +2195,6 @@ export class ResourceStreamManager {
       return;
     }
 
-    if (subscription.domain === 'namespaces') {
-      updates.forEach((update) => {
-        const clusterId = update.clusterId ?? subscription.clusterId;
-        const row = update.row as NamespaceSummary | undefined;
-        const name = update.name ?? row?.name ?? '';
-        const key = buildNamespaceKey(clusterId, name);
-        if (update.type === MESSAGE_TYPES.deleted) {
-          subscription.shadowKeys.delete(key);
-        } else {
-          subscription.shadowKeys.add(key);
-        }
-      });
-      return;
-    }
-
     if (subscription.domain === 'pods') {
       updates.forEach((update) => {
         const clusterId = update.clusterId ?? subscription.clusterId;
@@ -2650,36 +2564,6 @@ export class ResourceStreamManager {
     this.updateShadowBaseline(subscription, snapshot);
 
     const generatedAt = snapshot.generatedAt || Date.now();
-
-    if (subscription.domain === 'namespaces') {
-      const payload = snapshot.payload as NamespaceSnapshotPayload;
-      const shouldMerge = isMultiClusterScope(subscription.reportScope);
-      setDomainState('namespaces', (previous) => {
-        const incoming = payload.namespaces ?? [];
-        const merged = shouldMerge
-          ? mergeClusterRows(previous.data?.namespaces, incoming, subscription.clusterId)
-          : incoming;
-        if (shouldMerge) {
-          sortNamespaceRows(merged);
-        }
-        return {
-          ...previous,
-          status: 'ready',
-          data: shouldMerge ? { ...payload, namespaces: merged } : payload,
-          stats: updateStats(snapshot.stats ?? previous.stats ?? null, merged.length),
-          version: snapshot.version,
-          checksum: snapshot.checksum,
-          etag: snapshot.checksum ?? previous.etag,
-          lastUpdated: generatedAt,
-          lastAutoRefresh: generatedAt,
-          error: null,
-          isManual: false,
-          scope: subscription.reportScope,
-        };
-      });
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
 
     if (subscription.domain === 'pods') {
       const payload = snapshot.payload as PodSnapshotPayload;
@@ -3086,12 +2970,7 @@ export class ResourceStreamManager {
   private updateShadowBaseline(subscription: StreamSubscription, snapshot: Snapshot<any>): void {
     let snapshotKeys: Set<string> | null = null;
 
-    if (subscription.domain === 'namespaces') {
-      snapshotKeys = buildNamespaceKeySet(
-        snapshot.payload as NamespaceSnapshotPayload | null | undefined,
-        subscription.clusterId
-      );
-    } else if (subscription.domain === 'pods') {
+    if (subscription.domain === 'pods') {
       snapshotKeys = buildPodKeySet(
         snapshot.payload as PodSnapshotPayload | null | undefined,
         subscription.clusterId
@@ -3233,19 +3112,6 @@ export class ResourceStreamManager {
 
   private markResyncComplete(subscription: StreamSubscription): void {
     const now = Date.now();
-    if (subscription.domain === 'namespaces') {
-      setDomainState('namespaces', (previous) => ({
-        ...previous,
-        status: previous.data ? 'ready' : 'idle',
-        error: null,
-        lastUpdated: previous.lastUpdated ?? now,
-        lastAutoRefresh: now,
-        scope: subscription.reportScope,
-      }));
-      this.clearStreamError(subscription.clusterId);
-      return;
-    }
-
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.reportScope, (previous) => ({
         ...previous,
@@ -3456,16 +3322,6 @@ export class ResourceStreamManager {
 
   private markResyncing(subscription: StreamSubscription): void {
     const message = RESYNC_MESSAGE;
-    if (subscription.domain === 'namespaces') {
-      setDomainState('namespaces', (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: message,
-        scope: subscription.reportScope,
-      }));
-      return;
-    }
-
     if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.reportScope, (previous) => ({
         ...previous,
@@ -3632,14 +3488,7 @@ export class ResourceStreamManager {
     this.consecutiveErrors.set(key, attempts);
     const isTerminal = attempts >= STREAM_ERROR_NOTIFY_THRESHOLD;
 
-    if (subscription.domain === 'namespaces') {
-      setDomainState('namespaces', (previous) => ({
-        ...previous,
-        status: isTerminal ? 'error' : previous.status,
-        error: isTerminal ? message : previous.error,
-        scope: subscription.reportScope,
-      }));
-    } else if (subscription.domain === 'pods') {
+    if (subscription.domain === 'pods') {
       setScopedDomainState('pods', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,

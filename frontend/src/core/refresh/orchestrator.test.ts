@@ -812,7 +812,6 @@ describe('refreshOrchestrator', () => {
       scope?: string
     ) => string;
 
-    expect(normalize('namespaces', undefined)).toBe('clusters=cluster-a,cluster-b|');
     expect(normalize('cluster-events', undefined)).toBe('clusters=cluster-a,cluster-b|cluster');
     expect(normalize('namespace-events', 'namespace:team-a')).toBe('cluster-b|namespace:team-a');
   });

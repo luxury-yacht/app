@@ -2,7 +2,6 @@ package snapshot
 
 import (
 	"testing"
-	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -107,27 +106,6 @@ func TestBuildNodeSummary(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "node-1", summary.Name)
 	require.Equal(t, "c1", summary.ClusterID)
-}
-
-func TestBuildNamespaceSummary(t *testing.T) {
-	ns := &corev1.Namespace{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:              "default",
-			ResourceVersion:   "7",
-			CreationTimestamp: metav1.NewTime(time.Unix(123, 0)),
-		},
-		Status: corev1.NamespaceStatus{
-			Phase: corev1.NamespaceActive,
-		},
-	}
-
-	summary := BuildNamespaceSummary(ClusterMeta{ClusterID: "c1", ClusterName: "cluster"}, ns, true, false)
-	require.Equal(t, "default", summary.Name)
-	require.Equal(t, "Active", summary.Phase)
-	require.Equal(t, "7", summary.ResourceVersion)
-	require.Equal(t, int64(123), summary.CreationUnix)
-	require.True(t, summary.HasWorkloads)
-	require.False(t, summary.WorkloadsUnknown)
 }
 
 func ptrBool(value bool) *bool {

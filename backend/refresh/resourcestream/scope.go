@@ -28,8 +28,6 @@ func normalizeScopeForDomain(domain, scope string) (string, error) {
 		return normalizeNamespaceScope(trimmed, "namespace-storage")
 	case domainNamespaceAutoscaling:
 		return normalizeNamespaceScope(trimmed, "namespace-autoscaling")
-	case domainNamespaces:
-		return normalizeClusterScope(trimmed, "namespaces")
 	case domainClusterRBAC:
 		return normalizeClusterScope(trimmed, "cluster-rbac")
 	case domainClusterStorage:

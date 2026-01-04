@@ -1,7 +1,6 @@
 package resourcestream
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -21,7 +20,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apimachineryerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -35,7 +33,6 @@ import (
 	networklisters "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
 
-	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/logstream"
@@ -53,7 +50,6 @@ const (
 )
 
 const (
-	domainNamespaces           = "namespaces"
 	domainPods                 = "pods"
 	domainWorkloads            = "namespace-workloads"
 	domainNamespaceConfig      = "namespace-config"
@@ -213,10 +209,6 @@ type Manager struct {
 
 	podLister        corelisters.PodLister
 	podIndexer       cache.Indexer
-	namespaceLister  corelisters.NamespaceLister
-	namespaceTracker *snapshot.NamespaceWorkloadTracker
-	// namespaceTrackerReady gates when workload presence can be trusted from the tracker.
-	namespaceTrackerReady atomic.Bool
 	nodeLister       corelisters.NodeLister
 	serviceLister    corelisters.ServiceLister
 	sliceLister      discoverylisters.EndpointSliceLister
@@ -276,10 +268,6 @@ func NewManager(
 		return mgr
 	}
 
-	mgr.namespaceTracker = snapshot.NewNamespaceWorkloadTracker(shared)
-	// Wait for workload tracking caches before trusting namespace workload counts.
-	go mgr.waitForNamespaceTrackerSync()
-
 	podInformer := shared.Core().V1().Pods()
 	mgr.podLister = podInformer.Lister()
 	mgr.podIndexer = podInformer.Informer().GetIndexer()
@@ -287,14 +275,6 @@ func NewManager(
 		AddFunc:    func(obj interface{}) { mgr.handlePod(obj, MessageTypeAdded) },
 		UpdateFunc: func(_, newObj interface{}) { mgr.handlePod(newObj, MessageTypeModified) },
 		DeleteFunc: func(obj interface{}) { mgr.handlePod(obj, MessageTypeDeleted) },
-	})
-
-	namespaceInformer := shared.Core().V1().Namespaces()
-	mgr.namespaceLister = namespaceInformer.Lister()
-	namespaceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleNamespace(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleNamespace(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleNamespace(obj, MessageTypeDeleted) },
 	})
 
 	configMapInformer := shared.Core().V1().ConfigMaps()
@@ -552,16 +532,6 @@ func (m *Manager) initCustomResourceInformers(factory *informer.Factory) {
 		UpdateFunc: func(_, newObj interface{}) { m.handleCustomResourceDefinition(newObj, MessageTypeModified) },
 		DeleteFunc: func(obj interface{}) { m.handleCustomResourceDefinition(obj, MessageTypeDeleted) },
 	})
-}
-
-func (m *Manager) waitForNamespaceTrackerSync() {
-	if m == nil || m.namespaceTracker == nil {
-		return
-	}
-	// Track when workload caches are synced so namespace workload flags are reliable.
-	if m.namespaceTracker.WaitForSync(context.Background()) {
-		m.namespaceTrackerReady.Store(true)
-	}
 }
 
 func (m *Manager) handleCustomResourceDefinition(obj interface{}, updateType MessageType) {
@@ -869,37 +839,8 @@ func (m *Manager) handlePod(obj interface{}, updateType MessageType) {
 
 	m.broadcast(domainPods, scopesForPod(summary), update)
 
-	if updateType == MessageTypeAdded || updateType == MessageTypeDeleted {
-		// Pod lifecycle affects namespace workload presence.
-		m.handleNamespaceWorkloadUpdate(pod.Namespace, pod.ResourceVersion)
-	}
-
 	m.handleWorkloadFromPod(pod, updateType, podUsage)
 	m.handleNodeFromPod(pod)
-}
-
-func (m *Manager) handleNamespace(obj interface{}, updateType MessageType) {
-	ns := namespaceFromObject(obj)
-	if ns == nil {
-		return
-	}
-
-	update := Update{
-		Type:            updateType,
-		Domain:          domainNamespaces,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: ns.ResourceVersion,
-		UID:             string(ns.UID),
-		Name:            ns.Name,
-		Kind:            "Namespace",
-	}
-	if updateType != MessageTypeDeleted {
-		hasWorkloads, workloadsUnknown := m.namespaceWorkloadsStatus(ns.Name, true)
-		update.Row = snapshot.BuildNamespaceSummary(m.clusterMeta, ns, hasWorkloads, workloadsUnknown)
-	}
-
-	m.broadcast(domainNamespaces, scopesForCluster(), update)
 }
 
 func (m *Manager) handleConfigMap(obj interface{}, updateType MessageType) {
@@ -1624,42 +1565,6 @@ func (m *Manager) handleWorkload(obj interface{}, updateType MessageType) {
 	}
 
 	m.broadcast(domainWorkloads, scopesForNamespace(namespace), update)
-
-	if updateType == MessageTypeAdded || updateType == MessageTypeDeleted {
-		// Workload lifecycle affects namespace workload presence.
-		m.handleNamespaceWorkloadUpdate(namespace, workload.GetResourceVersion())
-	}
-}
-
-// handleNamespaceWorkloadUpdate refreshes namespace summaries when workloads change.
-func (m *Manager) handleNamespaceWorkloadUpdate(namespace, resourceVersion string) {
-	if namespace == "" || m.namespaceLister == nil {
-		return
-	}
-	if !m.namespaceTrackerReady.Load() {
-		// Wait for tracker sync so workload-derived updates don't override legacy results.
-		return
-	}
-	ns, err := m.namespaceLister.Get(namespace)
-	if err != nil || ns == nil {
-		return
-	}
-	if resourceVersion == "" {
-		resourceVersion = ns.ResourceVersion
-	}
-	hasWorkloads, workloadsUnknown := m.namespaceWorkloadsStatus(namespace, false)
-	update := Update{
-		Type:            MessageTypeModified,
-		Domain:          domainNamespaces,
-		ClusterID:       m.clusterMeta.ClusterID,
-		ClusterName:     m.clusterMeta.ClusterName,
-		ResourceVersion: resourceVersion,
-		UID:             string(ns.UID),
-		Name:            ns.Name,
-		Kind:            "Namespace",
-		Row:             snapshot.BuildNamespaceSummary(m.clusterMeta, ns, hasWorkloads, workloadsUnknown),
-	}
-	m.broadcast(domainNamespaces, scopesForCluster(), update)
 }
 
 func (m *Manager) handleWorkloadFromPod(pod *corev1.Pod, updateType MessageType, usage map[string]metrics.PodUsage) {
@@ -1806,146 +1711,6 @@ func (m *Manager) podMetricsSnapshot() map[string]metrics.PodUsage {
 		return map[string]metrics.PodUsage{}
 	}
 	return m.metrics.LatestPodUsage()
-}
-
-// namespaceWorkloadsStatus returns workload presence and unknown-state flags for namespaces.
-func (m *Manager) namespaceWorkloadsStatus(namespace string, allowLegacy bool) (bool, bool) {
-	if namespace == "" {
-		return false, false
-	}
-	tracker := m.namespaceTracker
-	trackerReady := m.namespaceTrackerReady.Load()
-	if tracker != nil && trackerReady {
-		has, known := tracker.HasWorkloads(namespace)
-		if known {
-			return has, false
-		}
-		if !allowLegacy {
-			return has, true
-		}
-		legacy, err := m.namespaceHasWorkloadsLegacy(namespace)
-		if err != nil {
-			tracker.MarkUnknown(namespace)
-			return false, true
-		}
-		tracker.MarkUnknown(namespace)
-		return legacy, true
-	}
-
-	if !allowLegacy {
-		return false, true
-	}
-
-	legacy, err := m.namespaceHasWorkloadsLegacy(namespace)
-	if err != nil {
-		if tracker != nil {
-			tracker.MarkUnknown(namespace)
-		}
-		return false, true
-	}
-	return legacy, false
-}
-
-// namespaceHasWorkloadsLegacy checks workload presence using informer listers as a fallback.
-func (m *Manager) namespaceHasWorkloadsLegacy(namespace string) (bool, error) {
-	if namespace == "" {
-		return false, nil
-	}
-
-	selector := labels.Everything()
-
-	type checkResult struct {
-		has bool
-		err error
-	}
-
-	var tasks []func(context.Context) error
-	var results []*checkResult
-
-	addTask := func(run func() (int, error)) {
-		res := &checkResult{}
-		results = append(results, res)
-		tasks = append(tasks, func(context.Context) error {
-			count, err := run()
-			if err != nil {
-				if apimachineryerrors.IsNotFound(err) {
-					return nil
-				}
-				res.err = err
-				return err
-			}
-			if count > 0 {
-				res.has = true
-			}
-			return nil
-		})
-	}
-
-	if m.deploymentLister != nil {
-		addTask(func() (int, error) {
-			list, err := m.deploymentLister.Deployments(namespace).List(selector)
-			return len(list), err
-		})
-	}
-
-	if m.statefulLister != nil {
-		addTask(func() (int, error) {
-			list, err := m.statefulLister.StatefulSets(namespace).List(selector)
-			return len(list), err
-		})
-	}
-
-	if m.daemonLister != nil {
-		addTask(func() (int, error) {
-			list, err := m.daemonLister.DaemonSets(namespace).List(selector)
-			return len(list), err
-		})
-	}
-
-	if m.jobLister != nil {
-		addTask(func() (int, error) {
-			list, err := m.jobLister.Jobs(namespace).List(selector)
-			return len(list), err
-		})
-	}
-
-	if m.cronJobLister != nil {
-		addTask(func() (int, error) {
-			list, err := m.cronJobLister.CronJobs(namespace).List(selector)
-			return len(list), err
-		})
-	}
-
-	if m.podLister != nil {
-		addTask(func() (int, error) {
-			list, err := m.podLister.Pods(namespace).List(selector)
-			return len(list), err
-		})
-	}
-
-	if len(tasks) == 0 {
-		return false, nil
-	}
-
-	if err := parallel.RunLimited(context.Background(), 3, tasks...); err != nil {
-		for _, res := range results {
-			if res.err != nil {
-				return false, res.err
-			}
-		}
-		return false, err
-	}
-
-	for _, res := range results {
-		if res.err != nil {
-			return false, res.err
-		}
-		if res.has {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }
 
 func (m *Manager) broadcast(domain string, scopes []string, update Update) {
@@ -2202,8 +1967,6 @@ func permissionResourceLabel(group, resource string) string {
 
 func domainPermissions(domain string) ([]permissionRequirement, bool) {
 	switch domain {
-	case domainNamespaces:
-		return []permissionRequirement{{group: "", resource: "namespaces"}}, true
 	case domainPods:
 		return []permissionRequirement{{group: "", resource: "pods"}}, true
 	case domainNamespaceConfig:
@@ -2438,17 +2201,6 @@ func podFromObject(obj interface{}) *corev1.Pod {
 		return typed
 	case cache.DeletedFinalStateUnknown:
 		return podFromObject(typed.Obj)
-	default:
-		return nil
-	}
-}
-
-func namespaceFromObject(obj interface{}) *corev1.Namespace {
-	switch typed := obj.(type) {
-	case *corev1.Namespace:
-		return typed
-	case cache.DeletedFinalStateUnknown:
-		return namespaceFromObject(typed.Obj)
 	default:
 		return nil
 	}
