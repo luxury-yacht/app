@@ -275,7 +275,7 @@ Per polling-only domain:
    - Effort: Medium.
    - Risk: Medium.
 
-2. Watch/stream handlers: debounce or linger stream unsubscribe operations to reduce churn during rapid view changes, similar to Headlamp's multiplexer debounce (headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:240; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1052).
+2. ✅ Watch/stream handlers: debounce or linger stream unsubscribe operations to reduce churn during rapid view changes, similar to Headlamp's multiplexer debounce (headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:240; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1052).
 
    - Work items:
      - Add a short unsubscribe debounce in the resource stream manager, keyed by domain/scope, to coalesce rapid stop/start cycles (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1052).

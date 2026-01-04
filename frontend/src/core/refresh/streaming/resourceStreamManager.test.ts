@@ -1271,6 +1271,85 @@ describe('ResourceStreamManager', () => {
     expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
   });
 
+  test('debounces unsubscribe before sending cancel', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'nodes',
+        scope: '',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { nodes: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    await manager.start('nodes', storeScope);
+    await flushPromises();
+
+    const socket = createdSockets[0];
+    expect(socket).toBeDefined();
+
+    const cancelCount = () =>
+      socket.send.mock.calls.filter(([payload]) => JSON.parse(payload).type === 'CANCEL').length;
+
+    manager.stop('nodes', storeScope, false);
+    expect(cancelCount()).toBe(0);
+
+    vi.runOnlyPendingTimers();
+
+    expect(cancelCount()).toBe(1);
+  });
+
+  test('cancels pending unsubscribe when resubscribed', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+
+    fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'nodes',
+        scope: '',
+        version: 1,
+        checksum: 'etag',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: { nodes: [] },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      notModified: false,
+    });
+
+    await manager.start('nodes', storeScope);
+    await flushPromises();
+
+    const socket = createdSockets[0];
+    expect(socket).toBeDefined();
+
+    const cancelCount = () =>
+      socket.send.mock.calls.filter(([payload]) => JSON.parse(payload).type === 'CANCEL').length;
+
+    manager.stop('nodes', storeScope, false);
+    expect(cancelCount()).toBe(0);
+
+    await manager.start('nodes', storeScope);
+    await flushPromises();
+
+    vi.runOnlyPendingTimers();
+
+    expect(cancelCount()).toBe(0);
+  });
+
   it('starts node streaming for each cluster in a multi-cluster scope', async () => {
     const manager = new ResourceStreamManager();
     const storeScope = buildClusterScopeList(['cluster-a', 'cluster-b'], '');

@@ -51,6 +51,8 @@ const RESYNC_COOLDOWN_MS = 1000;
 const RESYNC_MESSAGE = 'Stream resyncing';
 const STREAM_ERROR_NOTIFY_THRESHOLD = 3;
 const DRIFT_SAMPLE_SIZE = 5;
+// Linger stream stops briefly to avoid rapid subscribe/unsubscribe churn.
+const STREAM_UNSUBSCRIBE_DEBOUNCE_MS = 500;
 // Cap queued updates to avoid unbounded memory growth under bursty streams.
 const MAX_UPDATE_QUEUE = 1000;
 // Add jitter to reconnect backoff to avoid thundering-herd reconnects.
@@ -875,6 +877,10 @@ type StreamTelemetry = {
   lastFallbackReason?: string;
 };
 
+type PendingUnsubscribe = {
+  timerId: number;
+};
+
 class ResourceStreamConnection {
   private socket: WebSocket | null = null;
   private attempt = 0;
@@ -1008,6 +1014,7 @@ export class ResourceStreamManager {
   private consecutiveErrors = new Map<string, number>();
   private suspendedForVisibility = false;
   private streamTelemetry = new Map<string, StreamTelemetry>();
+  private pendingUnsubscribes = new Map<string, PendingUnsubscribe>();
 
   constructor() {
     eventBus.on('kubeconfig:changing', () => this.stopAll(true));
@@ -1054,7 +1061,7 @@ export class ResourceStreamManager {
     if (subscriptions.length === 0) {
       return;
     }
-    subscriptions.forEach((subscription) => this.unsubscribe(subscription, reset));
+    subscriptions.forEach((subscription) => this.scheduleUnsubscribe(subscription, reset));
   }
 
   async refreshOnce(domain: ResourceDomain, scope: string): Promise<void> {
@@ -1188,6 +1195,7 @@ export class ResourceStreamManager {
     const key = this.subscriptionKey(clusterId, domain, normalizedScope);
     const existing = this.subscriptions.get(key);
     if (existing) {
+      this.cancelPendingUnsubscribe(existing);
       return existing;
     }
 
@@ -1271,6 +1279,10 @@ export class ResourceStreamManager {
   }
 
   private subscribe(subscription: StreamSubscription): void {
+    // Avoid re-subscribing while a debounced stop is pending.
+    if (this.pendingUnsubscribes.has(subscription.key)) {
+      return;
+    }
     const connection = this.getConnection(subscription.clusterId);
     const resumeToken = subscription.lastSequence
       ? subscription.lastSequence.toString()
@@ -1289,6 +1301,7 @@ export class ResourceStreamManager {
   }
 
   private unsubscribe(subscription: StreamSubscription, reset: boolean): void {
+    this.cancelPendingUnsubscribe(subscription);
     const connection = this.connections.get(subscription.clusterId);
     if (connection) {
       connection.send({
@@ -1315,6 +1328,41 @@ export class ResourceStreamManager {
       connection.close();
       this.connections.delete(subscription.clusterId);
     }
+  }
+
+  private scheduleUnsubscribe(subscription: StreamSubscription, reset: boolean): void {
+    if (reset || typeof window === 'undefined' || STREAM_UNSUBSCRIBE_DEBOUNCE_MS <= 0) {
+      this.unsubscribe(subscription, reset);
+      return;
+    }
+    if (this.pendingUnsubscribes.has(subscription.key)) {
+      return;
+    }
+    const timerId = window.setTimeout(() => {
+      this.pendingUnsubscribes.delete(subscription.key);
+      this.unsubscribe(subscription, reset);
+    }, STREAM_UNSUBSCRIBE_DEBOUNCE_MS);
+    this.pendingUnsubscribes.set(subscription.key, { timerId });
+    logInfo(
+      `[resource-stream] debounce unsubscribe domain=${subscription.domain} scope=${subscription.storeScope} delayMs=${STREAM_UNSUBSCRIBE_DEBOUNCE_MS}`
+    );
+  }
+
+  private cancelPendingUnsubscribe(subscription: StreamSubscription): void {
+    const pending = this.pendingUnsubscribes.get(subscription.key);
+    if (!pending) {
+      return;
+    }
+    window.clearTimeout(pending.timerId);
+    this.pendingUnsubscribes.delete(subscription.key);
+    logInfo(
+      `[resource-stream] debounce cancel domain=${subscription.domain} scope=${subscription.storeScope}`
+    );
+  }
+
+  private clearPendingUnsubscribes(): void {
+    this.pendingUnsubscribes.forEach((pending) => window.clearTimeout(pending.timerId));
+    this.pendingUnsubscribes.clear();
   }
 
   private handleUpdate(subscription: StreamSubscription, message: UpdateMessage): void {
@@ -2445,6 +2493,10 @@ export class ResourceStreamManager {
     reason: string,
     force = false
   ): Promise<void> {
+    // Skip resync work for subscriptions that are already scheduled to stop.
+    if (this.pendingUnsubscribes.has(subscription.key)) {
+      return;
+    }
     if (subscription.resyncInFlight) {
       return;
     }
@@ -3581,6 +3633,7 @@ export class ResourceStreamManager {
     this.lastNotifiedErrors.clear();
     this.consecutiveErrors.clear();
     this.streamTelemetry.clear();
+    this.clearPendingUnsubscribes();
   }
 }
 
