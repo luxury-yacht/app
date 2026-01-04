@@ -54,3 +54,18 @@ func TestPermissionDeniedStatusFromError(t *testing.T) {
 		t.Fatalf("unexpected details %+v", status.Details)
 	}
 }
+
+func TestWrapPermissionDeniedPreservesMessage(t *testing.T) {
+	original := fmt.Errorf("forbidden from upstream")
+	err := WrapPermissionDenied(original, "nodes", "core/nodes")
+	status, ok := PermissionDeniedStatusFromError(err)
+	if !ok {
+		t.Fatalf("expected wrapped permission denied status")
+	}
+	if status.Message != "forbidden from upstream" {
+		t.Fatalf("expected wrapped message, got %s", status.Message)
+	}
+	if status.Details.Domain != "nodes" || status.Details.Resource != "core/nodes" {
+		t.Fatalf("unexpected details %+v", status.Details)
+	}
+}

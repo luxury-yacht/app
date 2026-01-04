@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -404,6 +405,11 @@ func (s *session) sendError(domain, scope string, err error) {
 	}
 	if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
 		msg.ErrorDetails = status
+	} else if apierrors.IsForbidden(err) {
+		wrapped := refresh.WrapPermissionDenied(err, domain, "")
+		if status, ok := refresh.PermissionDeniedStatusFromError(wrapped); ok {
+			msg.ErrorDetails = status
+		}
 	}
 	s.enqueue(msg)
 }

@@ -17,6 +17,8 @@ import type { SnapshotStats } from './client';
 export interface PermissionDeniedDetails {
   domain?: string;
   resource?: string;
+  kind?: string;
+  name?: string;
 }
 
 export interface PermissionDeniedStatus {

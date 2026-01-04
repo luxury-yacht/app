@@ -75,6 +75,20 @@ func PermissionDeniedStatusFromError(err error) (*PermissionDeniedStatus, bool) 
 	return status, true
 }
 
+// WrapPermissionDenied decorates an error with permission details for structured responses.
+func WrapPermissionDenied(err error, domain, resource string) error {
+	if err == nil {
+		return nil
+	}
+	return permissionDeniedWrapper{
+		err: err,
+		details: PermissionDeniedDetails{
+			Domain:   domain,
+			Resource: resource,
+		},
+	}
+}
+
 func permissionDeniedDetails(err error) (PermissionDeniedDetails, bool) {
 	if err == nil {
 		return PermissionDeniedDetails{}, false
@@ -84,4 +98,21 @@ func permissionDeniedDetails(err error) (PermissionDeniedDetails, bool) {
 		return provider.PermissionDeniedDetails(), true
 	}
 	return PermissionDeniedDetails{}, false
+}
+
+type permissionDeniedWrapper struct {
+	err     error
+	details PermissionDeniedDetails
+}
+
+func (w permissionDeniedWrapper) Error() string {
+	return w.err.Error()
+}
+
+func (w permissionDeniedWrapper) Unwrap() error {
+	return w.err
+}
+
+func (w permissionDeniedWrapper) PermissionDeniedDetails() PermissionDeniedDetails {
+	return w.details
 }

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -100,7 +102,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				h.telemetry.RecordStreamError(streamName, err)
 			}
 			h.logger.Warn(fmt.Sprintf("eventstream: initial snapshot failed: %v", err), "EventStream")
-			if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
+			status, ok := refresh.PermissionDeniedStatusFromError(err)
+			if !ok && apierrors.IsForbidden(err) {
+				wrapped := refresh.WrapPermissionDenied(err, params.Domain, "")
+				status, ok = refresh.PermissionDeniedStatusFromError(wrapped)
+			}
+			if ok {
 				payload := Payload{
 					Domain:       params.Domain,
 					Scope:        params.ScopeKey,

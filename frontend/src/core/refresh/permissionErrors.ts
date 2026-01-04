@@ -42,6 +42,12 @@ export const isPermissionDeniedStatus = (value: unknown): value is PermissionDen
     if (details.resource !== undefined && typeof details.resource !== 'string') {
       return false;
     }
+    if (details.kind !== undefined && typeof details.kind !== 'string') {
+      return false;
+    }
+    if (details.name !== undefined && typeof details.name !== 'string') {
+      return false;
+    }
   }
 
   const reason = obj.reason;
@@ -59,12 +65,20 @@ export const formatPermissionDeniedStatus = (status: PermissionDeniedStatus): st
   const detailParts: string[] = [];
   const domain = status.details?.domain?.trim();
   const resource = status.details?.resource?.trim();
+  const kind = status.details?.kind?.trim();
+  const name = status.details?.name?.trim();
 
   if (domain && !base.toLowerCase().includes(`domain ${domain.toLowerCase()}`)) {
     detailParts.push(`domain ${domain}`);
   }
   if (resource && !base.includes(resource)) {
     detailParts.push(`resource ${resource}`);
+  }
+  if (!domain && !resource && kind) {
+    const kindLabel = name ? `${kind}/${name}` : kind;
+    if (kindLabel && !base.includes(kindLabel)) {
+      detailParts.push(`resource ${kindLabel}`);
+    }
   }
 
   if (detailParts.length === 0) {

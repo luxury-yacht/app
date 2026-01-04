@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -86,6 +88,13 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
 			writePermissionDenied(w, status, correlationID)
 			return
+		}
+		if apierrors.IsForbidden(err) {
+			wrapped := refresh.WrapPermissionDenied(err, domainName, "")
+			if status, ok := refresh.PermissionDeniedStatusFromError(wrapped); ok {
+				writePermissionDenied(w, status, correlationID)
+				return
+			}
 		}
 		writeError(w, http.StatusInternalServerError, err, correlationID)
 		return
