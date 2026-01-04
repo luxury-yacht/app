@@ -1,6 +1,10 @@
 package logstream
 
-import "time"
+import (
+	"time"
+
+	"github.com/luxury-yacht/app/backend/refresh"
+)
 
 // Logger represents the minimal logging interface required by the log streaming subsystem.
 type Logger interface {
@@ -38,13 +42,14 @@ type Entry struct {
 
 // EventPayload is the SSE message envelope emitted to clients.
 type EventPayload struct {
-	Domain      string  `json:"domain"`
-	Scope       string  `json:"scope"`
-	Sequence    uint64  `json:"sequence"`
-	GeneratedAt int64   `json:"generatedAt"`
-	Reset       bool    `json:"reset,omitempty"`
-	Entries     []Entry `json:"entries,omitempty"`
-	Error       string  `json:"error,omitempty"`
+	Domain       string                          `json:"domain"`
+	Scope        string                          `json:"scope"`
+	Sequence     uint64                          `json:"sequence"`
+	GeneratedAt  int64                           `json:"generatedAt"`
+	Reset        bool                            `json:"reset,omitempty"`
+	Entries      []Entry                         `json:"entries,omitempty"`
+	Error        string                          `json:"error,omitempty"`
+	ErrorDetails *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`
 }
 
 // containerState keeps track of the last line delivered for a stream to avoid duplicates.

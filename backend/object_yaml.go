@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/cachekeys"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +22,7 @@ import (
 type gvrCacheEntry struct {
 	gvr        schema.GroupVersionResource
 	namespaced bool
+	cachedAt   time.Time
 }
 
 var (
@@ -33,6 +35,7 @@ var (
 
 const (
 	discoveryTimeout = 10 * time.Second
+	gvrCacheTTL      = 10 * time.Minute
 )
 
 func gvrCacheKey(selection, resourceKind string) string {
@@ -48,6 +51,52 @@ func clearGVRCache() {
 	defer gvrCacheMutex.Unlock()
 	gvrCache = make(map[string]gvrCacheEntry)
 	gvrCacheOrder = make(map[string][]string)
+}
+
+func isGVRCacheExpired(entry gvrCacheEntry) bool {
+	if gvrCacheTTL <= 0 {
+		return false
+	}
+	if entry.cachedAt.IsZero() {
+		return true
+	}
+	return time.Since(entry.cachedAt) > gvrCacheTTL
+}
+
+func removeGVRCacheEntryLocked(key string) {
+	delete(gvrCache, key)
+	selection := selectionFromCacheKey(key)
+	order := gvrCacheOrder[selection]
+	for idx, existing := range order {
+		if existing == key {
+			order = append(order[:idx], order[idx+1:]...)
+			break
+		}
+	}
+	if len(order) == 0 {
+		delete(gvrCacheOrder, selection)
+		return
+	}
+	gvrCacheOrder[selection] = order
+}
+
+func loadGVRCached(key string) (gvrCacheEntry, bool) {
+	gvrCacheMutex.RLock()
+	entry, found := gvrCache[key]
+	gvrCacheMutex.RUnlock()
+	if !found {
+		return gvrCacheEntry{}, false
+	}
+	if !isGVRCacheExpired(entry) {
+		return entry, true
+	}
+	gvrCacheMutex.Lock()
+	entry, found = gvrCache[key]
+	if found && isGVRCacheExpired(entry) {
+		removeGVRCacheEntryLocked(key)
+	}
+	gvrCacheMutex.Unlock()
+	return gvrCacheEntry{}, false
 }
 
 func selectionFromCacheKey(key string) string {
@@ -76,6 +125,7 @@ func storeGVRCached(key string, entry gvrCacheEntry) {
 		}
 	}
 	order = append(order, key)
+	entry.cachedAt = time.Now()
 	gvrCache[key] = entry
 	gvrCacheOrder[selection] = order
 
@@ -83,7 +133,7 @@ func storeGVRCached(key string, entry gvrCacheEntry) {
 		excess := len(order) - gvrCacheLimit
 		for i := 0; i < excess; i++ {
 			evictKey := order[i]
-			delete(gvrCache, evictKey)
+			removeGVRCacheEntryLocked(evictKey)
 		}
 		gvrCacheOrder[selection] = order[excess:]
 	}
@@ -95,7 +145,41 @@ func (a *App) GetObjectYAML(clusterID, resourceKind, namespace, name string) (st
 	if err != nil {
 		return "", err
 	}
-	return getObjectYAMLWithDependencies(deps, selectionKey, resourceKind, namespace, name)
+	return a.getObjectYAMLWithCache(deps, selectionKey, resourceKind, namespace, name)
+}
+
+func objectYAMLCacheKey(resourceKind, namespace, name string) string {
+	return cachekeys.Build("object-yaml-"+strings.ToLower(strings.TrimSpace(resourceKind)), namespace, name)
+}
+
+// getObjectYAMLWithCache wraps object YAML retrieval with a short-lived response cache.
+func (a *App) getObjectYAMLWithCache(
+	deps common.Dependencies,
+	selectionKey string,
+	resourceKind, namespace, name string,
+) (string, error) {
+	if a != nil {
+		cacheKey := objectYAMLCacheKey(resourceKind, namespace, name)
+		if cached, ok := a.responseCacheLookup(selectionKey, cacheKey); ok {
+			if yamlText, ok := cached.(string); ok {
+				// Avoid serving cached YAML when permission checks deny access.
+				if a.canServeCachedResponse(deps.Context, deps, selectionKey, resourceKind, namespace, name) {
+					return yamlText, nil
+				}
+			}
+			a.responseCacheDelete(selectionKey, cacheKey)
+		}
+	}
+
+	yamlText, err := getObjectYAMLWithDependencies(deps, selectionKey, resourceKind, namespace, name)
+	if err != nil {
+		return "", err
+	}
+
+	if a != nil {
+		a.responseCacheStore(selectionKey, objectYAMLCacheKey(resourceKind, namespace, name), yamlText)
+	}
+	return yamlText, nil
 }
 
 // getObjectYAMLWithDependencies fetches object YAML using the supplied cluster-scoped dependencies.
@@ -254,23 +338,18 @@ func getGVRForDependencies(
 	legacyKey := strings.TrimSpace(resourceKind)
 
 	// Check cache first (scoped key) with legacy fallbacks for compatibility.
-	gvrCacheMutex.RLock()
-	if cached, found := gvrCache[cacheKey]; found {
-		gvrCacheMutex.RUnlock()
+	if cached, found := loadGVRCached(cacheKey); found {
 		return cached.gvr, cached.namespaced, nil
 	}
 	if legacyKey != "" {
-		if cached, found := gvrCache[legacyKey]; found {
-			gvrCacheMutex.RUnlock()
+		if cached, found := loadGVRCached(legacyKey); found {
 			return cached.gvr, cached.namespaced, nil
 		}
 		legacyLower := strings.ToLower(legacyKey)
-		if cached, found := gvrCache[legacyLower]; found {
-			gvrCacheMutex.RUnlock()
+		if cached, found := loadGVRCached(legacyLower); found {
 			return cached.gvr, cached.namespaced, nil
 		}
 	}
-	gvrCacheMutex.RUnlock()
 
 	baseCtx := deps.Context
 	if baseCtx == nil {

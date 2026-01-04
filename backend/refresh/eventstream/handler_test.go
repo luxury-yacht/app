@@ -2,11 +2,13 @@ package eventstream
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -78,6 +80,25 @@ func TestHandlerInitialSnapshotFailure(t *testing.T) {
 	require.Empty(t, manager.subscribers)
 }
 
+func TestHandlerInitialSnapshotPermissionDenied(t *testing.T) {
+	handler, _, _ := newTestHandler(t, func(scope string) (*refresh.Snapshot, error) {
+		return nil, refresh.NewPermissionDeniedError("cluster-events", "core/events")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/stream?scope=cluster", nil)
+	rec := newFlushRecorder()
+
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	payloads := parseEventPayloads(rec.Body.String())
+	require.Len(t, payloads, 1)
+	require.Equal(t, "permission denied for domain cluster-events (core/events)", payloads[0].Error)
+	require.NotNil(t, payloads[0].ErrorDetails)
+	require.Equal(t, "cluster-events", payloads[0].ErrorDetails.Details.Domain)
+	require.Equal(t, "core/events", payloads[0].ErrorDetails.Details.Resource)
+}
+
 func TestHandlerStreamsEvents(t *testing.T) {
 	initialSnapshot := &refresh.Snapshot{
 		Domain: "cluster-events",
@@ -118,7 +139,7 @@ func TestHandlerStreamsEvents(t *testing.T) {
 		return strings.Contains(rec.Body.String(), "initial message")
 	}, time.Second, 10*time.Millisecond)
 
-	var ch chan Entry
+	var ch chan StreamEvent
 	require.Eventually(t, func() bool {
 		manager.mu.RLock()
 		defer manager.mu.RUnlock()
@@ -133,18 +154,21 @@ func TestHandlerStreamsEvents(t *testing.T) {
 		return false
 	}, time.Second, 10*time.Millisecond)
 
-	ch <- Entry{
-		Kind:            "Event",
-		Name:            "update",
-		Namespace:       "default",
-		ObjectNamespace: "default",
-		Type:            "Normal",
-		Source:          "tester",
-		Reason:          "Updated",
-		Object:          "Pod/test",
-		Message:         "update message",
-		Age:             "1s",
-		CreatedAt:       time.Now().UnixMilli(),
+	ch <- StreamEvent{
+		Entry: Entry{
+			Kind:            "Event",
+			Name:            "update",
+			Namespace:       "default",
+			ObjectNamespace: "default",
+			Type:            "Normal",
+			Source:          "tester",
+			Reason:          "Updated",
+			Object:          "Pod/test",
+			Message:         "update message",
+			Age:             "1s",
+			CreatedAt:       time.Now().UnixMilli(),
+		},
+		Sequence: 2,
 	}
 
 	require.Eventually(t, func() bool {
@@ -161,6 +185,135 @@ func TestHandlerStreamsEvents(t *testing.T) {
 	require.Equal(t, uint64(2), stream.TotalMessages)
 	require.Equal(t, 0, stream.ActiveSessions)
 	require.Equal(t, telemetry.StreamEvents, stream.Name)
+}
+
+func TestHandlerResumesFromSince(t *testing.T) {
+	var buildCalls atomic.Int32
+	handler, manager, _ := newTestHandler(t, func(scope string) (*refresh.Snapshot, error) {
+		buildCalls.Add(1)
+		return &refresh.Snapshot{
+			Domain: "cluster-events",
+			Payload: snapshot.ClusterEventsSnapshot{
+				Events: []snapshot.ClusterEventEntry{{
+					Kind:            "Event",
+					Name:            "snapshot",
+					ObjectNamespace: "default",
+					Type:            "Normal",
+					Source:          "tester",
+					Reason:          "Snapshot",
+					Object:          "Pod/test",
+					Message:         "snapshot message",
+					Age:             "0s",
+				}},
+			},
+			Stats: refresh.SnapshotStats{ItemCount: 1},
+		}, nil
+	})
+
+	manager.mu.Lock()
+	buffer := newEventBuffer(2)
+	buffer.add(bufferedEvent{
+		sequence: 1,
+		entry: Entry{
+			Kind:            "Event",
+			Name:            "first",
+			ObjectNamespace: "default",
+			Message:         "first message",
+		},
+	})
+	buffer.add(bufferedEvent{
+		sequence: 2,
+		entry: Entry{
+			Kind:            "Event",
+			Name:            "second",
+			ObjectNamespace: "default",
+			Message:         "second message",
+		},
+	})
+	manager.buffers["cluster"] = buffer
+	manager.sequences["cluster"] = 2
+	manager.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req := httptest.NewRequest(http.MethodGet, "/stream?scope=cluster&since=1", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		handler.ServeHTTP(rec, req)
+	}()
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(rec.Body.String(), "second message")
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, int32(0), buildCalls.Load())
+
+	cancel()
+	wg.Wait()
+}
+
+func TestHandlerFallsBackToSnapshotWhenResumeTooOld(t *testing.T) {
+	var buildCalls atomic.Int32
+	handler, manager, _ := newTestHandler(t, func(scope string) (*refresh.Snapshot, error) {
+		buildCalls.Add(1)
+		return &refresh.Snapshot{
+			Domain: "cluster-events",
+			Payload: snapshot.ClusterEventsSnapshot{
+				Events: []snapshot.ClusterEventEntry{{
+					Kind:            "Event",
+					Name:            "snapshot",
+					ObjectNamespace: "default",
+					Type:            "Normal",
+					Source:          "tester",
+					Reason:          "Snapshot",
+					Object:          "Pod/test",
+					Message:         "snapshot fallback",
+					Age:             "0s",
+				}},
+			},
+			Stats: refresh.SnapshotStats{ItemCount: 1},
+		}, nil
+	})
+
+	manager.mu.Lock()
+	buffer := newEventBuffer(2)
+	buffer.add(bufferedEvent{
+		sequence: 5,
+		entry: Entry{
+			Kind:            "Event",
+			Name:            "buffered",
+			ObjectNamespace: "default",
+			Message:         "buffered message",
+		},
+	})
+	manager.buffers["cluster"] = buffer
+	manager.sequences["cluster"] = 5
+	manager.mu.Unlock()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	req := httptest.NewRequest(http.MethodGet, "/stream?scope=cluster&since=1", nil).WithContext(ctx)
+	rec := newFlushRecorder()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		handler.ServeHTTP(rec, req)
+	}()
+
+	require.Eventually(t, func() bool {
+		return strings.Contains(rec.Body.String(), "snapshot fallback")
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, int32(1), buildCalls.Load())
+
+	cancel()
+	wg.Wait()
 }
 
 func newTestHandler(t testing.TB, build func(scope string) (*refresh.Snapshot, error)) (*Handler, *Manager, *telemetry.Recorder) {
@@ -183,6 +336,8 @@ func newTestHandler(t testing.TB, build func(scope string) (*refresh.Snapshot, e
 	service := snapshot.NewService(reg, recorder, snapshot.ClusterMeta{})
 	manager := &Manager{
 		subscribers: make(map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*eventBuffer),
+		sequences:   make(map[string]uint64),
 		logger:      noopLogger{},
 		telemetry:   recorder,
 	}
@@ -190,4 +345,29 @@ func newTestHandler(t testing.TB, build func(scope string) (*refresh.Snapshot, e
 	handler, err := NewHandler(service, manager, noopLogger{})
 	require.NoError(t, err)
 	return handler, manager, recorder
+}
+
+// parseEventPayloads extracts JSON payloads from SSE output for assertions.
+func parseEventPayloads(raw string) []Payload {
+	chunks := strings.Split(raw, "\n\n")
+	payloads := make([]Payload, 0, len(chunks))
+	for _, chunk := range chunks {
+		if !strings.HasPrefix(chunk, "event: event") {
+			continue
+		}
+		idx := strings.Index(chunk, "data: ")
+		if idx == -1 {
+			continue
+		}
+		data := chunk[idx+len("data: "):]
+		if nl := strings.IndexByte(data, '\n'); nl != -1 {
+			data = data[:nl]
+		}
+		var payload Payload
+		if err := json.Unmarshal([]byte(data), &payload); err != nil {
+			continue
+		}
+		payloads = append(payloads, payload)
+	}
+	return payloads
 }

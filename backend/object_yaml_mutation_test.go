@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -116,6 +117,7 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 			Resource: "deployments",
 		},
 		namespaced: true,
+		cachedAt:   time.Now(),
 	}
 	gvrCacheMutex.Unlock()
 

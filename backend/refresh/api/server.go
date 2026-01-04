@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -30,15 +32,27 @@ type Server struct {
 	snapshots refresh.SnapshotService
 	queue     refresh.ManualQueue
 	telemetry *telemetry.Recorder
+	metrics   metricsController
+}
+
+type metricsController interface {
+	SetMetricsActive(active bool)
 }
 
 // NewServer constructs an API server instance.
-func NewServer(reg *domain.Registry, snapshots refresh.SnapshotService, queue refresh.ManualQueue, recorder *telemetry.Recorder) *Server {
+func NewServer(
+	reg *domain.Registry,
+	snapshots refresh.SnapshotService,
+	queue refresh.ManualQueue,
+	recorder *telemetry.Recorder,
+	metrics metricsController,
+) *Server {
 	return &Server{
 		registry:  reg,
 		snapshots: snapshots,
 		queue:     queue,
 		telemetry: recorder,
+		metrics:   metrics,
 	}
 }
 
@@ -48,6 +62,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/v2/refresh/", s.handleManualRefresh)
 	mux.HandleFunc("/api/v2/jobs/", s.handleJobStatus)
 	mux.HandleFunc("/api/v2/telemetry/summary", s.handleTelemetrySummary)
+	mux.HandleFunc("/api/v2/metrics/active", s.handleMetricsActive)
 }
 
 func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +85,17 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 
 	snapshot, err := s.snapshots.Build(ctx, domainName, scope)
 	if err != nil {
+		if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
+			writePermissionDenied(w, status, correlationID)
+			return
+		}
+		if apierrors.IsForbidden(err) {
+			wrapped := refresh.WrapPermissionDenied(err, domainName, "")
+			if status, ok := refresh.PermissionDeniedStatusFromError(wrapped); ok {
+				writePermissionDenied(w, status, correlationID)
+				return
+			}
+		}
 		writeError(w, http.StatusInternalServerError, err, correlationID)
 		return
 	}
@@ -177,6 +203,41 @@ func (s *Server) handleTelemetrySummary(w http.ResponseWriter, r *http.Request) 
 	_ = json.NewEncoder(w).Encode(summary)
 }
 
+func (s *Server) handleMetricsActive(w http.ResponseWriter, r *http.Request) {
+	if !applyCORS(w, r, http.MethodPost) {
+		return
+	}
+
+	correlationID := getCorrelationID(r)
+
+	if r.Method != http.MethodPost {
+		setCorrelationID(w, correlationID)
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	var body struct {
+		Active bool `json:"active"`
+	}
+	if r.Body != nil {
+		defer r.Body.Close()
+		data, _ := io.ReadAll(r.Body)
+		if len(data) > 0 {
+			if err := json.Unmarshal(data, &body); err != nil {
+				writeError(w, http.StatusBadRequest, err, correlationID)
+				return
+			}
+		}
+	}
+
+	if s.metrics != nil {
+		s.metrics.SetMetricsActive(body.Active)
+	}
+
+	setCorrelationID(w, correlationID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // getCorrelationID extracts the correlation ID from the request header or generates a new one.
 func getCorrelationID(r *http.Request) string {
 	if id := r.Header.Get(CorrelationIDHeader); id != "" {
@@ -206,6 +267,14 @@ func writeError(w http.ResponseWriter, status int, err error, correlationID stri
 		Message:       err.Error(),
 		CorrelationID: correlationID,
 	})
+}
+
+// writePermissionDenied emits a Status-like payload for RBAC denials.
+func writePermissionDenied(w http.ResponseWriter, status *refresh.PermissionDeniedStatus, correlationID string) {
+	w.Header().Set("Content-Type", "application/json")
+	setCorrelationID(w, correlationID)
+	w.WriteHeader(http.StatusForbidden)
+	_ = json.NewEncoder(w).Encode(status)
 }
 
 func applyCORS(w http.ResponseWriter, r *http.Request, allowedMethods ...string) bool {

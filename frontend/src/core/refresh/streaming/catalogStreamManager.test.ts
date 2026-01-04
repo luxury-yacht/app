@@ -13,12 +13,22 @@ const errorHandlerMock = vi.hoisted(() => ({
   handle: vi.fn(),
 }));
 
+const refreshManagerMock = vi.hoisted(() => ({
+  triggerManualRefresh: vi.fn(),
+}));
+
+const FLUSH_DELAY_MS = 120;
+
 vi.mock('../client', () => ({
   ensureRefreshBaseURL: ensureRefreshBaseURLMock,
 }));
 
 vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
+}));
+
+vi.mock('../RefreshManager', () => ({
+  refreshManager: refreshManagerMock,
 }));
 
 import { getDomainState, resetDomainState, setDomainState } from '../store';
@@ -75,6 +85,19 @@ const createEmptySnapshot = () => ({
   isFinal: true,
 });
 
+const createStreamEvent = (overrides: Partial<Record<string, unknown>> = {}) => ({
+  snapshot: createSnapshot(),
+  stats: { itemCount: 1, buildDurationMs: 12 },
+  reset: true,
+  ready: true,
+  cacheReady: true,
+  truncated: false,
+  snapshotMode: 'full',
+  generatedAt: 1700000000000,
+  sequence: 1,
+  ...overrides,
+});
+
 const setupWindow = () => {
   if (!globalThis.window) {
     Object.defineProperty(globalThis, 'window', {
@@ -111,6 +134,7 @@ describe('catalogStreamManager', () => {
     ensureRefreshBaseURLMock.mockReset();
     ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
     errorHandlerMock.handle.mockReset();
+    refreshManagerMock.triggerManualRefresh.mockReset();
     resetDomainState('catalog');
     const module = await import('./catalogStreamManager');
     module.catalogStreamManager.stop(true);
@@ -124,6 +148,7 @@ describe('catalogStreamManager', () => {
   });
 
   it('opens an EventSource stream and applies snapshot payloads', async () => {
+    vi.useFakeTimers();
     const manager = await importManager();
     const cleanup = await manager.start(' limit=50 ');
 
@@ -135,17 +160,14 @@ describe('catalogStreamManager', () => {
     const snapshot = createSnapshot();
 
     MockEventSource.instances[0].onmessage?.({
-      data: JSON.stringify({
-        snapshot,
-        stats: { itemCount: 1, buildDurationMs: 12 },
-        reset: true,
-        ready: true,
-        generatedAt: 1700000000000,
-      }),
+      data: JSON.stringify(
+        createStreamEvent({
+          snapshot,
+        })
+      ),
     } as MessageEvent);
 
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
 
     const state = getDomainState('catalog');
     expect(state.status).toBe('ready');
@@ -178,6 +200,71 @@ describe('catalogStreamManager', () => {
     expect(state.status).toBe('idle');
     expect(state.data).toBeNull();
     expect(MockEventSource.instances[0].closed).toBe(true);
+  });
+
+  it('merges partial stream updates by uid', async () => {
+    vi.useFakeTimers();
+    const manager = await importManager();
+    await manager.start('limit=50');
+
+    const initialSnapshot = createSnapshot();
+    const updatedItem = { ...initialSnapshot.items[0], name: 'api-v2' };
+    const newItem = {
+      kind: 'Service',
+      group: '',
+      version: 'v1',
+      resource: 'services',
+      namespace: 'team-a',
+      name: 'web',
+      uid: 'uid-2',
+      resourceVersion: '2',
+      creationTimestamp: '2024-01-02T00:00:00Z',
+      scope: 'Namespace' as const,
+    };
+    const partialSnapshot = {
+      ...initialSnapshot,
+      items: [updatedItem, newItem],
+      total: 2,
+      resourceCount: 2,
+      batchSize: 2,
+      totalBatches: 1,
+      isFinal: false,
+    };
+
+    MockEventSource.instances[0].onmessage?.({
+      data: JSON.stringify(
+        createStreamEvent({
+          snapshot: initialSnapshot,
+          sequence: 1,
+        })
+      ),
+    } as MessageEvent);
+
+    MockEventSource.instances[0].onmessage?.({
+      data: JSON.stringify(
+        createStreamEvent({
+          snapshot: partialSnapshot,
+          stats: { itemCount: 2, buildDurationMs: 12 },
+          reset: false,
+          ready: false,
+          cacheReady: false,
+          truncated: false,
+          snapshotMode: 'partial',
+          generatedAt: 1700000001000,
+          sequence: 2,
+        })
+      ),
+    } as MessageEvent);
+
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
+
+    const state = getDomainState('catalog');
+    const mergedItems = state.data?.items ?? [];
+    const byUid = new Map(mergedItems.map((item) => [item.uid, item]));
+    expect(mergedItems).toHaveLength(2);
+    expect(byUid.get('uid-1')?.name).toBe('api-v2');
+    expect(byUid.get('uid-2')?.name).toBe('web');
+    expect(state.status).toBe('updating');
   });
 
   it('retries with backoff when EventSource fails to initialise', async () => {
@@ -267,42 +354,103 @@ describe('catalogStreamManager', () => {
     globalThis.window = originalWindow;
   });
 
-  it('updates catalog state via Promise fallback when queueMicrotask is unavailable', async () => {
+  it('debounces catalog stream updates before applying', async () => {
+    vi.useFakeTimers();
     const manager = await importManager();
     await manager.start('continue=token');
 
+    const initialSnapshot = createSnapshot();
     setDomainState('catalog', () => ({
       status: 'ready',
-      data: createSnapshot(),
+      data: initialSnapshot,
       stats: { itemCount: 1, buildDurationMs: 10 },
       error: null,
       droppedAutoRefreshes: 0,
       scope: 'continue=token',
     }));
 
-    const originalQueueMicrotask = globalThis.queueMicrotask;
-    (globalThis as any).queueMicrotask = undefined;
-
+    const updatedSnapshot = {
+      ...initialSnapshot,
+      items: [{ ...initialSnapshot.items[0], name: 'api-v2' }],
+    };
     MockEventSource.instances[0].onmessage?.({
-      data: JSON.stringify({
-        snapshot: createSnapshot(),
-        stats: { itemCount: 2, buildDurationMs: 15 },
-        reset: true,
-        ready: false,
-        generatedAt: 1700000005000,
-      }),
+      data: JSON.stringify(
+        createStreamEvent({
+          snapshot: updatedSnapshot,
+          stats: { itemCount: 2, buildDurationMs: 15 },
+          reset: false,
+          ready: false,
+          cacheReady: false,
+          truncated: false,
+          snapshotMode: 'partial',
+          generatedAt: 1700000005000,
+          sequence: 2,
+        })
+      ),
     } as MessageEvent);
 
-    await Promise.resolve();
-    await Promise.resolve();
+    const preState = getDomainState('catalog');
+    expect(preState.data?.items?.[0]?.name).toBe('api');
+
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
 
     const state = getDomainState('catalog');
     expect(state.status).toBe('updating');
     expect(state.scope).toBe('continue=token');
     expect(state.stats?.itemCount).toBe(2);
     expect(state.lastUpdated).toBe(1700000005000);
+    expect(state.data?.items?.[0]?.name).toBe('api-v2');
+  });
 
-    globalThis.queueMicrotask = originalQueueMicrotask;
+  it('triggers snapshot fallback when the stream reports sequence gaps', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Date, 'now').mockReturnValue(10000);
+    const manager = await importManager();
+    await manager.start('limit=50');
+
+    refreshManagerMock.triggerManualRefresh.mockReset();
+
+    MockEventSource.instances[0].onmessage?.({
+      data: JSON.stringify(
+        createStreamEvent({
+          sequence: 1,
+        })
+      ),
+    } as MessageEvent);
+
+    MockEventSource.instances[0].onmessage?.({
+      data: JSON.stringify(
+        createStreamEvent({
+          sequence: 3,
+        })
+      ),
+    } as MessageEvent);
+
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
+
+    expect(refreshManagerMock.triggerManualRefresh).toHaveBeenCalledWith('catalog');
+  });
+
+  it('triggers snapshot fallback when the catalog cache is not ready', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Date, 'now').mockReturnValue(10000);
+    const manager = await importManager();
+    await manager.start('limit=50');
+
+    refreshManagerMock.triggerManualRefresh.mockReset();
+
+    MockEventSource.instances[0].onmessage?.({
+      data: JSON.stringify(
+        createStreamEvent({
+          cacheReady: false,
+          sequence: 1,
+        })
+      ),
+    } as MessageEvent);
+
+    await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
+
+    expect(refreshManagerMock.triggerManualRefresh).toHaveBeenCalledWith('catalog');
   });
 
   it('suppresses error notifications immediately after kubeconfig changes', async () => {

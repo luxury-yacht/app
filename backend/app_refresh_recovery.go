@@ -31,6 +31,9 @@ func (a *App) teardownRefreshSubsystem() {
 		if subsystem == nil || subsystem.Manager == nil {
 			continue
 		}
+		if subsystem.ResourceStream != nil {
+			subsystem.ResourceStream.Stop()
+		}
 		done := make(chan struct{})
 		go func(manager *refresh.Manager) {
 			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
@@ -97,7 +100,6 @@ func (a *App) teardownRefreshSubsystem() {
 	a.apiExtensionsInformerFactory = nil
 	a.refreshBaseURL = ""
 	clearGVRCache()
-	a.clearPermissionCaches()
 }
 
 func (a *App) handlePermissionIssues(issues []system.PermissionIssue) {

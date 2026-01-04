@@ -26,20 +26,22 @@ var defaultLoopbackListener = func() (net.Listener, error) {
 
 // App provides the backend façade exposed to Wails.
 type App struct {
-	Ctx                     context.Context
-	client                  kubernetes.Interface
-	apiextensionsClient     apiextensionsclientset.Interface
-	dynamicClient           dynamic.Interface
-	metricsClient           *metricsclient.Clientset
-	restConfig              *rest.Config
-	selectedKubeconfig      string
-	selectedContext         string
-	selectedKubeconfigs     []string
-	availableKubeconfigs    []KubeconfigInfo
-	windowSettings          *WindowSettings
-	appSettings             *AppSettings
-	logger                  *Logger
-	versionCache            *versioning.Cache
+	Ctx                  context.Context
+	client               kubernetes.Interface
+	apiextensionsClient  apiextensionsclientset.Interface
+	dynamicClient        dynamic.Interface
+	metricsClient        *metricsclient.Clientset
+	restConfig           *rest.Config
+	selectedKubeconfig   string
+	selectedContext      string
+	selectedKubeconfigs  []string
+	availableKubeconfigs []KubeconfigInfo
+	windowSettings       *WindowSettings
+	appSettings          *AppSettings
+	logger               *Logger
+	versionCache         *versioning.Cache
+	// responseCache stores short-lived detail/YAML/helm GET responses.
+	responseCache           *responseCache
 	sidebarVisible          bool
 	diagnosticsPanelVisible bool
 	logsPanelVisible        bool
@@ -60,9 +62,6 @@ type App struct {
 
 	// persistenceMu guards persistence.json read/write operations.
 	persistenceMu sync.Mutex
-
-	permissionCacheMu sync.Mutex
-	permissionCaches  map[string]map[string]bool
 
 	clusterClientsMu sync.Mutex
 	clusterClients   map[string]*clusterClients
@@ -101,9 +100,9 @@ func NewApp() *App {
 	app := &App{
 		logger:               NewLogger(1000),
 		versionCache:         versioning.NewCache(),
+		responseCache:        newDefaultResponseCache(),
 		sidebarVisible:       true,
 		logsPanelVisible:     false,
-		permissionCaches:     make(map[string]map[string]bool),
 		refreshSubsystems:    make(map[string]*system.Subsystem),
 		clusterClients:       make(map[string]*clusterClients),
 		objectCatalogEntries: make(map[string]*objectCatalogEntry),
@@ -144,45 +143,9 @@ func (a *App) currentSelectionKey() string {
 	return a.selectedKubeconfig + ":" + a.selectedContext
 }
 
-func (a *App) getPermissionCache(selection string) map[string]bool {
-	if selection == "" {
-		return nil
-	}
-	a.permissionCacheMu.Lock()
-	defer a.permissionCacheMu.Unlock()
-	cache := a.permissionCaches[selection]
-	if cache == nil {
-		return nil
-	}
-	cloned := make(map[string]bool, len(cache))
-	for k, v := range cache {
-		cloned[k] = v
-	}
-	return cloned
-}
-
 func (a *App) emitEvent(name string, args ...interface{}) {
 	if a == nil || a.eventEmitter == nil || a.Ctx == nil {
 		return
 	}
 	a.eventEmitter(a.Ctx, name, args...)
-}
-
-func (a *App) setPermissionCache(selection string, cache map[string]bool) {
-	if selection == "" || cache == nil {
-		return
-	}
-	a.permissionCacheMu.Lock()
-	defer a.permissionCacheMu.Unlock()
-	cloned := make(map[string]bool, len(cache))
-	for k, v := range cache {
-		cloned[k] = v
-	}
-	a.permissionCaches[selection] = cloned
-}
-
-func (a *App) clearPermissionCaches() {
-	a.permissionCacheMu.Lock()
-	defer a.permissionCacheMu.Unlock()
-	a.permissionCaches = make(map[string]map[string]bool)
 }

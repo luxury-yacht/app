@@ -165,6 +165,32 @@ describe('fetchSnapshot', () => {
     await expect(fetchSnapshot('catalog')).rejects.toThrow('catalog sync failed');
   });
 
+  test('throws formatted permission denied message when status payload returned', async () => {
+    mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      json: vi.fn().mockResolvedValue({
+        kind: 'Status',
+        apiVersion: 'v1',
+        message: 'permission denied for domain nodes (core/nodes)',
+        reason: 'Forbidden',
+        details: { domain: 'nodes', resource: 'core/nodes' },
+        code: 403,
+      }),
+      headers: new Headers(),
+    });
+
+    (globalThis as any).fetch = fetchMock;
+    const { fetchSnapshot } = await import('./client');
+
+    await expect(fetchSnapshot('nodes')).rejects.toThrow(
+      'permission denied for domain nodes (core/nodes)'
+    );
+  });
+
   test('falls back to status text when error body cannot be parsed', async () => {
     mockGetBaseURL.mockResolvedValue('http://127.0.0.1:0');
 

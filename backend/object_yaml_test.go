@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -18,9 +19,7 @@ import (
 )
 
 func resetGVRCache() {
-	gvrCacheMutex.Lock()
-	defer gvrCacheMutex.Unlock()
-	gvrCache = make(map[string]gvrCacheEntry)
+	clearGVRCache()
 }
 
 const testClusterID = "config:ctx"
@@ -96,6 +95,7 @@ func TestGetObjectYAMLNamespacedResource(t *testing.T) {
 	gvrCache["Pod"] = gvrCacheEntry{
 		gvr:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
 		namespaced: true,
+		cachedAt:   time.Now(),
 	}
 	gvrCacheMutex.Unlock()
 
@@ -121,6 +121,49 @@ func TestGetObjectYAMLNamespacedResource(t *testing.T) {
 	}
 }
 
+func TestGetObjectYAMLUsesCacheWhenAvailable(t *testing.T) {
+	resetGVRCache()
+	app := newTestAppWithDefaults(t)
+	app.responseCache = newResponseCache(time.Minute, 10)
+	registerTestCluster(app, testClusterID)
+
+	cacheKey := objectYAMLCacheKey("Pod", "default", "cached-pod")
+	app.responseCacheStore(testClusterID, cacheKey, "cached-yaml")
+
+	yamlStr, err := app.GetObjectYAML(testClusterID, "Pod", "default", "cached-pod")
+	if err != nil {
+		t.Fatalf("GetObjectYAML returned error: %v", err)
+	}
+	if yamlStr != "cached-yaml" {
+		t.Fatalf("expected cached YAML, got %q", yamlStr)
+	}
+}
+
+func TestLoadGVRCachedEvictsExpiredEntry(t *testing.T) {
+	resetGVRCache()
+	cacheKey := gvrCacheKey("cluster-a", "Widget")
+	expired := time.Now().Add(-gvrCacheTTL - time.Second)
+
+	gvrCacheMutex.Lock()
+	gvrCache[cacheKey] = gvrCacheEntry{
+		gvr:        schema.GroupVersionResource{Group: "example.com", Version: "v1", Resource: "widgets"},
+		namespaced: true,
+		cachedAt:   expired,
+	}
+	gvrCacheMutex.Unlock()
+
+	if _, found := loadGVRCached(cacheKey); found {
+		t.Fatal("expected expired GVR cache entry to be evicted")
+	}
+
+	gvrCacheMutex.RLock()
+	_, exists := gvrCache[cacheKey]
+	gvrCacheMutex.RUnlock()
+	if exists {
+		t.Fatal("expected expired GVR cache entry to be removed")
+	}
+}
+
 func TestGetObjectYAMLClusterScopedResource(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
@@ -143,6 +186,7 @@ func TestGetObjectYAMLClusterScopedResource(t *testing.T) {
 	gvrCache["node"] = gvrCacheEntry{
 		gvr:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"},
 		namespaced: false,
+		cachedAt:   time.Now(),
 	}
 	gvrCacheMutex.Unlock()
 

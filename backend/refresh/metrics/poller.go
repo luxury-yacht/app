@@ -153,6 +153,9 @@ func (p *Poller) Start(ctx context.Context) error {
 	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 
+	p.recordActive(true)
+	defer p.recordActive(false)
+
 	log.Printf("[refresh:metrics] poller started, interval=%s", p.interval)
 
 	if err := p.refresh(ctx); err != nil {
@@ -360,6 +363,13 @@ func (p *Poller) recordMetricsTelemetry(duration time.Duration, collectedAt time
 		return
 	}
 	p.telemetry.RecordMetrics(duration, collectedAt, err, consecutive, success)
+}
+
+func (p *Poller) recordActive(active bool) {
+	if p.telemetry == nil {
+		return
+	}
+	p.telemetry.RecordMetricsActive(active)
 }
 
 func jitterDuration(base time.Duration, factor float64) time.Duration {

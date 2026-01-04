@@ -1,7 +1,7 @@
 package snapshot
 
 const (
-	clusterEventsLimit   = 200
-	namespaceEventsLimit = 200
-	objectEventsLimit    = 200
+	clusterEventsLimit   = 500
+	namespaceEventsLimit = 500
+	objectEventsLimit    = 500
 )

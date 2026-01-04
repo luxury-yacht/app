@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -29,6 +30,7 @@ var (
 	global       *Capture
 	eventEmitter func(string)
 	logSink      func(level string, message string)
+	tokenPattern = regexp.MustCompile(`\btokens?\b`)
 )
 
 // Init installs a stderr capture for klog/k8s client noise.
@@ -104,18 +106,21 @@ func (c *Capture) readPipe() {
 }
 
 func (c *Capture) captureIfInteresting(output string) {
-	lower := strings.ToLower(output)
-	if strings.Contains(lower, "token") ||
-		strings.Contains(lower, "expired") ||
-		strings.Contains(lower, "sso") ||
-		strings.Contains(lower, "authentication") ||
-		strings.Contains(lower, "unauthorized") ||
-		strings.Contains(lower, "refresh") {
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		msg := strings.TrimSpace(line)
+		if msg == "" {
+			continue
+		}
+		lower := strings.ToLower(msg)
+		if !isAuthRelated(lower) {
+			continue
+		}
 		c.lastErrorMu.Lock()
-		c.lastError = strings.TrimSpace(output)
+		c.lastError = msg
 		c.lastErrorMu.Unlock()
 		if eventEmitter != nil {
-			eventEmitter(c.lastError)
+			eventEmitter(msg)
 		}
 	}
 }
@@ -169,7 +174,7 @@ func capturedError() string {
 			strings.Contains(lower, "failed") ||
 			strings.Contains(lower, "unauthorized") ||
 			strings.Contains(lower, "forbidden") ||
-			strings.Contains(lower, "token") ||
+			tokenPattern.MatchString(lower) ||
 			strings.Contains(lower, "expired") {
 			return line
 		}
@@ -190,7 +195,7 @@ func Enhance(err error) error {
 
 	orig := err.Error()
 	lower := strings.ToLower(extra)
-	if len(extra) > len(orig) || strings.Contains(lower, "token") || strings.Contains(lower, "sso") || strings.Contains(lower, "expired") {
+	if len(extra) > len(orig) || tokenPattern.MatchString(lower) || strings.Contains(lower, "sso") || strings.Contains(lower, "expired") {
 		if !strings.Contains(extra, orig) && !strings.Contains(orig, extra) {
 			return fmt.Errorf("%s. STDERR: %s", orig, extra)
 		}
@@ -235,4 +240,17 @@ func (c *Capture) emitToLogSink(chunk []byte) {
 
 		logSink(level, msg)
 	}
+}
+
+func isAuthRelated(lower string) bool {
+	// Word-boundary token matching avoids false positives from resource names.
+	if tokenPattern.MatchString(lower) {
+		return true
+	}
+	return strings.Contains(lower, "expired") ||
+		strings.Contains(lower, "sso") ||
+		strings.Contains(lower, "authentication") ||
+		strings.Contains(lower, "unauthorized") ||
+		strings.Contains(lower, "forbidden") ||
+		strings.Contains(lower, "permission denied")
 }

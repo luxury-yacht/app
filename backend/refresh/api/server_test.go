@@ -27,6 +27,14 @@ func (f *fakeSnapshotService) Build(ctx context.Context, domain, scope string) (
 	return &snap, nil
 }
 
+type errorSnapshotService struct {
+	err error
+}
+
+func (f *errorSnapshotService) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+	return nil, f.err
+}
+
 type fakeQueue struct {
 	job *refresh.ManualRefreshJob
 }
@@ -68,6 +76,14 @@ func (errorQueue) Next(ctx context.Context) (*refresh.ManualRefreshJob, error) {
 	return nil, ctx.Err()
 }
 
+type fakeMetricsController struct {
+	activeValues []bool
+}
+
+func (f *fakeMetricsController) SetMetricsActive(active bool) {
+	f.activeValues = append(f.activeValues, active)
+}
+
 func TestSnapshotEndpoint(t *testing.T) {
 	reg := domain.New()
 	reg.Register(refresh.DomainConfig{
@@ -79,7 +95,7 @@ func TestSnapshotEndpoint(t *testing.T) {
 
 	svc := snapshotService()
 	queue := &fakeQueue{}
-	server := api.NewServer(reg, svc, queue, nil)
+	server := api.NewServer(reg, svc, queue, nil, nil)
 
 	mux := http.NewServeMux()
 	server.Register(mux)
@@ -106,6 +122,36 @@ func TestSnapshotEndpoint(t *testing.T) {
 	}
 }
 
+func TestSnapshotPermissionDenied(t *testing.T) {
+	svc := &errorSnapshotService{
+		err: refresh.NewPermissionDeniedError("nodes", "core/nodes"),
+	}
+	server := api.NewServer(domain.New(), svc, &fakeQueue{}, nil, nil)
+
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes", nil)
+	req.Header.Set("Origin", "wails://test")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403 got %d", rr.Code)
+	}
+
+	var payload refresh.PermissionDeniedStatus
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	if payload.Reason != "Forbidden" || payload.Code != http.StatusForbidden {
+		t.Fatalf("unexpected status payload: %+v", payload)
+	}
+	if payload.Details.Domain != "nodes" || payload.Details.Resource != "core/nodes" {
+		t.Fatalf("unexpected details: %+v", payload.Details)
+	}
+}
+
 func snapshotService() refresh.SnapshotService {
 	return &fakeSnapshotService{snapshot: &refresh.Snapshot{Version: 1, Payload: map[string]int{"items": 1}}}
 }
@@ -121,7 +167,7 @@ func TestManualRefreshEndpoint(t *testing.T) {
 
 	svc := snapshotService()
 	queue := &fakeQueue{}
-	server := api.NewServer(reg, svc, queue, nil)
+	server := api.NewServer(reg, svc, queue, nil, nil)
 
 	mux := http.NewServeMux()
 	server.Register(mux)
@@ -155,7 +201,7 @@ func TestManualRefreshHandlesQueueErrors(t *testing.T) {
 	})
 
 	svc := snapshotService()
-	server := api.NewServer(reg, svc, errorQueue{}, nil)
+	server := api.NewServer(reg, svc, errorQueue{}, nil, nil)
 
 	mux := http.NewServeMux()
 	server.Register(mux)
@@ -187,7 +233,7 @@ func TestOptionsPreflight(t *testing.T) {
 	reg := domain.New()
 	svc := snapshotService()
 	queue := &fakeQueue{}
-	server := api.NewServer(reg, svc, queue, nil)
+	server := api.NewServer(reg, svc, queue, nil, nil)
 	mux := http.NewServeMux()
 	server.Register(mux)
 
@@ -213,7 +259,7 @@ func TestTelemetrySummary(t *testing.T) {
 	reg := domain.New()
 	svc := snapshotService()
 	queue := &fakeQueue{}
-	server := api.NewServer(reg, svc, queue, recorder)
+	server := api.NewServer(reg, svc, queue, recorder, nil)
 
 	mux := http.NewServeMux()
 	server.Register(mux)
@@ -239,11 +285,30 @@ func TestTelemetrySummary(t *testing.T) {
 	}
 }
 
+func TestMetricsActiveEndpoint(t *testing.T) {
+	controller := &fakeMetricsController{}
+	server := api.NewServer(domain.New(), snapshotService(), &fakeQueue{}, nil, controller)
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/metrics/active", strings.NewReader(`{"active":true}`))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected status 204 got %d", rr.Code)
+	}
+	if len(controller.activeValues) != 1 || controller.activeValues[0] != true {
+		t.Fatalf("expected metrics controller to receive active=true")
+	}
+}
+
 func TestJobStatusEndpoint(t *testing.T) {
 	job := &refresh.ManualRefreshJob{ID: "job-42", Domain: "nodes", State: refresh.JobStateQueued}
 	queue := &fakeQueue{job: job}
 
-	server := api.NewServer(domain.New(), snapshotService(), queue, nil)
+	server := api.NewServer(domain.New(), snapshotService(), queue, nil, nil)
 	mux := http.NewServeMux()
 	server.Register(mux)
 

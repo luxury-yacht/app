@@ -58,6 +58,46 @@ func TestFetchResourceSuccess(t *testing.T) {
 	require.False(t, called)
 }
 
+func TestFetchResourceUsesCache(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.responseCache = newResponseCache(time.Minute, 10)
+	callCount := 0
+
+	value, err := FetchResource(app, "cache-key", "Widget", "id", func() (string, error) {
+		callCount++
+		return "cached", nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cached", value)
+
+	value, err = FetchResource(app, "cache-key", "Widget", "id", func() (string, error) {
+		callCount++
+		return "fresh", nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cached", value)
+	require.Equal(t, 1, callCount)
+}
+
+func TestFetchResourceSkipsCacheWhenKeyEmpty(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.responseCache = newResponseCache(time.Minute, 10)
+	callCount := 0
+
+	_, err := FetchResource(app, "", "Widget", "id", func() (string, error) {
+		callCount++
+		return "first", nil
+	})
+	require.NoError(t, err)
+
+	_, err = FetchResource(app, "", "Widget", "id", func() (string, error) {
+		callCount++
+		return "second", nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, 2, callCount)
+}
+
 func TestFetchResourceListErrorEmits(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()

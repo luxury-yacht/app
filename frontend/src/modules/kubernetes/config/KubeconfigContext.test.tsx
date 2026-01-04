@@ -238,6 +238,67 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
+  it('serializes selection updates to avoid overlapping backend calls', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'beta',
+        path: '/kube/beta',
+        context: 'prod',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+      {
+        name: 'gamma',
+        path: '/kube/gamma',
+        context: 'staging',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getSelectedKubeconfigsMock.mockResolvedValue(['/kube/alpha:dev']);
+
+    let resolveFirst!: () => void;
+    const firstCall = new Promise<void>((resolve) => {
+      // Keep the first selection pending so the second request queues behind it.
+      resolveFirst = resolve;
+    });
+
+    setSelectedKubeconfigsMock.mockReturnValueOnce(firstCall).mockResolvedValueOnce(undefined);
+
+    const { getContext, unmount } = await renderProvider();
+    let secondPromise: Promise<void> | null = null;
+
+    await act(async () => {
+      void getContext().setSelectedKubeconfigs(['/kube/alpha:dev', '/kube/beta:prod']);
+      secondPromise = getContext().setSelectedKubeconfigs([
+        '/kube/alpha:dev',
+        '/kube/beta:prod',
+        '/kube/gamma:staging',
+      ]);
+      await flushPromises();
+    });
+
+    expect(setSelectedKubeconfigsMock).toHaveBeenCalledTimes(1);
+
+    resolveFirst();
+
+    await act(async () => {
+      await (secondPromise ?? Promise.resolve());
+    });
+
+    expect(setSelectedKubeconfigsMock).toHaveBeenCalledTimes(2);
+
+    unmount();
+  });
+
   it('resolves cluster metadata for Windows kubeconfig selections', async () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/luxury-yacht/app/backend/internal/cachekeys"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/resources/admission"
 	"github.com/luxury-yacht/app/backend/resources/apiextensions"
@@ -36,6 +37,11 @@ type resolvedObjectDetailContext struct {
 	scoped       bool
 }
 
+// objectDetailCacheKey matches FetchNamespacedResource cache keys for detail payloads.
+func objectDetailCacheKey(kind, namespace, name string) string {
+	return cachekeys.Build(strings.ToLower(strings.TrimSpace(kind))+"-detailed", namespace, name)
+}
+
 // resolveDetailContext ensures object detail fetches use the cluster scoped to the snapshot request.
 func (p *objectDetailProvider) resolveDetailContext(ctx context.Context) resolvedObjectDetailContext {
 	if p == nil || p.app == nil {
@@ -62,7 +68,10 @@ func (p *objectDetailProvider) resolveDetailContext(ctx context.Context) resolve
 
 func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, kind, namespace, name string) (string, error) {
 	resolved := p.resolveDetailContext(ctx)
-	return getObjectYAMLWithDependencies(resolved.deps, resolved.selectionKey, kind, namespace, name)
+	if p == nil || p.app == nil {
+		return getObjectYAMLWithDependencies(resolved.deps, resolved.selectionKey, kind, namespace, name)
+	}
+	return p.app.getObjectYAMLWithCache(resolved.deps, resolved.selectionKey, kind, namespace, name)
 }
 
 func (p *objectDetailProvider) FetchHelmManifest(ctx context.Context, namespace, name string) (string, int, error) {
@@ -80,15 +89,34 @@ func (p *objectDetailProvider) FetchHelmManifest(ctx context.Context, namespace,
 	}
 
 	service := helm.NewService(helm.Dependencies{Common: resolved.deps})
+	manifestCacheKey := objectDetailCacheKey("HelmManifest", namespace, name)
+	if p != nil && p.app != nil {
+		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, manifestCacheKey); ok {
+			if manifest, ok := cached.(string); ok {
+				// Avoid serving cached Helm data when permission checks deny access.
+				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, "HelmManifest", namespace, name) {
+					revision, err := p.helmReleaseRevisionWithCache(resolved, service, namespace, name)
+					if err != nil {
+						return manifest, 0, nil
+					}
+					return manifest, revision, nil
+				}
+			}
+			p.app.responseCacheDelete(resolved.selectionKey, manifestCacheKey)
+		}
+	}
 	manifest, err := service.ReleaseManifest(namespace, name)
 	if err != nil {
 		return "", 0, err
 	}
-	details, err := service.ReleaseDetails(namespace, name)
-	if err != nil || details == nil {
+	if p != nil && p.app != nil {
+		p.app.responseCacheStore(resolved.selectionKey, manifestCacheKey, manifest)
+	}
+	revision, err := p.helmReleaseRevisionWithCache(resolved, service, namespace, name)
+	if err != nil {
 		return manifest, 0, nil
 	}
-	return manifest, details.Revision, nil
+	return manifest, revision, nil
 }
 
 func (p *objectDetailProvider) FetchHelmValues(ctx context.Context, namespace, name string) (map[string]interface{}, int, error) {
@@ -106,21 +134,54 @@ func (p *objectDetailProvider) FetchHelmValues(ctx context.Context, namespace, n
 	}
 
 	service := helm.NewService(helm.Dependencies{Common: resolved.deps})
+	valuesCacheKey := objectDetailCacheKey("HelmValues", namespace, name)
+	if p != nil && p.app != nil {
+		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, valuesCacheKey); ok {
+			if values, ok := cached.(map[string]interface{}); ok {
+				// Avoid serving cached Helm data when permission checks deny access.
+				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, "HelmValues", namespace, name) {
+					revision, err := p.helmReleaseRevisionWithCache(resolved, service, namespace, name)
+					if err != nil {
+						return values, 0, nil
+					}
+					return values, revision, nil
+				}
+			}
+			p.app.responseCacheDelete(resolved.selectionKey, valuesCacheKey)
+		}
+	}
 	values, err := service.ReleaseValues(namespace, name)
 	if err != nil {
 		return nil, 0, err
 	}
-	details, err := service.ReleaseDetails(namespace, name)
-	if err != nil || details == nil {
+	if p != nil && p.app != nil {
+		p.app.responseCacheStore(resolved.selectionKey, valuesCacheKey, values)
+	}
+	revision, err := p.helmReleaseRevisionWithCache(resolved, service, namespace, name)
+	if err != nil {
 		return values, 0, nil
 	}
-	return values, details.Revision, nil
+	return values, revision, nil
 }
 
 func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, kind, namespace, name string) (interface{}, string, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if resolved.scoped {
-		return fetchObjectDetailsWithDependencies(resolved.deps, kind, namespace, name)
+		cacheKey := objectDetailCacheKey(kind, namespace, name)
+		if p != nil && p.app != nil {
+			if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
+				// Avoid serving cached details when permission checks deny access.
+				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, kind, namespace, name) {
+					return cached, "", nil
+				}
+				p.app.responseCacheDelete(resolved.selectionKey, cacheKey)
+			}
+		}
+		detail, version, err := fetchObjectDetailsWithDependencies(resolved.deps, kind, namespace, name)
+		if err == nil && p != nil && p.app != nil {
+			p.app.responseCacheStore(resolved.selectionKey, cacheKey, detail)
+		}
+		return detail, version, err
 	}
 
 	// Delegates to existing App getters so the frontend continues to receive
@@ -225,6 +286,35 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, kind, nam
 	default:
 		return nil, "", snapshot.ErrObjectDetailNotImplemented
 	}
+}
+
+// helmReleaseRevisionWithCache reuses cached Helm release details when possible.
+func (p *objectDetailProvider) helmReleaseRevisionWithCache(
+	resolved resolvedObjectDetailContext,
+	service *helm.Service,
+	namespace, name string,
+) (int, error) {
+	detailsCacheKey := objectDetailCacheKey("HelmRelease", namespace, name)
+	if p != nil && p.app != nil {
+		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, detailsCacheKey); ok {
+			if details, ok := cached.(*HelmReleaseDetails); ok && details != nil {
+				// Avoid serving cached Helm data when permission checks deny access.
+				if p.app.canServeCachedResponse(resolved.deps.Context, resolved.deps, resolved.selectionKey, "HelmRelease", namespace, name) {
+					return details.Revision, nil
+				}
+			}
+			p.app.responseCacheDelete(resolved.selectionKey, detailsCacheKey)
+		}
+	}
+
+	details, err := service.ReleaseDetails(namespace, name)
+	if err != nil || details == nil {
+		return 0, err
+	}
+	if p != nil && p.app != nil {
+		p.app.responseCacheStore(resolved.selectionKey, detailsCacheKey, details)
+	}
+	return details.Revision, nil
 }
 
 // fetchObjectDetailsWithDependencies resolves object detail payloads using scoped dependencies.

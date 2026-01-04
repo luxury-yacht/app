@@ -92,10 +92,6 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
 		Logger: stubLogger{},
-		PermissionCache: map[string]bool{
-			"metrics.k8s.io/nodes/list": false,
-			"metrics.k8s.io/pods/list":  false,
-		},
 	}
 
 	manager, handler, recorder, issues, cache, factory, err := NewSubsystem(cfg)
@@ -105,10 +101,8 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 	require.NotNil(t, handler)
 	require.NotNil(t, recorder)
 	require.NotEmpty(t, issues)
-	require.NotNil(t, cache)
+	require.Nil(t, cache)
 	require.NotNil(t, factory)
-	require.Contains(t, cache, "metrics.k8s.io/nodes/list")
-	require.Contains(t, cache, "metrics.k8s.io/pods/list")
 }
 
 func TestHealthHandlerReflectsInformerSync(t *testing.T) {

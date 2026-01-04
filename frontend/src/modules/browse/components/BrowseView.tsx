@@ -27,7 +27,8 @@ import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary'
 import * as cf from '@shared/components/tables/columnFactories';
 import { useTableSort } from '@/hooks/useTableSort';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
-import { refreshManager, refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
+import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
+import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -294,6 +295,7 @@ const toTableRows = (items: CatalogItem[], useShortResourceNames: boolean): Tabl
 
 const BrowseView: React.FC = () => {
   const domain = useRefreshDomain('catalog');
+  useCatalogDiagnostics(domain, 'Browse');
   const { selectedClusterId } = useKubeconfig();
   const useShortResourceNames = useShortNames();
   const { openWithObject } = useObjectPanel();
@@ -478,11 +480,7 @@ const BrowseView: React.FC = () => {
     // The refresh orchestrator only fetches snapshots for enabled domains.
     // Enable catalog while Browse is mounted, and disable it on unmount to avoid
     // background work when Browse is not in use.
-    //
-    // Also disable the underlying refresher timer so the catalog does not auto-refresh
-    // in the background. Browse v2 is intentionally snapshot/manual-refresh driven.
     refreshOrchestrator.setDomainEnabled('catalog', true);
-    refreshManager.disable('catalog');
     return () => {
       refreshOrchestrator.setDomainEnabled('catalog', false);
     };

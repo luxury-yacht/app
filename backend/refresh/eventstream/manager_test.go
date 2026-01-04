@@ -48,12 +48,61 @@ func TestManagerBroadcastsToSubscribers(t *testing.T) {
 	select {
 	case <-time.After(2 * time.Second):
 		t.Fatalf("timed out waiting for event")
-	case entry, ok := <-ach:
+	case streamEvent, ok := <-ach:
 		if !ok {
 			t.Fatalf("subscription channel closed")
 		}
-		if entry.Name != "test-event" || entry.Namespace != "default" {
-			t.Fatalf("unexpected entry: %+v", entry)
+		if streamEvent.Sequence == 0 {
+			t.Fatalf("expected sequence to be set")
 		}
+		if streamEvent.Entry.Name != "test-event" || streamEvent.Entry.Namespace != "default" {
+			t.Fatalf("unexpected entry: %+v", streamEvent.Entry)
+		}
+	}
+}
+
+func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
+	manager := &Manager{
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*eventBuffer),
+		sequences:   make(map[string]uint64),
+	}
+
+	_, cancel := manager.Subscribe("namespace:default")
+
+	event := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-event",
+			Namespace: "default",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      "Pod",
+			Name:      "web-123",
+			Namespace: "default",
+		},
+		Message: "Pod restarted",
+		Type:    "Warning",
+	}
+
+	manager.handleEvent(event)
+
+	if _, ok := manager.buffers["namespace:default"]; !ok {
+		t.Fatal("expected resume buffer to be created")
+	}
+
+	cancel()
+
+	if _, ok := manager.buffers["namespace:default"]; ok {
+		t.Fatal("expected resume buffer to be evicted")
+	}
+	if _, ok := manager.sequences["namespace:default"]; ok {
+		t.Fatal("expected sequence state to be evicted")
+	}
+
+	manager.handleEvent(event)
+
+	if _, ok := manager.buffers["namespace:default"]; ok {
+		t.Fatal("expected no resume buffer without subscribers")
 	}
 }

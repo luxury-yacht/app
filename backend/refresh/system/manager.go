@@ -22,6 +22,8 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/logstream"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
+	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
@@ -45,7 +47,6 @@ type Config struct {
 	HelmFactory             snapshot.HelmActionFactory
 	ObjectDetailsProvider   snapshot.ObjectDetailProvider
 	Logger                  logstream.Logger
-	PermissionCache         map[string]bool
 	ObjectCatalogEnabled    func() bool
 	ObjectCatalogService    func() *objectcatalog.Service
 	ObjectCatalogNamespaces func() []snapshot.CatalogNamespaceGroup
@@ -59,12 +60,13 @@ type Subsystem struct {
 	Handler          http.Handler
 	Telemetry        *telemetry.Recorder
 	PermissionIssues []PermissionIssue
-	PermissionCache  map[string]bool
 	InformerFactory  *informer.Factory
+	RuntimePerms     *permissions.Checker
 	Registry         *domain.Registry
 	SnapshotService  refresh.SnapshotService
 	ManualQueue      refresh.ManualQueue
 	EventStream      *eventstream.Manager
+	ResourceStream   *resourcestream.Manager
 	ClusterMeta      snapshot.ClusterMeta
 }
 
@@ -80,7 +82,7 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 		subsystem.Handler,
 		subsystem.Telemetry,
 		subsystem.PermissionIssues,
-		subsystem.PermissionCache,
+		nil,
 		subsystem.InformerFactory,
 		nil
 }
@@ -88,7 +90,9 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 // NewSubsystemWithServices returns a fully wired refresh subsystem.
 func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	registry := domain.New()
-	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, cfg.PermissionCache)
+	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, nil)
+	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
+	informerFactory.ConfigureRuntimePermissions(runtimePerms, cfg.Logger)
 
 	preflight := []informer.PermissionRequest{
 		{Group: "metrics.k8s.io", Resource: "nodes", Verb: "list"},
@@ -155,8 +159,10 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	appendIssue("metrics-poller", "metrics.k8s.io/nodes,pods", metricsNodesErr, metricsPodsErr)
 	if metricsNodesErr == nil && metricsPodsErr == nil && metricsNodesAllowed && metricsPodsAllowed {
 		poller := metrics.NewPoller(cfg.MetricsClient, cfg.RestConfig, cfg.MetricsInterval, telemetryRecorder)
-		metricsPoller = poller
-		metricsProvider = poller
+		idleTimeout := cfg.MetricsInterval * 3
+		demandPoller := metrics.NewDemandPoller(poller, poller, idleTimeout)
+		metricsPoller = demandPoller
+		metricsProvider = demandPoller
 	} else {
 		logSkip("metrics-poller", "metrics.k8s.io", "nodes/pods")
 
@@ -360,7 +366,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 			return nil, err
 		}
 	}
-	if err := snapshot.RegisterObjectEventsDomain(registry, cfg.KubernetesClient); err != nil {
+	if err := snapshot.RegisterObjectEventsDomain(registry, cfg.KubernetesClient, informerFactory.SharedInformerFactory()); err != nil {
 		return nil, err
 	}
 
@@ -500,14 +506,14 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		}
 	}
 
-	snapshotService := snapshot.NewService(registry, telemetryRecorder, clusterMeta)
+	snapshotService := snapshot.NewServiceWithPermissions(registry, telemetryRecorder, clusterMeta, runtimePerms)
 	queue := refresh.NewInMemoryQueue()
 
 	manager := refresh.NewManager(registry, informerFactory, snapshotService, metricsPoller, queue)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz/refresh", HealthHandler(informerFactory))
-	api.NewServer(registry, snapshotService, queue, telemetryRecorder).Register(mux)
+	api.NewServer(registry, snapshotService, queue, telemetryRecorder, manager).Register(mux)
 
 	logHandler, err := logstream.NewHandler(cfg.KubernetesClient, cfg.Logger, telemetryRecorder)
 	if err != nil {
@@ -526,6 +532,20 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	}
 	mux.Handle("/api/v2/stream/events", eventHandler)
 
+	resourceManager := resourcestream.NewManager(
+		informerFactory,
+		metricsProvider,
+		cfg.Logger,
+		telemetryRecorder,
+		clusterMeta,
+		cfg.DynamicClient,
+	)
+	resourceHandler, err := resourcestream.NewHandler(resourceManager, cfg.Logger, telemetryRecorder, clusterMeta)
+	if err != nil {
+		return nil, err
+	}
+	mux.Handle("/api/v2/stream/resources", resourceHandler)
+
 	if cfg.ObjectCatalogService != nil {
 		catalogHandler := snapshot.NewCatalogStreamHandler(cfg.ObjectCatalogService, cfg.Logger, telemetryRecorder, clusterMeta)
 		mux.Handle("/api/v2/stream/catalog", catalogHandler)
@@ -536,12 +556,13 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		Handler:          mux,
 		Telemetry:        telemetryRecorder,
 		PermissionIssues: permissionIssues,
-		PermissionCache:  informerFactory.PermissionCacheSnapshot(),
 		InformerFactory:  informerFactory,
+		RuntimePerms:     runtimePerms,
 		Registry:         registry,
 		SnapshotService:  snapshotService,
 		ManualQueue:      queue,
 		EventStream:      eventManager,
+		ResourceStream:   resourceManager,
 		ClusterMeta:      clusterMeta,
 	}, nil
 }

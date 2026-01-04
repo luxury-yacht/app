@@ -127,7 +127,6 @@ describe('BrowseView', () => {
     });
 
     expect(refreshMocks.orchestrator.setDomainEnabled).toHaveBeenCalledWith('catalog', true);
-    expect(refreshMocks.manager.disable).toHaveBeenCalledWith('catalog');
     expect(refreshMocks.orchestrator.setDomainScope).toHaveBeenCalledWith(
       'catalog',
       'cluster-1|limit=200'

@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
 	authorizationv1 "k8s.io/api/authorization/v1"
@@ -62,6 +63,7 @@ func TestEvaluateCapabilitiesSuccess(t *testing.T) {
 			Resource: "deployments",
 		},
 		namespaced: true,
+		cachedAt:   time.Now(),
 	}
 	gvrCacheMutex.Unlock()
 	defer func() {
@@ -159,6 +161,7 @@ func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
 			Resource: "deployments",
 		},
 		namespaced: true,
+		cachedAt:   time.Now(),
 	}
 	gvrCacheMutex.Unlock()
 	defer func() {

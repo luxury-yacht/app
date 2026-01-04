@@ -2,9 +2,9 @@ package backend
 
 import (
 	"context"
-	"testing"
-
 	"strings"
+	"testing"
+	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
@@ -261,6 +261,7 @@ func TestObjectDetailProviderFetchObjectYAML(t *testing.T) {
 		"ConfigMap": {
 			gvr:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"},
 			namespaced: true,
+			cachedAt:   time.Now(),
 		},
 	}
 	gvrCacheMutex.Unlock()

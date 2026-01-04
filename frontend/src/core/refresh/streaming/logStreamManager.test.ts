@@ -91,6 +91,34 @@ describe('LogStreamManager', () => {
     expect(state.data?.resetCount).toBe(1);
   });
 
+  test('applyPayload uses permission denied details when provided', async () => {
+    const { LogStreamManager } = await import('./logStreamManager');
+    const manager = new LogStreamManager();
+
+    manager.applyPayload(
+      SCOPE,
+      {
+        domain: 'object-logs',
+        scope: SCOPE,
+        sequence: 1,
+        generatedAt: 123,
+        errorDetails: {
+          kind: 'Status',
+          apiVersion: 'v1',
+          message: 'permission denied',
+          reason: 'Forbidden',
+          details: { domain: 'object-logs', resource: 'core/pods/log' },
+          code: 403,
+        },
+      },
+      'stream'
+    );
+
+    const state = getScopedDomainState('object-logs', SCOPE);
+    expect(state.status).toBe('error');
+    expect(state.error).toBe('permission denied (domain object-logs, resource core/pods/log)');
+  });
+
   test('handleStreamError sets error state', async () => {
     const { LogStreamManager } = await import('./logStreamManager');
     const manager = new LogStreamManager();

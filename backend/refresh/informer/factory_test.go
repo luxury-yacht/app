@@ -2,6 +2,8 @@ package informer
 
 import (
 	"context"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -11,6 +13,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
+
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
 
 func TestNewFactoryRegistersPodNodeIndex(t *testing.T) {
@@ -139,9 +143,86 @@ func TestProcessPendingClusterInformersSkipsWithoutPermissions(t *testing.T) {
 	}
 }
 
+func TestRuntimePermissionFallbackUsesLegacyCache(t *testing.T) {
+	client := fake.NewClientset()
+
+	factory := newMinimalFactory(client)
+	logger := &captureLogger{}
+	checker := permissions.NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
+		return false, context.DeadlineExceeded
+	})
+	factory.storeLegacyPermission("/pods/list", true)
+	factory.ConfigureRuntimePermissions(checker, logger)
+
+	allowed, err := factory.CanListResource("", "pods")
+	if err != nil {
+		t.Fatalf("CanListResource returned error: %v", err)
+	}
+	if allowed {
+		// ok
+	} else {
+		t.Fatalf("expected fallback to allow based on legacy cache")
+	}
+	if logger.countWarningsContaining("permission fallback") == 0 {
+		t.Fatalf("expected fallback warning to be logged")
+	}
+}
+
+func TestLegacyPermissionCacheExpires(t *testing.T) {
+	client := fake.NewClientset()
+	now := time.Now()
+	factory := newMinimalFactory(client)
+	factory.permissionCacheTTL = time.Minute
+	factory.permissionNow = func() time.Time { return now }
+
+	factory.storeLegacyPermission("/pods/list", true)
+	if allowed, ok := factory.readLegacyPermission("/pods/list"); !ok || !allowed {
+		t.Fatalf("expected legacy permission to be cached")
+	}
+
+	now = now.Add(2 * time.Minute)
+	if _, ok := factory.readLegacyPermission("/pods/list"); ok {
+		t.Fatalf("expected legacy permission cache to expire")
+	}
+
+	if snapshot := factory.PermissionCacheSnapshot(); snapshot != nil {
+		t.Fatalf("expected expired cache to be evicted")
+	}
+}
+
 func newMinimalFactory(client kubernetes.Interface) *Factory {
 	return &Factory{
-		kubeClient:      client,
-		permissionCache: make(map[string]bool),
+		kubeClient:         client,
+		permissionCache:    make(map[string]permissionCacheEntry),
+		permissionAllowed:  make(map[string]struct{}),
+		permissionCacheTTL: time.Minute,
+		permissionNow:      time.Now,
 	}
+}
+
+type captureLogger struct {
+	mu       sync.Mutex
+	warnings []string
+}
+
+func (c *captureLogger) Debug(string, ...string) {}
+func (c *captureLogger) Info(string, ...string)  {}
+func (c *captureLogger) Error(string, ...string) {}
+
+func (c *captureLogger) Warn(message string, _ ...string) {
+	c.mu.Lock()
+	c.warnings = append(c.warnings, message)
+	c.mu.Unlock()
+}
+
+func (c *captureLogger) countWarningsContaining(match string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	count := 0
+	for _, msg := range c.warnings {
+		if strings.Contains(msg, match) {
+			count++
+		}
+	}
+	return count
 }

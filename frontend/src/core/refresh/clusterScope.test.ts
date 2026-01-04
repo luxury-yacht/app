@@ -7,7 +7,13 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buildClusterScope, buildClusterScopeList, stripClusterScope } from './clusterScope';
+import {
+  buildClusterScope,
+  buildClusterScopeList,
+  parseClusterScopeList,
+  parseClusterScope,
+  stripClusterScope,
+} from './clusterScope';
 
 describe('clusterScope helpers', () => {
   it('prefixes scope with a single cluster id when missing', () => {
@@ -45,5 +51,68 @@ describe('clusterScope helpers', () => {
     expect(buildClusterScopeList(['cluster-b'], 'cluster-a|namespace:default')).toBe(
       'cluster-a|namespace:default'
     );
+  });
+
+  it('parses single-cluster scopes with a delimiter', () => {
+    const parsed = parseClusterScope('cluster-a|namespace:default');
+    expect(parsed).toEqual({
+      clusterId: 'cluster-a',
+      scope: 'namespace:default',
+      isMultiCluster: false,
+    });
+  });
+
+  it('parses multi-cluster scopes and reports multi-cluster state', () => {
+    const parsed = parseClusterScope('clusters=cluster-a,cluster-b|namespace:default');
+    expect(parsed).toEqual({
+      clusterId: '',
+      scope: 'namespace:default',
+      isMultiCluster: true,
+    });
+  });
+
+  it('parses single-cluster lists as a single cluster', () => {
+    const parsed = parseClusterScope('clusters=cluster-a|');
+    expect(parsed).toEqual({
+      clusterId: 'cluster-a',
+      scope: '',
+      isMultiCluster: false,
+    });
+  });
+
+  it('parses cluster scope lists with multiple clusters', () => {
+    const parsed = parseClusterScopeList('clusters=cluster-a,cluster-b|namespace:default');
+    expect(parsed).toEqual({
+      clusterIds: ['cluster-a', 'cluster-b'],
+      scope: 'namespace:default',
+      isMultiCluster: true,
+    });
+  });
+
+  it('parses single-cluster scope lists', () => {
+    const parsed = parseClusterScopeList('clusters=cluster-a|');
+    expect(parsed).toEqual({
+      clusterIds: ['cluster-a'],
+      scope: '',
+      isMultiCluster: false,
+    });
+  });
+
+  it('parses cluster-prefixed scopes into a single cluster list', () => {
+    const parsed = parseClusterScopeList('cluster-a|namespace:default');
+    expect(parsed).toEqual({
+      clusterIds: ['cluster-a'],
+      scope: 'namespace:default',
+      isMultiCluster: false,
+    });
+  });
+
+  it('returns empty cluster lists when no prefix is present', () => {
+    const parsed = parseClusterScopeList('namespace:default');
+    expect(parsed).toEqual({
+      clusterIds: [],
+      scope: 'namespace:default',
+      isMultiCluster: false,
+    });
   });
 });

@@ -46,6 +46,25 @@ export interface DiagnosticsRow {
   namespace: string;
 }
 
+// DiagnosticsStreamRow captures formatted stream telemetry for the streams table.
+export interface DiagnosticsStreamRow {
+  rowKey: string;
+  label: string;
+  sessions: number;
+  delivered: number;
+  dropped: number;
+  errors: number;
+  resyncs: number | null;
+  resyncsTooltip?: string;
+  fallbacks: number | null;
+  fallbacksTooltip?: string;
+  lastConnect: string;
+  lastConnectTooltip: string;
+  lastEvent: string;
+  lastEventTooltip: string;
+  lastError: string;
+}
+
 export interface CapabilityDescriptorActivityDetails {
   namespace: string;
   descriptorLabel: string;

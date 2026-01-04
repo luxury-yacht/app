@@ -97,6 +97,16 @@ describe('ErrorHandler', () => {
     expect(details.category).toBe(ErrorCategory.TIMEOUT);
   });
 
+  it('does not treat token substrings in resource names as auth failures', () => {
+    const details = handler.handle('failed to list cloudsmithaccesstokens');
+    expect(details.category).toBe(ErrorCategory.UNKNOWN);
+  });
+
+  it('detects authentication when token errors are explicit', () => {
+    const details = handler.handle('token has expired');
+    expect(details.category).toBe(ErrorCategory.AUTHENTICATION);
+  });
+
   it('updates options and disables console logging when requested', () => {
     handler.updateOptions({ enableLogging: true, logToConsole: false });
     handler.handle('Unknown failure');

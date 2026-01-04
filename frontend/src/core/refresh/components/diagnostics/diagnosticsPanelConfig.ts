@@ -89,6 +89,30 @@ export const DOMAIN_REFRESHER_MAP: Partial<Record<RefreshDomain, RefresherName>>
   'object-logs': SYSTEM_REFRESHERS.objectLogs,
 };
 
+// Stream telemetry names for diagnostics (only set for stream-backed domains).
+export const DOMAIN_STREAM_MAP: Partial<Record<RefreshDomain, string>> = {
+  pods: 'resources',
+  'namespace-workloads': 'resources',
+  'namespace-config': 'resources',
+  'namespace-network': 'resources',
+  'namespace-rbac': 'resources',
+  'namespace-custom': 'resources',
+  'namespace-helm': 'resources',
+  'namespace-autoscaling': 'resources',
+  'namespace-quotas': 'resources',
+  'namespace-storage': 'resources',
+  nodes: 'resources',
+  'cluster-rbac': 'resources',
+  'cluster-storage': 'resources',
+  'cluster-config': 'resources',
+  'cluster-crds': 'resources',
+  'cluster-custom': 'resources',
+  'cluster-events': 'events',
+  'namespace-events': 'events',
+  catalog: 'catalog',
+  'object-logs': 'object-logs',
+};
+
 export const PRIORITY_DOMAINS: RefreshDomain[] = [
   'namespaces',
   'nodes',

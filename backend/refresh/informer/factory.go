@@ -20,6 +20,8 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh/logstream"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 )
 
 // Factory wraps the shared informer factory used by the refresh subsystem.
@@ -38,9 +40,23 @@ type Factory struct {
 
 	pendingClusterInformers []clusterInformerRegistration
 
-	permissionCache map[string]bool
-	permissionMu    sync.RWMutex
-	permissionGroup singleflight.Group
+	// permissionCache stores legacy SSAR results for fallback when runtime checks fail.
+	// Entries expire to avoid holding stale authorization decisions indefinitely.
+	permissionCache map[string]permissionCacheEntry
+	// permissionAllowed tracks permission keys that have been allowed at least once.
+	permissionAllowed  map[string]struct{}
+	permissionCacheTTL time.Duration
+	permissionNow      func() time.Time
+	permissionMu       sync.RWMutex
+	permissionGroup    singleflight.Group
+
+	runtimePermissions *permissions.Checker
+	runtimeLogger      logstream.Logger
+}
+
+type permissionCacheEntry struct {
+	allowed   bool
+	expiresAt time.Time
 }
 
 const podNodeIndexName = "pods:node"
@@ -72,6 +88,15 @@ func (f *Factory) CanWatchResource(group, resource string) (bool, error) {
 	return f.checkResourceVerb(group, resource, "watch")
 }
 
+// ConfigureRuntimePermissions sets the runtime permission checker used for gating.
+func (f *Factory) ConfigureRuntimePermissions(checker *permissions.Checker, logger logstream.Logger) {
+	if f == nil {
+		return
+	}
+	f.runtimePermissions = checker
+	f.runtimeLogger = logger
+}
+
 // New returns a new informer Factory with the provided resync period.
 func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interface, resync time.Duration, permissionCache map[string]bool) *Factory {
 	if resync <= 0 {
@@ -79,14 +104,17 @@ func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interf
 	}
 	kubeFactory := informers.NewSharedInformerFactory(client, resync)
 	result := &Factory{
-		kubeClient:      client,
-		resync:          resync,
-		factory:         kubeFactory,
-		permissionCache: make(map[string]bool),
+		kubeClient:         client,
+		resync:             resync,
+		factory:            kubeFactory,
+		permissionCache:    make(map[string]permissionCacheEntry),
+		permissionAllowed:  make(map[string]struct{}),
+		permissionCacheTTL: config.PermissionCacheTTL,
+		permissionNow:      time.Now,
 	}
 	if len(permissionCache) > 0 {
 		for k, v := range permissionCache {
-			result.permissionCache[k] = v
+			result.storeLegacyPermission(k, v)
 		}
 	}
 	result.registerClusterInformer("", "nodes", func() cache.SharedIndexInformer {
@@ -211,6 +239,7 @@ func (f *Factory) Shutdown() error {
 
 	f.permissionMu.Lock()
 	f.permissionCache = nil
+	f.permissionAllowed = nil
 	f.permissionMu.Unlock()
 
 	// Clear factory references to allow GC
@@ -305,20 +334,27 @@ func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) 
 
 	key := fmt.Sprintf("%s/%s/%s", group, resource, verb)
 
-	f.permissionMu.RLock()
-	if allowed, ok := f.permissionCache[key]; ok {
-		f.permissionMu.RUnlock()
-		return allowed, nil
-	}
-	f.permissionMu.RUnlock()
-
-	value, err, _ := f.permissionGroup.Do(key, func() (interface{}, error) {
-		f.permissionMu.RLock()
-		if allowed, ok := f.permissionCache[key]; ok {
-			f.permissionMu.RUnlock()
+	if f.runtimePermissions != nil {
+		decision, err := f.runtimePermissions.Can(context.Background(), group, resource, verb)
+		if err == nil {
+			f.storeLegacyPermission(key, decision.Allowed)
+			return decision.Allowed, nil
+		}
+		if allowed, ok := f.readLegacyPermission(key); ok {
+			f.logRuntimeFallback(group, resource, verb, err)
 			return allowed, nil
 		}
-		f.permissionMu.RUnlock()
+		return false, err
+	}
+
+	if allowed, ok := f.readLegacyPermission(key); ok {
+		return allowed, nil
+	}
+
+	value, err, _ := f.permissionGroup.Do(key, func() (interface{}, error) {
+		if allowed, ok := f.readLegacyPermission(key); ok {
+			return allowed, nil
+		}
 
 		review := &authorizationv1.SelfSubjectAccessReview{
 			Spec: authorizationv1.SelfSubjectAccessReviewSpec{
@@ -340,9 +376,7 @@ func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) 
 		}
 
 		allowed := resp.Status.Allowed
-		f.permissionMu.Lock()
-		f.permissionCache[key] = allowed
-		f.permissionMu.Unlock()
+		f.storeLegacyPermission(key, allowed)
 		return allowed, nil
 	})
 	if err != nil {
@@ -351,6 +385,70 @@ func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) 
 
 	allowed, _ := value.(bool)
 	return allowed, nil
+}
+
+func (f *Factory) readLegacyPermission(key string) (bool, bool) {
+	if f == nil {
+		return false, false
+	}
+	now := f.permissionCacheNow()
+	f.permissionMu.RLock()
+	entry, ok := f.permissionCache[key]
+	f.permissionMu.RUnlock()
+	if !ok {
+		return false, false
+	}
+	if !entry.expiresAt.IsZero() && now.After(entry.expiresAt) {
+		// Drop expired entries so fallback does not reuse stale decisions.
+		f.permissionMu.Lock()
+		entry, ok = f.permissionCache[key]
+		if ok && !entry.expiresAt.IsZero() && now.After(entry.expiresAt) {
+			delete(f.permissionCache, key)
+		}
+		f.permissionMu.Unlock()
+		return false, false
+	}
+	return entry.allowed, true
+}
+
+func (f *Factory) storeLegacyPermission(key string, allowed bool) {
+	if f == nil {
+		return
+	}
+	ttl := f.permissionCacheTTLValue()
+	if ttl <= 0 {
+		return
+	}
+	entry := permissionCacheEntry{
+		allowed:   allowed,
+		expiresAt: f.permissionCacheNow().Add(ttl),
+	}
+	f.permissionMu.Lock()
+	if f.permissionCache != nil {
+		f.permissionCache[key] = entry
+	}
+	if allowed && f.permissionAllowed != nil {
+		f.permissionAllowed[key] = struct{}{}
+	}
+	f.permissionMu.Unlock()
+}
+
+func (f *Factory) logRuntimeFallback(group, resource, verb string, err error) {
+	if err == nil {
+		return
+	}
+	message := fmt.Sprintf(
+		"permission fallback for %s/%s verb %s due to runtime error: %v",
+		group,
+		resource,
+		verb,
+		err,
+	)
+	if f.runtimeLogger != nil {
+		f.runtimeLogger.Warn(message, "Permissions")
+	} else {
+		klog.V(1).Info(message)
+	}
 }
 
 func (f *Factory) PrimePermissions(ctx context.Context, requests []PermissionRequest) error {
@@ -376,16 +474,58 @@ func (f *Factory) PrimePermissions(ctx context.Context, requests []PermissionReq
 }
 
 func (f *Factory) PermissionCacheSnapshot() map[string]bool {
-	f.permissionMu.RLock()
-	defer f.permissionMu.RUnlock()
+	if f == nil {
+		return nil
+	}
+	now := f.permissionCacheNow()
+	f.permissionMu.Lock()
+	defer f.permissionMu.Unlock()
 
 	if len(f.permissionCache) == 0 {
 		return nil
 	}
 
 	snapshot := make(map[string]bool, len(f.permissionCache))
-	for k, v := range f.permissionCache {
-		snapshot[k] = v
+	for k, entry := range f.permissionCache {
+		if !entry.expiresAt.IsZero() && now.After(entry.expiresAt) {
+			delete(f.permissionCache, k)
+			continue
+		}
+		snapshot[k] = entry.allowed
+	}
+	if len(snapshot) == 0 {
+		return nil
 	}
 	return snapshot
+}
+
+// PermissionAllowedSnapshot returns keys that have been allowed at least once.
+func (f *Factory) PermissionAllowedSnapshot() []string {
+	if f == nil {
+		return nil
+	}
+	f.permissionMu.RLock()
+	defer f.permissionMu.RUnlock()
+	if len(f.permissionAllowed) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(f.permissionAllowed))
+	for key := range f.permissionAllowed {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func (f *Factory) permissionCacheNow() time.Time {
+	if f != nil && f.permissionNow != nil {
+		return f.permissionNow()
+	}
+	return time.Now()
+}
+
+func (f *Factory) permissionCacheTTLValue() time.Duration {
+	if f != nil && f.permissionCacheTTL > 0 {
+		return f.permissionCacheTTL
+	}
+	return config.PermissionCacheTTL
 }

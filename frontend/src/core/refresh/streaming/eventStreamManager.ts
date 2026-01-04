@@ -13,7 +13,9 @@ import type {
   ClusterEventsSnapshotPayload,
   NamespaceEventSummary,
   NamespaceEventsSnapshotPayload,
+  PermissionDeniedStatus,
 } from '../types';
+import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
 import { formatAge } from '@/utils/ageFormatter';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
@@ -39,7 +41,10 @@ interface StreamEventPayload {
     age?: string;
     createdAt?: number;
   }>;
+  total?: number;
+  truncated?: boolean;
   error?: string;
+  errorDetails?: PermissionDeniedStatus;
 }
 
 function isValidStreamEventPayload(data: unknown): data is StreamEventPayload {
@@ -68,6 +73,18 @@ function isValidStreamEventPayload(data: unknown): data is StreamEventPayload {
     return false;
   }
 
+  if (obj.errorDetails !== undefined && !isPermissionDeniedStatus(obj.errorDetails)) {
+    return false;
+  }
+
+  if (obj.total !== undefined && typeof obj.total !== 'number') {
+    return false;
+  }
+
+  if (obj.truncated !== undefined && typeof obj.truncated !== 'boolean') {
+    return false;
+  }
+
   // events must be an array if present
   if (obj.events !== undefined && !Array.isArray(obj.events)) {
     return false;
@@ -80,15 +97,19 @@ const CLUSTER_DOMAIN = 'cluster-events' as const;
 const NAMESPACE_DOMAIN = 'namespace-events' as const;
 const CLUSTER_SCOPE = 'cluster';
 
-const MAX_CLUSTER_EVENTS = 200;
-const MAX_NAMESPACE_EVENTS = 200;
+const MAX_CLUSTER_EVENTS = 500;
+const MAX_NAMESPACE_EVENTS = 500;
 const STREAM_ERROR_NOTIFY_THRESHOLD = 3;
+const STREAM_RESYNC_MESSAGE = 'Stream resyncing';
+const RESYNC_STATE_ENABLED = true;
 
 class EventStreamConnection {
   private eventSource: EventSource | null = null;
   private retryTimer: number | null = null;
   private closed = false;
   private attempt = 0;
+  // Track the last SSE id so reconnects can request a resume window.
+  private lastEventId: string | null = null;
 
   constructor(
     private readonly domain: typeof CLUSTER_DOMAIN | typeof NAMESPACE_DOMAIN,
@@ -114,6 +135,9 @@ class EventStreamConnection {
       this.eventSource.close();
       this.eventSource = null;
     }
+    if (reset) {
+      this.lastEventId = null;
+    }
     this.manager.markIdle(this.domain, this.scope, reset);
   }
 
@@ -126,6 +150,10 @@ class EventStreamConnection {
 
       const url = new URL('/api/v2/stream/events', baseURL);
       url.searchParams.set('scope', this.scope);
+      const resumeId = this.getResumeId();
+      if (resumeId) {
+        url.searchParams.set('since', resumeId);
+      }
 
       const eventSource = new EventSource(url.toString());
       this.eventSource = eventSource;
@@ -169,6 +197,7 @@ class EventStreamConnection {
       if (parsed.scope !== this.scope || parsed.domain !== this.domain) {
         return;
       }
+      this.rememberEventId(event, parsed);
       this.manager.applyPayload(this.domain, this.scope, parsed);
     } catch (error) {
       console.error('Failed to parse event stream payload', error);
@@ -182,6 +211,28 @@ class EventStreamConnection {
     this.manager.handleStreamError(this.domain, this.scope, 'Event stream connection lost');
     this.scheduleReconnect();
   };
+
+  private getResumeId(): string | null {
+    if (!this.lastEventId) {
+      return null;
+    }
+    const parsed = Number(this.lastEventId);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return null;
+    }
+    return String(parsed);
+  }
+
+  private rememberEventId(event: MessageEvent, payload: StreamEventPayload): void {
+    const raw = event.lastEventId?.trim();
+    if (raw) {
+      this.lastEventId = raw;
+      return;
+    }
+    if (typeof payload.sequence === 'number' && Number.isFinite(payload.sequence)) {
+      this.lastEventId = String(payload.sequence);
+    }
+  }
 }
 
 // Include cluster identity in the dedupe key so multi-cluster streams don't collapse events.
@@ -363,7 +414,13 @@ export class EventStreamManager {
   applyPayload(domain: string, scope: string, payload: StreamEventPayload): void {
     const generatedAt = payload.generatedAt || Date.now();
     const events = payload.events ?? [];
-    if (!payload.reset && events.length === 0 && !payload.error) {
+    const errorMessage = resolvePermissionDeniedMessage(
+      payload.error ?? null,
+      payload.errorDetails
+    );
+    const payloadTotal = typeof payload.total === 'number' ? payload.total : undefined;
+    const payloadTruncated = typeof payload.truncated === 'boolean' ? payload.truncated : undefined;
+    if (!payload.reset && events.length === 0 && !errorMessage) {
       return;
     }
     if (domain === CLUSTER_DOMAIN) {
@@ -371,9 +428,12 @@ export class EventStreamManager {
       const { items, total, truncated } = payload.reset
         ? mergeEvents([], incoming, MAX_CLUSTER_EVENTS)
         : mergeEvents(this.clusterEvents, incoming, MAX_CLUSTER_EVENTS);
+      const resolvedTotal =
+        payloadTotal !== undefined ? Math.max(payloadTotal, items.length) : total;
+      const resolvedTruncated = payloadTruncated !== undefined ? payloadTruncated : truncated;
       this.clusterEvents = items.map(normalizeClusterEntry);
-      this.clusterEventMeta = { total, truncated };
-      this.scheduleClusterStateUpdate(generatedAt, payload.error ?? null);
+      this.clusterEventMeta = { total: resolvedTotal, truncated: resolvedTruncated };
+      this.scheduleClusterStateUpdate(generatedAt, errorMessage);
       return;
     }
 
@@ -383,9 +443,12 @@ export class EventStreamManager {
       const { items, total, truncated } = payload.reset
         ? mergeEvents([], incoming, MAX_NAMESPACE_EVENTS)
         : mergeEvents(existing, incoming, MAX_NAMESPACE_EVENTS);
+      const resolvedTotal =
+        payloadTotal !== undefined ? Math.max(payloadTotal, items.length) : total;
+      const resolvedTruncated = payloadTruncated !== undefined ? payloadTruncated : truncated;
       this.namespaceEvents.set(scope, items.map(normalizeNamespaceEntry));
-      this.namespaceEventMeta.set(scope, { total, truncated });
-      this.scheduleNamespaceStateUpdate(scope, generatedAt, payload.error ?? null);
+      this.namespaceEventMeta.set(scope, { total: resolvedTotal, truncated: resolvedTruncated });
+      this.scheduleNamespaceStateUpdate(scope, generatedAt, errorMessage);
     }
   }
 
@@ -394,12 +457,19 @@ export class EventStreamManager {
     const attempts = (this.consecutiveErrors.get(key) ?? 0) + 1;
     this.consecutiveErrors.set(key, attempts);
     const isTerminal = attempts >= STREAM_ERROR_NOTIFY_THRESHOLD;
+    const resyncing = RESYNC_STATE_ENABLED && !isTerminal;
 
     if (domain === CLUSTER_DOMAIN) {
       setDomainState(CLUSTER_DOMAIN, (previous) => ({
         ...previous,
-        status: isTerminal ? 'error' : previous.status === 'ready' ? 'ready' : 'updating',
-        error: isTerminal ? message : null,
+        status: isTerminal
+          ? 'error'
+          : resyncing
+            ? 'updating'
+            : previous.status === 'ready'
+              ? 'ready'
+              : 'updating',
+        error: isTerminal ? message : resyncing ? STREAM_RESYNC_MESSAGE : null,
         scope,
       }));
       if (isTerminal) {
@@ -410,8 +480,14 @@ export class EventStreamManager {
     if (domain === NAMESPACE_DOMAIN) {
       setDomainState(NAMESPACE_DOMAIN, (previous) => ({
         ...previous,
-        status: isTerminal ? 'error' : previous.status === 'ready' ? 'ready' : 'updating',
-        error: isTerminal ? message : null,
+        status: isTerminal
+          ? 'error'
+          : resyncing
+            ? 'updating'
+            : previous.status === 'ready'
+              ? 'ready'
+              : 'updating',
+        error: isTerminal ? message : resyncing ? STREAM_RESYNC_MESSAGE : null,
         scope,
       }));
       if (isTerminal) {

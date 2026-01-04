@@ -24,6 +24,9 @@ export enum ErrorSeverity {
   CRITICAL = 'critical',
 }
 
+// Word-boundary token matching avoids resource-name false positives.
+const authTokenPattern = /\btokens?\b/;
+
 export interface ErrorDetails {
   message: string;
   category: ErrorCategory;
@@ -85,7 +88,7 @@ class ErrorHandler {
       lowerError.includes('unauthorized') ||
       lowerError.includes('authentication') ||
       lowerError.includes('auth') ||
-      lowerError.includes('token') ||
+      authTokenPattern.test(lowerError) ||
       lowerError.includes('expired') ||
       lowerError.includes('401')
     ) {

@@ -20,6 +20,8 @@ type Manager struct {
 	manualQueue     ManualQueue
 	mu              sync.RWMutex
 	started         bool
+	// runCancel stops informers/metrics/manual queue without requiring callers to hold the parent cancel.
+	runCancel context.CancelFunc
 }
 
 // Registry abstracts domain registration for snapshots.
@@ -132,18 +134,23 @@ func NewManager(reg Registry, hub InformerHub, svc SnapshotService, poller Metri
 	}
 }
 
-// Start boots the informer hub and metrics poller exactly once.
+// Start boots the informer hub and captures the metrics poller context once.
 func (m *Manager) Start(ctx context.Context) error {
 	m.mu.Lock()
 	if m.started {
 		m.mu.Unlock()
 		return nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	runCtx, cancel := context.WithCancel(ctx)
 	m.started = true
+	m.runCancel = cancel
 	m.mu.Unlock()
 
 	if m.informerHub != nil {
-		if err := m.informerHub.Start(ctx); err != nil {
+		if err := m.informerHub.Start(runCtx); err != nil {
 			return err
 		}
 	}
@@ -155,7 +162,7 @@ func (m *Manager) Start(ctx context.Context) error {
 					log.Printf("[refresh] panic in metrics poller: %v", r)
 				}
 			}()
-			if err := m.metricsPoller.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
+			if err := m.metricsPoller.Start(runCtx); err != nil && !errors.Is(err, context.Canceled) {
 				log.Printf("[refresh] metrics poller stopped with error: %v", err)
 			}
 		}()
@@ -168,11 +175,21 @@ func (m *Manager) Start(ctx context.Context) error {
 					log.Printf("[refresh] panic in manual queue: %v", r)
 				}
 			}()
-			m.runManualQueue(ctx)
+			m.runManualQueue(runCtx)
 		}()
 	}
 
 	return nil
+}
+
+// SetMetricsActive toggles demand-driven metrics polling when supported.
+func (m *Manager) SetMetricsActive(active bool) {
+	if m == nil || m.metricsPoller == nil {
+		return
+	}
+	if controller, ok := m.metricsPoller.(interface{ SetActive(bool) }); ok {
+		controller.SetActive(active)
+	}
 }
 
 // Shutdown terminates running background services.
@@ -183,7 +200,14 @@ func (m *Manager) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	m.started = false
+	cancel := m.runCancel
+	m.runCancel = nil
 	m.mu.Unlock()
+
+	// Cancelling the run context stops informer factories and pollers that rely on it.
+	if cancel != nil {
+		cancel()
+	}
 
 	var firstErr error
 	if m.metricsPoller != nil {
@@ -236,7 +260,8 @@ func (m *Manager) processManualJob(parent context.Context, job *ManualRefreshJob
 		job.Error = manualErr.Error()
 	} else if m.snapshotService != nil {
 		snapshot, snapErr := retryManualOperation(ctx, config.ManualJobMaxAttempts, config.ManualJobRetryDelay, func(callCtx context.Context) (*Snapshot, error) {
-			return m.snapshotService.Build(callCtx, job.Domain, job.Scope)
+			// Manual refreshes should bypass snapshot caching so UI receives fresh data.
+			return m.snapshotService.Build(WithCacheBypass(callCtx), job.Domain, job.Scope)
 		})
 		if snapErr != nil {
 			job.State = JobStateFailed

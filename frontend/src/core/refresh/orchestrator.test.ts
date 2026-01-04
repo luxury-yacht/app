@@ -17,9 +17,11 @@ import {
   markPendingRequest,
   resetDomainState,
   setDomainState,
+  setScopedDomainState,
 } from './store';
 import { refreshOrchestrator } from './orchestrator';
 import { CLUSTER_REFRESHERS, NAMESPACE_REFRESHERS, SYSTEM_REFRESHERS } from './refresherTypes';
+import { buildClusterScopeList } from './clusterScope';
 
 const refreshManagerMocks = vi.hoisted(() => ({
   subscribeMock: vi.fn(),
@@ -47,12 +49,14 @@ const clientMocks = vi.hoisted(() => ({
   fetchSnapshotMock: vi.fn(),
   ensureRefreshBaseURLMock: vi.fn().mockResolvedValue('http://localhost'),
   invalidateRefreshBaseURLMock: vi.fn(),
+  setMetricsActiveMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('./client', () => ({
   fetchSnapshot: clientMocks.fetchSnapshotMock,
   ensureRefreshBaseURL: clientMocks.ensureRefreshBaseURLMock,
   invalidateRefreshBaseURL: clientMocks.invalidateRefreshBaseURLMock,
+  setMetricsActive: clientMocks.setMetricsActiveMock,
 }));
 
 const logStreamMocks = vi.hoisted(() => ({
@@ -77,6 +81,16 @@ const eventStreamMocks = vi.hoisted(() => ({
 
 vi.mock('./streaming/eventStreamManager', () => ({
   eventStreamManager: eventStreamMocks,
+}));
+
+const resourceStreamMocks = vi.hoisted(() => ({
+  start: vi.fn(),
+  stop: vi.fn(),
+  refreshOnce: vi.fn(),
+}));
+
+vi.mock('./streaming/resourceStreamManager', () => ({
+  resourceStreamManager: resourceStreamMocks,
 }));
 
 const catalogStreamMocks = vi.hoisted(() => ({
@@ -119,6 +133,7 @@ describe('refreshOrchestrator', () => {
     clientMocks.fetchSnapshotMock.mockReset();
     clientMocks.ensureRefreshBaseURLMock.mockClear();
     clientMocks.invalidateRefreshBaseURLMock.mockClear();
+    clientMocks.setMetricsActiveMock.mockClear();
     errorHandlerMock.handle.mockReset();
 
     orchestratorInternals.configs?.clear?.();
@@ -137,6 +152,7 @@ describe('refreshOrchestrator', () => {
     orchestratorInternals.suspendedDomains?.clear?.();
     orchestratorInternals.lastNotifiedErrors?.clear?.();
     orchestratorInternals.contextVersion = 0;
+    orchestratorInternals.metricsDemandActive = false;
     orchestratorInternals.context = {
       currentView: 'namespace',
       objectPanel: { isOpen: false },
@@ -160,6 +176,26 @@ describe('refreshOrchestrator', () => {
       refresherName: 'cluster-config',
       category: 'cluster',
       autoStart: true,
+    });
+  };
+
+  const registerNodeMaintenanceDomain = () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'node-maintenance',
+      refresherName: CLUSTER_REFRESHERS.nodeMaintenance,
+      category: 'cluster',
+      scoped: true,
+      autoStart: false,
+    });
+  };
+
+  const registerCatalogDiffDomain = () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'catalog-diff',
+      refresherName: CLUSTER_REFRESHERS.catalogDiff,
+      category: 'cluster',
+      scoped: true,
+      autoStart: false,
     });
   };
 
@@ -335,6 +371,206 @@ describe('refreshOrchestrator', () => {
     expect(getRefreshState().pendingRequests).toBe(0);
   });
 
+  it('reuses cached namespace rows when polling snapshots are unchanged', async () => {
+    const cachedNamespace = {
+      clusterId: 'cluster-a',
+      name: 'alpha',
+      phase: 'Active',
+      resourceVersion: '1',
+      creationTimestamp: 100,
+      hasWorkloads: false,
+    };
+    const changedNamespace = {
+      clusterId: 'cluster-a',
+      name: 'beta',
+      phase: 'Active',
+      resourceVersion: '2',
+      creationTimestamp: 200,
+      hasWorkloads: false,
+    };
+
+    setDomainState('namespaces', (prev) => ({
+      ...prev,
+      status: 'ready',
+      data: { namespaces: [cachedNamespace, changedNamespace] },
+      stats: { itemCount: 2, buildDurationMs: 0 },
+    }));
+
+    clientMocks.fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'namespaces',
+        version: 2,
+        checksum: 'etag-2',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: {
+          namespaces: [{ ...cachedNamespace }, { ...changedNamespace, phase: 'Terminating' }],
+        },
+        stats: { itemCount: 2, buildDurationMs: 0 },
+      },
+      etag: 'etag-2',
+      notModified: false,
+    });
+
+    registerNamespacesDomain();
+
+    const abortController = new AbortController();
+    await subscriber?.(true, abortController.signal);
+
+    const nextNamespaces = getDomainState('namespaces').data?.namespaces ?? [];
+    expect(nextNamespaces[0]).toBe(cachedNamespace);
+    expect(nextNamespaces[1]).not.toBe(changedNamespace);
+  });
+
+  it('reuses cached node maintenance drains when polling snapshots are unchanged', async () => {
+    const sharedOptions = {
+      gracePeriodSeconds: 30,
+      ignoreDaemonSets: true,
+      deleteEmptyDirData: false,
+      force: false,
+      disableEviction: false,
+      skipWaitForPodsToTerminate: false,
+    };
+    const sharedEvents = [
+      {
+        id: 'evt-1',
+        timestamp: 1000,
+        kind: 'info' as const,
+        message: 'Draining',
+      },
+    ];
+    const cachedDrain = {
+      clusterId: 'cluster-a',
+      id: 'drain-1',
+      nodeName: 'node-a',
+      status: 'running' as const,
+      startedAt: 1000,
+      options: sharedOptions,
+      events: sharedEvents,
+    };
+    const changedDrain = {
+      clusterId: 'cluster-a',
+      id: 'drain-2',
+      nodeName: 'node-b',
+      status: 'failed' as const,
+      startedAt: 2000,
+      completedAt: 3000,
+      message: 'Failed',
+      options: sharedOptions,
+      events: sharedEvents,
+    };
+
+    const scope = 'node:node-a';
+    setScopedDomainState('node-maintenance', scope, (prev) => ({
+      ...prev,
+      status: 'ready',
+      data: { drains: [cachedDrain, changedDrain] },
+      stats: { itemCount: 2, buildDurationMs: 0 },
+    }));
+
+    clientMocks.fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'node-maintenance',
+        version: 2,
+        checksum: 'etag-3',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: {
+          drains: [
+            { ...cachedDrain, options: sharedOptions, events: sharedEvents },
+            { ...changedDrain, status: 'succeeded' as const },
+          ],
+        },
+        stats: { itemCount: 2, buildDurationMs: 0 },
+      },
+      etag: 'etag-3',
+      notModified: false,
+    });
+
+    registerNodeMaintenanceDomain();
+
+    await refreshOrchestrator.fetchScopedDomain('node-maintenance', scope, { isManual: true });
+
+    const nextDrains = getScopedDomainState('node-maintenance', scope).data?.drains ?? [];
+    expect(nextDrains[0]).toBe(cachedDrain);
+    expect(nextDrains[1]).not.toBe(changedDrain);
+  });
+
+  it('reuses cached catalog diff items when polling snapshots are unchanged', async () => {
+    const cachedItem = {
+      clusterId: 'cluster-a',
+      kind: 'Deployment',
+      group: 'apps',
+      version: 'v1',
+      resource: 'deployments',
+      namespace: 'default',
+      name: 'web',
+      uid: 'uid-1',
+      resourceVersion: '10',
+      creationTimestamp: '2024-01-01T00:00:00Z',
+      scope: 'Namespace' as const,
+    };
+    const changedItem = {
+      clusterId: 'cluster-a',
+      kind: 'ConfigMap',
+      group: '',
+      version: 'v1',
+      resource: 'configmaps',
+      namespace: 'default',
+      name: 'settings',
+      uid: 'uid-2',
+      resourceVersion: '5',
+      creationTimestamp: '2024-01-01T00:00:00Z',
+      scope: 'Namespace' as const,
+    };
+
+    const scope = 'limit=50';
+    setScopedDomainState('catalog-diff', scope, (prev) => ({
+      ...prev,
+      status: 'ready',
+      data: {
+        items: [cachedItem, changedItem],
+        total: 2,
+        resourceCount: 2,
+        batchIndex: 0,
+        batchSize: 2,
+        totalBatches: 1,
+        isFinal: true,
+      },
+      stats: { itemCount: 2, buildDurationMs: 0 },
+    }));
+
+    clientMocks.fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'catalog-diff',
+        version: 2,
+        checksum: 'etag-4',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: {
+          items: [{ ...cachedItem }, { ...changedItem, resourceVersion: '6' }],
+          total: 2,
+          resourceCount: 2,
+          batchIndex: 0,
+          batchSize: 2,
+          totalBatches: 1,
+          isFinal: true,
+        },
+        stats: { itemCount: 2, buildDurationMs: 0 },
+      },
+      etag: 'etag-4',
+      notModified: false,
+    });
+
+    registerCatalogDiffDomain();
+
+    await refreshOrchestrator.fetchScopedDomain('catalog-diff', scope, { isManual: true });
+
+    const nextItems = getScopedDomainState('catalog-diff', scope).data?.items ?? [];
+    expect(nextItems[0]).toBe(cachedItem);
+    expect(nextItems[1]).not.toBe(changedItem);
+  });
+
   it('records errors and surfaces them via the error handler', async () => {
     clientMocks.fetchSnapshotMock.mockRejectedValue(new Error('offline'));
 
@@ -496,6 +732,23 @@ describe('refreshOrchestrator', () => {
     const state = getDomainState('cluster-config');
     expect(state.status).toBe('loading');
     expect(state.isManual).toBe(true);
+  });
+
+  it('updates metrics demand when metrics domains toggle', () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-overview',
+      refresherName: SYSTEM_REFRESHERS.clusterOverview,
+      category: 'cluster',
+      autoStart: false,
+    });
+
+    // Metrics demand should follow the visibility of metrics-driven domains.
+    refreshOrchestrator.setDomainEnabled('cluster-overview', true);
+    expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledWith(true);
+
+    refreshOrchestrator.setDomainEnabled('cluster-overview', false);
+    expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(false);
+    expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledTimes(2);
   });
 
   it('replaces existing non-scoped subscriptions when re-registering a domain', () => {
@@ -1176,6 +1429,147 @@ describe('refreshOrchestrator', () => {
     await subscriber?.(true, new AbortController().signal);
 
     expect(errorHandlerMock.handle).toHaveBeenCalledTimes(1);
+  });
+
+  it('fans out multi-cluster metrics-only pod refreshes and preserves existing rows', async () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'pods',
+      refresherName: SYSTEM_REFRESHERS.unifiedPods,
+      category: 'system',
+      scoped: true,
+      autoStart: false,
+      streaming: {
+        start: (scope: string) => resourceStreamMocks.start(scope),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          resourceStreamMocks.stop(scope, options),
+        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
+        metricsOnly: true,
+      },
+    });
+
+    refreshOrchestrator.updateContext({
+      currentView: 'namespace',
+      activeNamespaceView: 'pods',
+      selectedClusterIds: ['cluster-a', 'cluster-b'],
+    });
+
+    refreshOrchestrator.setScopedDomainEnabled('pods', 'namespace:default', true);
+
+    const reportScope = buildClusterScopeList(['cluster-a', 'cluster-b'], 'namespace:default');
+    setScopedDomainState('pods', reportScope, () => ({
+      status: 'ready',
+      data: {
+        pods: [
+          {
+            clusterId: 'cluster-a',
+            name: 'pod-a',
+            namespace: 'default',
+            status: 'Running',
+            ready: '1/1',
+            restarts: 0,
+            age: '1m',
+            ownerKind: 'Deployment',
+            ownerName: 'web',
+            node: 'node-a',
+            cpuRequest: '10m',
+            cpuLimit: '20m',
+            cpuUsage: '50m',
+            memRequest: '10Mi',
+            memLimit: '20Mi',
+            memUsage: '40Mi',
+          },
+          {
+            clusterId: 'cluster-b',
+            name: 'pod-b',
+            namespace: 'default',
+            status: 'Running',
+            ready: '1/1',
+            restarts: 0,
+            age: '2m',
+            ownerKind: 'Deployment',
+            ownerName: 'api',
+            node: 'node-b',
+            cpuRequest: '10m',
+            cpuLimit: '20m',
+            cpuUsage: '60m',
+            memRequest: '10Mi',
+            memLimit: '20Mi',
+            memUsage: '50Mi',
+          },
+        ],
+      },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: reportScope,
+    }));
+
+    await refreshOrchestrator.startStreamingDomain('pods', 'namespace:default');
+
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope: 'namespace:default',
+        version: 1,
+        checksum: 'etag-a',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          pods: [
+            {
+              clusterId: 'cluster-a',
+              name: 'pod-a',
+              namespace: 'default',
+              status: 'Pending',
+              cpuUsage: '5m',
+              memUsage: '6Mi',
+            },
+          ],
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      etag: 'etag-a',
+      notModified: false,
+    });
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'pods',
+        scope: 'namespace:default',
+        version: 1,
+        checksum: 'etag-b',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          pods: [
+            {
+              clusterId: 'cluster-b',
+              name: 'pod-b',
+              namespace: 'default',
+              status: 'Pending',
+              cpuUsage: '7m',
+              memUsage: '8Mi',
+            },
+          ],
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      etag: 'etag-b',
+      notModified: false,
+    });
+
+    await refreshOrchestrator.fetchScopedDomain('pods', 'namespace:default', { isManual: false });
+
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledTimes(2);
+    const scopes = clientMocks.fetchSnapshotMock.mock.calls.map((call) => call[1]?.scope).sort();
+    expect(scopes).toEqual(['cluster-a|namespace:default', 'cluster-b|namespace:default']);
+
+    const state = getScopedDomainState('pods', reportScope);
+    const podA = state.data?.pods?.find((pod) => pod.clusterId === 'cluster-a');
+    const podB = state.data?.pods?.find((pod) => pod.clusterId === 'cluster-b');
+    expect(podA?.cpuUsage).toBe('5m');
+    expect(podA?.status).toBe('Running');
+    expect(podB?.cpuUsage).toBe('7m');
+    expect(podB?.status).toBe('Running');
   });
 
   it('handles global reset and kubeconfig transitions by cancelling inflight work', () => {

@@ -19,6 +19,14 @@ type catalogStreamHandler struct {
 	clusterMeta ClusterMeta
 }
 
+// catalogStreamSnapshotMode marks whether the stream payload represents a full snapshot or a partial update.
+type catalogStreamSnapshotMode string
+
+const (
+	catalogStreamSnapshotFull    catalogStreamSnapshotMode = "full"
+	catalogStreamSnapshotPartial catalogStreamSnapshotMode = "partial"
+)
+
 // NewCatalogStreamHandler returns an SSE handler that streams catalog updates.
 func NewCatalogStreamHandler(
 	service func() *objectcatalog.Service,
@@ -77,7 +85,13 @@ func (h *catalogStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 
 	ctx := r.Context()
 
-	if err := h.writeSnapshot(w, f, svc, opts, svc.CachesReady(), true); err != nil {
+	sequence := uint64(0)
+	nextSequence := func() uint64 {
+		sequence++
+		return sequence
+	}
+
+	if err := h.writeSnapshot(w, f, svc, opts, svc.CachesReady(), true, nextSequence()); err != nil {
 		if h.telemetry != nil {
 			h.telemetry.RecordStreamError(telemetry.StreamCatalog, err)
 		}
@@ -96,7 +110,7 @@ func (h *catalogStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 			if !ok {
 				return
 			}
-			if err := h.writeSnapshot(w, f, svc, opts, update.Ready, false); err != nil {
+			if err := h.writeSnapshot(w, f, svc, opts, update.Ready, false, nextSequence()); err != nil {
 				if h.telemetry != nil {
 					h.telemetry.RecordStreamError(telemetry.StreamCatalog, err)
 				}
@@ -110,11 +124,15 @@ func (h *catalogStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 }
 
 type catalogStreamEvent struct {
-	Reset       bool                  `json:"reset,omitempty"`
-	Ready       bool                  `json:"ready"`
-	Snapshot    CatalogSnapshot       `json:"snapshot"`
-	Stats       refresh.SnapshotStats `json:"stats"`
-	GeneratedAt int64                 `json:"generatedAt"`
+	Reset        bool                      `json:"reset,omitempty"`
+	Ready        bool                      `json:"ready"`
+	CacheReady   bool                      `json:"cacheReady"`
+	Truncated    bool                      `json:"truncated"`
+	SnapshotMode catalogStreamSnapshotMode `json:"snapshotMode"`
+	Snapshot     CatalogSnapshot           `json:"snapshot"`
+	Stats        refresh.SnapshotStats     `json:"stats"`
+	GeneratedAt  int64                     `json:"generatedAt"`
+	Sequence     uint64                    `json:"sequence"`
 }
 
 func (h *catalogStreamHandler) writeSnapshot(
@@ -124,6 +142,7 @@ func (h *catalogStreamHandler) writeSnapshot(
 	opts browseQueryOptions,
 	ready bool,
 	reset bool,
+	sequence uint64,
 ) error {
 	result := svc.Query(opts.toQueryOptions())
 	health := svc.Health()
@@ -152,12 +171,21 @@ func (h *catalogStreamHandler) writeSnapshot(
 		stats.TimeToFirstRowMs = payload.FirstBatchLatencyMs
 	}
 
+	snapshotMode := catalogStreamSnapshotFull
+	if !payload.IsFinal || truncated {
+		snapshotMode = catalogStreamSnapshotPartial
+	}
+
 	event := catalogStreamEvent{
-		Reset:       reset,
-		Ready:       ready && payload.IsFinal,
-		Snapshot:    payload,
-		Stats:       stats,
-		GeneratedAt: time.Now().UnixMilli(),
+		Reset:        reset,
+		Ready:        ready && payload.IsFinal,
+		CacheReady:   cachesReady,
+		Truncated:    truncated,
+		SnapshotMode: snapshotMode,
+		Snapshot:     payload,
+		Stats:        stats,
+		GeneratedAt:  time.Now().UnixMilli(),
+		Sequence:     sequence,
 	}
 
 	body, err := json.Marshal(event)

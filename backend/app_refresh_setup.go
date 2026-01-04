@@ -17,12 +17,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 )
 
-func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKey string, permissionCache map[string]bool) (map[string]bool, error) {
+func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKey string) error {
 	if kubeClient == nil {
-		return nil, errors.New("kubernetes client is nil")
+		return errors.New("kubernetes client is nil")
 	}
 	if a.Ctx == nil {
-		return nil, errors.New("application context not initialised")
+		return errors.New("application context not initialised")
 	}
 
 	selections, err := a.selectedKubeconfigSelections()
@@ -63,7 +63,6 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			HelmFactory:           a.helmActionFactory(),
 			ObjectDetailsProvider: a.objectDetailProvider(),
 			Logger:                a.logger,
-			PermissionCache:       permissionCache,
 			ObjectCatalogService: func() *objectcatalog.Service {
 				return a.objectCatalogServiceForCluster(catalogClusterID)
 			},
@@ -73,8 +72,10 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			ClusterName:             clusterMeta.Name,
 		}, selectionKey)
 		if err != nil {
-			return nil, err
+			return err
 		}
+		// Watch informer updates to invalidate cached detail/YAML/helm responses.
+		a.registerResponseCacheInvalidation(subsystem, selectionKey)
 
 		if hostClusterID != "" {
 			subsystems[hostClusterID] = subsystem
@@ -84,17 +85,17 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	} else {
 		// Align the client pool to the selected cluster set before building managers.
 		if err := a.syncClusterClientPool(selections); err != nil {
-			return nil, err
+			return err
 		}
 
 		for _, selection := range selections {
 			clusterMeta := a.clusterMetaForSelection(selection)
 			if clusterMeta.ID == "" {
-				return nil, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
+				return fmt.Errorf("cluster identifier missing for selection %s", selection.String())
 			}
 			clients := a.clusterClientsForID(clusterMeta.ID)
 			if clients == nil {
-				return nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
+				return fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
 			}
 
 			cfg := system.Config{
@@ -108,7 +109,6 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 				HelmFactory:           a.helmActionFactoryForSelection(selection),
 				ObjectDetailsProvider: a.objectDetailProvider(),
 				Logger:                a.logger,
-				PermissionCache:       a.getPermissionCache(clusterMeta.ID),
 				ClusterID:             clusterMeta.ID,
 				ClusterName:           clusterMeta.Name,
 			}
@@ -121,8 +121,10 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 
 			subsystem, err := a.buildRefreshSubsystem(cfg, clusterMeta.ID)
 			if err != nil {
-				return nil, err
+				return err
 			}
+			// Watch informer updates to invalidate cached detail/YAML/helm responses.
+			a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
 
 			subsystems[clusterMeta.ID] = subsystem
 			clusterOrder = append(clusterOrder, clusterMeta.ID)
@@ -133,7 +135,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	}
 
 	if hostSubsystem == nil {
-		return nil, errors.New("refresh subsystem not initialised")
+		return errors.New("refresh subsystem not initialised")
 	}
 
 	for _, subsystem := range subsystems {
@@ -146,6 +148,8 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 				a.logger.Warn(fmt.Sprintf("refresh manager stopped: %v", err), "Refresh")
 			}
 		}(manager)
+		// Keep permission grants fresh; revoke access stops refresh informers/streams.
+		subsystem.StartPermissionRevalidation(ctx)
 	}
 
 	// Wrap the base refresh API with aggregate services for multi-cluster domains.
@@ -161,11 +165,22 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	)
 	aggregateLogs := newAggregateLogStreamHandler(subsystems)
 	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
+	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, hostSubsystem.Telemetry)
+	if err != nil {
+		return err
+	}
 	mux := http.NewServeMux()
-	api.NewServer(hostSubsystem.Registry, aggregateService, aggregateQueue, hostSubsystem.Telemetry).Register(mux)
+	api.NewServer(
+		hostSubsystem.Registry,
+		aggregateService,
+		aggregateQueue,
+		hostSubsystem.Telemetry,
+		hostSubsystem.Manager,
+	).Register(mux)
 	mux.Handle("/api/v2/stream/events", aggregateEvents)
 	mux.Handle("/api/v2/stream/logs", aggregateLogs)
 	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)
+	mux.Handle("/api/v2/stream/resources", aggregateResources)
 	mux.Handle("/", hostSubsystem.Handler)
 
 	if a.listenLoopback == nil {
@@ -174,7 +189,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 
 	listener, err := a.listenLoopback()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	srv := &http.Server{Handler: mux}
@@ -200,7 +215,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		}
 	}()
 
-	return hostSubsystem.PermissionCache, nil
+	return nil
 }
 
 // buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.
@@ -213,14 +228,6 @@ func (a *App) buildRefreshSubsystem(cfg system.Config, cacheKey string) (*system
 
 	if len(subsystem.PermissionIssues) > 0 {
 		a.handlePermissionIssues(subsystem.PermissionIssues)
-	}
-	if subsystem.PermissionCache != nil {
-		if cacheKey == "" {
-			cacheKey = cfg.ClusterID
-		}
-		if cacheKey != "" {
-			a.setPermissionCache(cacheKey, subsystem.PermissionCache)
-		}
 	}
 	return subsystem, nil
 }

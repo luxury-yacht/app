@@ -34,6 +34,8 @@ You must adhere to these at all times. If you want an exception to these rules y
 ## Documentation
 
 - Developer documentation is in `docs/development`. Any additional documentation you create must also go there.
+- If we are going through a phased implementation plan, you should always explicitly document it in plan.md.
+  - As plan items are completed, mark them complete with ✅
 
 ## Testing Guidelines
 

@@ -8,6 +8,7 @@
 import { GetRefreshBaseURL } from '@wailsjs/go/backend/App';
 
 import type { TelemetrySummary } from './types';
+import { formatPermissionDeniedStatus, isPermissionDeniedStatus } from './permissionErrors';
 
 export interface SnapshotStats {
   itemCount: number;
@@ -193,6 +194,9 @@ export async function fetchSnapshot<TPayload>(
 async function safeParseError(response: Response): Promise<string> {
   try {
     const data = await response.json();
+    if (isPermissionDeniedStatus(data)) {
+      return formatPermissionDeniedStatus(data);
+    }
     if (data?.message) {
       return data.message as string;
     }
@@ -218,4 +222,18 @@ export async function fetchTelemetrySummary(): Promise<TelemetrySummary> {
   }
 
   return (await response.json()) as TelemetrySummary;
+}
+
+export async function setMetricsActive(active: boolean): Promise<void> {
+  const baseURL = await resolveRefreshBaseURL();
+  const url = new URL('/api/v2/metrics/active', baseURL);
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active }),
+  });
+  if (!response.ok) {
+    throw new Error(`Metrics activity request failed: ${response.status} ${response.statusText}`);
+  }
 }

@@ -13,6 +13,23 @@
 import { types } from '@wailsjs/go/models';
 import type { SnapshotStats } from './client';
 
+// PermissionDeniedStatus mirrors Status-like RBAC error payloads from the refresh API.
+export interface PermissionDeniedDetails {
+  domain?: string;
+  resource?: string;
+  kind?: string;
+  name?: string;
+}
+
+export interface PermissionDeniedStatus {
+  kind?: string;
+  apiVersion?: string;
+  message?: string;
+  reason?: string;
+  details?: PermissionDeniedDetails;
+  code?: number;
+}
+
 export interface ClusterMeta {
   clusterId?: string;
   clusterName?: string;
@@ -292,12 +309,19 @@ export interface CatalogSnapshotPayload extends ClusterMeta {
   firstBatchLatencyMs?: number;
 }
 
+// Indicates whether the catalog stream payload is a full replacement or a partial update.
+export type CatalogStreamSnapshotMode = 'full' | 'partial';
+
 export interface CatalogStreamEventPayload {
   reset?: boolean;
   ready?: boolean;
+  cacheReady: boolean;
+  truncated: boolean;
+  snapshotMode: CatalogStreamSnapshotMode;
   snapshot: CatalogSnapshotPayload;
   stats: SnapshotStats;
   generatedAt: number;
+  sequence: number;
 }
 
 export interface PodSnapshotEntry extends ClusterMeta {
@@ -634,6 +658,7 @@ export interface TelemetryMetricsStatus {
   lastError?: string;
   successCount: number;
   failureCount: number;
+  active?: boolean;
 }
 
 export interface TelemetryStreamStatus {

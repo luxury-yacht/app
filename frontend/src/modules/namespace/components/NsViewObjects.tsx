@@ -16,7 +16,8 @@ import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary'
 import * as cf from '@shared/components/tables/columnFactories';
 import { useTableSort } from '@/hooks/useTableSort';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
-import { refreshManager, refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
+import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
+import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -254,6 +255,7 @@ interface NsViewObjectsProps {
 
 const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
   const domain = useRefreshDomain('catalog');
+  useCatalogDiagnostics(domain, 'Namespace Objects');
   const useShortResourceNames = useShortNames();
   const { openWithObject } = useObjectPanel();
   const { selectedClusterId } = useKubeconfig();
@@ -407,7 +409,6 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
 
   useEffect(() => {
     refreshOrchestrator.setDomainEnabled('catalog', true);
-    refreshManager.disable('catalog');
     return () => {
       refreshOrchestrator.setDomainEnabled('catalog', false);
     };

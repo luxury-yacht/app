@@ -22,6 +22,22 @@ const (
 	// RefreshRequestTimeout is the HTTP timeout used by refresh API clients.
 	RefreshRequestTimeout = 30 * time.Second
 
+	// SnapshotCacheTTL controls how long snapshot builds are cached to avoid redundant work.
+	SnapshotCacheTTL = 5 * time.Second
+
+	// ResponseCacheTTL controls how long non-informer resource GETs are cached.
+	// Keep this short to reduce staleness while still cutting repeated requests.
+	ResponseCacheTTL = 10 * time.Second
+
+	// ResponseCacheMaxEntries caps the number of cached GET responses before eviction.
+	ResponseCacheMaxEntries = 512
+
+	// PermissionCacheTTL controls how long SSAR permission decisions are cached.
+	PermissionCacheTTL = 2 * time.Minute
+
+	// PermissionCheckTimeout bounds SelfSubjectAccessReview calls.
+	PermissionCheckTimeout = 5 * time.Second
+
 	// ClusterVersionCacheTTL controls how long the cluster version lookup is cached.
 	ClusterVersionCacheTTL = 10 * time.Minute
 

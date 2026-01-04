@@ -151,6 +151,32 @@ describe('EventStreamManager', () => {
     expect(state.data).toBeNull();
   });
 
+  test('applyPayload surfaces permission denied details when provided', async () => {
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+
+    manager.applyPayload('cluster-events', 'cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 2,
+      generatedAt: 789,
+      errorDetails: {
+        kind: 'Status',
+        apiVersion: 'v1',
+        message: 'permission denied',
+        reason: 'Forbidden',
+        details: { domain: 'cluster-events', resource: 'core/events' },
+        code: 403,
+      },
+    });
+
+    await flushTimers();
+
+    const state = getDomainState('cluster-events');
+    expect(state.status).toBe('error');
+    expect(state.error).toBe('permission denied (domain cluster-events, resource core/events)');
+  });
+
   test('handleStreamError marks domain error after threshold', async () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();
@@ -159,7 +185,7 @@ describe('EventStreamManager', () => {
     manager.handleStreamError('cluster-events', 'cluster', 'stream disconnected');
     const clusterState = getDomainState('cluster-events');
     expect(clusterState.status).toBe('updating');
-    expect(clusterState.error).toBeNull();
+    expect(clusterState.error).toBe('Stream resyncing');
 
     manager.handleStreamError('cluster-events', 'cluster', 'stream disconnected');
     const clusterStateTerminal = getDomainState('cluster-events');
@@ -460,6 +486,60 @@ describe('EventStreamManager', () => {
 
     await vi.advanceTimersByTimeAsync(4000);
     expect(ensureRefreshBaseURLMock).toHaveBeenCalledTimes(3);
+  });
+
+  test('reconnect includes resume token when available', async () => {
+    vi.useFakeTimers();
+    Object.assign(window, {
+      setTimeout: globalThis.setTimeout,
+      clearTimeout: globalThis.clearTimeout,
+    });
+
+    class MockEventSource {
+      static instances: MockEventSource[] = [];
+      listeners: Record<string, (evt?: any) => void> = {};
+      url: string;
+      constructor(url: string) {
+        this.url = url;
+        MockEventSource.instances.push(this);
+      }
+      addEventListener(type: string, handler: (evt?: any) => void) {
+        this.listeners[type] = handler;
+      }
+      removeEventListener(): void {}
+      close(): void {}
+      emit(type: string, evt?: any) {
+        this.listeners[type]?.(evt);
+      }
+    }
+
+    (globalThis as any).EventSource = MockEventSource as any;
+
+    ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
+
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+
+    await manager.startCluster();
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    const payload = {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 41,
+      generatedAt: Date.now(),
+      events: [],
+    };
+    MockEventSource.instances[0]?.emit('event', {
+      data: JSON.stringify(payload),
+      lastEventId: '41',
+    });
+
+    MockEventSource.instances[0]?.emit('error');
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(MockEventSource.instances).toHaveLength(2);
+    expect(MockEventSource.instances[1]?.url).toContain('since=41');
   });
 
   test('deduplicates stream error notifications and clears after reconnect', async () => {

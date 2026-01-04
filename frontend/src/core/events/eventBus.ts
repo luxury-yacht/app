@@ -10,6 +10,24 @@
 
 import type { RefresherState } from '@/core/refresh/RefreshManager';
 
+type ResourceStreamDomain =
+  | 'pods'
+  | 'namespace-workloads'
+  | 'namespace-config'
+  | 'namespace-network'
+  | 'namespace-rbac'
+  | 'namespace-custom'
+  | 'namespace-helm'
+  | 'namespace-quotas'
+  | 'namespace-storage'
+  | 'namespace-autoscaling'
+  | 'cluster-rbac'
+  | 'cluster-storage'
+  | 'cluster-config'
+  | 'cluster-crds'
+  | 'cluster-custom'
+  | 'nodes';
+
 // Event payload types
 export interface AppEvents {
   // Kubeconfig events
@@ -29,6 +47,15 @@ export interface AppEvents {
   'refresh:registered': { name: string };
   'refresh:start': { name: string; isManual: boolean };
   'refresh:complete': { name: string; isManual: boolean; success: boolean; error?: unknown };
+  'refresh:resource-stream-drift': {
+    domain: ResourceStreamDomain;
+    scope: string;
+    reason: string;
+    streamCount: number;
+    snapshotCount: number;
+    missingKeys: number;
+    extraKeys: number;
+  };
 
   // Settings events
   'settings:auto-refresh': boolean;

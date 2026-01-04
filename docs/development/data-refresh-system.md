@@ -147,6 +147,20 @@ Streaming is wired in `frontend/src/core/refresh/orchestrator.ts` and uses `/api
 
 Log streaming also has a polling fallback (`objectLogFallbackManager`) used by the log viewer when streaming is unavailable or disabled.
 
+#### Resource streaming invariants and fallbacks
+
+The resource stream (pods, namespace workloads, nodes) uses a websocket transport with explicit resync triggers. These rules are enforced so the UI can fall back to snapshots safely:
+
+- Each domain/scope stream must deliver monotonic `resourceVersion` values. If a message is missing a version or the version moves backwards, the frontend triggers a snapshot resync and ignores the stream until resynced.
+- Backend sends `RESET` at subscription start and `COMPLETE` when a subscriber is dropped or a resync is required. The frontend treats both as resync signals.
+- Backpressure is enforced per domain/scope. If a subscriber falls behind, the backend drops it and emits a `COMPLETE` with an error string so the client resyncs.
+- The frontend coalesces bursts of updates over a short window; while a resync is in flight, update messages are ignored.
+
+These rules are implemented in:
+
+- Backend: `backend/refresh/resourcestream/handler.go` and `backend/refresh/resourcestream/manager.go`.
+- Frontend: `frontend/src/core/refresh/streaming/resourceStreamManager.ts`.
+
 ## Frontend architecture
 
 ### RefreshManager

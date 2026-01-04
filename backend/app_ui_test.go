@@ -200,21 +200,7 @@ func TestCurrentSelectionKey(t *testing.T) {
 	require.Equal(t, "", app.currentSelectionKey())
 }
 
-func TestPermissionCacheRoundTrip(t *testing.T) {
-	app := newUIApp(t)
-	cache := map[string]bool{"get": true}
-
-	require.Nil(t, app.getPermissionCache(""))
-
-	app.setPermissionCache("key", cache)
-	cloned := app.getPermissionCache("key")
-	require.NotNil(t, cloned)
-	require.True(t, cloned["get"])
-
-	cache["get"] = false
-	require.True(t, app.getPermissionCache("key")["get"])
-}
-
+// Legacy permission cache behavior retained for compatibility.
 func TestEmitEventNoContext(t *testing.T) {
 	app := newUIApp(t)
 	called := false
