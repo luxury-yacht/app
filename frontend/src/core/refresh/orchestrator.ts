@@ -842,6 +842,7 @@ class RefreshOrchestrator {
   private isResourceStreamDomain(
     domain: RefreshDomain
   ): domain is
+    | 'namespaces'
     | 'pods'
     | 'namespace-workloads'
     | 'namespace-config'
@@ -859,6 +860,7 @@ class RefreshOrchestrator {
     | 'cluster-custom'
     | 'nodes' {
     return (
+      domain === 'namespaces' ||
       domain === 'pods' ||
       domain === 'namespace-workloads' ||
       domain === 'namespace-config' ||
@@ -880,6 +882,7 @@ class RefreshOrchestrator {
 
   private isMultiClusterStreamDomain(domain: RefreshDomain): boolean {
     return (
+      domain === 'namespaces' ||
       domain === 'pods' ||
       domain === 'namespace-workloads' ||
       domain === 'nodes' ||
@@ -2238,7 +2241,7 @@ class RefreshOrchestrator {
   }
 
   private normalizeStreamingScope(domain: RefreshDomain, rawScope?: string): string {
-    if (domain === 'nodes') {
+    if (domain === 'namespaces' || domain === 'nodes') {
       return buildClusterScopeList(this.getSelectedClusterIds(), '');
     }
     if (
@@ -2290,6 +2293,14 @@ refreshOrchestrator.registerDomain({
   refresherName: SYSTEM_REFRESHERS.namespaces,
   category: 'system',
   autoStart: false,
+  streaming: {
+    start: (scope) => resourceStreamManager.start('namespaces', scope),
+    stop: (scope, options) =>
+      resourceStreamManager.stop('namespaces', scope, options?.reset ?? false),
+    refreshOnce: (scope) => resourceStreamManager.refreshOnce('namespaces', scope),
+    // Pause polling while streaming is active to prevent redundant refreshes.
+    pauseRefresherWhenStreaming: true,
+  },
 });
 
 refreshOrchestrator.registerDomain({

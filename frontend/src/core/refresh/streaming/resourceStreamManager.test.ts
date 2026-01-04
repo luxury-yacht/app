@@ -46,6 +46,7 @@ import {
   mergePodMetricsRow,
   mergeWorkloadMetricsRow,
   normalizeResourceScope,
+  sortNamespaceRows,
   sortNodeRows,
   sortPodRows,
   sortWorkloadRows,
@@ -92,6 +93,7 @@ beforeEach(() => {
   (window as any).clearTimeout = globalThis.clearTimeout;
   (globalThis as any).WebSocket = FakeWebSocket;
 
+  resetDomainState('namespaces');
   resetDomainState('nodes');
   resetDomainState('namespace-workloads');
   resetDomainState('namespace-config');
@@ -111,6 +113,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  resetDomainState('namespaces');
   resetDomainState('nodes');
   resetDomainState('namespace-workloads');
   resetDomainState('namespace-config');
@@ -185,6 +188,12 @@ describe('resourceStreamManager helpers', () => {
   it('normalizes namespace storage scopes', () => {
     expect(normalizeResourceScope('namespace-storage', 'default')).toBe('namespace:default');
     expect(normalizeResourceScope('namespace-storage', 'namespace:all')).toBe('namespace:all');
+  });
+
+  it('normalizes namespace list scopes', () => {
+    expect(normalizeResourceScope('namespaces', '')).toBe('');
+    expect(normalizeResourceScope('namespaces', 'cluster')).toBe('');
+    expect(() => normalizeResourceScope('namespaces', 'namespace:default')).toThrow();
   });
 
   it('normalizes node scopes', () => {
@@ -303,6 +312,12 @@ describe('resourceStreamManager helpers', () => {
     ]);
   });
 
+  it('sorts namespace rows by name', () => {
+    const rows = [{ name: 'beta' }, { name: 'alpha' }];
+    sortNamespaceRows(rows as any);
+    expect(rows.map((row) => row.name)).toEqual(['alpha', 'beta']);
+  });
+
   it('sorts node rows by name', () => {
     const rows = [{ name: 'node-b' }, { name: 'node-a' }];
     sortNodeRows(rows as any);
@@ -368,6 +383,51 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.pods?.[0]?.cpuUsage).toBe('50m');
     expect(state.data?.pods?.[0]?.memUsage).toBe('40Mi');
     expect(state.data?.pods?.[0]?.status).toBe('Pending');
+  });
+
+  test('applies namespace updates', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespaces', storeScope);
+
+    setDomainState('namespaces', () => ({
+      status: 'ready',
+      data: { namespaces: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'namespaces',
+        scope: '',
+        resourceVersion: '3',
+        name: 'default',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          name: 'default',
+          phase: 'Active',
+          resourceVersion: '3',
+          creationTimestamp: 170,
+          hasWorkloads: true,
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('namespaces');
+    expect(state.data?.namespaces?.[0]?.name).toBe('default');
   });
 
   test('applies namespace config updates', () => {

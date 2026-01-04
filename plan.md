@@ -331,7 +331,7 @@ Per polling-only domain:
 
 8. Streaming coverage: add streaming for namespaces and cluster-overview using list/watch-style sources, similar to Headlamp's watch-driven list updates, to reduce polling-only domains (headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:492; frontend/src/core/refresh/orchestrator.ts:2246; frontend/src/core/refresh/orchestrator.ts:2254).
    - Work items:
-     - Add namespaces to the resource stream domains and register streaming in the orchestrator (backend/refresh/resourcestream/manager.go:52; frontend/src/core/refresh/orchestrator.ts:2246).
+     - ✅ Add namespaces to the resource stream domains and register streaming in the orchestrator (backend/refresh/resourcestream/manager.go:52; frontend/src/core/refresh/orchestrator.ts:2246).
      - Derive cluster-overview updates from node/pod stream updates or add a dedicated stream endpoint (frontend/src/core/refresh/orchestrator.ts:2254; backend/refresh/system/manager.go:533).
      - Add diagnostics for stream health and fallback behavior (frontend/src/core/refresh/streaming/resourceStreamManager.ts:1019).
    - Effort: High.

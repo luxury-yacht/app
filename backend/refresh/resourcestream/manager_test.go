@@ -62,6 +62,40 @@ func TestManagerPodUpdateBroadcasts(t *testing.T) {
 	}
 }
 
+func TestManagerNamespaceUpdateBroadcasts(t *testing.T) {
+	manager := &Manager{
+		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[string]map[uint64]*subscription),
+	}
+
+	sub, err := manager.Subscribe(domainNamespaces, "")
+	require.NoError(t, err)
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:            "default",
+			UID:             "ns-uid",
+			ResourceVersion: "15",
+		},
+		Status: corev1.NamespaceStatus{Phase: corev1.NamespaceActive},
+	}
+
+	manager.handleNamespace(ns, MessageTypeAdded)
+
+	select {
+	case update := <-sub.Updates:
+		require.Equal(t, MessageTypeAdded, update.Type)
+		require.Equal(t, domainNamespaces, update.Domain)
+		require.Equal(t, "", update.Scope)
+		require.Equal(t, "default", update.Name)
+		require.Equal(t, "Namespace", update.Kind)
+		require.NotNil(t, update.Row)
+	default:
+		t.Fatal("expected namespace update to be delivered")
+	}
+}
+
 func TestManagerConfigUpdateBroadcasts(t *testing.T) {
 	manager := &Manager{
 		clusterMeta: snapshot.ClusterMeta{ClusterID: "c1", ClusterName: "cluster"},

@@ -34,6 +34,22 @@ func BuildPodSummary(meta ClusterMeta, pod *corev1.Pod, usage map[string]metrics
 	return buildPodSummary(meta, pod, usage, rsMap)
 }
 
+// BuildNamespaceSummary builds a namespace row payload that matches snapshot formatting.
+func BuildNamespaceSummary(meta ClusterMeta, ns *corev1.Namespace, hasWorkloads bool, workloadsUnknown bool) NamespaceSummary {
+	if ns == nil {
+		return NamespaceSummary{ClusterMeta: meta}
+	}
+	return NamespaceSummary{
+		ClusterMeta:     meta,
+		Name:             ns.Name,
+		Phase:            string(ns.Status.Phase),
+		ResourceVersion:  ns.ResourceVersion,
+		CreationUnix:     ns.CreationTimestamp.Unix(),
+		HasWorkloads:     hasWorkloads,
+		WorkloadsUnknown: workloadsUnknown,
+	}
+}
+
 // BuildConfigMapSummary builds a config map row payload that matches snapshot formatting.
 func BuildConfigMapSummary(meta ClusterMeta, cm *corev1.ConfigMap) ConfigSummary {
 	if cm == nil {

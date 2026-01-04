@@ -91,6 +91,7 @@ export const DOMAIN_REFRESHER_MAP: Partial<Record<RefreshDomain, RefresherName>>
 
 // Stream telemetry names for diagnostics (only set for stream-backed domains).
 export const DOMAIN_STREAM_MAP: Partial<Record<RefreshDomain, string>> = {
+  namespaces: 'resources',
   pods: 'resources',
   'namespace-workloads': 'resources',
   'namespace-config': 'resources',

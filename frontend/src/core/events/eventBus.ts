@@ -11,6 +11,7 @@
 import type { RefresherState } from '@/core/refresh/RefreshManager';
 
 type ResourceStreamDomain =
+  | 'namespaces'
   | 'pods'
   | 'namespace-workloads'
   | 'namespace-config'
