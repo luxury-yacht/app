@@ -175,6 +175,26 @@ describe('refreshOrchestrator', () => {
     });
   };
 
+  const registerNodeMaintenanceDomain = () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'node-maintenance',
+      refresherName: CLUSTER_REFRESHERS.nodeMaintenance,
+      category: 'cluster',
+      scoped: true,
+      autoStart: false,
+    });
+  };
+
+  const registerCatalogDiffDomain = () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'catalog-diff',
+      refresherName: CLUSTER_REFRESHERS.catalogDiff,
+      category: 'cluster',
+      scoped: true,
+      autoStart: false,
+    });
+  };
+
   it('normalizes object panel kind casing before updating refresh context', () => {
     refreshOrchestrator.updateContext({
       objectPanel: {
@@ -345,6 +365,206 @@ describe('refreshOrchestrator', () => {
     expect(state.etag).toBe('etag-1');
     expect(state.isManual).toBe(true);
     expect(getRefreshState().pendingRequests).toBe(0);
+  });
+
+  it('reuses cached namespace rows when polling snapshots are unchanged', async () => {
+    const cachedNamespace = {
+      clusterId: 'cluster-a',
+      name: 'alpha',
+      phase: 'Active',
+      resourceVersion: '1',
+      creationTimestamp: 100,
+      hasWorkloads: false,
+    };
+    const changedNamespace = {
+      clusterId: 'cluster-a',
+      name: 'beta',
+      phase: 'Active',
+      resourceVersion: '2',
+      creationTimestamp: 200,
+      hasWorkloads: false,
+    };
+
+    setDomainState('namespaces', (prev) => ({
+      ...prev,
+      status: 'ready',
+      data: { namespaces: [cachedNamespace, changedNamespace] },
+      stats: { itemCount: 2, buildDurationMs: 0 },
+    }));
+
+    clientMocks.fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'namespaces',
+        version: 2,
+        checksum: 'etag-2',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: {
+          namespaces: [{ ...cachedNamespace }, { ...changedNamespace, phase: 'Terminating' }],
+        },
+        stats: { itemCount: 2, buildDurationMs: 0 },
+      },
+      etag: 'etag-2',
+      notModified: false,
+    });
+
+    registerNamespacesDomain();
+
+    const abortController = new AbortController();
+    await subscriber?.(true, abortController.signal);
+
+    const nextNamespaces = getDomainState('namespaces').data?.namespaces ?? [];
+    expect(nextNamespaces[0]).toBe(cachedNamespace);
+    expect(nextNamespaces[1]).not.toBe(changedNamespace);
+  });
+
+  it('reuses cached node maintenance drains when polling snapshots are unchanged', async () => {
+    const sharedOptions = {
+      gracePeriodSeconds: 30,
+      ignoreDaemonSets: true,
+      deleteEmptyDirData: false,
+      force: false,
+      disableEviction: false,
+      skipWaitForPodsToTerminate: false,
+    };
+    const sharedEvents = [
+      {
+        id: 'evt-1',
+        timestamp: 1000,
+        kind: 'info' as const,
+        message: 'Draining',
+      },
+    ];
+    const cachedDrain = {
+      clusterId: 'cluster-a',
+      id: 'drain-1',
+      nodeName: 'node-a',
+      status: 'running' as const,
+      startedAt: 1000,
+      options: sharedOptions,
+      events: sharedEvents,
+    };
+    const changedDrain = {
+      clusterId: 'cluster-a',
+      id: 'drain-2',
+      nodeName: 'node-b',
+      status: 'failed' as const,
+      startedAt: 2000,
+      completedAt: 3000,
+      message: 'Failed',
+      options: sharedOptions,
+      events: sharedEvents,
+    };
+
+    const scope = 'node:node-a';
+    setScopedDomainState('node-maintenance', scope, (prev) => ({
+      ...prev,
+      status: 'ready',
+      data: { drains: [cachedDrain, changedDrain] },
+      stats: { itemCount: 2, buildDurationMs: 0 },
+    }));
+
+    clientMocks.fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'node-maintenance',
+        version: 2,
+        checksum: 'etag-3',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: {
+          drains: [
+            { ...cachedDrain, options: sharedOptions, events: sharedEvents },
+            { ...changedDrain, status: 'succeeded' as const },
+          ],
+        },
+        stats: { itemCount: 2, buildDurationMs: 0 },
+      },
+      etag: 'etag-3',
+      notModified: false,
+    });
+
+    registerNodeMaintenanceDomain();
+
+    await refreshOrchestrator.fetchScopedDomain('node-maintenance', scope, { isManual: true });
+
+    const nextDrains = getScopedDomainState('node-maintenance', scope).data?.drains ?? [];
+    expect(nextDrains[0]).toBe(cachedDrain);
+    expect(nextDrains[1]).not.toBe(changedDrain);
+  });
+
+  it('reuses cached catalog diff items when polling snapshots are unchanged', async () => {
+    const cachedItem = {
+      clusterId: 'cluster-a',
+      kind: 'Deployment',
+      group: 'apps',
+      version: 'v1',
+      resource: 'deployments',
+      namespace: 'default',
+      name: 'web',
+      uid: 'uid-1',
+      resourceVersion: '10',
+      creationTimestamp: '2024-01-01T00:00:00Z',
+      scope: 'Namespace' as const,
+    };
+    const changedItem = {
+      clusterId: 'cluster-a',
+      kind: 'ConfigMap',
+      group: '',
+      version: 'v1',
+      resource: 'configmaps',
+      namespace: 'default',
+      name: 'settings',
+      uid: 'uid-2',
+      resourceVersion: '5',
+      creationTimestamp: '2024-01-01T00:00:00Z',
+      scope: 'Namespace' as const,
+    };
+
+    const scope = 'limit=50';
+    setScopedDomainState('catalog-diff', scope, (prev) => ({
+      ...prev,
+      status: 'ready',
+      data: {
+        items: [cachedItem, changedItem],
+        total: 2,
+        resourceCount: 2,
+        batchIndex: 0,
+        batchSize: 2,
+        totalBatches: 1,
+        isFinal: true,
+      },
+      stats: { itemCount: 2, buildDurationMs: 0 },
+    }));
+
+    clientMocks.fetchSnapshotMock.mockResolvedValue({
+      snapshot: {
+        domain: 'catalog-diff',
+        version: 2,
+        checksum: 'etag-4',
+        generatedAt: Date.now(),
+        sequence: 2,
+        payload: {
+          items: [{ ...cachedItem }, { ...changedItem, resourceVersion: '6' }],
+          total: 2,
+          resourceCount: 2,
+          batchIndex: 0,
+          batchSize: 2,
+          totalBatches: 1,
+          isFinal: true,
+        },
+        stats: { itemCount: 2, buildDurationMs: 0 },
+      },
+      etag: 'etag-4',
+      notModified: false,
+    });
+
+    registerCatalogDiffDomain();
+
+    await refreshOrchestrator.fetchScopedDomain('catalog-diff', scope, { isManual: true });
+
+    const nextItems = getScopedDomainState('catalog-diff', scope).data?.items ?? [];
+    expect(nextItems[0]).toBe(cachedItem);
+    expect(nextItems[1]).not.toBe(changedItem);
   });
 
   it('records errors and surfaces them via the error handler', async () => {

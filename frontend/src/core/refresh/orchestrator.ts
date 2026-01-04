@@ -41,9 +41,12 @@ import {
   setScopedDomainState,
 } from './store';
 import type {
+  CatalogSnapshotPayload,
   ClusterNodeSnapshotPayload,
   DomainPayloadMap,
+  NamespaceSnapshotPayload,
   NamespaceWorkloadSnapshotPayload,
+  NodeMaintenanceSnapshotPayload,
   PodSnapshotPayload,
   RefreshDomain,
 } from './types';
@@ -102,6 +105,58 @@ const logWarning = (message: string): void => {
 };
 
 const makeInFlightKey = (domain: RefreshDomain, scope?: string) => `${domain}::${scope ?? '*'}`;
+
+const shallowEqualRecord = (left: Record<string, unknown>, right: Record<string, unknown>) => {
+  if (left === right) {
+    return true;
+  }
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+  for (const key of leftKeys) {
+    if (left[key] !== right[key]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+// Reuse cached row objects when incoming rows are unchanged to cut re-render churn.
+const mergeListByKey = <T extends object>(
+  incoming: T[],
+  previous: T[],
+  keyFor: (item: T) => string
+): T[] => {
+  if (incoming.length === 0 || previous.length === 0) {
+    return incoming;
+  }
+  const previousByKey = new Map<string, T>();
+  previous.forEach((item) => {
+    const key = keyFor(item);
+    if (key) {
+      previousByKey.set(key, item);
+    }
+  });
+  let reused = false;
+  const merged = incoming.map((item) => {
+    const key = keyFor(item);
+    if (!key) {
+      return item;
+    }
+    const cached = previousByKey.get(key);
+    if (
+      cached &&
+      shallowEqualRecord(cached as Record<string, unknown>, item as Record<string, unknown>)
+    ) {
+      reused = true;
+      return cached;
+    }
+    return item;
+  });
+  return reused ? merged : incoming;
+};
 
 class RefreshOrchestrator {
   private configs = new Map<RefreshDomain, DomainRegistration<RefreshDomain>>();
@@ -1705,6 +1760,7 @@ class RefreshOrchestrator {
     if (tracked && tracked.contextVersion !== this.contextVersion) {
       return;
     }
+    const payload = this.mergePollingListPayload(domain, snapshot.payload, scope);
 
     if (scope) {
       if (!this.isScopedDomainEnabledInternal(domain, scope)) {
@@ -1713,7 +1769,7 @@ class RefreshOrchestrator {
       setScopedDomainState(domain, scope, (prev) => ({
         ...prev,
         status: 'ready',
-        data: snapshot.payload,
+        data: payload,
         stats: snapshot.stats ?? null,
         version: snapshot.version,
         checksum: snapshot.checksum,
@@ -1735,7 +1791,7 @@ class RefreshOrchestrator {
     setDomainState(domain, (prev) => ({
       ...prev,
       status: 'ready',
-      data: snapshot.payload,
+      data: payload,
       stats: snapshot.stats ?? null,
       version: snapshot.version,
       checksum: snapshot.checksum,
@@ -1748,6 +1804,79 @@ class RefreshOrchestrator {
       scope: snapshot.scope ?? prev.scope,
     }));
     this.clearRefreshError(domain, snapshot.scope ?? undefined);
+  }
+
+  // Incrementally reuse row objects for polling-only list payloads.
+  private mergePollingListPayload<K extends RefreshDomain>(
+    domain: K,
+    payload: DomainPayloadMap[K],
+    scope?: string
+  ): DomainPayloadMap[K] {
+    if (domain === 'namespaces') {
+      const previous = getDomainState('namespaces').data as NamespaceSnapshotPayload | null;
+      if (!previous?.namespaces?.length) {
+        return payload;
+      }
+      const incoming = payload as NamespaceSnapshotPayload;
+      const fallbackClusterId = incoming.clusterId ?? '';
+      const merged = mergeListByKey(
+        incoming.namespaces ?? [],
+        previous.namespaces ?? [],
+        (entry) => `${entry.clusterId ?? fallbackClusterId}::${entry.name}`
+      );
+      if (merged === incoming.namespaces) {
+        return payload;
+      }
+      return { ...incoming, namespaces: merged } as DomainPayloadMap[K];
+    }
+
+    if (domain === 'node-maintenance') {
+      if (!scope) {
+        return payload;
+      }
+      const previous = getScopedDomainState('node-maintenance', scope)
+        .data as NodeMaintenanceSnapshotPayload | null;
+      if (!previous?.drains?.length) {
+        return payload;
+      }
+      const incoming = payload as NodeMaintenanceSnapshotPayload;
+      const fallbackClusterId = incoming.clusterId ?? '';
+      const merged = mergeListByKey(
+        incoming.drains ?? [],
+        previous.drains ?? [],
+        (entry) => `${entry.clusterId ?? fallbackClusterId}::${entry.id}`
+      );
+      if (merged === incoming.drains) {
+        return payload;
+      }
+      return { ...incoming, drains: merged } as DomainPayloadMap[K];
+    }
+
+    if (domain === 'catalog-diff') {
+      if (!scope) {
+        return payload;
+      }
+      const previous = getScopedDomainState('catalog-diff', scope)
+        .data as CatalogSnapshotPayload | null;
+      if (!previous?.items?.length) {
+        return payload;
+      }
+      const incoming = payload as CatalogSnapshotPayload;
+      const fallbackClusterId = incoming.clusterId ?? '';
+      const merged = mergeListByKey(incoming.items ?? [], previous.items ?? [], (entry) => {
+        const clusterId = entry.clusterId ?? fallbackClusterId;
+        if (entry.uid) {
+          return `${clusterId}::${entry.uid}`;
+        }
+        return `${clusterId}::${entry.group}::${entry.version}::${entry.resource}::${entry.namespace ?? ''}::${entry.name}`;
+      });
+      if (merged === incoming.items) {
+        return payload;
+      }
+      return { ...incoming, items: merged } as DomainPayloadMap[K];
+    }
+
+    return payload;
   }
 
   private applyMetricsSnapshot<K extends RefreshDomain>(

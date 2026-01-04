@@ -360,7 +360,6 @@ Luxury Yacht:
 
 Remaining gap-closing work (see stability/performance lists below for evidence):
 
-- Incremental list caching for polling-only domains (Performance #1).
 - Optional parity: per-request SSAR gating for snapshot builds to match Headlamp's per-request checks (headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/permissions/checker.go:34).
 
 ## Stability risks (remaining, with evidence)
@@ -380,7 +379,11 @@ None.
 
 ## Performance improvement opportunities (remaining, with evidence)
 
-1. ⏳ For remaining polling-only domains, consider incremental list caches (Headlamp's React Query + watch updates) to reduce full payload replacements (headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts:232; headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts:43; frontend/src/core/refresh/store.ts:13). Impact: high. Effort: high.
+None.
+
+## Performance improvements (completed)
+
+1. ✅ Incremental list caching for polling-only domains reuses unchanged rows to reduce full payload replacements (frontend/src/core/refresh/orchestrator.ts:1812; frontend/src/core/refresh/orchestrator.test.ts:370).
 
 ## Polling-only (non-streaming) domains
 
