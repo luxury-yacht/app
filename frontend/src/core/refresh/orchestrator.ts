@@ -9,6 +9,7 @@ import {
   ensureRefreshBaseURL,
   fetchSnapshot,
   invalidateRefreshBaseURL,
+  setMetricsActive,
   type Snapshot,
   type SnapshotStats,
 } from './client';
@@ -183,6 +184,7 @@ class RefreshOrchestrator {
   private domainStreamingScopes = new Map<RefreshDomain, string>();
   private blockedStreaming = new Set<string>();
   private lastMetricsRefreshAt = new Map<string, number>();
+  private metricsDemandActive = false;
   private domainEnabledState = new Map<RefreshDomain, boolean>();
   private scopedEnabledState = new Map<RefreshDomain, Map<string, boolean>>();
   private domainScopeOverrides = new Map<RefreshDomain, string>();
@@ -403,6 +405,7 @@ class RefreshOrchestrator {
         this.setScopedDomainEnabled(domain, scope, enabled);
       });
       this.scopedEnabledState.set(domain, scopedState);
+      this.updateMetricsDemand();
       return;
     }
 
@@ -419,12 +422,15 @@ class RefreshOrchestrator {
 
     if (config.streaming && !config.scoped) {
       if (enabled && !normalizedScope) {
+        this.updateMetricsDemand();
         return;
       }
       if (initialEnabled === enabled && previousScope === normalizedScope && shouldStream) {
+        this.updateMetricsDemand();
         return;
       }
     } else if (initialEnabled === enabled) {
+      this.updateMetricsDemand();
       return;
     }
 
@@ -433,6 +439,7 @@ class RefreshOrchestrator {
       refreshManager.disable(config.refresherName);
       this.cancelInFlightForDomain(domain);
       resetDomainState(domain);
+      this.updateMetricsDemand();
       return;
     }
 
@@ -458,6 +465,7 @@ class RefreshOrchestrator {
           refreshManager.disable(config.refresherName);
         }
         this.updateRefresherForStreaming(domain);
+        this.updateMetricsDemand();
         return;
       }
       if (enabled) {
@@ -499,10 +507,12 @@ class RefreshOrchestrator {
         refreshManager.disable(config.refresherName);
       }
       this.updateRefresherForStreaming(domain);
+      this.updateMetricsDemand();
       return;
     }
 
     if (initialEnabled === enabled) {
+      this.updateMetricsDemand();
       return;
     }
 
@@ -513,6 +523,7 @@ class RefreshOrchestrator {
       this.cancelInFlightForDomain(domain);
       resetDomainState(domain);
     }
+    this.updateMetricsDemand();
   }
 
   private scheduleStreamingStart(
@@ -733,6 +744,7 @@ class RefreshOrchestrator {
           this.stopStreamingScope(domain, normalizedScope, config.streaming, false);
         }
       }
+      this.updateMetricsDemand();
       return;
     }
 
@@ -740,6 +752,7 @@ class RefreshOrchestrator {
       this.cancelInFlightForScopedDomain(domain, normalizedScope);
       resetScopedDomainState(domain, normalizedScope);
     }
+    this.updateMetricsDemand();
   }
 
   resetScopedDomain(domain: RefreshDomain, scope: string): void {
@@ -2052,6 +2065,34 @@ class RefreshOrchestrator {
 
   private isDomainEnabledInternal(domain: RefreshDomain): boolean {
     return this.domainEnabledState.get(domain) ?? DEFAULT_AUTO_START;
+  }
+
+  private isMetricsDemandActive(): boolean {
+    if (this.isDomainEnabledInternal('cluster-overview')) {
+      return true;
+    }
+    if (this.isDomainEnabledInternal('nodes')) {
+      return true;
+    }
+    if (this.hasEnabledScopedSources('pods')) {
+      return true;
+    }
+    if (this.hasEnabledScopedSources('namespace-workloads')) {
+      return true;
+    }
+    return false;
+  }
+
+  private updateMetricsDemand(): void {
+    const active = this.isMetricsDemandActive();
+    if (active === this.metricsDemandActive) {
+      return;
+    }
+    this.metricsDemandActive = active;
+    void setMetricsActive(active).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarning(`[refresh] metrics demand update failed: ${message}`);
+    });
   }
 
   private isScopedDomainEnabledInternal(domain: RefreshDomain, scope: string): boolean {

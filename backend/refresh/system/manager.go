@@ -159,8 +159,10 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	appendIssue("metrics-poller", "metrics.k8s.io/nodes,pods", metricsNodesErr, metricsPodsErr)
 	if metricsNodesErr == nil && metricsPodsErr == nil && metricsNodesAllowed && metricsPodsAllowed {
 		poller := metrics.NewPoller(cfg.MetricsClient, cfg.RestConfig, cfg.MetricsInterval, telemetryRecorder)
-		metricsPoller = poller
-		metricsProvider = poller
+		idleTimeout := cfg.MetricsInterval * 3
+		demandPoller := metrics.NewDemandPoller(poller, poller, idleTimeout)
+		metricsPoller = demandPoller
+		metricsProvider = demandPoller
 	} else {
 		logSkip("metrics-poller", "metrics.k8s.io", "nodes/pods")
 
@@ -511,7 +513,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz/refresh", HealthHandler(informerFactory))
-	api.NewServer(registry, snapshotService, queue, telemetryRecorder).Register(mux)
+	api.NewServer(registry, snapshotService, queue, telemetryRecorder, manager).Register(mux)
 
 	logHandler, err := logstream.NewHandler(cfg.KubernetesClient, cfg.Logger, telemetryRecorder)
 	if err != nil {

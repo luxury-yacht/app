@@ -44,6 +44,7 @@ type MetricsStatus struct {
 	LastError           string `json:"lastError,omitempty"`
 	SuccessCount        uint64 `json:"successCount"`
 	FailureCount        uint64 `json:"failureCount"`
+	Active              bool   `json:"active"`
 }
 
 // Summary aggregates the telemetry story for diagnostics.
@@ -89,13 +90,13 @@ type ConnectionStats struct {
 
 // Recorder collects refresh and metrics telemetry in-memory.
 type Recorder struct {
-	mu         sync.RWMutex
-	snapshots  map[string]*SnapshotStatus
-	metrics    MetricsStatus
-	streams    map[string]*StreamStatus
-	catalog    CatalogStatus
-	connection ConnectionStats
-	clusterID  string
+	mu          sync.RWMutex
+	snapshots   map[string]*SnapshotStatus
+	metrics     MetricsStatus
+	streams     map[string]*StreamStatus
+	catalog     CatalogStatus
+	connection  ConnectionStats
+	clusterID   string
 	clusterName string
 }
 
@@ -277,6 +278,16 @@ func (r *Recorder) RecordMetrics(duration time.Duration, collectedAt time.Time, 
 	}
 }
 
+// RecordMetricsActive tracks whether the metrics poller is currently running.
+func (r *Recorder) RecordMetricsActive(active bool) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.metrics.Active = active
+}
+
 // RecordRetryAttempt increments retry-attempt counters.
 func (r *Recorder) RecordRetryAttempt(err error) {
 	if r == nil {
@@ -381,9 +392,9 @@ type StreamStatus struct {
 
 // Stream name identifiers used across the backend/frontend telemetry contract.
 const (
-	StreamEvents  = "events"
-	StreamLogs    = "object-logs"
-	StreamCatalog = "catalog"
+	StreamEvents    = "events"
+	StreamLogs      = "object-logs"
+	StreamCatalog   = "catalog"
 	StreamResources = "resources"
 )
 

@@ -293,7 +293,7 @@ Per polling-only domain:
    - Effort: Medium.
    - Risk: Medium.
 
-4. Metrics pipeline: make metrics polling demand-driven (start/stop based on active views) to reduce background load, similar to Headlamp's per-call polling loop, instead of always-on backend polling (headlamp/frontend/src/lib/k8s/api/v1/metricsApi.ts:33; backend/refresh/types.go:137; backend/refresh/types.go:158).
+4. ✅ Metrics pipeline: make metrics polling demand-driven (start/stop based on active views) to reduce background load, similar to Headlamp's per-call polling loop, instead of always-on backend polling (headlamp/frontend/src/lib/k8s/api/v1/metricsApi.ts:33; backend/refresh/types.go:137; backend/refresh/types.go:158).
 
    - Work items:
      - Track active metrics consumers in the refresh manager and call start/stop on the backend poller based on usage (frontend/src/core/refresh/RefreshManager.ts:554; backend/refresh/types.go:137).

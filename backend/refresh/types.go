@@ -134,7 +134,7 @@ func NewManager(reg Registry, hub InformerHub, svc SnapshotService, poller Metri
 	}
 }
 
-// Start boots the informer hub and metrics poller exactly once.
+// Start boots the informer hub and captures the metrics poller context once.
 func (m *Manager) Start(ctx context.Context) error {
 	m.mu.Lock()
 	if m.started {
@@ -180,6 +180,16 @@ func (m *Manager) Start(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// SetMetricsActive toggles demand-driven metrics polling when supported.
+func (m *Manager) SetMetricsActive(active bool) {
+	if m == nil || m.metricsPoller == nil {
+		return
+	}
+	if controller, ok := m.metricsPoller.(interface{ SetActive(bool) }); ok {
+		controller.SetActive(active)
+	}
 }
 
 // Shutdown terminates running background services.

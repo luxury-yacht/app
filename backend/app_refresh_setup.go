@@ -167,7 +167,13 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
 	aggregateResources := newAggregateResourceStreamHandler(subsystems)
 	mux := http.NewServeMux()
-	api.NewServer(hostSubsystem.Registry, aggregateService, aggregateQueue, hostSubsystem.Telemetry).Register(mux)
+	api.NewServer(
+		hostSubsystem.Registry,
+		aggregateService,
+		aggregateQueue,
+		hostSubsystem.Telemetry,
+		hostSubsystem.Manager,
+	).Register(mux)
 	mux.Handle("/api/v2/stream/events", aggregateEvents)
 	mux.Handle("/api/v2/stream/logs", aggregateLogs)
 	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)

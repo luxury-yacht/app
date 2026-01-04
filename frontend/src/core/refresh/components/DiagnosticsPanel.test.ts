@@ -631,6 +631,39 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
   });
 
+  test('shows idle metrics summary when polling is inactive', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
+    const now = Date.now();
+
+    fetchTelemetrySummaryMock.mockResolvedValueOnce({
+      snapshots: [],
+      metrics: {
+        lastCollected: now - 1000,
+        lastDurationMs: 120,
+        consecutiveFailures: 0,
+        lastError: '',
+        successCount: 3,
+        failureCount: 0,
+        active: false,
+      },
+      streams: [],
+    });
+
+    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+
+    await flushAsync();
+    await flushAsync();
+
+    const metricsPrimary = rendered.container.querySelector<HTMLSpanElement>(
+      '.diagnostics-summary-card:nth-of-type(2) .diagnostics-summary-primary'
+    );
+    expect(metricsPrimary?.textContent).toContain('Status: Idle');
+
+    await rendered.unmount();
+  });
+
   test('shows warning summaries when telemetry fetch fails', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));

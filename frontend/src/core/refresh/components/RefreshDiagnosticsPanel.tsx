@@ -1249,6 +1249,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   );
   const metricsSummary = useMemo(() => {
     const updatedInfo = formatLastUpdated(telemetryMetrics?.lastCollected);
+    // Demand-driven metrics polling reports inactive when no metrics views are open.
+    const isIdle = telemetryMetrics?.active === false;
     let statusText = 'Loading…';
     let className: string | undefined;
     let title: string | undefined;
@@ -1269,12 +1271,17 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       } else if (telemetryMetrics.consecutiveFailures > 0) {
         statusText = 'Retrying';
         className = 'diagnostics-summary-warning';
+      } else if (isIdle) {
+        statusText = 'Idle';
       } else {
         statusText = 'OK';
       }
     }
 
     const tooltipParts: string[] = [];
+    if (isIdle) {
+      tooltipParts.push('Polling idle (no active metrics views)');
+    }
     if (telemetryMetrics?.failureCount) {
       tooltipParts.push(`Failures: ${telemetryMetrics.failureCount}`);
     }

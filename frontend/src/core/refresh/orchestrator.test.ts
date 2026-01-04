@@ -49,12 +49,14 @@ const clientMocks = vi.hoisted(() => ({
   fetchSnapshotMock: vi.fn(),
   ensureRefreshBaseURLMock: vi.fn().mockResolvedValue('http://localhost'),
   invalidateRefreshBaseURLMock: vi.fn(),
+  setMetricsActiveMock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('./client', () => ({
   fetchSnapshot: clientMocks.fetchSnapshotMock,
   ensureRefreshBaseURL: clientMocks.ensureRefreshBaseURLMock,
   invalidateRefreshBaseURL: clientMocks.invalidateRefreshBaseURLMock,
+  setMetricsActive: clientMocks.setMetricsActiveMock,
 }));
 
 const logStreamMocks = vi.hoisted(() => ({
@@ -131,6 +133,7 @@ describe('refreshOrchestrator', () => {
     clientMocks.fetchSnapshotMock.mockReset();
     clientMocks.ensureRefreshBaseURLMock.mockClear();
     clientMocks.invalidateRefreshBaseURLMock.mockClear();
+    clientMocks.setMetricsActiveMock.mockClear();
     errorHandlerMock.handle.mockReset();
 
     orchestratorInternals.configs?.clear?.();
@@ -149,6 +152,7 @@ describe('refreshOrchestrator', () => {
     orchestratorInternals.suspendedDomains?.clear?.();
     orchestratorInternals.lastNotifiedErrors?.clear?.();
     orchestratorInternals.contextVersion = 0;
+    orchestratorInternals.metricsDemandActive = false;
     orchestratorInternals.context = {
       currentView: 'namespace',
       objectPanel: { isOpen: false },
@@ -728,6 +732,23 @@ describe('refreshOrchestrator', () => {
     const state = getDomainState('cluster-config');
     expect(state.status).toBe('loading');
     expect(state.isManual).toBe(true);
+  });
+
+  it('updates metrics demand when metrics domains toggle', () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-overview',
+      refresherName: SYSTEM_REFRESHERS.clusterOverview,
+      category: 'cluster',
+      autoStart: false,
+    });
+
+    // Metrics demand should follow the visibility of metrics-driven domains.
+    refreshOrchestrator.setDomainEnabled('cluster-overview', true);
+    expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledWith(true);
+
+    refreshOrchestrator.setDomainEnabled('cluster-overview', false);
+    expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(false);
+    expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledTimes(2);
   });
 
   it('replaces existing non-scoped subscriptions when re-registering a domain', () => {

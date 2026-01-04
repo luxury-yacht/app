@@ -641,6 +641,7 @@ export interface TelemetryMetricsStatus {
   lastError?: string;
   successCount: number;
   failureCount: number;
+  active?: boolean;
 }
 
 export interface TelemetryStreamStatus {
