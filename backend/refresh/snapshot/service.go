@@ -13,19 +13,22 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
 // Service builds snapshots through registered domain builders and applies short-lived caching via singleflight.
 type Service struct {
-	registry  *domain.Registry
-	telemetry *telemetry.Recorder
-	group     singleflight.Group
-	sequence  uint64
-	cluster   ClusterMeta
-	cacheMu   sync.RWMutex
-	cache     map[string]cacheEntry
-	cacheTTL  time.Duration
+	registry          *domain.Registry
+	telemetry         *telemetry.Recorder
+	group             singleflight.Group
+	sequence          uint64
+	cluster           ClusterMeta
+	cacheMu           sync.RWMutex
+	cache             map[string]cacheEntry
+	cacheTTL          time.Duration
+	permissionChecker *permissions.Checker
+	permissionChecks  map[string]permissionCheck
 }
 
 type cacheEntry struct {
@@ -35,18 +38,49 @@ type cacheEntry struct {
 
 // NewService returns a Service for the provided registry.
 func NewService(reg *domain.Registry, recorder *telemetry.Recorder, meta ClusterMeta) *Service {
+	return newService(reg, recorder, meta, nil, nil)
+}
+
+// NewServiceWithPermissions returns a Service that validates runtime permissions per snapshot request.
+func NewServiceWithPermissions(
+	reg *domain.Registry,
+	recorder *telemetry.Recorder,
+	meta ClusterMeta,
+	checker *permissions.Checker,
+) *Service {
+	return newService(reg, recorder, meta, checker, nil)
+}
+
+func newService(
+	reg *domain.Registry,
+	recorder *telemetry.Recorder,
+	meta ClusterMeta,
+	checker *permissions.Checker,
+	checks map[string]permissionCheck,
+) *Service {
+	if checker == nil {
+		checks = nil
+	}
+	if checker != nil && checks == nil {
+		checks = defaultPermissionChecks()
+	}
 	return &Service{
-		registry:  reg,
-		telemetry: recorder,
-		cluster:   meta,
-		cache:     make(map[string]cacheEntry),
-		cacheTTL:  config.SnapshotCacheTTL,
+		registry:          reg,
+		telemetry:         recorder,
+		cluster:           meta,
+		cache:             make(map[string]cacheEntry),
+		cacheTTL:          config.SnapshotCacheTTL,
+		permissionChecker: checker,
+		permissionChecks:  checks,
 	}
 }
 
 // Build returns a snapshot for the requested domain/scope.
 func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh.Snapshot, error) {
 	ctx = WithClusterMeta(ctx, s.cluster)
+	if err := s.ensurePermissions(ctx, domainName, scope); err != nil {
+		return nil, err
+	}
 	cacheKey := s.cacheKey(domainName, scope)
 	if !refresh.HasCacheBypass(ctx) {
 		if cached := s.loadCache(cacheKey); cached != nil {
@@ -112,6 +146,57 @@ func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh
 		return nil, err
 	}
 	return value.(*refresh.Snapshot), nil
+}
+
+// ensurePermissions blocks snapshot builds when the current identity no longer has list access.
+func (s *Service) ensurePermissions(ctx context.Context, domainName, scope string) error {
+	if s == nil || s.permissionChecker == nil || len(s.permissionChecks) == 0 {
+		return nil
+	}
+	check, ok := s.permissionChecks[domainName]
+	if !ok {
+		return nil
+	}
+	start := time.Now()
+	allowed, err := check.allows(ctx, s.permissionChecker)
+	if err != nil {
+		duration := time.Since(start)
+		s.recordTelemetry(
+			domainName,
+			scope,
+			duration,
+			err,
+			false,
+			0,
+			nil,
+			0,
+			0,
+			0,
+			true,
+			duration.Milliseconds(),
+		)
+		return err
+	}
+	if allowed {
+		return nil
+	}
+	denied := refresh.NewPermissionDeniedError(domainName, check.resource)
+	duration := time.Since(start)
+	s.recordTelemetry(
+		domainName,
+		scope,
+		duration,
+		denied,
+		false,
+		0,
+		nil,
+		0,
+		0,
+		0,
+		true,
+		duration.Milliseconds(),
+	)
+	return denied
 }
 
 func (s *Service) recordTelemetry(

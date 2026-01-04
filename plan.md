@@ -358,9 +358,9 @@ Luxury Yacht:
 
 ## Recommendations for Luxury Yacht (stability/perf)
 
-Remaining gap-closing work (see stability/performance lists below for evidence):
+Gap-closing work (completed):
 
-- Optional parity: per-request SSAR gating for snapshot builds to match Headlamp's per-request checks (headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/permissions/checker.go:34).
+- ✅ Optional parity: per-request SSAR gating for snapshot builds to match Headlamp's per-request checks (headlamp/backend/pkg/k8cache/authorization.go:119; backend/refresh/system/manager.go:93; backend/refresh/permissions/checker.go:34).
 
 ## Stability risks (remaining, with evidence)
 
