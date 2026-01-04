@@ -162,6 +162,22 @@ type sessionSubscription struct {
 	clusterName string
 }
 
+// Normal view transitions close the websocket without a close status or after we send a close.
+func isExpectedStreamCloseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, websocket.ErrCloseSent) {
+		return true
+	}
+	return websocket.IsCloseError(
+		err,
+		websocket.CloseNormalClosure,
+		websocket.CloseGoingAway,
+		websocket.CloseNoStatusReceived,
+	)
+}
+
 func newSession(
 	conn wsConn,
 	adapter Adapter,
@@ -212,7 +228,12 @@ func (s *session) readLoop() {
 	for {
 		var msg ClientMessage
 		if err := s.conn.ReadJSON(&msg); err != nil {
-			if !websocket.IsUnexpectedCloseError(err) {
+			if !websocket.IsUnexpectedCloseError(
+				err,
+				websocket.CloseNormalClosure,
+				websocket.CloseGoingAway,
+				websocket.CloseNoStatusReceived,
+			) {
 				return
 			}
 			s.logger.Warn(fmt.Sprintf("stream mux read error: %v", err), "StreamMux")
@@ -460,7 +481,9 @@ func (s *session) writeMessage(msg ServerMessage) error {
 		s.logger.Warn(fmt.Sprintf("stream mux: write deadline failed: %v", err), "StreamMux")
 	}
 	if err := s.conn.WriteJSON(msg); err != nil {
-		s.logger.Warn(fmt.Sprintf("stream mux write error: %v", err), "StreamMux")
+		if !isExpectedStreamCloseError(err) {
+			s.logger.Warn(fmt.Sprintf("stream mux write error: %v", err), "StreamMux")
+		}
 		s.shutdown()
 		return err
 	}
