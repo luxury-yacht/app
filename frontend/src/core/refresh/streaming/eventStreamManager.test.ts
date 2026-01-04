@@ -151,6 +151,32 @@ describe('EventStreamManager', () => {
     expect(state.data).toBeNull();
   });
 
+  test('applyPayload surfaces permission denied details when provided', async () => {
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+
+    manager.applyPayload('cluster-events', 'cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 2,
+      generatedAt: 789,
+      errorDetails: {
+        kind: 'Status',
+        apiVersion: 'v1',
+        message: 'permission denied',
+        reason: 'Forbidden',
+        details: { domain: 'cluster-events', resource: 'core/events' },
+        code: 403,
+      },
+    });
+
+    await flushTimers();
+
+    const state = getDomainState('cluster-events');
+    expect(state.status).toBe('error');
+    expect(state.error).toBe('permission denied (domain cluster-events, resource core/events)');
+  });
+
   test('handleStreamError marks domain error after threshold', async () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();

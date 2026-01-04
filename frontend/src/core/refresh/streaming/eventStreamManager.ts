@@ -13,7 +13,9 @@ import type {
   ClusterEventsSnapshotPayload,
   NamespaceEventSummary,
   NamespaceEventsSnapshotPayload,
+  PermissionDeniedStatus,
 } from '../types';
+import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
 import { formatAge } from '@/utils/ageFormatter';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
@@ -42,6 +44,7 @@ interface StreamEventPayload {
   total?: number;
   truncated?: boolean;
   error?: string;
+  errorDetails?: PermissionDeniedStatus;
 }
 
 function isValidStreamEventPayload(data: unknown): data is StreamEventPayload {
@@ -67,6 +70,10 @@ function isValidStreamEventPayload(data: unknown): data is StreamEventPayload {
   }
 
   if (obj.error !== undefined && typeof obj.error !== 'string') {
+    return false;
+  }
+
+  if (obj.errorDetails !== undefined && !isPermissionDeniedStatus(obj.errorDetails)) {
     return false;
   }
 
@@ -407,9 +414,13 @@ export class EventStreamManager {
   applyPayload(domain: string, scope: string, payload: StreamEventPayload): void {
     const generatedAt = payload.generatedAt || Date.now();
     const events = payload.events ?? [];
+    const errorMessage = resolvePermissionDeniedMessage(
+      payload.error ?? null,
+      payload.errorDetails
+    );
     const payloadTotal = typeof payload.total === 'number' ? payload.total : undefined;
     const payloadTruncated = typeof payload.truncated === 'boolean' ? payload.truncated : undefined;
-    if (!payload.reset && events.length === 0 && !payload.error) {
+    if (!payload.reset && events.length === 0 && !errorMessage) {
       return;
     }
     if (domain === CLUSTER_DOMAIN) {
@@ -422,7 +433,7 @@ export class EventStreamManager {
       const resolvedTruncated = payloadTruncated !== undefined ? payloadTruncated : truncated;
       this.clusterEvents = items.map(normalizeClusterEntry);
       this.clusterEventMeta = { total: resolvedTotal, truncated: resolvedTruncated };
-      this.scheduleClusterStateUpdate(generatedAt, payload.error ?? null);
+      this.scheduleClusterStateUpdate(generatedAt, errorMessage);
       return;
     }
 
@@ -437,7 +448,7 @@ export class EventStreamManager {
       const resolvedTruncated = payloadTruncated !== undefined ? payloadTruncated : truncated;
       this.namespaceEvents.set(scope, items.map(normalizeNamespaceEntry));
       this.namespaceEventMeta.set(scope, { total: resolvedTotal, truncated: resolvedTruncated });
-      this.scheduleNamespaceStateUpdate(scope, generatedAt, payload.error ?? null);
+      this.scheduleNamespaceStateUpdate(scope, generatedAt, errorMessage);
     }
   }
 

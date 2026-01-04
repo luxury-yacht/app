@@ -13,6 +13,21 @@
 import { types } from '@wailsjs/go/models';
 import type { SnapshotStats } from './client';
 
+// PermissionDeniedStatus mirrors Status-like RBAC error payloads from the refresh API.
+export interface PermissionDeniedDetails {
+  domain?: string;
+  resource?: string;
+}
+
+export interface PermissionDeniedStatus {
+  kind?: string;
+  apiVersion?: string;
+  message?: string;
+  reason?: string;
+  details?: PermissionDeniedDetails;
+  code?: number;
+}
+
 export interface ClusterMeta {
   clusterId?: string;
   clusterName?: string;

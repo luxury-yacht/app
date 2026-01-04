@@ -83,6 +83,10 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 
 	snapshot, err := s.snapshots.Build(ctx, domainName, scope)
 	if err != nil {
+		if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
+			writePermissionDenied(w, status, correlationID)
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err, correlationID)
 		return
 	}
@@ -254,6 +258,14 @@ func writeError(w http.ResponseWriter, status int, err error, correlationID stri
 		Message:       err.Error(),
 		CorrelationID: correlationID,
 	})
+}
+
+// writePermissionDenied emits a Status-like payload for RBAC denials.
+func writePermissionDenied(w http.ResponseWriter, status *refresh.PermissionDeniedStatus, correlationID string) {
+	w.Header().Set("Content-Type", "application/json")
+	setCorrelationID(w, correlationID)
+	w.WriteHeader(http.StatusForbidden)
+	_ = json.NewEncoder(w).Encode(status)
 }
 
 func applyCORS(w http.ResponseWriter, r *http.Request, allowedMethods ...string) bool {

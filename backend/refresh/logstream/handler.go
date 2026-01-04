@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -21,10 +22,30 @@ const (
 	batchMaxSize     = 64
 )
 
+const logPermissionResource = "core/pods/log"
+
 // Handler exposes an SSE endpoint for streaming pod/workload logs.
 type Handler struct {
 	streamer  *Streamer
 	telemetry *telemetry.Recorder
+}
+
+// permissionDeniedError preserves the original message while exposing details for structured payloads.
+type permissionDeniedError struct {
+	domain   string
+	resource string
+	message  string
+}
+
+func (e permissionDeniedError) Error() string {
+	return e.message
+}
+
+func (e permissionDeniedError) PermissionDeniedDetails() refresh.PermissionDeniedDetails {
+	return refresh.PermissionDeniedDetails{
+		Domain:   e.domain,
+		Resource: e.resource,
+	}
 }
 
 // NewHandler constructs a log stream handler.
@@ -68,6 +89,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
+	sequence := uint64(1)
 	ctx := r.Context()
 	if deadline, ok := ctx.Deadline(); ok {
 		h.streamer.logger.Debug(fmt.Sprintf("logstream: client deadline %s", deadline.Format(time.RFC3339)), "LogStream")
@@ -79,11 +101,22 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.telemetry.RecordStreamError(streamName, err)
 		}
 		h.streamer.logger.Warn(fmt.Sprintf("logstream: initial tail failed: %v", err), "LogStream")
+		if status := permissionDeniedStatus(err); status != nil {
+			payload := EventPayload{
+				Domain:       "object-logs",
+				Scope:        opts.ScopeString,
+				Sequence:     sequence,
+				GeneratedAt:  time.Now().UnixMilli(),
+				Error:        err.Error(),
+				ErrorDetails: status,
+			}
+			_ = writeEvent(w, f, payload)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	sequence := uint64(1)
 	if len(initial) > 0 {
 		event := EventPayload{
 			Domain:      "object-logs",
@@ -184,6 +217,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Sequence:    sequence,
 				GeneratedAt: time.Now().UnixMilli(),
 				Error:       err.Error(),
+			}
+			if status := permissionDeniedStatus(err); status != nil {
+				errPayload.ErrorDetails = status
 			}
 			sequence++
 			if writeEvent(w, f, errPayload) != nil {
@@ -287,11 +323,11 @@ func parseOptions(r *http.Request) (Options, error) {
 		}
 	}
 	return Options{
-		Namespace:   namespace,
-		Kind:        strings.ToLower(kind),
-		Name:        name,
-		Container:   container,
-		TailLines:   tail,
+		Namespace: namespace,
+		Kind:      strings.ToLower(kind),
+		Name:      name,
+		Container: container,
+		TailLines: tail,
 		// Keep the original scope for client-side keying.
 		ScopeString: rawScope,
 	}, nil
@@ -311,4 +347,22 @@ func applyCORS(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	return true
+}
+
+// permissionDeniedStatus translates forbidden log errors into Status-like payloads.
+func permissionDeniedStatus(err error) *refresh.PermissionDeniedStatus {
+	if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
+		return status
+	}
+	if apierrors.IsForbidden(err) {
+		wrapped := permissionDeniedError{
+			domain:   "object-logs",
+			resource: logPermissionResource,
+			message:  err.Error(),
+		}
+		if status, ok := refresh.PermissionDeniedStatusFromError(wrapped); ok {
+			return status
+		}
+	}
+	return nil
 }

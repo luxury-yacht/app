@@ -311,7 +311,7 @@ Per polling-only domain:
    - Effort: Low to Medium.
    - Risk: Low.
 
-6. Error handling/backoff: return structured permission-denied error payloads (Status-like) for snapshot/stream responses to improve UI diagnostics, similar to Headlamp's AuthErrResponse, instead of plain string errors (headlamp/backend/pkg/k8cache/authErrResp.go:23; backend/refresh/errors.go:5).
+6. ✅ Error handling/backoff: return structured permission-denied error payloads (Status-like) for snapshot/stream responses to improve UI diagnostics, similar to Headlamp's AuthErrResponse, instead of plain string errors (headlamp/backend/pkg/k8cache/authErrResp.go:23; backend/refresh/errors.go:5).
 
    - Work items:
      - Define a response shape for permission errors in the refresh API and SSE payloads (backend/refresh/errors.go:5; backend/refresh/api/server.go:71).

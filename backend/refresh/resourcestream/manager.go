@@ -33,6 +33,7 @@ import (
 	networklisters "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/logstream"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
@@ -1913,23 +1914,55 @@ func (m *Manager) checkDomainPermissions(domain string) error {
 	}
 
 	for _, perm := range required {
-		if err := m.checkPermission(perm.group, perm.resource); err != nil {
+		if err := m.checkPermission(domain, perm.group, perm.resource); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (m *Manager) checkPermission(group, resource string) error {
+// permissionDeniedError keeps the original error message while exposing details for structured responses.
+type permissionDeniedError struct {
+	domain   string
+	resource string
+	message  string
+}
+
+func (e permissionDeniedError) Error() string {
+	return e.message
+}
+
+func (e permissionDeniedError) PermissionDeniedDetails() refresh.PermissionDeniedDetails {
+	return refresh.PermissionDeniedDetails{
+		Domain:   e.domain,
+		Resource: e.resource,
+	}
+}
+
+func (m *Manager) checkPermission(domain, group, resource string) error {
 	listAllowed, listErr := m.permissions.CanListResource(group, resource)
 	watchAllowed, watchErr := m.permissions.CanWatchResource(group, resource)
 	if listErr != nil || watchErr != nil {
 		return fmt.Errorf("resource stream permission check failed for %s/%s: %v %v", group, resource, listErr, watchErr)
 	}
 	if !listAllowed || !watchAllowed {
-		return fmt.Errorf("resource stream permission denied for %s/%s", group, resource)
+		message := fmt.Sprintf("resource stream permission denied for %s/%s", group, resource)
+		return permissionDeniedError{
+			domain:   domain,
+			resource: permissionResourceLabel(group, resource),
+			message:  message,
+		}
 	}
 	return nil
+}
+
+// permissionResourceLabel normalizes resource identifiers for permission error details.
+func permissionResourceLabel(group, resource string) string {
+	labelGroup := strings.TrimSpace(group)
+	if labelGroup == "" {
+		labelGroup = "core"
+	}
+	return fmt.Sprintf("%s/%s", labelGroup, resource)
 }
 
 func domainPermissions(domain string) ([]permissionRequirement, bool) {

@@ -3,6 +3,8 @@ package eventstream
 import (
 	"sync"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/refresh"
 )
 
 // Logger represents the minimal interface required for streaming telemetry.
@@ -45,15 +47,16 @@ type StreamEvent struct {
 
 // Payload is the SSE envelope delivered to clients.
 type Payload struct {
-	Domain      string  `json:"domain"`
-	Scope       string  `json:"scope"`
-	Sequence    uint64  `json:"sequence"`
-	GeneratedAt int64   `json:"generatedAt"`
-	Reset       bool    `json:"reset,omitempty"`
-	Events      []Entry `json:"events,omitempty"`
-	Total       int     `json:"total,omitempty"`
-	Truncated   bool    `json:"truncated,omitempty"`
-	Error       string  `json:"error,omitempty"`
+	Domain       string                          `json:"domain"`
+	Scope        string                          `json:"scope"`
+	Sequence     uint64                          `json:"sequence"`
+	GeneratedAt  int64                           `json:"generatedAt"`
+	Reset        bool                            `json:"reset,omitempty"`
+	Events       []Entry                         `json:"events,omitempty"`
+	Total        int                             `json:"total,omitempty"`
+	Truncated    bool                            `json:"truncated,omitempty"`
+	Error        string                          `json:"error,omitempty"`
+	ErrorDetails *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`
 }
 
 // subscription represents a single consumer of streaming events.

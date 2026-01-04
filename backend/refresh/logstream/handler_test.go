@@ -3,6 +3,7 @@ package logstream
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,8 +15,12 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func TestParseOptions(t *testing.T) {
@@ -169,6 +174,32 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 	require.Equal(t, "app", entry.Container)
 	require.False(t, entry.IsInit)
 	require.Equal(t, http.StatusOK, rec.Status())
+}
+
+func TestServeHTTPEmitsPermissionDeniedPayload(t *testing.T) {
+	client := fake.NewClientset()
+	client.PrependReactor("list", "pods", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(
+			schema.GroupResource{Group: "", Resource: "pods"},
+			"",
+			errors.New("forbidden"),
+		)
+	})
+
+	handler, err := NewHandler(client, stubLogger{}, telemetry.NewRecorder())
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/?scope=default:job:my-job", nil)
+	rec := newFlushRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	events := parseSSEEvents(rec.Body())
+	require.Len(t, events, 1)
+	require.NotEmpty(t, events[0].Error)
+	require.NotNil(t, events[0].ErrorDetails)
+	require.Equal(t, "object-logs", events[0].ErrorDetails.Details.Domain)
+	require.Equal(t, logPermissionResource, events[0].ErrorDetails.Details.Resource)
 }
 
 func TestServeHTTPStreamsUpdates(t *testing.T) {

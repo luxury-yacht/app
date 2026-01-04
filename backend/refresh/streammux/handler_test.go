@@ -3,6 +3,8 @@ package streammux
 import (
 	"testing"
 	"time"
+
+	"github.com/luxury-yacht/app/backend/refresh"
 )
 
 type stubConn struct{}
@@ -48,5 +50,19 @@ func TestSessionBackpressureKeepsSessionOpenAndResetsScope(t *testing.T) {
 
 	if !foundReset {
 		t.Fatal("expected reset message after backpressure")
+	}
+}
+
+func TestSessionSendErrorIncludesPermissionDetails(t *testing.T) {
+	session := newSession(stubConn{}, nil, noopLogger{}, "cluster-1", "cluster-a", "resources", true)
+	err := refresh.NewPermissionDeniedError("pods", "core/pods")
+	session.sendError("pods", "namespace:default", err)
+
+	msg := <-session.outgoing
+	if msg.ErrorDetails == nil {
+		t.Fatal("expected permission denied details to be included")
+	}
+	if msg.ErrorDetails.Details.Domain != "pods" || msg.ErrorDetails.Details.Resource != "core/pods" {
+		t.Fatalf("unexpected error details: %+v", msg.ErrorDetails.Details)
 	}
 }

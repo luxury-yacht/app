@@ -100,6 +100,18 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				h.telemetry.RecordStreamError(streamName, err)
 			}
 			h.logger.Warn(fmt.Sprintf("eventstream: initial snapshot failed: %v", err), "EventStream")
+			if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
+				payload := Payload{
+					Domain:       params.Domain,
+					Scope:        params.ScopeKey,
+					Sequence:     h.manager.NextSequence(params.ScopeKey),
+					GeneratedAt:  time.Now().UnixMilli(),
+					Error:        err.Error(),
+					ErrorDetails: status,
+				}
+				_ = writeEvent(w, f, payload)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

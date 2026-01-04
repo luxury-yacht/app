@@ -27,6 +27,14 @@ func (f *fakeSnapshotService) Build(ctx context.Context, domain, scope string) (
 	return &snap, nil
 }
 
+type errorSnapshotService struct {
+	err error
+}
+
+func (f *errorSnapshotService) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+	return nil, f.err
+}
+
 type fakeQueue struct {
 	job *refresh.ManualRefreshJob
 }
@@ -111,6 +119,36 @@ func TestSnapshotEndpoint(t *testing.T) {
 	}
 	if snap.Domain != "nodes" {
 		t.Fatalf("unexpected domain %s", snap.Domain)
+	}
+}
+
+func TestSnapshotPermissionDenied(t *testing.T) {
+	svc := &errorSnapshotService{
+		err: refresh.NewPermissionDeniedError("nodes", "core/nodes"),
+	}
+	server := api.NewServer(domain.New(), svc, &fakeQueue{}, nil, nil)
+
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes", nil)
+	req.Header.Set("Origin", "wails://test")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected status 403 got %d", rr.Code)
+	}
+
+	var payload refresh.PermissionDeniedStatus
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	if payload.Reason != "Forbidden" || payload.Code != http.StatusForbidden {
+		t.Fatalf("unexpected status payload: %+v", payload)
+	}
+	if payload.Details.Domain != "nodes" || payload.Details.Resource != "core/nodes" {
+		t.Fatalf("unexpected details: %+v", payload.Details)
 	}
 }
 

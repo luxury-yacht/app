@@ -8,7 +8,8 @@
 import { ensureRefreshBaseURL } from '../client';
 import type { SnapshotStats } from '../client';
 import { resetScopedDomainState, setScopedDomainState } from '../store';
-import type { ObjectLogEntry, ObjectLogsSnapshotPayload } from '../types';
+import type { ObjectLogEntry, ObjectLogsSnapshotPayload, PermissionDeniedStatus } from '../types';
+import { isPermissionDeniedStatus, resolvePermissionDeniedMessage } from '../permissionErrors';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus } from '@/core/events';
 
@@ -28,6 +29,7 @@ interface StreamEventPayload {
     isInit?: boolean;
   }>;
   error?: string;
+  errorDetails?: PermissionDeniedStatus;
 }
 
 function isValidLogStreamPayload(data: unknown): data is StreamEventPayload {
@@ -53,6 +55,10 @@ function isValidLogStreamPayload(data: unknown): data is StreamEventPayload {
   }
 
   if (obj.error !== undefined && typeof obj.error !== 'string') {
+    return false;
+  }
+
+  if (obj.errorDetails !== undefined && !isPermissionDeniedStatus(obj.errorDetails)) {
     return false;
   }
 
@@ -325,6 +331,10 @@ export class LogStreamManager {
 
     const generatedAt = payload.generatedAt || Date.now();
     const sequence = payload.sequence ?? (payload.reset ? 1 : 0);
+    const errorMessage = resolvePermissionDeniedMessage(
+      payload.error ?? null,
+      payload.errorDetails
+    );
     const isManual = mode === 'manual';
     const stats = this.buildStats(scope, nextEntries.length);
 
@@ -339,17 +349,17 @@ export class LogStreamManager {
         sequence: sequence || previousPayload.sequence,
         generatedAt,
         resetCount,
-        error: payload.error ?? null,
+        error: errorMessage,
       };
 
-      const nextStatus = payload.error ? 'error' : 'ready';
+      const nextStatus = errorMessage ? 'error' : 'ready';
 
       return {
         ...previous,
         status: nextStatus,
         data: nextPayload,
         stats,
-        error: payload.error ?? null,
+        error: errorMessage,
         lastUpdated: generatedAt,
         lastAutoRefresh: isManual ? previous.lastAutoRefresh : generatedAt,
         lastManualRefresh: isManual ? generatedAt : previous.lastManualRefresh,
@@ -357,8 +367,8 @@ export class LogStreamManager {
         scope,
       };
     });
-    if (payload.error) {
-      this.notifyStreamError(scope, payload.error);
+    if (errorMessage) {
+      this.notifyStreamError(scope, errorMessage);
     } else {
       this.clearStreamError(scope);
     }

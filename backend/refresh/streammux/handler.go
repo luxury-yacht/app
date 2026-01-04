@@ -176,31 +176,31 @@ func (s *session) readLoop() {
 		case MessageTypeCancel:
 			s.handleCancel(msg)
 		default:
-			s.sendError(msg.Domain, msg.Scope, "unsupported request type")
+			s.sendError(msg.Domain, msg.Scope, errors.New("unsupported request type"))
 		}
 	}
 }
 
 func (s *session) handleSubscribe(msg ClientMessage) {
 	if msg.Domain == "" {
-		s.sendError(msg.Domain, msg.Scope, "domain is required")
+		s.sendError(msg.Domain, msg.Scope, errors.New("domain is required"))
 		return
 	}
 	if msg.ClusterID != "" && msg.ClusterID != s.clusterID {
-		s.sendError(msg.Domain, msg.Scope, "cluster mismatch")
+		s.sendError(msg.Domain, msg.Scope, errors.New("cluster mismatch"))
 		return
 	}
 
 	_, trimmed := refresh.SplitClusterScope(msg.Scope)
 	normalized, err := s.adapter.NormalizeScope(msg.Domain, trimmed)
 	if err != nil {
-		s.sendError(msg.Domain, msg.Scope, err.Error())
+		s.sendError(msg.Domain, msg.Scope, err)
 		return
 	}
 
 	sub, err := s.adapter.Subscribe(msg.Domain, normalized)
 	if err != nil {
-		s.sendError(msg.Domain, msg.Scope, err.Error())
+		s.sendError(msg.Domain, msg.Scope, err)
 		return
 	}
 
@@ -248,14 +248,14 @@ func (s *session) handleSubscribe(msg ClientMessage) {
 
 func (s *session) handleCancel(msg ClientMessage) {
 	if msg.Domain == "" {
-		s.sendError(msg.Domain, msg.Scope, "domain is required")
+		s.sendError(msg.Domain, msg.Scope, errors.New("domain is required"))
 		return
 	}
 
 	_, trimmed := refresh.SplitClusterScope(msg.Scope)
 	normalized, err := s.adapter.NormalizeScope(msg.Domain, trimmed)
 	if err != nil {
-		s.sendError(msg.Domain, msg.Scope, err.Error())
+		s.sendError(msg.Domain, msg.Scope, err)
 		return
 	}
 
@@ -390,14 +390,20 @@ func (s *session) writeMessage(msg ServerMessage) error {
 	return nil
 }
 
-func (s *session) sendError(domain, scope, message string) {
+func (s *session) sendError(domain, scope string, err error) {
+	if err == nil {
+		err = errors.New("stream error")
+	}
 	msg := ServerMessage{
 		Type:        MessageTypeError,
 		Domain:      domain,
 		Scope:       scope,
 		ClusterID:   s.clusterID,
 		ClusterName: s.clusterName,
-		Error:       message,
+		Error:       err.Error(),
+	}
+	if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
+		msg.ErrorDetails = status
 	}
 	s.enqueue(msg)
 }

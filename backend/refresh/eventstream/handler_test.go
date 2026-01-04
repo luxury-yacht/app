@@ -2,6 +2,7 @@ package eventstream
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -77,6 +78,25 @@ func TestHandlerInitialSnapshotFailure(t *testing.T) {
 	manager.mu.RLock()
 	defer manager.mu.RUnlock()
 	require.Empty(t, manager.subscribers)
+}
+
+func TestHandlerInitialSnapshotPermissionDenied(t *testing.T) {
+	handler, _, _ := newTestHandler(t, func(scope string) (*refresh.Snapshot, error) {
+		return nil, refresh.NewPermissionDeniedError("cluster-events", "core/events")
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/stream?scope=cluster", nil)
+	rec := newFlushRecorder()
+
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	payloads := parseEventPayloads(rec.Body.String())
+	require.Len(t, payloads, 1)
+	require.Equal(t, "permission denied for domain cluster-events (core/events)", payloads[0].Error)
+	require.NotNil(t, payloads[0].ErrorDetails)
+	require.Equal(t, "cluster-events", payloads[0].ErrorDetails.Details.Domain)
+	require.Equal(t, "core/events", payloads[0].ErrorDetails.Details.Resource)
 }
 
 func TestHandlerStreamsEvents(t *testing.T) {
@@ -325,4 +345,29 @@ func newTestHandler(t testing.TB, build func(scope string) (*refresh.Snapshot, e
 	handler, err := NewHandler(service, manager, noopLogger{})
 	require.NoError(t, err)
 	return handler, manager, recorder
+}
+
+// parseEventPayloads extracts JSON payloads from SSE output for assertions.
+func parseEventPayloads(raw string) []Payload {
+	chunks := strings.Split(raw, "\n\n")
+	payloads := make([]Payload, 0, len(chunks))
+	for _, chunk := range chunks {
+		if !strings.HasPrefix(chunk, "event: event") {
+			continue
+		}
+		idx := strings.Index(chunk, "data: ")
+		if idx == -1 {
+			continue
+		}
+		data := chunk[idx+len("data: "):]
+		if nl := strings.IndexByte(data, '\n'); nl != -1 {
+			data = data[:nl]
+		}
+		var payload Payload
+		if err := json.Unmarshal([]byte(data), &payload); err != nil {
+			continue
+		}
+		payloads = append(payloads, payload)
+	}
+	return payloads
 }

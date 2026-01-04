@@ -39,11 +39,13 @@ import type {
   NamespaceWorkloadSummary,
   PodSnapshotEntry,
   PodSnapshotPayload,
+  PermissionDeniedStatus,
 } from '../types';
 import { buildClusterScopeList, parseClusterScopeList } from '../clusterScope';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus, type AppEvents } from '@/core/events';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
+import { resolvePermissionDeniedMessage } from '../permissionErrors';
 
 const RESOURCE_STREAM_PATH = '/api/v2/stream/resources';
 const UPDATE_COALESCE_MS = 150;
@@ -107,6 +109,7 @@ type ServerMessage = {
   kind?: string;
   row?: unknown;
   error?: string;
+  errorDetails?: PermissionDeniedStatus;
 };
 
 type UpdateMessage = ServerMessage & { domain: ResourceDomain; scope: string };
@@ -1097,6 +1100,7 @@ export class ResourceStreamManager {
     if (!subscription) {
       return;
     }
+    const errorMessage = resolvePermissionDeniedMessage(parsed.error, parsed.errorDetails);
 
     switch (parsed.type) {
       case MESSAGE_TYPES.heartbeat:
@@ -1109,10 +1113,10 @@ export class ResourceStreamManager {
         void this.resyncSubscription(subscription, 'reset');
         return;
       case MESSAGE_TYPES.complete:
-        void this.resyncSubscription(subscription, parsed.error || 'complete');
+        void this.resyncSubscription(subscription, errorMessage || 'complete');
         return;
       case MESSAGE_TYPES.error:
-        void this.resyncSubscription(subscription, parsed.error || 'stream error', true);
+        void this.resyncSubscription(subscription, errorMessage || 'stream error', true);
         return;
       case MESSAGE_TYPES.added:
       case MESSAGE_TYPES.modified:
