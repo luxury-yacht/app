@@ -284,7 +284,7 @@ Per polling-only domain:
    - Effort: Low to Medium.
    - Risk: Low.
 
-3. Store/cache and invalidation: add an initial-sync guard or age filter for response cache invalidation to avoid evicting caches during informer warm-up, mirroring Headlamp's 1-minute age filter/skip list (headlamp/backend/pkg/k8cache/cacheInvalidation.go:106; headlamp/backend/pkg/k8cache/cacheInvalidation.go:248; backend/response_cache_invalidation.go:130).
+3. ✅ Store/cache and invalidation: add an initial-sync guard or age filter for response cache invalidation to avoid evicting caches during informer warm-up, mirroring Headlamp's 1-minute age filter/skip list (headlamp/backend/pkg/k8cache/cacheInvalidation.go:106; headlamp/backend/pkg/k8cache/cacheInvalidation.go:248; backend/response_cache_invalidation.go:130).
 
    - Work items:
      - Gate invalidation handlers on informer sync readiness or object age to avoid early churn (backend/response_cache_invalidation.go:130; backend/refresh/informer/factory.go:191).
