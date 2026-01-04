@@ -892,11 +892,7 @@ class ResourceStreamConnection {
   private reconnectTimer: number | null = null;
   private pendingMessages: ClientMessage[] = [];
 
-  constructor(
-    private readonly clusterId: string,
-    private readonly clusterScope: string,
-    private readonly manager: ResourceStreamManager
-  ) {}
+  constructor(private readonly manager: ResourceStreamManager) {}
 
   async connect(): Promise<void> {
     if (this.closed || this.paused || typeof window === 'undefined') {
@@ -908,7 +904,6 @@ class ResourceStreamConnection {
         return;
       }
       const url = new URL(RESOURCE_STREAM_PATH, baseURL);
-      url.searchParams.set('scope', this.clusterScope);
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
 
       const socket = new WebSocket(url.toString());
@@ -961,21 +956,21 @@ class ResourceStreamConnection {
 
   private handleOpen(): void {
     this.attempt = 0;
-    this.manager.handleConnectionOpen(this.clusterId);
+    this.manager.handleConnectionOpen('');
     const pending = [...this.pendingMessages];
     this.pendingMessages = [];
     pending.forEach((message) => this.send(message));
   }
 
   private handleMessage(event: MessageEvent): void {
-    this.manager.handleMessage(this.clusterId, event.data);
+    this.manager.handleMessage('', event.data);
   }
 
   private handleError(message: string): void {
     if (this.closed || this.paused) {
       return;
     }
-    this.manager.handleConnectionError(this.clusterId, message);
+    this.manager.handleConnectionError('', message);
     this.scheduleReconnect();
   }
 
@@ -983,7 +978,7 @@ class ResourceStreamConnection {
     if (this.closed || this.paused) {
       return;
     }
-    this.manager.handleConnectionError(this.clusterId, message);
+    this.manager.handleConnectionError('', message);
     this.scheduleReconnect();
   }
 
@@ -1012,7 +1007,8 @@ class ResourceStreamConnection {
 
 export class ResourceStreamManager {
   private subscriptions = new Map<string, StreamSubscription>();
-  private connections = new Map<string, ResourceStreamConnection>();
+  // Single socket used to multiplex subscriptions across clusters.
+  private connection: ResourceStreamConnection | null = null;
   private lastNotifiedErrors = new Map<string, string>();
   private consecutiveErrors = new Map<string, number>();
   private suspendedForVisibility = false;
@@ -1093,9 +1089,13 @@ export class ResourceStreamManager {
     if (!isUpdateMessage(parsed)) {
       return;
     }
+    const messageClusterId = parsed.clusterId?.trim() || clusterId;
+    if (!messageClusterId) {
+      return;
+    }
     const normalizedScope = parsed.scope.trim();
     const subscription = this.subscriptions.get(
-      this.subscriptionKey(clusterId, parsed.domain, normalizedScope)
+      this.subscriptionKey(messageClusterId, parsed.domain, normalizedScope)
     );
     if (!subscription) {
       return;
@@ -1129,11 +1129,16 @@ export class ResourceStreamManager {
   }
 
   handleConnectionOpen(clusterId: string): void {
+    const targetClusterId = clusterId.trim();
     // Log when the websocket is connected so it is clear streaming is active.
-    logInfo(`[resource-stream] connection open clusterId=${clusterId}`);
-    this.clearStreamError(clusterId);
+    logInfo(`[resource-stream] connection open clusterId=${targetClusterId || 'all'}`);
+    if (targetClusterId) {
+      this.clearStreamError(targetClusterId);
+    } else {
+      this.clearAllStreamErrors();
+    }
     this.subscriptions.forEach((subscription) => {
-      if (subscription.clusterId !== clusterId) {
+      if (targetClusterId && subscription.clusterId !== targetClusterId) {
         return;
       }
       this.subscribe(subscription);
@@ -1149,8 +1154,9 @@ export class ResourceStreamManager {
   }
 
   handleConnectionError(clusterId: string, message: string): void {
+    const targetClusterId = clusterId.trim();
     this.subscriptions.forEach((subscription) => {
-      if (subscription.clusterId !== clusterId) {
+      if (targetClusterId && subscription.clusterId !== targetClusterId) {
         return;
       }
       this.markResyncing(subscription);
@@ -1165,7 +1171,7 @@ export class ResourceStreamManager {
       return;
     }
     this.suspendedForVisibility = true;
-    this.connections.forEach((connection) => connection.pause());
+    this.connection?.pause();
   }
 
   private resumeFromVisibility(): void {
@@ -1173,7 +1179,7 @@ export class ResourceStreamManager {
       return;
     }
     this.suspendedForVisibility = false;
-    this.connections.forEach((connection) => connection.resume());
+    this.connection?.resume();
     this.subscriptions.forEach((subscription) => {
       this.markResyncing(subscription);
       void this.resyncSubscription(subscription, 'visibility resume');
@@ -1270,14 +1276,12 @@ export class ResourceStreamManager {
     return `${clusterId}::${domain}::${scope}`;
   }
 
-  private getConnection(clusterId: string): ResourceStreamConnection {
-    const existing = this.connections.get(clusterId);
-    if (existing) {
-      return existing;
+  private getConnection(): ResourceStreamConnection {
+    if (this.connection) {
+      return this.connection;
     }
-    const clusterScope = buildClusterScopeList([clusterId], '');
-    const connection = new ResourceStreamConnection(clusterId, clusterScope, this);
-    this.connections.set(clusterId, connection);
+    const connection = new ResourceStreamConnection(this);
+    this.connection = connection;
     void connection.connect();
     return connection;
   }
@@ -1287,7 +1291,7 @@ export class ResourceStreamManager {
     if (this.pendingUnsubscribes.has(subscription.key)) {
       return;
     }
-    const connection = this.getConnection(subscription.clusterId);
+    const connection = this.getConnection();
     const resumeToken = subscription.lastSequence
       ? subscription.lastSequence.toString()
       : undefined;
@@ -1306,7 +1310,7 @@ export class ResourceStreamManager {
 
   private unsubscribe(subscription: StreamSubscription, reset: boolean): void {
     this.cancelPendingUnsubscribe(subscription);
-    const connection = this.connections.get(subscription.clusterId);
+    const connection = this.connection;
     if (connection) {
       connection.send({
         type: MESSAGE_TYPES.cancel,
@@ -1325,12 +1329,9 @@ export class ResourceStreamManager {
       this.clearStreamError(subscription.clusterId);
     }
 
-    const remaining = Array.from(this.subscriptions.values()).some(
-      (item) => item.clusterId === subscription.clusterId
-    );
-    if (!remaining && connection) {
+    if (this.subscriptions.size === 0 && connection) {
       connection.close();
-      this.connections.delete(subscription.clusterId);
+      this.connection = null;
     }
   }
 
@@ -3617,6 +3618,11 @@ export class ResourceStreamManager {
     errorKeys.forEach((key) => this.consecutiveErrors.delete(key));
   }
 
+  private clearAllStreamErrors(): void {
+    this.lastNotifiedErrors.clear();
+    this.consecutiveErrors.clear();
+  }
+
   private notifyStreamError(clusterId: string, message: string): void {
     const key = `${clusterId}::resource-stream`;
     if (this.lastNotifiedErrors.get(key) === message) {
@@ -3632,8 +3638,8 @@ export class ResourceStreamManager {
     const subscriptions = Array.from(this.subscriptions.values());
     subscriptions.forEach((subscription) => this.unsubscribe(subscription, reset));
     this.subscriptions.clear();
-    this.connections.forEach((connection) => connection.close());
-    this.connections.clear();
+    this.connection?.close();
+    this.connection = null;
     this.lastNotifiedErrors.clear();
     this.consecutiveErrors.clear();
     this.streamTelemetry.clear();

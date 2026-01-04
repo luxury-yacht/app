@@ -1,51 +1,60 @@
 package backend
 
 import (
-	"fmt"
 	"net/http"
 
-	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/logstream"
+	"github.com/luxury-yacht/app/backend/refresh/resourcestream"
+	"github.com/luxury-yacht/app/backend/refresh/streammux"
 	"github.com/luxury-yacht/app/backend/refresh/system"
+	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
-// aggregateResourceStreamHandler routes resource stream requests to the requested cluster.
+// aggregateResourceStreamHandler multiplexes resource stream subscriptions across clusters.
 type aggregateResourceStreamHandler struct {
-	handlers map[string]http.Handler
+	mux *streammux.Handler
 }
 
-// newAggregateResourceStreamHandler builds a resource stream router for all active clusters.
-func newAggregateResourceStreamHandler(subsystems map[string]*system.Subsystem) *aggregateResourceStreamHandler {
-	handlers := make(map[string]http.Handler)
+// newAggregateResourceStreamHandler builds a multiplexed resource stream handler for all clusters.
+func newAggregateResourceStreamHandler(
+	subsystems map[string]*system.Subsystem,
+	logger logstream.Logger,
+	recorder *telemetry.Recorder,
+) (*aggregateResourceStreamHandler, error) {
+	if logger == nil {
+		logger = noopLogger{}
+	}
+
+	managers := make(map[string]*resourcestream.Manager)
+	clusterNames := make(map[string]string)
 	for id, subsystem := range subsystems {
-		if subsystem == nil || subsystem.Handler == nil {
+		if subsystem == nil || subsystem.ResourceStream == nil {
 			continue
 		}
-		handlers[id] = subsystem.Handler
+		managers[id] = subsystem.ResourceStream
+		if subsystem.ClusterMeta.ClusterName != "" {
+			clusterNames[id] = subsystem.ClusterMeta.ClusterName
+		}
 	}
-	return &aggregateResourceStreamHandler{handlers: handlers}
-}
-
-// ServeHTTP forwards the request to the matching cluster handler.
-func (h *aggregateResourceStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	rawScope := r.URL.Query().Get("scope")
-	clusterIDs, _ := refresh.SplitClusterScopeList(rawScope)
-
-	targetID, err := h.selectCluster(clusterIDs)
+	handler, err := streammux.NewHandler(streammux.Config{
+		Adapter:                    resourcestream.NewClusterAdapter(managers),
+		Logger:                     logger,
+		Telemetry:                  recorder,
+		StreamName:                 telemetry.StreamResources,
+		SendReset:                  true,
+		AllowClusterScopedRequests: true,
+		ResolveClusterName: func(clusterID string) string {
+			return clusterNames[clusterID]
+		},
+	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, err
 	}
-	handler := h.handlers[targetID]
-	if handler == nil {
-		http.Error(w, fmt.Sprintf("cluster %s not active", targetID), http.StatusBadRequest)
-		return
-	}
-	handler.ServeHTTP(w, r)
+
+	return &aggregateResourceStreamHandler{mux: handler}, nil
 }
 
-func (h *aggregateResourceStreamHandler) selectCluster(clusterIDs []string) (string, error) {
-	if len(clusterIDs) != 1 {
-		return "", fmt.Errorf("resource stream requires a single cluster scope")
-	}
-	return clusterIDs[0], nil
+// ServeHTTP upgrades the websocket and multiplexes resource subscriptions.
+func (h *aggregateResourceStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h.mux.ServeHTTP(w, r)
 }

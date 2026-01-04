@@ -1385,11 +1385,16 @@ describe('ResourceStreamManager', () => {
     await flushPromises();
 
     expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
-    expect(createdSockets).toHaveLength(2);
-    const scopes = createdSockets
-      .map((socket) => new URL(socket.url).searchParams.get('scope'))
-      .sort();
-    expect(scopes).toEqual(['cluster-a|', 'cluster-b|']);
+    expect(createdSockets).toHaveLength(1);
+    const socket = createdSockets[0];
+    expect(socket).toBeDefined();
+    socket.onopen?.(new Event('open'));
+    const requests = socket.send.mock.calls
+      .map(([payload]) => JSON.parse(payload))
+      .filter((message) => message.type === 'REQUEST');
+    const scopesByCluster = new Map(requests.map((message) => [message.clusterId, message.scope]));
+    expect(scopesByCluster.get('cluster-a')).toBe('cluster-a|');
+    expect(scopesByCluster.get('cluster-b')).toBe('cluster-b|');
   });
 
   test('merges pod updates from multiple clusters into a multi-cluster scope', () => {

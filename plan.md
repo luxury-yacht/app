@@ -320,7 +320,7 @@ Per polling-only domain:
    - Effort: Medium.
    - Risk: Medium.
 
-7. Performance considerations: evaluate consolidating resource stream connections into a single multiplexed WebSocket to reduce socket count, similar to Headlamp's single multiplexer socket vs per-cluster connections in Luxury Yacht (headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:61; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1266).
+7. ✅ Performance considerations: evaluate consolidating resource stream connections into a single multiplexed WebSocket to reduce socket count, similar to Headlamp's single multiplexer socket vs per-cluster connections in Luxury Yacht (headlamp/frontend/src/lib/k8s/api/v2/multiplexer.ts:61; frontend/src/core/refresh/streaming/resourceStreamManager.ts:1266).
 
    - Work items:
      - Prototype a single-connection stream mux for resource streams using the existing streammux handler (backend/refresh/streammux/handler.go:315).

@@ -38,27 +38,38 @@ type Adapter interface {
 	Resume(domain, scope string, since uint64) ([]ServerMessage, bool)
 }
 
+// ClusterAdapter allows multiplexing subscriptions across clusters.
+type ClusterAdapter interface {
+	Adapter
+	SubscribeCluster(clusterID, domain, scope string) (*Subscription, error)
+	ResumeCluster(clusterID, domain, scope string, since uint64) ([]ServerMessage, bool)
+}
+
 // Config captures the dependencies for a websocket stream multiplexer.
 type Config struct {
-	Adapter     Adapter
-	Logger      logstream.Logger
-	Telemetry   *telemetry.Recorder
-	ClusterID   string
-	ClusterName string
-	StreamName  string
-	SendReset   bool
+	Adapter                    Adapter
+	Logger                     logstream.Logger
+	Telemetry                  *telemetry.Recorder
+	ClusterID                  string
+	ClusterName                string
+	StreamName                 string
+	SendReset                  bool
+	AllowClusterScopedRequests bool
+	ResolveClusterName         func(clusterID string) string
 }
 
 // Handler exposes a websocket endpoint that multiplexes stream subscriptions.
 type Handler struct {
-	adapter     Adapter
-	logger      logstream.Logger
-	telemetry   *telemetry.Recorder
-	clusterID   string
-	clusterName string
-	streamName  string
-	sendReset   bool
-	upgrader    websocket.Upgrader
+	adapter                    Adapter
+	logger                     logstream.Logger
+	telemetry                  *telemetry.Recorder
+	clusterID                  string
+	clusterName                string
+	streamName                 string
+	sendReset                  bool
+	allowClusterScopedRequests bool
+	resolveClusterName         func(clusterID string) string
+	upgrader                   websocket.Upgrader
 }
 
 // NewHandler constructs a websocket stream multiplexer handler.
@@ -73,13 +84,15 @@ func NewHandler(cfg Config) (*Handler, error) {
 		return nil, errors.New("stream name is required")
 	}
 	return &Handler{
-		adapter:     cfg.Adapter,
-		logger:      cfg.Logger,
-		telemetry:   cfg.Telemetry,
-		clusterID:   cfg.ClusterID,
-		clusterName: cfg.ClusterName,
-		streamName:  cfg.StreamName,
-		sendReset:   cfg.SendReset,
+		adapter:                    cfg.Adapter,
+		logger:                     cfg.Logger,
+		telemetry:                  cfg.Telemetry,
+		clusterID:                  cfg.ClusterID,
+		clusterName:                cfg.ClusterName,
+		streamName:                 cfg.StreamName,
+		sendReset:                  cfg.SendReset,
+		allowClusterScopedRequests: cfg.AllowClusterScopedRequests,
+		resolveClusterName:         cfg.ResolveClusterName,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  4096,
 			WriteBufferSize: 4096,
@@ -106,38 +119,70 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer h.telemetry.RecordStreamDisconnect(h.streamName)
 	}
 
-	session := newSession(conn, h.adapter, h.logger, h.clusterID, h.clusterName, h.streamName, h.sendReset)
+	session := newSession(
+		conn,
+		h.adapter,
+		h.logger,
+		h.telemetry,
+		h.clusterID,
+		h.clusterName,
+		h.streamName,
+		h.sendReset,
+		h.allowClusterScopedRequests,
+		h.resolveClusterName,
+	)
 	session.run(r.Context())
 }
 
 type session struct {
-	conn        wsConn
-	adapter     Adapter
-	logger      logstream.Logger
-	clusterID   string
-	clusterName string
-	streamName  string
-	sendReset   bool
+	conn                      wsConn
+	adapter                   Adapter
+	logger                    logstream.Logger
+	telemetry                 *telemetry.Recorder
+	clusterID                 string
+	clusterName               string
+	streamName                string
+	sendReset                 bool
+	allowClusterScopedRequest bool
+	resolveClusterName        func(clusterID string) string
 
 	mu        sync.Mutex
-	subs      map[string]*Subscription
+	subs      map[string]*sessionSubscription
 	outgoing  chan ServerMessage
 	done      chan struct{}
 	closeOnce sync.Once
 }
 
-func newSession(conn wsConn, adapter Adapter, logger logstream.Logger, clusterID, clusterName, streamName string, sendReset bool) *session {
+type sessionSubscription struct {
+	sub         *Subscription
+	clusterID   string
+	clusterName string
+}
+
+func newSession(
+	conn wsConn,
+	adapter Adapter,
+	logger logstream.Logger,
+	recorder *telemetry.Recorder,
+	clusterID, clusterName, streamName string,
+	sendReset bool,
+	allowClusterScopedRequest bool,
+	resolveClusterName func(clusterID string) string,
+) *session {
 	return &session{
-		conn:        conn,
-		adapter:     adapter,
-		logger:      logger,
-		clusterID:   clusterID,
-		clusterName: clusterName,
-		streamName:  streamName,
-		sendReset:   sendReset,
-		subs:        make(map[string]*Subscription),
-		outgoing:    make(chan ServerMessage, outgoingBuffer),
-		done:        make(chan struct{}),
+		conn:                      conn,
+		adapter:                   adapter,
+		logger:                    logger,
+		telemetry:                 recorder,
+		clusterID:                 clusterID,
+		clusterName:               clusterName,
+		streamName:                streamName,
+		sendReset:                 sendReset,
+		allowClusterScopedRequest: allowClusterScopedRequest,
+		resolveClusterName:        resolveClusterName,
+		subs:                      make(map[string]*sessionSubscription),
+		outgoing:                  make(chan ServerMessage, outgoingBuffer),
+		done:                      make(chan struct{}),
 	}
 }
 
@@ -152,9 +197,9 @@ func (s *session) shutdown() {
 		close(s.done)
 		s.mu.Lock()
 		for _, sub := range s.subs {
-			sub.Cancel()
+			sub.sub.Cancel()
 		}
-		s.subs = make(map[string]*Subscription)
+		s.subs = make(map[string]*sessionSubscription)
 		s.mu.Unlock()
 		_ = s.conn.Close()
 	})
@@ -177,43 +222,45 @@ func (s *session) readLoop() {
 		case MessageTypeCancel:
 			s.handleCancel(msg)
 		default:
-			s.sendError(msg.Domain, msg.Scope, errors.New("unsupported request type"))
+			s.sendError(msg.ClusterID, msg.Domain, msg.Scope, errors.New("unsupported request type"))
 		}
 	}
 }
 
 func (s *session) handleSubscribe(msg ClientMessage) {
 	if msg.Domain == "" {
-		s.sendError(msg.Domain, msg.Scope, errors.New("domain is required"))
+		s.sendError(msg.ClusterID, msg.Domain, msg.Scope, errors.New("domain is required"))
 		return
 	}
-	if msg.ClusterID != "" && msg.ClusterID != s.clusterID {
-		s.sendError(msg.Domain, msg.Scope, errors.New("cluster mismatch"))
+	clusterID, err := s.resolveClusterID(msg)
+	if err != nil {
+		s.sendError(msg.ClusterID, msg.Domain, msg.Scope, err)
 		return
 	}
+	clusterName := s.clusterNameFor(clusterID)
 
 	_, trimmed := refresh.SplitClusterScope(msg.Scope)
 	normalized, err := s.adapter.NormalizeScope(msg.Domain, trimmed)
 	if err != nil {
-		s.sendError(msg.Domain, msg.Scope, err)
+		s.sendError(clusterID, msg.Domain, msg.Scope, err)
 		return
 	}
 
-	sub, err := s.adapter.Subscribe(msg.Domain, normalized)
+	sub, err := s.subscribe(clusterID, msg.Domain, normalized)
 	if err != nil {
-		s.sendError(msg.Domain, msg.Scope, err)
+		s.sendError(clusterID, msg.Domain, msg.Scope, err)
 		return
 	}
 
-	key := subscriptionKey(msg.Domain, normalized)
-	s.storeSubscription(key, sub)
+	key := subscriptionKey(clusterID, msg.Domain, normalized)
+	s.storeSubscription(key, sub, clusterID, clusterName)
 
 	resumeToken := parseResumeToken(msg.ResumeToken)
 	resumeUpdates := []ServerMessage(nil)
 	resumeOK := false
 	resumeHighWater := uint64(0)
 	if resumeToken > 0 {
-		resumeUpdates, resumeOK = s.adapter.Resume(msg.Domain, normalized, resumeToken)
+		resumeUpdates, resumeOK = s.resume(clusterID, msg.Domain, normalized, resumeToken)
 		if !resumeOK {
 			s.logger.Warn(fmt.Sprintf("stream mux: resume token expired for %s/%s", msg.Domain, normalized), "StreamMux")
 		}
@@ -233,34 +280,39 @@ func (s *session) handleSubscribe(msg ClientMessage) {
 			Type:        MessageTypeReset,
 			Domain:      msg.Domain,
 			Scope:       normalized,
-			ClusterID:   s.clusterID,
-			ClusterName: s.clusterName,
+			ClusterID:   clusterID,
+			ClusterName: clusterName,
 		})
 	}
 
 	if resumeOK && len(resumeUpdates) > 0 {
 		for _, update := range resumeUpdates {
-			s.enqueue(update)
+			s.enqueue(s.withClusterInfo(update, clusterID, clusterName))
 		}
 	}
 
-	go s.forwardSubscription(sub, resumeHighWater)
+	go s.forwardSubscription(key, resumeHighWater)
 }
 
 func (s *session) handleCancel(msg ClientMessage) {
 	if msg.Domain == "" {
-		s.sendError(msg.Domain, msg.Scope, errors.New("domain is required"))
+		s.sendError(msg.ClusterID, msg.Domain, msg.Scope, errors.New("domain is required"))
+		return
+	}
+	clusterID, err := s.resolveClusterID(msg)
+	if err != nil {
+		s.sendError(msg.ClusterID, msg.Domain, msg.Scope, err)
 		return
 	}
 
 	_, trimmed := refresh.SplitClusterScope(msg.Scope)
 	normalized, err := s.adapter.NormalizeScope(msg.Domain, trimmed)
 	if err != nil {
-		s.sendError(msg.Domain, msg.Scope, err)
+		s.sendError(clusterID, msg.Domain, msg.Scope, err)
 		return
 	}
 
-	key := subscriptionKey(msg.Domain, normalized)
+	key := subscriptionKey(clusterID, msg.Domain, normalized)
 	s.mu.Lock()
 	sub := s.subs[key]
 	delete(s.subs, key)
@@ -268,22 +320,32 @@ func (s *session) handleCancel(msg ClientMessage) {
 	if sub == nil {
 		return
 	}
-	sub.Cancel()
+	sub.sub.Cancel()
 }
 
-func (s *session) storeSubscription(key string, sub *Subscription) {
+func (s *session) storeSubscription(key string, sub *Subscription, clusterID, clusterName string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if existing := s.subs[key]; existing != nil {
-		existing.Cancel()
+		existing.sub.Cancel()
 	}
-	s.subs[key] = sub
+	s.subs[key] = &sessionSubscription{
+		sub:         sub,
+		clusterID:   clusterID,
+		clusterName: clusterName,
+	}
 }
 
-func (s *session) forwardSubscription(sub *Subscription, resumeHighWater uint64) {
+func (s *session) forwardSubscription(key string, resumeHighWater uint64) {
+	s.mu.Lock()
+	entry := s.subs[key]
+	s.mu.Unlock()
+	if entry == nil {
+		return
+	}
 	for {
 		select {
-		case update, ok := <-sub.Updates:
+		case update, ok := <-entry.sub.Updates:
 			if !ok {
 				return
 			}
@@ -293,17 +355,17 @@ func (s *session) forwardSubscription(sub *Subscription, resumeHighWater uint64)
 					continue
 				}
 			}
-			s.enqueue(update)
-		case reason, ok := <-sub.Drops:
+			s.enqueue(s.withClusterInfo(update, entry.clusterID, entry.clusterName))
+		case reason, ok := <-entry.sub.Drops:
 			if !ok {
 				return
 			}
 			s.enqueue(ServerMessage{
 				Type:        MessageTypeComplete,
-				Domain:      sub.Domain,
-				Scope:       sub.Scope,
-				ClusterID:   s.clusterID,
-				ClusterName: s.clusterName,
+				Domain:      entry.sub.Domain,
+				Scope:       entry.sub.Scope,
+				ClusterID:   entry.clusterID,
+				ClusterName: entry.clusterName,
 				Error:       fmt.Sprintf("subscription ended: %s", reason),
 			})
 			return
@@ -332,18 +394,29 @@ func (s *session) handleBackpressure(msg ServerMessage) {
 	case <-s.outgoing:
 	default:
 	}
+	if s.telemetry != nil {
+		s.telemetry.RecordStreamDelivery(s.streamName, 0, 1)
+	}
 
 	if msg.Domain == "" || msg.Scope == "" {
 		s.logger.Warn("stream mux: outgoing buffer full, dropping message", "StreamMux")
 		return
 	}
 
+	clusterID := strings.TrimSpace(msg.ClusterID)
+	if clusterID == "" {
+		clusterID = s.clusterID
+	}
+	clusterName := msg.ClusterName
+	if clusterName == "" {
+		clusterName = s.clusterNameFor(clusterID)
+	}
 	reset := ServerMessage{
 		Type:        MessageTypeReset,
 		Domain:      msg.Domain,
 		Scope:       msg.Scope,
-		ClusterID:   s.clusterID,
-		ClusterName: s.clusterName,
+		ClusterID:   clusterID,
+		ClusterName: clusterName,
 	}
 	select {
 	case s.outgoing <- reset:
@@ -391,16 +464,93 @@ func (s *session) writeMessage(msg ServerMessage) error {
 	return nil
 }
 
-func (s *session) sendError(domain, scope string, err error) {
+// resolveClusterID determines the cluster to use for the incoming message.
+func (s *session) resolveClusterID(msg ClientMessage) (string, error) {
+	if !s.allowClusterScopedRequest {
+		if msg.ClusterID != "" && msg.ClusterID != s.clusterID {
+			return "", errors.New("cluster mismatch")
+		}
+		return s.clusterID, nil
+	}
+	clusterID := strings.TrimSpace(msg.ClusterID)
+	if clusterID == "" {
+		clusterIDs, _ := refresh.SplitClusterScopeList(msg.Scope)
+		if len(clusterIDs) == 1 {
+			clusterID = clusterIDs[0]
+		}
+	}
+	if clusterID == "" {
+		return "", errors.New("cluster id is required")
+	}
+	return clusterID, nil
+}
+
+// clusterNameFor resolves a display name for the given cluster ID.
+func (s *session) clusterNameFor(clusterID string) string {
+	if clusterID == "" {
+		return s.clusterName
+	}
+	if s.resolveClusterName != nil {
+		if resolved := s.resolveClusterName(clusterID); resolved != "" {
+			return resolved
+		}
+	}
+	if clusterID == s.clusterID {
+		return s.clusterName
+	}
+	return ""
+}
+
+// withClusterInfo ensures the outgoing message includes cluster metadata.
+func (s *session) withClusterInfo(msg ServerMessage, clusterID, clusterName string) ServerMessage {
+	if msg.ClusterID == "" {
+		msg.ClusterID = clusterID
+	}
+	if msg.ClusterName == "" && clusterName != "" {
+		msg.ClusterName = clusterName
+	}
+	return msg
+}
+
+// subscribe routes subscriptions through a cluster-aware adapter when configured.
+func (s *session) subscribe(clusterID, domain, scope string) (*Subscription, error) {
+	if s.allowClusterScopedRequest {
+		adapter, ok := s.adapter.(ClusterAdapter)
+		if !ok {
+			return nil, errors.New("cluster-scoped subscriptions are not supported")
+		}
+		return adapter.SubscribeCluster(clusterID, domain, scope)
+	}
+	return s.adapter.Subscribe(domain, scope)
+}
+
+// resume routes resume buffers through a cluster-aware adapter when configured.
+func (s *session) resume(clusterID, domain, scope string, since uint64) ([]ServerMessage, bool) {
+	if s.allowClusterScopedRequest {
+		adapter, ok := s.adapter.(ClusterAdapter)
+		if !ok {
+			return nil, false
+		}
+		return adapter.ResumeCluster(clusterID, domain, scope, since)
+	}
+	return s.adapter.Resume(domain, scope, since)
+}
+
+func (s *session) sendError(clusterID, domain, scope string, err error) {
 	if err == nil {
 		err = errors.New("stream error")
 	}
+	resolvedClusterID := strings.TrimSpace(clusterID)
+	if resolvedClusterID == "" {
+		resolvedClusterID = s.clusterID
+	}
+	clusterName := s.clusterNameFor(resolvedClusterID)
 	msg := ServerMessage{
 		Type:        MessageTypeError,
 		Domain:      domain,
 		Scope:       scope,
-		ClusterID:   s.clusterID,
-		ClusterName: s.clusterName,
+		ClusterID:   resolvedClusterID,
+		ClusterName: clusterName,
 		Error:       err.Error(),
 	}
 	if status, ok := refresh.PermissionDeniedStatusFromError(err); ok {
@@ -414,8 +564,8 @@ func (s *session) sendError(domain, scope string, err error) {
 	s.enqueue(msg)
 }
 
-func subscriptionKey(domain, scope string) string {
-	return strings.TrimSpace(domain) + "|" + strings.TrimSpace(scope)
+func subscriptionKey(clusterID, domain, scope string) string {
+	return strings.TrimSpace(clusterID) + "|" + strings.TrimSpace(domain) + "|" + strings.TrimSpace(scope)
 }
 
 // parseResumeToken converts client tokens into sequence numbers, defaulting to zero on errors.

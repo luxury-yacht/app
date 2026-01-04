@@ -165,7 +165,10 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	)
 	aggregateLogs := newAggregateLogStreamHandler(subsystems)
 	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
-	aggregateResources := newAggregateResourceStreamHandler(subsystems)
+	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, hostSubsystem.Telemetry)
+	if err != nil {
+		return err
+	}
 	mux := http.NewServeMux()
 	api.NewServer(
 		hostSubsystem.Registry,
