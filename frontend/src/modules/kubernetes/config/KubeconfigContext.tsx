@@ -12,6 +12,7 @@ import React, {
   useCallback,
   useMemo,
   useEffect,
+  useRef,
   ReactNode,
 } from 'react';
 import {
@@ -94,6 +95,10 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const [selectedKubeconfig, setSelectedKubeconfigState] = useState<string>('');
   const [kubeconfigsLoading, setKubeconfigsLoading] = useState(false);
   const { enabled: backgroundRefreshEnabled } = useBackgroundRefresh();
+  const selectionQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const kubeconfigsRef = useRef<types.KubeconfigInfo[]>([]);
+  const selectedKubeconfigsRef = useRef<string[]>([]);
+  const selectedKubeconfigRef = useRef<string>('');
 
   // Resolve cluster identity metadata from the current selection and config list.
   const resolveClusterMeta = useCallback((selection: string, configs: types.KubeconfigInfo[]) => {
@@ -127,6 +132,18 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     () => resolveClusterMeta(selectedKubeconfig, kubeconfigs),
     [resolveClusterMeta, selectedKubeconfig, kubeconfigs]
   );
+
+  useEffect(() => {
+    kubeconfigsRef.current = kubeconfigs;
+  }, [kubeconfigs]);
+
+  useEffect(() => {
+    selectedKubeconfigsRef.current = selectedKubeconfigs;
+  }, [selectedKubeconfigs]);
+
+  useEffect(() => {
+    selectedKubeconfigRef.current = selectedKubeconfig;
+  }, [selectedKubeconfig]);
 
   const getClusterMeta = useCallback(
     (selection: string) => resolveClusterMeta(selection, kubeconfigs),
@@ -204,6 +221,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
 
       // Set the selection from the backend
       const normalizedSelection = normalizeSelections(currentSelection || [], configs || []);
+      selectedKubeconfigsRef.current = normalizedSelection;
+      selectedKubeconfigRef.current = normalizedSelection[0] || '';
       setSelectedKubeconfigsState(normalizedSelection);
       setSelectedKubeconfigState(normalizedSelection[0] || '');
     } catch (error) {
@@ -220,11 +239,11 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     }
   }, [normalizeSelections]);
 
-  const setSelectedKubeconfigs = useCallback(
+  const applySelectedKubeconfigs = useCallback(
     async (configs: string[]) => {
-      const previousSelections = selectedKubeconfigs;
-      const previousActive = selectedKubeconfig;
-      const normalizedSelections = normalizeSelections(configs, kubeconfigs);
+      const previousSelections = selectedKubeconfigsRef.current;
+      const previousActive = selectedKubeconfigRef.current;
+      const normalizedSelections = normalizeSelections(configs, kubeconfigsRef.current);
       const removedActive = previousActive && !normalizedSelections.includes(previousActive);
       const addedSelections = normalizedSelections.filter(
         (selection) => !previousSelections.includes(selection)
@@ -247,6 +266,10 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           eventBus.emit('kubeconfig:selection-changed');
         }
 
+        // Keep refs in sync immediately so queued requests read the latest state.
+        selectedKubeconfigsRef.current = normalizedSelections;
+        selectedKubeconfigRef.current = nextActive;
+
         // Optimistically update the UI immediately so the dropdown reflects the intent.
         setSelectedKubeconfigsState(normalizedSelections);
         setSelectedKubeconfigState(nextActive);
@@ -258,15 +281,17 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
           eventBus.emit('kubeconfig:changing', '');
         }
 
-        // Perform the actual kubeconfig switch
+        // Perform the actual kubeconfig switch.
         await SetSelectedKubeconfigs(normalizedSelections);
 
-        // 4. Perform a manual refresh (will be triggered by kubeconfig:changed event)
+        // 4. Perform a manual refresh (will be triggered by kubeconfig:changed event).
         if (shouldEmitChanged) {
           eventBus.emit('kubeconfig:changed', '');
         }
       } catch (error) {
         // Roll back the UI to the previous value if the backend switch failed.
+        selectedKubeconfigsRef.current = previousSelections;
+        selectedKubeconfigRef.current = previousActive;
         setSelectedKubeconfigsState(previousSelections);
         setSelectedKubeconfigState(previousActive);
         errorHandler.handle(
@@ -280,7 +305,17 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         throw error;
       }
     },
-    [kubeconfigs, normalizeSelections, selectedKubeconfig, selectedKubeconfigs]
+    [normalizeSelections]
+  );
+
+  const setSelectedKubeconfigs = useCallback(
+    (configs: string[]) => {
+      // Serialize selection changes to avoid overlapping refresh subsystem rebuilds.
+      const queued = selectionQueueRef.current.then(() => applySelectedKubeconfigs(configs));
+      selectionQueueRef.current = queued.catch(() => undefined);
+      return queued;
+    },
+    [applySelectedKubeconfigs]
   );
 
   const setSelectedKubeconfig = useCallback(
@@ -298,6 +333,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       if (!selectedKubeconfigs.includes(config)) {
         return;
       }
+      selectedKubeconfigRef.current = config;
       setSelectedKubeconfigState(config);
     },
     [selectedKubeconfig, selectedKubeconfigs]
