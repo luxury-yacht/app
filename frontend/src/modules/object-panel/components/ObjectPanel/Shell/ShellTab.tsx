@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import {
@@ -142,9 +143,60 @@ const ShellTab: React.FC<ShellTabProps> = ({
     });
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
+    // Enable OSC 52 clipboard integration for in-terminal apps (tmux/vim/etc).
+    terminal.loadAddon(new ClipboardAddon());
     terminal.open(terminalContainerRef.current);
     fitAddon.fit();
     terminal.focus();
+
+    // Provide standard OS copy/paste shortcuts when the terminal is focused.
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.type !== 'keydown') {
+        return true;
+      }
+
+      const clipboard = typeof navigator === 'undefined' ? undefined : navigator.clipboard;
+      const isModifier = event.ctrlKey || event.metaKey;
+      if (!isModifier) {
+        return true;
+      }
+
+      const key = event.key.toLowerCase();
+      if (key === 'c') {
+        if (!clipboard?.writeText || !terminal.hasSelection()) {
+          return true;
+        }
+        const selection = terminal.getSelection();
+        if (!selection) {
+          return true;
+        }
+        void clipboard.writeText(selection).catch(() => {
+          /* ignore clipboard write failures */
+        });
+        event.preventDefault();
+        event.stopPropagation();
+        return false;
+      }
+
+      if (key === 'v') {
+        if (!clipboard?.readText) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        void clipboard
+          .readText()
+          .then((text) => {
+            terminal.paste(text ?? '');
+          })
+          .catch(() => {
+            /* ignore clipboard read failures */
+          });
+        return false;
+      }
+
+      return true;
+    });
 
     terminalDataDisposableRef.current = terminal.onData((data) => {
       if (!sessionIdRef.current || statusRef.current !== 'open') {
