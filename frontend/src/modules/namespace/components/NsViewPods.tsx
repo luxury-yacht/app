@@ -56,16 +56,25 @@ const parseReadyCounts = (value?: string | null): { ready: number; total: number
   };
 };
 
+// Determine if a pod is unhealthy based on its status, restarts, and ready counts.
 const isPodUnhealthy = (pod: PodSnapshotEntry): boolean => {
   const restarts = pod.restarts ?? 0;
   if (restarts > 0) {
     return true;
   }
+  const normalizedStatus = (pod.status || '').trim().toLowerCase();
+  // Ignore readiness mismatch for succeeded pods (completed cron jobs).
+  const ignoreReadyMismatch = normalizedStatus === 'succeeded';
+  // If the ready count is less than total, consider unhealthy, unless ignoring ready mismatch for "succeeded" pods.
   const readyCounts = parseReadyCounts(pod.ready);
-  if (readyCounts && readyCounts.total > 0 && readyCounts.ready < readyCounts.total) {
+  if (
+    !ignoreReadyMismatch &&
+    readyCounts &&
+    readyCounts.total > 0 &&
+    readyCounts.ready < readyCounts.total
+  ) {
     return true;
   }
-  const normalizedStatus = (pod.status || '').trim().toLowerCase();
   if (!normalizedStatus) {
     return false;
   }

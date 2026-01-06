@@ -449,6 +449,29 @@ describe('NsViewPods', () => {
     expect(gridTablePropsRef.current.data).toEqual(pods);
   });
 
+  it('treats succeeded pods with readiness mismatch as healthy', async () => {
+    const pods = [
+      createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
+      // Succeeded pods should not be marked unhealthy for readiness mismatch.
+      createPod({ name: 'cron', status: 'Succeeded', ready: '0/1', restarts: 0 }),
+      createPod({ name: 'pending', status: 'Pending', ready: '0/1', restarts: 0 }),
+    ];
+
+    await renderPods({ data: pods });
+
+    const toggle = container.querySelector<HTMLButtonElement>(
+      '[data-testid="pods-unhealthy-toggle"]'
+    );
+    expect(toggle).not.toBeNull();
+    expect(toggle?.textContent).toContain('Show Unhealthy (1/3)');
+
+    await act(async () => {
+      toggle?.click();
+      await Promise.resolve();
+    });
+    expect(gridTablePropsRef.current.data).toEqual([pods[2]]);
+  });
+
   it('enables the unhealthy filter when an event targets the namespace', async () => {
     const pods = [
       createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
