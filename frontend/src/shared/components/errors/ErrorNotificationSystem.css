@@ -46,6 +46,11 @@
   border: 1px solid var(--toast-card-border);
   border-radius: 14px;
   box-shadow: var(--toast-card-shadow);
+  /* Allow selecting toast text for copy shortcuts. */
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
   transition:
     transform 160ms ease,
     opacity 160ms ease,
