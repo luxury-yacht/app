@@ -27,6 +27,8 @@ type ResourceStreamDomain =
   | 'cluster-crds'
   | 'cluster-custom'
   | 'nodes';
+type ResourceStreamHealthStatus = 'healthy' | 'degraded' | 'unhealthy';
+type ResourceStreamConnectionStatus = 'connected' | 'disconnected';
 
 // Event payload types
 export interface AppEvents {
@@ -55,6 +57,15 @@ export interface AppEvents {
     snapshotCount: number;
     missingKeys: number;
     extraKeys: number;
+  };
+  'refresh:resource-stream-health': {
+    domain: ResourceStreamDomain;
+    scope: string;
+    status: ResourceStreamHealthStatus;
+    reason: string;
+    connectionStatus: ResourceStreamConnectionStatus;
+    lastMessageAt?: number;
+    lastDeliveryAt?: number;
   };
 
   // Settings events

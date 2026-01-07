@@ -203,6 +203,7 @@ class RefreshOrchestrator {
     eventBus.on('kubeconfig:changed', this.handleKubeconfigChanged);
     eventBus.on('kubeconfig:selection-changed', this.handleKubeconfigSelectionChanged);
     eventBus.on('refresh:resource-stream-drift', this.handleResourceStreamDrift);
+    eventBus.on('refresh:resource-stream-health', this.handleResourceStreamHealth);
     // Emit a single log so operators can confirm streaming config at runtime.
     logInfo('[refresh] resource streaming enabled (mode=active, domains=all)');
   }
@@ -995,6 +996,14 @@ class RefreshOrchestrator {
     return this.streamingCleanup.has(makeInFlightKey(domain, scope));
   }
 
+  // Resource stream health gates polling so snapshots stay active until delivery resumes.
+  private isStreamingHealthy(domain: RefreshDomain, scope?: string): boolean {
+    if (!scope || !this.isResourceStreamDomain(domain)) {
+      return false;
+    }
+    return resourceStreamManager.isHealthy(domain, scope);
+  }
+
   private shouldStreamScope(domain: RefreshDomain, scope?: string): boolean {
     const trimmed = scope?.trim() ?? '';
     if (!trimmed) {
@@ -1056,6 +1065,19 @@ class RefreshOrchestrator {
     }
     if (!this.isDomainEnabledInternal(domain)) {
       refreshManager.disable(config.refresherName);
+      return;
+    }
+    if (this.isResourceStreamDomain(domain)) {
+      const scope = this.domainStreamingScopes.get(domain);
+      if (
+        scope &&
+        this.isStreamingActive(domain, scope) &&
+        this.isStreamingHealthy(domain, scope)
+      ) {
+        refreshManager.disable(config.refresherName);
+        return;
+      }
+      refreshManager.enable(config.refresherName);
       return;
     }
     if (this.hasActiveStreaming(domain)) {
@@ -1374,19 +1396,27 @@ class RefreshOrchestrator {
         (this.streamingCleanup.has(key) ||
           this.pendingStreaming.has(key) ||
           (this.domainStreamingScopes.get(domain) === normalizedScope && normalizedScope !== ''));
+      const streamHealthy = hasStream && this.isStreamingHealthy(domain, normalizedScope);
 
       if (hasStream) {
         if (options.isManual && config.streaming.refreshOnce && normalizedScope) {
           await config.streaming.refreshOnce(normalizedScope);
+          return;
         }
         if (!options.isManual && config.streaming.metricsOnly) {
-          if (this.shouldSkipStreamingMetricsRefresh(domain, normalizedScope)) {
-            incrementDroppedAutoRefresh(domain);
+          if (streamHealthy) {
+            if (this.shouldSkipStreamingMetricsRefresh(domain, normalizedScope)) {
+              incrementDroppedAutoRefresh(domain);
+              return;
+            }
+            await this.performFetch(domain, scope, { ...options, metricsOnly: true }, config);
             return;
           }
-          await this.performFetch(domain, scope, { ...options, metricsOnly: true }, config);
+        } else if (!options.isManual && streamHealthy) {
+          return;
+        } else if (options.isManual) {
+          return;
         }
-        return;
       }
     }
 
@@ -1417,7 +1447,10 @@ class RefreshOrchestrator {
         this.startStreamingScope(domain, normalizedScope, config.streaming);
       }
       if (config.streaming.metricsOnly && !options.isManual) {
-        const metricsOnly = shouldStream && this.isStreamingActive(domain, normalizedScope);
+        const metricsOnly =
+          shouldStream &&
+          this.isStreamingActive(domain, normalizedScope) &&
+          this.isStreamingHealthy(domain, normalizedScope);
         if (metricsOnly && this.shouldSkipStreamingMetricsRefresh(domain, normalizedScope)) {
           return;
         }
@@ -1429,7 +1462,7 @@ class RefreshOrchestrator {
         );
         return;
       }
-      if (shouldStream) {
+      if (shouldStream && this.isStreamingHealthy(domain, normalizedScope)) {
         return;
       }
     }
@@ -2161,6 +2194,20 @@ class RefreshOrchestrator {
     logWarning(
       `[refresh] resource stream drift detected domain=${domain} scope=${scope} reason=${payload.reason}`
     );
+  };
+
+  private handleResourceStreamHealth = (
+    payload: AppEvents['refresh:resource-stream-health']
+  ): void => {
+    const scope = payload.scope.trim();
+    if (!scope) {
+      return;
+    }
+    const domain = payload.domain as RefreshDomain;
+    if (!this.isResourceStreamDomain(domain)) {
+      return;
+    }
+    this.updateRefresherForStreaming(domain);
   };
 
   private handleResetViews = () => {

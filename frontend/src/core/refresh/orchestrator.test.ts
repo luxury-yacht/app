@@ -87,6 +87,7 @@ const resourceStreamMocks = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
   refreshOnce: vi.fn(),
+  isHealthy: vi.fn(() => false),
 }));
 
 vi.mock('./streaming/resourceStreamManager', () => ({
@@ -130,6 +131,11 @@ describe('refreshOrchestrator', () => {
     refreshManagerMocks.updateContextMock.mockReset();
     refreshManagerMocks.triggerManualRefreshMock.mockReset();
     refreshManagerMocks.triggerManualRefreshForContextMock.mockReset();
+    resourceStreamMocks.start.mockReset();
+    resourceStreamMocks.stop.mockReset();
+    resourceStreamMocks.refreshOnce.mockReset();
+    resourceStreamMocks.isHealthy.mockReset();
+    resourceStreamMocks.isHealthy.mockReturnValue(false);
     clientMocks.fetchSnapshotMock.mockReset();
     clientMocks.ensureRefreshBaseURLMock.mockClear();
     clientMocks.invalidateRefreshBaseURLMock.mockClear();
@@ -1505,6 +1511,8 @@ describe('refreshOrchestrator', () => {
     }));
 
     await refreshOrchestrator.startStreamingDomain('pods', 'namespace:default');
+    // Metrics-only refreshes require a healthy stream to trigger multi-cluster fan-out.
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
 
     clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {

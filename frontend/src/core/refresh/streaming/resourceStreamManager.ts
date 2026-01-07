@@ -83,8 +83,18 @@ const MESSAGE_TYPES = {
 // Keep stream domain literals aligned with the event bus payload contract.
 type ResourceStreamDomain = AppEvents['refresh:resource-stream-drift']['domain'];
 type ResourceDomain = ResourceStreamDomain;
+type ResourceStreamHealthStatus = AppEvents['refresh:resource-stream-health']['status'];
+type ResourceStreamHealthPayload = AppEvents['refresh:resource-stream-health'];
+type ResourceStreamConnectionStatus = ResourceStreamHealthPayload['connectionStatus'];
 
 type StreamMessageType = (typeof MESSAGE_TYPES)[keyof typeof MESSAGE_TYPES];
+
+// Aggregate health across clusters using worst-status wins.
+const STREAM_HEALTH_STATUS_ORDER: Record<ResourceStreamHealthStatus, number> = {
+  healthy: 0,
+  degraded: 1,
+  unhealthy: 2,
+};
 
 type ClientMessage = {
   type: StreamMessageType;
@@ -851,6 +861,10 @@ type StreamSubscription = {
   resourceVersion?: bigint;
   // Track the last stream sequence applied so we can resume after reconnects.
   lastSequence?: bigint;
+  // Track message activity so polling is paused only after delivery resumes.
+  lastMessageAt?: number;
+  lastDeliveryAt?: number;
+  lastDeliveryEpoch?: number;
   updateQueue: UpdateMessage[];
   updateTimer: number | null;
   pendingReset: boolean;
@@ -1009,6 +1023,10 @@ export class ResourceStreamManager {
   private subscriptions = new Map<string, StreamSubscription>();
   // Single socket used to multiplex subscriptions across clusters.
   private connection: ResourceStreamConnection | null = null;
+  private connectionStatus: ResourceStreamConnectionStatus = 'disconnected';
+  private connectionEpoch = 0;
+  private lastConnectionError = '';
+  private streamHealth = new Map<string, ResourceStreamHealthPayload>();
   private lastNotifiedErrors = new Map<string, string>();
   private consecutiveErrors = new Map<string, number>();
   private suspendedForVisibility = false;
@@ -1043,6 +1061,16 @@ export class ResourceStreamManager {
     });
 
     return summary;
+  }
+
+  // Expose per-scope health so refresh gating can keep snapshots running until delivery resumes.
+  getHealthStatus(domain: ResourceDomain, scope: string): ResourceStreamHealthStatus {
+    const key = this.healthKey(domain, scope);
+    return this.streamHealth.get(key)?.status ?? 'unhealthy';
+  }
+
+  isHealthy(domain: ResourceDomain, scope: string): boolean {
+    return this.getHealthStatus(domain, scope) === 'healthy';
   }
 
   async start(domain: ResourceDomain, scope: string): Promise<void> {
@@ -1101,6 +1129,7 @@ export class ResourceStreamManager {
       return;
     }
     const errorMessage = resolvePermissionDeniedMessage(parsed.error, parsed.errorDetails);
+    this.recordSubscriptionMessage(subscription);
 
     switch (parsed.type) {
       case MESSAGE_TYPES.heartbeat:
@@ -1108,20 +1137,25 @@ export class ResourceStreamManager {
       case MESSAGE_TYPES.reset:
         if (subscription.pendingReset) {
           subscription.pendingReset = false;
+          this.updateHealthForScope(subscription.domain, subscription.reportScope);
           return;
         }
         void this.resyncSubscription(subscription, 'reset');
+        this.updateHealthForScope(subscription.domain, subscription.reportScope);
         return;
       case MESSAGE_TYPES.complete:
         void this.resyncSubscription(subscription, errorMessage || 'complete');
+        this.updateHealthForScope(subscription.domain, subscription.reportScope);
         return;
       case MESSAGE_TYPES.error:
         void this.resyncSubscription(subscription, errorMessage || 'stream error', true);
+        this.updateHealthForScope(subscription.domain, subscription.reportScope);
         return;
       case MESSAGE_TYPES.added:
       case MESSAGE_TYPES.modified:
       case MESSAGE_TYPES.deleted:
         this.handleUpdate(subscription, parsed);
+        this.updateHealthForScope(subscription.domain, subscription.reportScope);
         return;
       default:
         return;
@@ -1132,6 +1166,7 @@ export class ResourceStreamManager {
     const targetClusterId = clusterId.trim();
     // Log when the websocket is connected so it is clear streaming is active.
     logInfo(`[resource-stream] connection open clusterId=${targetClusterId || 'all'}`);
+    this.markConnectionOpen();
     if (targetClusterId) {
       this.clearStreamError(targetClusterId);
     } else {
@@ -1155,6 +1190,7 @@ export class ResourceStreamManager {
 
   handleConnectionError(clusterId: string, message: string): void {
     const targetClusterId = clusterId.trim();
+    this.markConnectionError(message);
     this.subscriptions.forEach((subscription) => {
       if (targetClusterId && subscription.clusterId !== targetClusterId) {
         return;
@@ -1171,6 +1207,7 @@ export class ResourceStreamManager {
       return;
     }
     this.suspendedForVisibility = true;
+    this.markConnectionError('visibility hidden');
     this.connection?.pause();
   }
 
@@ -1231,6 +1268,7 @@ export class ResourceStreamManager {
     logInfo(
       `[resource-stream] subscription created domain=${subscription.domain} scope=${subscription.storeScope}`
     );
+    this.updateHealthForScope(subscription.domain, subscription.reportScope);
     return subscription;
   }
 
@@ -1324,6 +1362,7 @@ export class ResourceStreamManager {
       window.clearTimeout(subscription.updateTimer);
     }
     this.subscriptions.delete(subscription.key);
+    this.updateHealthForScope(subscription.domain, subscription.reportScope);
 
     if (reset) {
       this.clearStreamError(subscription.clusterId);
@@ -1332,6 +1371,7 @@ export class ResourceStreamManager {
     if (this.subscriptions.size === 0 && connection) {
       connection.close();
       this.connection = null;
+      this.markConnectionError('stream stopped');
     }
   }
 
@@ -1370,6 +1410,126 @@ export class ResourceStreamManager {
     this.pendingUnsubscribes.clear();
   }
 
+  private healthKey(domain: ResourceDomain, scope: string): string {
+    return `${domain}::${scope}`;
+  }
+
+  private recordSubscriptionMessage(subscription: StreamSubscription): void {
+    subscription.lastMessageAt = Date.now();
+  }
+
+  private computeSubscriptionHealth(subscription: StreamSubscription): {
+    status: ResourceStreamHealthStatus;
+    reason: string;
+  } {
+    if (subscription.driftDetected) {
+      return { status: 'unhealthy', reason: 'drift detected' };
+    }
+    if (this.connectionStatus !== 'connected') {
+      const reason = this.lastConnectionError || 'stream disconnected';
+      return { status: 'unhealthy', reason };
+    }
+    if (subscription.resyncInFlight) {
+      return { status: 'degraded', reason: 'resyncing' };
+    }
+    if (subscription.lastDeliveryEpoch === this.connectionEpoch) {
+      return { status: 'healthy', reason: 'delivering' };
+    }
+    return { status: 'degraded', reason: 'awaiting updates' };
+  }
+
+  private aggregateHealth(
+    domain: ResourceDomain,
+    reportScope: string
+  ): ResourceStreamHealthPayload {
+    const subscriptions = Array.from(this.subscriptions.values()).filter(
+      (subscription) => subscription.domain === domain && subscription.reportScope === reportScope
+    );
+    if (subscriptions.length === 0) {
+      return {
+        domain,
+        scope: reportScope,
+        status: 'unhealthy',
+        reason: 'inactive',
+        connectionStatus: this.connectionStatus,
+      };
+    }
+
+    let status: ResourceStreamHealthStatus = 'healthy';
+    let reason = 'delivering';
+    let lastMessageAt = 0;
+    let lastDeliveryAt = 0;
+
+    subscriptions.forEach((subscription) => {
+      const health = this.computeSubscriptionHealth(subscription);
+      if (STREAM_HEALTH_STATUS_ORDER[health.status] > STREAM_HEALTH_STATUS_ORDER[status]) {
+        status = health.status;
+        reason = health.reason;
+      }
+      lastMessageAt = Math.max(lastMessageAt, subscription.lastMessageAt ?? 0);
+      lastDeliveryAt = Math.max(lastDeliveryAt, subscription.lastDeliveryAt ?? 0);
+    });
+
+    const payload: ResourceStreamHealthPayload = {
+      domain,
+      scope: reportScope,
+      status,
+      reason,
+      connectionStatus: this.connectionStatus,
+    };
+    if (lastMessageAt) {
+      payload.lastMessageAt = lastMessageAt;
+    }
+    if (lastDeliveryAt) {
+      payload.lastDeliveryAt = lastDeliveryAt;
+    }
+    return payload;
+  }
+
+  private updateHealthForScope(domain: ResourceDomain, reportScope: string): void {
+    const next = this.aggregateHealth(domain, reportScope);
+    const key = this.healthKey(domain, reportScope);
+    const previous = this.streamHealth.get(key);
+    this.streamHealth.set(key, next);
+    // Avoid emitting on every message; only push updates when status changes.
+    if (
+      !previous ||
+      previous.status !== next.status ||
+      previous.reason !== next.reason ||
+      previous.connectionStatus !== next.connectionStatus
+    ) {
+      eventBus.emit('refresh:resource-stream-health', next);
+    }
+  }
+
+  private updateAllHealth(): void {
+    const targets = new Map<string, { domain: ResourceDomain; scope: string }>();
+    this.subscriptions.forEach((subscription) => {
+      const key = this.healthKey(subscription.domain, subscription.reportScope);
+      if (!targets.has(key)) {
+        targets.set(key, { domain: subscription.domain, scope: subscription.reportScope });
+      }
+    });
+    targets.forEach(({ domain, scope }) => this.updateHealthForScope(domain, scope));
+  }
+
+  private markConnectionOpen(): void {
+    this.connectionStatus = 'connected';
+    this.connectionEpoch += 1;
+    this.lastConnectionError = '';
+    this.updateAllHealth();
+  }
+
+  private markConnectionError(message: string): void {
+    this.connectionStatus = 'disconnected';
+    this.lastConnectionError = message;
+    this.updateAllHealth();
+  }
+
+  private shouldResetDeliveryOnResync(reason: string): boolean {
+    return reason !== 'initial' && reason !== 'manual refresh';
+  }
+
   private handleUpdate(subscription: StreamSubscription, message: UpdateMessage): void {
     if (subscription.resyncInFlight) {
       return;
@@ -1395,6 +1555,8 @@ export class ResourceStreamManager {
     ) {
       subscription.lastSequence = incomingSequence;
     }
+    subscription.lastDeliveryAt = Date.now();
+    subscription.lastDeliveryEpoch = this.connectionEpoch;
 
     subscription.updateQueue.push(message);
     if (subscription.updateQueue.length > MAX_UPDATE_QUEUE) {
@@ -2518,8 +2680,12 @@ export class ResourceStreamManager {
     }
     subscription.resyncInFlight = true;
     subscription.lastResyncAt = now;
+    if (this.shouldResetDeliveryOnResync(reason)) {
+      subscription.lastDeliveryEpoch = undefined;
+    }
     this.recordResync(subscription, reason);
     this.markResyncing(subscription);
+    this.updateHealthForScope(subscription.domain, subscription.reportScope);
     if (subscription.updateTimer !== null) {
       window.clearTimeout(subscription.updateTimer);
       subscription.updateTimer = null;
@@ -2556,6 +2722,7 @@ export class ResourceStreamManager {
       this.setStreamError(subscription, message);
     } finally {
       subscription.resyncInFlight = false;
+      this.updateHealthForScope(subscription.domain, subscription.reportScope);
     }
   }
 
@@ -3094,6 +3261,7 @@ export class ResourceStreamManager {
     }
     this.recordFallback(subscription, details.reason);
     subscription.driftDetected = true;
+    this.updateHealthForScope(subscription.domain, subscription.reportScope);
 
     eventBus.emit('refresh:resource-stream-drift', {
       domain: subscription.domain,
@@ -3640,6 +3808,10 @@ export class ResourceStreamManager {
     this.subscriptions.clear();
     this.connection?.close();
     this.connection = null;
+    this.connectionStatus = 'disconnected';
+    this.connectionEpoch = 0;
+    this.lastConnectionError = '';
+    this.streamHealth.clear();
     this.lastNotifiedErrors.clear();
     this.consecutiveErrors.clear();
     this.streamTelemetry.clear();

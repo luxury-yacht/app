@@ -51,13 +51,13 @@
 - Streaming gating:
   - Resource streams only start when the matching view/tab is active and a cluster scope exists (frontend/src/core/refresh/orchestrator.ts).
 
-### Phase 2: Streaming Health Gating and Fallback (pending)
+### Phase 2: Streaming Health Gating and Fallback ✅
 
-- Add a clear "stream healthy" signal from the resource stream manager.
-- Only pause snapshot refreshes when the stream is confirmed healthy and delivering.
-- Re-enable full snapshots automatically when the stream drops, errors, or drifts.
-- Apply snapshot fallback to resource-streamed domains only (nodes, pods, namespace/cluster resource lists).
-- Keep manual refresh behavior consistent with the streaming mode.
+- ✅ Add a clear "stream healthy" signal from the resource stream manager.
+- ✅ Only pause snapshot refreshes when the stream is confirmed healthy and delivering.
+- ✅ Re-enable full snapshots automatically when the stream drops, errors, or drifts.
+- ✅ Apply snapshot fallback to resource-streamed domains only (nodes, pods, namespace/cluster resource lists).
+- ✅ Keep manual refresh behavior consistent with the streaming mode.
 
 ### Phase 3: Implementation Details (pending)
 
