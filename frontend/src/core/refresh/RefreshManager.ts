@@ -288,6 +288,46 @@ class RefreshManager {
     return instance ? instance.config.interval : null;
   }
 
+  /**
+   * Update a refresher's interval without re-registering or altering subscribers.
+   */
+  public updateInterval(name: RefresherName, interval: number): void {
+    const instance = this.refreshers.get(name);
+    if (!instance) {
+      return;
+    }
+    if (!Number.isFinite(interval) || interval <= 0) {
+      return;
+    }
+    const normalizedInterval = Math.floor(interval);
+    if (instance.config.interval === normalizedInterval) {
+      return;
+    }
+
+    instance.config = { ...instance.config, interval: normalizedInterval };
+
+    if (!instance.isEnabled || this.isGloballyPaused || instance.state.status === 'paused') {
+      return;
+    }
+
+    if (instance.intervalTimer) {
+      window.clearInterval(instance.intervalTimer);
+      instance.intervalTimer = undefined;
+    }
+
+    // Reset the cadence without forcing an immediate refresh.
+    instance.intervalTimer = window.setInterval(() => {
+      if (instance.state.status === 'idle') {
+        this.refreshSingle(name, false);
+      }
+    }, instance.config.interval);
+
+    if (instance.state.status === 'idle') {
+      instance.state.nextRefreshTime = new Date(Date.now() + instance.config.interval);
+      this.emitStateChange(name);
+    }
+  }
+
   public async triggerManualRefreshMany(names: RefresherName[]): Promise<void> {
     const uniqueNames = Array.from(new Set(names));
     await Promise.allSettled(

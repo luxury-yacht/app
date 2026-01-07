@@ -73,6 +73,7 @@ export interface AppEvents {
   'settings:refresh-background': boolean;
   'settings:short-names': boolean;
   'settings:theme': string;
+  'settings:metrics-interval': number;
 
   // Feature events
   'pods:show-unhealthy': { scope: string };

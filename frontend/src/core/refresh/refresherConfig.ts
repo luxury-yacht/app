@@ -14,6 +14,7 @@ import {
   type SystemRefresherName,
   type StaticRefresherName,
 } from './refresherTypes';
+import { getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
 
 export interface RefresherTiming {
   interval: number;
@@ -56,11 +57,26 @@ const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
   [SYSTEM_REFRESHERS.objectLogs]: { interval: 5000, cooldown: 1000, timeout: 10 },
 };
 
+// Metrics-only refreshers should inherit the configurable metrics cadence.
+const METRICS_INTERVAL_REFRESHERS = new Set<StaticRefresherName>([
+  NAMESPACE_REFRESHERS.workloads,
+  CLUSTER_REFRESHERS.nodes,
+  SYSTEM_REFRESHERS.unifiedPods,
+]);
+
+const resolveTiming = (name: StaticRefresherName): RefresherTiming => {
+  const timing = STATIC_REFRESHER_CONFIG[name];
+  if (METRICS_INTERVAL_REFRESHERS.has(name)) {
+    return { ...timing, interval: getMetricsRefreshIntervalMs() };
+  }
+  return timing;
+};
+
 export const namespaceRefresherConfig = (name: NamespaceRefresherName): RefresherTiming =>
-  STATIC_REFRESHER_CONFIG[name];
+  resolveTiming(name);
 
 export const clusterRefresherConfig = (name: ClusterRefresherName): RefresherTiming =>
-  STATIC_REFRESHER_CONFIG[name];
+  resolveTiming(name);
 
 export const systemRefresherConfig = (name: SystemRefresherName): RefresherTiming =>
-  STATIC_REFRESHER_CONFIG[name];
+  resolveTiming(name);

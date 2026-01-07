@@ -10,7 +10,11 @@ import '@styles/index.css';
 import './App.css';
 import { errorHandler } from '@utils/errorHandler';
 import { KeyboardProvider, GlobalShortcuts } from '@ui/shortcuts';
-import { refreshOrchestrator, initializeAutoRefresh } from '@/core/refresh';
+import {
+  refreshOrchestrator,
+  initializeAutoRefresh,
+  initializeMetricsRefreshInterval,
+} from '@/core/refresh';
 import { eventBus } from '@/core/events';
 import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
@@ -58,6 +62,7 @@ function AppContent() {
         await hydrateAppPreferences();
       } finally {
         if (active) {
+          initializeMetricsRefreshInterval();
           initializeAutoRefresh();
         }
       }

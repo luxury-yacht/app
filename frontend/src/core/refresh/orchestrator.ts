@@ -57,6 +57,7 @@ import { resourceStreamManager } from './streaming/resourceStreamManager';
 import { catalogStreamManager } from './streaming/catalogStreamManager';
 import { errorHandler } from '@utils/errorHandler';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
+import { getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
 import {
   buildClusterScope,
   buildClusterScopeList,
@@ -94,8 +95,8 @@ type DomainFetchOptions = {
 const DEFAULT_AUTO_START = false;
 const CLUSTER_SCOPE = 'cluster';
 const noopStreamingCleanup = () => {};
-// Keep streaming metrics refreshes aligned with the backend poll cadence.
-const STREAMING_METRICS_MIN_INTERVAL_MS = 10_000;
+// Keep streaming metrics refreshes aligned with the configurable metrics cadence.
+const getStreamingMetricsMinIntervalMs = (): number => getMetricsRefreshIntervalMs();
 
 const logInfo = (message: string): void => {
   logAppInfo(message, 'RefreshOrchestrator');
@@ -1037,7 +1038,7 @@ class RefreshOrchestrator {
     if (!last) {
       return false;
     }
-    return Date.now() - last < STREAMING_METRICS_MIN_INTERVAL_MS;
+    return Date.now() - last < getStreamingMetricsMinIntervalMs();
   }
 
   private recordStreamingMetricsRefresh(domain: RefreshDomain, scope?: string): void {

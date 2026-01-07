@@ -579,6 +579,30 @@ describe('RefreshManager global controls', () => {
 
     refreshManager.unregister(intervalName);
   });
+
+  it('updates interval timers when cadence changes', () => {
+    vi.useFakeTimers();
+    const intervalName = 'namespace-metrics' as RefresherName;
+
+    refreshManager.register({
+      name: intervalName,
+      interval: 800,
+      cooldown: 200,
+      timeout: 2,
+      resource: 'ns-metrics',
+    });
+
+    const instance = unsafeRefreshManager.refreshers.get(intervalName)!;
+    const previousTimer = instance.intervalTimer;
+
+    refreshManager.updateInterval(intervalName, 1600);
+
+    expect(refreshManager.getRefresherInterval(intervalName)).toBe(1600);
+    expect(instance.intervalTimer).not.toBe(previousTimer);
+    expect(instance.state.nextRefreshTime).not.toBeNull();
+
+    refreshManager.unregister(intervalName);
+  });
 });
 
 describe('RefreshManager pause and cancellation integration', () => {

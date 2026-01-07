@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
@@ -16,6 +17,13 @@ import (
 	"helm.sh/helm/v3/pkg/cli"
 	"k8s.io/client-go/kubernetes"
 )
+
+func (a *App) resolveMetricsInterval() time.Duration {
+	if a.appSettings != nil && a.appSettings.MetricsRefreshIntervalMs > 0 {
+		return time.Duration(a.appSettings.MetricsRefreshIntervalMs) * time.Millisecond
+	}
+	return config.RefreshMetricsInterval
+}
 
 func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKey string) error {
 	if kubeClient == nil {
@@ -57,7 +65,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			MetricsClient:         a.metricsClient,
 			RestConfig:            a.restConfig,
 			ResyncInterval:        config.RefreshResyncInterval,
-			MetricsInterval:       config.RefreshMetricsInterval,
+			MetricsInterval:       a.resolveMetricsInterval(),
 			APIExtensionsClient:   a.apiextensionsClient,
 			DynamicClient:         a.dynamicClient,
 			HelmFactory:           a.helmActionFactory(),
@@ -103,7 +111,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 				MetricsClient:         clients.metricsClient,
 				RestConfig:            clients.restConfig,
 				ResyncInterval:        config.RefreshResyncInterval,
-				MetricsInterval:       config.RefreshMetricsInterval,
+				MetricsInterval:       a.resolveMetricsInterval(),
 				APIExtensionsClient:   clients.apiextensionsClient,
 				DynamicClient:         clients.dynamicClient,
 				HelmFactory:           a.helmActionFactoryForSelection(selection),

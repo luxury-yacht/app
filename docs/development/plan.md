@@ -66,12 +66,12 @@
 - ✅ Treat stream error, disconnect, or drift as unhealthy and resume snapshot polling immediately.
 - ✅ Surface stream health and fallback state in diagnostics for visibility.
 
-### Phase 4: Metrics Cadence Tuning (pending)
+### Phase 4: Metrics Cadence Tuning ✅
 
-- Add a single, easily configurable metrics interval (default 5s).
-- Apply the interval to nodes, pods, and workloads metrics refreshes.
-- Ensure metrics-only updates never overwrite status/taints/ready fields.
-- Align client-side throttling with the new metrics cadence.
+- ✅ Add a single, easily configurable metrics interval (default 5s).
+- ✅ Apply the interval to nodes, pods, and workloads metrics refreshes.
+- ✅ Confirm metrics-only updates never overwrite status/taints/ready fields.
+- ✅ Align client-side throttling with the new metrics cadence.
 
 ### Phase 5: Tests and Diagnostics (pending)
 

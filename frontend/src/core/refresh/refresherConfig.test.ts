@@ -5,7 +5,7 @@
  * Covers key behaviors and edge cases for refresherConfig.
  */
 
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   clusterRefresherConfig,
@@ -13,8 +13,14 @@ import {
   systemRefresherConfig,
 } from './refresherConfig';
 import { CLUSTER_REFRESHERS, NAMESPACE_REFRESHERS, SYSTEM_REFRESHERS } from './refresherTypes';
+import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
 
 describe('refresherConfig cadence defaults', () => {
+  beforeEach(() => {
+    // Ensure metrics interval defaults are reset between test runs.
+    resetAppPreferencesCacheForTesting();
+  });
+
   it('exposes expected namespace refresher timings', () => {
     expect(namespaceRefresherConfig(NAMESPACE_REFRESHERS.events)).toEqual({
       interval: 3000,
@@ -23,7 +29,7 @@ describe('refresherConfig cadence defaults', () => {
     });
 
     expect(namespaceRefresherConfig(NAMESPACE_REFRESHERS.workloads)).toEqual({
-      interval: 10000,
+      interval: 5000,
       cooldown: 500,
       timeout: 10,
     });
@@ -31,7 +37,7 @@ describe('refresherConfig cadence defaults', () => {
 
   it('exposes expected cluster refresher timings', () => {
     expect(clusterRefresherConfig(CLUSTER_REFRESHERS.nodes)).toEqual({
-      interval: 10000,
+      interval: 5000,
       cooldown: 1000,
       timeout: 10,
     });
