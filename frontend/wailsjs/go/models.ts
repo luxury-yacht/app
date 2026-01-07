@@ -620,6 +620,7 @@ export namespace types {
 	    useShortResourceNames: boolean;
 	    autoRefreshEnabled: boolean;
 	    refreshBackgroundClustersEnabled: boolean;
+	    metricsRefreshIntervalMs: number;
 	    gridTablePersistenceMode: string;
 	
 	    static createFrom(source: any = {}) {
@@ -634,6 +635,7 @@ export namespace types {
 	        this.useShortResourceNames = source["useShortResourceNames"];
 	        this.autoRefreshEnabled = source["autoRefreshEnabled"];
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
+	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];
 	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
 	    }
 	}
