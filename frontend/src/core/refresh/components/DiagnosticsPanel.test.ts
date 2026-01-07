@@ -94,6 +94,7 @@ const mockRefreshManager = vi.hoisted(() => ({
   disableScopedDomain: vi.fn(),
   fetchScopedDomain: vi.fn(),
   getRegisteredDomains: vi.fn(() => new Set<string>()),
+  getState: vi.fn(() => ({ status: 'enabled' })),
 }));
 
 vi.mock('../RefreshManager', () => ({
@@ -731,7 +732,7 @@ describe('DiagnosticsPanel component', () => {
     expect(configRow).toBeDefined();
 
     const cells = configRow?.querySelectorAll('td') ?? [];
-    const telemetryCell = cells[7];
+    const telemetryCell = cells[11];
     expect(telemetryCell?.textContent).toContain('Stream unhealthy');
     expect(telemetryCell?.getAttribute('title')).toContain('Stream health: unhealthy');
     expect(telemetryCell?.getAttribute('title')).toContain('Stream reason: no-delivery');

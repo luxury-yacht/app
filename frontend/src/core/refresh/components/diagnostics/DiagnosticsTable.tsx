@@ -19,8 +19,12 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
         <thead>
           <tr>
             <th>Domain</th>
+            <th>Scope</th>
             <th>Namespace</th>
+            <th>Mode</th>
+            <th>Health</th>
             <th>Status</th>
+            <th>Polling</th>
             <th>Interval</th>
             <th>Count</th>
             <th>Version</th>
@@ -37,7 +41,7 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
         <tbody>
           {rows.length === 0 ? (
             <tr className="diagnostics-empty">
-              <td colSpan={14}>
+              <td colSpan={18}>
                 All refreshers are idle. Enable "Show idle" to view the full list.
               </td>
             </tr>
@@ -49,8 +53,12 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
                     {row.label}
                   </span>
                 </td>
+                <td title={row.scopeTooltip ?? ''}>{row.scope}</td>
                 <td>{row.namespace}</td>
+                <td title={row.modeTooltip ?? ''}>{row.mode}</td>
+                <td title={row.healthTooltip ?? ''}>{row.healthStatus}</td>
                 <td>{row.status}</td>
+                <td title={row.pollingTooltip ?? ''}>{row.pollingStatus}</td>
                 <td>{row.interval}</td>
                 <td className={row.countClassName} title={row.countTooltip ?? ''}>
                   {row.countDisplay}

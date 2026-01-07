@@ -79,15 +79,15 @@
 - ✅ Add tests for metrics-only merge behavior to prevent regressions.
 - ✅ Ensure diagnostics surface stream health and fallback state clearly.
 
-### Phase 6: Diagnostics Retrieval Mode Reporting (pending)
+### Phase 6: Diagnostics Retrieval Mode Reporting ✅
 
-- Diagnostics tab must show, for every active domain in the current view, the data retrieval mode:
+- ✅ Diagnostics tab must show, for every active domain in the current view, the data retrieval mode:
   - `snapshot` (list), `streaming`, `watch`, `polling`, or `metrics-only`.
-- Diagnostics tab must show health state per domain:
+- ✅ Diagnostics tab must show health state per domain:
   - `healthy`, `degraded`, or `unhealthy`, plus the specific reason (disconnect, drift, errors, no scope, permissions).
-- Diagnostics tab must surface all active domains, including scoped domains (pods/logs), with their current scopes.
-- Diagnostics tab must show whether streaming is actually connected/delivering before snapshots are paused.
-- Diagnostics tab must show whether polling is enabled or paused for each domain, and the active interval.
+- ✅ Diagnostics tab must surface all active domains, including scoped domains (pods/logs), with their current scopes.
+- ✅ Diagnostics tab must show whether streaming is actually connected/delivering before snapshots are paused.
+- ✅ Diagnostics tab must show whether polling is enabled or paused for each domain, and the active interval.
 
 ### Phase 7: Validation and Rollout Notes (pending)
 
