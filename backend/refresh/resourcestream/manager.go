@@ -718,17 +718,11 @@ func (m *Manager) Subscribe(domain, scope string) (*Subscription, error) {
 	if m == nil {
 		return nil, errors.New("resource stream not initialised")
 	}
-	if err := m.checkDomainPermissions(domain); err != nil {
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamResources, err)
-		}
-		return nil, err
-	}
-
 	normalized, err := normalizeScopeForDomain(domain, scope)
 	if err != nil {
 		return nil, err
 	}
+	// Avoid pre-checking permissions so partial streams can still deliver updates.
 
 	m.mu.Lock()
 	scopeSubscribers, ok := m.subscribers[domain]

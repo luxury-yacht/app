@@ -94,7 +94,12 @@
 - ✅ Stop treating lower resourceVersion updates as stream errors; order updates by stream sequence.
 - ✅ Keep resourceVersion monotonic for resume/debugging without resyncing on regressions.
 
-### Phase 8: Validation and Rollout Notes (pending)
+### Phase 8: Permission Gate Parity ✅
+
+- ✅ Remove pre-check gating for resource stream subscriptions so missing permissions do not block streams.
+- ✅ Keep permission enforcement in snapshot/list handlers.
+
+### Phase 9: Validation and Rollout Notes (pending)
 
 - Manual validation checklist for nodes (cordon/uncordon), workloads, and pods.
 - Confirm metrics cadence and correctness under stream disconnects.
