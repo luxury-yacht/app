@@ -409,9 +409,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
               ? `Stream Dropped (${streamTelemetry.droppedMessages})`
               : 'Stream OK'
           : null;
-      const telemetryStatus = streamTelemetryStatus
-        ? `${snapshotTelemetryStatus} • ${streamTelemetryStatus}`
-        : snapshotTelemetryStatus;
+      // Show resource stream health alongside snapshot and telemetry summaries.
+      const streamHealth =
+        isResourceStreamDomain && state.scope
+          ? resourceStreamManager.getHealthSnapshot(domain, state.scope)
+          : null;
+      const streamHealthStatus = streamHealth ? `Stream ${streamHealth.status}` : null;
+      const telemetryStatus = [snapshotTelemetryStatus, streamTelemetryStatus, streamHealthStatus]
+        .filter(Boolean)
+        .join(' • ');
       const streamDropped = isResourceStreamDomain ? (streamTelemetry?.droppedMessages ?? 0) : 0;
       const telemetryTooltipParts: string[] = [];
       if (telemetryLastError) {
@@ -434,6 +440,18 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         }
         if (resourceStreamStats.lastFallbackReason) {
           telemetryTooltipParts.push(`Last fallback: ${resourceStreamStats.lastFallbackReason}`);
+        }
+      }
+      if (streamHealth) {
+        telemetryTooltipParts.push(`Stream health: ${streamHealth.status}`);
+        telemetryTooltipParts.push(`Stream reason: ${streamHealth.reason}`);
+        if (streamHealth.lastDeliveryAt) {
+          const deliveryInfo = formatLastUpdated(streamHealth.lastDeliveryAt);
+          telemetryTooltipParts.push(`Stream last delivery: ${deliveryInfo.tooltip}`);
+        }
+        if (streamHealth.lastMessageAt) {
+          const messageInfo = formatLastUpdated(streamHealth.lastMessageAt);
+          telemetryTooltipParts.push(`Stream last message: ${messageInfo.tooltip}`);
         }
       }
       const telemetryTooltip =
@@ -674,6 +692,63 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       }
     }
 
+    // Aggregate pod stream health across scopes using worst-status wins.
+    const podSummaryHealth = (() => {
+      if (!podScopes.length) {
+        return null;
+      }
+      const healthOrder = { healthy: 0, degraded: 1, unhealthy: 2 } as const;
+      let status: keyof typeof healthOrder = 'healthy';
+      let reason = 'delivering';
+      let lastDeliveryAt = 0;
+      let lastMessageAt = 0;
+      podScopes.forEach(([scope]) => {
+        const health = resourceStreamManager.getHealthSnapshot('pods', scope);
+        if (!health) {
+          return;
+        }
+        if (healthOrder[health.status] > healthOrder[status]) {
+          status = health.status;
+          reason = health.reason;
+        }
+        lastDeliveryAt = Math.max(lastDeliveryAt, health.lastDeliveryAt ?? 0);
+        lastMessageAt = Math.max(lastMessageAt, health.lastMessageAt ?? 0);
+      });
+      return {
+        status,
+        reason,
+        lastDeliveryAt: lastDeliveryAt || undefined,
+        lastMessageAt: lastMessageAt || undefined,
+      };
+    })();
+
+    const podSummaryTelemetryStatus = [
+      podSummaryStatus,
+      podSummaryHealth ? `Stream ${podSummaryHealth.status}` : null,
+    ]
+      .filter(Boolean)
+      .join(' • ');
+    const podSummaryTelemetryTooltipParts: string[] = [];
+    if (podSummaryError !== '—') {
+      podSummaryTelemetryTooltipParts.push(podSummaryError);
+    }
+    if (podSummaryHealth) {
+      podSummaryTelemetryTooltipParts.push(`Stream health: ${podSummaryHealth.status}`);
+      podSummaryTelemetryTooltipParts.push(`Stream reason: ${podSummaryHealth.reason}`);
+      if (podSummaryHealth.lastDeliveryAt) {
+        const deliveryInfo = formatLastUpdated(podSummaryHealth.lastDeliveryAt);
+        podSummaryTelemetryTooltipParts.push(`Stream last delivery: ${deliveryInfo.tooltip}`);
+      }
+      if (podSummaryHealth.lastMessageAt) {
+        const messageInfo = formatLastUpdated(podSummaryHealth.lastMessageAt);
+        podSummaryTelemetryTooltipParts.push(`Stream last message: ${messageInfo.tooltip}`);
+      }
+    }
+    const podSummaryTelemetryTooltip =
+      podSummaryTelemetryTooltipParts.length > 0
+        ? podSummaryTelemetryTooltipParts.join('\n')
+        : undefined;
+
     const podSummaryRow: DiagnosticsRow = {
       rowKey: 'pods-summary',
       domain: 'pods' as RefreshDomain,
@@ -687,8 +762,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       dropped: podSummaryDropped,
       stale: podSummaryStale,
       error: podSummaryError,
-      telemetryStatus: podSummaryStatus,
-      telemetryTooltip: podSummaryError !== '—' ? podSummaryError : undefined,
+      telemetryStatus: podSummaryTelemetryStatus,
+      telemetryTooltip: podSummaryTelemetryTooltip,
       metricsStatus: podSummaryMetricsStatus,
       metricsTooltip: podSummaryMetricsTooltip,
       metricsStale: podSummaryStale,
@@ -752,6 +827,28 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         }
       }
       const version = state.version != null ? String(state.version) : '—';
+      const streamHealth = resourceStreamManager.getHealthSnapshot('pods', scope);
+      const telemetryStatus = [state.status, streamHealth ? `Stream ${streamHealth.status}` : null]
+        .filter(Boolean)
+        .join(' • ');
+      const telemetryTooltipParts: string[] = [];
+      if (state.error) {
+        telemetryTooltipParts.push(state.error);
+      }
+      if (streamHealth) {
+        telemetryTooltipParts.push(`Stream health: ${streamHealth.status}`);
+        telemetryTooltipParts.push(`Stream reason: ${streamHealth.reason}`);
+        if (streamHealth.lastDeliveryAt) {
+          const deliveryInfo = formatLastUpdated(streamHealth.lastDeliveryAt);
+          telemetryTooltipParts.push(`Stream last delivery: ${deliveryInfo.tooltip}`);
+        }
+        if (streamHealth.lastMessageAt) {
+          const messageInfo = formatLastUpdated(streamHealth.lastMessageAt);
+          telemetryTooltipParts.push(`Stream last message: ${messageInfo.tooltip}`);
+        }
+      }
+      const telemetryTooltip =
+        telemetryTooltipParts.length > 0 ? telemetryTooltipParts.join('\n') : undefined;
 
       const displayScope = stripClusterScope(scope);
       let label = 'Pods';
@@ -779,8 +876,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         dropped: state.droppedAutoRefreshes,
         stale: isStale,
         error: state.error ?? '—',
-        telemetryStatus: state.status,
-        telemetryTooltip: state.error ?? undefined,
+        telemetryStatus,
+        telemetryTooltip,
         metricsStatus,
         metricsTooltip:
           metricsTooltipLines.length > 0 ? metricsTooltipLines.join('\n') : 'No metrics available',

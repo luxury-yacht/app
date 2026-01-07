@@ -865,6 +865,8 @@ type StreamSubscription = {
   lastMessageAt?: number;
   lastDeliveryAt?: number;
   lastDeliveryEpoch?: number;
+  lastErrorAt?: number;
+  lastErrorReason?: string;
   updateQueue: UpdateMessage[];
   updateTimer: number | null;
   pendingReset: boolean;
@@ -1069,6 +1071,14 @@ export class ResourceStreamManager {
     return this.streamHealth.get(key)?.status ?? 'unhealthy';
   }
 
+  getHealthSnapshot(domain: string, scope: string): ResourceStreamHealthPayload | null {
+    if (!isSupportedDomain(domain)) {
+      return null;
+    }
+    const key = this.healthKey(domain, scope);
+    return this.streamHealth.get(key) ?? null;
+  }
+
   isHealthy(domain: ResourceDomain, scope: string): boolean {
     return this.getHealthStatus(domain, scope) === 'healthy';
   }
@@ -1148,6 +1158,7 @@ export class ResourceStreamManager {
         this.updateHealthForScope(subscription.domain, subscription.reportScope);
         return;
       case MESSAGE_TYPES.error:
+        this.recordSubscriptionError(subscription, errorMessage || 'stream error');
         void this.resyncSubscription(subscription, errorMessage || 'stream error', true);
         this.updateHealthForScope(subscription.domain, subscription.reportScope);
         return;
@@ -1418,6 +1429,16 @@ export class ResourceStreamManager {
     subscription.lastMessageAt = Date.now();
   }
 
+  private markSubscriptionDelivery(subscription: StreamSubscription): void {
+    subscription.lastDeliveryAt = Date.now();
+    subscription.lastDeliveryEpoch = this.connectionEpoch;
+  }
+
+  private recordSubscriptionError(subscription: StreamSubscription, message: string): void {
+    subscription.lastErrorAt = Date.now();
+    subscription.lastErrorReason = message;
+  }
+
   private computeSubscriptionHealth(subscription: StreamSubscription): {
     status: ResourceStreamHealthStatus;
     reason: string;
@@ -1428,6 +1449,10 @@ export class ResourceStreamManager {
     if (this.connectionStatus !== 'connected') {
       const reason = this.lastConnectionError || 'stream disconnected';
       return { status: 'unhealthy', reason };
+    }
+    // Keep the stream unhealthy until a delivery arrives after the last error.
+    if (subscription.lastErrorAt && subscription.lastErrorAt > (subscription.lastDeliveryAt ?? 0)) {
+      return { status: 'unhealthy', reason: subscription.lastErrorReason || 'stream error' };
     }
     if (subscription.resyncInFlight) {
       return { status: 'degraded', reason: 'resyncing' };
@@ -1555,8 +1580,7 @@ export class ResourceStreamManager {
     ) {
       subscription.lastSequence = incomingSequence;
     }
-    subscription.lastDeliveryAt = Date.now();
-    subscription.lastDeliveryEpoch = this.connectionEpoch;
+    this.markSubscriptionDelivery(subscription);
 
     subscription.updateQueue.push(message);
     if (subscription.updateQueue.length > MAX_UPDATE_QUEUE) {
@@ -3651,6 +3675,7 @@ export class ResourceStreamManager {
   }
 
   private setStreamError(subscription: StreamSubscription, message: string): void {
+    this.recordSubscriptionError(subscription, message);
     const key = `${subscription.clusterId}::${subscription.domain}::${subscription.storeScope}`;
     const attempts = (this.consecutiveErrors.get(key) ?? 0) + 1;
     this.consecutiveErrors.set(key, attempts);
@@ -3773,6 +3798,7 @@ export class ResourceStreamManager {
     if (isTerminal) {
       this.notifyStreamError(subscription.clusterId, message);
     }
+    this.updateHealthForScope(subscription.domain, subscription.reportScope);
   }
 
   private clearStreamError(clusterId: string): void {

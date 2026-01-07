@@ -59,12 +59,12 @@
 - ✅ Apply snapshot fallback to resource-streamed domains only (nodes, pods, namespace/cluster resource lists).
 - ✅ Keep manual refresh behavior consistent with the streaming mode.
 
-### Phase 3: Implementation Details (pending)
+### Phase 3: Implementation Details ✅
 
-- Define stream healthy as: websocket open + at least one delivery signal (heartbeat/update/reset) per subscription.
-- Track per-domain/per-scope stream health to avoid pausing snapshots prematurely.
-- Treat stream error, disconnect, or drift as unhealthy and resume snapshot polling immediately.
-- Surface stream health and fallback state in diagnostics for visibility.
+- ✅ Define stream healthy as: websocket open + a delivered update per subscription (resource stream heartbeats do not include domain/scope, so they are not used for per-scope health).
+- ✅ Track per-domain/per-scope stream health to avoid pausing snapshots prematurely.
+- ✅ Treat stream error, disconnect, or drift as unhealthy and resume snapshot polling immediately.
+- ✅ Surface stream health and fallback state in diagnostics for visibility.
 
 ### Phase 4: Metrics Cadence Tuning (pending)
 
