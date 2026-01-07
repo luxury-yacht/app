@@ -21,6 +21,7 @@ import type {
 import type { PermissionStatus } from '@/core/capabilities/bootstrap';
 import type { DomainSnapshotState } from '../store';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
+import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 
 const fetchTelemetrySummaryMock = vi.hoisted(() =>
   vi.fn<() => Promise<TelemetrySummary>>(async () => {
@@ -654,6 +655,92 @@ describe('DiagnosticsPanel component', () => {
 
     await rendered.unmount();
     resourceStreamSpy.mockRestore();
+  });
+
+  test('shows resource stream health and fallback details in telemetry tooltips', async () => {
+    vi.useFakeTimers();
+    const baseTime = new Date('2024-01-01T12:00:00Z');
+    vi.setSystemTime(baseTime);
+    const now = Date.now();
+
+    const scope = buildClusterScopeList(['cluster-a'], '');
+    setDomainState('cluster-config', {
+      ...createReadyState({
+        resources: [{ kind: 'ConfigMap', name: 'app-config', namespace: 'default', data: 2 }],
+      }),
+      scope,
+    });
+
+    fetchTelemetrySummaryMock.mockResolvedValueOnce({
+      snapshots: [],
+      metrics: {
+        lastCollected: now - 2000,
+        lastDurationMs: 120,
+        consecutiveFailures: 0,
+        successCount: 3,
+        failureCount: 0,
+        active: true,
+      },
+      streams: [
+        {
+          name: 'resources',
+          activeSessions: 1,
+          totalMessages: 5,
+          droppedMessages: 1,
+          errorCount: 0,
+          lastConnect: now - 4000,
+          lastEvent: now - 1500,
+        },
+      ],
+    });
+
+    const healthSpy = vi
+      .spyOn(resourceStreamManager, 'getHealthSnapshot')
+      .mockImplementation((domain, scopeValue) => {
+        if (domain === 'cluster-config') {
+          return {
+            domain: 'cluster-config',
+            scope: scopeValue,
+            status: 'unhealthy',
+            reason: 'no-delivery',
+            connectionStatus: 'connected',
+            lastMessageAt: now - 1800,
+            lastDeliveryAt: now - 2400,
+          };
+        }
+        return null;
+      });
+
+    const telemetrySpy = vi.spyOn(resourceStreamManager, 'getTelemetrySummary').mockReturnValue({
+      resyncCount: 1,
+      fallbackCount: 2,
+      lastResyncAt: now - 3000,
+      lastResyncReason: 'gap detected',
+      lastFallbackAt: now - 2500,
+      lastFallbackReason: 'stream stalled',
+    });
+
+    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+
+    await flushAsync();
+    await flushAsync();
+
+    const rows = rendered.container.querySelectorAll('.diagnostics-table tbody tr');
+    const configRow = Array.from(rows).find((row) => row.textContent?.includes('Cluster Config'));
+    expect(configRow).toBeDefined();
+
+    const cells = configRow?.querySelectorAll('td') ?? [];
+    const telemetryCell = cells[7];
+    expect(telemetryCell?.textContent).toContain('Stream unhealthy');
+    expect(telemetryCell?.getAttribute('title')).toContain('Stream health: unhealthy');
+    expect(telemetryCell?.getAttribute('title')).toContain('Stream reason: no-delivery');
+    expect(telemetryCell?.getAttribute('title')).toContain('Stream fallbacks: 2');
+    expect(telemetryCell?.getAttribute('title')).toContain('Last fallback: stream stalled');
+
+    await rendered.unmount();
+    healthSpy.mockRestore();
+    telemetrySpy.mockRestore();
   });
 
   test('filters stream rows using the stream toggles', async () => {

@@ -73,11 +73,11 @@
 - ✅ Confirm metrics-only updates never overwrite status/taints/ready fields.
 - ✅ Align client-side throttling with the new metrics cadence.
 
-### Phase 5: Tests and Diagnostics (pending)
+### Phase 5: Tests and Diagnostics ✅
 
-- Add tests for stream health gating and snapshot fallback logic.
-- Add tests for metrics-only merge behavior to prevent regressions.
-- Ensure diagnostics surface stream health and fallback state clearly.
+- ✅ Add tests for stream health gating and snapshot fallback logic.
+- ✅ Add tests for metrics-only merge behavior to prevent regressions.
+- ✅ Ensure diagnostics surface stream health and fallback state clearly.
 
 ### Phase 6: Diagnostics Retrieval Mode Reporting (pending)
 
