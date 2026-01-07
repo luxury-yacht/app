@@ -159,6 +159,10 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
   const setActiveNamespaceView = useCallback(
     (tab: NamespaceViewType) => {
       updateActiveState((prev) => ({ ...prev, activeNamespaceView: tab }));
+      // Keep refresh context aligned so streaming targets follow the active tab.
+      refreshOrchestrator.updateContext({
+        activeNamespaceView: tab,
+      });
     },
     [updateActiveState]
   );

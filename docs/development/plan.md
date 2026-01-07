@@ -89,8 +89,42 @@
 - ✅ Diagnostics tab must show whether streaming is actually connected/delivering before snapshots are paused.
 - ✅ Diagnostics tab must show whether polling is enabled or paused for each domain, and the active interval.
 
-### Phase 7: Validation and Rollout Notes (pending)
+### Phase 7: Stream Ordering Fix ✅
+
+- ✅ Stop treating lower resourceVersion updates as stream errors; order updates by stream sequence.
+- ✅ Keep resourceVersion monotonic for resume/debugging without resyncing on regressions.
+
+### Phase 8: Validation and Rollout Notes (pending)
 
 - Manual validation checklist for nodes (cordon/uncordon), workloads, and pods.
 - Confirm metrics cadence and correctness under stream disconnects.
 - Document final behavior and limits in docs/development.
+
+## Headlamp Examination
+
+• Here’s the Headlamp comparison and the most likely “why ours isn’t working” based on their implementation.
+
+How Headlamp does it (and why it works)
+
+- Headlamp uses Kubernetes watch directly for each list. The client builds watch=1&resourceVersion=<listRV> per resource path and subscribes over a single WS multiplexer. See
+  headlamp/frontend/src/lib/k8s/api/v2/useKubeObjectList.ts and headlamp/frontend/src/lib/k8s/api/v2/KubeList.ts.
+- The backend just proxies WebSocket traffic to the Kubernetes API (no custom domain scopes, no extra permission gates). See headlamp/backend/cmd/multiplexer.go. If the list
+  succeeds, the watch almost always succeeds too.
+
+How Luxury Yacht does it (key differences)
+
+- We use a custom resource stream (/api/v2/stream/resources) with domain+scope routing and a separate backend stream manager. See frontend/src/core/refresh/streaming/
+  resourceStreamManager.ts and backend/refresh/resourcestream/manager.go.
+- We gate subscriptions by permissions for every resource in the domain before allowing any stream (checkDomainPermissions). If any required watch/list check fails, the entire
+  domain stream is rejected. That’s stricter than Headlamp and can leave streams dead even though snapshots work. See backend/refresh/resourcestream/manager.go.
+- On the frontend, we drop updates as “out‑of‑order” if update.resourceVersion <= subscription.resourceVersion or while resyncing. In multi‑cluster/aggregate scopes, the snapshot
+  version is the max across clusters, so per‑cluster updates can look “behind” and get dropped forever. See frontend/src/core/refresh/streaming/resourceStreamManager.ts
+  (handleUpdate + resync).
+
+Why ours is not working (most likely)
+
+1. Permission gate mismatch: Headlamp watches only the resource the list already proved you can access. We require list+watch on all resources in a domain (configmaps + secrets
+   for namespace‑config, etc.). If any watch permission is missing, the stream never starts, and you’ll only see polling with “stream degraded” (exactly what you’re reporting).
+2. ResourceVersion ordering mismatch: We compared per‑update resourceVersion against a snapshot max (per domain/scope), so legitimate updates with lower RVs were treated as
+   out‑of‑order and caused continuous resyncs (especially with informer resyncs or mixed-resource domains). Headlamp avoids this by ordering on the watch stream itself, not a
+   snapshot max.

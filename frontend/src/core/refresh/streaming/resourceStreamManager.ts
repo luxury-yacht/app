@@ -4,7 +4,13 @@
  * Resource stream manager for watch-style resource updates.
  */
 
-import { ensureRefreshBaseURL, fetchSnapshot, type Snapshot, type SnapshotStats } from '../client';
+import {
+  ensureRefreshBaseURL,
+  fetchSnapshot,
+  invalidateRefreshBaseURL,
+  type Snapshot,
+  type SnapshotStats,
+} from '../client';
 import { setDomainState, setScopedDomainState } from '../store';
 import type {
   ClusterNodeSnapshotEntry,
@@ -41,7 +47,7 @@ import type {
   PodSnapshotPayload,
   PermissionDeniedStatus,
 } from '../types';
-import { buildClusterScopeList, parseClusterScopeList } from '../clusterScope';
+import { buildClusterScopeList, parseClusterScopeList, stripClusterScope } from '../clusterScope';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus, type AppEvents } from '@/core/events';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
@@ -152,19 +158,73 @@ const isMultiClusterDomain = (domain: ResourceDomain): boolean =>
   domain === 'cluster-crds' ||
   domain === 'cluster-custom';
 
+const isClusterScopedDomain = (domain: ResourceDomain): boolean =>
+  domain === 'cluster-rbac' ||
+  domain === 'cluster-storage' ||
+  domain === 'cluster-config' ||
+  domain === 'cluster-crds' ||
+  domain === 'cluster-custom' ||
+  domain === 'nodes';
+
 const isMultiClusterScope = (scope: string): boolean => parseClusterScopeList(scope).isMultiCluster;
 
 const hasMessageType = (value: unknown): value is StreamMessageType =>
   typeof value === 'string' && Object.values(MESSAGE_TYPES).includes(value as StreamMessageType);
 
-const isUpdateMessage = (message: ServerMessage): message is UpdateMessage =>
-  hasMessageType(message.type) &&
-  isSupportedDomain(message.domain) &&
-  typeof message.scope === 'string';
+const normalizeStreamScope = (domain: ResourceDomain, scope: unknown): string | null => {
+  if (typeof scope === 'string') {
+    const trimmed = scope.trim();
+    const normalized = stripClusterScope(trimmed);
+    if (normalized || isClusterScopedDomain(domain)) {
+      return normalized;
+    }
+    return null;
+  }
+  // Cluster-scoped updates omit scope in JSON, so treat missing scope as empty.
+  if (scope == null && isClusterScopedDomain(domain)) {
+    return '';
+  }
+  return null;
+};
+
+const resolveUpdateMessage = (message: ServerMessage): UpdateMessage | null => {
+  if (!hasMessageType(message.type) || !isSupportedDomain(message.domain)) {
+    return null;
+  }
+  const normalizedScope = normalizeStreamScope(message.domain, message.scope);
+  if (normalizedScope === null) {
+    return null;
+  }
+  return { ...message, domain: message.domain, scope: normalizedScope };
+};
+
+const normalizeUpdateClusterId = (
+  update: UpdateMessage,
+  clusterId: string
+): UpdateMessage => {
+  if (!clusterId) {
+    return update;
+  }
+  const messageClusterId = update.clusterId?.trim();
+  if (messageClusterId && messageClusterId === clusterId) {
+    return update;
+  }
+  const next: UpdateMessage = { ...update, clusterId };
+  if (update.row && typeof update.row === 'object' && !Array.isArray(update.row)) {
+    if ('clusterId' in update.row) {
+      next.row = { ...(update.row as Record<string, unknown>), clusterId };
+    }
+  }
+  return next;
+};
 
 const parseResourceVersion = (value?: string | number): bigint | null => {
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value <= 0) {
+      return null;
+    }
+    // Avoid precision loss from JSON numbers that exceed safe integer limits.
+    if (!Number.isSafeInteger(value)) {
       return null;
     }
     return BigInt(Math.floor(value));
@@ -986,6 +1046,8 @@ class ResourceStreamConnection {
     if (this.closed || this.paused) {
       return;
     }
+    // Refresh base URLs can change when the backend rebuilds the refresh subsystem.
+    invalidateRefreshBaseURL();
     this.manager.handleConnectionError('', message);
     this.scheduleReconnect();
   }
@@ -994,6 +1056,8 @@ class ResourceStreamConnection {
     if (this.closed || this.paused) {
       return;
     }
+    // Force a fresh base URL lookup on reconnect in case the port rotated.
+    invalidateRefreshBaseURL();
     this.manager.handleConnectionError('', message);
     this.scheduleReconnect();
   }
@@ -1124,24 +1188,29 @@ export class ResourceStreamManager {
     if (!parsed || !hasMessageType(parsed.type)) {
       return;
     }
-    if (!isUpdateMessage(parsed)) {
+    const update = resolveUpdateMessage(parsed);
+    if (!update) {
       return;
     }
-    const messageClusterId = parsed.clusterId?.trim() || clusterId;
+    const messageClusterId = update.clusterId?.trim() || clusterId;
     if (!messageClusterId) {
       return;
     }
-    const normalizedScope = parsed.scope.trim();
-    const subscription = this.subscriptions.get(
-      this.subscriptionKey(messageClusterId, parsed.domain, normalizedScope)
-    );
+    const subscriptionKey = this.subscriptionKey(messageClusterId, update.domain, update.scope);
+    let subscription = this.subscriptions.get(subscriptionKey);
+    let resolvedUpdate = update;
     if (!subscription) {
-      return;
+      // Fall back when cluster IDs drift but the scope/domain pair is unique.
+      subscription = this.findSubscriptionByScope(update.domain, update.scope);
+      if (!subscription) {
+        return;
+      }
+      resolvedUpdate = normalizeUpdateClusterId(update, subscription.clusterId);
     }
-    const errorMessage = resolvePermissionDeniedMessage(parsed.error, parsed.errorDetails);
+    const errorMessage = resolvePermissionDeniedMessage(update.error, update.errorDetails);
     this.recordSubscriptionMessage(subscription);
 
-    switch (parsed.type) {
+    switch (resolvedUpdate.type) {
       case MESSAGE_TYPES.heartbeat:
         return;
       case MESSAGE_TYPES.reset:
@@ -1165,12 +1234,29 @@ export class ResourceStreamManager {
       case MESSAGE_TYPES.added:
       case MESSAGE_TYPES.modified:
       case MESSAGE_TYPES.deleted:
-        this.handleUpdate(subscription, parsed);
+        this.handleUpdate(subscription, resolvedUpdate);
         this.updateHealthForScope(subscription.domain, subscription.reportScope);
         return;
       default:
         return;
     }
+  }
+
+  private findSubscriptionByScope(
+    domain: ResourceDomain,
+    scope: string
+  ): StreamSubscription | null {
+    let match: StreamSubscription | null = null;
+    for (const subscription of this.subscriptions.values()) {
+      if (subscription.domain !== domain || subscription.normalizedScope !== scope) {
+        continue;
+      }
+      if (match) {
+        return null;
+      }
+      match = subscription;
+    }
+    return match;
   }
 
   handleConnectionOpen(clusterId: string): void {
@@ -1563,22 +1649,23 @@ export class ResourceStreamManager {
       return;
     }
 
-    const incomingVersion = parseResourceVersion(message.resourceVersion);
-    if (!incomingVersion) {
-      void this.resyncSubscription(subscription, 'missing resource version');
-      return;
-    }
-    if (subscription.resourceVersion && incomingVersion <= subscription.resourceVersion) {
-      void this.resyncSubscription(subscription, 'out-of-order update');
-      return;
-    }
-    subscription.resourceVersion = incomingVersion;
     const incomingSequence = parseStreamSequence(message.sequence);
+    // Stream sequence is the reliable ordering signal; resourceVersion can regress on resyncs.
     if (
       incomingSequence &&
-      (!subscription.lastSequence || incomingSequence > subscription.lastSequence)
+      subscription.lastSequence &&
+      incomingSequence <= subscription.lastSequence
     ) {
+      return;
+    }
+    if (incomingSequence) {
       subscription.lastSequence = incomingSequence;
+    }
+    const incomingVersion = parseResourceVersion(message.resourceVersion);
+    if (incomingVersion) {
+      if (!subscription.resourceVersion || incomingVersion > subscription.resourceVersion) {
+        subscription.resourceVersion = incomingVersion;
+      }
     }
     this.markSubscriptionDelivery(subscription);
 
@@ -2733,8 +2820,13 @@ export class ResourceStreamManager {
         throw new Error('resource stream snapshot missing');
       }
       this.applySnapshot(subscription, snapshot);
-      subscription.resourceVersion =
-        parseResourceVersion(snapshot.version) ?? subscription.resourceVersion;
+      const snapshotVersion = parseResourceVersion(snapshot.version);
+      if (
+        snapshotVersion &&
+        (!subscription.resourceVersion || snapshotVersion > subscription.resourceVersion)
+      ) {
+        subscription.resourceVersion = snapshotVersion;
+      }
       subscription.pendingReset = false;
       if (subscription.driftDetected) {
         this.unsubscribe(subscription, false);
