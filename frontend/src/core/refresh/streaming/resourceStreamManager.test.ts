@@ -1140,6 +1140,7 @@ describe('ResourceStreamManager', () => {
         type: 'ADDED',
         domain: 'nodes',
         scope: '',
+        name: 'node-a',
         resourceVersion: '10',
         sequence: 1,
         row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
@@ -1153,6 +1154,7 @@ describe('ResourceStreamManager', () => {
         type: 'MODIFIED',
         domain: 'nodes',
         scope: '',
+        name: 'node-a',
         resourceVersion: '5',
         sequence: 2,
         row: { name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' },
@@ -1366,7 +1368,7 @@ describe('ResourceStreamManager', () => {
     expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
   });
 
-  test('recovers from stale updates after a resync', async () => {
+  test('accepts newer updates after stale resource versions when sequences advance', async () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -1411,6 +1413,7 @@ describe('ResourceStreamManager', () => {
         domain: 'nodes',
         scope: '',
         resourceVersion: '5',
+        sequence: 1,
         name: 'node-a',
         row: { name: 'node-a', status: 'Unknown', clusterId: 'cluster-a' },
       })
@@ -1425,6 +1428,7 @@ describe('ResourceStreamManager', () => {
         domain: 'nodes',
         scope: '',
         resourceVersion: '12',
+        sequence: 2,
         name: 'node-a',
         row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
       })
@@ -1434,7 +1438,7 @@ describe('ResourceStreamManager', () => {
 
     const state = getDomainState('nodes');
     expect(state.data?.nodes?.[0]?.status).toBe('Ready');
-    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
+    expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
   });
 
   test('debounces unsubscribe before sending cancel', async () => {

@@ -198,10 +198,7 @@ const resolveUpdateMessage = (message: ServerMessage): UpdateMessage | null => {
   return { ...message, domain: message.domain, scope: normalizedScope };
 };
 
-const normalizeUpdateClusterId = (
-  update: UpdateMessage,
-  clusterId: string
-): UpdateMessage => {
+const normalizeUpdateClusterId = (update: UpdateMessage, clusterId: string): UpdateMessage => {
   if (!clusterId) {
     return update;
   }
@@ -1245,14 +1242,14 @@ export class ResourceStreamManager {
   private findSubscriptionByScope(
     domain: ResourceDomain,
     scope: string
-  ): StreamSubscription | null {
-    let match: StreamSubscription | null = null;
+  ): StreamSubscription | undefined {
+    let match: StreamSubscription | undefined;
     for (const subscription of this.subscriptions.values()) {
       if (subscription.domain !== domain || subscription.normalizedScope !== scope) {
         continue;
       }
       if (match) {
-        return null;
+        return undefined;
       }
       match = subscription;
     }
