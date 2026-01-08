@@ -14,15 +14,17 @@ interface PermissionsTableProps {
   onToggleShowAll: () => void;
 }
 
-export const PermissionsTable: React.FC<PermissionsTableProps> = ({
+export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({
   rows,
   showAllPermissions,
   onToggleShowAll,
 }) => {
   return (
-    <div className="diagnostics-permissions">
-      <div className="diagnostics-permissions-header">
-        <span className="diagnostics-permissions-title"></span>
+    <div className="diagnostics-section">
+      <div className="diagnostics-section-header">
+        <div className="diagnostics-section-title-group">
+          <span className="diagnostics-section-subtitle">Effective Permissions</span>
+        </div>
         <div className="diagnostics-permissions-actions">
           <button
             type="button"

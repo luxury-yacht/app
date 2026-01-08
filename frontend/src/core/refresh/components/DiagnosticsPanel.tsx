@@ -56,7 +56,7 @@ import {
 import { DiagnosticsTable, DiagnosticsSummaryCards } from './diagnostics/TableRefreshDomains';
 import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
 import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
-import { PermissionsTable } from './diagnostics/TableEffectivePermissions';
+import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
 
 // Re-export for backwards compatibility
 export { resolveDomainNamespace } from './diagnostics';
@@ -2164,7 +2164,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     priority: isOpen ? 35 : 0,
   });
 
-  // Keep domain diagnostics separate from stream telemetry to match the tab split.
+  // Refresh Domains tab content.
   const refreshDomainsContent = (
     <>
       <DiagnosticsSummaryCards
@@ -2178,41 +2178,30 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     </>
   );
 
+  // Streams tab content.
   const streamsContent = (
-    <div className="diagnostics-section diagnostics-streams">
-      <div className="diagnostics-section-header">
-        <div className="diagnostics-section-title-group">
-          <span className="diagnostics-section-title">Streams</span>
-          <span className="diagnostics-section-subtitle">{streamSummary}</span>
-        </div>
-      </div>
-      <DiagnosticsStreamsTable
-        rows={streamRows}
-        emptyMessage={
-          streamRows.length === 0
-            ? 'Stream telemetry is not available yet.'
-            : 'No streams available.'
-        }
-      />
-    </div>
+    <DiagnosticsStreamsTable
+      rows={streamRows}
+      summary={streamSummary}
+      emptyMessage={
+        streamRows.length === 0 ? 'Stream telemetry is not available yet.' : 'No streams available.'
+      }
+    />
   );
 
+  // Capabilities Checks tab content.
   const capabilityChecksContent = (
-    <div className="diagnostics-permissions">
-      <div className="diagnostics-permissions-header">
-        <div className="diagnostics-permissions-actions">
-          <span className="diagnostics-permissions-count">
-            {capabilityBatchRows.length} namespace
-            {capabilityBatchRows.length === 1 ? '' : 's'}
-          </span>
-        </div>
-      </div>
-      <CapabilityChecksTable rows={capabilityBatchRows} />
-    </div>
+    <CapabilityChecksTable
+      rows={capabilityBatchRows}
+      summary={`${capabilityBatchRows.length} namespace${
+        capabilityBatchRows.length === 1 ? '' : 's'
+      }`}
+    />
   );
 
+  // Effective Permissions tab content.
   const effectivePermissionsContent = (
-    <PermissionsTable
+    <EffectivePermissionsTable
       rows={permissionRows}
       showAllPermissions={showAllPermissions}
       onToggleShowAll={() => setShowAllPermissions((prev) => !prev)}
