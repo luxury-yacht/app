@@ -1036,7 +1036,7 @@ describe('DiagnosticsPanel component', () => {
     await flushAsync();
 
     const batchRows = rendered.container.querySelectorAll<HTMLTableRowElement>(
-      '.diagnostics-permissions-table--batches tbody tr'
+      '.diagnostics-table-batches tbody tr'
     );
     expect(batchRows.length).toBe(2);
     expect(batchRows[0].textContent).toContain('Cluster');
@@ -1056,9 +1056,7 @@ describe('DiagnosticsPanel component', () => {
     });
     await flushAsync();
 
-    const permissionsBody = rendered.container.querySelector(
-      '.diagnostics-permissions-table tbody'
-    );
+    const permissionsBody = rendered.container.querySelector('.diagnostics-table tbody');
     expect(permissionsBody).toBeTruthy();
     const scopedRows = permissionsBody!.querySelectorAll('tr');
     expect(scopedRows.length).toBe(2);
@@ -1066,10 +1064,11 @@ describe('DiagnosticsPanel component', () => {
     expect(scopedRows[0].textContent).toContain('deployments (get)');
     expect(scopedRows[1].textContent).toContain('pods/exec (create)');
 
-    const toggle = rendered.container.querySelector<HTMLButtonElement>(
-      '.diagnostics-permissions-toggle'
+    const toggle = rendered.container.querySelector<HTMLInputElement>(
+      '.diagnostics-permissions-toggle input'
     );
-    expect(toggle?.textContent?.trim()).toBe('Show All');
+    expect(toggle).toBeTruthy();
+    expect(toggle?.checked).toBe(false);
 
     await act(async () => {
       toggle?.click();
@@ -1077,7 +1076,10 @@ describe('DiagnosticsPanel component', () => {
     });
     await flushAsync();
 
-    expect(toggle?.textContent?.trim()).toBe('Show Scoped');
+    const updatedToggle = rendered.container.querySelector<HTMLInputElement>(
+      '.diagnostics-permissions-toggle input'
+    );
+    expect(updatedToggle?.checked).toBe(true);
     const allRows = permissionsBody!.querySelectorAll('tr');
     expect(allRows.length).toBe(4);
     expect(Array.from(allRows).some((row) => row.textContent?.includes('Cluster RBAC'))).toBe(true);

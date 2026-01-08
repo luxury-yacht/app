@@ -28,7 +28,7 @@ export const DiagnosticsStreamsTable: React.FC<DiagnosticsStreamsTableProps> = (
         </div>
       </div>
       <div className="diagnostics-table-wrapper">
-        <table className="diagnostics-table diagnostics-streams-table">
+        <table className="diagnostics-table">
           <thead>
             <tr>
               <th>Stream</th>

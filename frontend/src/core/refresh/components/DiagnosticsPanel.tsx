@@ -1696,7 +1696,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       return 'No stream telemetry available';
     }
     const sessionTotal = streamRows.reduce((acc, row) => acc + row.sessions, 0);
-    return `${streamRows.length} streams • Sessions: ${sessionTotal}`;
+    return `Sessions: ${sessionTotal} • Streams: ${streamRows.length}`;
   }, [streamRows]);
 
   const filteredRows = useMemo(() => rows.filter((row) => row.status !== 'idle'), [rows]);

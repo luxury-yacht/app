@@ -21,8 +21,8 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({ ro
           <span className="diagnostics-section-subtitle">{summary}</span>
         </div>
       </div>
-      <div className="diagnostics-permissions-table-wrapper">
-        <table className="diagnostics-permissions-table diagnostics-permissions-table--batches">
+      <div className="diagnostics-table-wrapper">
+        <table className="diagnostics-table">
           <thead>
             <tr>
               <th>Namespace</th>
@@ -66,7 +66,7 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({ ro
                   <td className="diagnostics-permission-reason">{row.lastError ?? '—'}</td>
                   <td className="diagnostics-permission-reason">
                     <span
-                      className="diagnostics-permissions-table__descriptor"
+                      className="diagnostics-table-descriptor"
                       title={row.descriptorSummary ?? undefined}
                     >
                       {row.descriptorSummary ? row.descriptorSummary : '—'}
@@ -74,7 +74,7 @@ export const CapabilityChecksTable: React.FC<CapabilityChecksTableProps> = ({ ro
                   </td>
                   <td className="diagnostics-permission-reason">
                     <span
-                      className="diagnostics-permissions-table__feature"
+                      className="diagnostics-table-feature"
                       title={row.featureSummary ?? undefined}
                     >
                       {row.featureSummary ? row.featureSummary : '—'}
