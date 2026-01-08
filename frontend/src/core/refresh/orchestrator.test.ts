@@ -87,6 +87,7 @@ const resourceStreamMocks = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
   refreshOnce: vi.fn(),
+  isHealthy: vi.fn(() => false),
 }));
 
 vi.mock('./streaming/resourceStreamManager', () => ({
@@ -130,6 +131,11 @@ describe('refreshOrchestrator', () => {
     refreshManagerMocks.updateContextMock.mockReset();
     refreshManagerMocks.triggerManualRefreshMock.mockReset();
     refreshManagerMocks.triggerManualRefreshForContextMock.mockReset();
+    resourceStreamMocks.start.mockReset();
+    resourceStreamMocks.stop.mockReset();
+    resourceStreamMocks.refreshOnce.mockReset();
+    resourceStreamMocks.isHealthy.mockReset();
+    resourceStreamMocks.isHealthy.mockReturnValue(false);
     clientMocks.fetchSnapshotMock.mockReset();
     clientMocks.ensureRefreshBaseURLMock.mockClear();
     clientMocks.invalidateRefreshBaseURLMock.mockClear();
@@ -177,6 +183,28 @@ describe('refreshOrchestrator', () => {
       category: 'cluster',
       autoStart: true,
     });
+  };
+
+  const registerStreamingClusterConfigDomain = () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-config',
+      refresherName: CLUSTER_REFRESHERS.config,
+      category: 'cluster',
+      autoStart: false,
+      streaming: {
+        start: (scope: string) => resourceStreamMocks.start(scope),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          resourceStreamMocks.stop(scope, options),
+        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
+        pauseRefresherWhenStreaming: true,
+      },
+    });
+  };
+
+  const markResourceStreamActive = (domain: RefreshDomain, scope: string) => {
+    // Simulate an active resource stream so polling gating is deterministic in tests.
+    orchestratorInternals.domainStreamingScopes.set(domain, scope);
+    orchestratorInternals.streamingCleanup.set(makeTestInFlightKey(domain, scope), () => undefined);
   };
 
   const registerNodeMaintenanceDomain = () => {
@@ -919,6 +947,97 @@ describe('refreshOrchestrator', () => {
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
   });
 
+  it('keeps polling enabled when a resource stream is active but unhealthy', () => {
+    registerStreamingClusterConfigDomain();
+
+    const scope = buildClusterScopeList(['cluster-a'], '');
+    orchestratorInternals.domainEnabledState.set('cluster-config', true);
+    markResourceStreamActive('cluster-config', scope);
+    resourceStreamMocks.isHealthy.mockReturnValue(false);
+
+    refreshManagerMocks.enableMock.mockClear();
+    refreshManagerMocks.disableMock.mockClear();
+
+    orchestratorInternals.handleResourceStreamHealth({
+      domain: 'cluster-config',
+      scope,
+      status: 'unhealthy',
+      reason: 'no-delivery',
+      connectionStatus: 'connected',
+    });
+
+    expect(refreshManagerMocks.enableMock).toHaveBeenCalledWith(CLUSTER_REFRESHERS.config);
+    expect(refreshManagerMocks.disableMock).not.toHaveBeenCalled();
+  });
+
+  it('pauses polling when a resource stream is active and healthy', () => {
+    registerStreamingClusterConfigDomain();
+
+    const scope = buildClusterScopeList(['cluster-a'], '');
+    orchestratorInternals.domainEnabledState.set('cluster-config', true);
+    markResourceStreamActive('cluster-config', scope);
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
+
+    refreshManagerMocks.enableMock.mockClear();
+    refreshManagerMocks.disableMock.mockClear();
+
+    orchestratorInternals.handleResourceStreamHealth({
+      domain: 'cluster-config',
+      scope,
+      status: 'healthy',
+      reason: 'delivering',
+      connectionStatus: 'connected',
+    });
+
+    expect(refreshManagerMocks.disableMock).toHaveBeenCalledWith(CLUSTER_REFRESHERS.config);
+  });
+
+  it('falls back to snapshots when a resource stream is unhealthy', async () => {
+    registerStreamingClusterConfigDomain();
+
+    const scope = buildClusterScopeList(['cluster-a'], '');
+    orchestratorInternals.context = {
+      currentView: 'cluster',
+      activeClusterView: 'config',
+      selectedClusterIds: ['cluster-a'],
+      objectPanel: { isOpen: false },
+    };
+    orchestratorInternals.domainEnabledState.set('cluster-config', true);
+    markResourceStreamActive('cluster-config', scope);
+    resourceStreamMocks.isHealthy.mockReturnValue(false);
+
+    clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
+      snapshot: {
+        domain: 'cluster-config',
+        scope,
+        version: 1,
+        checksum: 'etag-1',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          resources: [],
+        },
+        stats: { itemCount: 0, buildDurationMs: 0 },
+      },
+      etag: 'etag-1',
+      notModified: false,
+    });
+
+    await orchestratorInternals.fetchDomain('cluster-config', { isManual: false });
+
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
+      'cluster-config',
+      expect.objectContaining({ scope })
+    );
+
+    clientMocks.fetchSnapshotMock.mockClear();
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
+
+    await orchestratorInternals.fetchDomain('cluster-config', { isManual: false });
+
+    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+  });
+
   it('skips enabling streaming domains when no scope is available', async () => {
     catalogStreamMocks.start.mockClear();
     refreshManagerMocks.enableMock.mockClear();
@@ -1505,6 +1624,8 @@ describe('refreshOrchestrator', () => {
     }));
 
     await refreshOrchestrator.startStreamingDomain('pods', 'namespace:default');
+    // Metrics-only refreshes require a healthy stream to trigger multi-cluster fan-out.
+    resourceStreamMocks.isHealthy.mockReturnValue(true);
 
     clientMocks.fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
@@ -1570,6 +1691,177 @@ describe('refreshOrchestrator', () => {
     expect(podA?.status).toBe('Running');
     expect(podB?.cpuUsage).toBe('7m');
     expect(podB?.status).toBe('Running');
+  });
+
+  it('preserves node status fields when applying metrics-only snapshots', () => {
+    const scope = buildClusterScopeList(['cluster-a'], '');
+    const baseNode = {
+      clusterId: 'cluster-a',
+      name: 'node-a',
+      status: 'Ready',
+      roles: 'worker',
+      age: '2h',
+      version: '1.27',
+      cpuCapacity: '4',
+      cpuAllocatable: '4',
+      cpuRequests: '1',
+      cpuLimits: '2',
+      cpuUsage: '100m',
+      memoryCapacity: '8Gi',
+      memoryAllocatable: '8Gi',
+      memRequests: '1Gi',
+      memLimits: '2Gi',
+      memoryUsage: '200Mi',
+      pods: '10',
+      podsCapacity: '110',
+      podsAllocatable: '110',
+      restarts: 0,
+      kind: 'Node',
+      cpu: '4',
+      memory: '8Gi',
+      unschedulable: true,
+      labels: { role: 'worker' },
+      annotations: { source: 'test' },
+      taints: [{ key: 'dedicated', value: 'infra', effect: 'NoSchedule' }],
+    };
+    const existingNode = {
+      ...baseNode,
+      podMetrics: [
+        {
+          namespace: 'default',
+          name: 'pod-a',
+          cpuUsage: '5m',
+          memoryUsage: '10Mi',
+        },
+      ],
+    };
+
+    setDomainState('nodes', () => ({
+      status: 'ready',
+      data: {
+        nodes: [existingNode],
+        metrics: { stale: false, successCount: 1, failureCount: 0 },
+      },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope,
+    }));
+
+    const incomingNode = {
+      ...baseNode,
+      status: 'NotReady',
+      cpuUsage: '150m',
+      memoryUsage: '250Mi',
+      unschedulable: false,
+      podMetrics: [
+        {
+          namespace: 'default',
+          name: 'pod-a',
+          cpuUsage: '6m',
+          memoryUsage: '12Mi',
+        },
+      ],
+    };
+
+    const applied = orchestratorInternals.applyMetricsSnapshot(
+      'nodes',
+      {
+        domain: 'nodes',
+        scope,
+        version: 2,
+        checksum: 'etag-node',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          nodes: [incomingNode],
+          metrics: { stale: false, successCount: 2, failureCount: 0 },
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      'etag-node',
+      false,
+      scope
+    );
+
+    expect(applied).toBe(true);
+    const nextState = getDomainState('nodes');
+    const updated = nextState.data?.nodes?.[0];
+    expect(updated?.cpuUsage).toBe('150m');
+    expect(updated?.memoryUsage).toBe('250Mi');
+    expect(updated?.status).toBe('Ready');
+    expect(updated?.unschedulable).toBe(true);
+    expect(updated?.podMetrics?.[0]?.cpuUsage).toBe('6m');
+
+    resetDomainState('nodes');
+  });
+
+  it('preserves workload readiness when applying metrics-only snapshots', () => {
+    const scope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    const existingWorkload = {
+      clusterId: 'cluster-a',
+      kind: 'Deployment',
+      name: 'web',
+      namespace: 'default',
+      ready: '1/1',
+      status: 'Running',
+      restarts: 0,
+      age: '5m',
+      cpuUsage: '20m',
+      memUsage: '30Mi',
+      cpuRequest: '10m',
+      cpuLimit: '40m',
+      memRequest: '15Mi',
+      memLimit: '60Mi',
+    };
+
+    setDomainState('namespace-workloads', () => ({
+      status: 'ready',
+      data: {
+        workloads: [existingWorkload],
+      },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope,
+    }));
+
+    const incomingWorkload = {
+      ...existingWorkload,
+      status: 'Pending',
+      ready: '0/1',
+      cpuUsage: '25m',
+      memUsage: '35Mi',
+    };
+
+    const applied = orchestratorInternals.applyMetricsSnapshot(
+      'namespace-workloads',
+      {
+        domain: 'namespace-workloads',
+        scope,
+        version: 3,
+        checksum: 'etag-workload',
+        generatedAt: Date.now(),
+        sequence: 1,
+        payload: {
+          workloads: [incomingWorkload],
+        },
+        stats: { itemCount: 1, buildDurationMs: 0 },
+      },
+      'etag-workload',
+      false,
+      scope
+    );
+
+    expect(applied).toBe(true);
+    const nextState = getDomainState('namespace-workloads');
+    const updated = nextState.data?.workloads?.[0];
+    expect(updated?.cpuUsage).toBe('25m');
+    expect(updated?.memUsage).toBe('35Mi');
+    expect(updated?.status).toBe('Running');
+    expect(updated?.ready).toBe('1/1');
+
+    resetDomainState('namespace-workloads');
   });
 
   it('handles global reset and kubeconfig transitions by cancelling inflight work', () => {

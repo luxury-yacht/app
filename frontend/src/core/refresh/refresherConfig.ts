@@ -14,6 +14,7 @@ import {
   type SystemRefresherName,
   type StaticRefresherName,
 } from './refresherTypes';
+import { getMetricsRefreshIntervalMs } from '@/core/settings/appPreferences';
 
 export interface RefresherTiming {
   interval: number;
@@ -23,7 +24,7 @@ export interface RefresherTiming {
 
 const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
   // Streaming domains only poll for metrics; keep the interval aligned to the streaming cadence.
-  [NAMESPACE_REFRESHERS.workloads]: { interval: 10000, cooldown: 500, timeout: 10 },
+  [NAMESPACE_REFRESHERS.workloads]: { interval: 5000, cooldown: 500, timeout: 10 },
   [NAMESPACE_REFRESHERS.config]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [NAMESPACE_REFRESHERS.network]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [NAMESPACE_REFRESHERS.rbac]: { interval: 10000, cooldown: 1000, timeout: 10 },
@@ -34,7 +35,7 @@ const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
   [NAMESPACE_REFRESHERS.custom]: { interval: 10000, cooldown: 1000, timeout: 60 },
   [NAMESPACE_REFRESHERS.helm]: { interval: 10000, cooldown: 1000, timeout: 10 },
 
-  [CLUSTER_REFRESHERS.nodes]: { interval: 10000, cooldown: 1000, timeout: 10 },
+  [CLUSTER_REFRESHERS.nodes]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [CLUSTER_REFRESHERS.nodeMaintenance]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [CLUSTER_REFRESHERS.rbac]: { interval: 10000, cooldown: 1000, timeout: 10 },
   [CLUSTER_REFRESHERS.storage]: { interval: 10000, cooldown: 1000, timeout: 10 },
@@ -47,20 +48,43 @@ const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
 
   [SYSTEM_REFRESHERS.namespaces]: { interval: 2000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.clusterOverview]: { interval: 10000, cooldown: 1000, timeout: 10 },
-  [SYSTEM_REFRESHERS.unifiedPods]: { interval: 10000, cooldown: 1000, timeout: 30 },
-  [SYSTEM_REFRESHERS.objectDetails]: { interval: 5000, cooldown: 1000, timeout: 10 },
-  [SYSTEM_REFRESHERS.objectEvents]: { interval: 3000, cooldown: 1000, timeout: 10 },
+  [SYSTEM_REFRESHERS.unifiedPods]: { interval: 5000, cooldown: 1000, timeout: 30 },
   [SYSTEM_REFRESHERS.objectYaml]: { interval: 5000, cooldown: 1000, timeout: 10 },
-  [SYSTEM_REFRESHERS.objectHelmManifest]: { interval: 10000, cooldown: 1000, timeout: 10 },
-  [SYSTEM_REFRESHERS.objectHelmValues]: { interval: 10000, cooldown: 1000, timeout: 10 },
+  [SYSTEM_REFRESHERS.objectHelmManifest]: { interval: 5000, cooldown: 1000, timeout: 10 },
+  [SYSTEM_REFRESHERS.objectHelmValues]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectLogs]: { interval: 5000, cooldown: 1000, timeout: 10 },
+
+  // Placeholder value. Changing these intervals has no effect.
+  // Actual timings are in frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.ts
+  // and will be `object-${kind}`.
+  [SYSTEM_REFRESHERS.objectDetails]: { interval: 10000, cooldown: 1000, timeout: 10 },
+
+  // Placeholder value. Changing these intervals has no effect.
+  // Actual timings are in frontend/src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx
+  // and will be `object-${kind}-events`.
+  [SYSTEM_REFRESHERS.objectEvents]: { interval: 10000, cooldown: 1000, timeout: 10 },
+};
+
+// Metrics-only refreshers should inherit the configurable metrics cadence.
+const METRICS_INTERVAL_REFRESHERS = new Set<StaticRefresherName>([
+  NAMESPACE_REFRESHERS.workloads,
+  CLUSTER_REFRESHERS.nodes,
+  SYSTEM_REFRESHERS.unifiedPods,
+]);
+
+const resolveTiming = (name: StaticRefresherName): RefresherTiming => {
+  const timing = STATIC_REFRESHER_CONFIG[name];
+  if (METRICS_INTERVAL_REFRESHERS.has(name)) {
+    return { ...timing, interval: getMetricsRefreshIntervalMs() };
+  }
+  return timing;
 };
 
 export const namespaceRefresherConfig = (name: NamespaceRefresherName): RefresherTiming =>
-  STATIC_REFRESHER_CONFIG[name];
+  resolveTiming(name);
 
 export const clusterRefresherConfig = (name: ClusterRefresherName): RefresherTiming =>
-  STATIC_REFRESHER_CONFIG[name];
+  resolveTiming(name);
 
 export const systemRefresherConfig = (name: SystemRefresherName): RefresherTiming =>
-  STATIC_REFRESHER_CONFIG[name];
+  resolveTiming(name);

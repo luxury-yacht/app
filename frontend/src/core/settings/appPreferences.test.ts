@@ -9,6 +9,7 @@ import {
   getAutoRefreshEnabled,
   getBackgroundRefreshEnabled,
   getGridTablePersistenceMode,
+  getMetricsRefreshIntervalMs,
   getThemePreference,
   getUseShortResourceNames,
   hydrateAppPreferences,
@@ -66,6 +67,7 @@ describe('appPreferences', () => {
       useShortResourceNames: true,
       autoRefreshEnabled: false,
       refreshBackgroundClustersEnabled: false,
+      metricsRefreshIntervalMs: 7000,
       gridTablePersistenceMode: 'namespaced',
     });
 
@@ -75,6 +77,7 @@ describe('appPreferences', () => {
     expect(getUseShortResourceNames()).toBe(true);
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
+    expect(getMetricsRefreshIntervalMs()).toBe(7000);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
   });
 
@@ -101,6 +104,7 @@ describe('appPreferences', () => {
       useShortResourceNames: false,
       autoRefreshEnabled: true,
       refreshBackgroundClustersEnabled: true,
+      metricsRefreshIntervalMs: 6000,
       gridTablePersistenceMode: 'shared',
     });
 
@@ -124,6 +128,7 @@ describe('appPreferences', () => {
     expect(getUseShortResourceNames()).toBe(true);
     expect(getAutoRefreshEnabled()).toBe(false);
     expect(getBackgroundRefreshEnabled()).toBe(false);
+    expect(getMetricsRefreshIntervalMs()).toBe(6000);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
   });
 });

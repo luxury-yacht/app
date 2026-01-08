@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"k8s.io/client-go/util/homedir"
 )
@@ -36,8 +37,9 @@ type settingsPreferences struct {
 }
 
 type settingsRefresh struct {
-	Auto       bool `json:"auto"`
-	Background bool `json:"background"`
+	Auto              bool `json:"auto"`
+	Background        bool `json:"background"`
+	MetricsIntervalMs int  `json:"metricsIntervalMs"`
 }
 
 type settingsKubeconfig struct {
@@ -57,7 +59,7 @@ func defaultSettingsFile() *settingsFile {
 		UpdatedAt:     time.Now().UTC(),
 		Preferences: settingsPreferences{
 			Theme:                    "system",
-			Refresh:                  &settingsRefresh{Auto: true, Background: true},
+			Refresh:                  &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
 			GridTablePersistenceMode: "shared",
 		},
 	}
@@ -75,12 +77,19 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 		settings.Preferences.Theme = "system"
 	}
 	if settings.Preferences.Refresh == nil {
-		settings.Preferences.Refresh = &settingsRefresh{Auto: true, Background: true}
+		settings.Preferences.Refresh = &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()}
+	}
+	if settings.Preferences.Refresh.MetricsIntervalMs <= 0 {
+		settings.Preferences.Refresh.MetricsIntervalMs = defaultMetricsIntervalMs()
 	}
 	if settings.Preferences.GridTablePersistenceMode == "" {
 		settings.Preferences.GridTablePersistenceMode = "shared"
 	}
 	return settings
+}
+
+func defaultMetricsIntervalMs() int {
+	return int(config.RefreshMetricsInterval / time.Millisecond)
 }
 
 // getSettingsFilePath returns the path to the new settings.json location.
@@ -233,6 +242,7 @@ func getDefaultAppSettings() *AppSettings {
 		UseShortResourceNames:            false,
 		AutoRefreshEnabled:               true,
 		RefreshBackgroundClustersEnabled: true,
+		MetricsRefreshIntervalMs:         defaultMetricsIntervalMs(),
 		GridTablePersistenceMode:         "shared",
 	}
 }
@@ -250,6 +260,7 @@ func (a *App) loadAppSettings() error {
 		UseShortResourceNames:            settings.Preferences.UseShortResourceNames,
 		AutoRefreshEnabled:               settings.Preferences.Refresh.Auto,
 		RefreshBackgroundClustersEnabled: settings.Preferences.Refresh.Background,
+		MetricsRefreshIntervalMs:         settings.Preferences.Refresh.MetricsIntervalMs,
 		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
 	}
 	return nil
@@ -272,6 +283,7 @@ func (a *App) saveAppSettings() error {
 	}
 	settings.Preferences.Refresh.Auto = a.appSettings.AutoRefreshEnabled
 	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
+	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
 
 	if len(a.appSettings.SelectedKubeconfigs) > 0 {

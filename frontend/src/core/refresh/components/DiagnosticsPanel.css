@@ -83,10 +83,6 @@
   color: var(--color-error-text, var(--color-error));
 }
 
-.diagnostics-table-wrapper {
-  overflow: auto;
-}
-
 .diagnostics-section {
   display: flex;
   flex-direction: column;
@@ -147,51 +143,12 @@
   border-top: 1px solid var(--color-border);
 }
 
-.diagnostics-streams-filters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem 0.75rem;
-  padding: 0 0.5rem;
-}
-
 .diagnostics-streams-filter {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   font-size: 0.75rem;
   color: var(--color-text-secondary);
-}
-
-.diagnostics-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8rem;
-  color: var(--color-text);
-}
-
-.diagnostics-table th,
-.diagnostics-table td {
-  padding: 0.4rem 0.5rem;
-  border-bottom: 1px solid var(--color-table-border);
-  text-align: left;
-  white-space: nowrap;
-  min-width: 80px;
-}
-
-.diagnostics-table th {
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-secondary);
-  font-size: 0.7rem;
-  font-weight: 600;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--color-bg-secondary);
-}
-
-.diagnostics-table tbody tr:hover {
-  background: color-mix(in srgb, var(--color-accent-bg) 40%, transparent);
 }
 
 .diagnostics-empty td {
@@ -223,38 +180,6 @@
   color: var(--color-text);
 }
 
-.diagnostics-permissions {
-  border-bottom: 1px solid var(--color-border);
-  padding: 0.5rem 0.5rem 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  background: var(--color-bg);
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.diagnostics-permissions-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-  color: var(--color-text-secondary);
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.diagnostics-permissions-title {
-  font-weight: 600;
-  color: var(--color-text);
-  text-transform: none;
-  letter-spacing: normal;
-  font-size: 0.82rem;
-  flex: 0 0 auto;
-}
-
 .diagnostics-permissions-actions {
   display: flex;
   align-items: center;
@@ -262,53 +187,69 @@
 }
 
 .diagnostics-permissions-toggle {
-  padding: 0.3rem 0.65rem;
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  background: var(--color-bg-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--color-text);
   font-size: 0.75rem;
   text-transform: none;
   cursor: pointer;
 }
 
-.diagnostics-permissions-count {
-  font-variant-numeric: tabular-nums;
-  flex: 0 0 auto;
+.diagnostics-permissions-toggle input {
+  margin: 0;
+}
+
+.diagnostics-table-batches th,
+.diagnostics-table-batches td {
   white-space: nowrap;
 }
 
-.diagnostics-permissions-table--batches th,
-.diagnostics-permissions-table--batches td {
-  white-space: nowrap;
-}
-
-.diagnostics-permissions-table-wrapper {
+.diagnostics-table-wrapper {
   overflow: auto;
   flex: 1 1 auto;
   min-height: 0;
 }
 
-.diagnostics-permissions-table {
+.diagnostics-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.78rem;
 }
 
-.diagnostics-permissions-table th,
-.diagnostics-permissions-table td {
+.diagnostics-table th,
+.diagnostics-table td {
   padding: 0.35rem 0.45rem;
   border-bottom: 1px solid var(--color-table-border);
   text-align: left;
   white-space: nowrap;
 }
 
-.diagnostics-permissions-table th {
+.diagnostics-table th {
   background: var(--color-bg-secondary);
   color: var(--color-text-secondary);
   font-size: 0.68rem;
   font-weight: 600;
   text-transform: uppercase;
+}
+
+.diagnostics-table-descriptor {
+  max-width: 14rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--color-text-secondary);
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.diagnostics-table-feature {
+  max-width: 10rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .diagnostics-permission-denied {
@@ -323,23 +264,4 @@
 
 .diagnostics-tabs {
   padding: 0.35rem 0.5rem 0;
-}
-
-.diagnostics-permissions-table__descriptor {
-  max-width: 14rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--color-text-secondary);
-  display: inline-block;
-  vertical-align: middle;
-}
-
-.diagnostics-permissions-table__feature {
-  max-width: 10rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: inline-block;
-  vertical-align: middle;
 }

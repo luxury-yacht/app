@@ -21,6 +21,7 @@ import type {
 import type { PermissionStatus } from '@/core/capabilities/bootstrap';
 import type { DomainSnapshotState } from '../store';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
+import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 
 const fetchTelemetrySummaryMock = vi.hoisted(() =>
   vi.fn<() => Promise<TelemetrySummary>>(async () => {
@@ -93,6 +94,7 @@ const mockRefreshManager = vi.hoisted(() => ({
   disableScopedDomain: vi.fn(),
   fetchScopedDomain: vi.fn(),
   getRegisteredDomains: vi.fn(() => new Set<string>()),
+  getState: vi.fn(() => ({ status: 'enabled' })),
 }));
 
 vi.mock('../RefreshManager', () => ({
@@ -245,27 +247,27 @@ afterEach(() => {
 
 describe('resolveDomainNamespace', () => {
   test('returns namespace suffix for namespace domains', async () => {
-    const module = await import('./RefreshDiagnosticsPanel');
+    const module = await import('./DiagnosticsPanel');
     expect(module.resolveDomainNamespace('namespace-workloads', 'alpha|cluster:default')).toBe(
       'default'
     );
   });
 
   test('returns workload namespace for pod scopes', async () => {
-    const module = await import('./RefreshDiagnosticsPanel');
+    const module = await import('./DiagnosticsPanel');
     expect(module.resolveDomainNamespace('pods', 'alpha|workload:default:deployment:web')).toBe(
       'default'
     );
   });
 
   test('returns namespace for namespace-scoped pod scopes', async () => {
-    const module = await import('./RefreshDiagnosticsPanel');
+    const module = await import('./DiagnosticsPanel');
     expect(module.resolveDomainNamespace('pods', 'alpha|namespace:dev')).toBe('dev');
     expect(module.resolveDomainNamespace('pods', 'alpha|namespace:all')).toBe('All');
   });
 
   test('returns dash for cluster scoped domains', async () => {
-    const module = await import('./RefreshDiagnosticsPanel');
+    const module = await import('./DiagnosticsPanel');
     expect(module.resolveDomainNamespace('cluster-events', 'alpha|cluster')).toBe('-');
   });
 });
@@ -384,7 +386,7 @@ describe('DiagnosticsPanel component', () => {
       ],
     ];
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
     const markup = renderToStaticMarkup(
       React.createElement(KeyboardProvider, {
@@ -429,7 +431,7 @@ describe('DiagnosticsPanel component', () => {
       ],
     ];
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
     const markup = renderToStaticMarkup(
       React.createElement(KeyboardProvider, {
@@ -469,7 +471,7 @@ describe('DiagnosticsPanel component', () => {
       ],
     ];
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
     const markup = renderToStaticMarkup(
       React.createElement(KeyboardProvider, {
@@ -603,7 +605,7 @@ describe('DiagnosticsPanel component', () => {
       ],
     ];
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
@@ -640,7 +642,14 @@ describe('DiagnosticsPanel component', () => {
     expect(logPrimary?.textContent).toContain('Sessions: 1');
     expect(logPrimary?.textContent).toContain('Delivered: 9');
 
-    const streamsSection = rendered.container.querySelector('.diagnostics-streams');
+    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab');
+    await act(async () => {
+      tabButtons[1].click();
+      await Promise.resolve();
+    });
+    await flushAsync();
+
+    const streamsSection = rendered.container.querySelector('.diagnostics-section');
     expect(streamsSection?.textContent).toContain('Streams');
     expect(streamsSection?.textContent).toContain('Resources');
     const streamRows = streamsSection?.querySelectorAll('tbody tr') ?? [];
@@ -656,7 +665,93 @@ describe('DiagnosticsPanel component', () => {
     resourceStreamSpy.mockRestore();
   });
 
-  test('filters stream rows using the stream toggles', async () => {
+  test('shows resource stream health and fallback details in telemetry tooltips', async () => {
+    vi.useFakeTimers();
+    const baseTime = new Date('2024-01-01T12:00:00Z');
+    vi.setSystemTime(baseTime);
+    const now = Date.now();
+
+    const scope = buildClusterScopeList(['cluster-a'], '');
+    setDomainState('cluster-config', {
+      ...createReadyState({
+        resources: [{ kind: 'ConfigMap', name: 'app-config', namespace: 'default', data: 2 }],
+      }),
+      scope,
+    });
+
+    fetchTelemetrySummaryMock.mockResolvedValueOnce({
+      snapshots: [],
+      metrics: {
+        lastCollected: now - 2000,
+        lastDurationMs: 120,
+        consecutiveFailures: 0,
+        successCount: 3,
+        failureCount: 0,
+        active: true,
+      },
+      streams: [
+        {
+          name: 'resources',
+          activeSessions: 1,
+          totalMessages: 5,
+          droppedMessages: 1,
+          errorCount: 0,
+          lastConnect: now - 4000,
+          lastEvent: now - 1500,
+        },
+      ],
+    });
+
+    const healthSpy = vi
+      .spyOn(resourceStreamManager, 'getHealthSnapshot')
+      .mockImplementation((domain, scopeValue) => {
+        if (domain === 'cluster-config') {
+          return {
+            domain: 'cluster-config',
+            scope: scopeValue,
+            status: 'unhealthy',
+            reason: 'no-delivery',
+            connectionStatus: 'connected',
+            lastMessageAt: now - 1800,
+            lastDeliveryAt: now - 2400,
+          };
+        }
+        return null;
+      });
+
+    const telemetrySpy = vi.spyOn(resourceStreamManager, 'getTelemetrySummary').mockReturnValue({
+      resyncCount: 1,
+      fallbackCount: 2,
+      lastResyncAt: now - 3000,
+      lastResyncReason: 'gap detected',
+      lastFallbackAt: now - 2500,
+      lastFallbackReason: 'stream stalled',
+    });
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+
+    await flushAsync();
+    await flushAsync();
+
+    const rows = rendered.container.querySelectorAll('.diagnostics-table tbody tr');
+    const configRow = Array.from(rows).find((row) => row.textContent?.includes('Cluster Config'));
+    expect(configRow).toBeDefined();
+
+    const cells = configRow?.querySelectorAll('td') ?? [];
+    const telemetryCell = cells[11];
+    expect(telemetryCell?.textContent).toContain('Stream unhealthy');
+    expect(telemetryCell?.getAttribute('title')).toContain('Stream health: unhealthy');
+    expect(telemetryCell?.getAttribute('title')).toContain('Stream reason: no-delivery');
+    expect(telemetryCell?.getAttribute('title')).toContain('Stream fallbacks: 2');
+    expect(telemetryCell?.getAttribute('title')).toContain('Last fallback: stream stalled');
+
+    await rendered.unmount();
+    healthSpy.mockRestore();
+    telemetrySpy.mockRestore();
+  });
+
+  test('shows all streams without filter controls', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
     const now = Date.now();
@@ -693,30 +788,26 @@ describe('DiagnosticsPanel component', () => {
       ],
     });
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
     await flushAsync();
 
-    const streamsSection = rendered.container.querySelector('.diagnostics-streams');
-    const filters = streamsSection?.querySelectorAll<HTMLLabelElement>(
-      '.diagnostics-streams-filter'
-    );
-    const resourcesFilter = Array.from(filters ?? []).find((label) =>
-      label.textContent?.includes('Resources')
-    );
-    const resourcesCheckbox = resourcesFilter?.querySelector<HTMLInputElement>('input');
-    expect(resourcesCheckbox).toBeDefined();
-
+    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab');
     await act(async () => {
-      resourcesCheckbox?.click();
+      tabButtons[1].click();
+      await Promise.resolve();
     });
+    await flushAsync();
 
-    const streamRows = streamsSection?.querySelectorAll('tbody tr') ?? [];
-    expect(Array.from(streamRows).some((row) => row.textContent?.includes('Resources'))).toBe(
-      false
-    );
+    const streamsSection = rendered.container.querySelector('.diagnostics-section');
+    expect(streamsSection).toBeTruthy();
+    expect(streamsSection!.querySelectorAll('button, input').length).toBe(0);
+
+    const streamRows = streamsSection!.querySelectorAll('tbody tr');
+    expect(Array.from(streamRows).some((row) => row.textContent?.includes('Resources'))).toBe(true);
+    expect(Array.from(streamRows).some((row) => row.textContent?.includes('Events'))).toBe(true);
 
     await rendered.unmount();
   });
@@ -740,7 +831,7 @@ describe('DiagnosticsPanel component', () => {
       streams: [],
     });
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
@@ -759,7 +850,7 @@ describe('DiagnosticsPanel component', () => {
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
     fetchTelemetrySummaryMock.mockRejectedValueOnce(new Error('Telemetry offline'));
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
@@ -926,7 +1017,7 @@ describe('DiagnosticsPanel component', () => {
       ])
     );
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
@@ -937,13 +1028,14 @@ describe('DiagnosticsPanel component', () => {
 
     const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab');
     await act(async () => {
-      tabButtons[1].click();
+      // Skip the new streams tab to reach capability checks.
+      tabButtons[2].click();
       await Promise.resolve();
     });
     await flushAsync();
 
     const batchRows = rendered.container.querySelectorAll<HTMLTableRowElement>(
-      '.diagnostics-permissions-table--batches tbody tr'
+      '.diagnostics-table tbody tr'
     );
     expect(batchRows.length).toBe(2);
     expect(batchRows[0].textContent).toContain('Cluster');
@@ -958,14 +1050,12 @@ describe('DiagnosticsPanel component', () => {
     expect(batchCells[10].textContent).toContain('deployments/get, pods/create (exec)');
 
     await act(async () => {
-      tabButtons[2].click();
+      tabButtons[3].click();
       await Promise.resolve();
     });
     await flushAsync();
 
-    const permissionsBody = rendered.container.querySelector(
-      '.diagnostics-permissions-table tbody'
-    );
+    const permissionsBody = rendered.container.querySelector('.diagnostics-table tbody');
     expect(permissionsBody).toBeTruthy();
     const scopedRows = permissionsBody!.querySelectorAll('tr');
     expect(scopedRows.length).toBe(2);
@@ -973,10 +1063,11 @@ describe('DiagnosticsPanel component', () => {
     expect(scopedRows[0].textContent).toContain('deployments (get)');
     expect(scopedRows[1].textContent).toContain('pods/exec (create)');
 
-    const toggle = rendered.container.querySelector<HTMLButtonElement>(
-      '.diagnostics-permissions-toggle'
+    const toggle = rendered.container.querySelector<HTMLInputElement>(
+      '.diagnostics-permissions-toggle input'
     );
-    expect(toggle?.textContent?.trim()).toBe('Show All');
+    expect(toggle).toBeTruthy();
+    expect(toggle?.checked).toBe(false);
 
     await act(async () => {
       toggle?.click();
@@ -984,7 +1075,10 @@ describe('DiagnosticsPanel component', () => {
     });
     await flushAsync();
 
-    expect(toggle?.textContent?.trim()).toBe('Show Scoped');
+    const updatedToggle = rendered.container.querySelector<HTMLInputElement>(
+      '.diagnostics-permissions-toggle input'
+    );
+    expect(updatedToggle?.checked).toBe(true);
     const allRows = permissionsBody!.querySelectorAll('tr');
     expect(allRows.length).toBe(4);
     expect(Array.from(allRows).some((row) => row.textContent?.includes('Cluster RBAC'))).toBe(true);

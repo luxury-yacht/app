@@ -27,6 +27,8 @@ type ResourceStreamDomain =
   | 'cluster-crds'
   | 'cluster-custom'
   | 'nodes';
+type ResourceStreamHealthStatus = 'healthy' | 'degraded' | 'unhealthy';
+type ResourceStreamConnectionStatus = 'connected' | 'disconnected';
 
 // Event payload types
 export interface AppEvents {
@@ -56,12 +58,22 @@ export interface AppEvents {
     missingKeys: number;
     extraKeys: number;
   };
+  'refresh:resource-stream-health': {
+    domain: ResourceStreamDomain;
+    scope: string;
+    status: ResourceStreamHealthStatus;
+    reason: string;
+    connectionStatus: ResourceStreamConnectionStatus;
+    lastMessageAt?: number;
+    lastDeliveryAt?: number;
+  };
 
   // Settings events
   'settings:auto-refresh': boolean;
   'settings:refresh-background': boolean;
   'settings:short-names': boolean;
   'settings:theme': string;
+  'settings:metrics-interval': number;
 
   // Feature events
   'pods:show-unhealthy': { scope: string };

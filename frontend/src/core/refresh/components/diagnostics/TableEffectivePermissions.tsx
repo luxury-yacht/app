@@ -14,28 +14,30 @@ interface PermissionsTableProps {
   onToggleShowAll: () => void;
 }
 
-export const PermissionsTable: React.FC<PermissionsTableProps> = ({
+export const EffectivePermissionsTable: React.FC<PermissionsTableProps> = ({
   rows,
   showAllPermissions,
   onToggleShowAll,
 }) => {
   return (
-    <div className="diagnostics-permissions">
-      <div className="diagnostics-permissions-header">
-        <span className="diagnostics-permissions-title">Effective Permissions</span>
+    <div className="diagnostics-section">
+      <div className="diagnostics-section-header">
+        <div className="diagnostics-section-title-group">
+          <span className="diagnostics-section-subtitle">{rows.length} CHECKS</span>
+        </div>
         <div className="diagnostics-permissions-actions">
-          <button
-            type="button"
-            className="diagnostics-permissions-toggle"
-            onClick={onToggleShowAll}
-          >
-            {showAllPermissions ? 'Show Scoped' : 'Show All'}
-          </button>
-          <span className="diagnostics-permissions-count">{rows.length} checks</span>
+          <label className="diagnostics-permissions-toggle">
+            <input
+              type="checkbox"
+              checked={showAllPermissions}
+              onChange={() => onToggleShowAll()}
+            />
+            <span style={{ color: 'var(--color-text-secondary)' }}>Show All</span>
+          </label>
         </div>
       </div>
-      <div className="diagnostics-permissions-table-wrapper">
-        <table className="diagnostics-permissions-table">
+      <div className="diagnostics-table-wrapper">
+        <table className="diagnostics-table">
           <thead>
             <tr>
               <th>Namespace</th>
@@ -68,10 +70,7 @@ export const PermissionsTable: React.FC<PermissionsTableProps> = ({
                   <td>{row.namespace}</td>
                   <td>{row.descriptorLabel}</td>
                   <td>
-                    <span
-                      className="diagnostics-permissions-table__feature"
-                      title={row.feature ?? undefined}
-                    >
+                    <span className="diagnostics-table-feature" title={row.feature ?? undefined}>
                       {row.feature ?? '—'}
                     </span>
                   </td>

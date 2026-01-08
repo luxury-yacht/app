@@ -4,7 +4,13 @@
  * Resource stream manager for watch-style resource updates.
  */
 
-import { ensureRefreshBaseURL, fetchSnapshot, type Snapshot, type SnapshotStats } from '../client';
+import {
+  ensureRefreshBaseURL,
+  fetchSnapshot,
+  invalidateRefreshBaseURL,
+  type Snapshot,
+  type SnapshotStats,
+} from '../client';
 import { setDomainState, setScopedDomainState } from '../store';
 import type {
   ClusterNodeSnapshotEntry,
@@ -41,7 +47,7 @@ import type {
   PodSnapshotPayload,
   PermissionDeniedStatus,
 } from '../types';
-import { buildClusterScopeList, parseClusterScopeList } from '../clusterScope';
+import { buildClusterScopeList, parseClusterScopeList, stripClusterScope } from '../clusterScope';
 import { errorHandler } from '@utils/errorHandler';
 import { eventBus, type AppEvents } from '@/core/events';
 import { logAppInfo, logAppWarn } from '@/core/logging/appLogClient';
@@ -83,8 +89,18 @@ const MESSAGE_TYPES = {
 // Keep stream domain literals aligned with the event bus payload contract.
 type ResourceStreamDomain = AppEvents['refresh:resource-stream-drift']['domain'];
 type ResourceDomain = ResourceStreamDomain;
+type ResourceStreamHealthStatus = AppEvents['refresh:resource-stream-health']['status'];
+type ResourceStreamHealthPayload = AppEvents['refresh:resource-stream-health'];
+type ResourceStreamConnectionStatus = ResourceStreamHealthPayload['connectionStatus'];
 
 type StreamMessageType = (typeof MESSAGE_TYPES)[keyof typeof MESSAGE_TYPES];
+
+// Aggregate health across clusters using worst-status wins.
+const STREAM_HEALTH_STATUS_ORDER: Record<ResourceStreamHealthStatus, number> = {
+  healthy: 0,
+  degraded: 1,
+  unhealthy: 2,
+};
 
 type ClientMessage = {
   type: StreamMessageType;
@@ -142,19 +158,70 @@ const isMultiClusterDomain = (domain: ResourceDomain): boolean =>
   domain === 'cluster-crds' ||
   domain === 'cluster-custom';
 
+const isClusterScopedDomain = (domain: ResourceDomain): boolean =>
+  domain === 'cluster-rbac' ||
+  domain === 'cluster-storage' ||
+  domain === 'cluster-config' ||
+  domain === 'cluster-crds' ||
+  domain === 'cluster-custom' ||
+  domain === 'nodes';
+
 const isMultiClusterScope = (scope: string): boolean => parseClusterScopeList(scope).isMultiCluster;
 
 const hasMessageType = (value: unknown): value is StreamMessageType =>
   typeof value === 'string' && Object.values(MESSAGE_TYPES).includes(value as StreamMessageType);
 
-const isUpdateMessage = (message: ServerMessage): message is UpdateMessage =>
-  hasMessageType(message.type) &&
-  isSupportedDomain(message.domain) &&
-  typeof message.scope === 'string';
+const normalizeStreamScope = (domain: ResourceDomain, scope: unknown): string | null => {
+  if (typeof scope === 'string') {
+    const trimmed = scope.trim();
+    const normalized = stripClusterScope(trimmed);
+    if (normalized || isClusterScopedDomain(domain)) {
+      return normalized;
+    }
+    return null;
+  }
+  // Cluster-scoped updates omit scope in JSON, so treat missing scope as empty.
+  if (scope == null && isClusterScopedDomain(domain)) {
+    return '';
+  }
+  return null;
+};
+
+const resolveUpdateMessage = (message: ServerMessage): UpdateMessage | null => {
+  if (!hasMessageType(message.type) || !isSupportedDomain(message.domain)) {
+    return null;
+  }
+  const normalizedScope = normalizeStreamScope(message.domain, message.scope);
+  if (normalizedScope === null) {
+    return null;
+  }
+  return { ...message, domain: message.domain, scope: normalizedScope };
+};
+
+const normalizeUpdateClusterId = (update: UpdateMessage, clusterId: string): UpdateMessage => {
+  if (!clusterId) {
+    return update;
+  }
+  const messageClusterId = update.clusterId?.trim();
+  if (messageClusterId && messageClusterId === clusterId) {
+    return update;
+  }
+  const next: UpdateMessage = { ...update, clusterId };
+  if (update.row && typeof update.row === 'object' && !Array.isArray(update.row)) {
+    if ('clusterId' in update.row) {
+      next.row = { ...(update.row as Record<string, unknown>), clusterId };
+    }
+  }
+  return next;
+};
 
 const parseResourceVersion = (value?: string | number): bigint | null => {
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value <= 0) {
+      return null;
+    }
+    // Avoid precision loss from JSON numbers that exceed safe integer limits.
+    if (!Number.isSafeInteger(value)) {
       return null;
     }
     return BigInt(Math.floor(value));
@@ -317,7 +384,7 @@ export const sortWorkloadRows = (rows: NamespaceWorkloadSummary[]): void => {
   });
 };
 
-export const sortConfigRows = (rows: NamespaceConfigSummary[]): void => {
+const sortConfigRows = (rows: NamespaceConfigSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -335,7 +402,7 @@ export const sortConfigRows = (rows: NamespaceConfigSummary[]): void => {
   });
 };
 
-export const sortRBACRows = (rows: NamespaceRBACSummary[]): void => {
+const sortRBACRows = (rows: NamespaceRBACSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -349,7 +416,7 @@ export const sortRBACRows = (rows: NamespaceRBACSummary[]): void => {
   });
 };
 
-export const sortNetworkRows = (rows: NamespaceNetworkSummary[]): void => {
+const sortNetworkRows = (rows: NamespaceNetworkSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -364,7 +431,7 @@ export const sortNetworkRows = (rows: NamespaceNetworkSummary[]): void => {
 };
 
 // Keep custom rows ordered to match snapshot sorting.
-export const sortCustomRows = (rows: NamespaceCustomSummary[]): void => {
+const sortCustomRows = (rows: NamespaceCustomSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -383,7 +450,7 @@ export const sortCustomRows = (rows: NamespaceCustomSummary[]): void => {
 };
 
 // Keep helm rows ordered to match snapshot sorting.
-export const sortHelmRows = (rows: NamespaceHelmSummary[]): void => {
+const sortHelmRows = (rows: NamespaceHelmSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -394,7 +461,7 @@ export const sortHelmRows = (rows: NamespaceHelmSummary[]): void => {
 };
 
 // Keep autoscaling rows ordered to match snapshot sorting.
-export const sortAutoscalingRows = (rows: NamespaceAutoscalingSummary[]): void => {
+const sortAutoscalingRows = (rows: NamespaceAutoscalingSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -404,7 +471,7 @@ export const sortAutoscalingRows = (rows: NamespaceAutoscalingSummary[]): void =
   });
 };
 
-export const sortQuotaRows = (rows: NamespaceQuotaSummary[]): void => {
+const sortQuotaRows = (rows: NamespaceQuotaSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -418,7 +485,7 @@ export const sortQuotaRows = (rows: NamespaceQuotaSummary[]): void => {
   });
 };
 
-export const sortStorageRows = (rows: NamespaceStorageSummary[]): void => {
+const sortStorageRows = (rows: NamespaceStorageSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -429,7 +496,7 @@ export const sortStorageRows = (rows: NamespaceStorageSummary[]): void => {
 };
 
 // Keep cluster tab rows ordered to match snapshot sorting.
-export const sortClusterRBACRows = (rows: ClusterRBACEntry[]): void => {
+const sortClusterRBACRows = (rows: ClusterRBACEntry[]): void => {
   rows.sort((a, b) => {
     const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
     if (kind !== 0) {
@@ -439,11 +506,11 @@ export const sortClusterRBACRows = (rows: ClusterRBACEntry[]): void => {
   });
 };
 
-export const sortClusterStorageRows = (rows: ClusterStorageEntry[]): void => {
+const sortClusterStorageRows = (rows: ClusterStorageEntry[]): void => {
   rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
 };
 
-export const sortClusterConfigRows = (rows: ClusterConfigEntry[]): void => {
+const sortClusterConfigRows = (rows: ClusterConfigEntry[]): void => {
   rows.sort((a, b) => {
     const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
     if (kind !== 0) {
@@ -453,11 +520,11 @@ export const sortClusterConfigRows = (rows: ClusterConfigEntry[]): void => {
   });
 };
 
-export const sortClusterCRDRows = (rows: ClusterCRDEntry[]): void => {
+const sortClusterCRDRows = (rows: ClusterCRDEntry[]): void => {
   rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
 };
 
-export const sortClusterCustomRows = (rows: ClusterCustomEntry[]): void => {
+const sortClusterCustomRows = (rows: ClusterCustomEntry[]): void => {
   rows.sort((a, b) => {
     const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
     if (kind !== 0) {
@@ -851,6 +918,12 @@ type StreamSubscription = {
   resourceVersion?: bigint;
   // Track the last stream sequence applied so we can resume after reconnects.
   lastSequence?: bigint;
+  // Track message activity so polling is paused only after delivery resumes.
+  lastMessageAt?: number;
+  lastDeliveryAt?: number;
+  lastDeliveryEpoch?: number;
+  lastErrorAt?: number;
+  lastErrorReason?: string;
   updateQueue: UpdateMessage[];
   updateTimer: number | null;
   pendingReset: boolean;
@@ -970,6 +1043,8 @@ class ResourceStreamConnection {
     if (this.closed || this.paused) {
       return;
     }
+    // Refresh base URLs can change when the backend rebuilds the refresh subsystem.
+    invalidateRefreshBaseURL();
     this.manager.handleConnectionError('', message);
     this.scheduleReconnect();
   }
@@ -978,6 +1053,8 @@ class ResourceStreamConnection {
     if (this.closed || this.paused) {
       return;
     }
+    // Force a fresh base URL lookup on reconnect in case the port rotated.
+    invalidateRefreshBaseURL();
     this.manager.handleConnectionError('', message);
     this.scheduleReconnect();
   }
@@ -1009,6 +1086,10 @@ export class ResourceStreamManager {
   private subscriptions = new Map<string, StreamSubscription>();
   // Single socket used to multiplex subscriptions across clusters.
   private connection: ResourceStreamConnection | null = null;
+  private connectionStatus: ResourceStreamConnectionStatus = 'disconnected';
+  private connectionEpoch = 0;
+  private lastConnectionError = '';
+  private streamHealth = new Map<string, ResourceStreamHealthPayload>();
   private lastNotifiedErrors = new Map<string, string>();
   private consecutiveErrors = new Map<string, number>();
   private suspendedForVisibility = false;
@@ -1043,6 +1124,24 @@ export class ResourceStreamManager {
     });
 
     return summary;
+  }
+
+  // Expose per-scope health so refresh gating can keep snapshots running until delivery resumes.
+  getHealthStatus(domain: ResourceDomain, scope: string): ResourceStreamHealthStatus {
+    const key = this.healthKey(domain, scope);
+    return this.streamHealth.get(key)?.status ?? 'unhealthy';
+  }
+
+  getHealthSnapshot(domain: string, scope: string): ResourceStreamHealthPayload | null {
+    if (!isSupportedDomain(domain)) {
+      return null;
+    }
+    const key = this.healthKey(domain, scope);
+    return this.streamHealth.get(key) ?? null;
+  }
+
+  isHealthy(domain: ResourceDomain, scope: string): boolean {
+    return this.getHealthStatus(domain, scope) === 'healthy';
   }
 
   async start(domain: ResourceDomain, scope: string): Promise<void> {
@@ -1086,52 +1185,82 @@ export class ResourceStreamManager {
     if (!parsed || !hasMessageType(parsed.type)) {
       return;
     }
-    if (!isUpdateMessage(parsed)) {
+    const update = resolveUpdateMessage(parsed);
+    if (!update) {
       return;
     }
-    const messageClusterId = parsed.clusterId?.trim() || clusterId;
+    const messageClusterId = update.clusterId?.trim() || clusterId;
     if (!messageClusterId) {
       return;
     }
-    const normalizedScope = parsed.scope.trim();
-    const subscription = this.subscriptions.get(
-      this.subscriptionKey(messageClusterId, parsed.domain, normalizedScope)
-    );
+    const subscriptionKey = this.subscriptionKey(messageClusterId, update.domain, update.scope);
+    let subscription = this.subscriptions.get(subscriptionKey);
+    let resolvedUpdate = update;
     if (!subscription) {
-      return;
+      // Fall back when cluster IDs drift but the scope/domain pair is unique.
+      subscription = this.findSubscriptionByScope(update.domain, update.scope);
+      if (!subscription) {
+        return;
+      }
+      resolvedUpdate = normalizeUpdateClusterId(update, subscription.clusterId);
     }
-    const errorMessage = resolvePermissionDeniedMessage(parsed.error, parsed.errorDetails);
+    const errorMessage = resolvePermissionDeniedMessage(update.error, update.errorDetails);
+    this.recordSubscriptionMessage(subscription);
 
-    switch (parsed.type) {
+    switch (resolvedUpdate.type) {
       case MESSAGE_TYPES.heartbeat:
         return;
       case MESSAGE_TYPES.reset:
         if (subscription.pendingReset) {
           subscription.pendingReset = false;
+          this.updateHealthForScope(subscription.domain, subscription.reportScope);
           return;
         }
         void this.resyncSubscription(subscription, 'reset');
+        this.updateHealthForScope(subscription.domain, subscription.reportScope);
         return;
       case MESSAGE_TYPES.complete:
         void this.resyncSubscription(subscription, errorMessage || 'complete');
+        this.updateHealthForScope(subscription.domain, subscription.reportScope);
         return;
       case MESSAGE_TYPES.error:
+        this.recordSubscriptionError(subscription, errorMessage || 'stream error');
         void this.resyncSubscription(subscription, errorMessage || 'stream error', true);
+        this.updateHealthForScope(subscription.domain, subscription.reportScope);
         return;
       case MESSAGE_TYPES.added:
       case MESSAGE_TYPES.modified:
       case MESSAGE_TYPES.deleted:
-        this.handleUpdate(subscription, parsed);
+        this.handleUpdate(subscription, resolvedUpdate);
+        this.updateHealthForScope(subscription.domain, subscription.reportScope);
         return;
       default:
         return;
     }
   }
 
+  private findSubscriptionByScope(
+    domain: ResourceDomain,
+    scope: string
+  ): StreamSubscription | undefined {
+    let match: StreamSubscription | undefined;
+    for (const subscription of this.subscriptions.values()) {
+      if (subscription.domain !== domain || subscription.normalizedScope !== scope) {
+        continue;
+      }
+      if (match) {
+        return undefined;
+      }
+      match = subscription;
+    }
+    return match;
+  }
+
   handleConnectionOpen(clusterId: string): void {
     const targetClusterId = clusterId.trim();
     // Log when the websocket is connected so it is clear streaming is active.
     logInfo(`[resource-stream] connection open clusterId=${targetClusterId || 'all'}`);
+    this.markConnectionOpen();
     if (targetClusterId) {
       this.clearStreamError(targetClusterId);
     } else {
@@ -1155,6 +1284,7 @@ export class ResourceStreamManager {
 
   handleConnectionError(clusterId: string, message: string): void {
     const targetClusterId = clusterId.trim();
+    this.markConnectionError(message);
     this.subscriptions.forEach((subscription) => {
       if (targetClusterId && subscription.clusterId !== targetClusterId) {
         return;
@@ -1171,6 +1301,7 @@ export class ResourceStreamManager {
       return;
     }
     this.suspendedForVisibility = true;
+    this.markConnectionError('visibility hidden');
     this.connection?.pause();
   }
 
@@ -1231,6 +1362,7 @@ export class ResourceStreamManager {
     logInfo(
       `[resource-stream] subscription created domain=${subscription.domain} scope=${subscription.storeScope}`
     );
+    this.updateHealthForScope(subscription.domain, subscription.reportScope);
     return subscription;
   }
 
@@ -1324,6 +1456,7 @@ export class ResourceStreamManager {
       window.clearTimeout(subscription.updateTimer);
     }
     this.subscriptions.delete(subscription.key);
+    this.updateHealthForScope(subscription.domain, subscription.reportScope);
 
     if (reset) {
       this.clearStreamError(subscription.clusterId);
@@ -1332,6 +1465,7 @@ export class ResourceStreamManager {
     if (this.subscriptions.size === 0 && connection) {
       connection.close();
       this.connection = null;
+      this.markConnectionError('stream stopped');
     }
   }
 
@@ -1370,6 +1504,140 @@ export class ResourceStreamManager {
     this.pendingUnsubscribes.clear();
   }
 
+  private healthKey(domain: ResourceDomain, scope: string): string {
+    return `${domain}::${scope}`;
+  }
+
+  private recordSubscriptionMessage(subscription: StreamSubscription): void {
+    subscription.lastMessageAt = Date.now();
+  }
+
+  private markSubscriptionDelivery(subscription: StreamSubscription): void {
+    subscription.lastDeliveryAt = Date.now();
+    subscription.lastDeliveryEpoch = this.connectionEpoch;
+  }
+
+  private recordSubscriptionError(subscription: StreamSubscription, message: string): void {
+    subscription.lastErrorAt = Date.now();
+    subscription.lastErrorReason = message;
+  }
+
+  private computeSubscriptionHealth(subscription: StreamSubscription): {
+    status: ResourceStreamHealthStatus;
+    reason: string;
+  } {
+    if (subscription.driftDetected) {
+      return { status: 'unhealthy', reason: 'drift detected' };
+    }
+    if (this.connectionStatus !== 'connected') {
+      const reason = this.lastConnectionError || 'stream disconnected';
+      return { status: 'unhealthy', reason };
+    }
+    // Keep the stream unhealthy until a delivery arrives after the last error.
+    if (subscription.lastErrorAt && subscription.lastErrorAt > (subscription.lastDeliveryAt ?? 0)) {
+      return { status: 'unhealthy', reason: subscription.lastErrorReason || 'stream error' };
+    }
+    if (subscription.resyncInFlight) {
+      return { status: 'degraded', reason: 'resyncing' };
+    }
+    if (subscription.lastDeliveryEpoch === this.connectionEpoch) {
+      return { status: 'healthy', reason: 'delivering' };
+    }
+    return { status: 'degraded', reason: 'awaiting updates' };
+  }
+
+  private aggregateHealth(
+    domain: ResourceDomain,
+    reportScope: string
+  ): ResourceStreamHealthPayload {
+    const subscriptions = Array.from(this.subscriptions.values()).filter(
+      (subscription) => subscription.domain === domain && subscription.reportScope === reportScope
+    );
+    if (subscriptions.length === 0) {
+      return {
+        domain,
+        scope: reportScope,
+        status: 'unhealthy',
+        reason: 'inactive',
+        connectionStatus: this.connectionStatus,
+      };
+    }
+
+    let status: ResourceStreamHealthStatus = 'healthy';
+    let reason = 'delivering';
+    let lastMessageAt = 0;
+    let lastDeliveryAt = 0;
+
+    subscriptions.forEach((subscription) => {
+      const health = this.computeSubscriptionHealth(subscription);
+      if (STREAM_HEALTH_STATUS_ORDER[health.status] > STREAM_HEALTH_STATUS_ORDER[status]) {
+        status = health.status;
+        reason = health.reason;
+      }
+      lastMessageAt = Math.max(lastMessageAt, subscription.lastMessageAt ?? 0);
+      lastDeliveryAt = Math.max(lastDeliveryAt, subscription.lastDeliveryAt ?? 0);
+    });
+
+    const payload: ResourceStreamHealthPayload = {
+      domain,
+      scope: reportScope,
+      status,
+      reason,
+      connectionStatus: this.connectionStatus,
+    };
+    if (lastMessageAt) {
+      payload.lastMessageAt = lastMessageAt;
+    }
+    if (lastDeliveryAt) {
+      payload.lastDeliveryAt = lastDeliveryAt;
+    }
+    return payload;
+  }
+
+  private updateHealthForScope(domain: ResourceDomain, reportScope: string): void {
+    const next = this.aggregateHealth(domain, reportScope);
+    const key = this.healthKey(domain, reportScope);
+    const previous = this.streamHealth.get(key);
+    this.streamHealth.set(key, next);
+    // Avoid emitting on every message; only push updates when status changes.
+    if (
+      !previous ||
+      previous.status !== next.status ||
+      previous.reason !== next.reason ||
+      previous.connectionStatus !== next.connectionStatus
+    ) {
+      eventBus.emit('refresh:resource-stream-health', next);
+    }
+  }
+
+  private updateAllHealth(): void {
+    const targets = new Map<string, { domain: ResourceDomain; scope: string }>();
+    this.subscriptions.forEach((subscription) => {
+      const key = this.healthKey(subscription.domain, subscription.reportScope);
+      if (!targets.has(key)) {
+        targets.set(key, { domain: subscription.domain, scope: subscription.reportScope });
+      }
+    });
+    targets.forEach(({ domain, scope }) => this.updateHealthForScope(domain, scope));
+  }
+
+  private markConnectionOpen(): void {
+    this.connectionStatus = 'connected';
+    this.connectionEpoch += 1;
+    this.lastConnectionError = '';
+    this.updateAllHealth();
+  }
+
+  private markConnectionError(message: string): void {
+    this.connectionStatus = 'disconnected';
+    this.lastConnectionError = message;
+    this.updateAllHealth();
+  }
+
+  private shouldResetDeliveryOnResync(reason: string): boolean {
+    return reason !== 'initial' && reason !== 'manual refresh';
+  }
+
   private handleUpdate(subscription: StreamSubscription, message: UpdateMessage): void {
     if (subscription.resyncInFlight) {
       return;
@@ -1378,23 +1646,25 @@ export class ResourceStreamManager {
       return;
     }
 
-    const incomingVersion = parseResourceVersion(message.resourceVersion);
-    if (!incomingVersion) {
-      void this.resyncSubscription(subscription, 'missing resource version');
-      return;
-    }
-    if (subscription.resourceVersion && incomingVersion <= subscription.resourceVersion) {
-      void this.resyncSubscription(subscription, 'out-of-order update');
-      return;
-    }
-    subscription.resourceVersion = incomingVersion;
     const incomingSequence = parseStreamSequence(message.sequence);
+    // Stream sequence is the reliable ordering signal; resourceVersion can regress on resyncs.
     if (
       incomingSequence &&
-      (!subscription.lastSequence || incomingSequence > subscription.lastSequence)
+      subscription.lastSequence &&
+      incomingSequence <= subscription.lastSequence
     ) {
+      return;
+    }
+    if (incomingSequence) {
       subscription.lastSequence = incomingSequence;
     }
+    const incomingVersion = parseResourceVersion(message.resourceVersion);
+    if (incomingVersion) {
+      if (!subscription.resourceVersion || incomingVersion > subscription.resourceVersion) {
+        subscription.resourceVersion = incomingVersion;
+      }
+    }
+    this.markSubscriptionDelivery(subscription);
 
     subscription.updateQueue.push(message);
     if (subscription.updateQueue.length > MAX_UPDATE_QUEUE) {
@@ -2518,8 +2788,12 @@ export class ResourceStreamManager {
     }
     subscription.resyncInFlight = true;
     subscription.lastResyncAt = now;
+    if (this.shouldResetDeliveryOnResync(reason)) {
+      subscription.lastDeliveryEpoch = undefined;
+    }
     this.recordResync(subscription, reason);
     this.markResyncing(subscription);
+    this.updateHealthForScope(subscription.domain, subscription.reportScope);
     if (subscription.updateTimer !== null) {
       window.clearTimeout(subscription.updateTimer);
       subscription.updateTimer = null;
@@ -2543,8 +2817,13 @@ export class ResourceStreamManager {
         throw new Error('resource stream snapshot missing');
       }
       this.applySnapshot(subscription, snapshot);
-      subscription.resourceVersion =
-        parseResourceVersion(snapshot.version) ?? subscription.resourceVersion;
+      const snapshotVersion = parseResourceVersion(snapshot.version);
+      if (
+        snapshotVersion &&
+        (!subscription.resourceVersion || snapshotVersion > subscription.resourceVersion)
+      ) {
+        subscription.resourceVersion = snapshotVersion;
+      }
       subscription.pendingReset = false;
       if (subscription.driftDetected) {
         this.unsubscribe(subscription, false);
@@ -2556,6 +2835,7 @@ export class ResourceStreamManager {
       this.setStreamError(subscription, message);
     } finally {
       subscription.resyncInFlight = false;
+      this.updateHealthForScope(subscription.domain, subscription.reportScope);
     }
   }
 
@@ -3094,6 +3374,7 @@ export class ResourceStreamManager {
     }
     this.recordFallback(subscription, details.reason);
     subscription.driftDetected = true;
+    this.updateHealthForScope(subscription.domain, subscription.reportScope);
 
     eventBus.emit('refresh:resource-stream-drift', {
       domain: subscription.domain,
@@ -3483,6 +3764,7 @@ export class ResourceStreamManager {
   }
 
   private setStreamError(subscription: StreamSubscription, message: string): void {
+    this.recordSubscriptionError(subscription, message);
     const key = `${subscription.clusterId}::${subscription.domain}::${subscription.storeScope}`;
     const attempts = (this.consecutiveErrors.get(key) ?? 0) + 1;
     this.consecutiveErrors.set(key, attempts);
@@ -3605,6 +3887,7 @@ export class ResourceStreamManager {
     if (isTerminal) {
       this.notifyStreamError(subscription.clusterId, message);
     }
+    this.updateHealthForScope(subscription.domain, subscription.reportScope);
   }
 
   private clearStreamError(clusterId: string): void {
@@ -3640,6 +3923,10 @@ export class ResourceStreamManager {
     this.subscriptions.clear();
     this.connection?.close();
     this.connection = null;
+    this.connectionStatus = 'disconnected';
+    this.connectionEpoch = 0;
+    this.lastConnectionError = '';
+    this.streamHealth.clear();
     this.lastNotifiedErrors.clear();
     this.consecutiveErrors.clear();
     this.streamTelemetry.clear();

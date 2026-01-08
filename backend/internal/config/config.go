@@ -17,7 +17,7 @@ const (
 	RefreshInformerSyncPollInterval = 50 * time.Millisecond
 
 	// RefreshMetricsInterval determines the cadence for the metrics poller (node/pod metrics).
-	RefreshMetricsInterval = 10 * time.Second
+	RefreshMetricsInterval = 5 * time.Second
 
 	// RefreshRequestTimeout is the HTTP timeout used by refresh API clients.
 	RefreshRequestTimeout = 30 * time.Second

@@ -98,6 +98,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		UseShortResourceNames:            true,
 		AutoRefreshEnabled:               false,
 		RefreshBackgroundClustersEnabled: false,
+		MetricsRefreshIntervalMs:         7000,
 		GridTablePersistenceMode:         "namespaced",
 	}
 
@@ -110,6 +111,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.Equal(t, "/tmp/config", app.appSettings.SelectedKubeconfig)
 	require.False(t, app.appSettings.AutoRefreshEnabled)
 	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
+	require.Equal(t, 7000, app.appSettings.MetricsRefreshIntervalMs)
 	require.Equal(t, "namespaced", app.appSettings.GridTablePersistenceMode)
 }
 

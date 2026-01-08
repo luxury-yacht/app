@@ -16,6 +16,7 @@ interface AppPreferences {
   useShortResourceNames: boolean;
   autoRefreshEnabled: boolean;
   refreshBackgroundClustersEnabled: boolean;
+  metricsRefreshIntervalMs: number;
   gridTablePersistenceMode: GridTablePersistenceMode;
 }
 
@@ -24,14 +25,18 @@ interface AppSettingsPayload {
   useShortResourceNames?: boolean;
   autoRefreshEnabled?: boolean;
   refreshBackgroundClustersEnabled?: boolean;
+  metricsRefreshIntervalMs?: number;
   gridTablePersistenceMode?: string;
 }
+
+const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
 
 const DEFAULT_PREFERENCES: AppPreferences = {
   theme: 'system',
   useShortResourceNames: false,
   autoRefreshEnabled: true,
   refreshBackgroundClustersEnabled: true,
+  metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
   gridTablePersistenceMode: 'shared',
 };
 
@@ -96,6 +101,13 @@ const normalizeGridTableMode = (value: string | undefined): GridTablePersistence
   return DEFAULT_PREFERENCES.gridTablePersistenceMode;
 };
 
+const normalizeMetricsIntervalMs = (value?: number): number => {
+  if (value == null || Number.isNaN(value) || value <= 0) {
+    return DEFAULT_METRICS_REFRESH_INTERVAL_MS;
+  }
+  return Math.floor(value);
+};
+
 const resolvePreference = <T>(backendValue: T, legacyValue: T | undefined, defaultValue: T): T => {
   // Prefer backend values unless they are still default and legacy has a non-default override.
   if (legacyValue === undefined) {
@@ -122,6 +134,9 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   }
   if (previous.refreshBackgroundClustersEnabled !== next.refreshBackgroundClustersEnabled) {
     eventBus.emit('settings:refresh-background', next.refreshBackgroundClustersEnabled);
+  }
+  if (previous.metricsRefreshIntervalMs !== next.metricsRefreshIntervalMs) {
+    eventBus.emit('settings:metrics-interval', next.metricsRefreshIntervalMs);
   }
   if (previous.gridTablePersistenceMode !== next.gridTablePersistenceMode) {
     eventBus.emit('gridtable:persistence-mode', next.gridTablePersistenceMode);
@@ -205,6 +220,7 @@ export const hydrateAppPreferences = async (options?: {
     refreshBackgroundClustersEnabled:
       backendSettings?.refreshBackgroundClustersEnabled ??
       DEFAULT_PREFERENCES.refreshBackgroundClustersEnabled,
+    metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
     gridTablePersistenceMode: normalizeGridTableMode(backendSettings?.gridTablePersistenceMode),
   };
 
@@ -225,6 +241,7 @@ export const hydrateAppPreferences = async (options?: {
       legacyBackgroundRefresh,
       DEFAULT_PREFERENCES.refreshBackgroundClustersEnabled
     ),
+    metricsRefreshIntervalMs: backendPreferences.metricsRefreshIntervalMs,
     gridTablePersistenceMode: resolvePreference(
       backendPreferences.gridTablePersistenceMode,
       legacyGridTableMode,
@@ -267,6 +284,13 @@ export const getBackgroundRefreshEnabled = (): boolean => {
     );
   }
   return preferenceCache.refreshBackgroundClustersEnabled;
+};
+
+export const getMetricsRefreshIntervalMs = (): number => {
+  if (!hydrated) {
+    return preferenceCache.metricsRefreshIntervalMs;
+  }
+  return preferenceCache.metricsRefreshIntervalMs;
 };
 
 export const getGridTablePersistenceMode = (): GridTablePersistenceMode => {

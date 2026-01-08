@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import './RefreshDiagnosticsPanel.css';
+import './DiagnosticsPanel.css';
 import { DockablePanel } from '@components/dockable';
 import { useRefreshDomain, useRefreshState, useRefreshScopedDomainEntries } from '../store';
 import type {
@@ -18,6 +18,7 @@ import type {
   ClusterEventsSnapshotPayload,
   NamespaceEventsSnapshotPayload,
   TelemetrySummary,
+  TelemetryStreamStatus,
   CatalogSnapshotPayload,
 } from '../types';
 import { refreshManager } from '../RefreshManager';
@@ -52,11 +53,10 @@ import {
   getScopedFeaturesForView,
   resolveDomainNamespace,
 } from './diagnostics';
-import { DiagnosticsSummaryCards } from './diagnostics/DiagnosticsSummaryCards';
-import { DiagnosticsTable } from './diagnostics/DiagnosticsTable';
-import { DiagnosticsStreamsTable } from './diagnostics/DiagnosticsStreamsTable';
-import { CapabilityChecksTable } from './diagnostics/CapabilityChecksTable';
-import { PermissionsTable } from './diagnostics/PermissionsTable';
+import { DiagnosticsTable, DiagnosticsSummaryCards } from './diagnostics/TableRefreshDomains';
+import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
+import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
+import { EffectivePermissionsTable } from './diagnostics/TableEffectivePermissions';
 
 // Re-export for backwards compatibility
 export { resolveDomainNamespace } from './diagnostics';
@@ -69,13 +69,102 @@ const STREAM_LABELS: Record<string, string> = {
   'object-logs': 'Object Logs',
 };
 
-const STREAM_ORDER = ['resources', 'events', 'catalog', 'object-logs'];
+type HealthStatus = 'healthy' | 'degraded' | 'unhealthy';
+
+type StreamHealthSummary = {
+  status: HealthStatus;
+  reason: string;
+  connectionStatus?: 'connected' | 'disconnected';
+  lastMessageAt?: number;
+  lastDeliveryAt?: number;
+};
+
+const METRICS_ONLY_DOMAINS = new Set<RefreshDomain>(['pods', 'namespace-workloads', 'nodes']);
+const STREAM_ONLY_DOMAINS = new Set<RefreshDomain>(['object-logs']);
+const PAUSE_POLLING_WHEN_STREAMING_DOMAINS = new Set<RefreshDomain>([
+  'catalog',
+  'cluster-rbac',
+  'cluster-storage',
+  'cluster-config',
+  'cluster-crds',
+  'cluster-custom',
+  'cluster-events',
+  'namespace-config',
+  'namespace-network',
+  'namespace-rbac',
+  'namespace-storage',
+  'namespace-autoscaling',
+  'namespace-quotas',
+  'namespace-custom',
+  'namespace-helm',
+  'namespace-events',
+]);
+
+const STREAM_MODE_BY_NAME: Record<string, 'streaming' | 'watch'> = {
+  resources: 'streaming',
+  events: 'watch',
+  catalog: 'watch',
+  'object-logs': 'streaming',
+};
+
+const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'access denied', 'rbac'];
+
+// Diagnostics helpers for scope, error, and health labels.
+const resolveScopeDetails = (scope?: string): { display: string; tooltip?: string } => {
+  const trimmed = (scope ?? '').trim();
+  if (!trimmed) {
+    return { display: '-', tooltip: 'No active scope' };
+  }
+  return { display: trimmed, tooltip: trimmed };
+};
+
+const resolveErrorReason = (error?: string | null): string | null => {
+  if (!error) {
+    return null;
+  }
+  const trimmed = error.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const normalized = trimmed.toLowerCase();
+  if (PERMISSION_ERROR_HINTS.some((token) => normalized.includes(token))) {
+    return 'permissions';
+  }
+  return trimmed;
+};
+
+const resolveStreamTelemetryHealth = (
+  streamTelemetry?: TelemetryStreamStatus | null
+): StreamHealthSummary | null => {
+  if (!streamTelemetry) {
+    return null;
+  }
+  if (streamTelemetry.activeSessions <= 0) {
+    return { status: 'unhealthy', reason: 'inactive' };
+  }
+  if (streamTelemetry.lastError) {
+    return { status: 'unhealthy', reason: streamTelemetry.lastError };
+  }
+  if (streamTelemetry.errorCount > 0) {
+    return { status: 'unhealthy', reason: 'stream errors' };
+  }
+  if (streamTelemetry.droppedMessages > 0) {
+    return { status: 'degraded', reason: 'dropped messages' };
+  }
+  if (streamTelemetry.totalMessages === 0) {
+    return { status: 'degraded', reason: 'awaiting updates' };
+  }
+  return { status: 'healthy', reason: 'delivering' };
+};
+
+const formatHealthLabel = (status: HealthStatus, reason: string): string =>
+  reason ? `${status} (${reason})` : status;
 
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isOpen }) => {
   useTabStyles();
   const [activeTab, setActiveTab] = useState<
-    'refresh' | 'capability-checks' | 'effective-permissions'
-  >('refresh');
+    'refresh-domains' | 'streams' | 'capability-checks' | 'effective-permissions'
+  >('refresh-domains');
   const refreshState = useRefreshState();
   const namespaceDomain = useRefreshDomain('namespaces');
   const clusterOverviewDomain = useRefreshDomain('cluster-overview');
@@ -109,13 +198,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const { selectedNamespace } = useNamespace();
   const [showAllPermissions, setShowAllPermissions] = useState(false);
   const [diagnosticsClock, setDiagnosticsClock] = useState(() => Date.now());
-  const [streamFilters, setStreamFilters] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    STREAM_ORDER.forEach((name) => {
-      initial[name] = true;
-    });
-    return initial;
-  });
 
   useEffect(() => {
     if (!isOpen) {
@@ -305,56 +387,151 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     ]
   );
 
-  const streamOptions = useMemo(() => {
-    const names = new Set(STREAM_ORDER);
-    telemetrySummary?.streams?.forEach((stream) => names.add(stream.name));
-    const orderedNames = [
-      ...STREAM_ORDER,
-      ...Array.from(names)
-        .filter((name) => !STREAM_ORDER.includes(name))
-        .sort((a, b) => a.localeCompare(b)),
-    ];
-    return orderedNames.map((name) => ({
-      name,
-      label: STREAM_LABELS[name] ?? name,
-    }));
-  }, [telemetrySummary]);
-
-  useEffect(() => {
-    setStreamFilters((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      streamOptions.forEach((option) => {
-        if (!(option.name in next)) {
-          next[option.name] = true;
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-  }, [streamOptions]);
-
-  const toggleStreamFilter = useCallback((name: string) => {
-    setStreamFilters((prev) => ({
-      ...prev,
-      [name]: !prev[name],
-    }));
-  }, []);
-
-  const setAllStreamFilters = useCallback(
-    (value: boolean) => {
-      const next: Record<string, boolean> = {};
-      streamOptions.forEach((option) => {
-        next[option.name] = value;
-      });
-      setStreamFilters(next);
-    },
-    [streamOptions]
-  );
-
   const resourceStreamStats = resourceStreamManager.getTelemetrySummary();
   const rows = useMemo<DiagnosticsRow[]>(() => {
     const prioritySet = new Set(PRIORITY_DOMAINS);
+
+    const toStreamHealthSummary = (
+      health: ReturnType<typeof resourceStreamManager.getHealthSnapshot> | null
+    ): StreamHealthSummary | null => {
+      if (!health) {
+        return null;
+      }
+      return {
+        status: health.status,
+        reason: health.reason,
+        connectionStatus: health.connectionStatus,
+        lastMessageAt: health.lastMessageAt,
+        lastDeliveryAt: health.lastDeliveryAt,
+      };
+    };
+
+    const resolveHealthDetails = (params: {
+      domain: RefreshDomain;
+      status: DiagnosticsRow['status'];
+      error?: string | null;
+      scope?: string;
+      streamHealth?: StreamHealthSummary | null;
+    }): { label: string; tooltip?: string; status: HealthStatus } => {
+      const { domain, status, error, scope, streamHealth } = params;
+      const scopeTrimmed = (scope ?? '').trim();
+      if (!scopeTrimmed && (domain === 'pods' || domain === 'object-logs')) {
+        return {
+          label: formatHealthLabel('unhealthy', 'no scope'),
+          tooltip: 'No active scope',
+          status: 'unhealthy',
+        };
+      }
+      if (status === 'error') {
+        const reason = resolveErrorReason(error) ?? 'error';
+        return {
+          label: formatHealthLabel('unhealthy', reason),
+          tooltip: error ?? reason,
+          status: 'unhealthy',
+        };
+      }
+      if (streamHealth) {
+        const tooltipParts: string[] = [`Reason: ${streamHealth.reason}`];
+        if (streamHealth.connectionStatus) {
+          tooltipParts.push(`Connection: ${streamHealth.connectionStatus}`);
+        }
+        if (streamHealth.lastDeliveryAt) {
+          const deliveryInfo = formatLastUpdated(streamHealth.lastDeliveryAt);
+          tooltipParts.push(`Last delivery: ${deliveryInfo.tooltip}`);
+        }
+        if (streamHealth.lastMessageAt) {
+          const messageInfo = formatLastUpdated(streamHealth.lastMessageAt);
+          tooltipParts.push(`Last message: ${messageInfo.tooltip}`);
+        }
+        return {
+          label: formatHealthLabel(streamHealth.status, streamHealth.reason),
+          tooltip: tooltipParts.join('\n'),
+          status: streamHealth.status,
+        };
+      }
+      if (status === 'loading' || status === 'initialising') {
+        return {
+          label: formatHealthLabel('degraded', status),
+          tooltip: 'Awaiting snapshot data',
+          status: 'degraded',
+        };
+      }
+      if (status === 'idle') {
+        return {
+          label: formatHealthLabel('degraded', 'idle'),
+          tooltip: 'Domain is idle',
+          status: 'degraded',
+        };
+      }
+      return {
+        label: formatHealthLabel('healthy', 'ready'),
+        tooltip: 'Snapshot data is up to date',
+        status: 'healthy',
+      };
+    };
+
+    const resolvePollingDetails = (params: {
+      domain: RefreshDomain;
+      refresherName?: (typeof DOMAIN_REFRESHER_MAP)[RefreshDomain];
+      streamActive: boolean;
+      streamHealthy: boolean;
+      metricsOnly: boolean;
+    }): { label: string; tooltip?: string; enabled: boolean } => {
+      const { domain, refresherName, streamActive, streamHealthy, metricsOnly } = params;
+      if (!refresherName) {
+        return { label: '—', tooltip: 'No polling refresher', enabled: false };
+      }
+      const refresherState = refreshManager.getState(refresherName);
+      if (!refresherState) {
+        return { label: '—', tooltip: 'Polling not registered', enabled: false };
+      }
+      if (refresherState.status === 'paused') {
+        return { label: 'paused', tooltip: 'Polling paused by auto-refresh', enabled: false };
+      }
+      if (refresherState.status === 'disabled') {
+        if (PAUSE_POLLING_WHEN_STREAMING_DOMAINS.has(domain) && streamActive) {
+          const reason = streamHealthy ? 'stream healthy' : 'stream active';
+          return { label: 'paused', tooltip: `Paused while ${reason}`, enabled: false };
+        }
+        return { label: 'disabled', tooltip: 'Polling disabled for this domain', enabled: false };
+      }
+      const tooltipParts = [`State: ${refresherState.status}`];
+      if (metricsOnly) {
+        tooltipParts.push('Metrics-only polling');
+      }
+      return { label: 'enabled', tooltip: tooltipParts.join(' • '), enabled: true };
+    };
+
+    const resolveModeDetails = (params: {
+      domain: RefreshDomain;
+      streamMode: 'streaming' | 'watch' | null;
+      streamActive: boolean;
+      streamHealthy: boolean;
+      pollingEnabled: boolean;
+      metricsOnly: boolean;
+    }): { label: string; tooltip?: string } => {
+      const { domain, streamMode, streamActive, streamHealthy, pollingEnabled, metricsOnly } =
+        params;
+      if (streamMode && STREAM_ONLY_DOMAINS.has(domain)) {
+        return { label: streamMode, tooltip: 'Stream-only domain' };
+      }
+      if (metricsOnly && streamHealthy) {
+        return {
+          label: 'metrics-only',
+          tooltip: 'Stream healthy; polling metrics snapshots only',
+        };
+      }
+      if (streamMode && streamActive && streamHealthy) {
+        return { label: streamMode, tooltip: 'Stream delivering updates' };
+      }
+      if (pollingEnabled) {
+        return { label: 'polling', tooltip: 'Snapshot polling active' };
+      }
+      if (streamMode && streamActive) {
+        return { label: streamMode, tooltip: 'Stream active but unhealthy' };
+      }
+      return { label: 'snapshot', tooltip: 'Snapshot fetched on demand' };
+    };
 
     const baseRows = domainStates.map<DiagnosticsRow>(({ domain, state, label, hasMetrics }) => {
       const hasMetricsFlag = Boolean(hasMetrics);
@@ -364,6 +541,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         ? telemetrySummary?.streams.find((entry) => entry.name === streamName)
         : undefined;
       const isResourceStreamDomain = streamName === 'resources';
+      const streamMode = streamName ? (STREAM_MODE_BY_NAME[streamName] ?? 'streaming') : null;
+      const scopeDetails = resolveScopeDetails(state.scope);
       const streamLastEvent = isResourceStreamDomain ? streamTelemetry?.lastEvent : 0;
       const baseLastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
       const lastUpdated = (() => {
@@ -409,9 +588,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
               ? `Stream Dropped (${streamTelemetry.droppedMessages})`
               : 'Stream OK'
           : null;
-      const telemetryStatus = streamTelemetryStatus
-        ? `${snapshotTelemetryStatus} • ${streamTelemetryStatus}`
-        : snapshotTelemetryStatus;
+      // Show resource stream health alongside snapshot and telemetry summaries.
+      const streamHealth =
+        isResourceStreamDomain && state.scope
+          ? toStreamHealthSummary(resourceStreamManager.getHealthSnapshot(domain, state.scope))
+          : resolveStreamTelemetryHealth(streamTelemetry);
+      const streamHealthStatus = streamHealth ? `Stream ${streamHealth.status}` : null;
+      const telemetryStatus = [snapshotTelemetryStatus, streamTelemetryStatus, streamHealthStatus]
+        .filter(Boolean)
+        .join(' • ');
       const streamDropped = isResourceStreamDomain ? (streamTelemetry?.droppedMessages ?? 0) : 0;
       const telemetryTooltipParts: string[] = [];
       if (telemetryLastError) {
@@ -434,6 +619,18 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         }
         if (resourceStreamStats.lastFallbackReason) {
           telemetryTooltipParts.push(`Last fallback: ${resourceStreamStats.lastFallbackReason}`);
+        }
+      }
+      if (streamHealth) {
+        telemetryTooltipParts.push(`Stream health: ${streamHealth.status}`);
+        telemetryTooltipParts.push(`Stream reason: ${streamHealth.reason}`);
+        if (streamHealth.lastDeliveryAt) {
+          const deliveryInfo = formatLastUpdated(streamHealth.lastDeliveryAt);
+          telemetryTooltipParts.push(`Stream last delivery: ${deliveryInfo.tooltip}`);
+        }
+        if (streamHealth.lastMessageAt) {
+          const messageInfo = formatLastUpdated(streamHealth.lastMessageAt);
+          telemetryTooltipParts.push(`Stream last message: ${messageInfo.tooltip}`);
         }
       }
       const telemetryTooltip =
@@ -550,6 +747,33 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
 
       const version = state.version != null ? String(state.version) : '—';
+      const streamActive = isResourceStreamDomain
+        ? Boolean(streamHealth && streamHealth.reason !== 'inactive')
+        : Boolean(streamTelemetry?.activeSessions);
+      const streamHealthy = streamHealth?.status === 'healthy';
+      const metricsOnly = METRICS_ONLY_DOMAINS.has(domain);
+      const pollingDetails = resolvePollingDetails({
+        domain,
+        refresherName,
+        streamActive,
+        streamHealthy,
+        metricsOnly,
+      });
+      const modeDetails = resolveModeDetails({
+        domain,
+        streamMode,
+        streamActive,
+        streamHealthy,
+        pollingEnabled: pollingDetails.enabled,
+        metricsOnly,
+      });
+      const healthDetails = resolveHealthDetails({
+        domain,
+        status: state.status,
+        error: state.error,
+        scope: state.scope,
+        streamHealth,
+      });
 
       return {
         rowKey: domain,
@@ -582,6 +806,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         truncated,
         totalItems,
         namespace: namespaceLabel,
+        scope: scopeDetails.display,
+        scopeTooltip: scopeDetails.tooltip,
+        mode: modeDetails.label,
+        modeTooltip: modeDetails.tooltip,
+        healthStatus: healthDetails.label,
+        healthTooltip: healthDetails.tooltip,
+        pollingStatus: pollingDetails.label,
+        pollingTooltip: pollingDetails.tooltip,
       };
     });
 
@@ -674,6 +906,112 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       }
     }
 
+    // Aggregate pod stream health across scopes using worst-status wins.
+    const podSummaryHealth = (() => {
+      if (!podScopes.length) {
+        return null;
+      }
+      let hasHealthEntry = false;
+      const healthOrder = { healthy: 0, degraded: 1, unhealthy: 2 } as const;
+      let status: keyof typeof healthOrder = 'healthy';
+      let reason = 'delivering';
+      let lastDeliveryAt = 0;
+      let lastMessageAt = 0;
+      let connectionStatus: StreamHealthSummary['connectionStatus'];
+      podScopes.forEach(([scope]) => {
+        const health = resourceStreamManager.getHealthSnapshot('pods', scope);
+        if (!health) {
+          return;
+        }
+        hasHealthEntry = true;
+        if (!connectionStatus) {
+          connectionStatus = health.connectionStatus;
+        }
+        if (healthOrder[health.status] > healthOrder[status]) {
+          status = health.status;
+          reason = health.reason;
+        }
+        lastDeliveryAt = Math.max(lastDeliveryAt, health.lastDeliveryAt ?? 0);
+        lastMessageAt = Math.max(lastMessageAt, health.lastMessageAt ?? 0);
+      });
+      if (!hasHealthEntry) {
+        return null;
+      }
+      return {
+        status,
+        reason,
+        connectionStatus,
+        lastDeliveryAt: lastDeliveryAt || undefined,
+        lastMessageAt: lastMessageAt || undefined,
+      };
+    })();
+
+    const podSummaryTelemetryStatus = [
+      podSummaryStatus,
+      podSummaryHealth ? `Stream ${podSummaryHealth.status}` : null,
+    ]
+      .filter(Boolean)
+      .join(' • ');
+    const podSummaryTelemetryTooltipParts: string[] = [];
+    if (podSummaryError !== '—') {
+      podSummaryTelemetryTooltipParts.push(podSummaryError);
+    }
+    if (podSummaryHealth) {
+      podSummaryTelemetryTooltipParts.push(`Stream health: ${podSummaryHealth.status}`);
+      podSummaryTelemetryTooltipParts.push(`Stream reason: ${podSummaryHealth.reason}`);
+      if (podSummaryHealth.lastDeliveryAt) {
+        const deliveryInfo = formatLastUpdated(podSummaryHealth.lastDeliveryAt);
+        podSummaryTelemetryTooltipParts.push(`Stream last delivery: ${deliveryInfo.tooltip}`);
+      }
+      if (podSummaryHealth.lastMessageAt) {
+        const messageInfo = formatLastUpdated(podSummaryHealth.lastMessageAt);
+        podSummaryTelemetryTooltipParts.push(`Stream last message: ${messageInfo.tooltip}`);
+      }
+    }
+    const podSummaryTelemetryTooltip =
+      podSummaryTelemetryTooltipParts.length > 0
+        ? podSummaryTelemetryTooltipParts.join('\n')
+        : undefined;
+
+    const podScopeDetails = (() => {
+      if (!podScopes.length) {
+        return { display: '-', tooltip: 'No pod scopes active' };
+      }
+      if (podScopes.length === 1) {
+        return resolveScopeDetails(podScopes[0][0]);
+      }
+      return {
+        display: 'multiple',
+        tooltip: podScopes.map(([scope]) => scope).join('\n'),
+      };
+    })();
+
+    const podStreamMode = STREAM_MODE_BY_NAME.resources;
+    const podStreamActive = Boolean(podSummaryHealth && podSummaryHealth.reason !== 'inactive');
+    const podStreamHealthy = podSummaryHealth?.status === 'healthy';
+    const podPollingDetails = resolvePollingDetails({
+      domain: 'pods',
+      refresherName: DOMAIN_REFRESHER_MAP.pods,
+      streamActive: podStreamActive,
+      streamHealthy: podStreamHealthy,
+      metricsOnly: true,
+    });
+    const podModeDetails = resolveModeDetails({
+      domain: 'pods',
+      streamMode: podStreamMode,
+      streamActive: podStreamActive,
+      streamHealthy: podStreamHealthy,
+      pollingEnabled: podPollingDetails.enabled,
+      metricsOnly: true,
+    });
+    const podHealthDetails = resolveHealthDetails({
+      domain: 'pods',
+      status: podSummaryStatus,
+      error: podSummaryError !== '—' ? podSummaryError : null,
+      scope: podScopes.length ? podScopeDetails.display : '',
+      streamHealth: podSummaryHealth ?? null,
+    });
+
     const podSummaryRow: DiagnosticsRow = {
       rowKey: 'pods-summary',
       domain: 'pods' as RefreshDomain,
@@ -687,8 +1025,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       dropped: podSummaryDropped,
       stale: podSummaryStale,
       error: podSummaryError,
-      telemetryStatus: podSummaryStatus,
-      telemetryTooltip: podSummaryError !== '—' ? podSummaryError : undefined,
+      telemetryStatus: podSummaryTelemetryStatus,
+      telemetryTooltip: podSummaryTelemetryTooltip,
       metricsStatus: podSummaryMetricsStatus,
       metricsTooltip: podSummaryMetricsTooltip,
       metricsStale: podSummaryStale,
@@ -705,6 +1043,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       truncated: false,
       totalItems: undefined,
       namespace: '-',
+      scope: podScopeDetails.display,
+      scopeTooltip: podScopeDetails.tooltip,
+      mode: podModeDetails.label,
+      modeTooltip: podModeDetails.tooltip,
+      healthStatus: podHealthDetails.label,
+      healthTooltip: podHealthDetails.tooltip,
+      pollingStatus: podPollingDetails.label,
+      pollingTooltip: podPollingDetails.tooltip,
     };
 
     const podRows = podScopes.map<DiagnosticsRow>(([scope, state]) => {
@@ -752,6 +1098,48 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         }
       }
       const version = state.version != null ? String(state.version) : '—';
+      const streamHealth = toStreamHealthSummary(
+        resourceStreamManager.getHealthSnapshot('pods', scope)
+      );
+      const streamActive = Boolean(streamHealth && streamHealth.reason !== 'inactive');
+      const streamHealthy = streamHealth?.status === 'healthy';
+      const modeDetails = resolveModeDetails({
+        domain: 'pods',
+        streamMode: podStreamMode,
+        streamActive,
+        streamHealthy,
+        pollingEnabled: podPollingDetails.enabled,
+        metricsOnly: true,
+      });
+      const healthDetails = resolveHealthDetails({
+        domain: 'pods',
+        status: state.status,
+        error: state.error,
+        scope,
+        streamHealth,
+      });
+      const scopeDetails = resolveScopeDetails(scope);
+      const telemetryStatus = [state.status, streamHealth ? `Stream ${streamHealth.status}` : null]
+        .filter(Boolean)
+        .join(' • ');
+      const telemetryTooltipParts: string[] = [];
+      if (state.error) {
+        telemetryTooltipParts.push(state.error);
+      }
+      if (streamHealth) {
+        telemetryTooltipParts.push(`Stream health: ${streamHealth.status}`);
+        telemetryTooltipParts.push(`Stream reason: ${streamHealth.reason}`);
+        if (streamHealth.lastDeliveryAt) {
+          const deliveryInfo = formatLastUpdated(streamHealth.lastDeliveryAt);
+          telemetryTooltipParts.push(`Stream last delivery: ${deliveryInfo.tooltip}`);
+        }
+        if (streamHealth.lastMessageAt) {
+          const messageInfo = formatLastUpdated(streamHealth.lastMessageAt);
+          telemetryTooltipParts.push(`Stream last message: ${messageInfo.tooltip}`);
+        }
+      }
+      const telemetryTooltip =
+        telemetryTooltipParts.length > 0 ? telemetryTooltipParts.join('\n') : undefined;
 
       const displayScope = stripClusterScope(scope);
       let label = 'Pods';
@@ -779,8 +1167,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         dropped: state.droppedAutoRefreshes,
         stale: isStale,
         error: state.error ?? '—',
-        telemetryStatus: state.status,
-        telemetryTooltip: state.error ?? undefined,
+        telemetryStatus,
+        telemetryTooltip,
         metricsStatus,
         metricsTooltip:
           metricsTooltipLines.length > 0 ? metricsTooltipLines.join('\n') : 'No metrics available',
@@ -798,6 +1186,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         truncated,
         totalItems,
         namespace: namespaceLabel,
+        scope: scopeDetails.display,
+        scopeTooltip: scopeDetails.tooltip,
+        mode: modeDetails.label,
+        modeTooltip: modeDetails.tooltip,
+        healthStatus: healthDetails.label,
+        healthTooltip: healthDetails.tooltip,
+        pollingStatus: podPollingDetails.label,
+        pollingTooltip: podPollingDetails.tooltip,
       };
     });
 
@@ -846,6 +1242,48 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       return maxReset > 0 ? String(maxReset) : '—';
     })();
 
+    const logScopeDetails = (() => {
+      if (!logScopeEntries.length) {
+        return { display: '-', tooltip: 'No log scopes active' };
+      }
+      if (logScopeEntries.length === 1) {
+        return resolveScopeDetails(logScopeEntries[0][0]);
+      }
+      return {
+        display: 'multiple',
+        tooltip: logScopeEntries.map(([scope]) => scope).join('\n'),
+      };
+    })();
+
+    const logStreamTelemetry = telemetrySummary?.streams.find(
+      (entry) => entry.name === 'object-logs'
+    );
+    const logStreamHealth = resolveStreamTelemetryHealth(logStreamTelemetry);
+    const logStreamActive = Boolean(logStreamTelemetry?.activeSessions);
+    const logStreamHealthy = logStreamHealth?.status === 'healthy';
+    const logPollingDetails = resolvePollingDetails({
+      domain: 'object-logs',
+      refresherName: DOMAIN_REFRESHER_MAP['object-logs'],
+      streamActive: logStreamActive,
+      streamHealthy: logStreamHealthy,
+      metricsOnly: false,
+    });
+    const logModeDetails = resolveModeDetails({
+      domain: 'object-logs',
+      streamMode: STREAM_MODE_BY_NAME['object-logs'],
+      streamActive: logStreamActive,
+      streamHealthy: logStreamHealthy,
+      pollingEnabled: logPollingDetails.enabled,
+      metricsOnly: false,
+    });
+    const logHealthDetails = resolveHealthDetails({
+      domain: 'object-logs',
+      status: logSummaryStatus,
+      error: logSummaryError !== '—' ? logSummaryError : null,
+      scope: logScopeEntries.length ? logScopeDetails.display : '',
+      streamHealth: logStreamHealth,
+    });
+
     const logSummaryRow: DiagnosticsRow = {
       rowKey: 'object-logs-summary',
       domain: 'object-logs' as RefreshDomain,
@@ -877,6 +1315,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       truncated: false,
       totalItems: undefined,
       namespace: '-',
+      scope: logScopeDetails.display,
+      scopeTooltip: logScopeDetails.tooltip,
+      mode: logModeDetails.label,
+      modeTooltip: logModeDetails.tooltip,
+      healthStatus: logHealthDetails.label,
+      healthTooltip: logHealthDetails.tooltip,
+      pollingStatus: logPollingDetails.label,
+      pollingTooltip: logPollingDetails.tooltip,
     };
 
     const logRows = logScopeEntries.map<DiagnosticsRow>(([scope, state]) => {
@@ -902,6 +1348,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         truncated && totalItems !== undefined ? `${count} / ${totalItems}` : String(count);
       const countTooltip = warnings.length > 0 ? warnings.join('\n') : undefined;
       const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
+      const scopeDetails = resolveScopeDetails(scope);
+      const healthDetails = resolveHealthDetails({
+        domain: 'object-logs',
+        status: state.status,
+        error: state.error,
+        scope,
+        streamHealth: logStreamHealth,
+      });
 
       return {
         rowKey: `object-logs:${scope}`,
@@ -934,6 +1388,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         truncated,
         totalItems,
         namespace: namespaceLabel,
+        scope: scopeDetails.display,
+        scopeTooltip: scopeDetails.tooltip,
+        mode: logModeDetails.label,
+        modeTooltip: logModeDetails.tooltip,
+        healthStatus: healthDetails.label,
+        healthTooltip: healthDetails.tooltip,
+        pollingStatus: logPollingDetails.label,
+        pollingTooltip: logPollingDetails.tooltip,
       };
     });
 
@@ -958,7 +1420,37 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
       const status = state.status;
       const error = state.error ?? '—';
-      const intervalLabel = '—';
+      const refresherName = DOMAIN_REFRESHER_MAP['cluster-events'];
+      const intervalLabel = formatInterval(
+        refresherName ? refreshManager.getRefresherInterval(refresherName) : null
+      );
+      const scopeDetails = resolveScopeDetails(state.scope);
+      const streamTelemetry = telemetrySummary?.streams.find((entry) => entry.name === 'events');
+      const streamHealth = resolveStreamTelemetryHealth(streamTelemetry);
+      const streamActive = Boolean(streamTelemetry?.activeSessions);
+      const streamHealthy = streamHealth?.status === 'healthy';
+      const pollingDetails = resolvePollingDetails({
+        domain: 'cluster-events',
+        refresherName,
+        streamActive,
+        streamHealthy,
+        metricsOnly: false,
+      });
+      const modeDetails = resolveModeDetails({
+        domain: 'cluster-events',
+        streamMode: STREAM_MODE_BY_NAME.events,
+        streamActive,
+        streamHealthy,
+        pollingEnabled: pollingDetails.enabled,
+        metricsOnly: false,
+      });
+      const healthDetails = resolveHealthDetails({
+        domain: 'cluster-events',
+        status,
+        error: state.error,
+        scope: state.scope,
+        streamHealth,
+      });
 
       return {
         rowKey: 'cluster-events',
@@ -988,6 +1480,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         truncated,
         totalItems,
         namespace: '-',
+        scope: scopeDetails.display,
+        scopeTooltip: scopeDetails.tooltip,
+        mode: modeDetails.label,
+        modeTooltip: modeDetails.tooltip,
+        healthStatus: healthDetails.label,
+        healthTooltip: healthDetails.tooltip,
+        pollingStatus: pollingDetails.label,
+        pollingTooltip: pollingDetails.tooltip,
       };
     })();
 
@@ -1010,8 +1510,38 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
       const status = state.status;
       const error = state.error ?? '—';
-      const intervalLabel = '—';
+      const refresherName = DOMAIN_REFRESHER_MAP['namespace-events'];
+      const intervalLabel = formatInterval(
+        refresherName ? refreshManager.getRefresherInterval(refresherName) : null
+      );
       const namespaceLabel = resolveDomainNamespace('namespace-events', state.scope);
+      const scopeDetails = resolveScopeDetails(state.scope);
+      const streamTelemetry = telemetrySummary?.streams.find((entry) => entry.name === 'events');
+      const streamHealth = resolveStreamTelemetryHealth(streamTelemetry);
+      const streamActive = Boolean(streamTelemetry?.activeSessions);
+      const streamHealthy = streamHealth?.status === 'healthy';
+      const pollingDetails = resolvePollingDetails({
+        domain: 'namespace-events',
+        refresherName,
+        streamActive,
+        streamHealthy,
+        metricsOnly: false,
+      });
+      const modeDetails = resolveModeDetails({
+        domain: 'namespace-events',
+        streamMode: STREAM_MODE_BY_NAME.events,
+        streamActive,
+        streamHealthy,
+        pollingEnabled: pollingDetails.enabled,
+        metricsOnly: false,
+      });
+      const healthDetails = resolveHealthDetails({
+        domain: 'namespace-events',
+        status,
+        error: state.error,
+        scope: state.scope,
+        streamHealth,
+      });
 
       return {
         rowKey: `namespace-events:${state.scope ?? '-'}`,
@@ -1042,6 +1572,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         truncated,
         totalItems,
         namespace: namespaceLabel,
+        scope: scopeDetails.display,
+        scopeTooltip: scopeDetails.tooltip,
+        mode: modeDetails.label,
+        modeTooltip: modeDetails.tooltip,
+        healthStatus: healthDetails.label,
+        healthTooltip: healthDetails.tooltip,
+        pollingStatus: pollingDetails.label,
+        pollingTooltip: pollingDetails.tooltip,
       };
     })();
 
@@ -1152,22 +1690,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [resourceStreamStats, telemetrySummary]);
 
-  const filteredStreamRows = useMemo(
-    () => streamRows.filter((row) => streamFilters[row.rowKey] !== false),
-    [streamFilters, streamRows]
-  );
-
+  // Streams tab shows all telemetry rows without filtering controls.
   const streamSummary = useMemo(() => {
     if (streamRows.length === 0) {
       return 'No stream telemetry available';
     }
-    const sessionTotal = filteredStreamRows.reduce((acc, row) => acc + row.sessions, 0);
-    const visible =
-      filteredStreamRows.length === streamRows.length
-        ? `${streamRows.length} streams`
-        : `${filteredStreamRows.length}/${streamRows.length} streams`;
-    return `${visible} • Sessions: ${sessionTotal}`;
-  }, [filteredStreamRows, streamRows]);
+    const sessionTotal = streamRows.reduce((acc, row) => acc + row.sessions, 0);
+    return `Sessions: ${sessionTotal} • Streams: ${streamRows.length}`;
+  }, [streamRows]);
 
   const filteredRows = useMemo(() => rows.filter((row) => row.status !== 'idle'), [rows]);
   const { capabilityBatchRows, capabilityDescriptorIndex } = useMemo(() => {
@@ -1634,7 +2164,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     priority: isOpen ? 35 : 0,
   });
 
-  const refreshContent = (
+  // Refresh Domains tab content.
+  const refreshDomainsContent = (
     <>
       <DiagnosticsSummaryCards
         orchestratorPendingRequests={refreshState.pendingRequests}
@@ -1644,75 +2175,33 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         logSummary={logSummary}
       />
       <DiagnosticsTable rows={filteredRows} />
-      <div className="diagnostics-section diagnostics-streams">
-        <div className="diagnostics-section-header">
-          <div className="diagnostics-section-title-group">
-            <span className="diagnostics-section-title">Streams</span>
-            <span className="diagnostics-section-subtitle">{streamSummary}</span>
-          </div>
-          <div className="diagnostics-section-actions">
-            <button
-              className="diagnostics-section-toggle"
-              type="button"
-              onClick={() => setAllStreamFilters(true)}
-            >
-              All
-            </button>
-            <button
-              className="diagnostics-section-toggle"
-              type="button"
-              onClick={() => setAllStreamFilters(false)}
-            >
-              None
-            </button>
-          </div>
-        </div>
-        {streamOptions.length > 0 ? (
-          <div className="diagnostics-streams-filters">
-            {streamOptions.map((option) => {
-              const checked = streamFilters[option.name] !== false;
-              return (
-                <label key={option.name} className="diagnostics-streams-filter">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleStreamFilter(option.name)}
-                  />
-                  <span>{option.label}</span>
-                </label>
-              );
-            })}
-          </div>
-        ) : null}
-        <DiagnosticsStreamsTable
-          rows={filteredStreamRows}
-          emptyMessage={
-            streamRows.length === 0
-              ? 'Stream telemetry is not available yet.'
-              : 'No streams match current filters.'
-          }
-        />
-      </div>
     </>
   );
 
-  const capabilityChecksContent = (
-    <div className="diagnostics-permissions">
-      <div className="diagnostics-permissions-header">
-        <span className="diagnostics-permissions-title">Capabilities Checks</span>
-        <div className="diagnostics-permissions-actions">
-          <span className="diagnostics-permissions-count">
-            {capabilityBatchRows.length} namespace
-            {capabilityBatchRows.length === 1 ? '' : 's'}
-          </span>
-        </div>
-      </div>
-      <CapabilityChecksTable rows={capabilityBatchRows} />
-    </div>
+  // Streams tab content.
+  const streamsContent = (
+    <DiagnosticsStreamsTable
+      rows={streamRows}
+      summary={streamSummary}
+      emptyMessage={
+        streamRows.length === 0 ? 'Stream telemetry is not available yet.' : 'No streams available.'
+      }
+    />
   );
 
+  // Capabilities Checks tab content.
+  const capabilityChecksContent = (
+    <CapabilityChecksTable
+      rows={capabilityBatchRows}
+      summary={`${capabilityBatchRows.length} namespace${
+        capabilityBatchRows.length === 1 ? '' : 's'
+      }`}
+    />
+  );
+
+  // Effective Permissions tab content.
   const effectivePermissionsContent = (
-    <PermissionsTable
+    <EffectivePermissionsTable
       rows={permissionRows}
       showAllPermissions={showAllPermissions}
       onToggleShowAll={() => setShowAllPermissions((prev) => !prev)}
@@ -1816,12 +2305,20 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     >
       <div className="tabs diagnostics-tabs">
         <button
-          className={`tab ${activeTab === 'refresh' ? 'active' : ''}`}
-          onClick={() => setActiveTab('refresh')}
+          className={`tab ${activeTab === 'refresh-domains' ? 'active' : ''}`}
+          onClick={() => setActiveTab('refresh-domains')}
           data-diagnostics-focusable="true"
           tabIndex={-1}
         >
-          Refresh
+          REFRESH DOMAINS
+        </button>
+        <button
+          className={`tab ${activeTab === 'streams' ? 'active' : ''}`}
+          onClick={() => setActiveTab('streams')}
+          data-diagnostics-focusable="true"
+          tabIndex={-1}
+        >
+          STREAMS
         </button>
         <button
           className={`tab ${activeTab === 'capability-checks' ? 'active' : ''}`}
@@ -1840,11 +2337,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           EFFECTIVE PERMISSIONS
         </button>
       </div>
-      {activeTab === 'refresh'
-        ? refreshContent
-        : activeTab === 'capability-checks'
-          ? capabilityChecksContent
-          : effectivePermissionsContent}
+      {activeTab === 'refresh-domains'
+        ? refreshDomainsContent
+        : activeTab === 'streams'
+          ? streamsContent
+          : activeTab === 'capability-checks'
+            ? capabilityChecksContent
+            : effectivePermissionsContent}
     </DockablePanel>
   );
 };

@@ -35,7 +35,7 @@ import { useCommandPaletteCommands } from '@ui/command-palette/CommandPaletteCom
 // Error Handling
 import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
 import { PanelErrorBoundary, RouteErrorBoundary } from '@components/errors';
-import { DiagnosticsPanel } from '@/core/refresh/components/RefreshDiagnosticsPanel';
+import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
 import { DockablePanelProvider } from '@/components/dockable';
 
 const Sidebar = withLazyBoundary(() => import('@ui/layout/Sidebar'), 'Loading sidebar...');

@@ -431,7 +431,7 @@ export function NodeMaintenanceTab({
         </header>
         <div className="node-maintenance-actions">
           <button
-            className={`button ${unschedulable ? 'primary' : 'warning'}`}
+            className={`button ${unschedulable ? 'warning' : 'warning'}`}
             onClick={() => setShowCordonConfirm(true)}
             disabled={cordonDisabled}
             title={cordonDisabledReason ?? undefined}
@@ -628,7 +628,7 @@ export function NodeMaintenanceTab({
             : `Cordon node "${nodeName}"?\n\nThis prevents new workloads from being scheduled until it is uncordoned.`
         }
         confirmText={unschedulable ? 'Uncordon' : 'Cordon'}
-        confirmButtonClass={unschedulable ? 'primary' : 'warning'}
+        confirmButtonClass={unschedulable ? 'warning' : 'warning'}
         onConfirm={() => {
           setShowCordonConfirm(false);
           void executeAction(actionForState);

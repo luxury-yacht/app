@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, test, vi } from 'vitest';
 
 const ensureRefreshBaseURLMock = vi.hoisted(() => vi.fn(async () => 'http://127.0.0.1:0'));
 const fetchSnapshotMock = vi.hoisted(() => vi.fn());
+const invalidateRefreshBaseURLMock = vi.hoisted(() => vi.fn());
 const logAppInfoMock = vi.hoisted(() => vi.fn());
 const logAppWarnMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({
@@ -19,6 +20,7 @@ const createdSockets: FakeWebSocket[] = [];
 vi.mock('../client', () => ({
   ensureRefreshBaseURL: ensureRefreshBaseURLMock,
   fetchSnapshot: fetchSnapshotMock,
+  invalidateRefreshBaseURL: invalidateRefreshBaseURLMock,
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -77,6 +79,7 @@ beforeEach(() => {
   ensureRefreshBaseURLMock.mockReset();
   ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
   fetchSnapshotMock.mockReset();
+  invalidateRefreshBaseURLMock.mockReset();
   logAppInfoMock.mockClear();
   logAppWarnMock.mockClear();
   errorHandlerMock.handle.mockClear();
@@ -395,6 +398,103 @@ describe('ResourceStreamManager', () => {
         type: 'ADDED',
         domain: 'namespace-config',
         scope: 'namespace:default',
+        resourceVersion: '3',
+        name: 'config-a',
+        namespace: 'default',
+        kind: 'ConfigMap',
+        row: {
+          clusterId: 'cluster-a',
+          clusterName: 'cluster-a',
+          kind: 'ConfigMap',
+          typeAlias: 'CM',
+          name: 'config-a',
+          namespace: 'default',
+          data: 2,
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('namespace-config');
+    expect(state.data?.resources?.[0]?.name).toBe('config-a');
+  });
+
+  test('applies updates when cluster id mismatches but scope is unique', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-config', storeScope);
+
+    setDomainState('namespace-config', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'namespace-config',
+        scope: 'namespace:default',
+        resourceVersion: '3',
+        name: 'config-a',
+        namespace: 'default',
+        kind: 'ConfigMap',
+        clusterId: 'backend-id',
+        row: {
+          clusterId: 'backend-id',
+          clusterName: 'backend-id',
+          kind: 'ConfigMap',
+          typeAlias: 'CM',
+          name: 'config-a',
+          namespace: 'default',
+          data: 2,
+          age: '1m',
+        },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('namespace-config');
+    expect(state.data?.resources?.[0]?.clusterId).toBe('cluster-a');
+  });
+
+  test('applies updates when scope includes a cluster prefix', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], 'namespace:default');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('namespace-config', storeScope);
+
+    setDomainState('namespace-config', () => ({
+      status: 'ready',
+      data: { resources: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'namespace-config',
+        scope: 'cluster-a|namespace:default',
         resourceVersion: '3',
         name: 'config-a',
         namespace: 'default',
@@ -989,7 +1089,42 @@ describe('ResourceStreamManager', () => {
     expect(state.data?.resources?.[0]?.name).toBe('cluster-widget');
   });
 
-  test('resyncs on out-of-order resource versions', async () => {
+  test('applies cluster updates when scope is omitted', () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('nodes', storeScope);
+
+    setDomainState('nodes', () => ({
+      status: 'ready',
+      data: { nodes: [] },
+      stats: null,
+      error: null,
+      droppedAutoRefreshes: 0,
+      scope: storeScope,
+    }));
+
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'ADDED',
+        domain: 'nodes',
+        resourceVersion: '11',
+        row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    const state = getDomainState('nodes');
+    expect(state.data?.nodes?.[0]?.name).toBe('node-a');
+  });
+
+  test('accepts updates even when resource versions regress if sequences advance', async () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -1005,17 +1140,50 @@ describe('ResourceStreamManager', () => {
         type: 'ADDED',
         domain: 'nodes',
         scope: '',
+        name: 'node-a',
         resourceVersion: '10',
+        sequence: 1,
         row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
       })
     );
     vi.advanceTimersByTime(200);
 
+    manager.handleMessage(
+      'cluster-a',
+      JSON.stringify({
+        type: 'MODIFIED',
+        domain: 'nodes',
+        scope: '',
+        name: 'node-a',
+        resourceVersion: '5',
+        sequence: 2,
+        row: { name: 'node-a', status: 'NotReady', clusterId: 'cluster-a' },
+      })
+    );
+
+    vi.advanceTimersByTime(200);
+
+    expect(fetchSnapshotMock).not.toHaveBeenCalled();
+    const state = getDomainState('nodes');
+    expect(state.data?.nodes?.[0]?.status).toBe('NotReady');
+  });
+
+  test('accepts updates when snapshot version exceeds safe integer limits', async () => {
+    vi.useFakeTimers();
+    (window as any).setTimeout = globalThis.setTimeout;
+    (window as any).clearTimeout = globalThis.clearTimeout;
+    const manager = new ResourceStreamManager();
+    const storeScope = buildClusterScopeList(['cluster-a'], '');
+    (
+      manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
+    ).ensureSubscriptions('nodes', storeScope);
+
+    // Use an unsafe integer to mirror large resourceVersion values from the backend.
     fetchSnapshotMock.mockResolvedValueOnce({
       snapshot: {
         domain: 'nodes',
         scope: '',
-        version: 11,
+        version: Number.MAX_SAFE_INTEGER + 2,
         checksum: 'etag',
         generatedAt: Date.now(),
         sequence: 1,
@@ -1025,23 +1193,23 @@ describe('ResourceStreamManager', () => {
       notModified: false,
     });
 
+    await manager.refreshOnce('nodes', storeScope);
+
     manager.handleMessage(
       'cluster-a',
       JSON.stringify({
-        type: 'MODIFIED',
+        type: 'ADDED',
         domain: 'nodes',
         scope: '',
-        resourceVersion: '5',
+        resourceVersion: '1',
         row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
       })
     );
 
-    await flushPromises();
+    vi.advanceTimersByTime(200);
 
-    expect(fetchSnapshotMock).toHaveBeenCalled();
     const state = getDomainState('nodes');
-    expect(state.status).toBe('ready');
-    expect(state.data?.nodes).toEqual([]);
+    expect(state.data?.nodes?.[0]?.name).toBe('node-a');
   });
 
   test('resyncs on reset messages', async () => {
@@ -1200,7 +1368,7 @@ describe('ResourceStreamManager', () => {
     expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
   });
 
-  test('recovers from stale updates after a resync', async () => {
+  test('accepts newer updates after stale resource versions when sequences advance', async () => {
     vi.useFakeTimers();
     (window as any).setTimeout = globalThis.setTimeout;
     (window as any).clearTimeout = globalThis.clearTimeout;
@@ -1245,6 +1413,7 @@ describe('ResourceStreamManager', () => {
         domain: 'nodes',
         scope: '',
         resourceVersion: '5',
+        sequence: 1,
         name: 'node-a',
         row: { name: 'node-a', status: 'Unknown', clusterId: 'cluster-a' },
       })
@@ -1259,6 +1428,7 @@ describe('ResourceStreamManager', () => {
         domain: 'nodes',
         scope: '',
         resourceVersion: '12',
+        sequence: 2,
         name: 'node-a',
         row: { name: 'node-a', status: 'Ready', clusterId: 'cluster-a' },
       })
@@ -1268,7 +1438,7 @@ describe('ResourceStreamManager', () => {
 
     const state = getDomainState('nodes');
     expect(state.data?.nodes?.[0]?.status).toBe('Ready');
-    expect(fetchSnapshotMock).toHaveBeenCalledTimes(2);
+    expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
   });
 
   test('debounces unsubscribe before sending cancel', async () => {

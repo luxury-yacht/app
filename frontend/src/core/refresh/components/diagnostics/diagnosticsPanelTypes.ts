@@ -44,6 +44,15 @@ export interface DiagnosticsRow {
   truncated?: boolean;
   totalItems?: number;
   namespace: string;
+  // Scope/mode/health/polling describe how data is retrieved for this row.
+  scope: string;
+  scopeTooltip?: string;
+  mode: string;
+  modeTooltip?: string;
+  healthStatus: string;
+  healthTooltip?: string;
+  pollingStatus: string;
+  pollingTooltip?: string;
 }
 
 // DiagnosticsStreamRow captures formatted stream telemetry for the streams table.
