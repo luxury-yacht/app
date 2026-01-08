@@ -36,7 +36,7 @@ const parseCssPixelValue = (raw: string, fallback: number): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-export const getAppTopOffset = (): number => {
+const getAppTopOffset = (): number => {
   if (typeof document === 'undefined') {
     return LAYOUT.APP_HEADER_HEIGHT;
   }

@@ -384,7 +384,7 @@ export const sortWorkloadRows = (rows: NamespaceWorkloadSummary[]): void => {
   });
 };
 
-export const sortConfigRows = (rows: NamespaceConfigSummary[]): void => {
+const sortConfigRows = (rows: NamespaceConfigSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -402,7 +402,7 @@ export const sortConfigRows = (rows: NamespaceConfigSummary[]): void => {
   });
 };
 
-export const sortRBACRows = (rows: NamespaceRBACSummary[]): void => {
+const sortRBACRows = (rows: NamespaceRBACSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -416,7 +416,7 @@ export const sortRBACRows = (rows: NamespaceRBACSummary[]): void => {
   });
 };
 
-export const sortNetworkRows = (rows: NamespaceNetworkSummary[]): void => {
+const sortNetworkRows = (rows: NamespaceNetworkSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -431,7 +431,7 @@ export const sortNetworkRows = (rows: NamespaceNetworkSummary[]): void => {
 };
 
 // Keep custom rows ordered to match snapshot sorting.
-export const sortCustomRows = (rows: NamespaceCustomSummary[]): void => {
+const sortCustomRows = (rows: NamespaceCustomSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -450,7 +450,7 @@ export const sortCustomRows = (rows: NamespaceCustomSummary[]): void => {
 };
 
 // Keep helm rows ordered to match snapshot sorting.
-export const sortHelmRows = (rows: NamespaceHelmSummary[]): void => {
+const sortHelmRows = (rows: NamespaceHelmSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -461,7 +461,7 @@ export const sortHelmRows = (rows: NamespaceHelmSummary[]): void => {
 };
 
 // Keep autoscaling rows ordered to match snapshot sorting.
-export const sortAutoscalingRows = (rows: NamespaceAutoscalingSummary[]): void => {
+const sortAutoscalingRows = (rows: NamespaceAutoscalingSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -471,7 +471,7 @@ export const sortAutoscalingRows = (rows: NamespaceAutoscalingSummary[]): void =
   });
 };
 
-export const sortQuotaRows = (rows: NamespaceQuotaSummary[]): void => {
+const sortQuotaRows = (rows: NamespaceQuotaSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -485,7 +485,7 @@ export const sortQuotaRows = (rows: NamespaceQuotaSummary[]): void => {
   });
 };
 
-export const sortStorageRows = (rows: NamespaceStorageSummary[]): void => {
+const sortStorageRows = (rows: NamespaceStorageSummary[]): void => {
   rows.sort((a, b) => {
     const ns = normalizeSortKey(a.namespace).localeCompare(normalizeSortKey(b.namespace));
     if (ns !== 0) {
@@ -496,7 +496,7 @@ export const sortStorageRows = (rows: NamespaceStorageSummary[]): void => {
 };
 
 // Keep cluster tab rows ordered to match snapshot sorting.
-export const sortClusterRBACRows = (rows: ClusterRBACEntry[]): void => {
+const sortClusterRBACRows = (rows: ClusterRBACEntry[]): void => {
   rows.sort((a, b) => {
     const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
     if (kind !== 0) {
@@ -506,11 +506,11 @@ export const sortClusterRBACRows = (rows: ClusterRBACEntry[]): void => {
   });
 };
 
-export const sortClusterStorageRows = (rows: ClusterStorageEntry[]): void => {
+const sortClusterStorageRows = (rows: ClusterStorageEntry[]): void => {
   rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
 };
 
-export const sortClusterConfigRows = (rows: ClusterConfigEntry[]): void => {
+const sortClusterConfigRows = (rows: ClusterConfigEntry[]): void => {
   rows.sort((a, b) => {
     const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
     if (kind !== 0) {
@@ -520,11 +520,11 @@ export const sortClusterConfigRows = (rows: ClusterConfigEntry[]): void => {
   });
 };
 
-export const sortClusterCRDRows = (rows: ClusterCRDEntry[]): void => {
+const sortClusterCRDRows = (rows: ClusterCRDEntry[]): void => {
   rows.sort((a, b) => normalizeSortKey(a.name).localeCompare(normalizeSortKey(b.name)));
 };
 
-export const sortClusterCustomRows = (rows: ClusterCustomEntry[]): void => {
+const sortClusterCustomRows = (rows: ClusterCustomEntry[]): void => {
   rows.sort((a, b) => {
     const kind = normalizeSortKey(a.kind).localeCompare(normalizeSortKey(b.kind));
     if (kind !== 0) {

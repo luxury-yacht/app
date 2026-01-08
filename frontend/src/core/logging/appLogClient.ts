@@ -44,7 +44,3 @@ export const logAppInfo = (message: string, source?: string): void => {
 export const logAppWarn = (message: string, source?: string): void => {
   logToApp('warn', message, source);
 };
-
-export const logAppError = (message: string, source?: string): void => {
-  logToApp('error', message, source);
-};

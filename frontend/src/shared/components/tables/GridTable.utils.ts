@@ -56,7 +56,7 @@ export const defaultGetNamespace = (row: any): string | null => {
   return value;
 };
 
-export const defaultGetClusterId = (row: any): string | null => {
+const defaultGetClusterId = (row: any): string | null => {
   if (!row || typeof row !== 'object') {
     return null;
   }
@@ -70,19 +70,6 @@ export const defaultGetClusterId = (row: any): string | null => {
           : row.item && typeof row.item.clusterName === 'string'
             ? row.item.clusterName
             : null;
-  return value ?? null;
-};
-
-export const defaultGetClusterName = (row: any): string | null => {
-  if (!row || typeof row !== 'object') {
-    return null;
-  }
-  const value =
-    typeof row.clusterName === 'string'
-      ? row.clusterName
-      : row.item && typeof row.item.clusterName === 'string'
-        ? row.item.clusterName
-        : null;
   return value ?? null;
 };
 
