@@ -649,7 +649,7 @@ describe('DiagnosticsPanel component', () => {
     });
     await flushAsync();
 
-    const streamsSection = rendered.container.querySelector('.diagnostics-streams');
+    const streamsSection = rendered.container.querySelector('.diagnostics-section');
     expect(streamsSection?.textContent).toContain('Streams');
     expect(streamsSection?.textContent).toContain('Resources');
     const streamRows = streamsSection?.querySelectorAll('tbody tr') ?? [];
@@ -801,10 +801,9 @@ describe('DiagnosticsPanel component', () => {
     });
     await flushAsync();
 
-    const streamsSection = rendered.container.querySelector('.diagnostics-streams');
+    const streamsSection = rendered.container.querySelector('.diagnostics-section');
     expect(streamsSection).toBeTruthy();
-    expect(streamsSection!.querySelectorAll('.diagnostics-streams-filter').length).toBe(0);
-    expect(streamsSection!.querySelectorAll('.diagnostics-section-toggle').length).toBe(0);
+    expect(streamsSection!.querySelectorAll('button, input').length).toBe(0);
 
     const streamRows = streamsSection!.querySelectorAll('tbody tr');
     expect(Array.from(streamRows).some((row) => row.textContent?.includes('Resources'))).toBe(true);
@@ -1036,7 +1035,7 @@ describe('DiagnosticsPanel component', () => {
     await flushAsync();
 
     const batchRows = rendered.container.querySelectorAll<HTMLTableRowElement>(
-      '.diagnostics-table-batches tbody tr'
+      '.diagnostics-table tbody tr'
     );
     expect(batchRows.length).toBe(2);
     expect(batchRows[0].textContent).toContain('Cluster');
