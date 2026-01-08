@@ -49,12 +49,20 @@ const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
   [SYSTEM_REFRESHERS.namespaces]: { interval: 2000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.clusterOverview]: { interval: 10000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.unifiedPods]: { interval: 5000, cooldown: 1000, timeout: 30 },
-  [SYSTEM_REFRESHERS.objectDetails]: { interval: 3000, cooldown: 1000, timeout: 10 },
-  [SYSTEM_REFRESHERS.objectEvents]: { interval: 3000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectYaml]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectHelmManifest]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectHelmValues]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectLogs]: { interval: 2000, cooldown: 1000, timeout: 10 },
+
+  // Placeholder value. Changing these intervals has no effect.
+  // Actual timings are in frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.ts
+  // and will be `object-${kind}`.
+  [SYSTEM_REFRESHERS.objectDetails]: { interval: 10000, cooldown: 1000, timeout: 10 },
+
+  // Placeholder value. Changing these intervals has no effect.
+  // Actual timings are in frontend/src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx
+  // and will be `object-${kind}-events`.
+  [SYSTEM_REFRESHERS.objectEvents]: { interval: 10000, cooldown: 1000, timeout: 10 },
 };
 
 // Metrics-only refreshers should inherit the configurable metrics cadence.
