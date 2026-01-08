@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import './RefreshDiagnosticsPanel.css';
+import './DiagnosticsPanel.css';
 import { DockablePanel } from '@components/dockable';
 import { useRefreshDomain, useRefreshState, useRefreshScopedDomainEntries } from '../store';
 import type {
@@ -53,11 +53,10 @@ import {
   getScopedFeaturesForView,
   resolveDomainNamespace,
 } from './diagnostics';
-import { DiagnosticsSummaryCards } from './diagnostics/DiagnosticsSummaryCards';
-import { DiagnosticsTable } from './diagnostics/DiagnosticsTable';
-import { DiagnosticsStreamsTable } from './diagnostics/DiagnosticsStreamsTable';
-import { CapabilityChecksTable } from './diagnostics/CapabilityChecksTable';
-import { PermissionsTable } from './diagnostics/PermissionsTable';
+import { DiagnosticsTable, DiagnosticsSummaryCards } from './diagnostics/TableRefreshDomains';
+import { DiagnosticsStreamsTable } from './diagnostics/TableStreams';
+import { CapabilityChecksTable } from './diagnostics/TableCapabilitesChecks';
+import { PermissionsTable } from './diagnostics/TableEffectivePermissions';
 
 // Re-export for backwards compatibility
 export { resolveDomainNamespace } from './diagnostics';

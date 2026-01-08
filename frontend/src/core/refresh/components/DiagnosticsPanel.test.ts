@@ -247,27 +247,27 @@ afterEach(() => {
 
 describe('resolveDomainNamespace', () => {
   test('returns namespace suffix for namespace domains', async () => {
-    const module = await import('./RefreshDiagnosticsPanel');
+    const module = await import('./DiagnosticsPanel');
     expect(module.resolveDomainNamespace('namespace-workloads', 'alpha|cluster:default')).toBe(
       'default'
     );
   });
 
   test('returns workload namespace for pod scopes', async () => {
-    const module = await import('./RefreshDiagnosticsPanel');
+    const module = await import('./DiagnosticsPanel');
     expect(module.resolveDomainNamespace('pods', 'alpha|workload:default:deployment:web')).toBe(
       'default'
     );
   });
 
   test('returns namespace for namespace-scoped pod scopes', async () => {
-    const module = await import('./RefreshDiagnosticsPanel');
+    const module = await import('./DiagnosticsPanel');
     expect(module.resolveDomainNamespace('pods', 'alpha|namespace:dev')).toBe('dev');
     expect(module.resolveDomainNamespace('pods', 'alpha|namespace:all')).toBe('All');
   });
 
   test('returns dash for cluster scoped domains', async () => {
-    const module = await import('./RefreshDiagnosticsPanel');
+    const module = await import('./DiagnosticsPanel');
     expect(module.resolveDomainNamespace('cluster-events', 'alpha|cluster')).toBe('-');
   });
 });
@@ -386,7 +386,7 @@ describe('DiagnosticsPanel component', () => {
       ],
     ];
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
     const markup = renderToStaticMarkup(
       React.createElement(KeyboardProvider, {
@@ -431,7 +431,7 @@ describe('DiagnosticsPanel component', () => {
       ],
     ];
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
     const markup = renderToStaticMarkup(
       React.createElement(KeyboardProvider, {
@@ -471,7 +471,7 @@ describe('DiagnosticsPanel component', () => {
       ],
     ];
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
 
     const markup = renderToStaticMarkup(
       React.createElement(KeyboardProvider, {
@@ -605,7 +605,7 @@ describe('DiagnosticsPanel component', () => {
       ],
     ];
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
@@ -728,7 +728,7 @@ describe('DiagnosticsPanel component', () => {
       lastFallbackReason: 'stream stalled',
     });
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
@@ -788,7 +788,7 @@ describe('DiagnosticsPanel component', () => {
       ],
     });
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
@@ -832,7 +832,7 @@ describe('DiagnosticsPanel component', () => {
       streams: [],
     });
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
@@ -851,7 +851,7 @@ describe('DiagnosticsPanel component', () => {
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
     fetchTelemetrySummaryMock.mockRejectedValueOnce(new Error('Telemetry offline'));
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
@@ -1018,7 +1018,7 @@ describe('DiagnosticsPanel component', () => {
       ])
     );
 
-    const { DiagnosticsPanel } = await import('./RefreshDiagnosticsPanel');
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
