@@ -52,7 +52,7 @@ const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
   [SYSTEM_REFRESHERS.objectYaml]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectHelmManifest]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectHelmValues]: { interval: 5000, cooldown: 1000, timeout: 10 },
-  [SYSTEM_REFRESHERS.objectLogs]: { interval: 2000, cooldown: 1000, timeout: 10 },
+  [SYSTEM_REFRESHERS.objectLogs]: { interval: 5000, cooldown: 1000, timeout: 10 },
 
   // Placeholder value. Changing these intervals has no effect.
   // Actual timings are in frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.ts

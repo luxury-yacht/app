@@ -642,6 +642,13 @@ describe('DiagnosticsPanel component', () => {
     expect(logPrimary?.textContent).toContain('Sessions: 1');
     expect(logPrimary?.textContent).toContain('Delivered: 9');
 
+    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab');
+    await act(async () => {
+      tabButtons[1].click();
+      await Promise.resolve();
+    });
+    await flushAsync();
+
     const streamsSection = rendered.container.querySelector('.diagnostics-streams');
     expect(streamsSection?.textContent).toContain('Streams');
     expect(streamsSection?.textContent).toContain('Resources');
@@ -744,7 +751,7 @@ describe('DiagnosticsPanel component', () => {
     telemetrySpy.mockRestore();
   });
 
-  test('filters stream rows using the stream toggles', async () => {
+  test('shows all streams without filter controls', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2024-01-01T12:00:00Z'));
     const now = Date.now();
@@ -787,24 +794,21 @@ describe('DiagnosticsPanel component', () => {
     await flushAsync();
     await flushAsync();
 
-    const streamsSection = rendered.container.querySelector('.diagnostics-streams');
-    const filters = streamsSection?.querySelectorAll<HTMLLabelElement>(
-      '.diagnostics-streams-filter'
-    );
-    const resourcesFilter = Array.from(filters ?? []).find((label) =>
-      label.textContent?.includes('Resources')
-    );
-    const resourcesCheckbox = resourcesFilter?.querySelector<HTMLInputElement>('input');
-    expect(resourcesCheckbox).toBeDefined();
-
+    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab');
     await act(async () => {
-      resourcesCheckbox?.click();
+      tabButtons[1].click();
+      await Promise.resolve();
     });
+    await flushAsync();
 
-    const streamRows = streamsSection?.querySelectorAll('tbody tr') ?? [];
-    expect(Array.from(streamRows).some((row) => row.textContent?.includes('Resources'))).toBe(
-      false
-    );
+    const streamsSection = rendered.container.querySelector('.diagnostics-streams');
+    expect(streamsSection).toBeTruthy();
+    expect(streamsSection!.querySelectorAll('.diagnostics-streams-filter').length).toBe(0);
+    expect(streamsSection!.querySelectorAll('.diagnostics-section-toggle').length).toBe(0);
+
+    const streamRows = streamsSection!.querySelectorAll('tbody tr');
+    expect(Array.from(streamRows).some((row) => row.textContent?.includes('Resources'))).toBe(true);
+    expect(Array.from(streamRows).some((row) => row.textContent?.includes('Events'))).toBe(true);
 
     await rendered.unmount();
   });
@@ -1025,7 +1029,8 @@ describe('DiagnosticsPanel component', () => {
 
     const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab');
     await act(async () => {
-      tabButtons[1].click();
+      // Skip the new streams tab to reach capability checks.
+      tabButtons[2].click();
       await Promise.resolve();
     });
     await flushAsync();
@@ -1046,7 +1051,7 @@ describe('DiagnosticsPanel component', () => {
     expect(batchCells[10].textContent).toContain('deployments/get, pods/create (exec)');
 
     await act(async () => {
-      tabButtons[2].click();
+      tabButtons[3].click();
       await Promise.resolve();
     });
     await flushAsync();

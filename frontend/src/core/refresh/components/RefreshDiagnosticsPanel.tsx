@@ -70,8 +70,6 @@ const STREAM_LABELS: Record<string, string> = {
   'object-logs': 'Object Logs',
 };
 
-const STREAM_ORDER = ['resources', 'events', 'catalog', 'object-logs'];
-
 type HealthStatus = 'healthy' | 'degraded' | 'unhealthy';
 
 type StreamHealthSummary = {
@@ -166,8 +164,8 @@ const formatHealthLabel = (status: HealthStatus, reason: string): string =>
 export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isOpen }) => {
   useTabStyles();
   const [activeTab, setActiveTab] = useState<
-    'refresh' | 'capability-checks' | 'effective-permissions'
-  >('refresh');
+    'refresh-domains' | 'streams' | 'capability-checks' | 'effective-permissions'
+  >('refresh-domains');
   const refreshState = useRefreshState();
   const namespaceDomain = useRefreshDomain('namespaces');
   const clusterOverviewDomain = useRefreshDomain('cluster-overview');
@@ -201,13 +199,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const { selectedNamespace } = useNamespace();
   const [showAllPermissions, setShowAllPermissions] = useState(false);
   const [diagnosticsClock, setDiagnosticsClock] = useState(() => Date.now());
-  const [streamFilters, setStreamFilters] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    STREAM_ORDER.forEach((name) => {
-      initial[name] = true;
-    });
-    return initial;
-  });
 
   useEffect(() => {
     if (!isOpen) {
@@ -395,53 +386,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespaceRBACDomain,
       namespaceStorageDomain,
     ]
-  );
-
-  const streamOptions = useMemo(() => {
-    const names = new Set(STREAM_ORDER);
-    telemetrySummary?.streams?.forEach((stream) => names.add(stream.name));
-    const orderedNames = [
-      ...STREAM_ORDER,
-      ...Array.from(names)
-        .filter((name) => !STREAM_ORDER.includes(name))
-        .sort((a, b) => a.localeCompare(b)),
-    ];
-    return orderedNames.map((name) => ({
-      name,
-      label: STREAM_LABELS[name] ?? name,
-    }));
-  }, [telemetrySummary]);
-
-  useEffect(() => {
-    setStreamFilters((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      streamOptions.forEach((option) => {
-        if (!(option.name in next)) {
-          next[option.name] = true;
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-  }, [streamOptions]);
-
-  const toggleStreamFilter = useCallback((name: string) => {
-    setStreamFilters((prev) => ({
-      ...prev,
-      [name]: !prev[name],
-    }));
-  }, []);
-
-  const setAllStreamFilters = useCallback(
-    (value: boolean) => {
-      const next: Record<string, boolean> = {};
-      streamOptions.forEach((option) => {
-        next[option.name] = value;
-      });
-      setStreamFilters(next);
-    },
-    [streamOptions]
   );
 
   const resourceStreamStats = resourceStreamManager.getTelemetrySummary();
@@ -1747,22 +1691,14 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [resourceStreamStats, telemetrySummary]);
 
-  const filteredStreamRows = useMemo(
-    () => streamRows.filter((row) => streamFilters[row.rowKey] !== false),
-    [streamFilters, streamRows]
-  );
-
+  // Streams tab shows all telemetry rows without filtering controls.
   const streamSummary = useMemo(() => {
     if (streamRows.length === 0) {
       return 'No stream telemetry available';
     }
-    const sessionTotal = filteredStreamRows.reduce((acc, row) => acc + row.sessions, 0);
-    const visible =
-      filteredStreamRows.length === streamRows.length
-        ? `${streamRows.length} streams`
-        : `${filteredStreamRows.length}/${streamRows.length} streams`;
-    return `${visible} • Sessions: ${sessionTotal}`;
-  }, [filteredStreamRows, streamRows]);
+    const sessionTotal = streamRows.reduce((acc, row) => acc + row.sessions, 0);
+    return `${streamRows.length} streams • Sessions: ${sessionTotal}`;
+  }, [streamRows]);
 
   const filteredRows = useMemo(() => rows.filter((row) => row.status !== 'idle'), [rows]);
   const { capabilityBatchRows, capabilityDescriptorIndex } = useMemo(() => {
@@ -2229,7 +2165,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     priority: isOpen ? 35 : 0,
   });
 
-  const refreshContent = (
+  // Keep domain diagnostics separate from stream telemetry to match the tab split.
+  const refreshDomainsContent = (
     <>
       <DiagnosticsSummaryCards
         orchestratorPendingRequests={refreshState.pendingRequests}
@@ -2239,62 +2176,31 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         logSummary={logSummary}
       />
       <DiagnosticsTable rows={filteredRows} />
-      <div className="diagnostics-section diagnostics-streams">
-        <div className="diagnostics-section-header">
-          <div className="diagnostics-section-title-group">
-            <span className="diagnostics-section-title">Streams</span>
-            <span className="diagnostics-section-subtitle">{streamSummary}</span>
-          </div>
-          <div className="diagnostics-section-actions">
-            <button
-              className="diagnostics-section-toggle"
-              type="button"
-              onClick={() => setAllStreamFilters(true)}
-            >
-              All
-            </button>
-            <button
-              className="diagnostics-section-toggle"
-              type="button"
-              onClick={() => setAllStreamFilters(false)}
-            >
-              None
-            </button>
-          </div>
-        </div>
-        {streamOptions.length > 0 ? (
-          <div className="diagnostics-streams-filters">
-            {streamOptions.map((option) => {
-              const checked = streamFilters[option.name] !== false;
-              return (
-                <label key={option.name} className="diagnostics-streams-filter">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleStreamFilter(option.name)}
-                  />
-                  <span>{option.label}</span>
-                </label>
-              );
-            })}
-          </div>
-        ) : null}
-        <DiagnosticsStreamsTable
-          rows={filteredStreamRows}
-          emptyMessage={
-            streamRows.length === 0
-              ? 'Stream telemetry is not available yet.'
-              : 'No streams match current filters.'
-          }
-        />
-      </div>
     </>
+  );
+
+  const streamsContent = (
+    <div className="diagnostics-section diagnostics-streams">
+      <div className="diagnostics-section-header">
+        <div className="diagnostics-section-title-group">
+          <span className="diagnostics-section-title">Streams</span>
+          <span className="diagnostics-section-subtitle">{streamSummary}</span>
+        </div>
+      </div>
+      <DiagnosticsStreamsTable
+        rows={streamRows}
+        emptyMessage={
+          streamRows.length === 0
+            ? 'Stream telemetry is not available yet.'
+            : 'No streams available.'
+        }
+      />
+    </div>
   );
 
   const capabilityChecksContent = (
     <div className="diagnostics-permissions">
       <div className="diagnostics-permissions-header">
-        <span className="diagnostics-permissions-title">Capabilities Checks</span>
         <div className="diagnostics-permissions-actions">
           <span className="diagnostics-permissions-count">
             {capabilityBatchRows.length} namespace
@@ -2411,12 +2317,20 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     >
       <div className="tabs diagnostics-tabs">
         <button
-          className={`tab ${activeTab === 'refresh' ? 'active' : ''}`}
-          onClick={() => setActiveTab('refresh')}
+          className={`tab ${activeTab === 'refresh-domains' ? 'active' : ''}`}
+          onClick={() => setActiveTab('refresh-domains')}
           data-diagnostics-focusable="true"
           tabIndex={-1}
         >
-          Refresh
+          REFRESH DOMAINS
+        </button>
+        <button
+          className={`tab ${activeTab === 'streams' ? 'active' : ''}`}
+          onClick={() => setActiveTab('streams')}
+          data-diagnostics-focusable="true"
+          tabIndex={-1}
+        >
+          STREAMS
         </button>
         <button
           className={`tab ${activeTab === 'capability-checks' ? 'active' : ''}`}
@@ -2435,11 +2349,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           EFFECTIVE PERMISSIONS
         </button>
       </div>
-      {activeTab === 'refresh'
-        ? refreshContent
-        : activeTab === 'capability-checks'
-          ? capabilityChecksContent
-          : effectivePermissionsContent}
+      {activeTab === 'refresh-domains'
+        ? refreshDomainsContent
+        : activeTab === 'streams'
+          ? streamsContent
+          : activeTab === 'capability-checks'
+            ? capabilityChecksContent
+            : effectivePermissionsContent}
     </DockablePanel>
   );
 };

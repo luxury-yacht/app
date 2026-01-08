@@ -22,7 +22,7 @@ export const PermissionsTable: React.FC<PermissionsTableProps> = ({
   return (
     <div className="diagnostics-permissions">
       <div className="diagnostics-permissions-header">
-        <span className="diagnostics-permissions-title">Effective Permissions</span>
+        <span className="diagnostics-permissions-title"></span>
         <div className="diagnostics-permissions-actions">
           <button
             type="button"
