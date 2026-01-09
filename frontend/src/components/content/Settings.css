@@ -138,6 +138,10 @@
   gap: var(--spacing-sm);
 }
 
+.kubeconfig-path-row .button {
+  margin-top: 0;
+}
+
 .kubeconfig-path-label {
   min-width: 3rem;
   color: var(--color-text-secondary);
