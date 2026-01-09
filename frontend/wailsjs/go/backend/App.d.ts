@@ -85,6 +85,8 @@ export function GetIngressClass(arg1:string):Promise<types.IngressClassDetails>;
 
 export function GetJob(arg1:string,arg2:string):Promise<types.JobDetails>;
 
+export function GetKubeconfigSearchPaths():Promise<Array<string>>;
+
 export function GetKubeconfigs():Promise<Array<types.KubeconfigInfo>>;
 
 export function GetLimitRange(arg1:string,arg2:string):Promise<types.LimitRangeDetails>;
@@ -182,6 +184,8 @@ export function SetGridTablePersistence(arg1:string,arg2:json.RawMessage):Promis
 export function SetGridTablePersistenceMode(arg1:string):Promise<void>;
 
 export function SetKubeconfig(arg1:string):Promise<void>;
+
+export function SetKubeconfigSearchPaths(arg1:Array<string>):Promise<void>;
 
 export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 

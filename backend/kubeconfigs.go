@@ -4,121 +4,247 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 )
 
-// discoverKubeconfigs scans the ~/.kube directory for kubeconfig files
+// discoverKubeconfigs scans configured kubeconfig search paths for kubeconfig files.
 func (a *App) discoverKubeconfigs() error {
 	a.logger.Debug("Starting kubeconfig discovery", "KubeconfigManager")
 	a.availableKubeconfigs = []KubeconfigInfo{}
 
-	home := homedir.HomeDir()
-	if home == "" {
-		a.logger.Error("Could not find home directory for kubeconfig discovery", "KubeconfigManager")
-		return fmt.Errorf("could not find home directory")
-	}
-
-	a.logger.Debug(fmt.Sprintf("Using home directory: %s", home), "KubeconfigManager")
-
-	kubeDir := filepath.Join(home, ".kube")
-	a.logger.Debug(fmt.Sprintf("Scanning directory: %s", kubeDir), "KubeconfigManager")
-
-	// Check if .kube directory exists
-	if _, err := os.Stat(kubeDir); os.IsNotExist(err) {
-		a.logger.Warn(".kube directory not found - no kubeconfigs available", "KubeconfigManager")
-		return fmt.Errorf(".kube directory not found")
-	}
-
-	// Read directory contents (non-recursive)
-	entries, err := os.ReadDir(kubeDir)
+	searchPaths, err := a.loadKubeconfigSearchPaths()
 	if err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to read .kube directory: %v", err), "KubeconfigManager")
-		return fmt.Errorf("failed to read .kube directory: %w", err)
+		a.logger.Error(fmt.Sprintf("Failed to load kubeconfig search paths: %v", err), "KubeconfigManager")
+		return err
+	}
+	if len(searchPaths) == 0 {
+		a.logger.Warn("No kubeconfig search paths configured", "KubeconfigManager")
+		return nil
 	}
 
-	a.logger.Debug(fmt.Sprintf("Found %d items in .kube directory", len(entries)), "KubeconfigManager")
+	defaultConfigPath := resolveKubeconfigSearchPath(filepath.Join("~", ".kube", "config"))
+	foundRoot := false
+	seenFiles := make(map[string]struct{})
 
-	for _, d := range entries {
-		// Skip directories - we only want files directly in ~/.kube
-		if d.IsDir() {
+	for _, entry := range searchPaths {
+		resolved := resolveKubeconfigSearchPath(entry)
+		if resolved == "" {
 			continue
 		}
-
-		path := filepath.Join(kubeDir, d.Name())
-
-		name := d.Name()
-
-		// Skip obviously non-config files
-		if strings.HasPrefix(name, ".") && name != ".kubeconfig" {
-			continue
-		}
-
-		// Skip common non-kubeconfig files
-		skipPatterns := []string{
-			".bak", ".backup", ".old", ".tmp", ".swp", ".swo",
-			"~", ".orig", ".rej", ".lock", ".log", ".yaml.bak",
-		}
-
-		shouldSkip := false
-		for _, pattern := range skipPatterns {
-			if strings.HasSuffix(strings.ToLower(name), pattern) {
-				shouldSkip = true
-				break
-			}
-		}
-		if shouldSkip {
-			continue
-		}
-
-		// Skip files that are clearly not kubeconfigs by name pattern
-		if strings.Contains(strings.ToLower(name), "cache") ||
-			strings.Contains(strings.ToLower(name), "token") ||
-			strings.Contains(strings.ToLower(name), "credential") {
-			continue
-		}
-
-		// Try to parse the file as a kubeconfig to validate it
-		a.logger.Debug(fmt.Sprintf("Validating kubeconfig file: %s", path), "KubeconfigManager")
-		config, err := clientcmd.LoadFromFile(path)
+		info, err := os.Stat(resolved)
 		if err != nil {
-			a.logger.Debug(fmt.Sprintf("Skipping %s - not a valid kubeconfig: %v", path, err), "KubeconfigManager")
-			// Skip files that can't be parsed as kubeconfig
+			if os.IsNotExist(err) {
+				a.logger.Warn(fmt.Sprintf("Kubeconfig path not found: %s", resolved), "KubeconfigManager")
+			} else {
+				a.logger.Warn(fmt.Sprintf("Failed to read kubeconfig path %s: %v", resolved, err), "KubeconfigManager")
+			}
+			continue
+		}
+		foundRoot = true
+
+		if info.IsDir() {
+			a.logger.Debug(fmt.Sprintf("Scanning directory: %s", resolved), "KubeconfigManager")
+			entries, err := os.ReadDir(resolved)
+			if err != nil {
+				a.logger.Warn(fmt.Sprintf("Failed to read kubeconfig directory %s: %v", resolved, err), "KubeconfigManager")
+				continue
+			}
+			a.logger.Debug(fmt.Sprintf("Found %d items in %s", len(entries), resolved), "KubeconfigManager")
+			for _, d := range entries {
+				// Skip directories - we only want files directly in the search directory.
+				if d.IsDir() {
+					continue
+				}
+				path := filepath.Join(resolved, d.Name())
+				a.appendKubeconfigFromFile(path, d.Name(), defaultConfigPath, true, seenFiles)
+			}
 			continue
 		}
 
-		// Additional validation: ensure it has clusters and contexts
-		if len(config.Clusters) == 0 || len(config.Contexts) == 0 {
-			a.logger.Debug(fmt.Sprintf("Skipping %s - no clusters or contexts found", path), "KubeconfigManager")
-			continue
-		}
+		a.appendKubeconfigFromFile(resolved, filepath.Base(resolved), defaultConfigPath, false, seenFiles)
+	}
 
-		a.logger.Info(fmt.Sprintf("Found valid kubeconfig: %s (%d clusters, %d contexts)", path, len(config.Clusters), len(config.Contexts)), "KubeconfigManager")
-
-		// Determine display name
-		displayName := name
-		if name == "config" {
-			displayName = "default"
-		}
-
-		// Check if this is the default kubeconfig
-		isDefault := name == "config"
-
-		// Create an entry for each context in the kubeconfig
-		for contextName := range config.Contexts {
-			a.availableKubeconfigs = append(a.availableKubeconfigs, KubeconfigInfo{
-				Name:             displayName,
-				Path:             path,
-				Context:          contextName,
-				IsDefault:        isDefault,
-				IsCurrentContext: contextName == config.CurrentContext,
-			})
-		}
+	if !foundRoot {
+		return fmt.Errorf("no kubeconfig search paths exist")
 	}
 
 	return nil
+}
+
+// appendKubeconfigFromFile validates a kubeconfig file and appends its contexts.
+func (a *App) appendKubeconfigFromFile(path string, name string, defaultConfigPath string, applyHeuristics bool, seenFiles map[string]struct{}) {
+	cleanedPath := filepath.Clean(path)
+	if applyHeuristics && shouldSkipKubeconfigName(name) {
+		return
+	}
+
+	key := kubeconfigPathKey(cleanedPath)
+	if _, exists := seenFiles[key]; exists {
+		return
+	}
+	seenFiles[key] = struct{}{}
+
+	// Parse the file as a kubeconfig to validate it.
+	a.logger.Debug(fmt.Sprintf("Validating kubeconfig file: %s", cleanedPath), "KubeconfigManager")
+	config, err := clientcmd.LoadFromFile(cleanedPath)
+	if err != nil {
+		a.logger.Debug(fmt.Sprintf("Skipping %s - not a valid kubeconfig: %v", cleanedPath, err), "KubeconfigManager")
+		return
+	}
+
+	// Additional validation: ensure it has clusters and contexts.
+	if len(config.Clusters) == 0 || len(config.Contexts) == 0 {
+		a.logger.Debug(fmt.Sprintf("Skipping %s - no clusters or contexts found", cleanedPath), "KubeconfigManager")
+		return
+	}
+
+	isDefault := pathsEqual(cleanedPath, defaultConfigPath)
+	displayName := name
+	if isDefault {
+		displayName = "default"
+	}
+
+	a.logger.Info(fmt.Sprintf("Found valid kubeconfig: %s (%d clusters, %d contexts)", cleanedPath, len(config.Clusters), len(config.Contexts)), "KubeconfigManager")
+
+	// Create an entry for each context in the kubeconfig.
+	for contextName := range config.Contexts {
+		a.availableKubeconfigs = append(a.availableKubeconfigs, KubeconfigInfo{
+			Name:             displayName,
+			Path:             cleanedPath,
+			Context:          contextName,
+			IsDefault:        isDefault,
+			IsCurrentContext: contextName == config.CurrentContext,
+		})
+	}
+}
+
+// shouldSkipKubeconfigName filters out obvious non-kubeconfig files in directory scans.
+func shouldSkipKubeconfigName(name string) bool {
+	if strings.HasPrefix(name, ".") && name != ".kubeconfig" {
+		return true
+	}
+
+	// Skip common non-kubeconfig files.
+	skipPatterns := []string{
+		".bak", ".backup", ".old", ".tmp", ".swp", ".swo",
+		"~", ".orig", ".rej", ".lock", ".log", ".yaml.bak",
+	}
+
+	lower := strings.ToLower(name)
+	for _, pattern := range skipPatterns {
+		if strings.HasSuffix(lower, pattern) {
+			return true
+		}
+	}
+
+	// Skip files that are clearly not kubeconfigs by name pattern.
+	if strings.Contains(lower, "cache") || strings.Contains(lower, "token") || strings.Contains(lower, "credential") {
+		return true
+	}
+
+	return false
+}
+
+// loadKubeconfigSearchPaths reads and normalizes the kubeconfig search paths.
+func (a *App) loadKubeconfigSearchPaths() ([]string, error) {
+	settings, err := a.loadSettingsFile()
+	if err != nil {
+		return nil, err
+	}
+	return normalizeKubeconfigSearchPaths(settings.Kubeconfig.SearchPaths), nil
+}
+
+// GetKubeconfigSearchPaths returns the configured kubeconfig search paths.
+func (a *App) GetKubeconfigSearchPaths() ([]string, error) {
+	paths, err := a.loadKubeconfigSearchPaths()
+	if err != nil {
+		return nil, err
+	}
+	return append([]string(nil), paths...), nil
+}
+
+// SetKubeconfigSearchPaths persists the search paths and refreshes kubeconfig discovery.
+func (a *App) SetKubeconfigSearchPaths(paths []string) error {
+	normalized := normalizeKubeconfigSearchPaths(paths)
+
+	settings, err := a.loadSettingsFile()
+	if err != nil {
+		return err
+	}
+
+	settings.Kubeconfig.SearchPaths = normalized
+	if err := a.saveSettingsFile(settings); err != nil {
+		return err
+	}
+
+	if err := a.discoverKubeconfigs(); err != nil {
+		a.logger.Warn(fmt.Sprintf("Failed to refresh kubeconfig discovery: %v", err), "KubeconfigManager")
+	}
+
+	return nil
+}
+
+// normalizeKubeconfigSearchPaths trims and deduplicates kubeconfig path entries.
+func normalizeKubeconfigSearchPaths(paths []string) []string {
+	normalized := make([]string, 0, len(paths))
+	seen := make(map[string]struct{}, len(paths))
+
+	for _, path := range paths {
+		trimmed := strings.TrimSpace(path)
+		if trimmed == "" {
+			continue
+		}
+		resolved := resolveKubeconfigSearchPath(trimmed)
+		key := kubeconfigPathKey(resolved)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		normalized = append(normalized, trimmed)
+	}
+
+	return normalized
+}
+
+// resolveKubeconfigSearchPath expands home directory references for discovery.
+func resolveKubeconfigSearchPath(path string) string {
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return ""
+	}
+
+	if strings.HasPrefix(trimmed, "~") {
+		home := homedir.HomeDir()
+		if home != "" {
+			if trimmed == "~" {
+				trimmed = home
+			} else if strings.HasPrefix(trimmed, "~/") || strings.HasPrefix(trimmed, "~\\") {
+				trimmed = filepath.Join(home, trimmed[2:])
+			}
+		}
+	}
+
+	return filepath.Clean(trimmed)
+}
+
+// kubeconfigPathKey normalizes path keys for comparisons.
+func kubeconfigPathKey(path string) string {
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(path)
+	}
+	return path
+}
+
+// pathsEqual compares paths with OS-specific case rules.
+func pathsEqual(left string, right string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(left, right)
+	}
+	return left == right
 }
 
 // GetKubeconfigs returns the list of available kubeconfig files

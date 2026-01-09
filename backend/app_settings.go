@@ -29,6 +29,7 @@ type settingsFile struct {
 	UI            settingsUI          `json:"ui"`
 }
 
+// settingsPreferences captures user-configurable preferences.
 type settingsPreferences struct {
 	Theme                    string           `json:"theme"`
 	UseShortResourceNames    bool             `json:"useShortResourceNames"`
@@ -36,17 +37,21 @@ type settingsPreferences struct {
 	GridTablePersistenceMode string           `json:"gridTablePersistenceMode"`
 }
 
+// settingsRefresh captures user-configurable refresh settings.
 type settingsRefresh struct {
 	Auto              bool `json:"auto"`
 	Background        bool `json:"background"`
 	MetricsIntervalMs int  `json:"metricsIntervalMs"`
 }
 
+// settingsKubeconfig captures user-configurable kubeconfig settings.
 type settingsKubeconfig struct {
-	Selected []string `json:"selected"`
-	Active   string   `json:"active"`
+	Selected    []string `json:"selected"`
+	Active      string   `json:"active"`
+	SearchPaths []string `json:"searchPaths"`
 }
 
+// settingsUI captures user-configurable UI settings.
 type settingsUI struct {
 	Window   WindowSettings `json:"window"`
 	LastView *string        `json:"lastView"`
@@ -61,6 +66,9 @@ func defaultSettingsFile() *settingsFile {
 			Theme:                    "system",
 			Refresh:                  &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
 			GridTablePersistenceMode: "shared",
+		},
+		Kubeconfig: settingsKubeconfig{
+			SearchPaths: defaultKubeconfigSearchPaths(),
 		},
 	}
 }
@@ -85,11 +93,19 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	if settings.Preferences.GridTablePersistenceMode == "" {
 		settings.Preferences.GridTablePersistenceMode = "shared"
 	}
+	if settings.Kubeconfig.SearchPaths == nil {
+		settings.Kubeconfig.SearchPaths = defaultKubeconfigSearchPaths()
+	}
 	return settings
 }
 
 func defaultMetricsIntervalMs() int {
 	return int(config.RefreshMetricsInterval / time.Millisecond)
+}
+
+// defaultKubeconfigSearchPaths returns the default list of kubeconfig locations.
+func defaultKubeconfigSearchPaths() []string {
+	return []string{filepath.Join("~", ".kube")}
 }
 
 // getSettingsFilePath returns the path to the new settings.json location.

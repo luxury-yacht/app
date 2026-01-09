@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -39,6 +40,16 @@ users:
 	err := os.WriteFile(configPath, []byte(kubeconfigContent), 0644)
 	require.NoError(t, err)
 	return configPath
+}
+
+// hasKubeconfig returns true when a matching path/context entry exists.
+func hasKubeconfig(configs []KubeconfigInfo, path string, context string) bool {
+	for _, config := range configs {
+		if config.Path == path && config.Context == context {
+			return true
+		}
+	}
+	return false
 }
 
 func TestApp_discoverKubeconfigs(t *testing.T) {
@@ -96,13 +107,12 @@ func TestApp_discoverKubeconfigs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			setTestConfigEnv(t)
 			homeDir, cleanup := tt.setup(t)
 			defer cleanup()
 
-			// Temporarily override home directory
-			originalHome := os.Getenv("HOME")
-			os.Setenv("HOME", homeDir)
-			defer os.Setenv("HOME", originalHome)
+			// Temporarily override home directory for kubeconfig expansion.
+			t.Setenv("HOME", homeDir)
 
 			app := NewApp()
 			err := app.discoverKubeconfigs()
@@ -134,6 +144,7 @@ func TestApp_discoverKubeconfigs(t *testing.T) {
 }
 
 func TestApp_GetKubeconfigs(t *testing.T) {
+	setTestConfigEnv(t)
 	// Setup temp directory with kubeconfig
 	tempDir := t.TempDir()
 	kubeDir := filepath.Join(tempDir, ".kube")
@@ -141,10 +152,8 @@ func TestApp_GetKubeconfigs(t *testing.T) {
 	require.NoError(t, err)
 	createTempKubeconfig(t, kubeDir, "config", "default-context")
 
-	// Override home directory
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", originalHome)
+	// Override home directory for kubeconfig expansion.
+	t.Setenv("HOME", tempDir)
 
 	app := NewApp()
 
@@ -159,6 +168,93 @@ func TestApp_GetKubeconfigs(t *testing.T) {
 	configs2, err := app.GetKubeconfigs()
 	assert.NoError(t, err)
 	assert.Equal(t, configs, configs2)
+}
+
+func TestNormalizeKubeconfigSearchPathsDedupesResolvedPaths(t *testing.T) {
+	setTestConfigEnv(t)
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	paths := []string{
+		"~/config",
+		filepath.Join(homeDir, "config"),
+		"  ~/config  ",
+	}
+
+	normalized := normalizeKubeconfigSearchPaths(paths)
+	require.Equal(t, []string{"~/config"}, normalized)
+}
+
+func TestNormalizeKubeconfigSearchPathsWindowsCaseInsensitive(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-only path normalization")
+	}
+
+	paths := []string{
+		`C:\Users\Example\.kube`,
+		`c:\Users\Example\.kube`,
+		`C:/Users/Example/.kube`,
+	}
+
+	normalized := normalizeKubeconfigSearchPaths(paths)
+	require.Len(t, normalized, 1)
+}
+
+func TestNormalizeKubeconfigSearchPathsMixedFilesAndDirs(t *testing.T) {
+	setTestConfigEnv(t)
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	dirName := "configs"
+	fileName := "config"
+	dirPath := filepath.Join(homeDir, dirName)
+	require.NoError(t, os.MkdirAll(dirPath, 0o755))
+	filePath := filepath.Join(homeDir, fileName)
+	require.NoError(t, os.WriteFile(filePath, []byte("data"), 0o644))
+
+	paths := []string{
+		filepath.Join("~", dirName),
+		dirPath,
+		filepath.Join("~", fileName),
+		filePath,
+	}
+
+	normalized := normalizeKubeconfigSearchPaths(paths)
+	require.Equal(t, []string{filepath.Join("~", dirName), filepath.Join("~", fileName)}, normalized)
+}
+
+func TestApp_GetKubeconfigSearchPathsDefaults(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApp()
+
+	paths, err := app.GetKubeconfigSearchPaths()
+	require.NoError(t, err)
+	require.Equal(t, defaultKubeconfigSearchPaths(), paths)
+}
+
+func TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers(t *testing.T) {
+	setTestConfigEnv(t)
+	app := NewApp()
+
+	baseDir := t.TempDir()
+	dirPath := filepath.Join(baseDir, "configs")
+	require.NoError(t, os.MkdirAll(dirPath, 0o755))
+	dirConfigPath := createTempKubeconfig(t, dirPath, "config", "dir-context")
+
+	fileOnlyDir := filepath.Join(baseDir, "explicit")
+	require.NoError(t, os.MkdirAll(fileOnlyDir, 0o755))
+	fileOnlyPath := createTempKubeconfig(t, fileOnlyDir, "custom-config", "file-context")
+
+	paths := []string{dirPath, "  ", fileOnlyPath, dirPath}
+	require.NoError(t, app.SetKubeconfigSearchPaths(paths))
+
+	settings, err := app.loadSettingsFile()
+	require.NoError(t, err)
+	require.Equal(t, []string{dirPath, fileOnlyPath}, settings.Kubeconfig.SearchPaths)
+
+	require.NotEmpty(t, app.availableKubeconfigs)
+	assert.True(t, hasKubeconfig(app.availableKubeconfigs, dirConfigPath, "dir-context"))
+	assert.True(t, hasKubeconfig(app.availableKubeconfigs, fileOnlyPath, "file-context"))
 }
 
 func TestApp_GetSelectedKubeconfig(t *testing.T) {
@@ -186,6 +282,7 @@ func TestApp_GetSelectedKubeconfigs(t *testing.T) {
 }
 
 func TestApp_SetKubeconfig(t *testing.T) {
+	setTestConfigEnv(t)
 	// Setup temp directory with kubeconfig
 	tempDir := t.TempDir()
 	kubeDir := filepath.Join(tempDir, ".kube")
@@ -195,10 +292,8 @@ func TestApp_SetKubeconfig(t *testing.T) {
 	configPath := createTempKubeconfig(t, kubeDir, "config", "default-context")
 	testConfigPath := createTempKubeconfig(t, kubeDir, "test-config", "test-context")
 
-	// Override home directory
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", originalHome)
+	// Override home directory for kubeconfig expansion.
+	t.Setenv("HOME", tempDir)
 
 	app := NewApp()
 	app.Ctx = context.Background()
@@ -286,6 +381,7 @@ func TestApp_SetKubeconfig(t *testing.T) {
 }
 
 func TestApp_SetSelectedKubeconfigs(t *testing.T) {
+	setTestConfigEnv(t)
 	tempDir := t.TempDir()
 	kubeDir := filepath.Join(tempDir, ".kube")
 	require.NoError(t, os.MkdirAll(kubeDir, 0755))
@@ -293,9 +389,7 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 	configPath := createTempKubeconfig(t, kubeDir, "config", "default-context")
 	testConfigPath := createTempKubeconfig(t, kubeDir, "test-config", "test-context")
 
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", originalHome)
+	t.Setenv("HOME", tempDir)
 
 	app := NewApp()
 	app.Ctx = context.Background()
@@ -314,6 +408,7 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 }
 
 func TestApp_SetSelectedKubeconfigsRejectsDuplicateContexts(t *testing.T) {
+	setTestConfigEnv(t)
 	tempDir := t.TempDir()
 	kubeDir := filepath.Join(tempDir, ".kube")
 	require.NoError(t, os.MkdirAll(kubeDir, 0755))
@@ -321,9 +416,7 @@ func TestApp_SetSelectedKubeconfigsRejectsDuplicateContexts(t *testing.T) {
 	configPath := createTempKubeconfig(t, kubeDir, "config", "same-context")
 	testConfigPath := createTempKubeconfig(t, kubeDir, "test-config", "same-context")
 
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", originalHome)
+	t.Setenv("HOME", tempDir)
 
 	app := NewApp()
 	app.Ctx = context.Background()
@@ -338,10 +431,9 @@ func TestApp_SetSelectedKubeconfigsRejectsDuplicateContexts(t *testing.T) {
 }
 
 func TestApp_SetSelectedKubeconfigsClearsSelection(t *testing.T) {
+	setTestConfigEnv(t)
 	tempDir := t.TempDir()
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", originalHome)
+	t.Setenv("HOME", tempDir)
 
 	app := NewApp()
 	app.Ctx = context.Background()
@@ -359,6 +451,7 @@ func TestApp_SetSelectedKubeconfigsClearsSelection(t *testing.T) {
 }
 
 func TestApp_startup_withKubeconfigs(t *testing.T) {
+	setTestConfigEnv(t)
 	// Setup temp directory with multiple kubeconfigs
 	tempDir := t.TempDir()
 	kubeDir := filepath.Join(tempDir, ".kube")
@@ -368,10 +461,8 @@ func TestApp_startup_withKubeconfigs(t *testing.T) {
 	configPath := createTempKubeconfig(t, kubeDir, "config", "default-context")
 	createTempKubeconfig(t, kubeDir, "test-config", "test-context")
 
-	// Override home directory
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tempDir)
-	defer os.Setenv("HOME", originalHome)
+	// Override home directory for kubeconfig expansion.
+	t.Setenv("HOME", tempDir)
 
 	app := NewApp()
 	ctx := context.Background()

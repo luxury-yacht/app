@@ -278,6 +278,7 @@ func TestLoadSettingsFileNormalizesDefaults(t *testing.T) {
 	require.True(t, settings.Preferences.Refresh.Auto)
 	require.True(t, settings.Preferences.Refresh.Background)
 	require.Equal(t, "shared", settings.Preferences.GridTablePersistenceMode)
+	require.Equal(t, defaultKubeconfigSearchPaths(), settings.Kubeconfig.SearchPaths)
 }
 
 func TestSaveSettingsFileOverwritesExistingData(t *testing.T) {

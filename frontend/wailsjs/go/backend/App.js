@@ -150,6 +150,10 @@ export function GetJob(arg1, arg2) {
   return window['go']['backend']['App']['GetJob'](arg1, arg2);
 }
 
+export function GetKubeconfigSearchPaths() {
+  return window['go']['backend']['App']['GetKubeconfigSearchPaths']();
+}
+
 export function GetKubeconfigs() {
   return window['go']['backend']['App']['GetKubeconfigs']();
 }
@@ -344,6 +348,10 @@ export function SetGridTablePersistenceMode(arg1) {
 
 export function SetKubeconfig(arg1) {
   return window['go']['backend']['App']['SetKubeconfig'](arg1);
+}
+
+export function SetKubeconfigSearchPaths(arg1) {
+  return window['go']['backend']['App']['SetKubeconfigSearchPaths'](arg1);
 }
 
 export function SetLogsPanelVisible(arg1) {
