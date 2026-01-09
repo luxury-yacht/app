@@ -10,22 +10,40 @@ import (
 	"github.com/magefile/mage/sh"
 )
 
+const webkitVersionEnv = "LY_WEBKITGTK_VERSION"
+
 // Check which version of webkit2gtk is installed.
 func WebkitVersion() (string, error) {
 	if _, err := exec.LookPath("pkg-config"); err != nil {
 		return "", fmt.Errorf("pkg-config not found in PATH")
 	}
 
-	versions := []string{"4.0", "4.1"}
-
-	for _, v := range versions {
-		cmd := exec.Command("pkg-config", "--exists", "webkit2gtk-"+v)
-		if err := cmd.Run(); err == nil {
-			return v, nil
+	override := strings.TrimSpace(os.Getenv(webkitVersionEnv))
+	if override != "" {
+		// Allow explicit selection to avoid shipping a 4.1-only binary by accident.
+		if override != "4.0" && override != "4.1" {
+			return "", fmt.Errorf("%s must be 4.0 or 4.1", webkitVersionEnv)
 		}
+		if !hasWebkitVersion(override) {
+			return "", fmt.Errorf("webkit2gtk-%s not detected", override)
+		}
+		return override, nil
+	}
+
+	// Default to 4.0 for maximum runtime compatibility; require explicit opt-in for 4.1.
+	if hasWebkitVersion("4.0") {
+		return "4.0", nil
+	}
+	if hasWebkitVersion("4.1") {
+		return "", fmt.Errorf("webkit2gtk-4.0 not detected; set %s=4.1 to build against 4.1", webkitVersionEnv)
 	}
 	fmt.Println("❌ No webkit2gtk version detected!")
 	return "", fmt.Errorf("no webkit2gtk version detected")
+}
+
+func hasWebkitVersion(version string) bool {
+	cmd := exec.Command("pkg-config", "--exists", "webkit2gtk-"+version)
+	return cmd.Run() == nil
 }
 
 // Builds the application for Linux.

@@ -163,7 +163,7 @@ func (Clean) Frontend() error {
 func Dev() error {
 	args := []string{"dev"}
 
-	// If Linux, check for webkit2gtk 4.1 and set required tag.
+	// If Linux, select WebKitGTK (4.0 by default; 4.1 requires LY_WEBKITGTK_VERSION=4.1).
 	if cfg.OsType == "linux" {
 		if webkitVersion, err := mage.WebkitVersion(); err != nil {
 			return err
