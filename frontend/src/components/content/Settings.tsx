@@ -6,7 +6,12 @@
  */
 
 import { useState, useEffect } from 'react';
-import { GetThemeInfo } from '@wailsjs/go/backend/App';
+import {
+  GetKubeconfigSearchPaths,
+  GetThemeInfo,
+  OpenKubeconfigSearchPathDialog,
+  SetKubeconfigSearchPaths,
+} from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
@@ -23,6 +28,7 @@ import {
   type GridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
 import ConfirmationModal from '@components/modals/ConfirmationModal';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 interface SettingsProps {
   onClose?: () => void;
@@ -32,18 +38,31 @@ function Settings({ onClose }: SettingsProps) {
   const [themeInfo, setThemeInfo] = useState<types.ThemeInfo | null>(null);
   const { enabled: refreshEnabled, setAutoRefresh } = useAutoRefresh();
   const { enabled: backgroundRefreshEnabled, setBackgroundRefresh } = useBackgroundRefresh();
+  const { loadKubeconfigs } = useKubeconfig();
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
   );
+  // Track kubeconfig search paths for the settings panel.
+  const [kubeconfigPaths, setKubeconfigPaths] = useState<string[]>([]);
+  const [savedKubeconfigPaths, setSavedKubeconfigPaths] = useState<string[]>([]);
+  const [kubeconfigPathsLoading, setKubeconfigPathsLoading] = useState(false);
+  const [kubeconfigPathsSaving, setKubeconfigPathsSaving] = useState(false);
+  const [kubeconfigPathsSelecting, setKubeconfigPathsSelecting] = useState(false);
+  // Keep the default kubeconfig search path pinned in the list.
+  const defaultKubeconfigPath = '~/.kube';
   // Controls the confirmation modal for clearing all persisted app state.
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   // Controls the confirmation modal for resetting view persistence.
   const [isResetViewsConfirmOpen, setIsResetViewsConfirmOpen] = useState(false);
+  const pathsDirty =
+    kubeconfigPaths.length !== savedKubeconfigPaths.length ||
+    kubeconfigPaths.some((path, index) => path !== savedKubeconfigPaths[index]);
 
   useEffect(() => {
     loadThemeInfo();
     loadAppSettings();
+    loadKubeconfigPaths();
     setPersistenceMode(getGridTablePersistenceMode());
 
     // Initialize system theme listener using shared utility
@@ -66,6 +85,20 @@ function Settings({ onClose }: SettingsProps) {
       setUseShortResourceNames(preferences.useShortResourceNames);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
+    }
+  };
+
+  const loadKubeconfigPaths = async () => {
+    setKubeconfigPathsLoading(true);
+    try {
+      const paths = await GetKubeconfigSearchPaths();
+      const normalized = paths || [];
+      setKubeconfigPaths(normalized);
+      setSavedKubeconfigPaths(normalized);
+    } catch (error) {
+      errorHandler.handle(error, { action: 'loadKubeconfigPaths' });
+    } finally {
+      setKubeconfigPathsLoading(false);
     }
   };
 
@@ -97,6 +130,53 @@ function Settings({ onClose }: SettingsProps) {
     const mode: GridTablePersistenceMode = checked ? 'namespaced' : 'shared';
     setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
+  };
+
+  const handleAddKubeconfigPath = async () => {
+    setKubeconfigPathsSelecting(true);
+    try {
+      const selected = await OpenKubeconfigSearchPathDialog();
+      const trimmed = selected?.trim();
+      if (!trimmed) {
+        return;
+      }
+      setKubeconfigPaths((prev) => {
+        if (prev.some((path) => path.trim() === trimmed)) {
+          return prev;
+        }
+        return [...prev, trimmed];
+      });
+    } catch (error) {
+      errorHandler.handle(error, { action: 'addKubeconfigPath' });
+    } finally {
+      setKubeconfigPathsSelecting(false);
+    }
+  };
+
+  const handleRemoveKubeconfigPath = (index: number) => {
+    setKubeconfigPaths((prev) =>
+      prev.filter((path, currentIndex) => {
+        if (currentIndex !== index) {
+          return true;
+        }
+        // Prevent removing the default kubeconfig search path.
+        return path.trim() === defaultKubeconfigPath;
+      })
+    );
+  };
+
+  const handleSaveKubeconfigPaths = async () => {
+    setKubeconfigPathsSaving(true);
+    try {
+      await SetKubeconfigSearchPaths(kubeconfigPaths);
+      await loadKubeconfigPaths();
+      await loadKubeconfigs();
+    } catch (error) {
+      errorHandler.handle(error, { action: 'saveKubeconfigPaths' });
+      await loadKubeconfigPaths();
+    } finally {
+      setKubeconfigPathsSaving(false);
+    }
   };
 
   const handleResetViews = async () => {
@@ -241,6 +321,65 @@ function Settings({ onClose }: SettingsProps) {
               />
               Use short resource names (e.g., "sts" for StatefulSets)
             </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>Kubeconfig Paths</h3>
+        <div className="settings-items">
+          <div className="setting-description">Add directories to scan for kubeconfig files.</div>
+          {kubeconfigPathsLoading ? (
+            <div className="setting-item kubeconfig-path-status">Loading kubeconfig paths...</div>
+          ) : (
+            <>
+              {kubeconfigPaths.length === 0 && (
+                <div className="setting-item kubeconfig-path-empty">No kubeconfig paths set.</div>
+              )}
+              {kubeconfigPaths.map((path, index) => {
+                const isDefaultPath = path.trim() === defaultKubeconfigPath;
+                return (
+                  <div
+                    className="setting-item kubeconfig-path-row"
+                    key={`kubeconfig-path-${index}`}
+                  >
+                    {isDefaultPath ? (
+                      <span className="kubeconfig-path-label">Default</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className="kubeconfig-path-label kubeconfig-path-remove-button"
+                        onClick={() => handleRemoveKubeconfigPath(index)}
+                        disabled={kubeconfigPathsSaving}
+                        aria-label={`Remove kubeconfig path ${index + 1}`}
+                        title="Remove path"
+                      >
+                        ❌
+                      </button>
+                    )}
+                    <span className="kubeconfig-path-value">{path}</span>
+                  </div>
+                );
+              })}
+            </>
+          )}
+          <div className="setting-item kubeconfig-path-actions">
+            <button
+              type="button"
+              className="button generic"
+              onClick={handleAddKubeconfigPath}
+              disabled={kubeconfigPathsSaving || kubeconfigPathsLoading || kubeconfigPathsSelecting}
+            >
+              Add Path
+            </button>
+            <button
+              type="button"
+              className="button save"
+              onClick={handleSaveKubeconfigPaths}
+              disabled={kubeconfigPathsSaving || kubeconfigPathsLoading || !pathsDirty}
+            >
+              {kubeconfigPathsSaving ? 'Saving...' : 'Save Paths'}
+            </button>
           </div>
         </div>
       </div>

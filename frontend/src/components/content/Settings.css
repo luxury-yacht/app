@@ -36,10 +36,6 @@
   padding-left: 1rem;
 }
 
-.setting-item button {
-  margin-top: var(--spacing-md);
-}
-
 .setting-actions {
   display: flex;
   gap: var(--spacing-sm);
@@ -125,9 +121,57 @@
 }
 
 .setting-description {
-  margin-top: 0.25rem;
-  margin-left: 1.5rem;
+  margin-left: 1rem;
   font-size: var(--font-size-small);
   color: var(--color-text-secondary);
-  line-height: 1.4;
+}
+
+/* Kubeconfig paths */
+.kubeconfig-path-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.kubeconfig-path-remove-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 0.6rem;
+  transition: color var(--transition-fast);
+}
+
+.kubeconfig-path-remove-button:hover {
+  color: var(--color-text);
+}
+
+.kubeconfig-path-remove-button:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-tertiary);
+}
+
+.kubeconfig-path-label {
+  color: var(--color-text-secondary);
+}
+
+.kubeconfig-path-value {
+  flex: 1 1 260px;
+  color: var(--color-text);
+  font-family: var(--font-family-mono);
+  overflow-wrap: anywhere;
+}
+
+.kubeconfig-path-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.kubeconfig-path-status,
+.kubeconfig-path-empty {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-small);
 }

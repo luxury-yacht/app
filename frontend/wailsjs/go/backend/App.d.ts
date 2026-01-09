@@ -85,6 +85,8 @@ export function GetIngressClass(arg1:string):Promise<types.IngressClassDetails>;
 
 export function GetJob(arg1:string,arg2:string):Promise<types.JobDetails>;
 
+export function GetKubeconfigSearchPaths():Promise<Array<string>>;
+
 export function GetKubeconfigs():Promise<Array<types.KubeconfigInfo>>;
 
 export function GetLimitRange(arg1:string,arg2:string):Promise<types.LimitRangeDetails>;
@@ -157,6 +159,8 @@ export function LogFrontend(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function MigrateLegacyLocalStorage(arg1:backend.legacyLocalStoragePayload):Promise<void>;
 
+export function OpenKubeconfigSearchPathDialog():Promise<string>;
+
 export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function RestartWorkload(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
@@ -182,6 +186,8 @@ export function SetGridTablePersistence(arg1:string,arg2:json.RawMessage):Promis
 export function SetGridTablePersistenceMode(arg1:string):Promise<void>;
 
 export function SetKubeconfig(arg1:string):Promise<void>;
+
+export function SetKubeconfigSearchPaths(arg1:Array<string>):Promise<void>;
 
 export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 
