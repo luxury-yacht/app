@@ -328,9 +328,7 @@ function Settings({ onClose }: SettingsProps) {
       <div className="settings-section">
         <h3>Kubeconfig Paths</h3>
         <div className="settings-items">
-          <div className="setting-description">
-            Add directories to scan for kubeconfig files.
-          </div>
+          <div className="setting-description">Add directories to scan for kubeconfig files.</div>
           {kubeconfigPathsLoading ? (
             <div className="setting-item kubeconfig-path-status">Loading kubeconfig paths...</div>
           ) : (
@@ -370,9 +368,7 @@ function Settings({ onClose }: SettingsProps) {
               type="button"
               className="button generic"
               onClick={handleAddKubeconfigPath}
-              disabled={
-                kubeconfigPathsSaving || kubeconfigPathsLoading || kubeconfigPathsSelecting
-              }
+              disabled={kubeconfigPathsSaving || kubeconfigPathsLoading || kubeconfigPathsSelecting}
             >
               Add Path
             </button>
