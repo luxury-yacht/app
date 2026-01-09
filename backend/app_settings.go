@@ -105,7 +105,7 @@ func defaultMetricsIntervalMs() int {
 
 // defaultKubeconfigSearchPaths returns the default list of kubeconfig locations.
 func defaultKubeconfigSearchPaths() []string {
-	return []string{filepath.Join("~", ".kube")}
+	return []string{"~/.kube"}
 }
 
 // getSettingsFilePath returns the path to the new settings.json location.

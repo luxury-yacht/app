@@ -159,6 +159,8 @@ export function LogFrontend(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function MigrateLegacyLocalStorage(arg1:backend.legacyLocalStoragePayload):Promise<void>;
 
+export function OpenKubeconfigSearchPathDialog():Promise<string>;
+
 export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<void>;
 
 export function RestartWorkload(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;

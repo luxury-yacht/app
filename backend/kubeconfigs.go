@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 )
@@ -188,10 +189,61 @@ func (a *App) SetKubeconfigSearchPaths(paths []string) error {
 	return nil
 }
 
+// OpenKubeconfigSearchPathDialog opens a directory picker for kubeconfig search paths.
+func (a *App) OpenKubeconfigSearchPathDialog() (string, error) {
+	if a.Ctx == nil {
+		return "", fmt.Errorf("application context is not available")
+	}
+
+	return wailsruntime.OpenDirectoryDialog(a.Ctx, wailsruntime.OpenDialogOptions{
+		Title:            "Select kubeconfig directory",
+		DefaultDirectory: a.defaultKubeconfigSearchDirectory(),
+	})
+}
+
+// defaultKubeconfigSearchDirectory selects a safe default folder for the directory picker.
+func (a *App) defaultKubeconfigSearchDirectory() string {
+	searchPaths, err := a.loadKubeconfigSearchPaths()
+	if err == nil {
+		for _, entry := range searchPaths {
+			resolved := resolveKubeconfigSearchPath(entry)
+			if resolved == "" {
+				continue
+			}
+			info, err := os.Stat(resolved)
+			if err != nil {
+				continue
+			}
+			if info.IsDir() {
+				return resolved
+			}
+			parent := filepath.Dir(resolved)
+			if parent == "" {
+				continue
+			}
+			parentInfo, err := os.Stat(parent)
+			if err == nil && parentInfo.IsDir() {
+				return parent
+			}
+		}
+	}
+
+	home := homedir.HomeDir()
+	if home != "" {
+		return home
+	}
+
+	return ""
+}
+
 // normalizeKubeconfigSearchPaths trims and deduplicates kubeconfig path entries.
 func normalizeKubeconfigSearchPaths(paths []string) []string {
 	normalized := make([]string, 0, len(paths))
 	seen := make(map[string]struct{}, len(paths))
+	// Always retain the default kubeconfig location in the list.
+	defaultEntry := defaultKubeconfigSearchPaths()[0]
+	defaultResolved := resolveKubeconfigSearchPath(defaultEntry)
+	defaultKey := kubeconfigPathKey(defaultResolved)
 
 	for _, path := range paths {
 		trimmed := strings.TrimSpace(path)
@@ -200,11 +252,23 @@ func normalizeKubeconfigSearchPaths(paths []string) []string {
 		}
 		resolved := resolveKubeconfigSearchPath(trimmed)
 		key := kubeconfigPathKey(resolved)
+		if key == defaultKey {
+			if _, exists := seen[defaultKey]; exists {
+				continue
+			}
+			seen[defaultKey] = struct{}{}
+			normalized = append(normalized, defaultEntry)
+			continue
+		}
 		if _, exists := seen[key]; exists {
 			continue
 		}
 		seen[key] = struct{}{}
 		normalized = append(normalized, trimmed)
+	}
+
+	if _, exists := seen[defaultKey]; !exists {
+		normalized = append(normalized, defaultEntry)
 	}
 
 	return normalized

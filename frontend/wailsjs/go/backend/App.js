@@ -298,6 +298,10 @@ export function MigrateLegacyLocalStorage(arg1) {
   return window['go']['backend']['App']['MigrateLegacyLocalStorage'](arg1);
 }
 
+export function OpenKubeconfigSearchPathDialog() {
+  return window['go']['backend']['App']['OpenKubeconfigSearchPathDialog']();
+}
+
 export function ResizeShellSession(arg1, arg2, arg3) {
   return window['go']['backend']['App']['ResizeShellSession'](arg1, arg2, arg3);
 }

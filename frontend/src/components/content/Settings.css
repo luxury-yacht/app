@@ -36,10 +36,6 @@
   padding-left: 1rem;
 }
 
-.setting-item button {
-  margin-top: var(--spacing-md);
-}
-
 .setting-actions {
   display: flex;
   gap: var(--spacing-sm);
@@ -138,30 +134,33 @@
   gap: var(--spacing-sm);
 }
 
-.kubeconfig-path-row .button {
-  margin-top: 0;
+.kubeconfig-path-remove-button {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 0.6rem;
+  transition: color var(--transition-fast);
 }
 
-.kubeconfig-path-label {
-  min-width: 3rem;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-small);
-}
-
-.kubeconfig-path-input {
-  flex: 1 1 260px;
-  height: 1.5rem;
-  min-width: 200px;
-  padding: 0.25rem 0.6rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-sm);
-  background-color: var(--color-bg);
+.kubeconfig-path-remove-button:hover {
   color: var(--color-text);
 }
 
-.kubeconfig-path-input:disabled {
-  background-color: var(--color-bg-tertiary);
+.kubeconfig-path-remove-button:disabled {
+  cursor: not-allowed;
+  color: var(--color-text-tertiary);
+}
+
+.kubeconfig-path-label {
   color: var(--color-text-secondary);
+}
+
+.kubeconfig-path-value {
+  flex: 1 1 260px;
+  color: var(--color-text);
+  font-family: var(--font-family-mono);
+  overflow-wrap: anywhere;
 }
 
 .kubeconfig-path-actions {

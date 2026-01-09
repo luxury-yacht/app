@@ -182,7 +182,7 @@ func TestNormalizeKubeconfigSearchPathsDedupesResolvedPaths(t *testing.T) {
 	}
 
 	normalized := normalizeKubeconfigSearchPaths(paths)
-	require.Equal(t, []string{"~/config"}, normalized)
+	require.Equal(t, []string{"~/config", "~/.kube"}, normalized)
 }
 
 func TestNormalizeKubeconfigSearchPathsWindowsCaseInsensitive(t *testing.T) {
@@ -197,7 +197,8 @@ func TestNormalizeKubeconfigSearchPathsWindowsCaseInsensitive(t *testing.T) {
 	}
 
 	normalized := normalizeKubeconfigSearchPaths(paths)
-	require.Len(t, normalized, 1)
+	require.Len(t, normalized, 2)
+	require.Contains(t, normalized, "~/.kube")
 }
 
 func TestNormalizeKubeconfigSearchPathsMixedFilesAndDirs(t *testing.T) {
@@ -220,7 +221,11 @@ func TestNormalizeKubeconfigSearchPathsMixedFilesAndDirs(t *testing.T) {
 	}
 
 	normalized := normalizeKubeconfigSearchPaths(paths)
-	require.Equal(t, []string{filepath.Join("~", dirName), filepath.Join("~", fileName)}, normalized)
+	require.Equal(
+		t,
+		[]string{filepath.Join("~", dirName), filepath.Join("~", fileName), "~/.kube"},
+		normalized,
+	)
 }
 
 func TestApp_GetKubeconfigSearchPathsDefaults(t *testing.T) {
@@ -250,7 +255,7 @@ func TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers(t *testing.T) {
 
 	settings, err := app.loadSettingsFile()
 	require.NoError(t, err)
-	require.Equal(t, []string{dirPath, fileOnlyPath}, settings.Kubeconfig.SearchPaths)
+	require.Equal(t, []string{dirPath, fileOnlyPath, "~/.kube"}, settings.Kubeconfig.SearchPaths)
 
 	require.NotEmpty(t, app.availableKubeconfigs)
 	assert.True(t, hasKubeconfig(app.availableKubeconfigs, dirConfigPath, "dir-context"))
