@@ -146,7 +146,7 @@ func (s *Service) Drain(nodeName string, options restypes.DrainNodeOptions) (err
 	defer listCancel()
 
 	podList, err := client.CoreV1().Pods("").List(listCtx, metav1.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector("spec.nodeName", nodeName).String(),
+		FieldSelector: nodePodFieldSelector(nodeName),
 	})
 	if err != nil {
 		job.AddInfo("error", fmt.Sprintf("Failed to list pods: %v", err))
@@ -269,10 +269,7 @@ func (s *Service) patchUnschedulable(nodeName string, unschedulable bool) error 
 func (s *Service) filterPodsForDrain(pods []corev1.Pod, options restypes.DrainNodeOptions) ([]corev1.Pod, error) {
 	var result []corev1.Pod
 	for _, pod := range pods {
-		if _, ok := pod.Annotations[corev1.MirrorPodAnnotationKey]; ok {
-			continue
-		}
-		if options.IgnoreDaemonSets && isDaemonSetPod(&pod) {
+		if shouldSkipDrainPod(&pod, options) {
 			continue
 		}
 		if !options.DeleteEmptyDirData && hasLocalStorage(&pod) {
@@ -284,6 +281,19 @@ func (s *Service) filterPodsForDrain(pods []corev1.Pod, options restypes.DrainNo
 		result = append(result, pod)
 	}
 	return result, nil
+}
+
+// nodePodFieldSelector returns the field selector for pods scheduled on a node.
+func nodePodFieldSelector(nodeName string) string {
+	return fields.OneTermEqualSelector("spec.nodeName", nodeName).String()
+}
+
+// shouldSkipDrainPod reports whether a pod should be ignored during drain checks.
+func shouldSkipDrainPod(pod *corev1.Pod, options restypes.DrainNodeOptions) bool {
+	if _, ok := pod.Annotations[corev1.MirrorPodAnnotationKey]; ok {
+		return true
+	}
+	return options.IgnoreDaemonSets && isDaemonSetPod(pod)
 }
 
 func (s *Service) waitForPodsToTerminate(nodeName string, options restypes.DrainNodeOptions) error {
@@ -298,7 +308,7 @@ func (s *Service) waitForPodsToTerminate(nodeName string, options restypes.Drain
 		// Use timeout context for each poll iteration
 		pollCtx, pollCancel := context.WithTimeout(s.deps.Common.Context, 10*time.Second)
 		remaining, err := client.CoreV1().Pods("").List(pollCtx, metav1.ListOptions{
-			FieldSelector: fields.OneTermEqualSelector("spec.nodeName", nodeName).String(),
+			FieldSelector: nodePodFieldSelector(nodeName),
 		})
 		pollCancel()
 
@@ -308,11 +318,9 @@ func (s *Service) waitForPodsToTerminate(nodeName string, options restypes.Drain
 		}
 
 		hasPods := false
-		for _, pod := range remaining.Items {
-			if _, ok := pod.Annotations[corev1.MirrorPodAnnotationKey]; ok {
-				continue
-			}
-			if options.IgnoreDaemonSets && isDaemonSetPod(&pod) {
+		for i := range remaining.Items {
+			pod := &remaining.Items[i]
+			if shouldSkipDrainPod(pod, options) {
 				continue
 			}
 			hasPods = true
@@ -426,7 +434,7 @@ func (s *Service) listPodsForNode(name string) []corev1.Pod {
 	defer cancel()
 
 	podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector("spec.nodeName", name).String(),
+		FieldSelector: nodePodFieldSelector(name),
 	})
 	if err != nil {
 		s.logInfo(fmt.Sprintf("Failed to list pods for node %s: %v", name, err))
