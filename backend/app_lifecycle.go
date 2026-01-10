@@ -1,3 +1,9 @@
+/*
+ * backend/app_lifecycle.go
+ *
+ * Manages the lifecycle of the backend application.
+ */
+
 package backend
 
 import (

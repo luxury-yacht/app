@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -139,7 +140,7 @@ func TestAggregateEventStreamResumesFromBuffer(t *testing.T) {
 	)
 
 	scopeKey := "clusters=cluster-a|cluster"
-	handler.buffers[scopeKey] = newAggregateEventBuffer(aggregateResumeBufferSize)
+	handler.buffers[scopeKey] = newAggregateEventBuffer(config.AggregateEventStreamResumeBufferSize)
 	handler.buffers[scopeKey].add(aggregateBufferItem{Sequence: 1, Entry: eventstream.Entry{Message: "older"}})
 	handler.buffers[scopeKey].add(aggregateBufferItem{Sequence: 2, Entry: eventstream.Entry{Message: "buffered"}})
 	handler.sequences[scopeKey] = 2

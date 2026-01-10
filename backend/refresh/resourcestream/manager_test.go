@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 )
 
@@ -695,12 +696,12 @@ func TestManagerBackpressureTriggersReset(t *testing.T) {
 		Kind:        "Pod",
 	}
 
-	for i := 0; i < subscriberBufferSize+1; i++ {
+	for i := 0; i < config.ResourceStreamSubscriberBufferSize+1; i++ {
 		manager.broadcast(domainPods, []string{"namespace:default"}, update)
 	}
 
 	require.Eventually(t, func() bool {
-		for i := 0; i < subscriberBufferSize+1; i++ {
+		for i := 0; i < config.ResourceStreamSubscriberBufferSize+1; i++ {
 			select {
 			case msg := <-sub.Updates:
 				if msg.Type == MessageTypeReset {

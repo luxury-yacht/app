@@ -276,6 +276,7 @@ func SetLogSink(fn func(level string, message string)) {
 	logSink = fn
 }
 
+// emitToLogSink sends captured error messages to the configured log sink.
 func (c *Capture) emitToLogSink(chunk []byte) {
 	forEachTrimmedLine(string(chunk), func(msg string) {
 		level := "info"
