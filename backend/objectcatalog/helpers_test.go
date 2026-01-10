@@ -123,3 +123,28 @@ func TestBroadcastStreamingSendsReady(t *testing.T) {
 		t.Fatalf("expected update to be sent")
 	}
 }
+
+func TestCatalogKeyFormats(t *testing.T) {
+	nsGVR := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+	descNamespace := resourceDescriptor{GVR: nsGVR, Namespaced: true}
+	expectedNamespaced := nsGVR.String() + "/default/demo"
+	if key := catalogKey(descNamespace, "default", "demo"); key != expectedNamespaced {
+		t.Fatalf("unexpected namespaced key: %s", key)
+	}
+
+	clusterGVR := schema.GroupVersionResource{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}
+	descCluster := resourceDescriptor{GVR: clusterGVR, Namespaced: false}
+	expectedCluster := clusterGVR.String() + "//widgets.example.com"
+	if key := catalogKey(descCluster, "", "widgets.example.com"); key != expectedCluster {
+		t.Fatalf("unexpected cluster key: %s", key)
+	}
+}
+
+func TestContainsVerb(t *testing.T) {
+	if !containsVerb([]string{"get", "list"}, "list") {
+		t.Fatalf("expected list to be detected")
+	}
+	if containsVerb([]string{"get"}, "LIST") {
+		t.Fatalf("expected missing verb to return false")
+	}
+}

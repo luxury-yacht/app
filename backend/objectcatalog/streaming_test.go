@@ -96,6 +96,72 @@ func TestSubscribeStreamingAndBroadcast(t *testing.T) {
 	}
 }
 
+func TestServiceStreamingSubscriptionReceivesUpdates(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+
+	updates, unsubscribe := svc.SubscribeStreaming()
+	defer unsubscribe()
+
+	select {
+	case update := <-updates:
+		if update.Ready {
+			t.Fatalf("expected initial update to not be ready")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("timed out waiting for initial streaming update")
+	}
+
+	agg := newStreamingAggregator(svc)
+	agg.emit(0, []Summary{{Kind: "Pod", Name: "p1"}})
+
+	select {
+	case update := <-updates:
+		if update.Ready {
+			t.Fatalf("expected non-final flush to report not ready")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("timed out waiting for flush update")
+	}
+
+	agg.finalize(nil, true)
+
+	select {
+	case update := <-updates:
+		if !update.Ready {
+			t.Fatalf("expected final update to report ready")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("timed out waiting for final update")
+	}
+}
+
+func TestStreamingAggregatorEmitsOutOfOrderBatches(t *testing.T) {
+	svc := NewService(Dependencies{}, nil)
+	agg := newStreamingAggregator(svc)
+
+	summaries := []Summary{
+		{
+			Kind:      "Namespace",
+			Group:     "",
+			Version:   "v1",
+			Resource:  "namespaces",
+			Name:      "default",
+			Scope:     ScopeCluster,
+			Namespace: "",
+		},
+	}
+
+	agg.emit(5, summaries)
+
+	result := svc.Query(QueryOptions{Limit: 10})
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].Name != "default" || result.Items[0].Kind != "Namespace" {
+		t.Fatalf("unexpected item streamed: %+v", result.Items[0])
+	}
+}
+
 func TestPruneMissingHonorsTTL(t *testing.T) {
 	now := time.Now()
 	svc := &Service{opts: Options{EvictionTTL: time.Minute}, now: func() time.Time { return now }}
