@@ -12,6 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Wait briefly for async stderr processing.
+func Wait() { time.Sleep(100 * time.Millisecond) }
+
 func TestInitIsIdempotent(t *testing.T) {
 	Init()
 	Init() // second call should be harmless

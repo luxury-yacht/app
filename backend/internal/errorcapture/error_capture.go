@@ -15,7 +15,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"k8s.io/klog/v2"
 )
@@ -110,10 +109,8 @@ func (c *Capture) readPipe() {
 // isAuthRelated determines if a log message is related to authentication or token issues.
 func isAuthRelated(lower string) bool {
 	// Word-boundary token matching avoids false positives from resource names.
-	if tokenPattern.MatchString(lower) {
-		return true
-	}
-	return containsAny(lower, "expired", "sso", "authentication", "unauthorized", "forbidden", "permission denied")
+	return tokenPattern.MatchString(lower) ||
+		containsAny(lower, "expired", "sso", "authentication", "unauthorized", "forbidden", "permission denied")
 }
 
 // containsAny reports whether lower contains any of the provided substrings.
@@ -128,10 +125,8 @@ func containsAny(lower string, needles ...string) bool {
 
 // isFallbackErrorLine matches the broader error scan used in capturedError.
 func isFallbackErrorLine(lower string) bool {
-	if containsAny(lower, "error", "failed", "unauthorized", "forbidden", "expired") {
-		return true
-	}
-	return tokenPattern.MatchString(lower)
+	return tokenPattern.MatchString(lower) ||
+		containsAny(lower, "error", "failed", "unauthorized", "forbidden", "expired")
 }
 
 // forEachTrimmedLine iterates through non-empty, trimmed lines in input.
@@ -151,10 +146,10 @@ func trimBuffer(buf *bytes.Buffer, maxLen, keep int) {
 		return
 	}
 	data := buf.Bytes()
-	buf.Reset()
 	if keep > len(data) {
 		keep = len(data)
 	}
+	buf.Reset()
 	if keep > 0 {
 		buf.Write(data[len(data)-keep:])
 	}
@@ -216,11 +211,15 @@ func capturedError() string {
 	}
 
 	if last := global.last(); last != "" {
-		defer global.clearLast()
+		global.clearLast()
 		return last
 	}
 
-	recent := global.recent()
+	return scanRecentError(global.recent())
+}
+
+// scanRecentError returns the last interesting error-ish line from recent stderr output.
+func scanRecentError(recent string) string {
 	if recent == "" {
 		return ""
 	}
@@ -232,8 +231,7 @@ func capturedError() string {
 			continue
 		}
 
-		lower := strings.ToLower(line)
-		if isFallbackErrorLine(lower) {
+		if isFallbackErrorLine(strings.ToLower(line)) {
 			return line
 		}
 	}
@@ -253,18 +251,15 @@ func Enhance(err error) error {
 
 	orig := err.Error()
 	lower := strings.ToLower(extra)
-	if len(extra) > len(orig) || tokenPattern.MatchString(lower) || strings.Contains(lower, "sso") || strings.Contains(lower, "expired") {
-		if !strings.Contains(extra, orig) && !strings.Contains(orig, extra) {
-			return fmt.Errorf("%s. STDERR: %s", orig, extra)
-		}
-		return fmt.Errorf("%s", extra)
+	if len(extra) <= len(orig) && !tokenPattern.MatchString(lower) && !containsAny(lower, "sso", "expired") {
+		return err
 	}
 
-	return err
+	if !strings.Contains(extra, orig) && !strings.Contains(orig, extra) {
+		return fmt.Errorf("%s. STDERR: %s", orig, extra)
+	}
+	return fmt.Errorf("%s", extra)
 }
-
-// Wait briefly for async stderr processing.
-func Wait() { time.Sleep(100 * time.Millisecond) }
 
 // SetEventEmitter configures a callback invoked when interesting errors are captured.
 func SetEventEmitter(emitter func(string)) {
