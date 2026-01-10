@@ -132,6 +132,7 @@ type summaryChunk struct {
 	items []Summary
 }
 
+// evaluateDescriptor checks if the given descriptor is allowed by the capabilities service.
 func (s *Service) evaluateDescriptor(ctx context.Context, svc *capabilities.Service, desc resourceDescriptor) (bool, error) {
 	if svc == nil {
 		return true, nil
@@ -164,6 +165,7 @@ func (s *Service) evaluateDescriptor(ctx context.Context, svc *capabilities.Serv
 	return res.Allowed, nil
 }
 
+// evaluateDescriptorsBatch checks if the given descriptors are allowed by the capabilities service.
 func (s *Service) evaluateDescriptorsBatch(ctx context.Context, svc *capabilities.Service, descriptors []resourceDescriptor) (map[int]bool, map[int]error, error) {
 	allowed := make(map[int]bool, len(descriptors))
 	if len(descriptors) == 0 {
