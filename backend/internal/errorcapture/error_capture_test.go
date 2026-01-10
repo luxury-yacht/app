@@ -3,9 +3,23 @@ package errorcapture
 import (
 	"bytes"
 	"errors"
+	"fmt"
+	"os"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
+
+func TestInitIsIdempotent(t *testing.T) {
+	Init()
+	Init() // second call should be harmless
+
+	if got := capturedError(); got != "" {
+		t.Fatalf("expected no captured error after init, got %q", got)
+	}
+}
 
 func TestCaptureIfInterestingStoresLastAndEmits(t *testing.T) {
 	c := &Capture{buffer: &bytes.Buffer{}}
@@ -139,5 +153,70 @@ func TestEmitToLogSinkClassifiesLevels(t *testing.T) {
 		if logs[i] != want {
 			t.Fatalf("log entry %d mismatch: got %q want %q", i, logs[i], want)
 		}
+	}
+}
+
+func TestCaptureStartAndEnhance(t *testing.T) {
+	originalStderr := os.Stderr
+	defer func() { os.Stderr = originalStderr }()
+
+	c := &Capture{buffer: &bytes.Buffer{}}
+	global = c
+
+	var sinkLevels []string
+	SetLogSink(func(level string, message string) {
+		sinkLevels = append(sinkLevels, fmt.Sprintf("%s:%s", level, message))
+	})
+	defer SetLogSink(nil)
+
+	c.start()
+	require.True(t, c.capturing, "capture should start capturing stderr")
+
+	_, err := c.pipeWriter.Write([]byte("E token expired\n"))
+	require.NoError(t, err)
+
+	Wait()
+
+	enhanced := Enhance(fmt.Errorf("original error"))
+	require.Error(t, enhanced)
+	require.Contains(t, enhanced.Error(), "token expired")
+	require.NotEmpty(t, sinkLevels, "log sink should record emitted chunk")
+
+	// cleanup the pipe to stop the goroutine
+	_ = c.pipeWriter.Close()
+	_ = c.pipeReader.Close()
+	global = nil
+
+	time.Sleep(10 * time.Millisecond)
+}
+
+func TestCaptureIfInterestingSetsLastAndEmits(t *testing.T) {
+	c := &Capture{}
+	emitted := ""
+	SetEventEmitter(func(msg string) { emitted = msg })
+	t.Cleanup(func() {
+		SetEventEmitter(nil)
+	})
+
+	c.captureIfInteresting("token has expired")
+
+	if got := strings.TrimSpace(c.last()); !strings.Contains(got, "token has expired") {
+		t.Fatalf("expected last error to be set, got %q", got)
+	}
+	if emitted == "" {
+		t.Fatalf("expected event emitter to be called")
+	}
+}
+
+func TestCapturedErrorFallsBackToRecent(t *testing.T) {
+	orig := global
+	global = &Capture{buffer: &bytes.Buffer{}}
+	t.Cleanup(func() { global = orig })
+
+	global.buffer.WriteString("INFO starting\nerror pulling config\nanother line\n")
+
+	out := capturedError()
+	if out != "error pulling config" {
+		t.Fatalf("expected last error line, got %q", out)
 	}
 }
