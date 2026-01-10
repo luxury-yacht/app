@@ -1,3 +1,10 @@
+/*
+ * backend/internal/cachekeys/cachekeys.go
+ *
+ * Package cachekeys provides utilities for generating consistent cache keys
+ * for Kubernetes resource-specific and list operations.
+ */
+
 package cachekeys
 
 import "fmt"

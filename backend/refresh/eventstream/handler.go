@@ -18,10 +18,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
-const (
-	keepAliveInterval = 15 * time.Second
-)
-
 // Handler exposes an SSE endpoint for streaming Kubernetes events.
 type Handler struct {
 	service   *snapshot.Service
@@ -195,7 +191,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer cancel()
 
-	keepAlive := time.NewTicker(keepAliveInterval)
+	keepAlive := time.NewTicker(config.EventStreamKeepAliveInterval)
 	defer keepAlive.Stop()
 	heartbeat := time.NewTicker(config.StreamHeartbeatInterval)
 	defer heartbeat.Stop()

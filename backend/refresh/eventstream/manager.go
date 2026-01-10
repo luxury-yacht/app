@@ -11,15 +11,9 @@ import (
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
-)
-
-const (
-	// maxSubscribersPerScope limits concurrent subscribers per scope to prevent memory exhaustion.
-	maxSubscribersPerScope = 100
-	// resumeBufferSize caps stored events per scope for resume tokens.
-	resumeBufferSize = 1000
 )
 
 // Manager fan-outs informer updates to subscribed streaming clients.
@@ -128,16 +122,16 @@ func (m *Manager) Subscribe(scope string) (<-chan StreamEvent, context.CancelFun
 	}
 
 	// Check subscriber limit before adding
-	if len(m.subscribers[scope]) >= maxSubscribersPerScope {
+	if len(m.subscribers[scope]) >= config.EventStreamMaxSubscribersPerScope {
 		m.mu.Unlock()
-		m.logger.Warn(fmt.Sprintf("eventstream: subscriber limit (%d) reached for scope %s", maxSubscribersPerScope, scope), "EventStream")
+		m.logger.Warn(fmt.Sprintf("eventstream: subscriber limit (%d) reached for scope %s", config.EventStreamMaxSubscribersPerScope, scope), "EventStream")
 		if m.telemetry != nil {
 			m.telemetry.RecordStreamError(telemetry.StreamEvents, fmt.Errorf("subscriber limit reached for scope %s", scope))
 		}
 		return nil, func() {}
 	}
 
-	ch := make(chan StreamEvent, 256)
+	ch := make(chan StreamEvent, config.EventStreamSubscriberBufferSize)
 	id := atomic.AddUint64(&m.nextID, 1)
 	m.subscribers[scope][id] = &subscription{ch: ch, created: time.Now()}
 	m.mu.Unlock()
@@ -235,7 +229,7 @@ func (m *Manager) broadcast(scope string, entry Entry) {
 	if shouldBuffer {
 		sequence = m.nextSequenceLocked(scope)
 		if buffer == nil {
-			buffer = newEventBuffer(resumeBufferSize)
+			buffer = newEventBuffer(config.EventStreamResumeBufferSize)
 			m.buffers[scope] = buffer
 		}
 		buffer.add(bufferedEvent{sequence: sequence, entry: entry})

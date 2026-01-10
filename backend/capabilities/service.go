@@ -1,3 +1,10 @@
+/*
+ * backend/capabilities/service.go
+ *
+ * This service evaluates Kubernetes RBAC capabilities by submitting
+ * SelfSubjectAccessReview requests to the Kubernetes API.
+ */
+
 package capabilities
 
 import (

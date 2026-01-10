@@ -1,3 +1,9 @@
+/*
+ * backend/internal/errorcapture/error_capture_start_test.go
+ *
+ * Tests for the error capture start and enhance functionality.
+ */
+
 package errorcapture
 
 import (

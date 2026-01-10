@@ -14,6 +14,7 @@ import (
 	"k8s.io/klog/v2"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/api"
@@ -120,7 +121,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		{Group: "", Resource: "events", Verb: "list"},
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), config.PermissionPreflightTimeout)
 	_ = informerFactory.PrimePermissions(ctx, preflight)
 	cancel()
 	var permissionIssues []PermissionIssue
