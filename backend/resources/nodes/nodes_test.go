@@ -40,18 +40,6 @@ func TestServiceNodeReturnsDetails(t *testing.T) {
 	require.Equal(t, int32(1), detail.Restarts)
 }
 
-func TestServicePodsSummariesNodePods(t *testing.T) {
-	service, _, node := newNodeService(t)
-
-	pods, err := service.Pods(node.Name)
-	require.NoError(t, err)
-	require.Len(t, pods, 2)
-
-	names := []string{pods[0].Name, pods[1].Name}
-	require.Contains(t, names, "app-0")
-	require.Contains(t, names, "app-1")
-}
-
 func TestServiceDeleteHonorsForce(t *testing.T) {
 	service, client, node := newNodeService(t)
 

@@ -4,21 +4,18 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/nodemaintenance"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	"github.com/luxury-yacht/app/backend/resources/pods"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
-	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	"k8s.io/utils/ptr"
 )
@@ -228,60 +225,6 @@ func (s *Service) Drain(nodeName string, options restypes.DrainNodeOptions) (err
 	}
 
 	return nil
-}
-
-// Pods returns PodSimpleInfo entries for all pods scheduled on the given node.
-func (s *Service) Pods(nodeName string) ([]restypes.PodSimpleInfo, error) {
-	if err := s.ensureClient("NodePods"); err != nil {
-		return nil, err
-	}
-
-	client := s.deps.Common.KubernetesClient
-	podList, err := client.CoreV1().Pods("").List(s.deps.Common.Context, metav1.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector("spec.nodeName", nodeName).String(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list pods for node %s: %w", nodeName, err)
-	}
-
-	podService := pods.NewService(pods.Dependencies{Common: s.deps.Common})
-	namespacePods := make(map[string][]corev1.Pod)
-	for i := range podList.Items {
-		pod := podList.Items[i]
-		namespacePods[pod.Namespace] = append(namespacePods[pod.Namespace], pod)
-	}
-
-	rsMaps := make(map[string]map[string]string, len(namespacePods))
-	metricsByNamespace := make(map[string]map[string]*metricsv1beta1.PodMetrics, len(namespacePods))
-
-	var mu sync.Mutex
-	namespaces := make([]string, 0, len(namespacePods))
-	for namespace := range namespacePods {
-		namespaces = append(namespaces, namespace)
-	}
-
-	if err := parallel.ForEach(s.deps.Common.Context, namespaces, 4, func(ctx context.Context, namespace string) error {
-		nsPods := namespacePods[namespace]
-		rsMap := podService.BuildReplicaSetToDeploymentMap(namespace)
-		metricsMap := podService.GetPodMetricsForPods(namespace, nsPods)
-
-		mu.Lock()
-		rsMaps[namespace] = rsMap
-		metricsByNamespace[namespace] = metricsMap
-		mu.Unlock()
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	result := make([]restypes.PodSimpleInfo, 0, len(podList.Items))
-	for _, pod := range podList.Items {
-		ownerKind, ownerName := pods.ResolveOwner(pod, rsMaps[pod.Namespace])
-		metrics := metricsByNamespace[pod.Namespace]
-		result = append(result, pods.SummarizePod(pod, metrics, ownerKind, ownerName))
-	}
-
-	return result, nil
 }
 
 // Delete removes a node from the cluster.

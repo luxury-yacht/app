@@ -1,7 +1,14 @@
+/*
+ * backend/internal/parallel/parallel.go
+ *
+ * Utilities for parallel execution of tasks with concurrency control.
+ */
+
 package parallel
 
 import (
 	"context"
+
 	"golang.org/x/sync/errgroup"
 )
 
@@ -32,15 +39,18 @@ func RunLimited(ctx context.Context, limit int, tasks ...func(context.Context) e
 
 // ForEach runs fn for every item, honouring the provided concurrency limit.
 func ForEach[T any](ctx context.Context, items []T, limit int, fn func(context.Context, T) error) error {
+	// Return early if no function or items are provided.
 	if fn == nil || len(items) == 0 {
 		return nil
 	}
 
+	// Create an errgroup with the provided context.
 	group, ctx := errgroup.WithContext(ctx)
 	if limit > 0 {
 		group.SetLimit(limit)
 	}
 
+	// Launch a goroutine for each item.
 	for _, item := range items {
 		item := item
 		group.Go(func() error {
