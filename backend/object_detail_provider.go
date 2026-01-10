@@ -43,6 +43,371 @@ type resolvedObjectDetailContext struct {
 	scoped       bool                // Indicates if the context is scoped to a specific cluster
 }
 
+// objectDetailFetcher maps a kind to both app and dependency-based detail retrievals.
+type objectDetailFetcher struct {
+	withApp  func(app *App, namespace, name string) (interface{}, string, error)
+	withDeps func(deps common.Dependencies, namespace, name string) (interface{}, string, error)
+}
+
+var objectDetailFetchers = map[string]objectDetailFetcher{
+	"pod": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetPod(namespace, name, true)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := pods.GetPod(pods.Dependencies{Common: deps}, namespace, name, true)
+			return detail, "", err
+		},
+	},
+	"deployment": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetDeployment(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := workloads.NewDeploymentService(workloads.Dependencies{Common: deps}).Deployment(namespace, name)
+			return detail, "", err
+		},
+	},
+	"replicaset": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetReplicaSet(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := workloads.NewReplicaSetService(workloads.Dependencies{Common: deps}).ReplicaSet(namespace, name)
+			return detail, "", err
+		},
+	},
+	"daemonset": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetDaemonSet(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := workloads.NewDaemonSetService(workloads.Dependencies{Common: deps}).DaemonSet(namespace, name)
+			return detail, "", err
+		},
+	},
+	"statefulset": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetStatefulSet(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := workloads.NewStatefulSetService(workloads.Dependencies{Common: deps}).StatefulSet(namespace, name)
+			return detail, "", err
+		},
+	},
+	"job": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetJob(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := workloads.NewJobService(workloads.Dependencies{Common: deps}).Job(namespace, name)
+			return detail, "", err
+		},
+	},
+	"cronjob": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetCronJob(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := workloads.NewCronJobService(workloads.Dependencies{Common: deps}).CronJob(namespace, name)
+			return detail, "", err
+		},
+	},
+	"configmap": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetConfigMap(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := config.NewService(config.Dependencies{Common: deps}).ConfigMap(namespace, name)
+			return detail, "", err
+		},
+	},
+	"secret": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetSecret(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := config.NewService(config.Dependencies{Common: deps}).Secret(namespace, name)
+			return detail, "", err
+		},
+	},
+	"helmrelease": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetHelmReleaseDetails(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := helm.NewService(helm.Dependencies{Common: deps}).ReleaseDetails(namespace, name)
+			return detail, "", err
+		},
+	},
+	"service": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetService(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := network.NewService(network.Dependencies{Common: deps}).GetService(namespace, name)
+			return detail, "", err
+		},
+	},
+	"ingress": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetIngress(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := network.NewService(network.Dependencies{Common: deps}).Ingress(namespace, name)
+			return detail, "", err
+		},
+	},
+	"networkpolicy": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetNetworkPolicy(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := network.NewService(network.Dependencies{Common: deps}).NetworkPolicy(namespace, name)
+			return detail, "", err
+		},
+	},
+	"endpointslice": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetEndpointSlice(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := network.NewService(network.Dependencies{Common: deps}).EndpointSlice(namespace, name)
+			return detail, "", err
+		},
+	},
+	"persistentvolumeclaim": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetPersistentVolumeClaim(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := storage.NewService(storage.Dependencies{Common: deps}).PersistentVolumeClaim(namespace, name)
+			return detail, "", err
+		},
+	},
+	"persistentvolume": {
+		withApp: func(app *App, _ string, name string) (interface{}, string, error) {
+			detail, err := app.GetPersistentVolume(name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
+			detail, err := storage.NewService(storage.Dependencies{Common: deps}).PersistentVolume(name)
+			return detail, "", err
+		},
+	},
+	"storageclass": {
+		withApp: func(app *App, _ string, name string) (interface{}, string, error) {
+			detail, err := app.GetStorageClass(name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
+			detail, err := storage.NewService(storage.Dependencies{Common: deps}).StorageClass(name)
+			return detail, "", err
+		},
+	},
+	"serviceaccount": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetServiceAccount(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).ServiceAccount(namespace, name)
+			return detail, "", err
+		},
+	},
+	"role": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetRole(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).Role(namespace, name)
+			return detail, "", err
+		},
+	},
+	"rolebinding": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetRoleBinding(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).RoleBinding(namespace, name)
+			return detail, "", err
+		},
+	},
+	"clusterrole": {
+		withApp: func(app *App, _ string, name string) (interface{}, string, error) {
+			detail, err := app.GetClusterRole(name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
+			detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).ClusterRole(name)
+			return detail, "", err
+		},
+	},
+	"clusterrolebinding": {
+		withApp: func(app *App, _ string, name string) (interface{}, string, error) {
+			detail, err := app.GetClusterRoleBinding(name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
+			detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).ClusterRoleBinding(name)
+			return detail, "", err
+		},
+	},
+	"resourcequota": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetResourceQuota(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := constraints.NewService(constraints.Dependencies{Common: deps}).ResourceQuota(namespace, name)
+			return detail, "", err
+		},
+	},
+	"limitrange": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetLimitRange(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := constraints.NewService(constraints.Dependencies{Common: deps}).LimitRange(namespace, name)
+			return detail, "", err
+		},
+	},
+	"horizontalpodautoscaler": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetHorizontalPodAutoscaler(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := autoscaling.NewService(autoscaling.Dependencies{Common: deps}).HorizontalPodAutoscaler(namespace, name)
+			return detail, "", err
+		},
+	},
+	"poddisruptionbudget": {
+		withApp: func(app *App, namespace, name string) (interface{}, string, error) {
+			detail, err := app.GetPodDisruptionBudget(namespace, name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
+			detail, err := policy.NewService(policy.Dependencies{Common: deps}).PodDisruptionBudget(namespace, name)
+			return detail, "", err
+		},
+	},
+	"namespace": {
+		withApp: func(app *App, _ string, name string) (interface{}, string, error) {
+			detail, err := app.GetNamespace(name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
+			detail, err := namespaces.NewService(namespaces.Dependencies{Common: deps}).Namespace(name)
+			return detail, "", err
+		},
+	},
+	"node": {
+		withApp: func(app *App, _ string, name string) (interface{}, string, error) {
+			detail, err := app.GetNode(name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
+			detail, err := nodes.NewService(nodes.Dependencies{Common: deps}).Node(name)
+			return detail, "", err
+		},
+	},
+	"ingressclass": {
+		withApp: func(app *App, _ string, name string) (interface{}, string, error) {
+			detail, err := app.GetIngressClass(name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
+			detail, err := network.NewService(network.Dependencies{Common: deps}).IngressClass(name)
+			return detail, "", err
+		},
+	},
+	"customresourcedefinition": {
+		withApp: func(app *App, _ string, name string) (interface{}, string, error) {
+			detail, err := app.GetCustomResourceDefinition(name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
+			detail, err := apiextensions.NewService(apiextensions.Dependencies{Common: deps}).CustomResourceDefinition(name)
+			return detail, "", err
+		},
+	},
+	"mutatingwebhookconfiguration": {
+		withApp: func(app *App, _ string, name string) (interface{}, string, error) {
+			detail, err := app.GetMutatingWebhookConfiguration(name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
+			detail, err := admission.NewService(admission.Dependencies{Common: deps}).MutatingWebhookConfiguration(name)
+			return detail, "", err
+		},
+	},
+	"validatingwebhookconfiguration": {
+		withApp: func(app *App, _ string, name string) (interface{}, string, error) {
+			detail, err := app.GetValidatingWebhookConfiguration(name)
+			return detail, "", err
+		},
+		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
+			detail, err := admission.NewService(admission.Dependencies{Common: deps}).ValidatingWebhookConfiguration(name)
+			return detail, "", err
+		},
+	},
+}
+
+// lookupObjectDetailFetcher normalizes the kind and returns the configured fetcher.
+func lookupObjectDetailFetcher(kind string) (objectDetailFetcher, bool) {
+	normalized := strings.ToLower(strings.TrimSpace(kind))
+	fetcher, ok := objectDetailFetchers[normalized]
+	return fetcher, ok
+}
+
+// FetchObjectDetails retrieves the details of a Kubernetes object.
+func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, kind, namespace, name string) (interface{}, string, error) {
+	resolved := p.resolveDetailContext(ctx)
+	fetcher, ok := lookupObjectDetailFetcher(kind)
+	if !ok {
+		return nil, "", snapshot.ErrObjectDetailNotImplemented
+	}
+	if resolved.scoped {
+		cacheKey := objectDetailCacheKey(kind, namespace, name)
+		if p != nil && p.app != nil {
+			if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
+				// Avoid serving cached details when permission checks deny access.
+				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, kind, namespace, name) {
+					return cached, "", nil
+				}
+				p.app.responseCacheDelete(resolved.selectionKey, cacheKey)
+			}
+		}
+		detail, version, err := fetcher.withDeps(resolved.deps, namespace, name)
+		if err == nil && p != nil && p.app != nil {
+			p.app.responseCacheStore(resolved.selectionKey, cacheKey, detail)
+		}
+		return detail, version, err
+	}
+
+	// Delegates to existing App getters so the frontend receives rich detail structures.
+	return fetcher.withApp(p.app, namespace, name)
+}
+
 // objectDetailCacheKey matches FetchNamespacedResource cache keys for detail payloads.
 func objectDetailCacheKey(kind, namespace, name string) string {
 	return cachekeys.Build(strings.ToLower(strings.TrimSpace(kind))+"-detailed", namespace, name)
@@ -200,235 +565,4 @@ func (p *objectDetailProvider) helmReleaseRevisionWithCache(
 		p.app.responseCacheStore(resolved.selectionKey, detailsCacheKey, details)
 	}
 	return details.Revision, nil
-}
-
-// FetchObjectDetails retrieves the details of a Kubernetes object.
-func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, kind, namespace, name string) (interface{}, string, error) {
-	resolved := p.resolveDetailContext(ctx)
-	if resolved.scoped {
-		cacheKey := objectDetailCacheKey(kind, namespace, name)
-		if p != nil && p.app != nil {
-			if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, cacheKey); ok {
-				// Avoid serving cached details when permission checks deny access.
-				if p.app.canServeCachedResponse(ctx, resolved.deps, resolved.selectionKey, kind, namespace, name) {
-					return cached, "", nil
-				}
-				p.app.responseCacheDelete(resolved.selectionKey, cacheKey)
-			}
-		}
-		detail, version, err := fetchObjectDetailsWithDependencies(resolved.deps, kind, namespace, name)
-		if err == nil && p != nil && p.app != nil {
-			p.app.responseCacheStore(resolved.selectionKey, cacheKey, detail)
-		}
-		return detail, version, err
-	}
-
-	// Delegates to existing App getters so the frontend receives rich detail structures.
-	switch strings.ToLower(kind) {
-	case "pod":
-		detail, err := p.app.GetPod(namespace, name, true)
-		return detail, "", err
-	case "deployment":
-		detail, err := p.app.GetDeployment(namespace, name)
-		return detail, "", err
-	case "replicaset":
-		detail, err := p.app.GetReplicaSet(namespace, name)
-		return detail, "", err
-	case "daemonset":
-		detail, err := p.app.GetDaemonSet(namespace, name)
-		return detail, "", err
-	case "statefulset":
-		detail, err := p.app.GetStatefulSet(namespace, name)
-		return detail, "", err
-	case "job":
-		detail, err := p.app.GetJob(namespace, name)
-		return detail, "", err
-	case "cronjob":
-		detail, err := p.app.GetCronJob(namespace, name)
-		return detail, "", err
-	case "configmap":
-		detail, err := p.app.GetConfigMap(namespace, name)
-		return detail, "", err
-	case "secret":
-		detail, err := p.app.GetSecret(namespace, name)
-		return detail, "", err
-	case "helmrelease":
-		detail, err := p.app.GetHelmReleaseDetails(namespace, name)
-		return detail, "", err
-	case "service":
-		detail, err := p.app.GetService(namespace, name)
-		return detail, "", err
-	case "ingress":
-		detail, err := p.app.GetIngress(namespace, name)
-		return detail, "", err
-	case "networkpolicy":
-		detail, err := p.app.GetNetworkPolicy(namespace, name)
-		return detail, "", err
-	case "endpointslice":
-		detail, err := p.app.GetEndpointSlice(namespace, name)
-		return detail, "", err
-	case "persistentvolumeclaim":
-		detail, err := p.app.GetPersistentVolumeClaim(namespace, name)
-		return detail, "", err
-	case "persistentvolume":
-		detail, err := p.app.GetPersistentVolume(name)
-		return detail, "", err
-	case "storageclass":
-		detail, err := p.app.GetStorageClass(name)
-		return detail, "", err
-	case "serviceaccount":
-		detail, err := p.app.GetServiceAccount(namespace, name)
-		return detail, "", err
-	case "role":
-		detail, err := p.app.GetRole(namespace, name)
-		return detail, "", err
-	case "rolebinding":
-		detail, err := p.app.GetRoleBinding(namespace, name)
-		return detail, "", err
-	case "clusterrole":
-		detail, err := p.app.GetClusterRole(name)
-		return detail, "", err
-	case "clusterrolebinding":
-		detail, err := p.app.GetClusterRoleBinding(name)
-		return detail, "", err
-	case "resourcequota":
-		detail, err := p.app.GetResourceQuota(namespace, name)
-		return detail, "", err
-	case "limitrange":
-		detail, err := p.app.GetLimitRange(namespace, name)
-		return detail, "", err
-	case "horizontalpodautoscaler":
-		detail, err := p.app.GetHorizontalPodAutoscaler(namespace, name)
-		return detail, "", err
-	case "poddisruptionbudget":
-		detail, err := p.app.GetPodDisruptionBudget(namespace, name)
-		return detail, "", err
-	case "namespace":
-		detail, err := p.app.GetNamespace(name)
-		return detail, "", err
-	case "node":
-		detail, err := p.app.GetNode(name)
-		return detail, "", err
-	case "ingressclass":
-		detail, err := p.app.GetIngressClass(name)
-		return detail, "", err
-	case "customresourcedefinition":
-		detail, err := p.app.GetCustomResourceDefinition(name)
-		return detail, "", err
-	case "mutatingwebhookconfiguration":
-		detail, err := p.app.GetMutatingWebhookConfiguration(name)
-		return detail, "", err
-	case "validatingwebhookconfiguration":
-		detail, err := p.app.GetValidatingWebhookConfiguration(name)
-		return detail, "", err
-	default:
-		return nil, "", snapshot.ErrObjectDetailNotImplemented
-	}
-}
-
-// fetchObjectDetailsWithDependencies resolves object detail payloads using scoped dependencies.
-func fetchObjectDetailsWithDependencies(
-	deps common.Dependencies,
-	kind, namespace, name string,
-) (interface{}, string, error) {
-	switch strings.ToLower(kind) {
-	case "pod":
-		detail, err := pods.GetPod(pods.Dependencies{Common: deps}, namespace, name, true)
-		return detail, "", err
-	case "deployment":
-		detail, err := workloads.NewDeploymentService(workloads.Dependencies{Common: deps}).Deployment(namespace, name)
-		return detail, "", err
-	case "replicaset":
-		detail, err := workloads.NewReplicaSetService(workloads.Dependencies{Common: deps}).ReplicaSet(namespace, name)
-		return detail, "", err
-	case "daemonset":
-		detail, err := workloads.NewDaemonSetService(workloads.Dependencies{Common: deps}).DaemonSet(namespace, name)
-		return detail, "", err
-	case "statefulset":
-		detail, err := workloads.NewStatefulSetService(workloads.Dependencies{Common: deps}).StatefulSet(namespace, name)
-		return detail, "", err
-	case "job":
-		detail, err := workloads.NewJobService(workloads.Dependencies{Common: deps}).Job(namespace, name)
-		return detail, "", err
-	case "cronjob":
-		detail, err := workloads.NewCronJobService(workloads.Dependencies{Common: deps}).CronJob(namespace, name)
-		return detail, "", err
-	case "configmap":
-		detail, err := config.NewService(config.Dependencies{Common: deps}).ConfigMap(namespace, name)
-		return detail, "", err
-	case "secret":
-		detail, err := config.NewService(config.Dependencies{Common: deps}).Secret(namespace, name)
-		return detail, "", err
-	case "helmrelease":
-		detail, err := helm.NewService(helm.Dependencies{Common: deps}).ReleaseDetails(namespace, name)
-		return detail, "", err
-	case "service":
-		detail, err := network.NewService(network.Dependencies{Common: deps}).GetService(namespace, name)
-		return detail, "", err
-	case "ingress":
-		detail, err := network.NewService(network.Dependencies{Common: deps}).Ingress(namespace, name)
-		return detail, "", err
-	case "networkpolicy":
-		detail, err := network.NewService(network.Dependencies{Common: deps}).NetworkPolicy(namespace, name)
-		return detail, "", err
-	case "endpointslice":
-		detail, err := network.NewService(network.Dependencies{Common: deps}).EndpointSlice(namespace, name)
-		return detail, "", err
-	case "persistentvolumeclaim":
-		detail, err := storage.NewService(storage.Dependencies{Common: deps}).PersistentVolumeClaim(namespace, name)
-		return detail, "", err
-	case "persistentvolume":
-		detail, err := storage.NewService(storage.Dependencies{Common: deps}).PersistentVolume(name)
-		return detail, "", err
-	case "storageclass":
-		detail, err := storage.NewService(storage.Dependencies{Common: deps}).StorageClass(name)
-		return detail, "", err
-	case "serviceaccount":
-		detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).ServiceAccount(namespace, name)
-		return detail, "", err
-	case "role":
-		detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).Role(namespace, name)
-		return detail, "", err
-	case "rolebinding":
-		detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).RoleBinding(namespace, name)
-		return detail, "", err
-	case "clusterrole":
-		detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).ClusterRole(name)
-		return detail, "", err
-	case "clusterrolebinding":
-		detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).ClusterRoleBinding(name)
-		return detail, "", err
-	case "resourcequota":
-		detail, err := constraints.NewService(constraints.Dependencies{Common: deps}).ResourceQuota(namespace, name)
-		return detail, "", err
-	case "limitrange":
-		detail, err := constraints.NewService(constraints.Dependencies{Common: deps}).LimitRange(namespace, name)
-		return detail, "", err
-	case "horizontalpodautoscaler":
-		detail, err := autoscaling.NewService(autoscaling.Dependencies{Common: deps}).HorizontalPodAutoscaler(namespace, name)
-		return detail, "", err
-	case "poddisruptionbudget":
-		detail, err := policy.NewService(policy.Dependencies{Common: deps}).PodDisruptionBudget(namespace, name)
-		return detail, "", err
-	case "namespace":
-		detail, err := namespaces.NewService(namespaces.Dependencies{Common: deps}).Namespace(name)
-		return detail, "", err
-	case "node":
-		detail, err := nodes.NewService(nodes.Dependencies{Common: deps}).Node(name)
-		return detail, "", err
-	case "ingressclass":
-		detail, err := network.NewService(network.Dependencies{Common: deps}).IngressClass(name)
-		return detail, "", err
-	case "customresourcedefinition":
-		detail, err := apiextensions.NewService(apiextensions.Dependencies{Common: deps}).CustomResourceDefinition(name)
-		return detail, "", err
-	case "mutatingwebhookconfiguration":
-		detail, err := admission.NewService(admission.Dependencies{Common: deps}).MutatingWebhookConfiguration(name)
-		return detail, "", err
-	case "validatingwebhookconfiguration":
-		detail, err := admission.NewService(admission.Dependencies{Common: deps}).ValidatingWebhookConfiguration(name)
-		return detail, "", err
-	default:
-		return nil, "", snapshot.ErrObjectDetailNotImplemented
-	}
 }
