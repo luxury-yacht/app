@@ -227,7 +227,6 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 }
 
 // buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.
-// buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.
 func (a *App) buildRefreshSubsystem(cfg system.Config, cacheKey string) (*system.Subsystem, error) {
 	subsystem, err := newRefreshSubsystemWithServices(cfg)
 	if err != nil {

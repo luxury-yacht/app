@@ -1,3 +1,9 @@
+/*
+ * backend/object_detail_provider.go
+ *
+ * Object detail provider implementation.
+ */
+
 package backend
 
 import (
@@ -32,9 +38,9 @@ func (a *App) objectDetailProvider() snapshot.ObjectDetailProvider {
 }
 
 type resolvedObjectDetailContext struct {
-	deps         common.Dependencies
-	selectionKey string
-	scoped       bool
+	deps         common.Dependencies // Dependencies for resource operations
+	selectionKey string              // Selection key for caching and scoping
+	scoped       bool                // Indicates if the context is scoped to a specific cluster
 }
 
 // objectDetailCacheKey matches FetchNamespacedResource cache keys for detail payloads.
@@ -66,6 +72,7 @@ func (p *objectDetailProvider) resolveDetailContext(ctx context.Context) resolve
 	}
 }
 
+// FetchObjectYAML retrieves the YAML representation of a Kubernetes object.
 func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, kind, namespace, name string) (string, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if p == nil || p.app == nil {
@@ -74,6 +81,7 @@ func (p *objectDetailProvider) FetchObjectYAML(ctx context.Context, kind, namesp
 	return p.app.getObjectYAMLWithCache(resolved.deps, resolved.selectionKey, kind, namespace, name)
 }
 
+// FetchHelmManifest retrieves the manifest for a Helm release.
 func (p *objectDetailProvider) FetchHelmManifest(ctx context.Context, namespace, name string) (string, int, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if !resolved.scoped {
@@ -119,6 +127,7 @@ func (p *objectDetailProvider) FetchHelmManifest(ctx context.Context, namespace,
 	return manifest, revision, nil
 }
 
+// FetchHelmValues retrieves the values for a Helm release.
 func (p *objectDetailProvider) FetchHelmValues(ctx context.Context, namespace, name string) (map[string]interface{}, int, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if !resolved.scoped {
@@ -164,6 +173,36 @@ func (p *objectDetailProvider) FetchHelmValues(ctx context.Context, namespace, n
 	return values, revision, nil
 }
 
+// helmReleaseRevisionWithCache reuses cached Helm release details when possible.
+func (p *objectDetailProvider) helmReleaseRevisionWithCache(
+	resolved resolvedObjectDetailContext,
+	service *helm.Service,
+	namespace, name string,
+) (int, error) {
+	detailsCacheKey := objectDetailCacheKey("HelmRelease", namespace, name)
+	if p != nil && p.app != nil {
+		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, detailsCacheKey); ok {
+			if details, ok := cached.(*HelmReleaseDetails); ok && details != nil {
+				// Avoid serving cached Helm data when permission checks deny access.
+				if p.app.canServeCachedResponse(resolved.deps.Context, resolved.deps, resolved.selectionKey, "HelmRelease", namespace, name) {
+					return details.Revision, nil
+				}
+			}
+			p.app.responseCacheDelete(resolved.selectionKey, detailsCacheKey)
+		}
+	}
+
+	details, err := service.ReleaseDetails(namespace, name)
+	if err != nil || details == nil {
+		return 0, err
+	}
+	if p != nil && p.app != nil {
+		p.app.responseCacheStore(resolved.selectionKey, detailsCacheKey, details)
+	}
+	return details.Revision, nil
+}
+
+// FetchObjectDetails retrieves the details of a Kubernetes object.
 func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, kind, namespace, name string) (interface{}, string, error) {
 	resolved := p.resolveDetailContext(ctx)
 	if resolved.scoped {
@@ -184,8 +223,7 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, kind, nam
 		return detail, version, err
 	}
 
-	// Delegates to existing App getters so the frontend continues to receive
-	// the rich detail structures that were previously exposed via RPC.
+	// Delegates to existing App getters so the frontend receives rich detail structures.
 	switch strings.ToLower(kind) {
 	case "pod":
 		detail, err := p.app.GetPod(namespace, name, true)
@@ -286,35 +324,6 @@ func (p *objectDetailProvider) FetchObjectDetails(ctx context.Context, kind, nam
 	default:
 		return nil, "", snapshot.ErrObjectDetailNotImplemented
 	}
-}
-
-// helmReleaseRevisionWithCache reuses cached Helm release details when possible.
-func (p *objectDetailProvider) helmReleaseRevisionWithCache(
-	resolved resolvedObjectDetailContext,
-	service *helm.Service,
-	namespace, name string,
-) (int, error) {
-	detailsCacheKey := objectDetailCacheKey("HelmRelease", namespace, name)
-	if p != nil && p.app != nil {
-		if cached, ok := p.app.responseCacheLookup(resolved.selectionKey, detailsCacheKey); ok {
-			if details, ok := cached.(*HelmReleaseDetails); ok && details != nil {
-				// Avoid serving cached Helm data when permission checks deny access.
-				if p.app.canServeCachedResponse(resolved.deps.Context, resolved.deps, resolved.selectionKey, "HelmRelease", namespace, name) {
-					return details.Revision, nil
-				}
-			}
-			p.app.responseCacheDelete(resolved.selectionKey, detailsCacheKey)
-		}
-	}
-
-	details, err := service.ReleaseDetails(namespace, name)
-	if err != nil || details == nil {
-		return 0, err
-	}
-	if p != nil && p.app != nil {
-		p.app.responseCacheStore(resolved.selectionKey, detailsCacheKey, details)
-	}
-	return details.Revision, nil
 }
 
 // fetchObjectDetailsWithDependencies resolves object detail payloads using scoped dependencies.
