@@ -1,3 +1,10 @@
+/*
+ * backend/refresh/system/manager.go
+ *
+ * Refresh manager subsystem for Kubernetes clusters.
+ * Coordinates the collection of resource summaries, permission checks, and event streaming.
+ */
+
 package system
 
 import (
@@ -31,44 +38,44 @@ import (
 
 // PermissionIssue captures domains that could not be registered due to missing permissions or transient errors.
 type PermissionIssue struct {
-	Domain   string
-	Resource string
-	Err      error
+	Domain   string // The domain that encountered a permission issue.
+	Resource string // The specific resource that caused the permission issue.
+	Err      error  // The error encountered while accessing the resource.
 }
 
 // Config contains the dependencies required to initialise the refresh manager.
 type Config struct {
-	KubernetesClient        kubernetes.Interface
-	MetricsClient           *metricsclient.Clientset
-	RestConfig              *rest.Config
-	ResyncInterval          time.Duration
-	MetricsInterval         time.Duration
-	APIExtensionsClient     apiextensionsclientset.Interface
-	DynamicClient           dynamic.Interface
-	HelmFactory             snapshot.HelmActionFactory
-	ObjectDetailsProvider   snapshot.ObjectDetailProvider
-	Logger                  logstream.Logger
-	ObjectCatalogEnabled    func() bool
-	ObjectCatalogService    func() *objectcatalog.Service
-	ObjectCatalogNamespaces func() []snapshot.CatalogNamespaceGroup
-	ClusterID               string // stable identifier for cluster-scoped keys
-	ClusterName             string // display name for cluster in payloads
+	KubernetesClient        kubernetes.Interface                    // Kubernetes client for API interactions.
+	MetricsClient           *metricsclient.Clientset                // Metrics client for collecting cluster metrics.
+	RestConfig              *rest.Config                            // REST configuration for Kubernetes client.
+	ResyncInterval          time.Duration                           // Interval for resyncing informers.
+	MetricsInterval         time.Duration                           // Interval for collecting metrics.
+	APIExtensionsClient     apiextensionsclientset.Interface        // Client for API extensions.
+	DynamicClient           dynamic.Interface                       // Dynamic client for interacting with Kubernetes resources.
+	HelmFactory             snapshot.HelmActionFactory              // Factory for creating Helm actions.
+	ObjectDetailsProvider   snapshot.ObjectDetailProvider           // Provider for detailed object information.
+	Logger                  logstream.Logger                        // Logger for recording refresh operations.
+	ObjectCatalogEnabled    func() bool                             // Function to check if the object catalog is enabled.
+	ObjectCatalogService    func() *objectcatalog.Service           // Function to get the object catalog service.
+	ObjectCatalogNamespaces func() []snapshot.CatalogNamespaceGroup // Function to get the object catalog namespaces.
+	ClusterID               string                                  // stable identifier for cluster-scoped keys
+	ClusterName             string                                  // display name for cluster in payloads
 }
 
 // Subsystem bundles the refresh manager and supporting services.
 type Subsystem struct {
-	Manager          *refresh.Manager
-	Handler          http.Handler
-	Telemetry        *telemetry.Recorder
-	PermissionIssues []PermissionIssue
-	InformerFactory  *informer.Factory
-	RuntimePerms     *permissions.Checker
-	Registry         *domain.Registry
-	SnapshotService  refresh.SnapshotService
-	ManualQueue      refresh.ManualQueue
-	EventStream      *eventstream.Manager
-	ResourceStream   *resourcestream.Manager
-	ClusterMeta      snapshot.ClusterMeta
+	Manager          *refresh.Manager        // Refresh manager for coordinating resource updates.
+	Handler          http.Handler            // HTTP handler for serving refresh-related endpoints.
+	Telemetry        *telemetry.Recorder     // Telemetry recorder for capturing metrics and events.
+	PermissionIssues []PermissionIssue       // List of permission issues encountered during refresh.
+	InformerFactory  *informer.Factory       // Factory for creating informers.
+	RuntimePerms     *permissions.Checker    // Checker for runtime permissions.
+	Registry         *domain.Registry        // Registry for managing domain information.
+	SnapshotService  refresh.SnapshotService // Service for managing snapshots.
+	ManualQueue      refresh.ManualQueue     // Queue for manual refresh requests.
+	EventStream      *eventstream.Manager    // Manager for event streams.
+	ResourceStream   *resourcestream.Manager // Manager for resource streams.
+	ClusterMeta      snapshot.ClusterMeta    // Metadata about the cluster.
 }
 
 // NewSubsystem prepares the refresh manager, HTTP handler, and supporting services.
@@ -121,11 +128,13 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		{Group: "", Resource: "events", Verb: "list"},
 	}
 
+	// PrimePermissions checks the initial set of permissions required for the subsystem.
 	ctx, cancel := context.WithTimeout(context.Background(), config.PermissionPreflightTimeout)
 	_ = informerFactory.PrimePermissions(ctx, preflight)
 	cancel()
 	var permissionIssues []PermissionIssue
 
+	// appendIssue adds a permission issue to the list if any errors are present.
 	appendIssue := func(domainName, resource string, errs ...error) {
 		err := errors.Join(errs...)
 		if err != nil {
@@ -137,6 +146,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		}
 	}
 
+	// logSkip logs a message indicating that registration for a domain is being skipped due to insufficient permissions.
 	logSkip := func(domainName, group, resource string) {
 		klog.V(2).Infof("Skipping registration for domain %s: insufficient permission to list %s/%s", domainName, group, resource)
 	}
@@ -157,6 +167,8 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 
 	metricsNodesAllowed, metricsNodesErr := informerFactory.CanListResource("metrics.k8s.io", "nodes")
 	metricsPodsAllowed, metricsPodsErr := informerFactory.CanListResource("metrics.k8s.io", "pods")
+
+	// Check if metrics polling is allowed and append any permission issues.
 	appendIssue("metrics-poller", "metrics.k8s.io/nodes,pods", metricsNodesErr, metricsPodsErr)
 	if metricsNodesErr == nil && metricsPodsErr == nil && metricsNodesAllowed && metricsPodsAllowed {
 		poller := metrics.NewPoller(cfg.MetricsClient, cfg.RestConfig, cfg.MetricsInterval, telemetryRecorder)
@@ -187,6 +199,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		metricsProvider = disabled
 	}
 
+	// Register namespace domains.
 	if err := snapshot.RegisterNamespaceDomain(registry, informerFactory.SharedInformerFactory()); err != nil {
 		return nil, err
 	}
@@ -210,7 +223,6 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	); err != nil {
 		return nil, err
 	}
-
 	nsRolesAllowed, nsRolesErr := informerFactory.CanListResource("rbac.authorization.k8s.io", "roles")
 	nsRoleBindingsAllowed, nsRoleBindingsErr := informerFactory.CanListResource("rbac.authorization.k8s.io", "rolebindings")
 	appendIssue("namespace-rbac", "rbac.authorization.k8s.io/roles,rolebindings", nsRolesErr, nsRoleBindingsErr)
@@ -224,7 +236,6 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 			return nil, err
 		}
 	}
-
 	if err := snapshot.RegisterNamespaceStorageDomain(
 		registry,
 		informerFactory.SharedInformerFactory(),

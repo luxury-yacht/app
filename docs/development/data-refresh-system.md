@@ -12,6 +12,79 @@ The refresh system has three layers:
 
 Multi-cluster support uses a single refresh orchestrator in the frontend and a backend subsystem per active cluster. All snapshot payloads include cluster metadata, and frontend scopes encode cluster IDs so the right data shows in the right tab.
 
+The refresh subsystem builds point‑in‑time “snapshots” for UI views and serves them over HTTP; streaming endpoints push incremental updates for long‑lived views. The object catalog is the source of truth for namespaces/cluster listings. See backend/app_refresh_setup.go, backend/refresh/system/manager.go, backend/objectcatalog/service.go.
+
+### Informers (watch + cache)
+
+Informers keep a live, in‑memory cache of Kubernetes resources by watching the API. In the catalog, when a resource is supported by a shared informer, the service reads from that cache instead of listing directly. This reduces API load and improves latency. See backend/objectcatalog/informer_registry.go, backend/objectcatalog/collect.go#L52, backend/objectcatalog/collect.go#L324.
+
+Informers are long‑lived watchers + caches of Kubernetes resources. They continuously update in the background and let code read a current, shared in‑memory view. In this repo, that’s mainly used by the object catalog to list resources efficiently (backend/objectcatalog/informer_registry.go, backend/objectcatalog/collect.go).
+
+Informers are a live, constantly updated index.
+
+There is no direct frontend usage of informers; they are backend‑only caches.
+
+### Snapshots (point‑in‑time responses)
+
+Snapshot builders gather data for specific “domains” (cluster, namespace, etc.) and assemble the JSON payloads the frontend requests. Each file under backend/refresh/snapshot/ implements a slice of that data (e.g., workloads, config, events). The refresh manager wires domains and permissions. See backend/refresh/snapshot/\*.go, backend/refresh/system/manager.go.
+
+Snapshot builders are request/refresh‑time assemblers. They gather whatever data they need (often via direct list/get calls and the catalog) and build the response payload for a specific domain (backend/refresh/snapshot/\*.go).
+
+Snapshot builders are the report generators that pull from the index (and other sources) to answer a specific request.
+
+The frontend fetches snapshot payloads via fetchSnapshot in frontend/src/core/refresh/client.ts, used by the refresh orchestrator to load domains like nodes, namespace-workloads, etc. (frontend/src/core/refresh/orchestrator.ts). A direct UI example is the command palette doing a catalog search with fetchSnapshot('catalog', ...) in frontend/src/ui/command-palette/CommandPalette.tsx.
+
+### Streams (incremental updates)
+
+Streams are SSE endpoints used for long‑running, high‑volume updates like catalog, logs, and events. Instead of re‑polling, the frontend subscribes and receives deltas or batches. See:
+
+- Catalog stream: backend/refresh/snapshot/catalog_stream.go (fed by backend/objectcatalog/streaming.go)
+- Event stream: backend/refresh/eventstream/handler.go
+- Log stream: backend/refresh/logstream/handler.go
+- Resource stream: backend/refresh/resourcestream/handler.go
+
+The frontend orchestrator starts/stops stream managers for live updates (frontend/src/core/refresh/orchestrator.ts). Each manager opens an EventSource to a backend stream endpoint:
+
+- Catalog: frontend/src/core/refresh/streaming/catalogStreamManager.ts → /api/v2/stream/catalog
+- Events: frontend/src/core/refresh/streaming/eventStreamManager.ts → /api/v2/stream/events
+- Logs: frontend/src/core/refresh/streaming/logStreamManager.ts → /api/v2/stream/logs
+- Resources: frontend/src/core/refresh/streaming/resourceStreamManager.ts → /api/v2/stream/resources
+
+### How it ties together
+
+- The object catalog periodically syncs: discovery → descriptors → collection (via informers or direct list) → in‑memory summaries. It exposes query APIs and a streaming channel.
+  See backend/objectcatalog/discovery.go, backend/objectcatalog/sync.go, backend/objectcatalog/collect.go, backend/objectcatalog/query.go, backend/objectcatalog/streaming.go.
+- Snapshot builders use live clients and cached data (including the catalog) to build responses on demand; streaming endpoints use aggregators to emit updates when they change.
+
+### Example - Cluster Overview
+
+Frontend:
+
+- Frontend triggers a snapshot refresh. ClusterOverview enables the domain and calls refreshOrchestrator.triggerManualRefresh('cluster-overview'), then reads data from useRefreshDomain('cluster-overview') (frontend/src/modules/cluster/components/ClusterOverview.tsx).
+- The refresh orchestrator registers cluster-overview as a non‑streaming domain and computes a cluster‑scoped query string via scopeResolver (frontend/src/core/refresh/orchestrator.ts), so it uses snapshots only.
+- fetchSnapshot builds a request to /api/v2/snapshots/cluster-overview with the scope (frontend/src/core/refresh/client.ts), and the returned payload is read from overviewDomain.data.overview and overviewDomain.data.metrics in the component (frontend/src/modules/cluster/components/ClusterOverview.tsx).
+
+Backend:
+
+- The refresh subsystem decides whether to use informers or a list fallback. If list/watch permissions exist for nodes/pods/namespaces, it registers the informer‑based builder; otherwise it falls back to list‑only (backend/refresh/system/manager.go).
+- Informer path: RegisterClusterOverviewDomain wires the shared informer factory; the builder waits for cache sync and then lists from listers (nodes/pods/namespaces) to build the snapshot (backend/refresh/snapshot/cluster_overview.go).
+- List fallback path: RegisterClusterOverviewDomainList fetches nodes/pods/namespaces directly from the API and builds the same snapshot (backend/refresh/snapshot/cluster_overview.go).
+- The snapshot payload is assembled in buildClusterOverviewSnapshot (totals, CPU/memory, pod counts, version detection) and returned as the cluster-overview snapshot (backend/refresh/snapshot/cluster_overview.go).
+
+### Example - Nodes
+
+Frontend:
+
+- Frontend enables the nodes domain when the Nodes tab is active in frontend/src/modules/cluster/contexts/ClusterResourcesContext.tsx, then reads data via useRefreshDomain('nodes'). The table in frontend/src/modules/cluster/components/ClusterViewNodes.tsx renders from that domain state.
+- The refresh orchestrator registers nodes as a streaming domain and wires it to resourceStreamManager in frontend/src/core/refresh/orchestrator.ts. That manager opens a WebSocket to /api/v2/stream/resources and subscribes to the nodes domain.
+- When the stream needs a baseline or resync, the frontend falls back to a snapshot fetch for nodes via fetchSnapshot inside resourceStreamManager (frontend/src/core/refresh/streaming/resourceStreamManager.ts).
+
+Backend:
+
+- If list/watch permissions are available, the nodes snapshot builder uses informer listers; otherwise it falls back to list‑only. This is decided in backend/refresh/system/manager.go and implemented in backend/refresh/snapshot/nodes.go.
+- The resource stream itself is fed by informers: backend/refresh/resourcestream/manager.go attaches event handlers to node/pod informers and broadcasts updates for the nodes domain to connected clients.
+- So the Nodes view gets live updates from the resource stream, with the nodes snapshot as the fallback/baseline.
+
 ## Definitions
 
 Explanations of terminology used in this document.
