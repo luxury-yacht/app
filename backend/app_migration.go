@@ -1,3 +1,9 @@
+/*
+ * backend/app_migration.go
+ *
+ * Handles migration of legacy backend files to the current settings format.
+ */
+
 package backend
 
 import (
@@ -13,22 +19,22 @@ import (
 )
 
 type legacyAppPreferences struct {
-	Theme                            string  `json:"theme"`
-	SelectedKubeconfig               string  `json:"selectedKubeconfig"`
+	Theme                            string   `json:"theme"`
+	SelectedKubeconfig               string   `json:"selectedKubeconfig"`
 	SelectedKubeconfigs              []string `json:"selectedKubeconfigs"`
-	UseShortResourceNames            *bool   `json:"useShortResourceNames"`
-	AutoRefreshEnabled               *bool   `json:"autoRefreshEnabled"`
-	RefreshBackgroundClustersEnabled *bool   `json:"refreshBackgroundClustersEnabled"`
-	GridTablePersistenceMode         string  `json:"gridTablePersistenceMode"`
+	UseShortResourceNames            *bool    `json:"useShortResourceNames"`
+	AutoRefreshEnabled               *bool    `json:"autoRefreshEnabled"`
+	RefreshBackgroundClustersEnabled *bool    `json:"refreshBackgroundClustersEnabled"`
+	GridTablePersistenceMode         string   `json:"gridTablePersistenceMode"`
 }
 
 type legacyLocalStoragePayload struct {
-	Theme                            *string                   `json:"theme"`
-	UseShortResourceNames            *bool                     `json:"useShortResourceNames"`
-	AutoRefreshEnabled               *bool                     `json:"autoRefreshEnabled"`
-	RefreshBackgroundClustersEnabled *bool                     `json:"refreshBackgroundClustersEnabled"`
-	GridTablePersistenceMode         *string                   `json:"gridTablePersistenceMode"`
-	ClusterTabsOrder                 []string                  `json:"clusterTabsOrder"`
+	Theme                            *string                    `json:"theme"`
+	UseShortResourceNames            *bool                      `json:"useShortResourceNames"`
+	AutoRefreshEnabled               *bool                      `json:"autoRefreshEnabled"`
+	RefreshBackgroundClustersEnabled *bool                      `json:"refreshBackgroundClustersEnabled"`
+	GridTablePersistenceMode         *string                    `json:"gridTablePersistenceMode"`
+	ClusterTabsOrder                 []string                   `json:"clusterTabsOrder"`
 	GridTableEntries                 map[string]json.RawMessage `json:"gridTableEntries"`
 }
 

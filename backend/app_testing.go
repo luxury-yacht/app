@@ -1,3 +1,9 @@
+/*
+ * backend/app_testing.go
+*
+ * Tests for application testing functionality.
+*/
+
 package backend
 
 import (

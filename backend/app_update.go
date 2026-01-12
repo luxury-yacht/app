@@ -1,3 +1,9 @@
+/*
+ * backend/app_update.go
+ *
+ * Handles application update checks and version management.
+ */
+
 package backend
 
 import (

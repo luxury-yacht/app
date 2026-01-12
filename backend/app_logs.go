@@ -1,3 +1,9 @@
+/*
+ * backend/app_logs.go
+ *
+ * Handles application logging functionality.
+ */
+
 package backend
 
 import (

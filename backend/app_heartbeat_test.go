@@ -1,3 +1,9 @@
+/*
+ * backend/app_heartbeat_test.go
+ *
+ * Tests for the application's heartbeat functionality.
+ */
+
 package backend
 
 import (
