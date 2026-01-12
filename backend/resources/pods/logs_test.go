@@ -25,7 +25,7 @@ import (
 func TestLogFetcherRequiresNamespace(t *testing.T) {
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: fake.NewClientset(),
 	}})
 
@@ -37,7 +37,7 @@ func TestLogFetcherUnsupportedWorkload(t *testing.T) {
 	pods := fake.NewClientset()
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: pods,
 	}})
 
@@ -57,7 +57,7 @@ func TestPodContainersPropagatesError(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -138,7 +138,7 @@ func TestPodsForCronJobContinuesOnPodListError(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -151,7 +151,7 @@ func TestFetchPodLogsPropagatesGetError(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -208,7 +208,7 @@ func TestResolveTargetPodsCronJob(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -229,7 +229,7 @@ func TestLogFetcherAggregatesWorkloadPods(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -290,7 +290,7 @@ func TestFetchContainerLogsSwallowsCommonErrors(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -313,7 +313,7 @@ func TestFetchContainerLogsUnexpectedErrorPropagates(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -356,7 +356,7 @@ func TestLogFetcherAggregatesAndSortsEntries(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -403,7 +403,7 @@ func TestResolveTargetPodsOtherWorkloads(t *testing.T) {
 	}
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -450,7 +450,7 @@ func TestFetchContainerLogsScannerError(t *testing.T) {
 	}
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -479,7 +479,7 @@ func TestFetchPodLogsSpecificContainer(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -503,7 +503,7 @@ func TestLogFetcherHandlesFetchErrors(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 

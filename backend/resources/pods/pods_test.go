@@ -25,12 +25,12 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
 
-type testLogger struct{}
+type noopLogger struct{}
 
-func (testLogger) Debug(string, ...string) {}
-func (testLogger) Info(string, ...string)  {}
-func (testLogger) Warn(string, ...string)  {}
-func (testLogger) Error(string, ...string) {}
+func (noopLogger) Debug(string, ...string) {}
+func (noopLogger) Info(string, ...string)  {}
+func (noopLogger) Warn(string, ...string)  {}
+func (noopLogger) Error(string, ...string) {}
 
 func TestGetPodReturnsDetailedInfo(t *testing.T) {
 	now := time.Now()
@@ -114,7 +114,7 @@ func TestGetPodReturnsDetailedInfo(t *testing.T) {
 	deps := Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           testLogger{},
+			Logger:           noopLogger{},
 			KubernetesClient: client,
 		},
 	}
@@ -149,7 +149,7 @@ func TestGetPodPropagatesError(t *testing.T) {
 	deps := Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           testLogger{},
+			Logger:           noopLogger{},
 			KubernetesClient: client,
 		},
 	}
@@ -171,7 +171,7 @@ func TestDeletePodSucceeds(t *testing.T) {
 	deps := Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           testLogger{},
+			Logger:           noopLogger{},
 			KubernetesClient: client,
 		},
 	}
@@ -203,7 +203,7 @@ func TestDeletePodReturnsErrorWhenAPIFails(t *testing.T) {
 	deps := Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           testLogger{},
+			Logger:           noopLogger{},
 			KubernetesClient: client,
 		},
 	}
@@ -221,7 +221,7 @@ func TestDeletePodReturnsErrorWhenContextMissing(t *testing.T) {
 	deps := Dependencies{
 		Common: common.Dependencies{
 			Context:          nil,
-			Logger:           testLogger{},
+			Logger:           noopLogger{},
 			KubernetesClient: client,
 		},
 	}
@@ -482,7 +482,7 @@ func TestPodsForCronJobReturnsEmptyWhenListingPodsFails(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -511,7 +511,7 @@ func TestFetchPodsWithFilterPropagatesError(t *testing.T) {
 func TestGetPodMetricsFallbackWhenClientMissing(t *testing.T) {
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context: context.Background(),
-		Logger:  testLogger{},
+		Logger:  noopLogger{},
 	}})
 
 	metrics := service.getPodMetrics("team-a")
@@ -533,7 +533,7 @@ func TestGetPodMetricsForPodsUsesIndividualFetchForSmallSets(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          ctx,
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: fake.NewClientset(),
 		MetricsClient:    metricsClient,
 	}})
@@ -564,7 +564,7 @@ func TestGetPodMetricsForPodsListsForLargeSets(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          ctx,
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: fake.NewClientset(),
 		MetricsClient:    metricsClient,
 	}})
@@ -592,7 +592,7 @@ func TestGetPodMetricsListErrorReturnsEmpty(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          ctx,
-		Logger:           testLogger{},
+		Logger:           noopLogger{},
 		KubernetesClient: fake.NewClientset(),
 		MetricsClient:    metricsClient,
 	}})

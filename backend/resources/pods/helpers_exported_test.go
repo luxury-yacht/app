@@ -21,7 +21,7 @@ func TestGetPodMetricsForPods(t *testing.T) {
 	svc := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:       context.Background(),
-			Logger:        testLogger{},
+			Logger:        noopLogger{},
 			MetricsClient: metricsClient,
 		},
 	})

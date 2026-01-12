@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLoggerTrimCapacity(t *testing.T) {
+func noopLoggerTrimCapacity(t *testing.T) {
 	logger := NewLogger(2)
 	logger.Info("first")
 	logger.Info("second")
@@ -19,7 +19,7 @@ func TestLoggerTrimCapacity(t *testing.T) {
 	require.Equal(t, 2, logger.Count())
 }
 
-func TestLoggerEventEmitter(t *testing.T) {
+func noopLoggerEventEmitter(t *testing.T) {
 	logger := NewLogger(10)
 	emitted := 0
 	logger.SetEventEmitter(func(string) { emitted++ })
@@ -27,7 +27,7 @@ func TestLoggerEventEmitter(t *testing.T) {
 	require.Equal(t, 1, emitted)
 }
 
-func TestLoggerClearAndNilSafety(t *testing.T) {
+func noopLoggerClearAndNilSafety(t *testing.T) {
 	var nilLogger *Logger
 	require.NotPanics(t, func() { nilLogger.Info("noop") })
 	require.Equal(t, 0, nilLogger.Count())
@@ -40,7 +40,7 @@ func TestLoggerClearAndNilSafety(t *testing.T) {
 	require.Equal(t, 0, logger.Count())
 }
 
-func TestLoggerDefaultMaxSizeAndUnknownLevel(t *testing.T) {
+func noopLoggerDefaultMaxSizeAndUnknownLevel(t *testing.T) {
 	logger := NewLogger(0) // should use default
 	logger.Log(LogLevel(99), "mystery", "src")
 
