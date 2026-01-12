@@ -1,3 +1,9 @@
+/*
+ * backend/objectcatalog/streaming.go
+ *
+ * Catalog streaming implementation.
+ */
+
 package objectcatalog
 
 import (
@@ -11,25 +17,26 @@ type StreamingUpdate struct {
 }
 
 type streamingAggregator struct {
-	service      *Service
-	mu           sync.Mutex
-	chunks       []*summaryChunk
-	kindSet      map[string]struct{}
-	namespaceSet map[string]struct{}
-	start        time.Time
-	firstFlush   time.Time
+	service      *Service            // service is the catalog service associated with this aggregator.
+	mu           sync.Mutex          // mu protects access to the aggregator's state.
+	chunks       []*summaryChunk     // chunks holds the summary chunks collected by the aggregator.
+	kindSet      map[string]struct{} // kindSet tracks the kinds present in the aggregator.
+	namespaceSet map[string]struct{} // namespaceSet tracks the namespaces present in the aggregator.
+	start        time.Time           // start is the time when the aggregator was created.
+	firstFlush   time.Time           // firstFlush is the time when the first flush occurred.
 }
 
 func newStreamingAggregator(s *Service) *streamingAggregator {
 	return &streamingAggregator{
-		service:      s,
-		chunks:       make([]*summaryChunk, 0),
-		kindSet:      make(map[string]struct{}),
-		namespaceSet: make(map[string]struct{}),
-		start:        s.now(),
+		service:      s,                         // service is the catalog service associated with this aggregator.
+		chunks:       make([]*summaryChunk, 0),  // chunks holds the summary chunks collected by the aggregator.
+		kindSet:      make(map[string]struct{}), // kindSet tracks the kinds present in the aggregator.
+		namespaceSet: make(map[string]struct{}), // namespaceSet tracks the namespaces present in the aggregator.
+		start:        s.now(),                   // start is the time when the aggregator was created.
 	}
 }
 
+// emit adds a batch of summaries to the aggregator.
 func (a *streamingAggregator) emit(_ int, items []Summary) {
 	if a == nil || len(items) == 0 {
 		return
@@ -64,12 +71,14 @@ func (a *streamingAggregator) emit(_ int, items []Summary) {
 	}
 }
 
+// complete marks the aggregator as complete.
 func (a *streamingAggregator) complete(_ int) {
 	if a == nil {
 		return
 	}
 }
 
+// cloneChunksLocked creates a deep copy of the aggregator's chunks.
 func (a *streamingAggregator) cloneChunksLocked() []*summaryChunk {
 	if len(a.chunks) == 0 {
 		return nil
@@ -83,6 +92,7 @@ func (a *streamingAggregator) cloneChunksLocked() []*summaryChunk {
 	return result
 }
 
+// firstFlushLatency returns the duration between the aggregator's creation and its first flush.
 func (a *streamingAggregator) firstFlushLatency() time.Duration {
 	if a == nil || a.firstFlush.IsZero() || a.start.IsZero() {
 		return 0
@@ -90,6 +100,7 @@ func (a *streamingAggregator) firstFlushLatency() time.Duration {
 	return a.firstFlush.Sub(a.start)
 }
 
+// finalize publishes the final state of the aggregator.
 func (a *streamingAggregator) finalize(descriptors []Descriptor, ready bool) {
 	if a == nil {
 		return
@@ -105,6 +116,7 @@ func (a *streamingAggregator) finalize(descriptors []Descriptor, ready bool) {
 	}
 }
 
+// emitSummaries adds a batch of summaries to the aggregator.
 func emitSummaries(index int, agg *streamingAggregator, summaries []Summary, err error, handled bool) ([]Summary, bool, error) {
 	if handled && agg != nil && err == nil {
 		if len(summaries) > 0 {
@@ -148,6 +160,7 @@ func (s *Service) SubscribeStreaming() (<-chan StreamingUpdate, func()) {
 	return ch, unsubscribe
 }
 
+// broadcastStreaming sends a streaming update to all subscribers.
 func (s *Service) broadcastStreaming(ready bool) {
 	s.streamSubMu.Lock()
 	defer s.streamSubMu.Unlock()
@@ -194,6 +207,7 @@ func (s *Service) CachesReady() bool {
 	return s.cachesReady
 }
 
+// publishStreamingState updates the streaming state in the service.
 func (s *Service) publishStreamingState(
 	chunks []*summaryChunk,
 	kindSet map[string]struct{},
@@ -218,6 +232,7 @@ func (s *Service) publishStreamingState(
 	s.mu.Unlock()
 }
 
+// setFirstBatchLatency records the time-to-first-batch measurement.
 func (s *Service) setFirstBatchLatency(latency time.Duration) {
 	s.mu.Lock()
 	s.lastFirstBatchLatency = latency

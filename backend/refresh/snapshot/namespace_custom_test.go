@@ -6,6 +6,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type noopLogger struct{}
+
+func (noopLogger) Debug(string, ...string) {}
+func (noopLogger) Info(string, ...string)  {}
+func (noopLogger) Warn(string, ...string)  {}
+func (noopLogger) Error(string, ...string) {}
+
 func TestSortNamespaceCustomSummaries(t *testing.T) {
 	items := []NamespaceCustomSummary{
 		{Namespace: "staging", APIGroup: "apps.example.com", Kind: "Widget", Name: "zeta"},
@@ -23,10 +30,3 @@ func TestSortNamespaceCustomSummaries(t *testing.T) {
 		{Namespace: "staging", APIGroup: "apps.example.com", Kind: "Widget", Name: "zeta"},
 	}, items)
 }
-
-type noopTestLogger struct{}
-
-func (noopTestLogger) Debug(string, ...string) {}
-func (noopTestLogger) Info(string, ...string)  {}
-func (noopTestLogger) Warn(string, ...string)  {}
-func (noopTestLogger) Error(string, ...string) {}

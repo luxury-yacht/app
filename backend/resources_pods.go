@@ -1,9 +1,17 @@
+/*
+ * backend/resources_pods.go
+ *
+ * App-level pod resource wrappers.
+ * - Bridges Wails handlers to pod services.
+ * - Resolves cluster-scoped dependencies for pod actions.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/pods"
 
 func (a *App) GetPod(namespace string, name string, detailed bool) (*PodDetailInfo, error) {
-	return pods.GetPod(pods.Dependencies{Common: a.resourceDependencies()}, namespace, name, detailed)
+	return pods.GetPod(a.resourceDependencies(), namespace, name, detailed)
 }
 
 func (a *App) DeletePod(clusterID, namespace, name string) error {
@@ -11,7 +19,7 @@ func (a *App) DeletePod(clusterID, namespace, name string) error {
 	if err != nil {
 		return err
 	}
-	return pods.DeletePod(pods.Dependencies{Common: deps}, namespace, name)
+	return pods.DeletePod(deps, namespace, name)
 }
 
 func (a *App) LogFetcher(clusterID string, req LogFetchRequest) LogFetchResponse {
@@ -19,7 +27,7 @@ func (a *App) LogFetcher(clusterID string, req LogFetchRequest) LogFetchResponse
 	if err != nil {
 		return LogFetchResponse{Error: err.Error()}
 	}
-	service := pods.NewService(pods.Dependencies{Common: deps})
+	service := pods.NewService(deps)
 	return service.LogFetcher(req)
 }
 
@@ -28,6 +36,6 @@ func (a *App) GetPodContainers(clusterID, namespace, podName string) ([]string, 
 	if err != nil {
 		return nil, err
 	}
-	service := pods.NewService(pods.Dependencies{Common: deps})
+	service := pods.NewService(deps)
 	return service.PodContainers(namespace, podName)
 }

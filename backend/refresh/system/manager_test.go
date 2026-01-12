@@ -16,7 +16,7 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
-	clientgotesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 
 	"helm.sh/helm/v3/pkg/action"
 )
@@ -32,7 +32,7 @@ func TestNewSubsystemRequiresDynamicClient(t *testing.T) {
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
-		Logger: stubLogger{},
+		Logger: noopLogger{},
 	}
 
 	manager, handler, recorder, _, cache, _, err := NewSubsystem(cfg)
@@ -58,7 +58,7 @@ func TestNewSubsystemRequiresHelmFactory(t *testing.T) {
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
-		Logger: stubLogger{},
+		Logger: noopLogger{},
 	}
 
 	manager, handler, recorder, _, cache, _, err := NewSubsystem(cfg)
@@ -73,7 +73,7 @@ func TestNewSubsystemRequiresHelmFactory(t *testing.T) {
 
 func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T) {
 	client := kubernetesfake.NewClientset()
-	client.PrependReactor("create", "selfsubjectaccessreviews", func(action clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("ssar denied")
 	})
 
@@ -91,7 +91,7 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
-		Logger: stubLogger{},
+		Logger: noopLogger{},
 	}
 
 	manager, handler, recorder, issues, cache, factory, err := NewSubsystem(cfg)
@@ -139,12 +139,12 @@ func (p noopObjectDetailProvider) FetchObjectDetails(context.Context, string, st
 	return nil, "", p.err
 }
 
-type stubLogger struct{}
+type noopLogger struct{}
 
-func (stubLogger) Debug(string, ...string) {}
-func (stubLogger) Info(string, ...string)  {}
-func (stubLogger) Warn(string, ...string)  {}
-func (stubLogger) Error(string, ...string) {}
+func (noopLogger) Debug(string, ...string) {}
+func (noopLogger) Info(string, ...string)  {}
+func (noopLogger) Warn(string, ...string)  {}
+func (noopLogger) Error(string, ...string) {}
 
 type fakeInformerHub struct {
 	synced bool

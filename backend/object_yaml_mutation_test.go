@@ -20,7 +20,7 @@ import (
 	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	clientfake "k8s.io/client-go/kubernetes/fake"
-	kubetesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 	"k8s.io/utils/ptr"
 )
 
@@ -75,8 +75,8 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 
 	dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme, initialDeployment.DeepCopyObject())
 	updateCalls := 0
-	dynamicClient.Fake.PrependReactor("update", "*", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		updateAction := action.(kubetesting.UpdateAction)
+	dynamicClient.Fake.PrependReactor("update", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		updateAction := action.(cgotesting.UpdateAction)
 		obj := updateAction.GetObject().(*unstructured.Unstructured)
 		copyObj := obj.DeepCopy()
 		updateCalls++
@@ -268,8 +268,8 @@ spec:
 func TestValidateObjectYamlForbiddenError(t *testing.T) {
 	app, dynamicClient, clusterID := setupYAMLTestApp(t)
 
-	dynamicClient.Fake.PrependReactor("update", "*", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		updateAction := action.(kubetesting.UpdateAction)
+	dynamicClient.Fake.PrependReactor("update", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		updateAction := action.(cgotesting.UpdateAction)
 		return true, nil, apierrors.NewForbidden(
 			schema.GroupResource{Group: "apps", Resource: "deployments"},
 			updateAction.GetResource().Resource,

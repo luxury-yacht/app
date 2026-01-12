@@ -1,3 +1,10 @@
+/*
+ * backend/resources/types/types.go
+ *
+ * Shared resource type definitions.
+ * - Common data structures used across resources.
+ */
+
 package types
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/namespaces/namespaces.go
+ *
+ * Namespace resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package namespaces
 
 import (
@@ -7,35 +14,28 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Dependencies captures collaborators required for namespace operations.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-// Service exposes helpers for namespace details.
 type Service struct {
-	deps Dependencies
+	deps common.Dependencies
 }
 
-// NewService constructs a namespace service.
-func NewService(deps Dependencies) *Service {
+func NewService(deps common.Dependencies) *Service {
 	return &Service{deps: deps}
 }
 
 // Namespace returns a detailed description for the given namespace.
-func (s *Service) Namespace(name string) (*restypes.NamespaceDetails, error) {
+func (s *Service) Namespace(name string) (*types.NamespaceDetails, error) {
 	if err := s.ensureClient("namespace"); err != nil {
 		return nil, err
 	}
 
-	client := s.deps.Common.KubernetesClient
-	ns, err := client.CoreV1().Namespaces().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	client := s.deps.KubernetesClient
+	ns, err := client.CoreV1().Namespaces().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to get namespace %s: %v", name, err))
 		return nil, fmt.Errorf("failed to get namespace: %v", err)
@@ -44,8 +44,8 @@ func (s *Service) Namespace(name string) (*restypes.NamespaceDetails, error) {
 	return s.buildNamespaceDetails(ns), nil
 }
 
-func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *restypes.NamespaceDetails {
-	details := &restypes.NamespaceDetails{
+func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *types.NamespaceDetails {
+	details := &types.NamespaceDetails{
 		Kind:        "Namespace",
 		Name:        namespace.Name,
 		Age:         common.FormatAge(namespace.CreationTimestamp.Time),
@@ -83,13 +83,13 @@ func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *restypes.N
 }
 
 func (s *Service) hasWorkloads(namespace string) (bool, bool) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		s.logError("hasWorkloads: kubernetes client not initialised")
 		return false, true
 	}
 
-	ctx, cancel := context.WithTimeout(s.deps.Common.Context, config.NamespaceOperationTimeout)
+	ctx, cancel := context.WithTimeout(s.deps.Context, config.NamespaceOperationTimeout)
 	defer cancel()
 
 	opts := metav1.ListOptions{Limit: 1}
@@ -153,12 +153,12 @@ func (s *Service) hasWorkloads(namespace string) (bool, bool) {
 }
 
 func (s *Service) collectQuotasAndLimits(namespace string) (quotas, limits []string) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil
 	}
 
-	ctx, cancel := context.WithTimeout(s.deps.Common.Context, config.NamespaceOperationTimeout)
+	ctx, cancel := context.WithTimeout(s.deps.Context, config.NamespaceOperationTimeout)
 	defer cancel()
 
 	if rqList, err := client.CoreV1().ResourceQuotas(namespace).List(ctx, metav1.ListOptions{}); err == nil {
@@ -177,19 +177,19 @@ func (s *Service) collectQuotasAndLimits(namespace string) (quotas, limits []str
 }
 
 func (s *Service) ensureClient(resource string) error {
-	if s.deps.Common.EnsureClient != nil {
-		if err := s.deps.Common.EnsureClient(resource); err != nil {
+	if s.deps.EnsureClient != nil {
+		if err := s.deps.EnsureClient(resource); err != nil {
 			return err
 		}
 	}
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client not initialized")
 	}
 	return nil
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "ResourceLoader")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Error(msg, "ResourceLoader")
 	}
 }

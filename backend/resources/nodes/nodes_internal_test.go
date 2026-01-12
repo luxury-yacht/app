@@ -1,3 +1,10 @@
+/*
+ * backend/resources/nodes/nodes_internal_test.go
+ *
+ * Tests for Node internal helpers.
+ * - Covers Node internal helpers behavior and edge cases.
+ */
+
 package nodes
 
 import (
@@ -9,9 +16,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
-	kubetesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	metricsfake "k8s.io/metrics/pkg/client/clientset/versioned/fake"
@@ -25,22 +32,20 @@ func TestEnsureMetricsClientInitializesClient(t *testing.T) {
 		testsupport.WithDepsRestConfig(&rest.Config{Host: "https://example.com", TLSClientConfig: rest.TLSClientConfig{Insecure: true}}),
 		testsupport.WithDepsSetMetrics(func(metricsclient.Interface) { setterCalled = true }),
 	)
-	service := NewService(Dependencies{Common: deps})
+	service := NewService(deps)
 
 	service.ensureMetricsClient()
 
 	require.True(t, setterCalled, "metrics setter should fire when rest config is available")
-	require.NotNil(t, service.deps.Common.MetricsClient)
+	require.NotNil(t, service.deps.MetricsClient)
 }
 
 func TestListNodeMetricsHandlesAPIErrors(t *testing.T) {
 	//lint:ignore SA1019 No replacement for the deprecated method
 	client := metricsfake.NewSimpleClientset()
-	service := NewService(Dependencies{
-		Common: testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)),
-	})
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)))
 
-	client.Fake.PrependReactor("*", "*", func(action kubetesting.Action) (bool, runtime.Object, error) {
+	client.Fake.PrependReactor("*", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("list failed")
 	})
 
@@ -59,12 +64,10 @@ func TestListNodeMetricsReturnsValues(t *testing.T) {
 
 	//lint:ignore SA1019 No replacement for the deprecated method
 	client := metricsfake.NewSimpleClientset(metrics)
-	client.Fake.PrependReactor("*", "*", func(kubetesting.Action) (bool, runtime.Object, error) {
+	client.Fake.PrependReactor("*", "*", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, &metricsv1beta1.NodeMetricsList{Items: []metricsv1beta1.NodeMetrics{*metrics}}, nil
 	})
-	service := NewService(Dependencies{
-		Common: testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)),
-	})
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)))
 
 	result := service.listNodeMetrics()
 	require.Contains(t, result, "node-1")
@@ -82,10 +85,8 @@ func TestListAllPodsByNodeGroupsPods(t *testing.T) {
 	ignored := testsupport.PodFixture("default", "pod-ignored")
 	ignored.Spec.NodeName = ""
 
-	client := kubefake.NewClientset(podOne, podTwo, ignored)
-	service := NewService(Dependencies{
-		Common: testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(client)),
-	})
+	client := cgofake.NewClientset(podOne, podTwo, ignored)
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(client)))
 
 	result := service.listAllPodsByNode()
 	require.Len(t, result, 1)
@@ -103,16 +104,14 @@ func TestGetNodeMetricsReturnsUsage(t *testing.T) {
 
 	//lint:ignore SA1019 No replacement for the deprecated method
 	client := metricsfake.NewSimpleClientset(metrics)
-	client.Fake.PrependReactor("*", "*", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		if get, ok := action.(kubetesting.GetAction); ok && get.GetName() == "node-1" {
+	client.Fake.PrependReactor("*", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		if get, ok := action.(cgotesting.GetAction); ok && get.GetName() == "node-1" {
 			return true, metrics, nil
 		}
 		return false, nil, nil
 	})
 
-	service := NewService(Dependencies{
-		Common: testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)),
-	})
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)))
 
 	usage := service.getNodeMetrics("node-1")
 	require.NotNil(t, usage)
@@ -160,9 +159,7 @@ func (l *recordingLogger) Error(string, ...string) { l.errorCalled = true }
 
 func TestLogHelpersUseLogger(t *testing.T) {
 	logger := &recordingLogger{}
-	service := NewService(Dependencies{
-		Common: testsupport.NewResourceDependencies(testsupport.WithDepsLogger(logger)),
-	})
+	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsLogger(logger)))
 
 	service.logInfo("info")
 	service.logError("error")

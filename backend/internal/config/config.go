@@ -1,3 +1,9 @@
+/*
+ * backend/internal/config/config.go
+ *
+ * Configuration and timing settings used across the backend refresh subsystem.
+ */
+
 package config
 
 import "time"
@@ -32,11 +38,20 @@ const (
 	// ResponseCacheMaxEntries caps the number of cached GET responses before eviction.
 	ResponseCacheMaxEntries = 512
 
+	// ResponseCacheInvalidationWarmupAge ignores cache invalidation events for very new objects.
+	ResponseCacheInvalidationWarmupAge = time.Minute
+
 	// PermissionCacheTTL controls how long SSAR permission decisions are cached.
 	PermissionCacheTTL = 2 * time.Minute
 
 	// PermissionCheckTimeout bounds SelfSubjectAccessReview calls.
 	PermissionCheckTimeout = 5 * time.Second
+
+	// PermissionPrimeTimeout bounds permission priming calls before informer registration.
+	PermissionPrimeTimeout = 10 * time.Second
+
+	// PermissionPreflightTimeout bounds permission preflight calls during refresh setup.
+	PermissionPreflightTimeout = 15 * time.Second
 
 	// ClusterVersionCacheTTL controls how long the cluster version lookup is cached.
 	ClusterVersionCacheTTL = 10 * time.Minute
@@ -70,6 +85,48 @@ const (
 
 	// LogStreamKeepAliveInterval controls how often keepalive messages are emitted for log streams.
 	LogStreamKeepAliveInterval = 15 * time.Second
+
+	// EventStreamKeepAliveInterval controls how often keepalive messages are emitted for event streams.
+	EventStreamKeepAliveInterval = 15 * time.Second
+
+	// EventStreamMaxSubscribersPerScope limits concurrent subscribers per scope to prevent memory exhaustion.
+	EventStreamMaxSubscribersPerScope = 100
+
+	// EventStreamResumeBufferSize caps stored events per scope for resume tokens.
+	EventStreamResumeBufferSize = 1000
+
+	// EventStreamSubscriberBufferSize buffers per-subscriber event stream deliveries.
+	EventStreamSubscriberBufferSize = 256
+
+	// AggregateEventStreamResumeBufferSize caps stored aggregate events per scope for resume tokens.
+	AggregateEventStreamResumeBufferSize = 2000
+
+	// AggregateEventStreamEntryBufferSize buffers aggregate events before delivery.
+	AggregateEventStreamEntryBufferSize = 256
+
+	// ResourceStreamMaxSubscribersPerScope limits concurrent resource stream subscribers per scope.
+	ResourceStreamMaxSubscribersPerScope = 100
+
+	// ResourceStreamSubscriberBufferSize buffers per-subscriber resource stream deliveries.
+	ResourceStreamSubscriberBufferSize = 256
+
+	// ResourceStreamResumeBufferSize caps buffered resource updates per scope for resume tokens.
+	ResourceStreamResumeBufferSize = 1000
+
+	// StreamMuxWriteTimeout bounds websocket writes for multiplexed streams.
+	StreamMuxWriteTimeout = 10 * time.Second
+
+	// StreamMuxHandshakeTimeout bounds websocket upgrade handshakes for multiplexed streams.
+	StreamMuxHandshakeTimeout = 45 * time.Second
+
+	// StreamMuxOutgoingBufferSize caps queued outbound messages per multiplexed stream.
+	StreamMuxOutgoingBufferSize = 512
+
+	// StreamMuxReadBufferSize configures websocket read buffer sizing for multiplexed streams.
+	StreamMuxReadBufferSize = 4096
+
+	// StreamMuxWriteBufferSize configures websocket write buffer sizing for multiplexed streams.
+	StreamMuxWriteBufferSize = 4096
 
 	// NodeDrainTimeout is the maximum time to wait for pods to terminate during node drain.
 	NodeDrainTimeout = 30 * time.Second

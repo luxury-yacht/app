@@ -1,3 +1,10 @@
+/*
+ * backend/resources/policy/poddisruptionbudgets_test.go
+ *
+ * Tests for PodDisruptionBudget resource handlers.
+ * - Covers PodDisruptionBudget resource handlers behavior and edge cases.
+ */
+
 package policy
 
 import (
@@ -15,20 +22,21 @@ import (
 	cgotesting "k8s.io/client-go/testing"
 )
 
-type pdbTestLogger struct {
+// errorCapturingLogger stores error messages for assertions in tests.
+type errorCapturingLogger struct {
 	errors []string
 }
 
-func (l *pdbTestLogger) Error(msg string, _ ...string) {
+func (l *errorCapturingLogger) Error(msg string, _ ...string) {
 	l.errors = append(l.errors, msg)
 }
 
-func (pdbTestLogger) Debug(string, ...string) {}
-func (pdbTestLogger) Info(string, ...string)  {}
-func (pdbTestLogger) Warn(string, ...string)  {}
+func (errorCapturingLogger) Debug(string, ...string) {}
+func (errorCapturingLogger) Info(string, ...string)  {}
+func (errorCapturingLogger) Warn(string, ...string)  {}
 
 func TestPodDisruptionBudgetRequiresClient(t *testing.T) {
-	svc := NewService(Dependencies{Common: common.Dependencies{Context: context.Background()}})
+	svc := NewService(common.Dependencies{Context: context.Background()})
 	_, err := svc.PodDisruptionBudget("default", "demo")
 	require.Error(t, err)
 
@@ -68,12 +76,12 @@ func TestPodDisruptionBudgetDetailsFormatting(t *testing.T) {
 	}
 
 	client := fake.NewClientset(pdb)
-	logger := &pdbTestLogger{}
-	svc := NewService(Dependencies{Common: common.Dependencies{
+	logger := &errorCapturingLogger{}
+	svc := NewService(common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
 		Logger:           logger,
-	}})
+	})
 
 	resp, err := svc.PodDisruptionBudget("default", "demo")
 	require.NoError(t, err)
@@ -101,12 +109,12 @@ func TestPodDisruptionBudgetListErrorLogs(t *testing.T) {
 	client.PrependReactor("list", "poddisruptionbudgets", func(action cgotesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, nil, fmt.Errorf("boom")
 	})
-	logger := &pdbTestLogger{}
-	svc := NewService(Dependencies{Common: common.Dependencies{
+	logger := &errorCapturingLogger{}
+	svc := NewService(common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
 		Logger:           logger,
-	}})
+	})
 
 	_, err := svc.PodDisruptionBudgets("default")
 	require.Error(t, err)

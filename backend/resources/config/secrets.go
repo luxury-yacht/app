@@ -1,3 +1,10 @@
+/*
+ * backend/resources/config/secrets.go
+ *
+ * Secret resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package config
 
 import (
@@ -5,15 +12,15 @@ import (
 	"sort"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (s *Service) Secret(namespace, name string) (*restypes.SecretDetails, error) {
-	secret, err := s.deps.Common.KubernetesClient.CoreV1().Secrets(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+func (s *Service) Secret(namespace, name string) (*types.SecretDetails, error) {
+	secret, err := s.deps.KubernetesClient.CoreV1().Secrets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get secret %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get secret %s/%s: %v", namespace, name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get secret: %v", err)
 	}
 
@@ -21,15 +28,15 @@ func (s *Service) Secret(namespace, name string) (*restypes.SecretDetails, error
 	return s.processSecretDetails(secret, pods), nil
 }
 
-func (s *Service) Secrets(namespace string) ([]*restypes.SecretDetails, error) {
-	secrets, err := s.deps.Common.KubernetesClient.CoreV1().Secrets(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+func (s *Service) Secrets(namespace string) ([]*types.SecretDetails, error) {
+	secrets, err := s.deps.KubernetesClient.CoreV1().Secrets(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list secrets: %v", err)
 	}
 
 	pods := s.listNamespacePods(namespace)
 
-	var detailsList []*restypes.SecretDetails
+	var detailsList []*types.SecretDetails
 	for i := range secrets.Items {
 		detailsList = append(detailsList, s.processSecretDetails(&secrets.Items[i], pods))
 	}
@@ -37,8 +44,8 @@ func (s *Service) Secrets(namespace string) ([]*restypes.SecretDetails, error) {
 	return detailsList, nil
 }
 
-func (s *Service) processSecretDetails(secret *corev1.Secret, pods *corev1.PodList) *restypes.SecretDetails {
-	details := &restypes.SecretDetails{
+func (s *Service) processSecretDetails(secret *corev1.Secret, pods *corev1.PodList) *types.SecretDetails {
+	details := &types.SecretDetails{
 		Kind:        "Secret",
 		Name:        secret.Name,
 		Namespace:   secret.Namespace,

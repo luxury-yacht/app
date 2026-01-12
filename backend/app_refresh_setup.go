@@ -78,7 +78,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			ObjectCatalogEnabled:    func() bool { return true },
 			ClusterID:               clusterMeta.ID,
 			ClusterName:             clusterMeta.Name,
-		}, selectionKey)
+		})
 		if err != nil {
 			return err
 		}
@@ -127,7 +127,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			cfg.ObjectCatalogNamespaces = a.catalogNamespaceGroups
 			cfg.ObjectCatalogEnabled = func() bool { return true }
 
-			subsystem, err := a.buildRefreshSubsystem(cfg, clusterMeta.ID)
+			subsystem, err := a.buildRefreshSubsystem(cfg)
 			if err != nil {
 				return err
 			}
@@ -227,8 +227,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 }
 
 // buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.
-// buildRefreshSubsystem constructs a refresh subsystem and stores permission cache state.
-func (a *App) buildRefreshSubsystem(cfg system.Config, cacheKey string) (*system.Subsystem, error) {
+func (a *App) buildRefreshSubsystem(cfg system.Config) (*system.Subsystem, error) {
 	subsystem, err := newRefreshSubsystemWithServices(cfg)
 	if err != nil {
 		return nil, err

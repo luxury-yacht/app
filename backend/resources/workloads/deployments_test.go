@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/deployments_test.go
+ *
+ * Tests for Deployment resource handlers.
+ * - Covers Deployment resource handlers behavior and edge cases.
+ */
+
 package workloads_test
 
 import (
@@ -9,7 +16,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 )
 
@@ -60,7 +67,7 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 		podB.OwnerReferences[0].UID = replicaSet.UID
 	}
 
-	client := kubefake.NewClientset(
+	client := cgofake.NewClientset(
 		deployment.DeepCopy(),
 		replicaSet.DeepCopy(),
 		podA.DeepCopy(),
@@ -72,7 +79,7 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	)
 
-	service := workloads.NewDeploymentService(workloads.Dependencies{Common: deps})
+	service := workloads.NewDeploymentService(deps)
 	details, err := service.Deployment("default", "web")
 	if err != nil {
 		t.Fatalf("Deployment returned error: %v", err)

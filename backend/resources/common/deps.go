@@ -1,13 +1,20 @@
+/*
+ * backend/resources/common/deps.go
+ *
+ * Shared dependency bundle for resource services.
+ * - Carries clients, config, and helper callbacks.
+ */
+
 package common
 
 import (
 	"context"
 
-	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
+	"k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 // EnsureClientFunc initialises core Kubernetes clients when required.
@@ -21,10 +28,10 @@ type Dependencies struct {
 	Context             context.Context
 	Logger              Logger
 	KubernetesClient    kubernetes.Interface
-	MetricsClient       metricsclient.Interface
-	SetMetricsClient    func(metricsclient.Interface)
+	MetricsClient       versioned.Interface
+	SetMetricsClient    func(versioned.Interface)
 	DynamicClient       dynamic.Interface
-	APIExtensionsClient apiextensionsclientset.Interface
+	APIExtensionsClient clientset.Interface
 	RestConfig          *rest.Config
 	EnsureClient        EnsureClientFunc
 	EnsureAPIExtensions EnsureAPIExtensionsFunc

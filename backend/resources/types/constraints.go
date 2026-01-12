@@ -1,3 +1,10 @@
+/*
+ * backend/resources/types/constraints.go
+ *
+ * Type definitions for Constraints resources.
+ * - Shared data structures for API responses.
+ */
+
 package types
 
 // LimitRangeDetails represents comprehensive limit range information.

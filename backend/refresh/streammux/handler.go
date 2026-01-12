@@ -19,12 +19,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
-const (
-	writeTimeout     = 10 * time.Second
-	handshakeTimeout = 45 * time.Second
-	outgoingBuffer   = 512
-)
-
 type wsConn interface {
 	ReadJSON(v interface{}) error
 	WriteJSON(v interface{}) error
@@ -95,10 +89,10 @@ func NewHandler(cfg Config) (*Handler, error) {
 		allowClusterScopedRequests: cfg.AllowClusterScopedRequests,
 		resolveClusterName:         cfg.ResolveClusterName,
 		upgrader: websocket.Upgrader{
-			ReadBufferSize:  4096,
-			WriteBufferSize: 4096,
+			ReadBufferSize:  config.StreamMuxReadBufferSize,
+			WriteBufferSize: config.StreamMuxWriteBufferSize,
 			// Prevent slow or stalled websocket upgrades from hanging indefinitely.
-			HandshakeTimeout: handshakeTimeout,
+			HandshakeTimeout: config.StreamMuxHandshakeTimeout,
 			CheckOrigin:      func(r *http.Request) bool { return true },
 		},
 	}, nil
@@ -200,7 +194,7 @@ func newSession(
 		allowClusterScopedRequest: allowClusterScopedRequest,
 		resolveClusterName:        resolveClusterName,
 		subs:                      make(map[string]*sessionSubscription),
-		outgoing:                  make(chan ServerMessage, outgoingBuffer),
+		outgoing:                  make(chan ServerMessage, config.StreamMuxOutgoingBufferSize),
 		done:                      make(chan struct{}),
 	}
 }
@@ -477,7 +471,7 @@ func (s *session) writeLoop(ctx context.Context) {
 }
 
 func (s *session) writeMessage(msg ServerMessage) error {
-	if err := s.conn.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+	if err := s.conn.SetWriteDeadline(time.Now().Add(config.StreamMuxWriteTimeout)); err != nil {
 		s.logger.Warn(fmt.Sprintf("stream mux: write deadline failed: %v", err), "StreamMux")
 	}
 	if err := s.conn.WriteJSON(msg); err != nil {

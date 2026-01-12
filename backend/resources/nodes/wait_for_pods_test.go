@@ -1,3 +1,10 @@
+/*
+ * backend/resources/nodes/wait_for_pods_test.go
+ *
+ * Tests for Pod termination wait helpers.
+ * - Covers Pod termination wait helpers behavior and edge cases.
+ */
+
 package nodes
 
 import (
@@ -5,19 +12,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 func TestWaitForPodsToTerminateReturnsWhenNoneRemain(t *testing.T) {
-	service := NewService(Dependencies{
-		Common: testsupport.NewResourceDependencies(
-			testsupport.WithDepsContext(context.Background()),
-			testsupport.WithDepsKubeClient(kubefake.NewClientset()),
-		),
-	})
+	service := NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(fake.NewClientset()),
+	))
 
 	options := types.DrainNodeOptions{GracePeriodSeconds: 1}
 	require.NoError(t, service.waitForPodsToTerminate("node-1", options))
@@ -26,14 +31,12 @@ func TestWaitForPodsToTerminateReturnsWhenNoneRemain(t *testing.T) {
 func TestWaitForPodsToTerminateTimesOutWhenPodsRemain(t *testing.T) {
 	pod := testsupport.PodFixture("default", "stuck-pod")
 	pod.Spec.NodeName = "node-1"
-	client := kubefake.NewClientset(pod)
+	client := fake.NewClientset(pod)
 
-	service := NewService(Dependencies{
-		Common: testsupport.NewResourceDependencies(
-			testsupport.WithDepsContext(context.Background()),
-			testsupport.WithDepsKubeClient(client),
-		),
-	})
+	service := NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(client),
+	))
 
 	options := types.DrainNodeOptions{GracePeriodSeconds: 1}
 	err := service.waitForPodsToTerminate("node-1", options)

@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
@@ -20,7 +21,6 @@ const (
 	helmReleaseNamePrefix              = "sh.helm.release.v1."
 	helmReleaseOwnerLabel              = "owner"
 	helmReleaseOwnerValue              = "helm"
-	responseCacheInvalidationWarmupAge = time.Minute
 )
 
 var responseCacheInvalidationSkipKinds = map[string]struct{}{
@@ -313,7 +313,7 @@ func shouldSkipWarmupInvalidation(
 	if age < 0 {
 		return false
 	}
-	return age >= responseCacheInvalidationWarmupAge
+	return age >= config.ResponseCacheInvalidationWarmupAge
 }
 
 func isHelmReleaseObject(name string, labels map[string]string, secretType string) bool {

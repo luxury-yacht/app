@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestInitKubernetesClientReturnsEarlyWithExistingClient(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
-	app.client = fake.NewClientset()
+	app.client = cgofake.NewClientset()
 
 	if err := app.initKubernetesClient(); err != nil {
 		t.Fatalf("expected nil error when client already present, got %v", err)

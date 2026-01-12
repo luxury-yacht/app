@@ -23,12 +23,6 @@ type eventStreamSubscriber interface {
 	Subscribe(scope string) (<-chan eventstream.StreamEvent, context.CancelFunc)
 }
 
-// aggregateKeepAliveInterval matches the per-cluster event stream keep-alive cadence.
-const aggregateKeepAliveInterval = 15 * time.Second
-
-// aggregateResumeBufferSize caps stored events per aggregate scope for resume tokens.
-const aggregateResumeBufferSize = 2000
-
 // aggregateEventStreamHandler merges event streams across multiple clusters.
 type aggregateEventStreamHandler struct {
 	snapshotService refresh.SnapshotService
@@ -176,7 +170,7 @@ func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	entryCh := make(chan streamEntry, 256)
+	entryCh := make(chan streamEntry, config.AggregateEventStreamEntryBufferSize)
 	cancelFns := make([]context.CancelFunc, 0, len(targets))
 	for _, id := range targets {
 		manager := h.managers[id]
@@ -200,7 +194,7 @@ func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 		}
 	}()
 
-	keepAlive := time.NewTicker(aggregateKeepAliveInterval)
+	keepAlive := time.NewTicker(config.EventStreamKeepAliveInterval)
 	defer keepAlive.Stop()
 	heartbeat := time.NewTicker(config.StreamHeartbeatInterval)
 	defer heartbeat.Stop()
@@ -516,7 +510,7 @@ func (h *aggregateEventStreamHandler) bufferAggregateEvent(
 	defer h.mu.Unlock()
 	buffer := h.buffers[scope]
 	if buffer == nil {
-		buffer = newAggregateEventBuffer(aggregateResumeBufferSize)
+		buffer = newAggregateEventBuffer(config.AggregateEventStreamResumeBufferSize)
 		h.buffers[scope] = buffer
 	}
 	buffer.add(aggregateBufferItem{Sequence: sequence, Entry: entry})

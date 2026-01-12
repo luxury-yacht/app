@@ -1,3 +1,10 @@
+/*
+ * backend/resources/admission/webhooks.go
+ *
+ * Admission webhook conversion helpers.
+ * - Normalizes webhook configs for UI models.
+ */
+
 package admission
 
 import (
@@ -5,178 +12,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-// Dependencies captures collaborators needed for admission resources.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-// Service exposes helpers for mutating/validating webhook configurations.
-type Service struct {
-	deps Dependencies
-}
-
-// NewService constructs a new admission Service.
-func NewService(deps Dependencies) *Service {
-	return &Service{deps: deps}
-}
-
-// MutatingWebhookConfiguration returns details for a single mutating configuration.
-func (s *Service) MutatingWebhookConfiguration(name string) (*restypes.MutatingWebhookConfigurationDetails, error) {
-	client := s.deps.Common.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	config, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(s.deps.Common.Context, name, metav1.GetOptions{})
-	if err != nil {
-		s.logError(fmt.Sprintf("Failed to get mutating webhook configuration %s: %v", name, err))
-		return nil, fmt.Errorf("failed to get mutating webhook configuration: %v", err)
-	}
-
-	return s.buildMutatingWebhookConfigurationDetails(config), nil
-}
-
-// MutatingWebhookConfigurations lists all mutating webhook configurations.
-func (s *Service) MutatingWebhookConfigurations() ([]*restypes.MutatingWebhookConfigurationDetails, error) {
-	client := s.deps.Common.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	configs, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().List(s.deps.Common.Context, metav1.ListOptions{})
-	if err != nil {
-		s.logError(fmt.Sprintf("Failed to list mutating webhook configurations: %v", err))
-		return nil, fmt.Errorf("failed to list mutating webhook configurations: %v", err)
-	}
-
-	result := make([]*restypes.MutatingWebhookConfigurationDetails, 0, len(configs.Items))
-	for i := range configs.Items {
-		result = append(result, s.buildMutatingWebhookConfigurationDetails(&configs.Items[i]))
-	}
-
-	return result, nil
-}
-
-// ValidatingWebhookConfiguration returns details for a single validating configuration.
-func (s *Service) ValidatingWebhookConfiguration(name string) (*restypes.ValidatingWebhookConfigurationDetails, error) {
-	client := s.deps.Common.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	config, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(s.deps.Common.Context, name, metav1.GetOptions{})
-	if err != nil {
-		s.logError(fmt.Sprintf("Failed to get validating webhook configuration %s: %v", name, err))
-		return nil, fmt.Errorf("failed to get validating webhook configuration: %v", err)
-	}
-
-	return s.buildValidatingWebhookConfigurationDetails(config), nil
-}
-
-// ValidatingWebhookConfigurations lists all validating webhook configurations.
-func (s *Service) ValidatingWebhookConfigurations() ([]*restypes.ValidatingWebhookConfigurationDetails, error) {
-	client := s.deps.Common.KubernetesClient
-	if client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-
-	configs, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().List(s.deps.Common.Context, metav1.ListOptions{})
-	if err != nil {
-		s.logError(fmt.Sprintf("Failed to list validating webhook configurations: %v", err))
-		return nil, fmt.Errorf("failed to list validating webhook configurations: %v", err)
-	}
-
-	result := make([]*restypes.ValidatingWebhookConfigurationDetails, 0, len(configs.Items))
-	for i := range configs.Items {
-		result = append(result, s.buildValidatingWebhookConfigurationDetails(&configs.Items[i]))
-	}
-
-	return result, nil
-}
-
-func (s *Service) buildMutatingWebhookConfigurationDetails(config *admissionregistrationv1.MutatingWebhookConfiguration) *restypes.MutatingWebhookConfigurationDetails {
-	details := &restypes.MutatingWebhookConfigurationDetails{
-		Kind:        "MutatingWebhookConfiguration",
-		Name:        config.Name,
-		Age:         common.FormatAge(config.CreationTimestamp.Time),
-		Labels:      config.Labels,
-		Annotations: config.Annotations,
-	}
-
-	details.Webhooks = convertMutatingWebhooks(config.Webhooks)
-	var selector *metav1.LabelSelector
-	if len(config.Webhooks) > 0 {
-		selector = config.Webhooks[0].NamespaceSelector
-	}
-	details.Details = summarizeWebhookConfiguration(len(config.Webhooks), selector)
-
-	return details
-}
-
-func (s *Service) buildValidatingWebhookConfigurationDetails(config *admissionregistrationv1.ValidatingWebhookConfiguration) *restypes.ValidatingWebhookConfigurationDetails {
-	details := &restypes.ValidatingWebhookConfigurationDetails{
-		Kind:        "ValidatingWebhookConfiguration",
-		Name:        config.Name,
-		Age:         common.FormatAge(config.CreationTimestamp.Time),
-		Labels:      config.Labels,
-		Annotations: config.Annotations,
-	}
-
-	details.Webhooks = convertValidatingWebhooks(config.Webhooks)
-	var selector *metav1.LabelSelector
-	if len(config.Webhooks) > 0 {
-		selector = config.Webhooks[0].NamespaceSelector
-	}
-	details.Details = summarizeWebhookConfiguration(len(config.Webhooks), selector)
-
-	return details
-}
-
-func convertMutatingWebhooks(webhooks []admissionregistrationv1.MutatingWebhook) []restypes.WebhookDetails {
-	result := make([]restypes.WebhookDetails, 0, len(webhooks))
-	for i := range webhooks {
-		result = append(result, convertWebhook(
-			webhooks[i].Name,
-			webhooks[i].AdmissionReviewVersions,
-			webhooks[i].ClientConfig,
-			webhooks[i].Rules,
-			webhooks[i].NamespaceSelector,
-			webhooks[i].ObjectSelector,
-			webhooks[i].FailurePolicy,
-			webhooks[i].MatchPolicy,
-			webhooks[i].SideEffects,
-			webhooks[i].TimeoutSeconds,
-			webhooks[i].ReinvocationPolicy,
-		))
-	}
-	return result
-}
-
-func convertValidatingWebhooks(webhooks []admissionregistrationv1.ValidatingWebhook) []restypes.WebhookDetails {
-	result := make([]restypes.WebhookDetails, 0, len(webhooks))
-	for i := range webhooks {
-		result = append(result, convertWebhook(
-			webhooks[i].Name,
-			webhooks[i].AdmissionReviewVersions,
-			webhooks[i].ClientConfig,
-			webhooks[i].Rules,
-			webhooks[i].NamespaceSelector,
-			webhooks[i].ObjectSelector,
-			webhooks[i].FailurePolicy,
-			webhooks[i].MatchPolicy,
-			webhooks[i].SideEffects,
-			webhooks[i].TimeoutSeconds,
-			nil,
-		))
-	}
-	return result
-}
 
 func convertWebhook(
 	name string,
@@ -190,14 +29,14 @@ func convertWebhook(
 	sideEffects *admissionregistrationv1.SideEffectClass,
 	timeoutSeconds *int32,
 	reinvocationPolicy *admissionregistrationv1.ReinvocationPolicyType,
-) restypes.WebhookDetails {
-	details := restypes.WebhookDetails{
+) types.WebhookDetails {
+	details := types.WebhookDetails{
 		Name:                    name,
 		AdmissionReviewVersions: append([]string{}, admissionVersions...),
 	}
 
 	if clientConfig.Service != nil {
-		details.ClientConfig.Service = &restypes.WebhookService{
+		details.ClientConfig.Service = &types.WebhookService{
 			Namespace: clientConfig.Service.Namespace,
 			Name:      clientConfig.Service.Name,
 			Path:      clientConfig.Service.Path,
@@ -225,7 +64,7 @@ func convertWebhook(
 	}
 
 	for _, rule := range rules {
-		converted := restypes.WebhookRule{
+		converted := types.WebhookRule{
 			APIGroups:   append([]string{}, rule.APIGroups...),
 			APIVersions: append([]string{}, rule.APIVersions...),
 			Resources:   append([]string{}, rule.Resources...),
@@ -249,13 +88,13 @@ func convertWebhook(
 	return details
 }
 
-func convertSelector(selector *metav1.LabelSelector) *restypes.WebhookSelector {
-	converted := &restypes.WebhookSelector{}
+func convertSelector(selector *metav1.LabelSelector) *types.WebhookSelector {
+	converted := &types.WebhookSelector{}
 	if selector.MatchLabels != nil {
 		converted.MatchLabels = selector.MatchLabels
 	}
 	for _, expr := range selector.MatchExpressions {
-		converted.MatchExpressions = append(converted.MatchExpressions, restypes.WebhookSelectorExpression{
+		converted.MatchExpressions = append(converted.MatchExpressions, types.WebhookSelectorExpression{
 			Key:      expr.Key,
 			Operator: string(expr.Operator),
 			Values:   append([]string{}, expr.Values...),
@@ -283,7 +122,7 @@ func summarizeWebhookConfiguration(count int, selector *metav1.LabelSelector) st
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "ResourceLoader")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Error(msg, "ResourceLoader")
 	}
 }

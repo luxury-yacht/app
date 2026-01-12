@@ -1,3 +1,10 @@
+/*
+ * backend/resources_helm.go
+ *
+ * App-level Helm resource wrappers.
+ * - Fetches Helm release details, manifests, and values.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/helm"

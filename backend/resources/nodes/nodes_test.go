@@ -1,3 +1,10 @@
+/*
+ * backend/resources/nodes/nodes_test.go
+ *
+ * Tests for Node resource handlers.
+ * - Covers Node resource handlers behavior and edge cases.
+ */
+
 package nodes_test
 
 import (
@@ -13,20 +20,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	kubefake "k8s.io/client-go/kubernetes/fake"
-	kubetesting "k8s.io/client-go/testing"
+	"k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
-
-type stubLogger struct{}
-
-func (stubLogger) Debug(string, ...string) {}
-func (stubLogger) Info(string, ...string)  {}
-func (stubLogger) Warn(string, ...string)  {}
-func (stubLogger) Error(string, ...string) {}
 
 func TestServiceNodeReturnsDetails(t *testing.T) {
 	service, _, node := newNodeService(t)
@@ -40,24 +40,12 @@ func TestServiceNodeReturnsDetails(t *testing.T) {
 	require.Equal(t, int32(1), detail.Restarts)
 }
 
-func TestServicePodsSummariesNodePods(t *testing.T) {
-	service, _, node := newNodeService(t)
-
-	pods, err := service.Pods(node.Name)
-	require.NoError(t, err)
-	require.Len(t, pods, 2)
-
-	names := []string{pods[0].Name, pods[1].Name}
-	require.Contains(t, names, "app-0")
-	require.Contains(t, names, "app-1")
-}
-
 func TestServiceDeleteHonorsForce(t *testing.T) {
 	service, client, node := newNodeService(t)
 
 	var recordedGrace *int64
-	client.Fake.PrependReactor("delete", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		deleteAction := action.(kubetesting.DeleteAction)
+	client.Fake.PrependReactor("delete", "nodes", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		deleteAction := action.(cgotesting.DeleteAction)
 		opts := deleteAction.GetDeleteOptions()
 		if opts.GracePeriodSeconds != nil {
 			val := *opts.GracePeriodSeconds
@@ -75,8 +63,8 @@ func TestServiceDeleteWithoutForceUsesDefaultGrace(t *testing.T) {
 	service, client, node := newNodeService(t)
 
 	var recordedGraceSeen bool
-	client.Fake.PrependReactor("delete", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		deleteAction := action.(kubetesting.DeleteAction)
+	client.Fake.PrependReactor("delete", "nodes", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		deleteAction := action.(cgotesting.DeleteAction)
 		if opts := deleteAction.GetDeleteOptions(); opts.GracePeriodSeconds != nil {
 			recordedGraceSeen = true
 		}
@@ -91,7 +79,7 @@ func TestServiceDeleteReturnsEnsureClientError(t *testing.T) {
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsEnsureClient(func(string) error { return errors.New("ensure failed") }),
 	)
-	service := nodes.NewService(nodes.Dependencies{Common: deps})
+	service := nodes.NewService(deps)
 
 	err := service.Delete("node-1", false)
 	require.Error(t, err)
@@ -134,7 +122,7 @@ func TestServiceDrainDeletesPods(t *testing.T) {
 	}
 }
 
-func newNodeService(t *testing.T) (*nodes.Service, *kubefake.Clientset, *corev1.Node) {
+func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -185,24 +173,24 @@ func newNodeService(t *testing.T) (*nodes.Service, *kubefake.Clientset, *corev1.
 	podB.Spec.NodeName = node.Name
 	podB.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", RestartCount: 0, Ready: true}}
 
-	client := kubefake.NewClientset(node.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
+	client := fake.NewClientset(node.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(ctx),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(stubLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 	)
 
-	service := nodes.NewService(nodes.Dependencies{Common: deps})
+	service := nodes.NewService(deps)
 	return service, client, node
 }
 
-func addNodePatchReactor(t *testing.T, client *kubefake.Clientset) {
+func addNodePatchReactor(t *testing.T, client *fake.Clientset) {
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}
-	client.Fake.PrependReactor("patch", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		patchAction := action.(kubetesting.PatchAction)
+	client.Fake.PrependReactor("patch", "nodes", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		patchAction := action.(cgotesting.PatchAction)
 		current, err := client.Tracker().Get(gvr, "", patchAction.GetName())
 		if err != nil {
 			return true, nil, err

@@ -1,37 +1,29 @@
+/*
+ * backend/resources/autoscaling/hpa.go
+ *
+ * HorizontalPodAutoscaler resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package autoscaling
 
 import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Dependencies captures the collaborators required for autoscaling resources.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-// Service exposes helpers for HorizontalPodAutoscalers.
-type Service struct {
-	deps Dependencies
-}
-
-// NewService constructs an autoscaling service.
-func NewService(deps Dependencies) *Service {
-	return &Service{deps: deps}
-}
-
 // HorizontalPodAutoscaler returns a detailed view for a single HPA.
-func (s *Service) HorizontalPodAutoscaler(namespace, name string) (*restypes.HorizontalPodAutoscalerDetails, error) {
-	client := s.deps.Common.KubernetesClient
+func (s *Service) HorizontalPodAutoscaler(namespace, name string) (*types.HorizontalPodAutoscalerDetails, error) {
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	hpa, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	hpa, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to get HPA %s/%s: %v", namespace, name, err))
 		return nil, fmt.Errorf("failed to get HPA: %v", err)
@@ -41,19 +33,19 @@ func (s *Service) HorizontalPodAutoscaler(namespace, name string) (*restypes.Hor
 }
 
 // HorizontalPodAutoscalers returns detailed views for all HPAs in the namespace.
-func (s *Service) HorizontalPodAutoscalers(namespace string) ([]*restypes.HorizontalPodAutoscalerDetails, error) {
-	client := s.deps.Common.KubernetesClient
+func (s *Service) HorizontalPodAutoscalers(namespace string) ([]*types.HorizontalPodAutoscalerDetails, error) {
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	hpas, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	hpas, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to list HPAs in namespace %s: %v", namespace, err))
 		return nil, fmt.Errorf("failed to list HPAs: %v", err)
 	}
 
-	result := make([]*restypes.HorizontalPodAutoscalerDetails, 0, len(hpas.Items))
+	result := make([]*types.HorizontalPodAutoscalerDetails, 0, len(hpas.Items))
 	for i := range hpas.Items {
 		result = append(result, s.buildHorizontalPodAutoscalerDetails(&hpas.Items[i]))
 	}
@@ -61,8 +53,8 @@ func (s *Service) HorizontalPodAutoscalers(namespace string) ([]*restypes.Horizo
 	return result, nil
 }
 
-func (s *Service) buildHorizontalPodAutoscalerDetails(hpa *autoscalingv2.HorizontalPodAutoscaler) *restypes.HorizontalPodAutoscalerDetails {
-	details := &restypes.HorizontalPodAutoscalerDetails{
+func (s *Service) buildHorizontalPodAutoscalerDetails(hpa *autoscalingv2.HorizontalPodAutoscaler) *types.HorizontalPodAutoscalerDetails {
+	details := &types.HorizontalPodAutoscalerDetails{
 		Kind:            "HorizontalPodAutoscaler",
 		Name:            hpa.Name,
 		Namespace:       hpa.Namespace,
@@ -74,7 +66,7 @@ func (s *Service) buildHorizontalPodAutoscalerDetails(hpa *autoscalingv2.Horizon
 		LastScaleTime:   hpa.Status.LastScaleTime,
 		Labels:          hpa.Labels,
 		Annotations:     hpa.Annotations,
-		ScaleTargetRef: restypes.ScaleTargetReference{
+		ScaleTargetRef: types.ScaleTargetReference{
 			Kind:       hpa.Spec.ScaleTargetRef.Kind,
 			Name:       hpa.Spec.ScaleTargetRef.Name,
 			APIVersion: hpa.Spec.ScaleTargetRef.APIVersion,
@@ -82,7 +74,7 @@ func (s *Service) buildHorizontalPodAutoscalerDetails(hpa *autoscalingv2.Horizon
 	}
 
 	for _, metric := range hpa.Spec.Metrics {
-		spec := restypes.MetricSpec{Kind: string(metric.Type), Target: map[string]string{}}
+		spec := types.MetricSpec{Kind: string(metric.Type), Target: map[string]string{}}
 		switch metric.Type {
 		case autoscalingv2.ResourceMetricSourceType:
 			if metric.Resource != nil {
@@ -143,7 +135,7 @@ func (s *Service) buildHorizontalPodAutoscalerDetails(hpa *autoscalingv2.Horizon
 	}
 
 	for _, metric := range hpa.Status.CurrentMetrics {
-		status := restypes.MetricStatus{Kind: string(metric.Type), Current: map[string]string{}}
+		status := types.MetricStatus{Kind: string(metric.Type), Current: map[string]string{}}
 		switch metric.Type {
 		case autoscalingv2.ResourceMetricSourceType:
 			if metric.Resource != nil {
@@ -196,7 +188,7 @@ func (s *Service) buildHorizontalPodAutoscalerDetails(hpa *autoscalingv2.Horizon
 	}
 
 	if hpa.Spec.Behavior != nil {
-		behavior := &restypes.ScalingBehavior{}
+		behavior := &types.ScalingBehavior{}
 		if hpa.Spec.Behavior.ScaleUp != nil {
 			behavior.ScaleUp = buildScalingRules(hpa.Spec.Behavior.ScaleUp)
 		}
@@ -227,8 +219,8 @@ func (s *Service) buildHorizontalPodAutoscalerDetails(hpa *autoscalingv2.Horizon
 	return details
 }
 
-func buildScalingRules(rules *autoscalingv2.HPAScalingRules) *restypes.ScalingRules {
-	result := &restypes.ScalingRules{
+func buildScalingRules(rules *autoscalingv2.HPAScalingRules) *types.ScalingRules {
+	result := &types.ScalingRules{
 		StabilizationWindowSeconds: rules.StabilizationWindowSeconds,
 	}
 	if rules.SelectPolicy != nil {
@@ -241,7 +233,7 @@ func buildScalingRules(rules *autoscalingv2.HPAScalingRules) *restypes.ScalingRu
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "ResourceLoader")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Error(msg, "ResourceLoader")
 	}
 }

@@ -1,37 +1,29 @@
+/*
+ * backend/resources/apiextensions/crds.go
+ *
+ * CustomResourceDefinition resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package apiextensions
 
 import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Dependencies captures collaborators required for CRD operations.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-// Service exposes helpers for Kubernetes CustomResourceDefinitions.
-type Service struct {
-	deps Dependencies
-}
-
-// NewService constructs a CRD service instance.
-func NewService(deps Dependencies) *Service {
-	return &Service{deps: deps}
-}
-
 // CustomResourceDefinition returns a detailed view for a single CRD.
-func (s *Service) CustomResourceDefinition(name string) (*restypes.CustomResourceDefinitionDetails, error) {
+func (s *Service) CustomResourceDefinition(name string) (*types.CustomResourceDefinitionDetails, error) {
 	if err := s.ensureAPIExtensions("CustomResourceDefinition"); err != nil {
 		return nil, err
 	}
 
-	client := s.deps.Common.APIExtensionsClient
-	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	client := s.deps.APIExtensionsClient
+	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to get CRD %s: %v", name, err))
 		return nil, fmt.Errorf("failed to get CRD: %v", err)
@@ -41,19 +33,19 @@ func (s *Service) CustomResourceDefinition(name string) (*restypes.CustomResourc
 }
 
 // CustomResourceDefinitions returns detailed views for all CRDs.
-func (s *Service) CustomResourceDefinitions() ([]*restypes.CustomResourceDefinitionDetails, error) {
+func (s *Service) CustomResourceDefinitions() ([]*types.CustomResourceDefinitionDetails, error) {
 	if err := s.ensureAPIExtensions("CustomResourceDefinition"); err != nil {
 		return nil, err
 	}
 
-	client := s.deps.Common.APIExtensionsClient
-	crds, err := client.ApiextensionsV1().CustomResourceDefinitions().List(s.deps.Common.Context, metav1.ListOptions{})
+	client := s.deps.APIExtensionsClient
+	crds, err := client.ApiextensionsV1().CustomResourceDefinitions().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to list CRDs: %v", err))
 		return nil, fmt.Errorf("failed to list CRDs: %v", err)
 	}
 
-	result := make([]*restypes.CustomResourceDefinitionDetails, 0, len(crds.Items))
+	result := make([]*types.CustomResourceDefinitionDetails, 0, len(crds.Items))
 	for i := range crds.Items {
 		result = append(result, s.buildCRDDetails(&crds.Items[i]))
 	}
@@ -61,8 +53,8 @@ func (s *Service) CustomResourceDefinitions() ([]*restypes.CustomResourceDefinit
 	return result, nil
 }
 
-func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition) *restypes.CustomResourceDefinitionDetails {
-	details := &restypes.CustomResourceDefinitionDetails{
+func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition) *types.CustomResourceDefinitionDetails {
+	details := &types.CustomResourceDefinitionDetails{
 		Kind:        "CustomResourceDefinition",
 		Name:        crd.Name,
 		Group:       crd.Spec.Group,
@@ -73,7 +65,7 @@ func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition)
 	}
 
 	for _, version := range crd.Spec.Versions {
-		entry := restypes.CRDVersion{
+		entry := types.CRDVersion{
 			Name:       version.Name,
 			Served:     version.Served,
 			Storage:    version.Storage,
@@ -85,7 +77,7 @@ func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition)
 		details.Versions = append(details.Versions, entry)
 	}
 
-	details.Names = restypes.CRDNames{
+	details.Names = types.CRDNames{
 		Plural:     crd.Spec.Names.Plural,
 		Singular:   crd.Spec.Names.Singular,
 		Kind:       crd.Spec.Names.Kind,
@@ -99,7 +91,7 @@ func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition)
 	}
 
 	for _, condition := range crd.Status.Conditions {
-		details.Conditions = append(details.Conditions, restypes.CRDCondition{
+		details.Conditions = append(details.Conditions, types.CRDCondition{
 			Kind:               string(condition.Type),
 			Status:             string(condition.Status),
 			Reason:             condition.Reason,
@@ -117,17 +109,17 @@ func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition)
 }
 
 func (s *Service) ensureAPIExtensions(resource string) error {
-	if s.deps.Common.EnsureAPIExtensions != nil {
-		return s.deps.Common.EnsureAPIExtensions(resource)
+	if s.deps.EnsureAPIExtensions != nil {
+		return s.deps.EnsureAPIExtensions(resource)
 	}
-	if s.deps.Common.APIExtensionsClient == nil {
+	if s.deps.APIExtensionsClient == nil {
 		return fmt.Errorf("apiextensions client not initialized")
 	}
 	return nil
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "ResourceLoader")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Error(msg, "ResourceLoader")
 	}
 }

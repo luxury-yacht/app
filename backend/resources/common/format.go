@@ -1,3 +1,10 @@
+/*
+ * backend/resources/common/format.go
+ *
+ * Formatting helpers for resource fields.
+ * - CPU, memory, and age formatting utilities.
+ */
+
 package common
 
 import (

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/helpers.go
+ *
+ * Workload detail helper utilities.
+ * - Shared aggregation and formatting helpers.
+ */
+
 package workloads
 
 import (

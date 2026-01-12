@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 )
 
@@ -25,7 +26,8 @@ func (stubAdapter) Resume(_, _ string, _ uint64) ([]ServerMessage, bool) {
 
 func TestSessionBackpressureKeepsSessionOpenAndResetsScope(t *testing.T) {
 	session := newSession(stubConn{}, nil, noopLogger{}, nil, "cluster-1", "cluster-a", "resources", true, false, nil)
-	for i := 0; i < outgoingBuffer; i++ {
+	// Match production buffer sizing for backpressure behavior.
+	for i := 0; i < config.StreamMuxOutgoingBufferSize; i++ {
 		session.outgoing <- ServerMessage{
 			Type:   MessageTypeAdded,
 			Domain: "pods",
@@ -46,14 +48,14 @@ func TestSessionBackpressureKeepsSessionOpenAndResetsScope(t *testing.T) {
 	}
 
 	foundReset := false
-	for i := 0; i < outgoingBuffer; i++ {
+	for i := 0; i < config.StreamMuxOutgoingBufferSize; i++ {
 		select {
 		case msg := <-session.outgoing:
 			if msg.Type == MessageTypeReset && msg.Domain == "pods" && msg.Scope == "default" {
 				foundReset = true
 			}
 		default:
-			t.Fatalf("expected %d queued messages, got %d", outgoingBuffer, i)
+			t.Fatalf("expected %d queued messages, got %d", config.StreamMuxOutgoingBufferSize, i)
 		}
 	}
 
@@ -84,7 +86,7 @@ func TestHandlerSetsHandshakeTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected handler error: %v", err)
 	}
-	if handler.upgrader.HandshakeTimeout != handshakeTimeout {
-		t.Fatalf("expected handshake timeout %v, got %v", handshakeTimeout, handler.upgrader.HandshakeTimeout)
+	if handler.upgrader.HandshakeTimeout != config.StreamMuxHandshakeTimeout {
+		t.Fatalf("expected handshake timeout %v, got %v", config.StreamMuxHandshakeTimeout, handler.upgrader.HandshakeTimeout)
 	}
 }

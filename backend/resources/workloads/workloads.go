@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/workloads.go
+ *
+ * Aggregated workload listing logic.
+ * - Combines workload types for namespace views.
+ */
+
 package workloads
 
 import (
@@ -11,11 +18,6 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 )
-
-// Dependencies captures the collaborators required to load workloads.
-type Dependencies struct {
-	Common common.Dependencies
-}
 
 // WorkloadInfo represents a workload with basic information.
 type WorkloadInfo struct {
@@ -36,15 +38,15 @@ type WorkloadInfo struct {
 }
 
 // GetWorkloads returns all workloads in a namespace with aggregated resource usage.
-func GetWorkloads(deps Dependencies, namespace string) ([]*WorkloadInfo, error) {
-	logger := deps.Common.Logger
-	if deps.Common.EnsureClient == nil {
+func GetWorkloads(deps common.Dependencies, namespace string) ([]*WorkloadInfo, error) {
+	logger := deps.Logger
+	if deps.EnsureClient == nil {
 		return nil, fmt.Errorf("workloads: EnsureClient dependency not provided")
 	}
-	if err := deps.Common.EnsureClient("workload resources"); err != nil {
+	if err := deps.EnsureClient("workload resources"); err != nil {
 		return nil, err
 	}
-	if deps.Common.KubernetesClient == nil {
+	if deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
@@ -56,11 +58,9 @@ func GetWorkloads(deps Dependencies, namespace string) ([]*WorkloadInfo, error) 
 		workloads   []*WorkloadInfo
 	)
 
-	depsBundle := Dependencies{Common: deps.Common}
-
 	tasks := []func(context.Context) error{
 		func(context.Context) error {
-			details, err := NewDeploymentService(depsBundle).Deployments(namespace)
+			details, err := NewDeploymentService(deps).Deployments(namespace)
 			if err != nil {
 				logger.Warn(fmt.Sprintf("Failed to list Deployments in namespace %s: %v", namespace, err), "ResourceLoader")
 				return nil
@@ -77,7 +77,7 @@ func GetWorkloads(deps Dependencies, namespace string) ([]*WorkloadInfo, error) 
 			return nil
 		},
 		func(context.Context) error {
-			details, err := NewStatefulSetService(depsBundle).StatefulSets(namespace)
+			details, err := NewStatefulSetService(deps).StatefulSets(namespace)
 			if err != nil {
 				logger.Warn(fmt.Sprintf("Failed to list StatefulSets in namespace %s: %v", namespace, err), "ResourceLoader")
 				return nil
@@ -94,7 +94,7 @@ func GetWorkloads(deps Dependencies, namespace string) ([]*WorkloadInfo, error) 
 			return nil
 		},
 		func(context.Context) error {
-			details, err := NewDaemonSetService(depsBundle).DaemonSets(namespace)
+			details, err := NewDaemonSetService(deps).DaemonSets(namespace)
 			if err != nil {
 				logger.Warn(fmt.Sprintf("Failed to list DaemonSets in namespace %s: %v", namespace, err), "ResourceLoader")
 				return nil
@@ -111,7 +111,7 @@ func GetWorkloads(deps Dependencies, namespace string) ([]*WorkloadInfo, error) 
 			return nil
 		},
 		func(context.Context) error {
-			details, err := NewJobService(depsBundle).Jobs(namespace)
+			details, err := NewJobService(deps).Jobs(namespace)
 			if err != nil {
 				logger.Warn(fmt.Sprintf("Failed to list Jobs in namespace %s: %v", namespace, err), "ResourceLoader")
 				return nil
@@ -128,7 +128,7 @@ func GetWorkloads(deps Dependencies, namespace string) ([]*WorkloadInfo, error) 
 			return nil
 		},
 		func(context.Context) error {
-			details, err := NewCronJobService(depsBundle).CronJobs(namespace)
+			details, err := NewCronJobService(deps).CronJobs(namespace)
 			if err != nil {
 				logger.Warn(fmt.Sprintf("Failed to list CronJobs in namespace %s: %v", namespace, err), "ResourceLoader")
 				return nil
@@ -146,7 +146,7 @@ func GetWorkloads(deps Dependencies, namespace string) ([]*WorkloadInfo, error) 
 		},
 	}
 
-	if err := parallel.RunLimited(deps.Common.Context, 0, tasks...); err != nil {
+	if err := parallel.RunLimited(deps.Context, 0, tasks...); err != nil {
 		return nil, err
 	}
 

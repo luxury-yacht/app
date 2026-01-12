@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/replicasets_test.go
+ *
+ * Tests for ReplicaSet resource handlers.
+ * - Covers ReplicaSet resource handlers behavior and edge cases.
+ */
+
 package workloads_test
 
 import (
@@ -10,7 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 )
 
@@ -79,13 +86,13 @@ func TestReplicaSetServiceReplicaSet(t *testing.T) {
 		podB.OwnerReferences[0].Controller = ptr.To(true)
 	}
 
-	client := kubefake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
+	client := cgofake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	)
 
-	service := workloads.NewReplicaSetService(workloads.Dependencies{Common: deps})
+	service := workloads.NewReplicaSetService(deps)
 	details, err := service.ReplicaSet("default", "web-rs")
 	if err != nil {
 		t.Fatalf("ReplicaSet returned error: %v", err)
@@ -148,13 +155,13 @@ func TestReplicaSetServiceReplicaSetInactiveRevision(t *testing.T) {
 		Status: appsv1.ReplicaSetStatus{Replicas: 1, ReadyReplicas: 1},
 	}
 
-	client := kubefake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy())
+	client := cgofake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy())
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
 	)
 
-	service := workloads.NewReplicaSetService(workloads.Dependencies{Common: deps})
+	service := workloads.NewReplicaSetService(deps)
 	details, err := service.ReplicaSet("default", "web-rs")
 	if err != nil {
 		t.Fatalf("ReplicaSet returned error: %v", err)

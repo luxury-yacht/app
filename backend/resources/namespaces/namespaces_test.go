@@ -1,4 +1,11 @@
-package namespaces_test
+/*
+ * backend/resources/namespaces/namespaces_test.go
+ *
+ * Tests for Namespace resource handlers.
+ * - Covers Namespace resource handlers behavior and edge cases.
+ */
+
+package namespaces
 
 import (
 	"context"
@@ -14,19 +21,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	kubefake "k8s.io/client-go/kubernetes/fake"
-	k8stesting "k8s.io/client-go/testing"
+	"k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 
-	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-type stubLogger struct{}
+func TestHasWorkloadsWithoutClient(t *testing.T) {
+	service := NewService(testsupport.NewResourceDependencies())
 
-func (stubLogger) Debug(string, ...string) {}
-func (stubLogger) Info(string, ...string)  {}
-func (stubLogger) Warn(string, ...string)  {}
-func (stubLogger) Error(string, ...string) {}
+	has, unknown := service.hasWorkloads("default")
+	require.False(t, has)
+	require.True(t, unknown)
+}
 
 func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 	ns := &corev1.Namespace{
@@ -44,7 +51,7 @@ func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"}}
 	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "job", Namespace: "default"}}
 
-	client := kubefake.NewClientset(ns.DeepCopy(), quota.DeepCopy(), limit.DeepCopy(), deploy.DeepCopy(), job.DeepCopy())
+	client := fake.NewClientset(ns.DeepCopy(), quota.DeepCopy(), limit.DeepCopy(), deploy.DeepCopy(), job.DeepCopy())
 	service := newNamespaceService(t, client)
 
 	detail, err := service.Namespace("default")
@@ -56,15 +63,15 @@ func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 }
 
 func TestServiceNamespaceEnsureClientError(t *testing.T) {
-	client := kubefake.NewClientset()
+	client := fake.NewClientset()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(stubLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return fmt.Errorf("ensure fail") }),
 	)
 
-	service := namespaces.NewService(namespaces.Dependencies{Common: deps})
+	service := NewService(deps)
 
 	_, err := service.Namespace("default")
 	require.Error(t, err)
@@ -73,8 +80,8 @@ func TestServiceNamespaceEnsureClientError(t *testing.T) {
 
 func TestServiceNamespaceMarksWorkloadsUnknownOnForbidden(t *testing.T) {
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-	client := kubefake.NewClientset(ns)
-	client.PrependReactor("list", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client := fake.NewClientset(ns)
+	client.PrependReactor("list", "deployments", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, "deployments", fmt.Errorf("forbidden"))
 	})
 
@@ -85,13 +92,13 @@ func TestServiceNamespaceMarksWorkloadsUnknownOnForbidden(t *testing.T) {
 	require.False(t, detail.HasWorkloads)
 }
 
-func newNamespaceService(t testing.TB, client *kubefake.Clientset) *namespaces.Service {
+func newNamespaceService(t testing.TB, client *fake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(stubLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
-	return namespaces.NewService(namespaces.Dependencies{Common: deps})
+	return NewService(deps)
 }

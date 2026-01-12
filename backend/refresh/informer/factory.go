@@ -305,7 +305,7 @@ func (f *Factory) processPendingClusterInformers() {
 		for _, req := range requestsMap {
 			requests = append(requests, req)
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), config.PermissionPrimeTimeout)
 		_ = f.PrimePermissions(ctx, requests)
 		cancel()
 	}
@@ -366,7 +366,7 @@ func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) 
 			},
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), config.PermissionCheckTimeout)
 		defer cancel()
 
 		resp, err := f.kubeClient.AuthorizationV1().SelfSubjectAccessReviews().Create(ctx, review, metav1.CreateOptions{})

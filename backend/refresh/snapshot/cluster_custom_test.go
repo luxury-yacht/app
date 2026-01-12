@@ -61,7 +61,7 @@ func TestClusterCustomBuilder(t *testing.T) {
 	builder := &ClusterCustomBuilder{
 		dynamic:   dynamicClient,
 		crdLister: testsupport.NewCRDLister(t, crd),
-		logger:    noopTestLogger{},
+		logger:    noopLogger{},
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")
@@ -135,7 +135,7 @@ func TestClusterCustomBuilderMultipleCRDs(t *testing.T) {
 	builder := &ClusterCustomBuilder{
 		dynamic:   dynamicClient,
 		crdLister: testsupport.NewCRDLister(t, clusterCRD, namespacedCRD),
-		logger:    noopTestLogger{},
+		logger:    noopLogger{},
 	}
 
 	snapshot, err := builder.Build(context.Background(), "")

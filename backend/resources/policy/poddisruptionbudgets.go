@@ -1,37 +1,29 @@
+/*
+ * backend/resources/policy/poddisruptionbudgets.go
+ *
+ * PodDisruptionBudget resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package policy
 
 import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Dependencies captures the collaborators needed to load policy resources.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-// Service surfaces pod disruption budget helpers.
-type Service struct {
-	deps Dependencies
-}
-
-// NewService constructs a Service instance.
-func NewService(deps Dependencies) *Service {
-	return &Service{deps: deps}
-}
-
 // PodDisruptionBudget returns a detailed description for a single PDB.
-func (s *Service) PodDisruptionBudget(namespace, name string) (*restypes.PodDisruptionBudgetDetails, error) {
-	client := s.deps.Common.KubernetesClient
+func (s *Service) PodDisruptionBudget(namespace, name string) (*types.PodDisruptionBudgetDetails, error) {
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	pdb, err := client.PolicyV1().PodDisruptionBudgets(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	pdb, err := client.PolicyV1().PodDisruptionBudgets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to get pod disruption budget %s/%s: %v", namespace, name, err))
 		return nil, fmt.Errorf("failed to get pod disruption budget: %v", err)
@@ -41,19 +33,19 @@ func (s *Service) PodDisruptionBudget(namespace, name string) (*restypes.PodDisr
 }
 
 // PodDisruptionBudgets returns detailed descriptions for all PDBs in the namespace.
-func (s *Service) PodDisruptionBudgets(namespace string) ([]*restypes.PodDisruptionBudgetDetails, error) {
-	client := s.deps.Common.KubernetesClient
+func (s *Service) PodDisruptionBudgets(namespace string) ([]*types.PodDisruptionBudgetDetails, error) {
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	pdbs, err := client.PolicyV1().PodDisruptionBudgets(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	pdbs, err := client.PolicyV1().PodDisruptionBudgets(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to list pod disruption budgets in namespace %s: %v", namespace, err))
 		return nil, fmt.Errorf("failed to list pod disruption budgets: %v", err)
 	}
 
-	result := make([]*restypes.PodDisruptionBudgetDetails, 0, len(pdbs.Items))
+	result := make([]*types.PodDisruptionBudgetDetails, 0, len(pdbs.Items))
 	for i := range pdbs.Items {
 		result = append(result, s.buildPodDisruptionBudgetDetails(&pdbs.Items[i]))
 	}
@@ -61,8 +53,8 @@ func (s *Service) PodDisruptionBudgets(namespace string) ([]*restypes.PodDisrupt
 	return result, nil
 }
 
-func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBudget) *restypes.PodDisruptionBudgetDetails {
-	details := &restypes.PodDisruptionBudgetDetails{
+func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBudget) *types.PodDisruptionBudgetDetails {
+	details := &types.PodDisruptionBudgetDetails{
 		Kind:               "PodDisruptionBudget",
 		Name:               pdb.Name,
 		Namespace:          pdb.Namespace,
@@ -122,7 +114,7 @@ func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBud
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "ResourceLoader")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Error(msg, "ResourceLoader")
 	}
 }

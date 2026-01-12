@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/services_test.go
+ *
+ * Tests for Service resource handlers.
+ * - Covers Service resource handlers behavior and edge cases.
+ */
+
 package workloads_test
 
 import (
@@ -14,19 +21,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/workloads"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
-
-type stubLogger struct{}
-
-func (stubLogger) Debug(string, ...string) {}
-func (stubLogger) Info(string, ...string)  {}
-func (stubLogger) Warn(string, ...string)  {}
-func (stubLogger) Error(string, ...string) {}
 
 func TestStatefulSetServiceReturnsDetail(t *testing.T) {
 	ss := testsupport.StatefulSetFixture("default", "db")
@@ -90,10 +90,10 @@ func TestStatefulSetServiceReturnsDetail(t *testing.T) {
 		RestartCount: 0,
 	}}
 
-	client := kubefake.NewClientset(ss.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
+	client := cgofake.NewClientset(ss.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewStatefulSetService(workloads.Dependencies{Common: deps})
+	service := workloads.NewStatefulSetService(deps)
 	detail, err := service.StatefulSet("default", "db")
 	require.NoError(t, err)
 	require.Equal(t, "StatefulSet", detail.Kind)
@@ -142,10 +142,10 @@ func TestDaemonSetServiceReturnsDetail(t *testing.T) {
 		RestartCount: 2,
 	}}
 
-	client := kubefake.NewClientset(ds.DeepCopy(), pod.DeepCopy())
+	client := cgofake.NewClientset(ds.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewDaemonSetService(workloads.Dependencies{Common: deps})
+	service := workloads.NewDaemonSetService(deps)
 	detail, err := service.DaemonSet("default", "agent")
 	require.NoError(t, err)
 	require.Equal(t, "DaemonSet", detail.Kind)
@@ -187,10 +187,10 @@ func TestJobServiceReturnsDetail(t *testing.T) {
 		RestartCount: 3,
 	}}
 
-	client := kubefake.NewClientset(job.DeepCopy(), pod.DeepCopy())
+	client := cgofake.NewClientset(job.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewJobService(workloads.Dependencies{Common: deps})
+	service := workloads.NewJobService(deps)
 	detail, err := service.Job("default", "report")
 	require.NoError(t, err)
 	require.Equal(t, "Job", detail.Kind)
@@ -240,10 +240,10 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 		RestartCount: 0,
 	}}
 
-	client := kubefake.NewClientset(cron.DeepCopy(), job.DeepCopy(), pod.DeepCopy())
+	client := cgofake.NewClientset(cron.DeepCopy(), job.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewCronJobService(workloads.Dependencies{Common: deps})
+	service := workloads.NewCronJobService(deps)
 	detail, err := service.CronJob("default", "nightly")
 	require.NoError(t, err)
 	require.Equal(t, "CronJob", detail.Kind)
@@ -280,10 +280,10 @@ func TestGetWorkloadsAggregatesKinds(t *testing.T) {
 		cron.DeepCopy(),
 	}, pods...)
 
-	client := kubefake.NewClientset(objects...)
+	client := cgofake.NewClientset(objects...)
 	deps := newDeps(t, client)
 
-	results, err := workloads.GetWorkloads(workloads.Dependencies{Common: deps}, "default")
+	results, err := workloads.GetWorkloads(deps, "default")
 	require.NoError(t, err)
 
 	kinds := make(map[string]bool)
@@ -393,20 +393,20 @@ func TestGetWorkloadsSortsAndSummarizes(t *testing.T) {
 		cron.DeepCopy(),
 	}, pods...)
 
-	client := kubefake.NewClientset(objects...)
+	client := cgofake.NewClientset(objects...)
 
 	ensureCalled := false
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(stubLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error {
 			ensureCalled = true
 			return nil
 		}),
 	)
 
-	results, err := workloads.GetWorkloads(workloads.Dependencies{Common: deps}, "default")
+	results, err := workloads.GetWorkloads(deps, "default")
 	require.NoError(t, err)
 	require.True(t, ensureCalled, "expected EnsureClient to be invoked")
 
@@ -435,12 +435,12 @@ func TestGetWorkloadsSortsAndSummarizes(t *testing.T) {
 	require.Equal(t, "Running", deployInfo.Status)
 }
 
-func newDeps(t testing.TB, client *kubefake.Clientset) common.Dependencies {
+func newDeps(t testing.TB, client *cgofake.Clientset) common.Dependencies {
 	t.Helper()
 	return testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(stubLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
 }

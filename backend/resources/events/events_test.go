@@ -1,4 +1,11 @@
-package events_test
+/*
+ * backend/resources/events/events_test.go
+ *
+ * Tests for Event resource handlers.
+ * - Covers Event resource handlers behavior and edge cases.
+ */
+
+package events
 
 import (
 	"context"
@@ -8,18 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/luxury-yacht/app/backend/resources/events"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
-
-type stubLogger struct{}
-
-func (stubLogger) Debug(string, ...string) {}
-func (stubLogger) Info(string, ...string)  {}
-func (stubLogger) Warn(string, ...string)  {}
-func (stubLogger) Error(string, ...string) {}
 
 func TestServiceEventsFiltersByObject(t *testing.T) {
 	now := metav1.NewTime(time.Now())
@@ -51,7 +50,7 @@ func TestServiceEventsFiltersByObject(t *testing.T) {
 		Source: corev1.EventSource{Component: "scheduler"},
 	}
 
-	client := kubefake.NewClientset(deploymentEvent.DeepCopy(), podEvent.DeepCopy())
+	client := fake.NewClientset(deploymentEvent.DeepCopy(), podEvent.DeepCopy())
 
 	service := newEventsService(t, client)
 
@@ -66,20 +65,20 @@ func TestServiceEventsFiltersByObject(t *testing.T) {
 }
 
 func TestNamespaceEventsRequiresNamespace(t *testing.T) {
-	client := kubefake.NewClientset()
+	client := fake.NewClientset()
 	service := newEventsService(t, client)
 
 	_, err := service.NamespaceEvents("")
 	require.Error(t, err)
 }
 
-func newEventsService(t testing.TB, client *kubefake.Clientset) *events.Service {
+func newEventsService(t testing.TB, client *fake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(stubLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
-	return events.NewService(events.Dependencies{Common: deps})
+	return NewService(deps)
 }

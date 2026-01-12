@@ -1,3 +1,10 @@
+/*
+ * backend/resources/apiextensions/crds_test.go
+ *
+ * Tests for CustomResourceDefinition resource handlers.
+ * - Covers CustomResourceDefinition resource handlers behavior and edge cases.
+ */
+
 package apiextensions
 
 import (
@@ -6,18 +13,12 @@ import (
 	"time"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apiextfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/testsupport"
 )
-
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}
 
 func TestCustomResourceDefinition(t *testing.T) {
 	crd := &apiextensionsv1.CustomResourceDefinition{
@@ -55,20 +56,18 @@ func TestCustomResourceDefinition(t *testing.T) {
 		},
 	}
 
-	client := apiextfake.NewClientset(crd)
+	client := fake.NewClientset(crd)
 	var ensureCalled bool
-	svc := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:             context.Background(),
-			Logger:              noopLogger{},
-			APIExtensionsClient: client,
-			EnsureAPIExtensions: func(resource string) error {
-				ensureCalled = true
-				if resource != "CustomResourceDefinition" {
-					t.Fatalf("EnsureAPIExtensions received unexpected resource %q", resource)
-				}
-				return nil
-			},
+	svc := NewService(common.Dependencies{
+		Context:             context.Background(),
+		Logger:              testsupport.NoopLogger{},
+		APIExtensionsClient: client,
+		EnsureAPIExtensions: func(resource string) error {
+			ensureCalled = true
+			if resource != "CustomResourceDefinition" {
+				t.Fatalf("EnsureAPIExtensions received unexpected resource %q", resource)
+			}
+			return nil
 		},
 	})
 
@@ -123,13 +122,11 @@ func TestCustomResourceDefinitionsList(t *testing.T) {
 		},
 	}
 
-	client := apiextfake.NewClientset(crd1, crd2)
-	svc := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:             context.Background(),
-			Logger:              noopLogger{},
-			APIExtensionsClient: client,
-		},
+	client := fake.NewClientset(crd1, crd2)
+	svc := NewService(common.Dependencies{
+		Context:             context.Background(),
+		Logger:              testsupport.NoopLogger{},
+		APIExtensionsClient: client,
 	})
 
 	list, err := svc.CustomResourceDefinitions()

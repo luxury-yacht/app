@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/statefulsets.go
+ *
+ * StatefulSet resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package workloads
 
 import (
@@ -14,51 +21,51 @@ import (
 )
 
 type StatefulSetService struct {
-	deps Dependencies
+	deps common.Dependencies
 }
 
-func NewStatefulSetService(deps Dependencies) *StatefulSetService {
+func NewStatefulSetService(deps common.Dependencies) *StatefulSetService {
 	return &StatefulSetService{deps: deps}
 }
 
 func (s *StatefulSetService) StatefulSet(namespace, name string) (*restypes.StatefulSetDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	ss, err := client.AppsV1().StatefulSets(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	ss, err := client.AppsV1().StatefulSets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get StatefulSet %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get StatefulSet %s/%s: %v", namespace, name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get statefulset: %v", err)
 	}
 
 	podsForSet, podMetrics, err := s.getStatefulSetPods(ss)
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to collect pods for StatefulSet %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for StatefulSet %s/%s: %v", namespace, name, err), "ResourceLoader")
 	}
 
 	return s.buildStatefulSetDetails(ss, podsForSet, podMetrics), nil
 }
 
 func (s *StatefulSetService) StatefulSets(namespace string) ([]*restypes.StatefulSetDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	statefulSets, err := client.AppsV1().StatefulSets(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	statefulSets, err := client.AppsV1().StatefulSets(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list StatefulSets in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list StatefulSets in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list statefulsets: %v", err)
 	}
 
-	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
 	}
 
-	podService := pods.NewService(pods.Dependencies{Common: s.deps.Common})
+	podService := pods.NewService(s.deps)
 	var metricsByPod map[string]*metricsv1beta1.PodMetrics
 	if podList != nil {
 		metricsByPod = podService.GetPodMetricsForPods(namespace, podList.Items)
@@ -148,19 +155,19 @@ func (s *StatefulSetService) buildStatefulSetDetails(
 }
 
 func (s *StatefulSetService) getStatefulSetPods(statefulSet *appsv1.StatefulSet) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
 	selector := labels.Set(statefulSet.Spec.Selector.MatchLabels).String()
-	podList, err := client.CoreV1().Pods(statefulSet.Namespace).List(s.deps.Common.Context, metav1.ListOptions{LabelSelector: selector})
+	podList, err := client.CoreV1().Pods(statefulSet.Namespace).List(s.deps.Context, metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
 		return nil, nil, err
 	}
 
 	filtered := filterPodsForStatefulSet(statefulSet, podList)
-	metrics := pods.NewService(pods.Dependencies{Common: s.deps.Common}).GetPodMetricsForPods(statefulSet.Namespace, filtered)
+	metrics := pods.NewService(s.deps).GetPodMetricsForPods(statefulSet.Namespace, filtered)
 
 	return filtered, metrics, nil
 }

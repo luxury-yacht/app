@@ -46,7 +46,7 @@ func TestFollowContainerStreamsBatches(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, stubLogger{}, nil)
+	streamer := NewStreamer(client, noopLogger{}, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -125,7 +125,7 @@ func TestFollowContainerRecordsDroppedTelemetry(t *testing.T) {
 	}
 
 	recorder := telemetry.NewRecorder()
-	streamer := NewStreamer(client, stubLogger{}, recorder)
+	streamer := NewStreamer(client, noopLogger{}, recorder)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -194,7 +194,7 @@ func TestFollowContainerRetriesAfterStreamFailure(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, stubLogger{}, nil)
+	streamer := NewStreamer(client, noopLogger{}, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -261,7 +261,7 @@ func TestFollowContainerStopsAfterInitCompletes(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, stubLogger{}, nil)
+	streamer := NewStreamer(client, noopLogger{}, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -321,7 +321,7 @@ func TestFollowContainerStopsWhenPodTerminated(t *testing.T) {
 		core:      coreOverride,
 	}
 
-	streamer := NewStreamer(client, stubLogger{}, nil)
+	streamer := NewStreamer(client, noopLogger{}, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/generic/generic.go
+ *
+ * Generic resource deletion helpers.
+ * - Uses dynamic clients to delete resources by kind.
+ */
+
 package generic
 
 import (
@@ -11,24 +18,17 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-// Dependencies captures collaborators required for generic resource operations.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-// Service exposes helpers for interacting with arbitrary Kubernetes resources.
 type Service struct {
-	deps Dependencies
+	deps common.Dependencies
 }
 
-// NewService constructs a generic resource service instance.
-func NewService(deps Dependencies) *Service {
+func NewService(deps common.Dependencies) *Service {
 	return &Service{deps: deps}
 }
 
 // Delete removes a Kubernetes resource by kind/namespace/name using the dynamic client.
 func (s *Service) Delete(resourceKind, namespace, name string) error {
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client not initialized")
 	}
 
@@ -192,11 +192,11 @@ func (s *Service) groupVersionResource(resourceKind string) (schema.GroupVersion
 }
 
 func (s *Service) discoverGroupVersionResource(resourceKind string) (schema.GroupVersionResource, error) {
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return schema.GroupVersionResource{}, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	discoveryClient := s.deps.Common.KubernetesClient.Discovery()
+	discoveryClient := s.deps.KubernetesClient.Discovery()
 	apiResourceLists, err := discoveryClient.ServerPreferredResources()
 	if err != nil && apiResourceLists == nil {
 		return schema.GroupVersionResource{}, fmt.Errorf("failed to get server resources: %w", err)
@@ -237,30 +237,30 @@ func (s *Service) discoverGroupVersionResource(resourceKind string) (schema.Grou
 }
 
 func (s *Service) dynamicClient() (dynamic.Interface, error) {
-	if s.deps.Common.DynamicClient != nil {
-		return s.deps.Common.DynamicClient, nil
+	if s.deps.DynamicClient != nil {
+		return s.deps.DynamicClient, nil
 	}
-	if s.deps.Common.RestConfig == nil {
+	if s.deps.RestConfig == nil {
 		return nil, fmt.Errorf("rest config not initialized")
 	}
-	return dynamic.NewForConfig(s.deps.Common.RestConfig)
+	return dynamic.NewForConfig(s.deps.RestConfig)
 }
 
 func (s *Service) context() context.Context {
-	if s.deps.Common.Context != nil {
-		return s.deps.Common.Context
+	if s.deps.Context != nil {
+		return s.deps.Context
 	}
 	return context.Background()
 }
 
 func (s *Service) logInfo(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Info(msg, "GenericResource")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Info(msg, "GenericResource")
 	}
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "GenericResource")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Error(msg, "GenericResource")
 	}
 }

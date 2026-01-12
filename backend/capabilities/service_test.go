@@ -9,7 +9,7 @@ import (
 	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	kubetesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 type noopLogger struct{}
@@ -47,8 +47,8 @@ func (s *stubRateLimiter) Stop() {}
 
 func TestEvaluateAllowed(t *testing.T) {
 	client := fake.NewClientset()
-	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		createAction := action.(kubetesting.CreateAction)
+	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		createAction := action.(cgotesting.CreateAction)
 		review := createAction.GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		review.Status = authorizationv1.SubjectAccessReviewStatus{
 			Allowed: true,
@@ -96,8 +96,8 @@ func TestEvaluateAllowed(t *testing.T) {
 
 func TestEvaluateDenied(t *testing.T) {
 	client := fake.NewClientset()
-	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		createAction := action.(kubetesting.CreateAction)
+	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		createAction := action.(cgotesting.CreateAction)
 		review := createAction.GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		review.Status = authorizationv1.SubjectAccessReviewStatus{
 			Allowed: false,
@@ -145,7 +145,7 @@ func TestEvaluateDenied(t *testing.T) {
 
 func TestEvaluateHandlesAPIError(t *testing.T) {
 	client := fake.NewClientset()
-	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
+	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("cluster unavailable")
 	})
 
@@ -184,8 +184,8 @@ func TestEvaluateHandlesAPIError(t *testing.T) {
 
 func TestEvaluateUsesRateLimiter(t *testing.T) {
 	client := fake.NewClientset()
-	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		review := action.(kubetesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
+	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		review := action.(cgotesting.CreateAction).GetObject().(*authorizationv1.SelfSubjectAccessReview)
 		review.Status = authorizationv1.SubjectAccessReviewStatus{Allowed: true}
 		return true, review, nil
 	})
@@ -286,7 +286,7 @@ func TestResolveWorkerCount(t *testing.T) {
 func TestEvaluateSkipsAPICallWhenRateLimiterErrors(t *testing.T) {
 	client := fake.NewClientset()
 	var apiCalls int
-	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
+	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		apiCalls++
 		return true, nil, nil
 	})

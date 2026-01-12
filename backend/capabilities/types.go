@@ -1,43 +1,33 @@
+/*
+ * backend/capabilities/types.go
+ *
+ * Defines types used for capability evaluation.
+ */
+
 package capabilities
 
 // CheckRequest represents a single capability evaluation request.
-//
-// ID is an arbitrary identifier supplied by the caller so results can be
-// correlated with UI actions (for example "update", "delete", "portForward").
-// Verb matches the Kubernetes verb being evaluated (get, list, create, update,
-// patch, delete, deletecollection, watch). ResourceKind is the Kubernetes Kind
-// being queried (Deployment, Pod, Namespace, etc.). Optional Namespace, Name,
-// and Subresource values scope the request; they are omitted for cluster-level
-// operations or verbs that operate on collections.
 type CheckRequest struct {
-	ID           string `json:"id"`
-	ClusterID    string `json:"clusterId,omitempty"`
-	Verb         string `json:"verb"`
-	ResourceKind string `json:"resourceKind"`
-	Namespace    string `json:"namespace,omitempty"`
-	Name         string `json:"name,omitempty"`
-	Subresource  string `json:"subresource,omitempty"`
+	ID           string `json:"id"`                    // Arbitrary identifier supplied by the caller.
+	ClusterID    string `json:"clusterId,omitempty"`   // Optional cluster identifier.
+	Verb         string `json:"verb"`                  // Kubernetes verb being evaluated (get, list, create, update, patch, delete, deletecollection, watch).
+	ResourceKind string `json:"resourceKind"`          // Kubernetes Kind being queried (Deployment, Pod, Namespace, etc.).
+	Namespace    string `json:"namespace,omitempty"`   // Optional namespace scope.
+	Name         string `json:"name,omitempty"`        // Optional resource name.
+	Subresource  string `json:"subresource,omitempty"` // Optional subresource (e.g., "status", "scale").
 }
 
 // CheckResult captures the outcome of a capability evaluation.
-//
-// Allowed indicates whether the action is permitted. DeniedReason contains any
-// denial message returned by the Kubernetes API (usually an RBAC reason).
-// EvaluationError captures evaluation errors returned by the API server (for
-// example, malformed requests). Error is populated when the review request
-// itself fails (network/RBAC errors against the SelfSubjectAccessReview API).
-// The request metadata (ID, Verb, ResourceKind, Namespace, Name, Subresource)
-// are echoed to simplify correlating results on the frontend.
 type CheckResult struct {
-	ID              string `json:"id"`
-	ClusterID       string `json:"clusterId,omitempty"`
-	Verb            string `json:"verb"`
-	ResourceKind    string `json:"resourceKind"`
-	Namespace       string `json:"namespace,omitempty"`
-	Name            string `json:"name,omitempty"`
-	Subresource     string `json:"subresource,omitempty"`
-	Allowed         bool   `json:"allowed"`
-	DeniedReason    string `json:"deniedReason,omitempty"`
-	EvaluationError string `json:"evaluationError,omitempty"`
-	Error           string `json:"error,omitempty"`
+	ID              string `json:"id"`                        // Arbitrary identifier supplied by the caller.
+	ClusterID       string `json:"clusterId,omitempty"`       // Optional cluster identifier.
+	Verb            string `json:"verb"`                      // Kubernetes verb being evaluated (get, list, create, update, patch, delete, deletecollection, watch).
+	ResourceKind    string `json:"resourceKind"`              // Kubernetes Kind being queried (Deployment, Pod, Namespace, etc.).
+	Namespace       string `json:"namespace,omitempty"`       // Optional namespace scope.
+	Name            string `json:"name,omitempty"`            // Optional resource name.
+	Subresource     string `json:"subresource,omitempty"`     // Optional subresource (e.g., "status", "scale").
+	Allowed         bool   `json:"allowed"`                   // Indicates whether the action is permitted.
+	DeniedReason    string `json:"deniedReason,omitempty"`    // Contains any denial message returned by the Kubernetes API.
+	EvaluationError string `json:"evaluationError,omitempty"` // Captures evaluation errors returned by the API server.
+	Error           string `json:"error,omitempty"`           // Populated when the review request itself fails.
 }

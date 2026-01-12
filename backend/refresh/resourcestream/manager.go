@@ -33,6 +33,7 @@ import (
 	networklisters "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/logstream"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
@@ -40,13 +41,7 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
-const (
-	maxSubscribersPerScope = 100
-	subscriberBufferSize   = 256
-	podNodeIndexName       = "pods:node"
-	// resumeBufferSize caps buffered updates per domain/scope for stream resumption.
-	resumeBufferSize = 1000
-)
+const podNodeIndexName = "pods:node"
 
 const (
 	domainPods                 = "pods"
@@ -735,7 +730,7 @@ func (m *Manager) Subscribe(domain, scope string) (*Subscription, error) {
 		subs = make(map[uint64]*subscription)
 		scopeSubscribers[normalized] = subs
 	}
-	if len(subs) >= maxSubscribersPerScope {
+	if len(subs) >= config.ResourceStreamMaxSubscribersPerScope {
 		m.mu.Unlock()
 		err := fmt.Errorf("resource stream subscriber limit reached for %s/%s", domain, normalized)
 		m.logger.Warn(err.Error(), "ResourceStream")
@@ -747,7 +742,7 @@ func (m *Manager) Subscribe(domain, scope string) (*Subscription, error) {
 
 	id := atomic.AddUint64(&m.nextID, 1)
 	sub := &subscription{
-		ch:      make(chan Update, subscriberBufferSize),
+		ch:      make(chan Update, config.ResourceStreamSubscriberBufferSize),
 		drops:   make(chan DropReason, 1),
 		created: time.Now(),
 	}
@@ -1816,7 +1811,7 @@ func (m *Manager) bufferLocked(domain, scope string) *updateBuffer {
 	}
 	buffer := m.buffers[key]
 	if buffer == nil {
-		buffer = newUpdateBuffer(resumeBufferSize)
+		buffer = newUpdateBuffer(config.ResourceStreamResumeBufferSize)
 		m.buffers[key] = buffer
 	}
 	return buffer

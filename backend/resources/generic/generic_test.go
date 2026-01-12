@@ -1,17 +1,23 @@
-package generic_test
+/*
+ * backend/resources/generic/generic_test.go
+ *
+ * Tests for Generic resource deletion helpers.
+ * - Covers Generic resource deletion helpers behavior and edge cases.
+ */
+
+package generic
 
 import (
 	"context"
 	"testing"
 
-	"github.com/luxury-yacht/app/backend/resources/generic"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestServiceDeleteCoreResource(t *testing.T) {
@@ -19,14 +25,14 @@ func TestServiceDeleteCoreResource(t *testing.T) {
 	pod := testsupport.PodFixture("default", "web-0")
 
 	dynamicClient := testsupport.NewDynamicClient(t, scheme, pod.DeepCopyObject())
-	kubeClient := kubefake.NewClientset(pod.DeepCopy())
+	kubeClient := fake.NewClientset(pod.DeepCopy())
 
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(kubeClient),
 		testsupport.WithDepsDynamicClient(dynamicClient),
 	)
-	service := generic.NewService(generic.Dependencies{Common: deps})
+	service := NewService(deps)
 
 	if err := service.Delete("Pod", "default", "web-0"); err != nil {
 		t.Fatalf("Delete returned error: %v", err)
@@ -40,7 +46,7 @@ func TestServiceDeleteCoreResource(t *testing.T) {
 }
 
 func TestServiceDeleteCustomResource(t *testing.T) {
-	kubeClient := kubefake.NewClientset()
+	kubeClient := fake.NewClientset()
 	testsupport.SeedAPIResources(t, kubeClient, testsupport.NewAPIResourceList("example.com/v1", metav1.APIResource{
 		Name:         "widgets",
 		SingularName: "widget",
@@ -68,7 +74,7 @@ func TestServiceDeleteCustomResource(t *testing.T) {
 		testsupport.WithDepsKubeClient(kubeClient),
 		testsupport.WithDepsDynamicClient(dynamicClient),
 	)
-	service := generic.NewService(generic.Dependencies{Common: deps})
+	service := NewService(deps)
 
 	if err := service.Delete("Widget", "default", "sample"); err != nil {
 		t.Fatalf("Delete returned error: %v", err)
