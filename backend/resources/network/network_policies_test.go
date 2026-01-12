@@ -18,7 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
 
@@ -47,7 +47,7 @@ func TestManagerNetworkPolicyDetails(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewClientset(np)
+	client := clientgofake.NewClientset(np)
 	manager := newManager(t, client)
 
 	detail, err := manager.NetworkPolicy("default", "allow-http")
@@ -90,7 +90,7 @@ func TestManagerNetworkPolicyDetailsWithEgressAndIPBlock(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewClientset(np)
+	client := clientgofake.NewClientset(np)
 	manager := newManager(t, client)
 
 	detail, err := manager.NetworkPolicy("default", "dns-egress")
@@ -135,7 +135,7 @@ func TestManagerNetworkPoliciesAggregatesMultipleResults(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewClientset(allowAll, restrict)
+	client := clientgofake.NewClientset(allowAll, restrict)
 	manager := newManager(t, client)
 
 	allPolicies, err := manager.NetworkPolicies("default")
@@ -147,7 +147,7 @@ func TestManagerNetworkPoliciesAggregatesMultipleResults(t *testing.T) {
 }
 
 func TestManagerNetworkPoliciesErrorWhenListFails(t *testing.T) {
-	client := kubefake.NewClientset()
+	client := clientgofake.NewClientset()
 	client.PrependReactor("list", "networkpolicies", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("api down")
 	})
@@ -160,7 +160,7 @@ func TestManagerNetworkPoliciesErrorWhenListFails(t *testing.T) {
 }
 
 func TestManagerNetworkPolicyErrorWhenGetFails(t *testing.T) {
-	client := kubefake.NewClientset()
+	client := clientgofake.NewClientset()
 	client.PrependReactor("get", "networkpolicies", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("boom")
 	})

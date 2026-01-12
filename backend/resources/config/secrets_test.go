@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestServiceSecretDetailsIncludesUsage(t *testing.T) {
@@ -51,7 +51,7 @@ func TestServiceSecretDetailsIncludesUsage(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewClientset(secret.DeepCopy(), pod.DeepCopy())
+	client := clientgofake.NewClientset(secret.DeepCopy(), pod.DeepCopy())
 	service := newConfigService(t, client)
 
 	detail, err := service.Secret("default", "app-secret")
@@ -65,7 +65,7 @@ func TestServiceSecretDetailsIncludesUsage(t *testing.T) {
 func TestServiceSecretsListsAll(t *testing.T) {
 	secA := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"}}
 	secB := &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "default"}}
-	client := kubefake.NewClientset(secA, secB)
+	client := clientgofake.NewClientset(secA, secB)
 	service := newConfigService(t, client)
 
 	secrets, err := service.Secrets("default")

@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -51,7 +51,7 @@ func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 	deploy := &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"}}
 	job := &batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "job", Namespace: "default"}}
 
-	client := kubefake.NewClientset(ns.DeepCopy(), quota.DeepCopy(), limit.DeepCopy(), deploy.DeepCopy(), job.DeepCopy())
+	client := clientgofake.NewClientset(ns.DeepCopy(), quota.DeepCopy(), limit.DeepCopy(), deploy.DeepCopy(), job.DeepCopy())
 	service := newNamespaceService(t, client)
 
 	detail, err := service.Namespace("default")
@@ -63,7 +63,7 @@ func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 }
 
 func TestServiceNamespaceEnsureClientError(t *testing.T) {
-	client := kubefake.NewClientset()
+	client := clientgofake.NewClientset()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
@@ -80,7 +80,7 @@ func TestServiceNamespaceEnsureClientError(t *testing.T) {
 
 func TestServiceNamespaceMarksWorkloadsUnknownOnForbidden(t *testing.T) {
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-	client := kubefake.NewClientset(ns)
+	client := clientgofake.NewClientset(ns)
 	client.PrependReactor("list", "deployments", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, "deployments", fmt.Errorf("forbidden"))
 	})
@@ -92,7 +92,7 @@ func TestServiceNamespaceMarksWorkloadsUnknownOnForbidden(t *testing.T) {
 	require.False(t, detail.HasWorkloads)
 }
 
-func newNamespaceService(t testing.TB, client *kubefake.Clientset) *Service {
+func newNamespaceService(t testing.TB, client *clientgofake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),

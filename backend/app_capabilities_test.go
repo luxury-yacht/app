@@ -11,14 +11,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	fakediscovery "k8s.io/client-go/discovery/fake"
-	clientfake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 	kubetesting "k8s.io/client-go/testing"
 )
 
 const capabilitiesClusterID = "config:ctx"
 
 func TestEvaluateCapabilitiesSuccess(t *testing.T) {
-	client := clientfake.NewClientset()
+	client := clientgofake.NewClientset()
 	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		createAction := action.(kubetesting.CreateAction)
 		review := createAction.GetObject().(*authorizationv1.SelfSubjectAccessReview)
@@ -129,7 +129,7 @@ func TestEvaluateCapabilitiesHandlesInvalidRequest(t *testing.T) {
 }
 
 func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
-	client := clientfake.NewClientset()
+	client := clientgofake.NewClientset()
 	var sarCalls int
 	client.Fake.PrependReactor("create", "selfsubjectaccessreviews", func(action kubetesting.Action) (bool, runtime.Object, error) {
 		sarCalls++

@@ -17,7 +17,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestServiceDeleteCoreResource(t *testing.T) {
@@ -25,7 +25,7 @@ func TestServiceDeleteCoreResource(t *testing.T) {
 	pod := testsupport.PodFixture("default", "web-0")
 
 	dynamicClient := testsupport.NewDynamicClient(t, scheme, pod.DeepCopyObject())
-	kubeClient := kubefake.NewClientset(pod.DeepCopy())
+	kubeClient := clientgofake.NewClientset(pod.DeepCopy())
 
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
@@ -46,7 +46,7 @@ func TestServiceDeleteCoreResource(t *testing.T) {
 }
 
 func TestServiceDeleteCustomResource(t *testing.T) {
-	kubeClient := kubefake.NewClientset()
+	kubeClient := clientgofake.NewClientset()
 	testsupport.SeedAPIResources(t, kubeClient, testsupport.NewAPIResourceList("example.com/v1", metav1.APIResource{
 		Name:         "widgets",
 		SingularName: "widget",

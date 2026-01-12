@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
@@ -50,7 +50,7 @@ func TestServiceEventsFiltersByObject(t *testing.T) {
 		Source: corev1.EventSource{Component: "scheduler"},
 	}
 
-	client := kubefake.NewClientset(deploymentEvent.DeepCopy(), podEvent.DeepCopy())
+	client := clientgofake.NewClientset(deploymentEvent.DeepCopy(), podEvent.DeepCopy())
 
 	service := newEventsService(t, client)
 
@@ -65,14 +65,14 @@ func TestServiceEventsFiltersByObject(t *testing.T) {
 }
 
 func TestNamespaceEventsRequiresNamespace(t *testing.T) {
-	client := kubefake.NewClientset()
+	client := clientgofake.NewClientset()
 	service := newEventsService(t, client)
 
 	_, err := service.NamespaceEvents("")
 	require.Error(t, err)
 }
 
-func newEventsService(t testing.TB, client *kubefake.Clientset) *Service {
+func newEventsService(t testing.TB, client *clientgofake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),

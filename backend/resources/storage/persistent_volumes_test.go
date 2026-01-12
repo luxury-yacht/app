@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -25,7 +25,7 @@ func TestServicePersistentVolumeDetails(t *testing.T) {
 		pv.Spec.ClaimRef = &corev1.ObjectReference{Namespace: "default", Name: "pvc-standard"}
 	})
 
-	client := kubefake.NewClientset(pv.DeepCopy())
+	client := clientgofake.NewClientset(pv.DeepCopy())
 	service := newStorageService(t, client)
 
 	detail, err := service.PersistentVolume("pv-standard")
@@ -65,7 +65,7 @@ func TestServicePersistentVolumeDetailsIncludesNodeAffinityAndConditions(t *test
 		pv.Status.Message = "No matching nodes"
 	})
 
-	client := kubefake.NewClientset(pv.DeepCopy())
+	client := clientgofake.NewClientset(pv.DeepCopy())
 	service := newStorageService(t, client)
 
 	detail, err := service.PersistentVolume("pv-csi")
@@ -80,7 +80,7 @@ func TestServicePersistentVolumeDetailsIncludesNodeAffinityAndConditions(t *test
 }
 
 func TestServicePersistentVolumesErrorWhenListFails(t *testing.T) {
-	client := kubefake.NewClientset()
+	client := clientgofake.NewClientset()
 	client.PrependReactor("list", "persistentvolumes", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("api down")
 	})

@@ -16,7 +16,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/internal/versioning"
 )
@@ -54,7 +54,7 @@ func TestGetWorkloadsReturnsData(t *testing.T) {
 		},
 		Status: appsv1.DeploymentStatus{ReadyReplicas: 1, Replicas: 1},
 	}
-	app.client = kubefake.NewClientset(deploy)
+	app.client = clientgofake.NewClientset(deploy)
 
 	resp, err := app.GetWorkloads("default", "")
 	if err != nil {
@@ -182,7 +182,7 @@ func TestWorkloadWrappersHappyPath(t *testing.T) {
 		},
 	}
 
-	app.client = kubefake.NewClientset(deploy, rs, sts, ds, job, cronJob, service, &pods[0], &pods[1], &pods[2], &pods[3])
+	app.client = clientgofake.NewClientset(deploy, rs, sts, ds, job, cronJob, service, &pods[0], &pods[1], &pods[2], &pods[3])
 
 	if _, err := app.GetDeployment("apps", "web"); err != nil {
 		t.Fatalf("expected deployment wrapper to succeed: %v", err)

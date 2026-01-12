@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -32,7 +32,7 @@ func TestConstraintsRequireClient(t *testing.T) {
 }
 
 func TestConstraintsListFailures(t *testing.T) {
-	client := kubefake.NewClientset()
+	client := clientgofake.NewClientset()
 	client.PrependReactor("list", "resourcequotas", func(_ k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("rq-list-fail")
 	})
@@ -48,7 +48,7 @@ func TestConstraintsListFailures(t *testing.T) {
 	require.Error(t, err)
 }
 
-func newConstraintsService(t testing.TB, client *kubefake.Clientset) *Service {
+func newConstraintsService(t testing.TB, client *clientgofake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),

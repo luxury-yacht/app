@@ -15,7 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -27,7 +27,7 @@ func TestServiceStorageClassDetails(t *testing.T) {
 		pv.Spec.StorageClassName = "standard"
 	})
 
-	client := kubefake.NewClientset(sc.DeepCopy(), pv.DeepCopy())
+	client := clientgofake.NewClientset(sc.DeepCopy(), pv.DeepCopy())
 	service := newStorageService(t, client)
 
 	detail, err := service.StorageClass("standard")
@@ -52,7 +52,7 @@ func TestServiceStorageClassDetailsIncludesTopologies(t *testing.T) {
 		pv.Spec.StorageClassName = "zonal"
 	})
 
-	client := kubefake.NewClientset(sc.DeepCopy(), pv.DeepCopy())
+	client := clientgofake.NewClientset(sc.DeepCopy(), pv.DeepCopy())
 	service := newStorageService(t, client)
 
 	detail, err := service.StorageClass("zonal")
@@ -63,7 +63,7 @@ func TestServiceStorageClassDetailsIncludesTopologies(t *testing.T) {
 
 func TestServiceStorageClassDetailsHandlesPVListFailure(t *testing.T) {
 	sc := testsupport.StorageClassFixture("slow")
-	client := kubefake.NewClientset(sc.DeepCopy())
+	client := clientgofake.NewClientset(sc.DeepCopy())
 	client.PrependReactor("list", "persistentvolumes", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("pv list down")
 	})
@@ -77,7 +77,7 @@ func TestServiceStorageClassDetailsHandlesPVListFailure(t *testing.T) {
 }
 
 func TestServiceStorageClassesErrorWhenListFails(t *testing.T) {
-	client := kubefake.NewClientset()
+	client := clientgofake.NewClientset()
 	client.PrependReactor("list", "storageclasses", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("api down")
 	})

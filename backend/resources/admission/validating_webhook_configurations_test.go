@@ -18,7 +18,7 @@ import (
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 	clientgotesting "k8s.io/client-go/testing"
 )
 
@@ -55,7 +55,7 @@ func TestServiceValidatingWebhookConfigurations(t *testing.T) {
 func TestValidatingWebhookConfigurationListLogsError(t *testing.T) {
 	logger := &capturingLogger{}
 	// Use the client-go fake so the client satisfies kubernetes.Interface.
-	client := kubefake.NewClientset()
+	client := clientgofake.NewClientset()
 	client.PrependReactor("list", "validatingwebhookconfigurations", func(clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("no list")
 	})

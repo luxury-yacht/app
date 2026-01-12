@@ -16,7 +16,7 @@ import (
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 )
 
@@ -56,7 +56,7 @@ func TestManagerIngressDetails(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewClientset(ing)
+	client := clientgofake.NewClientset(ing)
 	manager := newManager(t, client)
 
 	detail, err := manager.Ingress("default", "web")
@@ -68,7 +68,7 @@ func TestManagerIngressDetails(t *testing.T) {
 }
 
 func TestManagerIngressesErrorWhenListFails(t *testing.T) {
-	client := kubefake.NewClientset()
+	client := clientgofake.NewClientset()
 	client.PrependReactor("list", "ingresses", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("api down")
 	})

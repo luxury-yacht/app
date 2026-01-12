@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestServiceConfigMapDetailsIncludesUsage(t *testing.T) {
@@ -57,7 +57,7 @@ func TestServiceConfigMapDetailsIncludesUsage(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewClientset(cm.DeepCopy(), pod.DeepCopy())
+	client := clientgofake.NewClientset(cm.DeepCopy(), pod.DeepCopy())
 	service := newConfigService(t, client)
 
 	detail, err := service.ConfigMap("default", "app-config")
@@ -71,7 +71,7 @@ func TestServiceConfigMapDetailsIncludesUsage(t *testing.T) {
 func TestServiceConfigMapsListsAll(t *testing.T) {
 	cmA := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "a", Namespace: "default"}}
 	cmB := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "b", Namespace: "default"}}
-	client := kubefake.NewClientset(cmA, cmB)
+	client := clientgofake.NewClientset(cmA, cmB)
 	service := newConfigService(t, client)
 
 	configMaps, err := service.ConfigMaps("default")
@@ -79,7 +79,7 @@ func TestServiceConfigMapsListsAll(t *testing.T) {
 	require.Len(t, configMaps, 2)
 }
 
-func newConfigService(t testing.TB, client *kubefake.Clientset) *Service {
+func newConfigService(t testing.TB, client *clientgofake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),

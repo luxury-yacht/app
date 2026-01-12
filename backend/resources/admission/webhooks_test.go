@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
@@ -25,7 +25,7 @@ func newAdmissionService(t testing.TB, objects ...runtime.Object) *Service {
 		runtimeObjects[i] = obj.DeepCopyObject()
 	}
 
-	client := kubefake.NewClientset(runtimeObjects...)
+	client := clientgofake.NewClientset(runtimeObjects...)
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),

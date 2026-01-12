@@ -16,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	kubetesting "k8s.io/client-go/testing"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
@@ -85,7 +85,7 @@ func TestListAllPodsByNodeGroupsPods(t *testing.T) {
 	ignored := testsupport.PodFixture("default", "pod-ignored")
 	ignored.Spec.NodeName = ""
 
-	client := kubefake.NewClientset(podOne, podTwo, ignored)
+	client := clientgofake.NewClientset(podOne, podTwo, ignored)
 	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsKubeClient(client)))
 
 	result := service.listAllPodsByNode()

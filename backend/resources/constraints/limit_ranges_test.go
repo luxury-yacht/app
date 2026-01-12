@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestServiceLimitRangeDetails(t *testing.T) {
@@ -39,7 +39,7 @@ func TestServiceLimitRangeDetails(t *testing.T) {
 		},
 	}
 
-	client := kubefake.NewClientset(lr.DeepCopy())
+	client := clientgofake.NewClientset(lr.DeepCopy())
 	service := newConstraintsService(t, client)
 
 	detail, err := service.LimitRange("default", "lr")

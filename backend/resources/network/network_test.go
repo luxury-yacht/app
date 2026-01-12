@@ -12,12 +12,12 @@ import (
 	"testing"
 
 	"k8s.io/apimachinery/pkg/util/intstr"
-	kubefake "k8s.io/client-go/kubernetes/fake"
+	clientgofake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-func newManager(t testing.TB, client *kubefake.Clientset) *Service {
+func newManager(t testing.TB, client *clientgofake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
