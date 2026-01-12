@@ -121,8 +121,7 @@ func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discove
 		details.ExternalName = service.Spec.ExternalName
 	}
 
-	var notReadyCount int
-	details.Endpoints, notReadyCount = rollupServiceEndpoints(slices)
+	details.Endpoints, _ = rollupServiceEndpoints(slices)
 	details.EndpointCount = len(details.Endpoints)
 
 	switch {
@@ -132,8 +131,6 @@ func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discove
 		details.HealthStatus = "Unknown"
 	case service.Spec.Type == corev1.ServiceTypeExternalName:
 		details.HealthStatus = "External"
-	case notReadyCount > 0:
-		details.HealthStatus = "No endpoints"
 	default:
 		details.HealthStatus = "No endpoints"
 	}
