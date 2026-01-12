@@ -11,18 +11,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-type Service struct {
-	deps Dependencies
-}
-
-func NewService(deps Dependencies) *Service {
-	return &Service{deps: deps}
-}
-
 func (s *Service) ConfigMap(namespace, name string) (*restypes.ConfigMapDetails, error) {
 	cm, err := s.deps.Common.KubernetesClient.CoreV1().ConfigMaps(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
 	if err != nil {
