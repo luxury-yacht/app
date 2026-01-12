@@ -1,4 +1,4 @@
-package namespaces_test
+package namespaces
 
 import (
 	"context"
@@ -17,7 +17,6 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/luxury-yacht/app/backend/resources/namespaces"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -27,6 +26,16 @@ func (noopLogger) Debug(string, ...string) {}
 func (noopLogger) Info(string, ...string)  {}
 func (noopLogger) Warn(string, ...string)  {}
 func (noopLogger) Error(string, ...string) {}
+
+func TestHasWorkloadsWithoutClient(t *testing.T) {
+	service := NewService(Dependencies{
+		Common: testsupport.NewResourceDependencies(),
+	})
+
+	has, unknown := service.hasWorkloads("default")
+	require.False(t, has)
+	require.True(t, unknown)
+}
 
 func TestServiceNamespaceDetailsIncludesUsage(t *testing.T) {
 	ns := &corev1.Namespace{
@@ -64,7 +73,7 @@ func TestServiceNamespaceEnsureClientError(t *testing.T) {
 		testsupport.WithDepsEnsureClient(func(string) error { return fmt.Errorf("ensure fail") }),
 	)
 
-	service := namespaces.NewService(namespaces.Dependencies{Common: deps})
+	service := NewService(Dependencies{Common: deps})
 
 	_, err := service.Namespace("default")
 	require.Error(t, err)
@@ -85,7 +94,7 @@ func TestServiceNamespaceMarksWorkloadsUnknownOnForbidden(t *testing.T) {
 	require.False(t, detail.HasWorkloads)
 }
 
-func newNamespaceService(t testing.TB, client *kubefake.Clientset) *namespaces.Service {
+func newNamespaceService(t testing.TB, client *kubefake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
@@ -93,5 +102,5 @@ func newNamespaceService(t testing.TB, client *kubefake.Clientset) *namespaces.S
 		testsupport.WithDepsLogger(noopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
-	return namespaces.NewService(namespaces.Dependencies{Common: deps})
+	return NewService(Dependencies{Common: deps})
 }

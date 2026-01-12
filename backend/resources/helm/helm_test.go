@@ -1,8 +1,11 @@
 package helm
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -22,6 +25,47 @@ import (
 	"github.com/luxury-yacht/app/backend/resources/common"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 )
+
+type fakeKubeClient struct{}
+
+func (fakeKubeClient) Create(kube.ResourceList) (*kube.Result, error) { return &kube.Result{}, nil }
+func (fakeKubeClient) Wait(kube.ResourceList, time.Duration) error    { return nil }
+func (fakeKubeClient) WaitWithJobs(kube.ResourceList, time.Duration) error {
+	return nil
+}
+func (fakeKubeClient) Delete(kube.ResourceList) (*kube.Result, []error) {
+	return &kube.Result{}, nil
+}
+func (fakeKubeClient) WatchUntilReady(kube.ResourceList, time.Duration) error { return nil }
+func (fakeKubeClient) Update(kube.ResourceList, kube.ResourceList, bool) (*kube.Result, error) {
+	return &kube.Result{}, nil
+}
+func (fakeKubeClient) Build(io.Reader, bool) (kube.ResourceList, error) {
+	return kube.ResourceList{}, nil
+}
+func (fakeKubeClient) WaitAndGetCompletedPodPhase(string, time.Duration) (corev1.PodPhase, error) {
+	return corev1.PodSucceeded, nil
+}
+func (fakeKubeClient) IsReachable() error                                   { return nil }
+func (fakeKubeClient) WaitForDelete(kube.ResourceList, time.Duration) error { return nil }
+func (fakeKubeClient) UpdateThreeWayMerge(kube.ResourceList, kube.ResourceList, bool) (*kube.Result, error) {
+	return &kube.Result{}, nil
+}
+func (fakeKubeClient) GetPodList(string, metav1.ListOptions) (*corev1.PodList, error) {
+	return &corev1.PodList{}, nil
+}
+func (fakeKubeClient) OutputContainerLogsForPodList(*corev1.PodList, string, func(string, string, string) io.Writer) error {
+	return nil
+}
+func (fakeKubeClient) DeleteWithPropagationPolicy(kube.ResourceList, metav1.DeletionPropagation) (*kube.Result, []error) {
+	return &kube.Result{}, nil
+}
+func (fakeKubeClient) Get(kube.ResourceList, bool) (map[string][]runtime.Object, error) {
+	return map[string][]runtime.Object{}, nil
+}
+func (fakeKubeClient) BuildTable(io.Reader, bool) (kube.ResourceList, error) {
+	return kube.ResourceList{}, nil
+}
 
 func TestExtractResourcesFromManifestBuildsUniqueList(t *testing.T) {
 	t.Helper()
@@ -296,43 +340,136 @@ func buildTestRelease(name, namespace string, version int, first, last time.Time
 	}
 }
 
-type fakeKubeClient struct{}
+func TestReleaseManifestEnsureClientError(t *testing.T) {
+	service := NewService(Dependencies{
+		Common: common.Dependencies{
+			EnsureClient: func(kind string) error {
+				require.Equal(t, "HelmRelease", kind)
+				return errors.New("no kube client")
+			},
+		},
+	})
 
-func (fakeKubeClient) Create(kube.ResourceList) (*kube.Result, error) { return &kube.Result{}, nil }
-func (fakeKubeClient) Wait(kube.ResourceList, time.Duration) error    { return nil }
-func (fakeKubeClient) WaitWithJobs(kube.ResourceList, time.Duration) error {
-	return nil
+	_, err := service.ReleaseManifest("default", "web")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no kube client")
 }
-func (fakeKubeClient) Delete(kube.ResourceList) (*kube.Result, []error) {
-	return &kube.Result{}, nil
+
+func TestReleaseManifestInitError(t *testing.T) {
+	tempDir := t.TempDir()
+	missingConfig := filepath.Join(tempDir, "missing-kubeconfig")
+
+	service := NewService(Dependencies{
+		Common: common.Dependencies{
+			Context:            context.Background(),
+			EnsureClient:       func(string) error { return nil },
+			SelectedKubeconfig: missingConfig,
+		},
+	})
+
+	_, err := service.ReleaseManifest("default", "web")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Kubernetes cluster unreachable")
 }
-func (fakeKubeClient) WatchUntilReady(kube.ResourceList, time.Duration) error { return nil }
-func (fakeKubeClient) Update(kube.ResourceList, kube.ResourceList, bool) (*kube.Result, error) {
-	return &kube.Result{}, nil
+
+func TestReleaseDetailsEnsureClientError(t *testing.T) {
+	service := NewService(Dependencies{Common: common.Dependencies{
+		EnsureClient: func(kind string) error {
+			require.Equal(t, "HelmRelease", kind)
+			return fmt.Errorf("ensure fail")
+		},
+	}})
+
+	_, err := service.ReleaseDetails("default", "demo")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ensure fail")
 }
-func (fakeKubeClient) Build(io.Reader, bool) (kube.ResourceList, error) {
-	return kube.ResourceList{}, nil
+
+func TestReleaseValuesEnsureClientError(t *testing.T) {
+	service := NewService(Dependencies{Common: common.Dependencies{
+		EnsureClient: func(string) error { return fmt.Errorf("ensure") },
+	}})
+
+	_, err := service.ReleaseValues("default", "demo")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ensure")
 }
-func (fakeKubeClient) WaitAndGetCompletedPodPhase(string, time.Duration) (corev1.PodPhase, error) {
-	return corev1.PodSucceeded, nil
+
+func TestDeleteReleaseEnsureClientError(t *testing.T) {
+	service := NewService(Dependencies{Common: common.Dependencies{
+		EnsureClient: func(string) error { return fmt.Errorf("ensure") },
+	}})
+
+	err := service.DeleteRelease("default", "demo")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ensure")
 }
-func (fakeKubeClient) IsReachable() error                                   { return nil }
-func (fakeKubeClient) WaitForDelete(kube.ResourceList, time.Duration) error { return nil }
-func (fakeKubeClient) UpdateThreeWayMerge(kube.ResourceList, kube.ResourceList, bool) (*kube.Result, error) {
-	return &kube.Result{}, nil
+
+func TestDeleteReleaseRemovesRelease(t *testing.T) {
+	release := buildTestRelease("demo", "default", 1, time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour))
+	store := storage.Init(driver.NewMemory())
+	require.NoError(t, store.Create(release))
+
+	service := NewService(Dependencies{
+		Common: common.Dependencies{
+			EnsureClient: func(string) error { return nil },
+		},
+		ActionConfigFactory: func(*cli.EnvSettings, string) (*action.Configuration, error) {
+			return &action.Configuration{
+				Releases:   store,
+				Log:        func(string, ...interface{}) {},
+				KubeClient: &fakeKubeClient{},
+			}, nil
+		},
+	})
+
+	err := service.DeleteRelease("default", "demo")
+	require.NoError(t, err)
+
+	_, err = store.Get("demo", 1)
+	require.Error(t, err)
 }
-func (fakeKubeClient) GetPodList(string, metav1.ListOptions) (*corev1.PodList, error) {
-	return &corev1.PodList{}, nil
+
+func TestDeleteReleaseMissingReturnsError(t *testing.T) {
+	store := storage.Init(driver.NewMemory())
+	service := NewService(Dependencies{
+		Common: common.Dependencies{
+			EnsureClient: func(string) error { return nil },
+		},
+		ActionConfigFactory: func(*cli.EnvSettings, string) (*action.Configuration, error) {
+			return &action.Configuration{
+				Releases:   store,
+				Log:        func(string, ...interface{}) {},
+				KubeClient: &fakeKubeClient{},
+			}, nil
+		},
+	})
+
+	err := service.DeleteRelease("default", "missing")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to delete Helm release")
 }
-func (fakeKubeClient) OutputContainerLogsForPodList(*corev1.PodList, string, func(string, string, string) io.Writer) error {
-	return nil
-}
-func (fakeKubeClient) DeleteWithPropagationPolicy(kube.ResourceList, metav1.DeletionPropagation) (*kube.Result, []error) {
-	return &kube.Result{}, nil
-}
-func (fakeKubeClient) Get(kube.ResourceList, bool) (map[string][]runtime.Object, error) {
-	return map[string][]runtime.Object{}, nil
-}
-func (fakeKubeClient) BuildTable(io.Reader, bool) (kube.ResourceList, error) {
-	return kube.ResourceList{}, nil
+
+func TestReleaseManifestReturnsContent(t *testing.T) {
+	rel := buildTestRelease("demo", "ns1", 1, time.Now().Add(-time.Hour), time.Now())
+	rel.Manifest = "kind: ConfigMap"
+	store := storage.Init(driver.NewMemory())
+	require.NoError(t, store.Create(rel))
+
+	service := NewService(Dependencies{
+		Common: common.Dependencies{
+			EnsureClient: func(string) error { return nil },
+		},
+		ActionConfigFactory: func(*cli.EnvSettings, string) (*action.Configuration, error) {
+			return &action.Configuration{
+				Releases:   store,
+				Log:        func(string, ...interface{}) {},
+				KubeClient: &fakeKubeClient{},
+			}, nil
+		},
+	})
+
+	out, err := service.ReleaseManifest("ns1", "demo")
+	require.NoError(t, err)
+	require.Equal(t, "kind: ConfigMap", out)
 }
