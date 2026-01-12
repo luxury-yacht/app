@@ -3,7 +3,7 @@ package backend
 import "github.com/luxury-yacht/app/backend/resources/nodes"
 
 func (a *App) GetNode(name string) (*NodeDetails, error) {
-	deps := nodes.Dependencies{Common: a.resourceDependencies()}
+	deps := a.resourceDependencies()
 	return FetchClusterResource(a, "Node", name, func() (*NodeDetails, error) {
 		return nodes.NewService(deps).Node(name)
 	})
@@ -14,7 +14,7 @@ func (a *App) CordonNode(clusterID, nodeName string) error {
 	if err != nil {
 		return err
 	}
-	if err := nodes.NewService(nodes.Dependencies{Common: deps}).Cordon(nodeName); err != nil {
+	if err := nodes.NewService(deps).Cordon(nodeName); err != nil {
 		return err
 	}
 	a.clearNodeCaches(nodeName)
@@ -26,7 +26,7 @@ func (a *App) UncordonNode(clusterID, nodeName string) error {
 	if err != nil {
 		return err
 	}
-	if err := nodes.NewService(nodes.Dependencies{Common: deps}).Uncordon(nodeName); err != nil {
+	if err := nodes.NewService(deps).Uncordon(nodeName); err != nil {
 		return err
 	}
 	a.clearNodeCaches(nodeName)
@@ -38,7 +38,7 @@ func (a *App) DrainNode(clusterID, nodeName string, options DrainNodeOptions) er
 	if err != nil {
 		return err
 	}
-	if err := nodes.NewService(nodes.Dependencies{Common: deps}).Drain(nodeName, options); err != nil {
+	if err := nodes.NewService(deps).Drain(nodeName, options); err != nil {
 		return err
 	}
 	a.clearNodeCaches(nodeName)
@@ -50,7 +50,7 @@ func (a *App) DeleteNode(clusterID, nodeName string) error {
 	if err != nil {
 		return err
 	}
-	if err := nodes.NewService(nodes.Dependencies{Common: deps}).Delete(nodeName, false); err != nil {
+	if err := nodes.NewService(deps).Delete(nodeName, false); err != nil {
 		return err
 	}
 	a.clearNodeCaches(nodeName)
@@ -62,7 +62,7 @@ func (a *App) ForceDeleteNode(clusterID, nodeName string) error {
 	if err != nil {
 		return err
 	}
-	if err := nodes.NewService(nodes.Dependencies{Common: deps}).Delete(nodeName, true); err != nil {
+	if err := nodes.NewService(deps).Delete(nodeName, true); err != nil {
 		return err
 	}
 	a.clearNodeCaches(nodeName)

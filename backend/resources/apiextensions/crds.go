@@ -15,8 +15,8 @@ func (s *Service) CustomResourceDefinition(name string) (*restypes.CustomResourc
 		return nil, err
 	}
 
-	client := s.deps.Common.APIExtensionsClient
-	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	client := s.deps.APIExtensionsClient
+	crd, err := client.ApiextensionsV1().CustomResourceDefinitions().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to get CRD %s: %v", name, err))
 		return nil, fmt.Errorf("failed to get CRD: %v", err)
@@ -31,8 +31,8 @@ func (s *Service) CustomResourceDefinitions() ([]*restypes.CustomResourceDefinit
 		return nil, err
 	}
 
-	client := s.deps.Common.APIExtensionsClient
-	crds, err := client.ApiextensionsV1().CustomResourceDefinitions().List(s.deps.Common.Context, metav1.ListOptions{})
+	client := s.deps.APIExtensionsClient
+	crds, err := client.ApiextensionsV1().CustomResourceDefinitions().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to list CRDs: %v", err))
 		return nil, fmt.Errorf("failed to list CRDs: %v", err)
@@ -102,17 +102,17 @@ func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition)
 }
 
 func (s *Service) ensureAPIExtensions(resource string) error {
-	if s.deps.Common.EnsureAPIExtensions != nil {
-		return s.deps.Common.EnsureAPIExtensions(resource)
+	if s.deps.EnsureAPIExtensions != nil {
+		return s.deps.EnsureAPIExtensions(resource)
 	}
-	if s.deps.Common.APIExtensionsClient == nil {
+	if s.deps.APIExtensionsClient == nil {
 		return fmt.Errorf("apiextensions client not initialized")
 	}
 	return nil
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "ResourceLoader")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Error(msg, "ResourceLoader")
 	}
 }

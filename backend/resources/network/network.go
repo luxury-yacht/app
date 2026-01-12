@@ -1,17 +1,11 @@
 package network
 
-import (
-	"github.com/luxury-yacht/app/backend/resources/common"
-)
-
-type Dependencies struct {
-	Common common.Dependencies
-}
+import "github.com/luxury-yacht/app/backend/resources/common"
 
 type Service struct {
-	deps Dependencies
+	deps common.Dependencies
 }
 
-func NewService(deps Dependencies) *Service {
+func NewService(deps common.Dependencies) *Service {
 	return &Service{deps: deps}
 }

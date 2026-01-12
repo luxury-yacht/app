@@ -10,13 +10,13 @@ import (
 )
 
 func (s *Service) PersistentVolume(name string) (*restypes.PersistentVolumeDetails, error) {
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	pv, err := s.deps.Common.KubernetesClient.CoreV1().PersistentVolumes().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	pv, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get persistent volume %s: %v", name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get persistent volume %s: %v", name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get persistent volume: %v", err)
 	}
 
@@ -24,13 +24,13 @@ func (s *Service) PersistentVolume(name string) (*restypes.PersistentVolumeDetai
 }
 
 func (s *Service) PersistentVolumes() ([]*restypes.PersistentVolumeDetails, error) {
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	pvs, err := s.deps.Common.KubernetesClient.CoreV1().PersistentVolumes().List(s.deps.Common.Context, metav1.ListOptions{})
+	pvs, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list persistent volumes: %v", err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list persistent volumes: %v", err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list persistent volumes: %v", err)
 	}
 
@@ -191,13 +191,13 @@ func (s *Service) processPersistentVolumeDetails(pv *corev1.PersistentVolume) *r
 }
 
 func (s *Service) listPersistentVolumes() *corev1.PersistentVolumeList {
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return nil
 	}
 
-	pvs, err := s.deps.Common.KubernetesClient.CoreV1().PersistentVolumes().List(s.deps.Common.Context, metav1.ListOptions{})
+	pvs, err := s.deps.KubernetesClient.CoreV1().PersistentVolumes().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list persistent volumes: %v", err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list persistent volumes: %v", err), "ResourceLoader")
 		return nil
 	}
 	return pvs

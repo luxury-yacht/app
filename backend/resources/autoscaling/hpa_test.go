@@ -86,7 +86,7 @@ func TestServiceHorizontalPodAutoscalerDetails(t *testing.T) {
 }
 
 func TestHPAServiceRequiresClient(t *testing.T) {
-	svc := NewService(Dependencies{Common: testsupport.NewResourceDependencies()})
+	svc := NewService(testsupport.NewResourceDependencies())
 
 	_, err := svc.HorizontalPodAutoscaler("default", "missing")
 	require.Error(t, err)
@@ -114,5 +114,5 @@ func newHPAService(t testing.TB, client *kubefake.Clientset) *Service {
 		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
-	return NewService(Dependencies{Common: deps})
+	return NewService(deps)
 }

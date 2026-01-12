@@ -14,26 +14,26 @@ import (
 )
 
 type CronJobService struct {
-	deps Dependencies
+	deps common.Dependencies
 }
 
-func NewCronJobService(deps Dependencies) *CronJobService {
+func NewCronJobService(deps common.Dependencies) *CronJobService {
 	return &CronJobService{deps: deps}
 }
 
 func (s *CronJobService) CronJob(namespace, name string) (*restypes.CronJobDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	cronJob, err := client.BatchV1().CronJobs(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	cronJob, err := client.BatchV1().CronJobs(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get CronJob %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get CronJob %s/%s: %v", namespace, name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get cronjob: %v", err)
 	}
 
-	jobs, err := client.BatchV1().Jobs(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	jobs, err := client.BatchV1().Jobs(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		jobs = nil
 	}
@@ -43,18 +43,18 @@ func (s *CronJobService) CronJob(namespace, name string) (*restypes.CronJobDetai
 }
 
 func (s *CronJobService) CronJobs(namespace string) ([]*restypes.CronJobDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	cronJobs, err := client.BatchV1().CronJobs(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	cronJobs, err := client.BatchV1().CronJobs(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list CronJobs in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list CronJobs in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list cronjobs: %v", err)
 	}
 
-	jobs, err := client.BatchV1().Jobs(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	jobs, err := client.BatchV1().Jobs(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		jobs = nil
 	}
@@ -132,12 +132,12 @@ func (s *CronJobService) collectCronJobPods(namespace string, cronJob *batchv1.C
 	if jobs == nil {
 		return nil, nil
 	}
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil
 	}
 
-	podService := pods.NewService(pods.Dependencies{Common: s.deps.Common})
+	podService := pods.NewService(s.deps)
 	rsMap := podService.BuildReplicaSetToDeploymentMap(namespace)
 
 	var collected []corev1.Pod
@@ -156,9 +156,9 @@ func (s *CronJobService) collectCronJobPods(namespace string, cronJob *batchv1.C
 			}
 		}
 
-		podList, err := client.CoreV1().Pods(namespace).List(s.deps.Common.Context, options)
+		podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, options)
 		if err != nil {
-			s.deps.Common.Logger.Debug(fmt.Sprintf("Failed to list pods for job %s/%s: %v", namespace, job.Name, err), "ResourceLoader")
+			s.deps.Logger.Debug(fmt.Sprintf("Failed to list pods for job %s/%s: %v", namespace, job.Name, err), "ResourceLoader")
 			continue
 		}
 

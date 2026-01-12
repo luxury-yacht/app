@@ -21,12 +21,12 @@ type PodDetailInfoContainer = restypes.PodDetailInfoContainer
 
 // Helper to fetch a single pod with full details
 func (s *Service) fetchSinglePodFull(namespace, name string) (*restypes.PodDetailInfo, error) {
-	pod, err := s.deps.Common.KubernetesClient.CoreV1().Pods(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to fetch pod %s/%s from Kubernetes API: %v", namespace, name, err), "Pod")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to fetch pod %s/%s from Kubernetes API: %v", namespace, name, err), "Pod")
 		return nil, fmt.Errorf("failed to fetch pod from API: %w", err)
 	}
-	s.deps.Common.Logger.Debug(fmt.Sprintf("Fetched pod %s/%s from Kubernetes API", namespace, name), "Pod")
+	s.deps.Logger.Debug(fmt.Sprintf("Fetched pod %s/%s from Kubernetes API", namespace, name), "Pod")
 
 	// Get metrics and owner info
 	podMetrics := s.getPodMetrics(namespace)
@@ -68,17 +68,17 @@ func (s *Service) getMultiNamespacePodMetrics(pods []corev1.Pod) map[string]*met
 	metrics := make(map[string]*metricsv1beta1.PodMetrics)
 
 	// Ensure metrics client is available
-	client := s.deps.Common.MetricsClient
+	client := s.deps.MetricsClient
 	if client == nil {
-		config := s.deps.Common.RestConfig
+		config := s.deps.RestConfig
 		if config != nil {
 			metricsClient, err := metricsclient.NewForConfig(config)
 			if err != nil {
-				s.deps.Common.Logger.Debug(fmt.Sprintf("Metrics client not available: %v", err), "ResourceLoader")
+				s.deps.Logger.Debug(fmt.Sprintf("Metrics client not available: %v", err), "ResourceLoader")
 				return metrics
 			}
-			s.deps.Common.SetMetricsClient(metricsClient)
-			s.deps.Common.MetricsClient = metricsClient
+			s.deps.SetMetricsClient(metricsClient)
+			s.deps.MetricsClient = metricsClient
 			client = metricsClient
 		} else {
 			return metrics
@@ -98,10 +98,10 @@ func (s *Service) getMultiNamespacePodMetrics(pods []corev1.Pod) map[string]*met
 
 	var mu sync.Mutex
 
-	_ = parallel.ForEach(s.deps.Common.Context, nsList, 4, func(ctx context.Context, ns string) error {
+	_ = parallel.ForEach(s.deps.Context, nsList, 4, func(ctx context.Context, ns string) error {
 		podMetricsList, err := client.MetricsV1beta1().PodMetricses(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
-			s.deps.Common.Logger.Debug(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", ns, err), "ResourceLoader")
+			s.deps.Logger.Debug(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", ns, err), "ResourceLoader")
 			return nil
 		}
 
@@ -132,7 +132,7 @@ func (s *Service) getMultiNamespacePodMetrics(pods []corev1.Pod) map[string]*met
 func (s *Service) buildReplicaSetToDeploymentMap(namespace string) map[string]string {
 	rsToDeployment := make(map[string]string)
 
-	rsList, err := s.deps.Common.KubernetesClient.AppsV1().ReplicaSets(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	rsList, err := s.deps.KubernetesClient.AppsV1().ReplicaSets(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		return rsToDeployment
 	}
@@ -171,7 +171,7 @@ func (s *Service) getNodeIP(nodeName string) string {
 		return ""
 	}
 
-	node, err := s.deps.Common.KubernetesClient.CoreV1().Nodes().Get(s.deps.Common.Context, nodeName, metav1.GetOptions{})
+	node, err := s.deps.KubernetesClient.CoreV1().Nodes().Get(s.deps.Context, nodeName, metav1.GetOptions{})
 	if err != nil {
 		return ""
 	}
@@ -331,17 +331,17 @@ func calculatePodResources(pod corev1.Pod) (*resource.Quantity, *resource.Quanti
 func (s *Service) getPodMetrics(namespace string) map[string]*metricsv1beta1.PodMetrics {
 	metrics := make(map[string]*metricsv1beta1.PodMetrics)
 
-	client := s.deps.Common.MetricsClient
+	client := s.deps.MetricsClient
 	if client == nil {
-		config := s.deps.Common.RestConfig
+		config := s.deps.RestConfig
 		if config != nil {
 			metricsClient, err := metricsclient.NewForConfig(config)
 			if err != nil {
-				s.deps.Common.Logger.Info(fmt.Sprintf("Metrics client not available: %v", err), "ResourceLoader")
+				s.deps.Logger.Info(fmt.Sprintf("Metrics client not available: %v", err), "ResourceLoader")
 				return metrics
 			}
-			s.deps.Common.SetMetricsClient(metricsClient)
-			s.deps.Common.MetricsClient = metricsClient
+			s.deps.SetMetricsClient(metricsClient)
+			s.deps.MetricsClient = metricsClient
 			client = metricsClient
 		} else {
 			return metrics
@@ -349,9 +349,9 @@ func (s *Service) getPodMetrics(namespace string) map[string]*metricsv1beta1.Pod
 	}
 
 	// Fetch pod metrics
-	podMetricsList, err := client.MetricsV1beta1().PodMetricses(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	podMetricsList, err := client.MetricsV1beta1().PodMetricses(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Info(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Info(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", namespace, err), "ResourceLoader")
 		return metrics
 	}
 
@@ -375,17 +375,17 @@ func (s *Service) getPodMetricsForPods(namespace string, pods []corev1.Pod) map[
 		return metrics
 	}
 
-	client := s.deps.Common.MetricsClient
+	client := s.deps.MetricsClient
 	if client == nil {
-		config := s.deps.Common.RestConfig
+		config := s.deps.RestConfig
 		if config != nil {
 			metricsClient, err := metricsclient.NewForConfig(config)
 			if err != nil {
-				s.deps.Common.Logger.Debug(fmt.Sprintf("Metrics client not available: %v", err), "ResourceLoader")
+				s.deps.Logger.Debug(fmt.Sprintf("Metrics client not available: %v", err), "ResourceLoader")
 				return metrics
 			}
-			s.deps.Common.SetMetricsClient(metricsClient)
-			s.deps.Common.MetricsClient = metricsClient
+			s.deps.SetMetricsClient(metricsClient)
+			s.deps.MetricsClient = metricsClient
 			client = metricsClient
 		} else {
 			return metrics
@@ -397,19 +397,19 @@ func (s *Service) getPodMetricsForPods(namespace string, pods []corev1.Pod) map[
 	if len(pods) <= 3 {
 		// Fetch metrics individually
 		for _, pod := range pods {
-			podMetric, err := client.MetricsV1beta1().PodMetricses(namespace).Get(s.deps.Common.Context, pod.Name, metav1.GetOptions{})
+			podMetric, err := client.MetricsV1beta1().PodMetricses(namespace).Get(s.deps.Context, pod.Name, metav1.GetOptions{})
 			if err != nil {
 				// Individual pod metrics might not be available yet (new pods)
-				s.deps.Common.Logger.Debug(fmt.Sprintf("No metrics for pod %s: %v", pod.Name, err), "ResourceLoader")
+				s.deps.Logger.Debug(fmt.Sprintf("No metrics for pod %s: %v", pod.Name, err), "ResourceLoader")
 				continue
 			}
 			metrics[pod.Name] = podMetric
 		}
 	} else {
 		// For many pods, fetch all and filter
-		podMetricsList, err := client.MetricsV1beta1().PodMetricses(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+		podMetricsList, err := client.MetricsV1beta1().PodMetricses(namespace).List(s.deps.Context, metav1.ListOptions{})
 		if err != nil {
-			s.deps.Common.Logger.Info(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", namespace, err), "ResourceLoader")
+			s.deps.Logger.Info(fmt.Sprintf("Failed to fetch pod metrics for namespace %s: %v", namespace, err), "ResourceLoader")
 			return metrics
 		}
 
@@ -744,7 +744,7 @@ func buildContainerDetails(container corev1.Container, statuses []corev1.Contain
 // fetchPodsWithFilter fetches pods with the given filters
 func (s *Service) fetchPodsWithFilter(namespace string, listOptions metav1.ListOptions) ([]corev1.Pod, error) {
 	if namespace != "" {
-		podList, err := s.deps.Common.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Common.Context, listOptions)
+		podList, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Context, listOptions)
 		if err != nil {
 			return nil, fmt.Errorf("failed to list pods: %v", err)
 		}
@@ -752,7 +752,7 @@ func (s *Service) fetchPodsWithFilter(namespace string, listOptions metav1.ListO
 	}
 
 	// Fetch from all namespaces
-	podList, err := s.deps.Common.KubernetesClient.CoreV1().Pods("").List(s.deps.Common.Context, listOptions)
+	podList, err := s.deps.KubernetesClient.CoreV1().Pods("").List(s.deps.Context, listOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods: %v", err)
 	}
@@ -771,9 +771,9 @@ func (s *Service) buildMultiNamespaceRSMap(pods []corev1.Pod) map[string]string 
 	// Build combined map - use ReplicaSet name as key since it's unique per namespace
 	rsToDeployment := make(map[string]string)
 	for ns := range namespaces {
-		rsList, err := s.deps.Common.KubernetesClient.AppsV1().ReplicaSets(ns).List(s.deps.Common.Context, metav1.ListOptions{})
+		rsList, err := s.deps.KubernetesClient.AppsV1().ReplicaSets(ns).List(s.deps.Context, metav1.ListOptions{})
 		if err != nil {
-			s.deps.Common.Logger.Debug(fmt.Sprintf("Failed to fetch ReplicaSets for namespace %s: %v", ns, err), "ResourceLoader")
+			s.deps.Logger.Debug(fmt.Sprintf("Failed to fetch ReplicaSets for namespace %s: %v", ns, err), "ResourceLoader")
 			continue
 		}
 

@@ -11,12 +11,12 @@ import (
 
 // ValidatingWebhookConfiguration returns details for a single validating configuration.
 func (s *Service) ValidatingWebhookConfiguration(name string) (*restypes.ValidatingWebhookConfigurationDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	config, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	config, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to get validating webhook configuration %s: %v", name, err))
 		return nil, fmt.Errorf("failed to get validating webhook configuration: %v", err)
@@ -27,12 +27,12 @@ func (s *Service) ValidatingWebhookConfiguration(name string) (*restypes.Validat
 
 // ValidatingWebhookConfigurations lists all validating webhook configurations.
 func (s *Service) ValidatingWebhookConfigurations() ([]*restypes.ValidatingWebhookConfigurationDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	configs, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().List(s.deps.Common.Context, metav1.ListOptions{})
+	configs, err := client.AdmissionregistrationV1().ValidatingWebhookConfigurations().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to list validating webhook configurations: %v", err))
 		return nil, fmt.Errorf("failed to list validating webhook configurations: %v", err)

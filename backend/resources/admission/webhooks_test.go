@@ -25,7 +25,7 @@ func newAdmissionService(t testing.TB, objects ...runtime.Object) *Service {
 		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
-	return NewService(Dependencies{Common: deps})
+	return NewService(deps)
 }
 
 func ptrToInt32(value int32) *int32 {

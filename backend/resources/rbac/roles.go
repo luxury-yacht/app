@@ -11,15 +11,15 @@ import (
 )
 
 func (s *Service) Role(namespace, name string) (*restypes.RoleDetails, error) {
-	role, err := s.deps.Common.KubernetesClient.RbacV1().Roles(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	role, err := s.deps.KubernetesClient.RbacV1().Roles(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get role %s/%s: %v", namespace, name, err), "RBAC")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get role %s/%s: %v", namespace, name, err), "RBAC")
 		return nil, fmt.Errorf("failed to get role: %v", err)
 	}
 
 	var bindings *rbacv1.RoleBindingList
-	if rbList, err := s.deps.Common.KubernetesClient.RbacV1().RoleBindings(namespace).List(s.deps.Common.Context, metav1.ListOptions{}); err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list role bindings in namespace %s: %v", namespace, err), "RBAC")
+	if rbList, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).List(s.deps.Context, metav1.ListOptions{}); err != nil {
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list role bindings in namespace %s: %v", namespace, err), "RBAC")
 	} else {
 		bindings = rbList
 	}
@@ -28,15 +28,15 @@ func (s *Service) Role(namespace, name string) (*restypes.RoleDetails, error) {
 }
 
 func (s *Service) Roles(namespace string) ([]*restypes.RoleDetails, error) {
-	roles, err := s.deps.Common.KubernetesClient.RbacV1().Roles(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	roles, err := s.deps.KubernetesClient.RbacV1().Roles(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list roles in namespace %s: %v", namespace, err), "RBAC")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list roles in namespace %s: %v", namespace, err), "RBAC")
 		return nil, fmt.Errorf("failed to list roles: %v", err)
 	}
 
 	var bindings *rbacv1.RoleBindingList
-	if rbList, err := s.deps.Common.KubernetesClient.RbacV1().RoleBindings(namespace).List(s.deps.Common.Context, metav1.ListOptions{}); err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list role bindings in namespace %s: %v", namespace, err), "RBAC")
+	if rbList, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).List(s.deps.Context, metav1.ListOptions{}); err != nil {
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list role bindings in namespace %s: %v", namespace, err), "RBAC")
 	} else {
 		bindings = rbList
 	}

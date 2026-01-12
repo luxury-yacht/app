@@ -73,5 +73,5 @@ func newEventsService(t testing.TB, client *kubefake.Clientset) *Service {
 		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
-	return NewService(Dependencies{Common: deps})
+	return NewService(deps)
 }

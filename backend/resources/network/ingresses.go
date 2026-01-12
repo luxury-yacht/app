@@ -10,18 +10,18 @@ import (
 )
 
 func (s *Service) Ingress(namespace, name string) (*restypes.IngressDetails, error) {
-	ingress, err := s.deps.Common.KubernetesClient.NetworkingV1().Ingresses(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	ingress, err := s.deps.KubernetesClient.NetworkingV1().Ingresses(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get ingress %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get ingress %s/%s: %v", namespace, name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get ingress: %v", err)
 	}
 	return buildIngressDetails(ingress), nil
 }
 
 func (s *Service) Ingresses(namespace string) ([]*restypes.IngressDetails, error) {
-	ingresses, err := s.deps.Common.KubernetesClient.NetworkingV1().Ingresses(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	ingresses, err := s.deps.KubernetesClient.NetworkingV1().Ingresses(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list ingresses in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list ingresses in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list ingresses: %v", err)
 	}
 
@@ -35,18 +35,18 @@ func (s *Service) Ingresses(namespace string) ([]*restypes.IngressDetails, error
 }
 
 func (s *Service) IngressClass(name string) (*restypes.IngressClassDetails, error) {
-	ic, err := s.deps.Common.KubernetesClient.NetworkingV1().IngressClasses().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	ic, err := s.deps.KubernetesClient.NetworkingV1().IngressClasses().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get ingress class %s: %v", name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get ingress class %s: %v", name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get ingress class: %v", err)
 	}
 	return buildIngressClassDetails(ic, nil), nil
 }
 
 func (s *Service) IngressClasses() ([]*restypes.IngressClassDetails, error) {
-	classes, err := s.deps.Common.KubernetesClient.NetworkingV1().IngressClasses().List(s.deps.Common.Context, metav1.ListOptions{})
+	classes, err := s.deps.KubernetesClient.NetworkingV1().IngressClasses().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list ingress classes: %v", err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list ingress classes: %v", err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list ingress classes: %v", err)
 	}
 

@@ -115,7 +115,7 @@ func summarizeWebhookConfiguration(count int, selector *metav1.LabelSelector) st
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "ResourceLoader")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Error(msg, "ResourceLoader")
 	}
 }

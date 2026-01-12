@@ -21,7 +21,7 @@ var logStreamFunc = func(pods corev1client.PodInterface, ctx context.Context, po
 
 // LogFetcher aggregates logs from pods or workloads based on the provided request.
 func (s *Service) LogFetcher(req restypes.LogFetchRequest) restypes.LogFetchResponse {
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return restypes.LogFetchResponse{Error: "kubernetes client not initialized"}
 	}
 
@@ -68,11 +68,11 @@ func (s *Service) LogFetcher(req restypes.LogFetchRequest) restypes.LogFetchResp
 
 // PodContainers returns container names (including init containers) for the specified pod.
 func (s *Service) PodContainers(namespace, podName string) ([]string, error) {
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	pod, err := s.deps.Common.KubernetesClient.CoreV1().Pods(namespace).Get(s.ctx(), podName, metav1.GetOptions{})
+	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(s.ctx(), podName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pod: %w", err)
 	}
@@ -98,7 +98,7 @@ func (s *Service) resolveTargetPods(req restypes.LogFetchRequest) ([]string, err
 }
 
 func (s *Service) workloadPods(namespace, workloadName, workloadKind string) ([]string, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	switch strings.ToLower(workloadKind) {
 	case "deployment":
 		deployment, err := client.AppsV1().Deployments(namespace).Get(s.ctx(), workloadName, metav1.GetOptions{})
@@ -134,7 +134,7 @@ func (s *Service) workloadPods(namespace, workloadName, workloadKind string) ([]
 }
 
 func (s *Service) podsBySelector(namespace, selector string) ([]string, error) {
-	pods, err := s.deps.Common.KubernetesClient.CoreV1().Pods(namespace).List(s.ctx(), metav1.ListOptions{LabelSelector: selector})
+	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.ctx(), metav1.ListOptions{LabelSelector: selector})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pods with selector %s: %w", selector, err)
 	}
@@ -146,7 +146,7 @@ func (s *Service) podsBySelector(namespace, selector string) ([]string, error) {
 }
 
 func (s *Service) podsForCronJob(namespace, cronJobName string) ([]string, error) {
-	jobs, err := s.deps.Common.KubernetesClient.BatchV1().Jobs(namespace).List(s.ctx(), metav1.ListOptions{})
+	jobs, err := s.deps.KubernetesClient.BatchV1().Jobs(namespace).List(s.ctx(), metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list jobs: %w", err)
 	}
@@ -168,7 +168,7 @@ func (s *Service) podsForCronJob(namespace, cronJobName string) ([]string, error
 }
 
 func (s *Service) fetchPodLogs(namespace, podName, container string, tailLines int, previous bool, sinceSeconds int64) ([]restypes.PodLogEntry, error) {
-	pod, err := s.deps.Common.KubernetesClient.CoreV1().Pods(namespace).Get(s.ctx(), podName, metav1.GetOptions{})
+	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(s.ctx(), podName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pod: %w", err)
 	}
@@ -226,7 +226,7 @@ func (s *Service) fetchContainerLogs(namespace, podName, containerName string, i
 		logOptions.SinceSeconds = &sinceSeconds
 	}
 
-	pods := s.deps.Common.KubernetesClient.CoreV1().Pods(namespace)
+	pods := s.deps.KubernetesClient.CoreV1().Pods(namespace)
 	stream, err := logStreamFunc(pods, s.ctx(), podName, logOptions)
 	if err != nil {
 		errStr := err.Error()
@@ -269,14 +269,14 @@ func (s *Service) fetchContainerLogs(namespace, podName, containerName string, i
 }
 
 func (s *Service) ctx() context.Context {
-	if s.deps.Common.Context != nil {
-		return s.deps.Common.Context
+	if s.deps.Context != nil {
+		return s.deps.Context
 	}
 	return context.Background()
 }
 
 func (s *Service) logWarn(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Warn(msg, "PodLogs")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Warn(msg, "PodLogs")
 	}
 }

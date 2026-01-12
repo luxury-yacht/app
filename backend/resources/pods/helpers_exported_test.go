@@ -19,12 +19,10 @@ func TestGetPodMetricsForPods(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "ns"},
 	})
 
-	svc := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:       context.Background(),
-			Logger:        testsupport.NoopLogger{},
-			MetricsClient: metricsClient,
-		},
+	svc := NewService(common.Dependencies{
+		Context:       context.Background(),
+		Logger:        testsupport.NoopLogger{},
+		MetricsClient: metricsClient,
 	})
 
 	result := svc.GetPodMetricsForPods("ns", []corev1.Pod{

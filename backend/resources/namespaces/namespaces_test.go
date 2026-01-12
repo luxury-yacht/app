@@ -21,9 +21,7 @@ import (
 )
 
 func TestHasWorkloadsWithoutClient(t *testing.T) {
-	service := NewService(Dependencies{
-		Common: testsupport.NewResourceDependencies(),
-	})
+	service := NewService(testsupport.NewResourceDependencies())
 
 	has, unknown := service.hasWorkloads("default")
 	require.False(t, has)
@@ -66,7 +64,7 @@ func TestServiceNamespaceEnsureClientError(t *testing.T) {
 		testsupport.WithDepsEnsureClient(func(string) error { return fmt.Errorf("ensure fail") }),
 	)
 
-	service := NewService(Dependencies{Common: deps})
+	service := NewService(deps)
 
 	_, err := service.Namespace("default")
 	require.Error(t, err)
@@ -95,5 +93,5 @@ func newNamespaceService(t testing.TB, client *kubefake.Clientset) *Service {
 		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
-	return NewService(Dependencies{Common: deps})
+	return NewService(deps)
 }

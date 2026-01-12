@@ -25,7 +25,7 @@ func TestServiceDeleteCoreResource(t *testing.T) {
 		testsupport.WithDepsKubeClient(kubeClient),
 		testsupport.WithDepsDynamicClient(dynamicClient),
 	)
-	service := NewService(Dependencies{Common: deps})
+	service := NewService(deps)
 
 	if err := service.Delete("Pod", "default", "web-0"); err != nil {
 		t.Fatalf("Delete returned error: %v", err)
@@ -67,7 +67,7 @@ func TestServiceDeleteCustomResource(t *testing.T) {
 		testsupport.WithDepsKubeClient(kubeClient),
 		testsupport.WithDepsDynamicClient(dynamicClient),
 	)
-	service := NewService(Dependencies{Common: deps})
+	service := NewService(deps)
 
 	if err := service.Delete("Widget", "default", "sample"); err != nil {
 		t.Fatalf("Delete returned error: %v", err)

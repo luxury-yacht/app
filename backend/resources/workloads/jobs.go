@@ -14,53 +14,53 @@ import (
 )
 
 type JobService struct {
-	deps Dependencies
+	deps common.Dependencies
 }
 
-func NewJobService(deps Dependencies) *JobService {
+func NewJobService(deps common.Dependencies) *JobService {
 	return &JobService{deps: deps}
 }
 
 func (s *JobService) Job(namespace, name string) (*restypes.JobDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	job, err := client.BatchV1().Jobs(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	job, err := client.BatchV1().Jobs(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get Job %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get Job %s/%s: %v", namespace, name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get job: %v", err)
 	}
 
-	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Common.Context, metav1.ListOptions{LabelSelector: metav1.FormatLabelSelector(job.Spec.Selector)})
+	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{LabelSelector: metav1.FormatLabelSelector(job.Spec.Selector)})
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list pods for Job %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods for Job %s/%s: %v", namespace, name, err), "ResourceLoader")
 	}
 
 	podsForJob := filterPodsForJob(job, podList)
-	metrics := pods.NewService(pods.Dependencies{Common: s.deps.Common}).GetPodMetricsForPods(namespace, podsForJob)
+	metrics := pods.NewService(s.deps).GetPodMetricsForPods(namespace, podsForJob)
 	return buildJobDetails(job, podsForJob, metrics), nil
 }
 
 func (s *JobService) Jobs(namespace string) ([]*restypes.JobDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	jobs, err := client.BatchV1().Jobs(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	jobs, err := client.BatchV1().Jobs(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list Jobs in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list Jobs in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list jobs: %v", err)
 	}
 
-	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
 	}
 
-	podService := pods.NewService(pods.Dependencies{Common: s.deps.Common})
+	podService := pods.NewService(s.deps)
 	var results []*restypes.JobDetails
 	for i := range jobs.Items {
 		job := &jobs.Items[i]

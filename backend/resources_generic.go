@@ -7,6 +7,6 @@ func (a *App) DeleteResource(clusterID, resourceKind, namespace, name string) er
 	if err != nil {
 		return err
 	}
-	service := generic.NewService(generic.Dependencies{Common: deps})
+	service := generic.NewService(deps)
 	return service.Delete(resourceKind, namespace, name)
 }

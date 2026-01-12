@@ -67,12 +67,10 @@ func TestManagerServiceAccountAggregatesRelations(t *testing.T) {
 	}
 
 	client := fake.NewClientset(sa, pod, roleBinding, clusterRoleBinding)
-	manager := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           testsupport.NoopLogger{},
-			KubernetesClient: client,
-		},
+	manager := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: client,
 	})
 
 	details, err := manager.ServiceAccount("team-a", "builder")

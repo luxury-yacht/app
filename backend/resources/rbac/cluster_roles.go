@@ -10,24 +10,24 @@ import (
 )
 
 func (s *Service) ClusterRole(name string) (*restypes.ClusterRoleDetails, error) {
-	cr, err := s.deps.Common.KubernetesClient.RbacV1().ClusterRoles().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	cr, err := s.deps.KubernetesClient.RbacV1().ClusterRoles().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get cluster role %s: %v", name, err), "RBAC")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get cluster role %s: %v", name, err), "RBAC")
 		return nil, fmt.Errorf("failed to get cluster role: %v", err)
 	}
 	return s.buildClusterRoleDetails(cr, nil, nil), nil
 }
 
 func (s *Service) ClusterRoles() ([]*restypes.ClusterRoleDetails, error) {
-	roles, err := s.deps.Common.KubernetesClient.RbacV1().ClusterRoles().List(s.deps.Common.Context, metav1.ListOptions{})
+	roles, err := s.deps.KubernetesClient.RbacV1().ClusterRoles().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list cluster roles: %v", err), "RBAC")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list cluster roles: %v", err), "RBAC")
 		return nil, fmt.Errorf("failed to list cluster roles: %v", err)
 	}
 
 	var crbMap map[string][]string
-	if crbs, err := s.deps.Common.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Common.Context, metav1.ListOptions{}); err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
+	if crbs, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Context, metav1.ListOptions{}); err != nil {
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
 	} else {
 		crbMap = make(map[string][]string)
 		for i := range crbs.Items {

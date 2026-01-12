@@ -72,7 +72,7 @@ func TestServiceDeleteReturnsEnsureClientError(t *testing.T) {
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsEnsureClient(func(string) error { return errors.New("ensure failed") }),
 	)
-	service := nodes.NewService(nodes.Dependencies{Common: deps})
+	service := nodes.NewService(deps)
 
 	err := service.Delete("node-1", false)
 	require.Error(t, err)
@@ -174,7 +174,7 @@ func newNodeService(t *testing.T) (*nodes.Service, *kubefake.Clientset, *corev1.
 		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 	)
 
-	service := nodes.NewService(nodes.Dependencies{Common: deps})
+	service := nodes.NewService(deps)
 	return service, client, node
 }
 

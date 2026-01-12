@@ -15,7 +15,7 @@ import (
 )
 
 func TestConstraintsRequireClient(t *testing.T) {
-	svc := NewService(Dependencies{Common: testsupport.NewResourceDependencies()})
+	svc := NewService(testsupport.NewResourceDependencies())
 
 	_, err := svc.ResourceQuota("default", "rq")
 	require.Error(t, err)
@@ -49,7 +49,7 @@ func newConstraintsService(t testing.TB, client *kubefake.Clientset) *Service {
 		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
-	return NewService(Dependencies{Common: deps})
+	return NewService(deps)
 }
 
 func resourceMustParse(value string) resource.Quantity {

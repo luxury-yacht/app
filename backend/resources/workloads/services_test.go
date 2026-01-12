@@ -86,7 +86,7 @@ func TestStatefulSetServiceReturnsDetail(t *testing.T) {
 	client := kubefake.NewClientset(ss.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewStatefulSetService(workloads.Dependencies{Common: deps})
+	service := workloads.NewStatefulSetService(deps)
 	detail, err := service.StatefulSet("default", "db")
 	require.NoError(t, err)
 	require.Equal(t, "StatefulSet", detail.Kind)
@@ -138,7 +138,7 @@ func TestDaemonSetServiceReturnsDetail(t *testing.T) {
 	client := kubefake.NewClientset(ds.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewDaemonSetService(workloads.Dependencies{Common: deps})
+	service := workloads.NewDaemonSetService(deps)
 	detail, err := service.DaemonSet("default", "agent")
 	require.NoError(t, err)
 	require.Equal(t, "DaemonSet", detail.Kind)
@@ -183,7 +183,7 @@ func TestJobServiceReturnsDetail(t *testing.T) {
 	client := kubefake.NewClientset(job.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewJobService(workloads.Dependencies{Common: deps})
+	service := workloads.NewJobService(deps)
 	detail, err := service.Job("default", "report")
 	require.NoError(t, err)
 	require.Equal(t, "Job", detail.Kind)
@@ -236,7 +236,7 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 	client := kubefake.NewClientset(cron.DeepCopy(), job.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
-	service := workloads.NewCronJobService(workloads.Dependencies{Common: deps})
+	service := workloads.NewCronJobService(deps)
 	detail, err := service.CronJob("default", "nightly")
 	require.NoError(t, err)
 	require.Equal(t, "CronJob", detail.Kind)
@@ -276,7 +276,7 @@ func TestGetWorkloadsAggregatesKinds(t *testing.T) {
 	client := kubefake.NewClientset(objects...)
 	deps := newDeps(t, client)
 
-	results, err := workloads.GetWorkloads(workloads.Dependencies{Common: deps}, "default")
+	results, err := workloads.GetWorkloads(deps, "default")
 	require.NoError(t, err)
 
 	kinds := make(map[string]bool)
@@ -399,7 +399,7 @@ func TestGetWorkloadsSortsAndSummarizes(t *testing.T) {
 		}),
 	)
 
-	results, err := workloads.GetWorkloads(workloads.Dependencies{Common: deps}, "default")
+	results, err := workloads.GetWorkloads(deps, "default")
 	require.NoError(t, err)
 	require.True(t, ensureCalled, "expected EnsureClient to be invoked")
 

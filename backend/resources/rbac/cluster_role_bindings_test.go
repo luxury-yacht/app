@@ -28,12 +28,10 @@ func TestManagerClusterRolesToleratesBindingListFailure(t *testing.T) {
 		return true, nil, errors.New("nope")
 	})
 
-	manager := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           testsupport.NoopLogger{},
-			KubernetesClient: client,
-		},
+	manager := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: client,
 	})
 
 	roles, err := manager.ClusterRoles()

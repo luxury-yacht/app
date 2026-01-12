@@ -20,7 +20,7 @@ func (s *Service) EndpointSlice(namespace, service string) (*restypes.EndpointSl
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, service)
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get endpoint slices %s/%s: %v", namespace, service, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get endpoint slices %s/%s: %v", namespace, service, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get endpoint slices: %v", err)
 	}
 	return buildEndpointSliceDetails(namespace, service, slices), nil
@@ -32,7 +32,7 @@ func (s *Service) EndpointSlices(namespace string) ([]*restypes.EndpointSliceDet
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, "")
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list endpoint slices in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list endpoint slices in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list endpoint slices: %v", err)
 	}
 
@@ -49,7 +49,7 @@ func (s *Service) listEndpointSlices(ctx context.Context, namespace, service str
 	if service != "" {
 		opts.LabelSelector = labels.Set{discoveryv1.LabelServiceName: service}.AsSelector().String()
 	}
-	list, err := s.deps.Common.KubernetesClient.DiscoveryV1().EndpointSlices(namespace).List(ctx, opts)
+	list, err := s.deps.KubernetesClient.DiscoveryV1().EndpointSlices(namespace).List(ctx, opts)
 	if err != nil {
 		return nil, err
 	}

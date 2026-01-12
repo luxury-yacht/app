@@ -10,18 +10,18 @@ import (
 )
 
 func (s *Service) RoleBinding(namespace, name string) (*restypes.RoleBindingDetails, error) {
-	rb, err := s.deps.Common.KubernetesClient.RbacV1().RoleBindings(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	rb, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get role binding %s/%s: %v", namespace, name, err), "RBAC")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get role binding %s/%s: %v", namespace, name, err), "RBAC")
 		return nil, fmt.Errorf("failed to get role binding: %v", err)
 	}
 	return buildRoleBindingDetails(rb), nil
 }
 
 func (s *Service) RoleBindings(namespace string) ([]*restypes.RoleBindingDetails, error) {
-	roleBindings, err := s.deps.Common.KubernetesClient.RbacV1().RoleBindings(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	roleBindings, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list role bindings in namespace %s: %v", namespace, err), "RBAC")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list role bindings in namespace %s: %v", namespace, err), "RBAC")
 		return nil, fmt.Errorf("failed to list role bindings: %v", err)
 	}
 
@@ -80,9 +80,9 @@ func buildRoleBindingDetails(rb *rbacv1.RoleBinding) *restypes.RoleBindingDetail
 }
 
 func (s *Service) listRoleBindings(namespace string) *rbacv1.RoleBindingList {
-	bindings, err := s.deps.Common.KubernetesClient.RbacV1().RoleBindings(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	bindings, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list role bindings in namespace %s: %v", namespace, err), "RBAC")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list role bindings in namespace %s: %v", namespace, err), "RBAC")
 		return nil
 	}
 	return bindings

@@ -46,12 +46,10 @@ func TestManagerRoleIncludesBindings(t *testing.T) {
 	}
 
 	client := fake.NewClientset(role, rb)
-	manager := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           testsupport.NoopLogger{},
-			KubernetesClient: client,
-		},
+	manager := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: client,
 	})
 
 	details, err := manager.Role("team-a", "reader")
@@ -85,12 +83,10 @@ func TestManagerRoleSkipsBindingsOnListFailure(t *testing.T) {
 		return true, nil, errors.New("boom")
 	})
 
-	manager := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           testsupport.NoopLogger{},
-			KubernetesClient: client,
-		},
+	manager := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: client,
 	})
 
 	details, err := manager.Role("team-a", "orphan")

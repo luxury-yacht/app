@@ -10,11 +10,9 @@ import (
 
 // newManagerWithClient is a test helper for building a service with a fake client.
 func newManagerWithClient(client kubernetes.Interface) *Service {
-	return NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           testsupport.NoopLogger{},
-			KubernetesClient: client,
-		},
+	return NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: client,
 	})
 }

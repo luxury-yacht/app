@@ -53,12 +53,10 @@ func TestValidatingWebhookConfigurationListLogsError(t *testing.T) {
 		return true, nil, errors.New("no list")
 	})
 
-	service := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           logger,
-			KubernetesClient: client,
-		},
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           logger,
+		KubernetesClient: client,
 	})
 
 	_, err := service.ValidatingWebhookConfigurations()

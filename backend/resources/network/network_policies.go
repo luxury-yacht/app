@@ -10,18 +10,18 @@ import (
 )
 
 func (s *Service) NetworkPolicy(namespace, name string) (*restypes.NetworkPolicyDetails, error) {
-	np, err := s.deps.Common.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	np, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get network policy %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get network policy %s/%s: %v", namespace, name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get network policy: %v", err)
 	}
 	return buildNetworkPolicyDetails(np), nil
 }
 
 func (s *Service) NetworkPolicies(namespace string) ([]*restypes.NetworkPolicyDetails, error) {
-	policies, err := s.deps.Common.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	policies, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list network policies in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list network policies in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list network policies: %v", err)
 	}
 

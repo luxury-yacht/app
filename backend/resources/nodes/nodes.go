@@ -20,18 +20,11 @@ import (
 	"k8s.io/utils/ptr"
 )
 
-// Dependencies captures collaborators required for node operations.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-// Service exposes helpers for node inspection and management.
 type Service struct {
-	deps Dependencies
+	deps common.Dependencies
 }
 
-// NewService constructs a node service instance.
-func NewService(deps Dependencies) *Service {
+func NewService(deps common.Dependencies) *Service {
 	return &Service{deps: deps}
 }
 
@@ -41,8 +34,8 @@ func (s *Service) Node(name string) (*restypes.NodeDetails, error) {
 		return nil, err
 	}
 
-	client := s.deps.Common.KubernetesClient
-	node, err := client.CoreV1().Nodes().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	client := s.deps.KubernetesClient
+	node, err := client.CoreV1().Nodes().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to get node %s: %v", name, err))
 		return nil, fmt.Errorf("failed to get node: %v", err)
@@ -60,8 +53,8 @@ func (s *Service) Nodes() ([]*restypes.NodeDetails, error) {
 		return nil, err
 	}
 
-	client := s.deps.Common.KubernetesClient
-	nodeList, err := client.CoreV1().Nodes().List(s.deps.Common.Context, metav1.ListOptions{})
+	client := s.deps.KubernetesClient
+	nodeList, err := client.CoreV1().Nodes().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to list nodes: %v", err))
 		return nil, fmt.Errorf("failed to list nodes: %v", err)
@@ -72,7 +65,7 @@ func (s *Service) Nodes() ([]*restypes.NodeDetails, error) {
 		nodeMetrics map[string]corev1.ResourceList
 	)
 
-	if err := parallel.RunLimited(s.deps.Common.Context, 0,
+	if err := parallel.RunLimited(s.deps.Context, 0,
 		func(context.Context) error {
 			podsByNode = s.listAllPodsByNode()
 			return nil
@@ -111,8 +104,8 @@ func (s *Service) patchUnschedulable(nodeName string, unschedulable bool) error 
 	}
 
 	patch := []byte(fmt.Sprintf(`{"spec":{"unschedulable":%t}}`, unschedulable))
-	_, err := s.deps.Common.KubernetesClient.CoreV1().Nodes().Patch(
-		s.deps.Common.Context,
+	_, err := s.deps.KubernetesClient.CoreV1().Nodes().Patch(
+		s.deps.Context,
 		nodeName,
 		types.StrategicMergePatchType,
 		patch,
@@ -185,8 +178,8 @@ func (s *Service) cordonForDrain(job *nodemaintenance.DrainJob, nodeName string)
 
 // listPodsForDrain fetches pods on the node and applies drain filtering.
 func (s *Service) listPodsForDrain(nodeName string, options restypes.DrainNodeOptions, job *nodemaintenance.DrainJob) ([]corev1.Pod, error) {
-	client := s.deps.Common.KubernetesClient
-	listCtx, listCancel := context.WithTimeout(s.deps.Common.Context, config.NodeDrainTimeout)
+	client := s.deps.KubernetesClient
+	listCtx, listCancel := context.WithTimeout(s.deps.Context, config.NodeDrainTimeout)
 	defer listCancel()
 
 	podList, err := client.CoreV1().Pods("").List(listCtx, metav1.ListOptions{
@@ -221,10 +214,10 @@ func (s *Service) drainPod(pod corev1.Pod, options restypes.DrainNodeOptions, jo
 	job.AddPodEvent("evicting", pod.Namespace, pod.Name, "Evicting pod", false)
 	success := true
 
-	podCtx, podCancel := context.WithTimeout(s.deps.Common.Context, 30*time.Second)
+	podCtx, podCancel := context.WithTimeout(s.deps.Context, 30*time.Second)
 	defer podCancel()
 
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if options.DisableEviction {
 		grace := int64(options.GracePeriodSeconds)
 		deleteOptions := metav1.DeleteOptions{GracePeriodSeconds: &grace}
@@ -292,7 +285,7 @@ func (s *Service) Delete(nodeName string, force bool) error {
 		deleteOptions.GracePeriodSeconds = &zero
 	}
 
-	if err := s.deps.Common.KubernetesClient.CoreV1().Nodes().Delete(s.deps.Common.Context, nodeName, deleteOptions); err != nil {
+	if err := s.deps.KubernetesClient.CoreV1().Nodes().Delete(s.deps.Context, nodeName, deleteOptions); err != nil {
 		s.logError(fmt.Sprintf("Failed to delete node %s: %v", nodeName, err))
 		return fmt.Errorf("failed to delete node: %v", err)
 	}
@@ -331,7 +324,7 @@ func shouldSkipDrainPod(pod *corev1.Pod, options restypes.DrainNodeOptions) bool
 }
 
 func (s *Service) waitForPodsToTerminate(nodeName string, options restypes.DrainNodeOptions) error {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	timeout := time.Duration(options.GracePeriodSeconds) * time.Second
 	if timeout == 0 {
 		timeout = config.NodeDrainTimeout
@@ -340,7 +333,7 @@ func (s *Service) waitForPodsToTerminate(nodeName string, options restypes.Drain
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		// Use timeout context for each poll iteration
-		pollCtx, pollCancel := context.WithTimeout(s.deps.Common.Context, 10*time.Second)
+		pollCtx, pollCancel := context.WithTimeout(s.deps.Context, 10*time.Second)
 		remaining, err := client.CoreV1().Pods("").List(pollCtx, metav1.ListOptions{
 			FieldSelector: nodePodFieldSelector(nodeName),
 		})
@@ -459,12 +452,12 @@ func (s *Service) buildNodeDetails(node *corev1.Node, pods []corev1.Pod, nodeMet
 }
 
 func (s *Service) listPodsForNode(name string) []corev1.Pod {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(s.deps.Common.Context, config.NamespaceOperationTimeout)
+	ctx, cancel := context.WithTimeout(s.deps.Context, config.NamespaceOperationTimeout)
 	defer cancel()
 
 	podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
@@ -478,13 +471,13 @@ func (s *Service) listPodsForNode(name string) []corev1.Pod {
 }
 
 func (s *Service) listAllPodsByNode() map[string][]corev1.Pod {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	result := make(map[string][]corev1.Pod)
 	if client == nil {
 		return result
 	}
 
-	ctx, cancel := context.WithTimeout(s.deps.Common.Context, config.NamespaceOperationTimeout)
+	ctx, cancel := context.WithTimeout(s.deps.Context, config.NamespaceOperationTimeout)
 	defer cancel()
 
 	podList, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
@@ -505,11 +498,11 @@ func (s *Service) listAllPodsByNode() map[string][]corev1.Pod {
 
 func (s *Service) getNodeMetrics(name string) corev1.ResourceList {
 	s.ensureMetricsClient()
-	if s.deps.Common.MetricsClient == nil {
+	if s.deps.MetricsClient == nil {
 		return nil
 	}
 
-	metric, err := s.deps.Common.MetricsClient.MetricsV1beta1().NodeMetricses().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	metric, err := s.deps.MetricsClient.MetricsV1beta1().NodeMetricses().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logInfo(fmt.Sprintf("Failed to fetch metrics for node %s: %v", name, err))
 		return nil
@@ -519,11 +512,11 @@ func (s *Service) getNodeMetrics(name string) corev1.ResourceList {
 
 func (s *Service) listNodeMetrics() map[string]corev1.ResourceList {
 	s.ensureMetricsClient()
-	if s.deps.Common.MetricsClient == nil {
+	if s.deps.MetricsClient == nil {
 		return nil
 	}
 
-	metricsList, err := s.deps.Common.MetricsClient.MetricsV1beta1().NodeMetricses().List(s.deps.Common.Context, metav1.ListOptions{})
+	metricsList, err := s.deps.MetricsClient.MetricsV1beta1().NodeMetricses().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.logInfo(fmt.Sprintf("Failed to list node metrics: %v", err))
 		return nil
@@ -538,30 +531,30 @@ func (s *Service) listNodeMetrics() map[string]corev1.ResourceList {
 }
 
 func (s *Service) ensureMetricsClient() {
-	if s.deps.Common.MetricsClient != nil {
+	if s.deps.MetricsClient != nil {
 		return
 	}
-	if s.deps.Common.RestConfig == nil || s.deps.Common.SetMetricsClient == nil {
+	if s.deps.RestConfig == nil || s.deps.SetMetricsClient == nil {
 		return
 	}
 
-	metricsClient, err := metricsclient.NewForConfig(s.deps.Common.RestConfig)
+	metricsClient, err := metricsclient.NewForConfig(s.deps.RestConfig)
 	if err != nil {
 		s.logInfo(fmt.Sprintf("Metrics client not available: %v", err))
 		return
 	}
 
-	s.deps.Common.SetMetricsClient(metricsClient)
-	s.deps.Common.MetricsClient = metricsClient
+	s.deps.SetMetricsClient(metricsClient)
+	s.deps.MetricsClient = metricsClient
 }
 
 func (s *Service) ensureClient(resource string) error {
-	if s.deps.Common.EnsureClient != nil {
-		if err := s.deps.Common.EnsureClient(resource); err != nil {
+	if s.deps.EnsureClient != nil {
+		if err := s.deps.EnsureClient(resource); err != nil {
 			return err
 		}
 	}
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client not initialized")
 	}
 	return nil
@@ -690,14 +683,14 @@ func formatMemoryBytes(bytes int64) string {
 }
 
 func (s *Service) logInfo(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Info(msg, "NodeOperations")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Info(msg, "NodeOperations")
 	}
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "NodeOperations")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Error(msg, "NodeOperations")
 	}
 }
 

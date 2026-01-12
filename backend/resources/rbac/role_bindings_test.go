@@ -30,12 +30,10 @@ func TestManagerRoleBindingsList(t *testing.T) {
 		RoleRef: rbacv1.RoleRef{Kind: "Role", Name: "reader"},
 	}
 	client := fake.NewClientset(rb)
-	manager := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           testsupport.NoopLogger{},
-			KubernetesClient: client,
-		},
+	manager := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: client,
 	})
 
 	list, err := manager.RoleBindings("team-a")

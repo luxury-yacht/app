@@ -51,8 +51,7 @@ func TestCustomResourceDefinition(t *testing.T) {
 
 	client := apiextfake.NewClientset(crd)
 	var ensureCalled bool
-	svc := NewService(Dependencies{
-		Common: common.Dependencies{
+	svc := NewService(common.Dependencies{
 			Context:             context.Background(),
 			Logger:              testsupport.NoopLogger{},
 			APIExtensionsClient: client,
@@ -63,7 +62,6 @@ func TestCustomResourceDefinition(t *testing.T) {
 				}
 				return nil
 			},
-		},
 	})
 
 	details, err := svc.CustomResourceDefinition("widgets.example.com")
@@ -118,12 +116,10 @@ func TestCustomResourceDefinitionsList(t *testing.T) {
 	}
 
 	client := apiextfake.NewClientset(crd1, crd2)
-	svc := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:             context.Background(),
-			Logger:              testsupport.NoopLogger{},
-			APIExtensionsClient: client,
-		},
+	svc := NewService(common.Dependencies{
+		Context:             context.Background(),
+		Logger:              testsupport.NoopLogger{},
+		APIExtensionsClient: client,
 	})
 
 	list, err := svc.CustomResourceDefinitions()

@@ -85,7 +85,7 @@ func TestReplicaSetServiceReplicaSet(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	)
 
-	service := workloads.NewReplicaSetService(workloads.Dependencies{Common: deps})
+	service := workloads.NewReplicaSetService(deps)
 	details, err := service.ReplicaSet("default", "web-rs")
 	if err != nil {
 		t.Fatalf("ReplicaSet returned error: %v", err)
@@ -154,7 +154,7 @@ func TestReplicaSetServiceReplicaSetInactiveRevision(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	)
 
-	service := workloads.NewReplicaSetService(workloads.Dependencies{Common: deps})
+	service := workloads.NewReplicaSetService(deps)
 	details, err := service.ReplicaSet("default", "web-rs")
 	if err != nil {
 		t.Fatalf("ReplicaSet returned error: %v", err)

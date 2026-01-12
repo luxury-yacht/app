@@ -29,7 +29,7 @@ func (errorCapturingLogger) Info(string, ...string)  {}
 func (errorCapturingLogger) Warn(string, ...string)  {}
 
 func TestPodDisruptionBudgetRequiresClient(t *testing.T) {
-	svc := NewService(Dependencies{Common: common.Dependencies{Context: context.Background()}})
+	svc := NewService(common.Dependencies{Context: context.Background()})
 	_, err := svc.PodDisruptionBudget("default", "demo")
 	require.Error(t, err)
 
@@ -70,11 +70,11 @@ func TestPodDisruptionBudgetDetailsFormatting(t *testing.T) {
 
 	client := fake.NewClientset(pdb)
 	logger := &errorCapturingLogger{}
-	svc := NewService(Dependencies{Common: common.Dependencies{
+	svc := NewService(common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
 		Logger:           logger,
-	}})
+	})
 
 	resp, err := svc.PodDisruptionBudget("default", "demo")
 	require.NoError(t, err)
@@ -103,11 +103,11 @@ func TestPodDisruptionBudgetListErrorLogs(t *testing.T) {
 		return true, nil, fmt.Errorf("boom")
 	})
 	logger := &errorCapturingLogger{}
-	svc := NewService(Dependencies{Common: common.Dependencies{
+	svc := NewService(common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
 		Logger:           logger,
-	}})
+	})
 
 	_, err := svc.PodDisruptionBudgets("default")
 	require.Error(t, err)

@@ -11,12 +11,12 @@ import (
 
 // LimitRange returns a detailed limit range description.
 func (s *Service) LimitRange(namespace, name string) (*restypes.LimitRangeDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	lr, err := client.CoreV1().LimitRanges(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	lr, err := client.CoreV1().LimitRanges(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to get limit range %s/%s: %v", namespace, name, err))
 		return nil, fmt.Errorf("failed to get limit range: %v", err)
@@ -27,12 +27,12 @@ func (s *Service) LimitRange(namespace, name string) (*restypes.LimitRangeDetail
 
 // LimitRanges returns all limit ranges in a namespace.
 func (s *Service) LimitRanges(namespace string) ([]*restypes.LimitRangeDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	limitRanges, err := client.CoreV1().LimitRanges(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	limitRanges, err := client.CoreV1().LimitRanges(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to list limit ranges in namespace %s: %v", namespace, err))
 		return nil, fmt.Errorf("failed to list limit ranges: %v", err)
@@ -94,7 +94,7 @@ func (s *Service) buildLimitRangeDetails(lr *corev1.LimitRange) *restypes.LimitR
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "ResourceLoader")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Error(msg, "ResourceLoader")
 	}
 }

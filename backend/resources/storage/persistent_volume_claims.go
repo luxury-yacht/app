@@ -10,22 +10,22 @@ import (
 )
 
 func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
-	pods, err := s.deps.Common.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil
 	}
 	return pods
 }
 
 func (s *Service) PersistentVolumeClaim(namespace, name string) (*restypes.PersistentVolumeClaimDetails, error) {
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	pvc, err := s.deps.Common.KubernetesClient.CoreV1().PersistentVolumeClaims(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	pvc, err := s.deps.KubernetesClient.CoreV1().PersistentVolumeClaims(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get PVC %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get PVC %s/%s: %v", namespace, name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get PVC: %v", err)
 	}
 
@@ -34,13 +34,13 @@ func (s *Service) PersistentVolumeClaim(namespace, name string) (*restypes.Persi
 }
 
 func (s *Service) PersistentVolumeClaims(namespace string) ([]*restypes.PersistentVolumeClaimDetails, error) {
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	pvcs, err := s.deps.Common.KubernetesClient.CoreV1().PersistentVolumeClaims(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	pvcs, err := s.deps.KubernetesClient.CoreV1().PersistentVolumeClaims(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list PVCs in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list PVCs in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list PVCs: %v", err)
 	}
 

@@ -51,7 +51,7 @@ func TestBuildServiceDetailsVariants(t *testing.T) {
 		}},
 	}}
 
-	m := NewService(Dependencies{Common: common.Dependencies{}})
+	m := NewService(common.Dependencies{})
 	detail := m.buildServiceDetails(lbSvc, withSlices)
 	if detail.HealthStatus != "Healthy" || detail.LoadBalancerStatus != "Active" || detail.LoadBalancerIP != "1.2.3.4" {
 		t.Fatalf("unexpected load balancer detail: %+v", detail)
@@ -287,11 +287,9 @@ func TestManagerServiceErrors(t *testing.T) {
 		return true, nil, fmt.Errorf("boom")
 	})
 
-	manager := NewService(Dependencies{
-		Common: common.Dependencies{
-			KubernetesClient: client,
-			Logger:           testsupport.NoopLogger{},
-		},
+	manager := NewService(common.Dependencies{
+		KubernetesClient: client,
+		Logger:           testsupport.NoopLogger{},
 	})
 
 	_, err := manager.GetService("default", "web")
@@ -304,11 +302,9 @@ func TestManagerServicesListError(t *testing.T) {
 		return true, nil, fmt.Errorf("list failed")
 	})
 
-	manager := NewService(Dependencies{
-		Common: common.Dependencies{
-			KubernetesClient: client,
-			Logger:           testsupport.NoopLogger{},
-		},
+	manager := NewService(common.Dependencies{
+		KubernetesClient: client,
+		Logger:           testsupport.NoopLogger{},
 	})
 
 	_, err := manager.Services("default")
@@ -325,11 +321,9 @@ func TestManagerServicesBuildsFromEndpointSlices(t *testing.T) {
 		},
 	}
 	client := kubefake.NewClientset(svc)
-	manager := NewService(Dependencies{
-		Common: common.Dependencies{
-			KubernetesClient: client,
-			Logger:           testsupport.NoopLogger{},
-		},
+	manager := NewService(common.Dependencies{
+		KubernetesClient: client,
+		Logger:           testsupport.NoopLogger{},
 	})
 
 	details, err := manager.Services("default")

@@ -11,12 +11,12 @@ import (
 
 // ResourceQuota returns a detailed quota description.
 func (s *Service) ResourceQuota(namespace, name string) (*restypes.ResourceQuotaDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	rq, err := client.CoreV1().ResourceQuotas(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	rq, err := client.CoreV1().ResourceQuotas(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to get resource quota %s/%s: %v", namespace, name, err))
 		return nil, fmt.Errorf("failed to get resource quota: %v", err)
@@ -27,12 +27,12 @@ func (s *Service) ResourceQuota(namespace, name string) (*restypes.ResourceQuota
 
 // ResourceQuotas returns all quotas in a namespace.
 func (s *Service) ResourceQuotas(namespace string) ([]*restypes.ResourceQuotaDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	rqs, err := client.CoreV1().ResourceQuotas(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	rqs, err := client.CoreV1().ResourceQuotas(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to list resource quotas in namespace %s: %v", namespace, err))
 		return nil, fmt.Errorf("failed to list resource quotas: %v", err)

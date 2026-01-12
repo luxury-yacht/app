@@ -11,13 +11,13 @@ import (
 )
 
 func (s *Service) StorageClass(name string) (*restypes.StorageClassDetails, error) {
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	sc, err := s.deps.Common.KubernetesClient.StorageV1().StorageClasses().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	sc, err := s.deps.KubernetesClient.StorageV1().StorageClasses().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get storage class %s: %v", name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get storage class %s: %v", name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get storage class: %v", err)
 	}
 
@@ -26,13 +26,13 @@ func (s *Service) StorageClass(name string) (*restypes.StorageClassDetails, erro
 }
 
 func (s *Service) StorageClasses() ([]*restypes.StorageClassDetails, error) {
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	storageClasses, err := s.deps.Common.KubernetesClient.StorageV1().StorageClasses().List(s.deps.Common.Context, metav1.ListOptions{})
+	storageClasses, err := s.deps.KubernetesClient.StorageV1().StorageClasses().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list storage classes: %v", err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list storage classes: %v", err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list storage classes: %v", err)
 	}
 

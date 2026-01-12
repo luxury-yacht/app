@@ -12,9 +12,9 @@ import (
 )
 
 func (s *Service) ConfigMap(namespace, name string) (*restypes.ConfigMapDetails, error) {
-	cm, err := s.deps.Common.KubernetesClient.CoreV1().ConfigMaps(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	cm, err := s.deps.KubernetesClient.CoreV1().ConfigMaps(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get configmap %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get configmap %s/%s: %v", namespace, name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get configmap: %v", err)
 	}
 
@@ -23,9 +23,9 @@ func (s *Service) ConfigMap(namespace, name string) (*restypes.ConfigMapDetails,
 }
 
 func (s *Service) ConfigMaps(namespace string) ([]*restypes.ConfigMapDetails, error) {
-	configMaps, err := s.deps.Common.KubernetesClient.CoreV1().ConfigMaps(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	configMaps, err := s.deps.KubernetesClient.CoreV1().ConfigMaps(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list configmaps in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list configmaps in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list configmaps: %v", err)
 	}
 
@@ -72,9 +72,9 @@ func (s *Service) processConfigMapDetails(cm *corev1.ConfigMap, pods *corev1.Pod
 }
 
 func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
-	pods, err := s.deps.Common.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	pods, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil
 	}
 	return pods

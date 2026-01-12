@@ -37,12 +37,10 @@ func TestManagerClusterRolesIncludeBindings(t *testing.T) {
 	}
 
 	client := fake.NewClientset(cr, crb)
-	manager := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           testsupport.NoopLogger{},
-			KubernetesClient: client,
-		},
+	manager := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: client,
 	})
 
 	details, err := manager.ClusterRole("cluster-reader")
@@ -103,12 +101,10 @@ func TestManagerClusterRolesAggregatesBindingsAndSelectors(t *testing.T) {
 	}
 
 	client := fake.NewClientset(clusterRole, crb)
-	manager := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           testsupport.NoopLogger{},
-			KubernetesClient: client,
-		},
+	manager := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           testsupport.NoopLogger{},
+		KubernetesClient: client,
 	})
 
 	roles, err := manager.ClusterRoles()

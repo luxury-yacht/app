@@ -13,12 +13,12 @@ import (
 
 // MutatingWebhookConfiguration returns details for a single mutating configuration.
 func (s *Service) MutatingWebhookConfiguration(name string) (*restypes.MutatingWebhookConfigurationDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	config, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	config, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to get mutating webhook configuration %s: %v", name, err))
 		return nil, fmt.Errorf("failed to get mutating webhook configuration: %v", err)
@@ -29,12 +29,12 @@ func (s *Service) MutatingWebhookConfiguration(name string) (*restypes.MutatingW
 
 // MutatingWebhookConfigurations lists all mutating webhook configurations.
 func (s *Service) MutatingWebhookConfigurations() ([]*restypes.MutatingWebhookConfigurationDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	configs, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().List(s.deps.Common.Context, metav1.ListOptions{})
+	configs, err := client.AdmissionregistrationV1().MutatingWebhookConfigurations().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to list mutating webhook configurations: %v", err))
 		return nil, fmt.Errorf("failed to list mutating webhook configurations: %v", err)
@@ -88,7 +88,7 @@ func convertMutatingWebhooks(webhooks []admissionregistrationv1.MutatingWebhook)
 }
 
 func TestMutatingWebhookConfigurationRequiresClient(t *testing.T) {
-	service := NewService(Dependencies{})
+	service := NewService(common.Dependencies{})
 
 	_, err := service.MutatingWebhookConfiguration("hook-one")
 

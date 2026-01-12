@@ -14,7 +14,7 @@ import (
 )
 
 func TestPersistentVolumesRequireClient(t *testing.T) {
-	service := NewService(Dependencies{})
+	service := NewService(common.Dependencies{})
 
 	_, err := service.PersistentVolumes()
 
@@ -29,12 +29,10 @@ func TestPersistentVolumeLogsErrorOnFailure(t *testing.T) {
 		return true, nil, errors.New("boom")
 	})
 
-	service := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           logger,
-			KubernetesClient: client,
-		},
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           logger,
+		KubernetesClient: client,
 	})
 
 	_, err := service.PersistentVolume("pv-one")
@@ -54,12 +52,10 @@ func TestPersistentVolumeClaimsListLogsError(t *testing.T) {
 		return true, nil, errors.New("no pvc list")
 	})
 
-	service := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           logger,
-			KubernetesClient: client,
-		},
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           logger,
+		KubernetesClient: client,
 	})
 
 	_, err := service.PersistentVolumeClaims("default")

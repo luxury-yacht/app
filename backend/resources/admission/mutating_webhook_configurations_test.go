@@ -109,12 +109,10 @@ func TestMutatingWebhookConfigurationLogsErrorOnFailure(t *testing.T) {
 		return true, nil, errors.New("boom")
 	})
 
-	service := NewService(Dependencies{
-		Common: common.Dependencies{
-			Context:          context.Background(),
-			Logger:           logger,
-			KubernetesClient: client,
-		},
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		Logger:           logger,
+		KubernetesClient: client,
 	})
 
 	_, err := service.MutatingWebhookConfiguration("hook-one")

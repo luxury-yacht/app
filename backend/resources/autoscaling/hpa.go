@@ -11,12 +11,12 @@ import (
 
 // HorizontalPodAutoscaler returns a detailed view for a single HPA.
 func (s *Service) HorizontalPodAutoscaler(namespace, name string) (*restypes.HorizontalPodAutoscalerDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	hpa, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	hpa, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to get HPA %s/%s: %v", namespace, name, err))
 		return nil, fmt.Errorf("failed to get HPA: %v", err)
@@ -27,12 +27,12 @@ func (s *Service) HorizontalPodAutoscaler(namespace, name string) (*restypes.Hor
 
 // HorizontalPodAutoscalers returns detailed views for all HPAs in the namespace.
 func (s *Service) HorizontalPodAutoscalers(namespace string) ([]*restypes.HorizontalPodAutoscalerDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	hpas, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	hpas, err := client.AutoscalingV2().HorizontalPodAutoscalers(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.logError(fmt.Sprintf("Failed to list HPAs in namespace %s: %v", namespace, err))
 		return nil, fmt.Errorf("failed to list HPAs: %v", err)
@@ -226,7 +226,7 @@ func buildScalingRules(rules *autoscalingv2.HPAScalingRules) *restypes.ScalingRu
 }
 
 func (s *Service) logError(msg string) {
-	if s.deps.Common.Logger != nil {
-		s.deps.Common.Logger.Error(msg, "ResourceLoader")
+	if s.deps.Logger != nil {
+		s.deps.Logger.Error(msg, "ResourceLoader")
 	}
 }

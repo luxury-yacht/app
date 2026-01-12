@@ -10,18 +10,18 @@ import (
 )
 
 func (s *Service) ClusterRoleBinding(name string) (*restypes.ClusterRoleBindingDetails, error) {
-	crb, err := s.deps.Common.KubernetesClient.RbacV1().ClusterRoleBindings().Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	crb, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get cluster role binding %s: %v", name, err), "RBAC")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get cluster role binding %s: %v", name, err), "RBAC")
 		return nil, fmt.Errorf("failed to get cluster role binding: %v", err)
 	}
 	return buildClusterRoleBindingDetails(crb), nil
 }
 
 func (s *Service) ClusterRoleBindings() ([]*restypes.ClusterRoleBindingDetails, error) {
-	bindings, err := s.deps.Common.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Common.Context, metav1.ListOptions{})
+	bindings, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
 		return nil, fmt.Errorf("failed to list cluster role bindings: %v", err)
 	}
 
@@ -60,9 +60,9 @@ func buildClusterRoleBindingDetails(crb *rbacv1.ClusterRoleBinding) *restypes.Cl
 }
 
 func (s *Service) listClusterRoleBindings() *rbacv1.ClusterRoleBindingList {
-	bindings, err := s.deps.Common.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Common.Context, metav1.ListOptions{})
+	bindings, err := s.deps.KubernetesClient.RbacV1().ClusterRoleBindings().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list cluster role bindings: %v", err), "RBAC")
 		return nil
 	}
 	return bindings

@@ -12,14 +12,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Dependencies captures collaborators required for event retrieval.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
 // Service exposes helpers for querying Kubernetes events.
 type Service struct {
-	deps Dependencies
+	deps common.Dependencies
 }
 
 // Filter represents filtering options for events queries.
@@ -31,7 +26,7 @@ type Filter struct {
 }
 
 // NewService constructs an event service with shared dependencies.
-func NewService(deps Dependencies) *Service {
+func NewService(deps common.Dependencies) *Service {
 	return &Service{deps: deps}
 }
 
@@ -41,7 +36,7 @@ func (s *Service) Events(filter Filter) ([]restypes.Event, error) {
 		return nil, err
 	}
 
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
@@ -51,7 +46,7 @@ func (s *Service) Events(filter Filter) ([]restypes.Event, error) {
 		err       error
 	)
 
-	ctx := s.deps.Common.Context
+	ctx := s.deps.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -114,12 +109,12 @@ func (s *Service) ObjectEvents(resourceKind, namespace, name string) ([]restypes
 }
 
 func (s *Service) ensureClient() error {
-	if s.deps.Common.EnsureClient != nil {
-		if err := s.deps.Common.EnsureClient("events"); err != nil {
+	if s.deps.EnsureClient != nil {
+		if err := s.deps.EnsureClient("events"); err != nil {
 			return err
 		}
 	}
-	if s.deps.Common.KubernetesClient == nil {
+	if s.deps.KubernetesClient == nil {
 		return fmt.Errorf("kubernetes client not initialized")
 	}
 	return nil

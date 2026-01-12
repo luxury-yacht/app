@@ -56,7 +56,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := pods.GetPod(pods.Dependencies{Common: deps}, namespace, name, true)
+			detail, err := pods.GetPod(deps, namespace, name, true)
 			return detail, "", err
 		},
 	},
@@ -66,7 +66,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewDeploymentService(workloads.Dependencies{Common: deps}).Deployment(namespace, name)
+			detail, err := workloads.NewDeploymentService(deps).Deployment(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -76,7 +76,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewReplicaSetService(workloads.Dependencies{Common: deps}).ReplicaSet(namespace, name)
+			detail, err := workloads.NewReplicaSetService(deps).ReplicaSet(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -86,7 +86,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewDaemonSetService(workloads.Dependencies{Common: deps}).DaemonSet(namespace, name)
+			detail, err := workloads.NewDaemonSetService(deps).DaemonSet(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -96,7 +96,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewStatefulSetService(workloads.Dependencies{Common: deps}).StatefulSet(namespace, name)
+			detail, err := workloads.NewStatefulSetService(deps).StatefulSet(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -106,7 +106,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewJobService(workloads.Dependencies{Common: deps}).Job(namespace, name)
+			detail, err := workloads.NewJobService(deps).Job(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -116,7 +116,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := workloads.NewCronJobService(workloads.Dependencies{Common: deps}).CronJob(namespace, name)
+			detail, err := workloads.NewCronJobService(deps).CronJob(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -126,7 +126,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := config.NewService(config.Dependencies{Common: deps}).ConfigMap(namespace, name)
+			detail, err := config.NewService(deps).ConfigMap(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -136,7 +136,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := config.NewService(config.Dependencies{Common: deps}).Secret(namespace, name)
+			detail, err := config.NewService(deps).Secret(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -156,7 +156,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(network.Dependencies{Common: deps}).GetService(namespace, name)
+			detail, err := network.NewService(deps).GetService(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -166,7 +166,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(network.Dependencies{Common: deps}).Ingress(namespace, name)
+			detail, err := network.NewService(deps).Ingress(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -176,7 +176,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(network.Dependencies{Common: deps}).NetworkPolicy(namespace, name)
+			detail, err := network.NewService(deps).NetworkPolicy(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -186,7 +186,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := network.NewService(network.Dependencies{Common: deps}).EndpointSlice(namespace, name)
+			detail, err := network.NewService(deps).EndpointSlice(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -196,7 +196,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := storage.NewService(storage.Dependencies{Common: deps}).PersistentVolumeClaim(namespace, name)
+			detail, err := storage.NewService(deps).PersistentVolumeClaim(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -206,7 +206,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := storage.NewService(storage.Dependencies{Common: deps}).PersistentVolume(name)
+			detail, err := storage.NewService(deps).PersistentVolume(name)
 			return detail, "", err
 		},
 	},
@@ -216,7 +216,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := storage.NewService(storage.Dependencies{Common: deps}).StorageClass(name)
+			detail, err := storage.NewService(deps).StorageClass(name)
 			return detail, "", err
 		},
 	},
@@ -226,7 +226,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).ServiceAccount(namespace, name)
+			detail, err := rbac.NewService(deps).ServiceAccount(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -236,7 +236,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).Role(namespace, name)
+			detail, err := rbac.NewService(deps).Role(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -246,7 +246,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).RoleBinding(namespace, name)
+			detail, err := rbac.NewService(deps).RoleBinding(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -256,7 +256,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).ClusterRole(name)
+			detail, err := rbac.NewService(deps).ClusterRole(name)
 			return detail, "", err
 		},
 	},
@@ -266,7 +266,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := rbac.NewService(rbac.Dependencies{Common: deps}).ClusterRoleBinding(name)
+			detail, err := rbac.NewService(deps).ClusterRoleBinding(name)
 			return detail, "", err
 		},
 	},
@@ -276,7 +276,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := constraints.NewService(constraints.Dependencies{Common: deps}).ResourceQuota(namespace, name)
+			detail, err := constraints.NewService(deps).ResourceQuota(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -286,7 +286,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := constraints.NewService(constraints.Dependencies{Common: deps}).LimitRange(namespace, name)
+			detail, err := constraints.NewService(deps).LimitRange(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -296,7 +296,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := autoscaling.NewService(autoscaling.Dependencies{Common: deps}).HorizontalPodAutoscaler(namespace, name)
+			detail, err := autoscaling.NewService(deps).HorizontalPodAutoscaler(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -306,7 +306,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, namespace, name string) (interface{}, string, error) {
-			detail, err := policy.NewService(policy.Dependencies{Common: deps}).PodDisruptionBudget(namespace, name)
+			detail, err := policy.NewService(deps).PodDisruptionBudget(namespace, name)
 			return detail, "", err
 		},
 	},
@@ -316,7 +316,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := namespaces.NewService(namespaces.Dependencies{Common: deps}).Namespace(name)
+			detail, err := namespaces.NewService(deps).Namespace(name)
 			return detail, "", err
 		},
 	},
@@ -326,7 +326,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := nodes.NewService(nodes.Dependencies{Common: deps}).Node(name)
+			detail, err := nodes.NewService(deps).Node(name)
 			return detail, "", err
 		},
 	},
@@ -336,7 +336,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := network.NewService(network.Dependencies{Common: deps}).IngressClass(name)
+			detail, err := network.NewService(deps).IngressClass(name)
 			return detail, "", err
 		},
 	},
@@ -346,7 +346,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := apiextensions.NewService(apiextensions.Dependencies{Common: deps}).CustomResourceDefinition(name)
+			detail, err := apiextensions.NewService(deps).CustomResourceDefinition(name)
 			return detail, "", err
 		},
 	},
@@ -356,7 +356,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := admission.NewService(admission.Dependencies{Common: deps}).MutatingWebhookConfiguration(name)
+			detail, err := admission.NewService(deps).MutatingWebhookConfiguration(name)
 			return detail, "", err
 		},
 	},
@@ -366,7 +366,7 @@ var objectDetailFetchers = map[string]objectDetailFetcher{
 			return detail, "", err
 		},
 		withDeps: func(deps common.Dependencies, _ string, name string) (interface{}, string, error) {
-			detail, err := admission.NewService(admission.Dependencies{Common: deps}).ValidatingWebhookConfiguration(name)
+			detail, err := admission.NewService(deps).ValidatingWebhookConfiguration(name)
 			return detail, "", err
 		},
 	},

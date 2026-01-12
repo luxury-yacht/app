@@ -14,33 +14,31 @@ import (
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 )
 
-// DeploymentService exposes detailed deployment views backed by shared resource dependencies.
 type DeploymentService struct {
-	deps Dependencies
+	deps common.Dependencies
 }
 
-// NewDeploymentService constructs a deployment service using the supplied dependencies bundle.
-func NewDeploymentService(deps Dependencies) *DeploymentService {
+func NewDeploymentService(deps common.Dependencies) *DeploymentService {
 	return &DeploymentService{deps: deps}
 }
 
 // Deployment returns the detailed view for a single deployment.
 func (s *DeploymentService) Deployment(namespace, name string) (*restypes.DeploymentDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	deployment, err := client.AppsV1().Deployments(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	deployment, err := client.AppsV1().Deployments(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get deployment %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get deployment %s/%s: %v", namespace, name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get deployment: %v", err)
 	}
 
 	// getDeploymentPods also fetches ReplicaSets for filtering; reuse them to avoid a second list call.
 	deploymentPods, podMetrics, replicaSets, err := s.getDeploymentPods(deployment)
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to collect pods for deployment %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to collect pods for deployment %s/%s: %v", namespace, name, err), "ResourceLoader")
 	}
 
 	return s.buildDeploymentDetails(deployment, deploymentPods, podMetrics, replicaSets), nil
@@ -48,28 +46,28 @@ func (s *DeploymentService) Deployment(namespace, name string) (*restypes.Deploy
 
 // Deployments returns detailed views for all deployments in the namespace.
 func (s *DeploymentService) Deployments(namespace string) ([]*restypes.DeploymentDetails, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
-	deployments, err := client.AppsV1().Deployments(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	deployments, err := client.AppsV1().Deployments(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list deployments in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list deployments in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list deployments: %v", err)
 	}
 
-	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	podList, err := client.CoreV1().Pods(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "ResourceLoader")
 	}
 
-	replicaSetList, err := client.AppsV1().ReplicaSets(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	replicaSetList, err := client.AppsV1().ReplicaSets(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		replicaSetList = nil
 	}
 
-	podService := pods.NewService(pods.Dependencies{Common: s.deps.Common})
+	podService := pods.NewService(s.deps)
 	var metricsByPod map[string]*metricsv1beta1.PodMetrics
 	if podList != nil {
 		metricsByPod = podService.GetPodMetricsForPods(namespace, podList.Items)
@@ -157,24 +155,24 @@ func (s *DeploymentService) buildDeploymentDetails(
 }
 
 func (s *DeploymentService) getDeploymentPods(deployment *appsv1.Deployment) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, *appsv1.ReplicaSetList, error) {
-	client := s.deps.Common.KubernetesClient
+	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, nil, nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
 	labelSelector := labels.Set(deployment.Spec.Selector.MatchLabels).String()
-	podList, err := client.CoreV1().Pods(deployment.Namespace).List(s.deps.Common.Context, metav1.ListOptions{LabelSelector: labelSelector})
+	podList, err := client.CoreV1().Pods(deployment.Namespace).List(s.deps.Context, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	replicaSets, err := client.AppsV1().ReplicaSets(deployment.Namespace).List(s.deps.Common.Context, metav1.ListOptions{LabelSelector: labelSelector})
+	replicaSets, err := client.AppsV1().ReplicaSets(deployment.Namespace).List(s.deps.Context, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
 		replicaSets = nil
 	}
 
 	filteredPods := filterPodsForDeployment(deployment, podList, replicaSets)
-	metrics := pods.NewService(pods.Dependencies{Common: s.deps.Common}).GetPodMetricsForPods(deployment.Namespace, filteredPods)
+	metrics := pods.NewService(s.deps).GetPodMetricsForPods(deployment.Namespace, filteredPods)
 
 	return filteredPods, metrics, replicaSets, nil
 }

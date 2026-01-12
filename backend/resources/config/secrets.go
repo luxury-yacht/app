@@ -11,9 +11,9 @@ import (
 )
 
 func (s *Service) Secret(namespace, name string) (*restypes.SecretDetails, error) {
-	secret, err := s.deps.Common.KubernetesClient.CoreV1().Secrets(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	secret, err := s.deps.KubernetesClient.CoreV1().Secrets(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get secret %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get secret %s/%s: %v", namespace, name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get secret: %v", err)
 	}
 
@@ -22,7 +22,7 @@ func (s *Service) Secret(namespace, name string) (*restypes.SecretDetails, error
 }
 
 func (s *Service) Secrets(namespace string) ([]*restypes.SecretDetails, error) {
-	secrets, err := s.deps.Common.KubernetesClient.CoreV1().Secrets(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	secrets, err := s.deps.KubernetesClient.CoreV1().Secrets(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list secrets: %v", err)
 	}

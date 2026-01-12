@@ -12,12 +12,10 @@ import (
 )
 
 func TestWaitForPodsToTerminateReturnsWhenNoneRemain(t *testing.T) {
-	service := NewService(Dependencies{
-		Common: testsupport.NewResourceDependencies(
-			testsupport.WithDepsContext(context.Background()),
-			testsupport.WithDepsKubeClient(kubefake.NewClientset()),
-		),
-	})
+	service := NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(kubefake.NewClientset()),
+	))
 
 	options := types.DrainNodeOptions{GracePeriodSeconds: 1}
 	require.NoError(t, service.waitForPodsToTerminate("node-1", options))
@@ -28,12 +26,10 @@ func TestWaitForPodsToTerminateTimesOutWhenPodsRemain(t *testing.T) {
 	pod.Spec.NodeName = "node-1"
 	client := kubefake.NewClientset(pod)
 
-	service := NewService(Dependencies{
-		Common: testsupport.NewResourceDependencies(
-			testsupport.WithDepsContext(context.Background()),
-			testsupport.WithDepsKubeClient(client),
-		),
-	})
+	service := NewService(testsupport.NewResourceDependencies(
+		testsupport.WithDepsContext(context.Background()),
+		testsupport.WithDepsKubeClient(client),
+	))
 
 	options := types.DrainNodeOptions{GracePeriodSeconds: 1}
 	err := service.waitForPodsToTerminate("node-1", options)

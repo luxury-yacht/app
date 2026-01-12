@@ -72,7 +72,7 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 		testsupport.WithDepsKubeClient(client),
 	)
 
-	service := workloads.NewDeploymentService(workloads.Dependencies{Common: deps})
+	service := workloads.NewDeploymentService(deps)
 	details, err := service.Deployment("default", "web")
 	if err != nil {
 		t.Fatalf("Deployment returned error: %v", err)

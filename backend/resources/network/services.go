@@ -16,9 +16,9 @@ import (
 const endpointSliceTimeout = 10 * time.Second
 
 func (s *Service) GetService(namespace, name string) (*restypes.ServiceDetails, error) {
-	svc, err := s.deps.Common.KubernetesClient.CoreV1().Services(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
+	svc, err := s.deps.KubernetesClient.CoreV1().Services(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to get service %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to get service %s/%s: %v", namespace, name, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to get service: %v", err)
 	}
 
@@ -26,16 +26,16 @@ func (s *Service) GetService(namespace, name string) (*restypes.ServiceDetails, 
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, name)
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to get endpoint slices for service %s/%s: %v", namespace, name, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to get endpoint slices for service %s/%s: %v", namespace, name, err), "ResourceLoader")
 	}
 
 	return s.buildServiceDetails(svc, slices), nil
 }
 
 func (s *Service) Services(namespace string) ([]*restypes.ServiceDetails, error) {
-	services, err := s.deps.Common.KubernetesClient.CoreV1().Services(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	services, err := s.deps.KubernetesClient.CoreV1().Services(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
-		s.deps.Common.Logger.Error(fmt.Sprintf("Failed to list services in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Error(fmt.Sprintf("Failed to list services in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list services: %v", err)
 	}
 
@@ -43,7 +43,7 @@ func (s *Service) Services(namespace string) ([]*restypes.ServiceDetails, error)
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, "")
 	if err != nil {
-		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list endpoint slices in namespace %s: %v", namespace, err), "ResourceLoader")
+		s.deps.Logger.Warn(fmt.Sprintf("Failed to list endpoint slices in namespace %s: %v", namespace, err), "ResourceLoader")
 	}
 	slicesByService := groupEndpointSlicesByService(slices)
 
@@ -57,7 +57,7 @@ func (s *Service) Services(namespace string) ([]*restypes.ServiceDetails, error)
 }
 
 func (s *Service) ctx() (context.Context, context.CancelFunc) {
-	base := s.deps.Common.Context
+	base := s.deps.Context
 	if base == nil {
 		base = context.Background()
 	}
