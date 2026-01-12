@@ -14,12 +14,12 @@ import (
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-type stubLogger struct{}
+type noopLogger struct{}
 
-func (stubLogger) Debug(string, ...string) {}
-func (stubLogger) Info(string, ...string)  {}
-func (stubLogger) Warn(string, ...string)  {}
-func (stubLogger) Error(string, ...string) {}
+func (noopLogger) Debug(string, ...string) {}
+func (noopLogger) Info(string, ...string)  {}
+func (noopLogger) Warn(string, ...string)  {}
+func (noopLogger) Error(string, ...string) {}
 
 func TestServiceEventsFiltersByObject(t *testing.T) {
 	now := metav1.NewTime(time.Now())
@@ -78,7 +78,7 @@ func newEventsService(t testing.TB, client *kubefake.Clientset) *events.Service 
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(stubLogger{}),
+		testsupport.WithDepsLogger(noopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
 	return events.NewService(events.Dependencies{Common: deps})

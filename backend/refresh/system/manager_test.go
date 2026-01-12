@@ -32,7 +32,7 @@ func TestNewSubsystemRequiresDynamicClient(t *testing.T) {
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
-		Logger: stubLogger{},
+		Logger: noopLogger{},
 	}
 
 	manager, handler, recorder, _, cache, _, err := NewSubsystem(cfg)
@@ -58,7 +58,7 @@ func TestNewSubsystemRequiresHelmFactory(t *testing.T) {
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
-		Logger: stubLogger{},
+		Logger: noopLogger{},
 	}
 
 	manager, handler, recorder, _, cache, _, err := NewSubsystem(cfg)
@@ -91,7 +91,7 @@ func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T)
 		ObjectDetailsProvider: noopObjectDetailProvider{
 			err: snapshot.ErrObjectDetailNotImplemented,
 		},
-		Logger: stubLogger{},
+		Logger: noopLogger{},
 	}
 
 	manager, handler, recorder, issues, cache, factory, err := NewSubsystem(cfg)
@@ -139,12 +139,12 @@ func (p noopObjectDetailProvider) FetchObjectDetails(context.Context, string, st
 	return nil, "", p.err
 }
 
-type stubLogger struct{}
+type noopLogger struct{}
 
-func (stubLogger) Debug(string, ...string) {}
-func (stubLogger) Info(string, ...string)  {}
-func (stubLogger) Warn(string, ...string)  {}
-func (stubLogger) Error(string, ...string) {}
+func (noopLogger) Debug(string, ...string) {}
+func (noopLogger) Info(string, ...string)  {}
+func (noopLogger) Warn(string, ...string)  {}
+func (noopLogger) Error(string, ...string) {}
 
 type fakeInformerHub struct {
 	synced bool

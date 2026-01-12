@@ -14,12 +14,12 @@ import (
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-type stubLogger struct{}
+type noopLogger struct{}
 
-func (stubLogger) Debug(string, ...string) {}
-func (stubLogger) Info(string, ...string)  {}
-func (stubLogger) Warn(string, ...string)  {}
-func (stubLogger) Error(string, ...string) {}
+func (noopLogger) Debug(string, ...string) {}
+func (noopLogger) Info(string, ...string)  {}
+func (noopLogger) Warn(string, ...string)  {}
+func (noopLogger) Error(string, ...string) {}
 
 func TestServiceConfigMapDetailsIncludesUsage(t *testing.T) {
 	cm := &corev1.ConfigMap{
@@ -142,7 +142,7 @@ func newConfigService(t testing.TB, client *kubefake.Clientset) *config.Service 
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(stubLogger{}),
+		testsupport.WithDepsLogger(noopLogger{}),
 	)
 	return config.NewService(config.Dependencies{Common: deps})
 }

@@ -88,7 +88,7 @@ func TestMatchContainerFilter(t *testing.T) {
 
 func TestServeHTTPRequiresFlusher(t *testing.T) {
 	client := fake.NewClientset()
-	handler, err := NewHandler(client, stubLogger{}, telemetry.NewRecorder())
+	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
 	if err != nil {
 		t.Fatalf("NewHandler returned error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 		},
 	}
 	client := fake.NewClientset(pod)
-	handler, err := NewHandler(client, stubLogger{}, telemetry.NewRecorder())
+	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
 	if err != nil {
 		t.Fatalf("NewHandler returned error: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestServeHTTPEmitsPermissionDeniedPayload(t *testing.T) {
 		)
 	})
 
-	handler, err := NewHandler(client, stubLogger{}, telemetry.NewRecorder())
+	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
 	require.NoError(t, err)
 
 	req := httptest.NewRequest(http.MethodGet, "/?scope=default:job:my-job", nil)
@@ -229,7 +229,7 @@ func TestServeHTTPStreamsUpdates(t *testing.T) {
 		},
 	}
 
-	handler, err := NewHandler(client, stubLogger{}, telemetry.NewRecorder())
+	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -295,7 +295,7 @@ func TestServeHTTPEmitsErrorEvent(t *testing.T) {
 		},
 	}
 
-	handler, err := NewHandler(client, stubLogger{}, telemetry.NewRecorder())
+	handler, err := NewHandler(client, noopLogger{}, telemetry.NewRecorder())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -413,13 +413,6 @@ func (f *flushRecorder) Status() int {
 	}
 	return f.status
 }
-
-type stubLogger struct{}
-
-func (stubLogger) Debug(string, ...string) {}
-func (stubLogger) Info(string, ...string)  {}
-func (stubLogger) Warn(string, ...string)  {}
-func (stubLogger) Error(string, ...string) {}
 
 func parseSSEEvents(raw string) []EventPayload {
 	chunks := strings.Split(raw, "\n\n")

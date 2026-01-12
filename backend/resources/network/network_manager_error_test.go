@@ -24,7 +24,7 @@ func TestManagerServiceErrors(t *testing.T) {
 	manager := network.NewService(network.Dependencies{
 		Common: common.Dependencies{
 			KubernetesClient: client,
-			Logger:           stubLogger{},
+			Logger:           noopLogger{},
 		},
 	})
 
@@ -41,7 +41,7 @@ func TestManagerServicesListError(t *testing.T) {
 	manager := network.NewService(network.Dependencies{
 		Common: common.Dependencies{
 			KubernetesClient: client,
-			Logger:           stubLogger{},
+			Logger:           noopLogger{},
 		},
 	})
 
@@ -62,7 +62,7 @@ func TestManagerServicesBuildsFromEndpointSlices(t *testing.T) {
 	manager := network.NewService(network.Dependencies{
 		Common: common.Dependencies{
 			KubernetesClient: client,
-			Logger:           stubLogger{},
+			Logger:           noopLogger{},
 		},
 	})
 
