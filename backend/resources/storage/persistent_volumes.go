@@ -1,3 +1,10 @@
+/*
+ * backend/resources/storage/persistent_volumes.go
+ *
+ * PersistentVolume resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package storage
 
 import (

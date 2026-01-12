@@ -1,3 +1,10 @@
+/*
+ * backend/resources/constraints/resource_quotas.go
+ *
+ * ResourceQuota resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package constraints
 
 import (

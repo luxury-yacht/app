@@ -1,3 +1,10 @@
+/*
+ * backend/resources/rbac/service_accounts.go
+ *
+ * ServiceAccount resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package rbac
 
 import (

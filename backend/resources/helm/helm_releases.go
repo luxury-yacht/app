@@ -1,3 +1,10 @@
+/*
+ * backend/resources/helm/helm_releases.go
+ *
+ * Helm release operations.
+ * - Fetches release details, manifests, and values.
+ */
+
 package helm
 
 import (

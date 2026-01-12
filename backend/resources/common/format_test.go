@@ -1,3 +1,10 @@
+/*
+ * backend/resources/common/format_test.go
+ *
+ * Tests for Formatting helpers for resource fields.
+ * - Covers Formatting helpers for resource fields behavior and edge cases.
+ */
+
 package common
 
 import (

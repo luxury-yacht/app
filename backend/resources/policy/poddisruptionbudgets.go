@@ -1,3 +1,10 @@
+/*
+ * backend/resources/policy/poddisruptionbudgets.go
+ *
+ * PodDisruptionBudget resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package policy
 
 import (

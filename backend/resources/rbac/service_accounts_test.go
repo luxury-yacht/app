@@ -1,3 +1,10 @@
+/*
+ * backend/resources/rbac/service_accounts_test.go
+ *
+ * Tests for ServiceAccount resource handlers.
+ * - Covers ServiceAccount resource handlers behavior and edge cases.
+ */
+
 package rbac
 
 import (

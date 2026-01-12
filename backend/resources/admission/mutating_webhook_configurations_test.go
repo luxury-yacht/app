@@ -1,3 +1,10 @@
+/*
+ * backend/resources/admission/mutating_webhook_configurations_test.go
+ *
+ * Tests for Mutating Webhook Configurations resource handlers.
+ * - Covers Mutating Webhook Configurations resource handlers behavior and edge cases.
+ */
+
 package admission
 
 import (

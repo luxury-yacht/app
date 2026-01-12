@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/daemonsets.go
+ *
+ * DaemonSet resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package workloads
 
 import (

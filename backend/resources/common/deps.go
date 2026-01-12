@@ -1,3 +1,10 @@
+/*
+ * backend/resources/common/deps.go
+ *
+ * Shared dependency bundle for resource services.
+ * - Carries clients, config, and helper callbacks.
+ */
+
 package common
 
 import (

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/config/secrets_test.go
+ *
+ * Tests for Secret resource handlers.
+ * - Covers Secret resource handlers behavior and edge cases.
+ */
+
 package config
 
 import (

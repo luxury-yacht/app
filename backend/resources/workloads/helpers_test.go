@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/helpers_test.go
+ *
+ * Tests for Workload detail helper utilities.
+ * - Covers Workload detail helper utilities behavior and edge cases.
+ */
+
 package workloads
 
 import (

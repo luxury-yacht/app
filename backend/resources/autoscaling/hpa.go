@@ -1,3 +1,10 @@
+/*
+ * backend/resources/autoscaling/hpa.go
+ *
+ * HorizontalPodAutoscaler resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package autoscaling
 
 import (

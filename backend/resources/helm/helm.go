@@ -1,3 +1,10 @@
+/*
+ * backend/resources/helm/helm.go
+ *
+ * Helm service wiring.
+ * - Holds Helm dependencies and action configuration helpers.
+ */
+
 package helm
 
 import (

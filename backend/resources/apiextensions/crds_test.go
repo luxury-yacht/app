@@ -1,3 +1,10 @@
+/*
+ * backend/resources/apiextensions/crds_test.go
+ *
+ * Tests for CustomResourceDefinition resource handlers.
+ * - Covers CustomResourceDefinition resource handlers behavior and edge cases.
+ */
+
 package apiextensions
 
 import (

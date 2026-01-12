@@ -1,3 +1,10 @@
+/*
+ * backend/resources/types/admission.go
+ *
+ * Type definitions for Admission resources.
+ * - Shared data structures for API responses.
+ */
+
 package types
 
 import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/rbac/rbac_test.go
+ *
+ * Test helpers for RBAC resources.
+ * - Provides shared helpers for RBAC tests.
+ */
+
 package rbac
 
 import (

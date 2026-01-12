@@ -1,3 +1,10 @@
+/*
+ * backend/resources/network/network_policies_test.go
+ *
+ * Tests for NetworkPolicy resource handlers.
+ * - Covers NetworkPolicy resource handlers behavior and edge cases.
+ */
+
 package network
 
 import (

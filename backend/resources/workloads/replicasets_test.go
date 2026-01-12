@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/replicasets_test.go
+ *
+ * Tests for ReplicaSet resource handlers.
+ * - Covers ReplicaSet resource handlers behavior and edge cases.
+ */
+
 package workloads_test
 
 import (

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/config/configmaps_test.go
+ *
+ * Tests for ConfigMap resource handlers.
+ * - Covers ConfigMap resource handlers behavior and edge cases.
+ */
+
 package config
 
 import (

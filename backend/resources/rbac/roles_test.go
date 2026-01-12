@@ -1,3 +1,10 @@
+/*
+ * backend/resources/rbac/roles_test.go
+ *
+ * Tests for Role resource handlers.
+ * - Covers Role resource handlers behavior and edge cases.
+ */
+
 package rbac
 
 import (
@@ -14,7 +21,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	clientgotesting "k8s.io/client-go/testing"
-	k8stesting "k8s.io/client-go/testing"
 )
 
 func TestManagerRoleIncludesBindings(t *testing.T) {
@@ -79,7 +85,7 @@ func TestManagerRoleSkipsBindingsOnListFailure(t *testing.T) {
 	}
 
 	client := fake.NewClientset(role)
-	client.PrependReactor("list", "rolebindings", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "rolebindings", func(action clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom")
 	})
 

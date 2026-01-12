@@ -1,3 +1,10 @@
+/*
+ * backend/resources/storage/storage_classes.go
+ *
+ * StorageClass resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package storage
 
 import (

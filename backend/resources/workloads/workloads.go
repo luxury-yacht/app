@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/workloads.go
+ *
+ * Aggregated workload listing logic.
+ * - Combines workload types for namespace views.
+ */
+
 package workloads
 
 import (

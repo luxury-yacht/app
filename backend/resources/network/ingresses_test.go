@@ -1,3 +1,10 @@
+/*
+ * backend/resources/network/ingresses_test.go
+ *
+ * Tests for Ingress and IngressClass resource handlers.
+ * - Covers Ingress and IngressClass resource handlers behavior and edge cases.
+ */
+
 package network
 
 import (

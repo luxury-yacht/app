@@ -1,3 +1,10 @@
+/*
+ * backend/resources/nodes/nodes_internal_test.go
+ *
+ * Tests for Node internal helpers.
+ * - Covers Node internal helpers behavior and edge cases.
+ */
+
 package nodes
 
 import (

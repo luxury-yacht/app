@@ -1,3 +1,10 @@
+/*
+ * backend/resources/nodes/nodes.go
+ *
+ * Node resource handlers and maintenance operations.
+ * - Supports cordon, uncordon, drain, and delete workflows.
+ */
+
 package nodes
 
 import (

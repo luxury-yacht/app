@@ -1,3 +1,10 @@
+/*
+ * backend/resources/admission/mutating_webhook_configurations.go
+ *
+ * Mutating Webhook Configurations resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package admission
 
 import (

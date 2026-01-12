@@ -1,3 +1,10 @@
+/*
+ * backend/resources/autoscaling/hpa_test.go
+ *
+ * Tests for HorizontalPodAutoscaler resource handlers.
+ * - Covers HorizontalPodAutoscaler resource handlers behavior and edge cases.
+ */
+
 package autoscaling
 
 import (

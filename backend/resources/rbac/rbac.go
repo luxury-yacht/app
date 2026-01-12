@@ -1,3 +1,10 @@
+/*
+ * backend/resources/rbac/rbac.go
+ *
+ * RBAC service wiring.
+ * - Defines the service container for RBAC resources.
+ */
+
 package rbac
 
 import "github.com/luxury-yacht/app/backend/resources/common"

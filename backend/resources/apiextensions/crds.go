@@ -1,3 +1,10 @@
+/*
+ * backend/resources/apiextensions/crds.go
+ *
+ * CustomResourceDefinition resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package apiextensions
 
 import (

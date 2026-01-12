@@ -1,3 +1,10 @@
+/*
+ * backend/resources/constraints/resource_quotas_test.go
+ *
+ * Tests for ResourceQuota resource handlers.
+ * - Covers ResourceQuota resource handlers behavior and edge cases.
+ */
+
 package constraints
 
 import (

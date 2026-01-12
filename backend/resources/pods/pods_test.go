@@ -1,3 +1,10 @@
+/*
+ * backend/resources/pods/pods_test.go
+ *
+ * Tests for Pod resource handlers.
+ * - Covers Pod resource handlers behavior and edge cases.
+ */
+
 package pods
 
 import (

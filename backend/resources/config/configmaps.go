@@ -1,3 +1,10 @@
+/*
+ * backend/resources/config/configmaps.go
+ *
+ * ConfigMap resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package config
 
 import (

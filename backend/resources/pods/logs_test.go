@@ -1,3 +1,10 @@
+/*
+ * backend/resources/pods/logs_test.go
+ *
+ * Tests for Pod log retrieval and follow helpers.
+ * - Covers Pod log retrieval and follow helpers behavior and edge cases.
+ */
+
 package pods
 
 import (

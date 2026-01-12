@@ -1,3 +1,10 @@
+/*
+ * backend/resources/pods/pods.go
+ *
+ * Pod resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package pods
 
 import (

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/network/services_test.go
+ *
+ * Tests for Service resource handlers.
+ * - Covers Service resource handlers behavior and edge cases.
+ */
+
 package network
 
 import (

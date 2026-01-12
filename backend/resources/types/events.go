@@ -1,3 +1,10 @@
+/*
+ * backend/resources/types/events.go
+ *
+ * Type definitions for Event resources.
+ * - Shared data structures for API responses.
+ */
+
 package types
 
 import "time"

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/admission/webhooks.go
+ *
+ * Admission webhook conversion helpers.
+ * - Normalizes webhook configs for UI models.
+ */
+
 package admission
 
 import (

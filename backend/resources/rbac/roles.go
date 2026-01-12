@@ -1,3 +1,10 @@
+/*
+ * backend/resources/rbac/roles.go
+ *
+ * Role resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package rbac
 
 import (

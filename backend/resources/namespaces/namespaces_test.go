@@ -1,3 +1,10 @@
+/*
+ * backend/resources/namespaces/namespaces_test.go
+ *
+ * Tests for Namespace resource handlers.
+ * - Covers Namespace resource handlers behavior and edge cases.
+ */
+
 package namespaces
 
 import (

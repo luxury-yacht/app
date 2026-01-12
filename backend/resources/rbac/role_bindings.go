@@ -1,3 +1,10 @@
+/*
+ * backend/resources/rbac/role_bindings.go
+ *
+ * RoleBinding resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package rbac
 
 import (

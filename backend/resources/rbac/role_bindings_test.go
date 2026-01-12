@@ -1,3 +1,10 @@
+/*
+ * backend/resources/rbac/role_bindings_test.go
+ *
+ * Tests for RoleBinding resource handlers.
+ * - Covers RoleBinding resource handlers behavior and edge cases.
+ */
+
 package rbac
 
 import (

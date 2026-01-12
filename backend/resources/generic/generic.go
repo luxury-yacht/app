@@ -1,3 +1,10 @@
+/*
+ * backend/resources/generic/generic.go
+ *
+ * Generic resource deletion helpers.
+ * - Uses dynamic clients to delete resources by kind.
+ */
+
 package generic
 
 import (

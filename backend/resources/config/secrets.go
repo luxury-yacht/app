@@ -1,3 +1,10 @@
+/*
+ * backend/resources/config/secrets.go
+ *
+ * Secret resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package config
 
 import (

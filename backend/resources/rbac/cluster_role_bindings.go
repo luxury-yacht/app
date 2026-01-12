@@ -1,3 +1,10 @@
+/*
+ * backend/resources/rbac/cluster_role_bindings.go
+ *
+ * ClusterRoleBinding resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package rbac
 
 import (

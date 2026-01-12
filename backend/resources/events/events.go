@@ -1,3 +1,10 @@
+/*
+ * backend/resources/events/events.go
+ *
+ * Event resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package events
 
 import (

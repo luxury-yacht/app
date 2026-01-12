@@ -1,3 +1,10 @@
+/*
+ * backend/resources/rbac/cluster_role_bindings_test.go
+ *
+ * Tests for ClusterRoleBinding resource handlers.
+ * - Covers ClusterRoleBinding resource handlers behavior and edge cases.
+ */
+
 package rbac
 
 import (
@@ -13,7 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	clientgotesting "k8s.io/client-go/testing"
-	k8stesting "k8s.io/client-go/testing"
 )
 
 func TestManagerClusterRolesToleratesBindingListFailure(t *testing.T) {
@@ -24,7 +30,7 @@ func TestManagerClusterRolesToleratesBindingListFailure(t *testing.T) {
 	}
 
 	client := fake.NewClientset(clusterRole)
-	client.PrependReactor("list", "clusterrolebindings", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "clusterrolebindings", func(action clientgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("nope")
 	})
 

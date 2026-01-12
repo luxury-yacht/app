@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/jobs.go
+ *
+ * Job resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package workloads
 
 import (

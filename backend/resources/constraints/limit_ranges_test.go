@@ -1,3 +1,10 @@
+/*
+ * backend/resources/constraints/limit_ranges_test.go
+ *
+ * Tests for LimitRange resource handlers.
+ * - Covers LimitRange resource handlers behavior and edge cases.
+ */
+
 package constraints
 
 import (

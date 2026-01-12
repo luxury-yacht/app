@@ -1,3 +1,10 @@
+/*
+ * backend/resources/network/endpoint_slices.go
+ *
+ * EndpointSlice resource handlers.
+ * - Aggregates slice details by service.
+ */
+
 package network
 
 import (

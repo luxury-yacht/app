@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/deployments_test.go
+ *
+ * Tests for Deployment resource handlers.
+ * - Covers Deployment resource handlers behavior and edge cases.
+ */
+
 package workloads_test
 
 import (

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/pods/logs.go
+ *
+ * Pod log retrieval and follow helpers.
+ * - Resolves workloads and streams logs.
+ */
+
 package pods
 
 import (

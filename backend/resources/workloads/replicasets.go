@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/replicasets.go
+ *
+ * ReplicaSet resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package workloads
 
 import (

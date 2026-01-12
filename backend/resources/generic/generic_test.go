@@ -1,3 +1,10 @@
+/*
+ * backend/resources/generic/generic_test.go
+ *
+ * Tests for Generic resource deletion helpers.
+ * - Covers Generic resource deletion helpers behavior and edge cases.
+ */
+
 package generic
 
 import (

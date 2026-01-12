@@ -1,3 +1,10 @@
+/*
+ * backend/resources/types/nodes.go
+ *
+ * Type definitions for Node resources.
+ * - Shared data structures for API responses.
+ */
+
 package types
 
 // DrainNodeOptions contains options for draining a node.

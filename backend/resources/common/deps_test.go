@@ -1,3 +1,10 @@
+/*
+ * backend/resources/common/deps_test.go
+ *
+ * Tests for Shared dependency bundle for resource services.
+ * - Covers Shared dependency bundle for resource services behavior and edge cases.
+ */
+
 package common
 
 import (

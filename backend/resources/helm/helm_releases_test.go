@@ -1,3 +1,10 @@
+/*
+ * backend/resources/helm/helm_releases_test.go
+ *
+ * Tests for Helm release operations.
+ * - Covers Helm release operations behavior and edge cases.
+ */
+
 package helm
 
 import (

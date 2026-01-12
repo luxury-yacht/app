@@ -1,3 +1,10 @@
+/*
+ * backend/resources/rbac/cluster_roles_test.go
+ *
+ * Tests for ClusterRole resource handlers.
+ * - Covers ClusterRole resource handlers behavior and edge cases.
+ */
+
 package rbac
 
 import (

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/pods/helpers_exported_test.go
+ *
+ * Tests for Pod helper utilities.
+ * - Covers Pod helper utilities behavior and edge cases.
+ */
+
 package pods
 
 import (

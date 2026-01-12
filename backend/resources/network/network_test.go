@@ -1,3 +1,10 @@
+/*
+ * backend/resources/network/network_test.go
+ *
+ * Test helpers for network resources.
+ * - Provides shared helpers for network tests.
+ */
+
 package network
 
 import (

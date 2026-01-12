@@ -1,3 +1,10 @@
+/*
+ * backend/resources/network/network.go
+ *
+ * Network service wiring.
+ * - Defines the service container for network resources.
+ */
+
 package network
 
 import "github.com/luxury-yacht/app/backend/resources/common"

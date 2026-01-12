@@ -1,3 +1,10 @@
+/*
+ * backend/resources/pods/helpers.go
+ *
+ * Pod detail and metrics helpers.
+ * - Aggregates metrics, owners, and summaries.
+ */
+
 package pods
 
 import (

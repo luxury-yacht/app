@@ -1,3 +1,10 @@
+/*
+ * backend/resources/admission/webhooks_test.go
+ *
+ * Test helpers for admission webhooks.
+ * - Provides shared helpers for admission webhook tests.
+ */
+
 package admission
 
 import (

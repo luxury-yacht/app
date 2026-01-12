@@ -1,3 +1,10 @@
+/*
+ * backend/resources/constraints/limit_ranges.go
+ *
+ * LimitRange resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package constraints
 
 import (

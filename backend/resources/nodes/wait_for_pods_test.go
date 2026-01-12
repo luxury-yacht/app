@@ -1,3 +1,10 @@
+/*
+ * backend/resources/nodes/wait_for_pods_test.go
+ *
+ * Tests for Pod termination wait helpers.
+ * - Covers Pod termination wait helpers behavior and edge cases.
+ */
+
 package nodes
 
 import (

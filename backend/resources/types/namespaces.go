@@ -1,3 +1,10 @@
+/*
+ * backend/resources/types/namespaces.go
+ *
+ * Type definitions for Namespace resources.
+ * - Shared data structures for API responses.
+ */
+
 package types
 
 // NamespaceDetails represents comprehensive namespace information.

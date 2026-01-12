@@ -1,3 +1,10 @@
+/*
+ * backend/resources/network/network_policies.go
+ *
+ * NetworkPolicy resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package network
 
 import (

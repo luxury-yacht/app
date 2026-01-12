@@ -1,3 +1,10 @@
+/*
+ * backend/resources/types/storage.go
+ *
+ * Type definitions for Storage resources.
+ * - Shared data structures for API responses.
+ */
+
 package types
 
 // PersistentVolumeDetails represents comprehensive PV information.

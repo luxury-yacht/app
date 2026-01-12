@@ -1,3 +1,10 @@
+/*
+ * backend/resources/events/events_test.go
+ *
+ * Tests for Event resource handlers.
+ * - Covers Event resource handlers behavior and edge cases.
+ */
+
 package events
 
 import (

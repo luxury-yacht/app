@@ -1,3 +1,10 @@
+/*
+ * backend/resources/storage/storage_test.go
+ *
+ * Test helpers for storage resources.
+ * - Provides shared helpers for storage tests.
+ */
+
 package storage
 
 import (

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/admission/validating_webhook_configurations.go
+ *
+ * Validating Webhook Configurations resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package admission
 
 import (

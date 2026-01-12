@@ -1,3 +1,10 @@
+/*
+ * backend/resources/nodes/nodes_test.go
+ *
+ * Tests for Node resource handlers.
+ * - Covers Node resource handlers behavior and edge cases.
+ */
+
 package nodes_test
 
 import (

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/admission/validating_webhook_configurations_test.go
+ *
+ * Tests for Validating Webhook Configurations resource handlers.
+ * - Covers Validating Webhook Configurations resource handlers behavior and edge cases.
+ */
+
 package admission
 
 import (

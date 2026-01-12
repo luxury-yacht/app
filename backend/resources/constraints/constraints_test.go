@@ -1,3 +1,10 @@
+/*
+ * backend/resources/constraints/constraints_test.go
+ *
+ * Tests for Constraints resource handlers.
+ * - Covers Constraints resource handlers behavior and edge cases.
+ */
+
 package constraints
 
 import (

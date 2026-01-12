@@ -1,3 +1,10 @@
+/*
+ * backend/resources/autoscaling/autoscaling_test.go
+ *
+ * Test helpers for autoscaling resources.
+ * - Provides shared helpers for autoscaling tests.
+ */
+
 package autoscaling
 
 import "k8s.io/apimachinery/pkg/api/resource"

@@ -1,3 +1,10 @@
+/*
+ * backend/resources/namespaces/namespaces.go
+ *
+ * Namespace resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package namespaces
 
 import (

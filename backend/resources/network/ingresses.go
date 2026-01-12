@@ -1,3 +1,10 @@
+/*
+ * backend/resources/network/ingresses.go
+ *
+ * Ingress and IngressClass resource handlers.
+ * - Builds detail and list views for ingress resources.
+ */
+
 package network
 
 import (

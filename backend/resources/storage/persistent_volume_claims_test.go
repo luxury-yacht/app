@@ -1,3 +1,10 @@
+/*
+ * backend/resources/storage/persistent_volume_claims_test.go
+ *
+ * Tests for PersistentVolumeClaim resource handlers.
+ * - Covers PersistentVolumeClaim resource handlers behavior and edge cases.
+ */
+
 package storage
 
 import (

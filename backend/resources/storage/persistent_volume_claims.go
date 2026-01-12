@@ -1,3 +1,10 @@
+/*
+ * backend/resources/storage/persistent_volume_claims.go
+ *
+ * PersistentVolumeClaim resource handlers.
+ * - Builds detail and list views for the frontend.
+ */
+
 package storage
 
 import (

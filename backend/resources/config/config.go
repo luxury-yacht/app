@@ -1,3 +1,10 @@
+/*
+ * backend/resources/config/config.go
+ *
+ * Config service wiring.
+ * - Defines the service container for config resources.
+ */
+
 package config
 
 import "github.com/luxury-yacht/app/backend/resources/common"

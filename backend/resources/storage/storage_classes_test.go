@@ -1,3 +1,10 @@
+/*
+ * backend/resources/storage/storage_classes_test.go
+ *
+ * Tests for StorageClass resource handlers.
+ * - Covers StorageClass resource handlers behavior and edge cases.
+ */
+
 package storage
 
 import (

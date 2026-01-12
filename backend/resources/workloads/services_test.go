@@ -1,3 +1,10 @@
+/*
+ * backend/resources/workloads/services_test.go
+ *
+ * Tests for Service resource handlers.
+ * - Covers Service resource handlers behavior and edge cases.
+ */
+
 package workloads_test
 
 import (
