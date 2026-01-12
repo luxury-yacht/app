@@ -5,26 +5,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/luxury-yacht/app/backend/resources/common"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-// Dependencies captures collaborators needed for admission resources.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-// Service exposes helpers for mutating/validating webhook configurations.
-type Service struct {
-	deps Dependencies
-}
-
-// NewService constructs a new admission Service.
-func NewService(deps Dependencies) *Service {
-	return &Service{deps: deps}
-}
 
 func convertWebhook(
 	name string,
