@@ -1,3 +1,10 @@
+/*
+ * backend/resources_wrappers_success_extended_test.go
+ *
+ * Tests for resource wrapper success cases.
+ * - Covers extended success scenarios for wrappers.
+ */
+
 package backend
 
 import (

@@ -1,3 +1,10 @@
+/*
+ * backend/resources_network.go
+ *
+ * App-level network resource wrappers.
+ * - Exposes Service, Ingress, EndpointSlice, and NetworkPolicy handlers.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/network"

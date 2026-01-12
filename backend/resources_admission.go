@@ -1,3 +1,10 @@
+/*
+ * backend/resources_admission.go
+ *
+ * App-level admission resource wrappers.
+ * - Exposes mutating and validating webhook handlers.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/admission"

@@ -1,3 +1,10 @@
+/*
+ * backend/resources_workloads.go
+ *
+ * App-level workload resource wrappers.
+ * - Exposes workload detail handlers and aggregated listings.
+ */
+
 package backend
 
 import (

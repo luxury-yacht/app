@@ -1,3 +1,10 @@
+/*
+ * backend/resources_storage.go
+ *
+ * App-level storage resource wrappers.
+ * - Exposes PV, PVC, and StorageClass handlers.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/storage"

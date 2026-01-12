@@ -1,3 +1,10 @@
+/*
+ * backend/resources_workloads_wrappers_test.go
+ *
+ * Tests for workload wrapper handlers.
+ * - Covers workload wrapper behavior and edge cases.
+ */
+
 package backend
 
 import (

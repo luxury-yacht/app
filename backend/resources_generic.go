@@ -1,3 +1,10 @@
+/*
+ * backend/resources_generic.go
+ *
+ * App-level generic resource wrappers.
+ * - Exposes generic delete handler by resource kind.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/generic"

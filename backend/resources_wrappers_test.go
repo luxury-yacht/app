@@ -1,3 +1,10 @@
+/*
+ * backend/resources_wrappers_test.go
+ *
+ * Tests for resource wrapper handlers.
+ * - Covers wrapper behavior for baseline scenarios.
+ */
+
 package backend
 
 import (

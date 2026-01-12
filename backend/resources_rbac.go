@@ -1,3 +1,10 @@
+/*
+ * backend/resources_rbac.go
+ *
+ * App-level RBAC resource wrappers.
+ * - Exposes role, binding, and service account handlers.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/rbac"

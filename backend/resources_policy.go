@@ -1,3 +1,10 @@
+/*
+ * backend/resources_policy.go
+ *
+ * App-level policy resource wrappers.
+ * - Exposes PodDisruptionBudget handlers.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/policy"

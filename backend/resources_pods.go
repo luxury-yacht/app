@@ -1,3 +1,11 @@
+/*
+ * backend/resources_pods.go
+ *
+ * App-level pod resource wrappers.
+ * - Bridges Wails handlers to pod services.
+ * - Resolves cluster-scoped dependencies for pod actions.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/pods"

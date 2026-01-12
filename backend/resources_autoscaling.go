@@ -1,3 +1,10 @@
+/*
+ * backend/resources_autoscaling.go
+ *
+ * App-level autoscaling resource wrappers.
+ * - Exposes HorizontalPodAutoscaler handlers.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/autoscaling"

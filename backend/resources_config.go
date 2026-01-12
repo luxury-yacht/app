@@ -1,3 +1,10 @@
+/*
+ * backend/resources_config.go
+ *
+ * App-level config resource wrappers.
+ * - Exposes ConfigMap and Secret detail handlers.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/config"

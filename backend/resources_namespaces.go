@@ -1,3 +1,10 @@
+/*
+ * backend/resources_namespaces.go
+ *
+ * App-level namespace resource wrappers.
+ * - Exposes Namespace detail handlers.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/namespaces"

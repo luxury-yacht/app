@@ -1,3 +1,10 @@
+/*
+ * backend/resources_constraints.go
+ *
+ * App-level constraint resource wrappers.
+ * - Exposes LimitRange and ResourceQuota handlers.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/constraints"

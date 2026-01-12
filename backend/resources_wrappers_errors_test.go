@@ -1,3 +1,10 @@
+/*
+ * backend/resources_wrappers_errors_test.go
+ *
+ * Tests for resource wrapper error handling.
+ * - Covers wrapper error paths and messages.
+ */
+
 package backend
 
 import (

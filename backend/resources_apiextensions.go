@@ -1,3 +1,10 @@
+/*
+ * backend/resources_apiextensions.go
+ *
+ * App-level API extensions resource wrappers.
+ * - Exposes CustomResourceDefinition handlers.
+ */
+
 package backend
 
 import "github.com/luxury-yacht/app/backend/resources/apiextensions"
