@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/testsupport"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -39,7 +40,7 @@ func TestManagerClusterRolesIncludeBindings(t *testing.T) {
 	manager := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           noopLogger{},
+			Logger:           testsupport.NoopLogger{},
 			KubernetesClient: client,
 		},
 	})
@@ -105,7 +106,7 @@ func TestManagerClusterRolesAggregatesBindingsAndSelectors(t *testing.T) {
 	manager := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           noopLogger{},
+			Logger:           testsupport.NoopLogger{},
 			KubernetesClient: client,
 		},
 	})

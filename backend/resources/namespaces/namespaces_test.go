@@ -20,13 +20,6 @@ import (
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}
-
 func TestHasWorkloadsWithoutClient(t *testing.T) {
 	service := NewService(Dependencies{
 		Common: testsupport.NewResourceDependencies(),
@@ -69,7 +62,7 @@ func TestServiceNamespaceEnsureClientError(t *testing.T) {
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(noopLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return fmt.Errorf("ensure fail") }),
 	)
 
@@ -99,7 +92,7 @@ func newNamespaceService(t testing.TB, client *kubefake.Clientset) *Service {
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(noopLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
 	return NewService(Dependencies{Common: deps})

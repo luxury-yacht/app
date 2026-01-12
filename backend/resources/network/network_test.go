@@ -10,19 +10,12 @@ import (
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}
-
 func newManager(t testing.TB, client *kubefake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(noopLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 	)
 	return NewService(Dependencies{Common: deps})
 }

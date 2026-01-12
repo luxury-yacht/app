@@ -13,6 +13,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 )
 
@@ -289,7 +290,7 @@ func TestManagerServiceErrors(t *testing.T) {
 	manager := NewService(Dependencies{
 		Common: common.Dependencies{
 			KubernetesClient: client,
-			Logger:           noopLogger{},
+			Logger:           testsupport.NoopLogger{},
 		},
 	})
 
@@ -306,7 +307,7 @@ func TestManagerServicesListError(t *testing.T) {
 	manager := NewService(Dependencies{
 		Common: common.Dependencies{
 			KubernetesClient: client,
-			Logger:           noopLogger{},
+			Logger:           testsupport.NoopLogger{},
 		},
 	})
 
@@ -327,7 +328,7 @@ func TestManagerServicesBuildsFromEndpointSlices(t *testing.T) {
 	manager := NewService(Dependencies{
 		Common: common.Dependencies{
 			KubernetesClient: client,
-			Logger:           noopLogger{},
+			Logger:           testsupport.NoopLogger{},
 		},
 	})
 

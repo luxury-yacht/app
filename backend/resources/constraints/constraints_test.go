@@ -14,13 +14,6 @@ import (
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}
-
 func TestConstraintsRequireClient(t *testing.T) {
 	svc := NewService(Dependencies{Common: testsupport.NewResourceDependencies()})
 
@@ -53,7 +46,7 @@ func newConstraintsService(t testing.TB, client *kubefake.Clientset) *Service {
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(noopLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
 	return NewService(Dependencies{Common: deps})

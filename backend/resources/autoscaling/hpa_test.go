@@ -111,7 +111,7 @@ func newHPAService(t testing.TB, client *kubefake.Clientset) *Service {
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(noopLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
 	return NewService(Dependencies{Common: deps})

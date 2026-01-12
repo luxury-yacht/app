@@ -10,6 +10,7 @@ import (
 	metricsfake "k8s.io/metrics/pkg/client/clientset/versioned/fake"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 func TestGetPodMetricsForPods(t *testing.T) {
@@ -21,7 +22,7 @@ func TestGetPodMetricsForPods(t *testing.T) {
 	svc := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:       context.Background(),
-			Logger:        noopLogger{},
+			Logger:        testsupport.NoopLogger{},
 			MetricsClient: metricsClient,
 		},
 	})

@@ -77,7 +77,7 @@ func newConfigService(t testing.TB, client *kubefake.Clientset) *Service {
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(noopLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 	)
 	return NewService(Dependencies{Common: deps})
 }

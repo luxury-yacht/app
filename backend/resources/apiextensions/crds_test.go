@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 func TestCustomResourceDefinition(t *testing.T) {
@@ -53,7 +54,7 @@ func TestCustomResourceDefinition(t *testing.T) {
 	svc := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:             context.Background(),
-			Logger:              noopLogger{},
+			Logger:              testsupport.NoopLogger{},
 			APIExtensionsClient: client,
 			EnsureAPIExtensions: func(resource string) error {
 				ensureCalled = true
@@ -120,7 +121,7 @@ func TestCustomResourceDefinitionsList(t *testing.T) {
 	svc := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:             context.Background(),
-			Logger:              noopLogger{},
+			Logger:              testsupport.NoopLogger{},
 			APIExtensionsClient: client,
 		},
 	})

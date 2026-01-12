@@ -20,12 +20,13 @@ import (
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
 func TestLogFetcherRequiresNamespace(t *testing.T) {
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: fake.NewClientset(),
 	}})
 
@@ -37,7 +38,7 @@ func TestLogFetcherUnsupportedWorkload(t *testing.T) {
 	pods := fake.NewClientset()
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: pods,
 	}})
 
@@ -57,7 +58,7 @@ func TestPodContainersPropagatesError(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -138,7 +139,7 @@ func TestPodsForCronJobContinuesOnPodListError(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -151,7 +152,7 @@ func TestFetchPodLogsPropagatesGetError(t *testing.T) {
 	client := fake.NewClientset()
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -208,7 +209,7 @@ func TestResolveTargetPodsCronJob(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -229,7 +230,7 @@ func TestLogFetcherAggregatesWorkloadPods(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -290,7 +291,7 @@ func TestFetchContainerLogsSwallowsCommonErrors(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -313,7 +314,7 @@ func TestFetchContainerLogsUnexpectedErrorPropagates(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -356,7 +357,7 @@ func TestLogFetcherAggregatesAndSortsEntries(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -403,7 +404,7 @@ func TestResolveTargetPodsOtherWorkloads(t *testing.T) {
 	}
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -450,7 +451,7 @@ func TestFetchContainerLogsScannerError(t *testing.T) {
 	}
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -479,7 +480,7 @@ func TestFetchPodLogsSpecificContainer(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 
@@ -503,7 +504,7 @@ func TestLogFetcherHandlesFetchErrors(t *testing.T) {
 
 	service := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
-		Logger:           noopLogger{},
+		Logger:           testsupport.NoopLogger{},
 		KubernetesClient: client,
 	}})
 

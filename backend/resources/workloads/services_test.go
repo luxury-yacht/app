@@ -21,13 +21,6 @@ import (
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}
-
 func TestStatefulSetServiceReturnsDetail(t *testing.T) {
 	ss := testsupport.StatefulSetFixture("default", "db")
 	partition := int32(1)
@@ -399,7 +392,7 @@ func TestGetWorkloadsSortsAndSummarizes(t *testing.T) {
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(noopLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error {
 			ensureCalled = true
 			return nil
@@ -440,7 +433,7 @@ func newDeps(t testing.TB, client *kubefake.Clientset) common.Dependencies {
 	return testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
-		testsupport.WithDepsLogger(noopLogger{}),
+		testsupport.WithDepsLogger(testsupport.NoopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
 }

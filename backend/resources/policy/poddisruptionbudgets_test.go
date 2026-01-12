@@ -15,17 +15,18 @@ import (
 	cgotesting "k8s.io/client-go/testing"
 )
 
-type noopLogger struct {
+// errorCapturingLogger stores error messages for assertions in tests.
+type errorCapturingLogger struct {
 	errors []string
 }
 
-func (l *noopLogger) Error(msg string, _ ...string) {
+func (l *errorCapturingLogger) Error(msg string, _ ...string) {
 	l.errors = append(l.errors, msg)
 }
 
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
+func (errorCapturingLogger) Debug(string, ...string) {}
+func (errorCapturingLogger) Info(string, ...string)  {}
+func (errorCapturingLogger) Warn(string, ...string)  {}
 
 func TestPodDisruptionBudgetRequiresClient(t *testing.T) {
 	svc := NewService(Dependencies{Common: common.Dependencies{Context: context.Background()}})
@@ -68,7 +69,7 @@ func TestPodDisruptionBudgetDetailsFormatting(t *testing.T) {
 	}
 
 	client := fake.NewClientset(pdb)
-	logger := &noopLogger{}
+	logger := &errorCapturingLogger{}
 	svc := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
@@ -101,7 +102,7 @@ func TestPodDisruptionBudgetListErrorLogs(t *testing.T) {
 	client.PrependReactor("list", "poddisruptionbudgets", func(action cgotesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, nil, fmt.Errorf("boom")
 	})
-	logger := &noopLogger{}
+	logger := &errorCapturingLogger{}
 	svc := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,

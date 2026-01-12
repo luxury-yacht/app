@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
+	"github.com/luxury-yacht/app/backend/testsupport"
 	"github.com/stretchr/testify/require"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,7 +31,7 @@ func TestManagerClusterRolesToleratesBindingListFailure(t *testing.T) {
 	manager := NewService(Dependencies{
 		Common: common.Dependencies{
 			Context:          context.Background(),
-			Logger:           noopLogger{},
+			Logger:           testsupport.NoopLogger{},
 			KubernetesClient: client,
 		},
 	})
