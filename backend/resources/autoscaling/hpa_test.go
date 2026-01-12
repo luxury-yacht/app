@@ -1,4 +1,4 @@
-package autoscaling_test
+package autoscaling
 
 import (
 	"context"
@@ -15,16 +15,8 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/luxury-yacht/app/backend/resources/autoscaling"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
-
-type noopLogger struct{}
-
-func (noopLogger) Debug(string, ...string) {}
-func (noopLogger) Info(string, ...string)  {}
-func (noopLogger) Warn(string, ...string)  {}
-func (noopLogger) Error(string, ...string) {}
 
 func TestServiceHorizontalPodAutoscalerDetails(t *testing.T) {
 	min := int32(1)
@@ -94,7 +86,7 @@ func TestServiceHorizontalPodAutoscalerDetails(t *testing.T) {
 }
 
 func TestHPAServiceRequiresClient(t *testing.T) {
-	svc := autoscaling.NewService(autoscaling.Dependencies{Common: testsupport.NewResourceDependencies()})
+	svc := NewService(Dependencies{Common: testsupport.NewResourceDependencies()})
 
 	_, err := svc.HorizontalPodAutoscaler("default", "missing")
 	require.Error(t, err)
@@ -114,7 +106,7 @@ func TestHPAServiceListError(t *testing.T) {
 	require.Error(t, err)
 }
 
-func newHPAService(t testing.TB, client *kubefake.Clientset) *autoscaling.Service {
+func newHPAService(t testing.TB, client *kubefake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
@@ -122,14 +114,5 @@ func newHPAService(t testing.TB, client *kubefake.Clientset) *autoscaling.Servic
 		testsupport.WithDepsLogger(noopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
-	return autoscaling.NewService(autoscaling.Dependencies{Common: deps})
-}
-
-func resourcePtr(value string) *resource.Quantity {
-	q := resource.MustParse(value)
-	return &q
-}
-
-func ptrToInt32(v int32) *int32 {
-	return &v
+	return NewService(Dependencies{Common: deps})
 }

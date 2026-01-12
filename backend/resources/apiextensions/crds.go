@@ -9,21 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Dependencies captures collaborators required for CRD operations.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-// Service exposes helpers for Kubernetes CustomResourceDefinitions.
-type Service struct {
-	deps Dependencies
-}
-
-// NewService constructs a CRD service instance.
-func NewService(deps Dependencies) *Service {
-	return &Service{deps: deps}
-}
-
 // CustomResourceDefinition returns a detailed view for a single CRD.
 func (s *Service) CustomResourceDefinition(name string) (*restypes.CustomResourceDefinitionDetails, error) {
 	if err := s.ensureAPIExtensions("CustomResourceDefinition"); err != nil {

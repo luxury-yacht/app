@@ -9,21 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Dependencies captures the collaborators required for autoscaling resources.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-// Service exposes helpers for HorizontalPodAutoscalers.
-type Service struct {
-	deps Dependencies
-}
-
-// NewService constructs an autoscaling service.
-func NewService(deps Dependencies) *Service {
-	return &Service{deps: deps}
-}
-
 // HorizontalPodAutoscaler returns a detailed view for a single HPA.
 func (s *Service) HorizontalPodAutoscaler(namespace, name string) (*restypes.HorizontalPodAutoscalerDetails, error) {
 	client := s.deps.Common.KubernetesClient
