@@ -46,6 +46,8 @@ func (s *Service) StorageClasses() ([]*restypes.StorageClassDetails, error) {
 	return detailsList, nil
 }
 
+// processStorageClassDetails processes a StorageClass object and returns its details.
+// It includes information about the storage class itself and lists persistent volumes using this storage class.
 func (s *Service) processStorageClassDetails(storageClass *storagev1.StorageClass, pvs *corev1.PersistentVolumeList) *restypes.StorageClassDetails {
 	details := &restypes.StorageClassDetails{
 		Kind:         "StorageClass",
@@ -93,6 +95,7 @@ func (s *Service) processStorageClassDetails(storageClass *storagev1.StorageClas
 		}
 	}
 
+	// List persistent volumes associated with this storage class
 	if pvs != nil {
 		for _, pv := range pvs.Items {
 			if pv.Spec.StorageClassName == storageClass.Name {
