@@ -37,14 +37,10 @@ func (s *DeploymentService) Deployment(namespace, name string) (*restypes.Deploy
 		return nil, fmt.Errorf("failed to get deployment: %v", err)
 	}
 
-	deploymentPods, podMetrics, err := s.getDeploymentPods(deployment)
+	// getDeploymentPods also fetches ReplicaSets for filtering; reuse them to avoid a second list call.
+	deploymentPods, podMetrics, replicaSets, err := s.getDeploymentPods(deployment)
 	if err != nil {
 		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to collect pods for deployment %s/%s: %v", namespace, name, err), "ResourceLoader")
-	}
-
-	replicaSets, err := client.AppsV1().ReplicaSets(namespace).List(s.deps.Common.Context, metav1.ListOptions{LabelSelector: labels.Set(deployment.Spec.Selector.MatchLabels).String()})
-	if err != nil {
-		replicaSets = nil
 	}
 
 	return s.buildDeploymentDetails(deployment, deploymentPods, podMetrics, replicaSets), nil
@@ -160,16 +156,16 @@ func (s *DeploymentService) buildDeploymentDetails(
 	return details
 }
 
-func (s *DeploymentService) getDeploymentPods(deployment *appsv1.Deployment) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, error) {
+func (s *DeploymentService) getDeploymentPods(deployment *appsv1.Deployment) ([]corev1.Pod, map[string]*metricsv1beta1.PodMetrics, *appsv1.ReplicaSetList, error) {
 	client := s.deps.Common.KubernetesClient
 	if client == nil {
-		return nil, nil, fmt.Errorf("kubernetes client not initialized")
+		return nil, nil, nil, fmt.Errorf("kubernetes client not initialized")
 	}
 
 	labelSelector := labels.Set(deployment.Spec.Selector.MatchLabels).String()
 	podList, err := client.CoreV1().Pods(deployment.Namespace).List(s.deps.Common.Context, metav1.ListOptions{LabelSelector: labelSelector})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	replicaSets, err := client.AppsV1().ReplicaSets(deployment.Namespace).List(s.deps.Common.Context, metav1.ListOptions{LabelSelector: labelSelector})
@@ -180,7 +176,7 @@ func (s *DeploymentService) getDeploymentPods(deployment *appsv1.Deployment) ([]
 	filteredPods := filterPodsForDeployment(deployment, podList, replicaSets)
 	metrics := pods.NewService(pods.Dependencies{Common: s.deps.Common}).GetPodMetricsForPods(deployment.Namespace, filteredPods)
 
-	return filteredPods, metrics, nil
+	return filteredPods, metrics, replicaSets, nil
 }
 
 func summarizeReplicaSets(deployment *appsv1.Deployment, replicaSets *appsv1.ReplicaSetList) ([]string, string) {
