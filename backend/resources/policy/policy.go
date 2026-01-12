@@ -1,4 +1,4 @@
-package rbac
+package policy
 
 import (
 	"github.com/luxury-yacht/app/backend/resources/common"

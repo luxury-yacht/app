@@ -15,18 +15,6 @@ import (
 
 const endpointSliceTimeout = 10 * time.Second
 
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-type Service struct {
-	deps Dependencies
-}
-
-func NewService(deps Dependencies) *Service {
-	return &Service{deps: deps}
-}
-
 func (s *Service) GetService(namespace, name string) (*restypes.ServiceDetails, error) {
 	svc, err := s.deps.Common.KubernetesClient.CoreV1().Services(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
 	if err != nil {

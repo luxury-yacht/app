@@ -1,10 +1,9 @@
-package generic_test
+package generic
 
 import (
 	"context"
 	"testing"
 
-	"github.com/luxury-yacht/app/backend/resources/generic"
 	"github.com/luxury-yacht/app/backend/testsupport"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,7 +25,7 @@ func TestServiceDeleteCoreResource(t *testing.T) {
 		testsupport.WithDepsKubeClient(kubeClient),
 		testsupport.WithDepsDynamicClient(dynamicClient),
 	)
-	service := generic.NewService(generic.Dependencies{Common: deps})
+	service := NewService(Dependencies{Common: deps})
 
 	if err := service.Delete("Pod", "default", "web-0"); err != nil {
 		t.Fatalf("Delete returned error: %v", err)
@@ -68,7 +67,7 @@ func TestServiceDeleteCustomResource(t *testing.T) {
 		testsupport.WithDepsKubeClient(kubeClient),
 		testsupport.WithDepsDynamicClient(dynamicClient),
 	)
-	service := generic.NewService(generic.Dependencies{Common: deps})
+	service := NewService(Dependencies{Common: deps})
 
 	if err := service.Delete("Widget", "default", "sample"); err != nil {
 		t.Fatalf("Delete returned error: %v", err)

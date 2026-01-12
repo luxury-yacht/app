@@ -1,4 +1,4 @@
-package events_test
+package events
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 
-	"github.com/luxury-yacht/app/backend/resources/events"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -73,7 +72,7 @@ func TestNamespaceEventsRequiresNamespace(t *testing.T) {
 	require.Error(t, err)
 }
 
-func newEventsService(t testing.TB, client *kubefake.Clientset) *events.Service {
+func newEventsService(t testing.TB, client *kubefake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
@@ -81,5 +80,5 @@ func newEventsService(t testing.TB, client *kubefake.Clientset) *events.Service 
 		testsupport.WithDepsLogger(noopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
-	return events.NewService(events.Dependencies{Common: deps})
+	return NewService(Dependencies{Common: deps})
 }

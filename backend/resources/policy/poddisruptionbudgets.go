@@ -9,21 +9,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// Dependencies captures the collaborators needed to load policy resources.
-type Dependencies struct {
-	Common common.Dependencies
-}
-
-// Service surfaces pod disruption budget helpers.
-type Service struct {
-	deps Dependencies
-}
-
-// NewService constructs a Service instance.
-func NewService(deps Dependencies) *Service {
-	return &Service{deps: deps}
-}
-
 // PodDisruptionBudget returns a detailed description for a single PDB.
 func (s *Service) PodDisruptionBudget(namespace, name string) (*restypes.PodDisruptionBudgetDetails, error) {
 	client := s.deps.Common.KubernetesClient

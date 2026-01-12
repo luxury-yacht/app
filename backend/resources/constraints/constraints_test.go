@@ -1,4 +1,4 @@
-package constraints_test
+package constraints
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/luxury-yacht/app/backend/resources/constraints"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -89,7 +88,7 @@ func TestServiceLimitRangeDetails(t *testing.T) {
 }
 
 func TestConstraintsRequireClient(t *testing.T) {
-	svc := constraints.NewService(constraints.Dependencies{Common: testsupport.NewResourceDependencies()})
+	svc := NewService(Dependencies{Common: testsupport.NewResourceDependencies()})
 
 	_, err := svc.ResourceQuota("default", "rq")
 	require.Error(t, err)
@@ -115,7 +114,7 @@ func TestConstraintsListFailures(t *testing.T) {
 	require.Error(t, err)
 }
 
-func newConstraintsService(t testing.TB, client *kubefake.Clientset) *constraints.Service {
+func newConstraintsService(t testing.TB, client *kubefake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
@@ -123,7 +122,7 @@ func newConstraintsService(t testing.TB, client *kubefake.Clientset) *constraint
 		testsupport.WithDepsLogger(noopLogger{}),
 		testsupport.WithDepsEnsureClient(func(string) error { return nil }),
 	)
-	return constraints.NewService(constraints.Dependencies{Common: deps})
+	return NewService(Dependencies{Common: deps})
 }
 
 func resourceMustParse(value string) resource.Quantity {

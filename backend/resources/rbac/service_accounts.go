@@ -11,6 +11,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
+	pods, err := s.deps.Common.KubernetesClient.CoreV1().Pods(namespace).List(s.deps.Common.Context, metav1.ListOptions{})
+	if err != nil {
+		s.deps.Common.Logger.Warn(fmt.Sprintf("Failed to list pods in namespace %s: %v", namespace, err), "RBAC")
+		return nil
+	}
+	return pods
+}
+
 func (s *Service) ServiceAccount(namespace, name string) (*restypes.ServiceAccountDetails, error) {
 	sa, err := s.deps.Common.KubernetesClient.CoreV1().ServiceAccounts(namespace).Get(s.deps.Common.Context, name, metav1.GetOptions{})
 	if err != nil {

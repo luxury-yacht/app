@@ -1,4 +1,4 @@
-package rbac
+package network
 
 import (
 	"github.com/luxury-yacht/app/backend/resources/common"
