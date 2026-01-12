@@ -15,17 +15,17 @@ import (
 	cgotesting "k8s.io/client-go/testing"
 )
 
-type pdbnoopLogger struct {
+type noopLogger struct {
 	errors []string
 }
 
-func (l *pdbnoopLogger) Error(msg string, _ ...string) {
+func (l *noopLogger) Error(msg string, _ ...string) {
 	l.errors = append(l.errors, msg)
 }
 
-func (pdbnoopLogger) Debug(string, ...string) {}
-func (pdbnoopLogger) Info(string, ...string)  {}
-func (pdbnoopLogger) Warn(string, ...string)  {}
+func (noopLogger) Debug(string, ...string) {}
+func (noopLogger) Info(string, ...string)  {}
+func (noopLogger) Warn(string, ...string)  {}
 
 func TestPodDisruptionBudgetRequiresClient(t *testing.T) {
 	svc := NewService(Dependencies{Common: common.Dependencies{Context: context.Background()}})
@@ -68,7 +68,7 @@ func TestPodDisruptionBudgetDetailsFormatting(t *testing.T) {
 	}
 
 	client := fake.NewClientset(pdb)
-	logger := &pdbnoopLogger{}
+	logger := &noopLogger{}
 	svc := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
@@ -101,7 +101,7 @@ func TestPodDisruptionBudgetListErrorLogs(t *testing.T) {
 	client.PrependReactor("list", "poddisruptionbudgets", func(action cgotesting.Action) (handled bool, ret runtime.Object, err error) {
 		return true, nil, fmt.Errorf("boom")
 	})
-	logger := &pdbnoopLogger{}
+	logger := &noopLogger{}
 	svc := NewService(Dependencies{Common: common.Dependencies{
 		Context:          context.Background(),
 		KubernetesClient: client,
