@@ -11,7 +11,7 @@ import (
 	"context"
 	"testing"
 
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
@@ -41,7 +41,7 @@ func (l *capturingLogger) Error(msg string, source ...string) {
 	l.entries = append(l.entries, logEntry{level: "ERROR", message: msg})
 }
 
-func newStorageService(t testing.TB, client *clientgofake.Clientset) *Service {
+func newStorageService(t testing.TB, client *fake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),

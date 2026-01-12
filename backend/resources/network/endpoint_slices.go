@@ -18,11 +18,11 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
 // EndpointSlice returns slice details grouped by service name.
-func (s *Service) EndpointSlice(namespace, service string) (*restypes.EndpointSliceDetails, error) {
+func (s *Service) EndpointSlice(namespace, service string) (*types.EndpointSliceDetails, error) {
 	ctx, cancel := s.ctx()
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, service)
@@ -34,7 +34,7 @@ func (s *Service) EndpointSlice(namespace, service string) (*restypes.EndpointSl
 }
 
 // EndpointSlices lists slice details for every service in the namespace.
-func (s *Service) EndpointSlices(namespace string) ([]*restypes.EndpointSliceDetails, error) {
+func (s *Service) EndpointSlices(namespace string) ([]*types.EndpointSliceDetails, error) {
 	ctx, cancel := s.ctx()
 	defer cancel()
 	slices, err := s.listEndpointSlices(ctx, namespace, "")
@@ -44,7 +44,7 @@ func (s *Service) EndpointSlices(namespace string) ([]*restypes.EndpointSliceDet
 	}
 
 	grouped := groupEndpointSlicesByService(slices)
-	results := make([]*restypes.EndpointSliceDetails, 0, len(grouped))
+	results := make([]*types.EndpointSliceDetails, 0, len(grouped))
 	for service, serviceSlices := range grouped {
 		results = append(results, buildEndpointSliceDetails(namespace, service, serviceSlices))
 	}
@@ -81,8 +81,8 @@ func endpointReady(endpoint discoveryv1.Endpoint) bool {
 	return true
 }
 
-func buildEndpointSliceDetails(namespace, service string, slices []*discoveryv1.EndpointSlice) *restypes.EndpointSliceDetails {
-	details := &restypes.EndpointSliceDetails{
+func buildEndpointSliceDetails(namespace, service string, slices []*discoveryv1.EndpointSlice) *types.EndpointSliceDetails {
+	details := &types.EndpointSliceDetails{
 		Kind:      "EndpointSlice",
 		Name:      service,
 		Namespace: namespace,
@@ -103,7 +103,7 @@ func buildEndpointSliceDetails(namespace, service string, slices []*discoveryv1.
 		if slice == nil {
 			continue
 		}
-		summary := restypes.EndpointSliceSummary{
+		summary := types.EndpointSliceSummary{
 			Name:        slice.Name,
 			AddressType: string(slice.AddressType),
 			Age:         common.FormatAge(slice.CreationTimestamp.Time),
@@ -140,13 +140,13 @@ func buildEndpointSliceDetails(namespace, service string, slices []*discoveryv1.
 	return details
 }
 
-func slicePortsToDetails(ports []discoveryv1.EndpointPort) []restypes.EndpointSlicePort {
+func slicePortsToDetails(ports []discoveryv1.EndpointPort) []types.EndpointSlicePort {
 	if len(ports) == 0 {
 		return nil
 	}
-	result := make([]restypes.EndpointSlicePort, 0, len(ports))
+	result := make([]types.EndpointSlicePort, 0, len(ports))
 	for _, port := range ports {
-		detail := restypes.EndpointSlicePort{
+		detail := types.EndpointSlicePort{
 			Port: portNumber(port),
 		}
 		if port.Name != nil {
@@ -163,9 +163,9 @@ func slicePortsToDetails(ports []discoveryv1.EndpointPort) []restypes.EndpointSl
 	return result
 }
 
-func endpointAddressesFromSlice(slice *discoveryv1.EndpointSlice) ([]restypes.EndpointSliceAddress, []restypes.EndpointSliceAddress) {
-	ready := []restypes.EndpointSliceAddress{}
-	notReady := []restypes.EndpointSliceAddress{}
+func endpointAddressesFromSlice(slice *discoveryv1.EndpointSlice) ([]types.EndpointSliceAddress, []types.EndpointSliceAddress) {
+	ready := []types.EndpointSliceAddress{}
+	notReady := []types.EndpointSliceAddress{}
 
 	for _, endpoint := range slice.Endpoints {
 		if len(endpoint.Addresses) == 0 {
@@ -180,7 +180,7 @@ func endpointAddressesFromSlice(slice *discoveryv1.EndpointSlice) ([]restypes.En
 			if endpoint.TargetRef != nil {
 				targetRef = fmt.Sprintf("%s/%s", endpoint.TargetRef.Kind, endpoint.TargetRef.Name)
 			}
-			next := restypes.EndpointSliceAddress{
+			next := types.EndpointSliceAddress{
 				IP: address,
 			}
 			if endpoint.Hostname != nil {

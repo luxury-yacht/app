@@ -10,13 +10,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	corelisters "k8s.io/client-go/listers/core/v1"
-	k8stesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
 )
 
 func TestObjectEventsBuilderUsesCacheWhenSynced(t *testing.T) {
 	client := fake.NewClientset()
-	client.PrependReactor("list", "events", func(k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "events", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("unexpected API list call")
 	})
 

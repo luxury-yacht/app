@@ -26,7 +26,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/luxury-yacht/app/backend/testsupport"
 )
 
@@ -37,7 +37,7 @@ func TestLogFetcherRequiresNamespace(t *testing.T) {
 		KubernetesClient: fake.NewClientset(),
 	})
 
-	resp := service.LogFetcher(restypes.LogFetchRequest{})
+	resp := service.LogFetcher(types.LogFetchRequest{})
 	require.Equal(t, "namespace is required", resp.Error)
 }
 
@@ -49,7 +49,7 @@ func TestLogFetcherUnsupportedWorkload(t *testing.T) {
 		KubernetesClient: pods,
 	})
 
-	resp := service.LogFetcher(restypes.LogFetchRequest{
+	resp := service.LogFetcher(types.LogFetchRequest{
 		Namespace:    "default",
 		WorkloadKind: "gadget",
 		WorkloadName: "demo",
@@ -203,7 +203,7 @@ func TestResolveTargetPodsDeployment(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	pods, err := service.resolveTargetPods(restypes.LogFetchRequest{Namespace: "default", WorkloadKind: "deployment", WorkloadName: "web"})
+	pods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "deployment", WorkloadName: "web"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"web-pod"}, pods)
 }
@@ -220,7 +220,7 @@ func TestResolveTargetPodsCronJob(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	pods, err := service.resolveTargetPods(restypes.LogFetchRequest{Namespace: "default", WorkloadKind: "cronjob", WorkloadName: "nightly"})
+	pods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "cronjob", WorkloadName: "nightly"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"nightly-pod"}, pods)
 }
@@ -241,7 +241,7 @@ func TestLogFetcherAggregatesWorkloadPods(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(restypes.LogFetchRequest{
+	resp := service.LogFetcher(types.LogFetchRequest{
 		Namespace:    "default",
 		WorkloadKind: "deployment",
 		WorkloadName: "api",
@@ -249,7 +249,7 @@ func TestLogFetcherAggregatesWorkloadPods(t *testing.T) {
 	require.Empty(t, resp.Error)
 	sort.Slice(resp.Entries, func(i, j int) bool { return resp.Entries[i].Pod < resp.Entries[j].Pod })
 	require.Len(t, resp.Entries, 0)
-	require.NotPanics(t, func() { service.resolveTargetPods(restypes.LogFetchRequest{Namespace: "default", PodName: "api-0"}) })
+	require.NotPanics(t, func() { service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", PodName: "api-0"}) })
 }
 
 func TestFetchContainerLogsParsesTimestamps(t *testing.T) {
@@ -368,13 +368,13 @@ func TestLogFetcherAggregatesAndSortsEntries(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(restypes.LogFetchRequest{Namespace: "default", PodName: "demo"})
+	resp := service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo"})
 	require.Empty(t, resp.Error)
 	require.Len(t, resp.Entries, 2)
 	require.Equal(t, "2024-01-01T00:00:00Z", resp.Entries[0].Timestamp)
 	require.Equal(t, "init", resp.Entries[0].Container)
 
-	resp = service.LogFetcher(restypes.LogFetchRequest{Namespace: "default", PodName: "demo-2"})
+	resp = service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo-2"})
 	require.Len(t, resp.Entries, 1)
 	require.Equal(t, "other pod", resp.Entries[0].Line)
 }
@@ -415,19 +415,19 @@ func TestResolveTargetPodsOtherWorkloads(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	rsPods, err := service.resolveTargetPods(restypes.LogFetchRequest{Namespace: "default", WorkloadKind: "replicaset", WorkloadName: "rs"})
+	rsPods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "replicaset", WorkloadName: "rs"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"rs-pod"}, rsPods)
 
-	dsPods, err := service.resolveTargetPods(restypes.LogFetchRequest{Namespace: "default", WorkloadKind: "daemonset", WorkloadName: "ds"})
+	dsPods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "daemonset", WorkloadName: "ds"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"ds-pod"}, dsPods)
 
-	stsPods, err := service.resolveTargetPods(restypes.LogFetchRequest{Namespace: "default", WorkloadKind: "statefulset", WorkloadName: "sts"})
+	stsPods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "statefulset", WorkloadName: "sts"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"sts-0"}, stsPods)
 
-	jobPods, err := service.resolveTargetPods(restypes.LogFetchRequest{Namespace: "default", WorkloadKind: "job", WorkloadName: "job"})
+	jobPods, err := service.resolveTargetPods(types.LogFetchRequest{Namespace: "default", WorkloadKind: "job", WorkloadName: "job"})
 	require.NoError(t, err)
 	require.Equal(t, []string{"job-pod"}, jobPods)
 }
@@ -436,7 +436,7 @@ func TestLogFetcherRequiresClient(t *testing.T) {
 	service := NewService(common.Dependencies{
 		Context: context.Background(),
 	})
-	resp := service.LogFetcher(restypes.LogFetchRequest{Namespace: "default", PodName: "demo"})
+	resp := service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo"})
 	require.Contains(t, resp.Error, "kubernetes client not initialized")
 }
 
@@ -515,7 +515,7 @@ func TestLogFetcherHandlesFetchErrors(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(restypes.LogFetchRequest{Namespace: "default", PodName: "demo"})
+	resp := service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo"})
 	require.Empty(t, resp.Entries)
 	require.Empty(t, resp.Error)
 }
@@ -539,7 +539,7 @@ func TestLogFetcherSortsWhenTimestampMissing(t *testing.T) {
 		KubernetesClient: client,
 	})
 
-	resp := service.LogFetcher(restypes.LogFetchRequest{Namespace: "default", PodName: "demo"})
+	resp := service.LogFetcher(types.LogFetchRequest{Namespace: "default", PodName: "demo"})
 	require.Len(t, resp.Entries, 2)
 	require.Equal(t, []string{"2024-01-01T00:00:01Z", "malformed"}, []string{resp.Entries[0].Timestamp, resp.Entries[1].Timestamp})
 }

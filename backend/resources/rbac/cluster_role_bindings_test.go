@@ -19,7 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	clientgotesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func TestManagerClusterRolesToleratesBindingListFailure(t *testing.T) {
@@ -30,7 +30,7 @@ func TestManagerClusterRolesToleratesBindingListFailure(t *testing.T) {
 	}
 
 	client := fake.NewClientset(clusterRole)
-	client.PrependReactor("list", "clusterrolebindings", func(action clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "clusterrolebindings", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("nope")
 	})
 
@@ -80,7 +80,7 @@ func TestBuildClusterRoleBindingDetails(t *testing.T) {
 
 func TestClusterRoleBindingsListError(t *testing.T) {
 	client := fake.NewClientset()
-	client.PrependReactor("list", "clusterrolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "clusterrolebindings", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("crb-list")
 	})
 
@@ -92,7 +92,7 @@ func TestClusterRoleBindingsListError(t *testing.T) {
 
 func TestClusterRoleBindingGetError(t *testing.T) {
 	client := fake.NewClientset()
-	client.PrependReactor("get", "clusterrolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("get", "clusterrolebindings", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("crb-get")
 	})
 

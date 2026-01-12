@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v2"
@@ -21,7 +21,7 @@ import (
 )
 
 // ReleaseDetails returns detailed information about a Helm release.
-func (s *Service) ReleaseDetails(namespace, name string) (*restypes.HelmReleaseDetails, error) {
+func (s *Service) ReleaseDetails(namespace, name string) (*types.HelmReleaseDetails, error) {
 	if err := s.ensureClient(); err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (s *Service) ReleaseDetails(namespace, name string) (*restypes.HelmReleaseD
 		s.logWarn(fmt.Sprintf("Failed to get Helm history for %s/%s: %v", namespace, name, err))
 	}
 
-	details := &restypes.HelmReleaseDetails{
+	details := &types.HelmReleaseDetails{
 		Kind:        "helmrelease",
 		Name:        release.Name,
 		Namespace:   release.Namespace,
@@ -63,7 +63,7 @@ func (s *Service) ReleaseDetails(namespace, name string) (*restypes.HelmReleaseD
 	}
 
 	for _, h := range history {
-		details.History = append(details.History, restypes.HelmRevision{
+		details.History = append(details.History, types.HelmRevision{
 			Revision:    h.Version,
 			Updated:     common.FormatAge(h.Info.LastDeployed.Time),
 			Status:      cases.Title(language.English).String(strings.ToLower(h.Info.Status.String())),
@@ -195,8 +195,8 @@ func (s *Service) initActionConfig(settings *cli.EnvSettings, namespace string) 
 	return actionConfig, nil
 }
 
-func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string) []restypes.HelmResource {
-	var resources []restypes.HelmResource
+func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string) []types.HelmResource {
+	var resources []types.HelmResource
 	resourceMap := make(map[string]bool)
 
 	trimmed := strings.TrimPrefix(strings.TrimSpace(manifest), "---")
@@ -241,7 +241,7 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 					continue
 				}
 				resourceMap[key] = true
-				resources = append(resources, restypes.HelmResource{Kind: itemKind, Name: name, Namespace: namespace})
+				resources = append(resources, types.HelmResource{Kind: itemKind, Name: name, Namespace: namespace})
 			}
 			continue
 		}
@@ -256,7 +256,7 @@ func (s *Service) extractResourcesFromManifest(manifest, defaultNamespace string
 			continue
 		}
 		resourceMap[key] = true
-		resources = append(resources, restypes.HelmResource{Kind: kind, Name: name, Namespace: namespace})
+		resources = append(resources, types.HelmResource{Kind: kind, Name: name, Namespace: namespace})
 	}
 
 	return resources

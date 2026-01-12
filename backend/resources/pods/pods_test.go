@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -23,11 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
-	k8stesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsfake "k8s.io/metrics/pkg/client/clientset/versioned/fake"
-
-	"github.com/stretchr/testify/require"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -141,7 +140,7 @@ func TestGetPodReturnsDetailedInfo(t *testing.T) {
 
 func TestGetPodPropagatesError(t *testing.T) {
 	client := fake.NewClientset()
-	client.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("get", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom")
 	})
 
@@ -191,7 +190,7 @@ func TestDeletePodReturnsErrorWhenAPIFails(t *testing.T) {
 	client := fake.NewClientset(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "delete-me", Namespace: "team-a"},
 	})
-	client.PrependReactor("delete", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("delete", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("cannot delete")
 	})
 
@@ -439,7 +438,7 @@ func TestGetMultiNamespacePodMetrics(t *testing.T) {
 
 func TestPodsBySelectorPropagatesListError(t *testing.T) {
 	client := fake.NewClientset()
-	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("selector failure")
 	})
 
@@ -466,7 +465,7 @@ func TestPodsForCronJobReturnsEmptyWhenListingPodsFails(t *testing.T) {
 	client := fake.NewClientset(job)
 
 	var listCalls int
-	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		listCalls++
 		return true, nil, fmt.Errorf("pods unavailable")
 	})
@@ -485,7 +484,7 @@ func TestPodsForCronJobReturnsEmptyWhenListingPodsFails(t *testing.T) {
 
 func TestFetchPodsWithFilterPropagatesError(t *testing.T) {
 	client := fake.NewClientset()
-	client.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom")
 	})
 
@@ -514,9 +513,9 @@ func TestGetPodMetricsForPodsUsesIndividualFetchForSmallSets(t *testing.T) {
 	var getCalls int
 	//lint:ignore SA1019 No replacement for the deprecated method
 	metricsClient := metricsfake.NewSimpleClientset()
-	metricsClient.PrependReactor("get", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	metricsClient.PrependReactor("get", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		getCalls++
-		getAction, ok := action.(k8stesting.GetAction)
+		getAction, ok := action.(cgotesting.GetAction)
 		require.True(t, ok)
 		name := getAction.GetName()
 		return true, buildPodMetrics("team-a", name), nil
@@ -544,7 +543,7 @@ func TestGetPodMetricsForPodsListsForLargeSets(t *testing.T) {
 	var listCalls int
 	//lint:ignore SA1019 No replacement for the deprecated method
 	metricsClient := metricsfake.NewSimpleClientset()
-	metricsClient.PrependReactor("list", "pods", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	metricsClient.PrependReactor("list", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		listCalls++
 		list := &metricsv1beta1.PodMetricsList{}
 		for _, name := range []string{"pod-a", "pod-b", "pod-c", "pod-d"} {
@@ -577,7 +576,7 @@ func TestGetPodMetricsListErrorReturnsEmpty(t *testing.T) {
 	ctx := context.Background()
 	//lint:ignore SA1019 No replacement for the deprecated method
 	metricsClient := metricsfake.NewSimpleClientset()
-	metricsClient.PrependReactor("list", "podmetricses", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	metricsClient.PrependReactor("list", "podmetricses", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("metrics unavailable")
 	})
 

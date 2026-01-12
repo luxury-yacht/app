@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	clientgotesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func TestManagerServiceAccountAggregatesRelations(t *testing.T) {
@@ -109,7 +109,7 @@ func TestManagerServiceAccountAggregatesRelations(t *testing.T) {
 
 func TestServiceAccountsListError(t *testing.T) {
 	client := fake.NewClientset()
-	client.PrependReactor("list", "serviceaccounts", func(clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "serviceaccounts", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("sa-list")
 	})
 
@@ -121,7 +121,7 @@ func TestServiceAccountsListError(t *testing.T) {
 
 func TestServiceAccountGetError(t *testing.T) {
 	client := fake.NewClientset()
-	client.PrependReactor("get", "serviceaccounts", func(clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("get", "serviceaccounts", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("sa-get")
 	})
 

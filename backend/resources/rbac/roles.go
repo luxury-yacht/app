@@ -12,12 +12,12 @@ import (
 	"sort"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (s *Service) Role(namespace, name string) (*restypes.RoleDetails, error) {
+func (s *Service) Role(namespace, name string) (*types.RoleDetails, error) {
 	role, err := s.deps.KubernetesClient.RbacV1().Roles(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get role %s/%s: %v", namespace, name, err), "RBAC")
@@ -34,7 +34,7 @@ func (s *Service) Role(namespace, name string) (*restypes.RoleDetails, error) {
 	return s.buildRoleDetails(role, bindings), nil
 }
 
-func (s *Service) Roles(namespace string) ([]*restypes.RoleDetails, error) {
+func (s *Service) Roles(namespace string) ([]*types.RoleDetails, error) {
 	roles, err := s.deps.KubernetesClient.RbacV1().Roles(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to list roles in namespace %s: %v", namespace, err), "RBAC")
@@ -48,15 +48,15 @@ func (s *Service) Roles(namespace string) ([]*restypes.RoleDetails, error) {
 		bindings = rbList
 	}
 
-	results := make([]*restypes.RoleDetails, 0, len(roles.Items))
+	results := make([]*types.RoleDetails, 0, len(roles.Items))
 	for i := range roles.Items {
 		results = append(results, s.buildRoleDetails(&roles.Items[i], bindings))
 	}
 	return results, nil
 }
 
-func (s *Service) buildRoleDetails(role *rbacv1.Role, bindings *rbacv1.RoleBindingList) *restypes.RoleDetails {
-	details := &restypes.RoleDetails{
+func (s *Service) buildRoleDetails(role *rbacv1.Role, bindings *rbacv1.RoleBindingList) *types.RoleDetails {
+	details := &types.RoleDetails{
 		Kind:        "Role",
 		Name:        role.Name,
 		Namespace:   role.Namespace,
@@ -66,7 +66,7 @@ func (s *Service) buildRoleDetails(role *rbacv1.Role, bindings *rbacv1.RoleBindi
 	}
 
 	for _, rule := range role.Rules {
-		details.Rules = append(details.Rules, restypes.PolicyRule{
+		details.Rules = append(details.Rules, types.PolicyRule{
 			APIGroups:       rule.APIGroups,
 			Resources:       rule.Resources,
 			ResourceNames:   rule.ResourceNames,

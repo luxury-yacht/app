@@ -11,12 +11,12 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (s *Service) PersistentVolume(name string) (*restypes.PersistentVolumeDetails, error) {
+func (s *Service) PersistentVolume(name string) (*types.PersistentVolumeDetails, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
@@ -30,7 +30,7 @@ func (s *Service) PersistentVolume(name string) (*restypes.PersistentVolumeDetai
 	return s.processPersistentVolumeDetails(pv), nil
 }
 
-func (s *Service) PersistentVolumes() ([]*restypes.PersistentVolumeDetails, error) {
+func (s *Service) PersistentVolumes() ([]*types.PersistentVolumeDetails, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
@@ -41,7 +41,7 @@ func (s *Service) PersistentVolumes() ([]*restypes.PersistentVolumeDetails, erro
 		return nil, fmt.Errorf("failed to list persistent volumes: %v", err)
 	}
 
-	var detailsList []*restypes.PersistentVolumeDetails
+	var detailsList []*types.PersistentVolumeDetails
 	for i := range pvs.Items {
 		detailsList = append(detailsList, s.processPersistentVolumeDetails(&pvs.Items[i]))
 	}
@@ -49,8 +49,8 @@ func (s *Service) PersistentVolumes() ([]*restypes.PersistentVolumeDetails, erro
 	return detailsList, nil
 }
 
-func (s *Service) processPersistentVolumeDetails(pv *corev1.PersistentVolume) *restypes.PersistentVolumeDetails {
-	details := &restypes.PersistentVolumeDetails{
+func (s *Service) processPersistentVolumeDetails(pv *corev1.PersistentVolume) *types.PersistentVolumeDetails {
+	details := &types.PersistentVolumeDetails{
 		Kind:          "PersistentVolume",
 		Name:          pv.Name,
 		Age:           common.FormatAge(pv.CreationTimestamp.Time),
@@ -77,13 +77,13 @@ func (s *Service) processPersistentVolumeDetails(pv *corev1.PersistentVolume) *r
 	}
 
 	if pv.Spec.ClaimRef != nil {
-		details.ClaimRef = &restypes.ClaimReference{
+		details.ClaimRef = &types.ClaimReference{
 			Namespace: pv.Spec.ClaimRef.Namespace,
 			Name:      pv.Spec.ClaimRef.Name,
 		}
 	}
 
-	volumeSource := restypes.VolumeSourceInfo{Details: make(map[string]string)}
+	volumeSource := types.VolumeSourceInfo{Details: make(map[string]string)}
 
 	switch {
 	case pv.Spec.HostPath != nil:

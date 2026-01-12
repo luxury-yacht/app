@@ -11,12 +11,12 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (s *Service) NetworkPolicy(namespace, name string) (*restypes.NetworkPolicyDetails, error) {
+func (s *Service) NetworkPolicy(namespace, name string) (*types.NetworkPolicyDetails, error) {
 	np, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get network policy %s/%s: %v", namespace, name, err), "ResourceLoader")
@@ -25,14 +25,14 @@ func (s *Service) NetworkPolicy(namespace, name string) (*restypes.NetworkPolicy
 	return buildNetworkPolicyDetails(np), nil
 }
 
-func (s *Service) NetworkPolicies(namespace string) ([]*restypes.NetworkPolicyDetails, error) {
+func (s *Service) NetworkPolicies(namespace string) ([]*types.NetworkPolicyDetails, error) {
 	policies, err := s.deps.KubernetesClient.NetworkingV1().NetworkPolicies(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to list network policies in namespace %s: %v", namespace, err), "ResourceLoader")
 		return nil, fmt.Errorf("failed to list network policies: %v", err)
 	}
 
-	var results []*restypes.NetworkPolicyDetails
+	var results []*types.NetworkPolicyDetails
 	for i := range policies.Items {
 		np := policies.Items[i]
 		results = append(results, buildNetworkPolicyDetails(&np))
@@ -41,8 +41,8 @@ func (s *Service) NetworkPolicies(namespace string) ([]*restypes.NetworkPolicyDe
 	return results, nil
 }
 
-func buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *restypes.NetworkPolicyDetails {
-	details := &restypes.NetworkPolicyDetails{
+func buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *types.NetworkPolicyDetails {
+	details := &types.NetworkPolicyDetails{
 		Kind:        "NetworkPolicy",
 		Name:        np.Name,
 		Namespace:   np.Namespace,
@@ -57,9 +57,9 @@ func buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *restypes.Network
 	}
 
 	for _, ingress := range np.Spec.Ingress {
-		rule := restypes.NetworkPolicyRule{}
+		rule := types.NetworkPolicyRule{}
 		for _, from := range ingress.From {
-			peer := restypes.NetworkPolicyPeer{}
+			peer := types.NetworkPolicyPeer{}
 			if from.PodSelector != nil {
 				peer.PodSelector = from.PodSelector.MatchLabels
 			}
@@ -67,7 +67,7 @@ func buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *restypes.Network
 				peer.NamespaceSelector = from.NamespaceSelector.MatchLabels
 			}
 			if from.IPBlock != nil {
-				peer.IPBlock = &restypes.IPBlock{
+				peer.IPBlock = &types.IPBlock{
 					CIDR:   from.IPBlock.CIDR,
 					Except: from.IPBlock.Except,
 				}
@@ -81,9 +81,9 @@ func buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *restypes.Network
 	}
 
 	for _, egress := range np.Spec.Egress {
-		rule := restypes.NetworkPolicyRule{}
+		rule := types.NetworkPolicyRule{}
 		for _, to := range egress.To {
-			peer := restypes.NetworkPolicyPeer{}
+			peer := types.NetworkPolicyPeer{}
 			if to.PodSelector != nil {
 				peer.PodSelector = to.PodSelector.MatchLabels
 			}
@@ -91,7 +91,7 @@ func buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *restypes.Network
 				peer.NamespaceSelector = to.NamespaceSelector.MatchLabels
 			}
 			if to.IPBlock != nil {
-				peer.IPBlock = &restypes.IPBlock{
+				peer.IPBlock = &types.IPBlock{
 					CIDR:   to.IPBlock.CIDR,
 					Except: to.IPBlock.Except,
 				}
@@ -123,8 +123,8 @@ func buildNetworkPolicyDetails(np *networkingv1.NetworkPolicy) *restypes.Network
 	return details
 }
 
-func networkPolicyPort(port networkingv1.NetworkPolicyPort) restypes.NetworkPolicyPort {
-	var npPort restypes.NetworkPolicyPort
+func networkPolicyPort(port networkingv1.NetworkPolicyPort) types.NetworkPolicyPort {
+	var npPort types.NetworkPolicyPort
 	if port.Protocol != nil {
 		npPort.Protocol = string(*port.Protocol)
 	}

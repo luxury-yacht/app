@@ -14,7 +14,7 @@ import (
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	informers "k8s.io/client-go/informers"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 )
 
 func TestStopObjectCatalogCancelsAndResets(t *testing.T) {
@@ -182,7 +182,7 @@ func TestWaitForFactoriesRespectContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	factory := informers.NewSharedInformerFactory(clientgofake.NewClientset(), 0)
+	factory := informers.NewSharedInformerFactory(cgofake.NewClientset(), 0)
 	// ensure at least one informer is registered
 	factory.Core().V1().Pods()
 

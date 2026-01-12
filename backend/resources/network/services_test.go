@@ -16,7 +16,7 @@ import (
 	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -148,7 +148,7 @@ func TestManagerServiceDetails(t *testing.T) {
 		}},
 	}
 
-	client := clientgofake.NewClientset(service, slice)
+	client := fake.NewClientset(service, slice)
 	manager := newManager(t, client)
 
 	detail, err := manager.GetService("default", "web")
@@ -162,7 +162,7 @@ func TestManagerServiceDetails(t *testing.T) {
 }
 
 func TestManagerServiceErrorWhenGetFails(t *testing.T) {
-	client := clientgofake.NewClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("get", "services", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("boom")
 	})
@@ -186,7 +186,7 @@ func TestManagerServicesHandlesEndpointListError(t *testing.T) {
 		},
 	}
 
-	client := clientgofake.NewClientset(service)
+	client := fake.NewClientset(service)
 	client.PrependReactor("list", "endpointslices", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("endpoint slices down")
 	})
@@ -220,7 +220,7 @@ func TestManagerServicesReflectsPendingLoadBalancer(t *testing.T) {
 		},
 	}
 
-	client := clientgofake.NewClientset(service)
+	client := fake.NewClientset(service)
 	manager := newManager(t, client)
 
 	detail, err := manager.GetService("default", "lb-web")
@@ -278,7 +278,7 @@ func TestManagerServicesLoadBalancerActiveWhenIngressPresent(t *testing.T) {
 		}},
 	}
 
-	client := clientgofake.NewClientset(service, slice)
+	client := fake.NewClientset(service, slice)
 	manager := newManager(t, client)
 
 	detail, err := manager.GetService("default", "lb-active")
@@ -289,7 +289,7 @@ func TestManagerServicesLoadBalancerActiveWhenIngressPresent(t *testing.T) {
 }
 
 func TestManagerServiceErrors(t *testing.T) {
-	client := clientgofake.NewClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("get", "services", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("boom")
 	})
@@ -304,7 +304,7 @@ func TestManagerServiceErrors(t *testing.T) {
 }
 
 func TestManagerServicesListError(t *testing.T) {
-	client := clientgofake.NewClientset()
+	client := fake.NewClientset()
 	client.PrependReactor("list", "services", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("list failed")
 	})
@@ -327,7 +327,7 @@ func TestManagerServicesBuildsFromEndpointSlices(t *testing.T) {
 			Ports:     []corev1.ServicePort{{Port: 80}},
 		},
 	}
-	client := clientgofake.NewClientset(svc)
+	client := fake.NewClientset(svc)
 	manager := NewService(common.Dependencies{
 		KubernetesClient: client,
 		Logger:           testsupport.NoopLogger{},

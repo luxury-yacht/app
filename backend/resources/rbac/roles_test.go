@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	clientgotesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func TestManagerRoleIncludesBindings(t *testing.T) {
@@ -85,7 +85,7 @@ func TestManagerRoleSkipsBindingsOnListFailure(t *testing.T) {
 	}
 
 	client := fake.NewClientset(role)
-	client.PrependReactor("list", "rolebindings", func(action clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "rolebindings", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom")
 	})
 
@@ -109,7 +109,7 @@ func TestManagerRoleSkipsBindingsOnListFailure(t *testing.T) {
 
 func TestRolesListError(t *testing.T) {
 	client := fake.NewClientset()
-	client.PrependReactor("list", "roles", func(clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "roles", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom-roles")
 	})
 
@@ -129,7 +129,7 @@ func TestRoleWarnsWhenBindingsListFails(t *testing.T) {
 		}},
 	}
 	client := fake.NewClientset(role)
-	client.PrependReactor("list", "rolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "rolebindings", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("rb-fail")
 	})
 

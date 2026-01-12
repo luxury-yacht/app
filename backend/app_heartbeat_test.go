@@ -17,11 +17,11 @@ import (
 
 	"k8s.io/client-go/discovery"
 	fakediscovery "k8s.io/client-go/discovery/fake"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	restfake "k8s.io/client-go/rest/fake"
-	k8stesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func TestRunHeartbeatNoClientSafeguards(t *testing.T) {
@@ -31,7 +31,7 @@ func TestRunHeartbeatNoClientSafeguards(t *testing.T) {
 
 func TestRunHeartbeatSkipsDuringRebuild(t *testing.T) {
 	app := NewApp()
-	app.client = clientgofake.NewClientset()
+	app.client = cgofake.NewClientset()
 	app.transportMu.Lock()
 	app.transportRebuildInProgress = true
 	app.transportMu.Unlock()
@@ -44,7 +44,7 @@ func TestRunHeartbeatFailureUpdatesStatus(t *testing.T) {
 	app.Ctx = context.Background()
 
 	disco := &heartbeatDiscovery{
-		FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &k8stesting.Fake{}},
+		FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &cgotesting.Fake{}},
 		restClient: &restfake.RESTClient{
 			NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
 			Client: restfake.CreateHTTPClient(func(*http.Request) (*http.Response, error) {
@@ -52,7 +52,7 @@ func TestRunHeartbeatFailureUpdatesStatus(t *testing.T) {
 			}),
 		},
 	}
-	app.client = &heartbeatClientSet{Clientset: clientgofake.NewClientset(), disco: disco}
+	app.client = &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: disco}
 
 	app.runHeartbeat()
 	if app.connectionStatus != ConnectionStateOffline {
@@ -66,7 +66,7 @@ func TestRunHeartbeatSuccess(t *testing.T) {
 	app.Ctx = context.Background()
 
 	disco := &heartbeatDiscovery{
-		FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &k8stesting.Fake{}},
+		FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &cgotesting.Fake{}},
 		restClient: &restfake.RESTClient{
 			NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
 			Client: restfake.CreateHTTPClient(func(*http.Request) (*http.Response, error) {
@@ -78,7 +78,7 @@ func TestRunHeartbeatSuccess(t *testing.T) {
 			}),
 		},
 	}
-	app.client = &heartbeatClientSet{Clientset: clientgofake.NewClientset(), disco: disco}
+	app.client = &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: disco}
 
 	app.runHeartbeat()
 	if app.connectionStatus == ConnectionStateOffline {
@@ -110,7 +110,7 @@ func (h *heartbeatDiscovery) RESTClient() rest.Interface {
 
 // heartbeatClientSet overrides Discovery() to return a custom discovery impl.
 type heartbeatClientSet struct {
-	*clientgofake.Clientset
+	*cgofake.Clientset
 	disco *heartbeatDiscovery
 }
 

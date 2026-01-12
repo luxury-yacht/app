@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/fake"
 	kubetesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/resources/nodes"
@@ -122,7 +122,7 @@ func TestServiceDrainDeletesPods(t *testing.T) {
 	}
 }
 
-func newNodeService(t *testing.T) (*nodes.Service, *clientgofake.Clientset, *corev1.Node) {
+func newNodeService(t *testing.T) (*nodes.Service, *fake.Clientset, *corev1.Node) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -173,7 +173,7 @@ func newNodeService(t *testing.T) (*nodes.Service, *clientgofake.Clientset, *cor
 	podB.Spec.NodeName = node.Name
 	podB.Status.ContainerStatuses = []corev1.ContainerStatus{{Name: "app", RestartCount: 0, Ready: true}}
 
-	client := clientgofake.NewClientset(node.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
+	client := fake.NewClientset(node.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(ctx),
@@ -185,7 +185,7 @@ func newNodeService(t *testing.T) (*nodes.Service, *clientgofake.Clientset, *cor
 	return service, client, node
 }
 
-func addNodePatchReactor(t *testing.T, client *clientgofake.Clientset) {
+func addNodePatchReactor(t *testing.T, client *fake.Clientset) {
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}

@@ -11,13 +11,13 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // CustomResourceDefinition returns a detailed view for a single CRD.
-func (s *Service) CustomResourceDefinition(name string) (*restypes.CustomResourceDefinitionDetails, error) {
+func (s *Service) CustomResourceDefinition(name string) (*types.CustomResourceDefinitionDetails, error) {
 	if err := s.ensureAPIExtensions("CustomResourceDefinition"); err != nil {
 		return nil, err
 	}
@@ -33,7 +33,7 @@ func (s *Service) CustomResourceDefinition(name string) (*restypes.CustomResourc
 }
 
 // CustomResourceDefinitions returns detailed views for all CRDs.
-func (s *Service) CustomResourceDefinitions() ([]*restypes.CustomResourceDefinitionDetails, error) {
+func (s *Service) CustomResourceDefinitions() ([]*types.CustomResourceDefinitionDetails, error) {
 	if err := s.ensureAPIExtensions("CustomResourceDefinition"); err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func (s *Service) CustomResourceDefinitions() ([]*restypes.CustomResourceDefinit
 		return nil, fmt.Errorf("failed to list CRDs: %v", err)
 	}
 
-	result := make([]*restypes.CustomResourceDefinitionDetails, 0, len(crds.Items))
+	result := make([]*types.CustomResourceDefinitionDetails, 0, len(crds.Items))
 	for i := range crds.Items {
 		result = append(result, s.buildCRDDetails(&crds.Items[i]))
 	}
@@ -53,8 +53,8 @@ func (s *Service) CustomResourceDefinitions() ([]*restypes.CustomResourceDefinit
 	return result, nil
 }
 
-func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition) *restypes.CustomResourceDefinitionDetails {
-	details := &restypes.CustomResourceDefinitionDetails{
+func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition) *types.CustomResourceDefinitionDetails {
+	details := &types.CustomResourceDefinitionDetails{
 		Kind:        "CustomResourceDefinition",
 		Name:        crd.Name,
 		Group:       crd.Spec.Group,
@@ -65,7 +65,7 @@ func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition)
 	}
 
 	for _, version := range crd.Spec.Versions {
-		entry := restypes.CRDVersion{
+		entry := types.CRDVersion{
 			Name:       version.Name,
 			Served:     version.Served,
 			Storage:    version.Storage,
@@ -77,7 +77,7 @@ func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition)
 		details.Versions = append(details.Versions, entry)
 	}
 
-	details.Names = restypes.CRDNames{
+	details.Names = types.CRDNames{
 		Plural:     crd.Spec.Names.Plural,
 		Singular:   crd.Spec.Names.Singular,
 		Kind:       crd.Spec.Names.Kind,
@@ -91,7 +91,7 @@ func (s *Service) buildCRDDetails(crd *apiextensionsv1.CustomResourceDefinition)
 	}
 
 	for _, condition := range crd.Status.Conditions {
-		details.Conditions = append(details.Conditions, restypes.CRDCondition{
+		details.Conditions = append(details.Conditions, types.CRDCondition{
 			Kind:               string(condition.Type),
 			Status:             string(condition.Status),
 			Reason:             condition.Reason,

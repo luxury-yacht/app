@@ -11,7 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 	kubetesting "k8s.io/client-go/testing"
 )
 
@@ -67,16 +67,16 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 	tests := []struct {
 		name   string
 		kind   string
-		object *clientgofake.Clientset
-		get    func(context.Context, *clientgofake.Clientset) (map[string]string, error)
+		object *cgofake.Clientset
+		get    func(context.Context, *cgofake.Clientset) (map[string]string, error)
 	}{
 		{
 			name: "deployment",
 			kind: "Deployment",
-			object: clientgofake.NewClientset(
+			object: cgofake.NewClientset(
 				deployment.DeepCopy(),
 			),
-			get: func(ctx context.Context, client *clientgofake.Clientset) (map[string]string, error) {
+			get: func(ctx context.Context, client *cgofake.Clientset) (map[string]string, error) {
 				result, err := client.AppsV1().Deployments("default").Get(ctx, "demo", metav1.GetOptions{})
 				if err != nil {
 					return nil, err
@@ -87,10 +87,10 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 		{
 			name: "statefulset",
 			kind: "StatefulSet",
-			object: clientgofake.NewClientset(
+			object: cgofake.NewClientset(
 				statefulSet.DeepCopy(),
 			),
-			get: func(ctx context.Context, client *clientgofake.Clientset) (map[string]string, error) {
+			get: func(ctx context.Context, client *cgofake.Clientset) (map[string]string, error) {
 				result, err := client.AppsV1().StatefulSets("default").Get(ctx, "demo", metav1.GetOptions{})
 				if err != nil {
 					return nil, err
@@ -101,10 +101,10 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 		{
 			name: "daemonset",
 			kind: "DaemonSet",
-			object: clientgofake.NewClientset(
+			object: cgofake.NewClientset(
 				daemonSet.DeepCopy(),
 			),
-			get: func(ctx context.Context, client *clientgofake.Clientset) (map[string]string, error) {
+			get: func(ctx context.Context, client *cgofake.Clientset) (map[string]string, error) {
 				result, err := client.AppsV1().DaemonSets("default").Get(ctx, "demo", metav1.GetOptions{})
 				if err != nil {
 					return nil, err
@@ -152,7 +152,7 @@ func TestRestartWorkloadErrors(t *testing.T) {
 	t.Helper()
 
 	app := &App{
-		client: clientgofake.NewClientset(),
+		client: cgofake.NewClientset(),
 		logger: NewLogger(10),
 	}
 	app.clusterClients = map[string]*clusterClients{
@@ -203,7 +203,7 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			client := clientgofake.NewClientset()
+			client := cgofake.NewClientset()
 			var observed capture
 			client.Fake.PrependReactor("update", tc.resource, func(action kubetesting.Action) (handled bool, ret runtime.Object, err error) {
 				updateAction, ok := action.(kubetesting.UpdateAction)
@@ -249,7 +249,7 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 func TestScaleWorkloadErrors(t *testing.T) {
 	t.Helper()
 
-	client := clientgofake.NewClientset()
+	client := cgofake.NewClientset()
 	app := &App{
 		client: client,
 		logger: NewLogger(10),

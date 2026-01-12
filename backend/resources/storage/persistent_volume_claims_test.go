@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	clientgotesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 )
@@ -32,7 +32,7 @@ func TestPersistentVolumesRequireClient(t *testing.T) {
 func TestPersistentVolumeLogsErrorOnFailure(t *testing.T) {
 	logger := &capturingLogger{}
 	client := fake.NewClientset()
-	client.PrependReactor("get", "persistentvolumes", func(clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("get", "persistentvolumes", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("boom")
 	})
 
@@ -55,7 +55,7 @@ func TestPersistentVolumeLogsErrorOnFailure(t *testing.T) {
 func TestPersistentVolumeClaimsListLogsError(t *testing.T) {
 	logger := &capturingLogger{}
 	client := fake.NewClientset()
-	client.PrependReactor("list", "persistentvolumeclaims", func(clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "persistentvolumeclaims", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("no pvc list")
 	})
 

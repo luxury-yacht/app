@@ -11,12 +11,12 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (s *Service) ClusterRole(name string) (*restypes.ClusterRoleDetails, error) {
+func (s *Service) ClusterRole(name string) (*types.ClusterRoleDetails, error) {
 	cr, err := s.deps.KubernetesClient.RbacV1().ClusterRoles().Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get cluster role %s: %v", name, err), "RBAC")
@@ -25,7 +25,7 @@ func (s *Service) ClusterRole(name string) (*restypes.ClusterRoleDetails, error)
 	return s.buildClusterRoleDetails(cr, nil, nil), nil
 }
 
-func (s *Service) ClusterRoles() ([]*restypes.ClusterRoleDetails, error) {
+func (s *Service) ClusterRoles() ([]*types.ClusterRoleDetails, error) {
 	roles, err := s.deps.KubernetesClient.RbacV1().ClusterRoles().List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to list cluster roles: %v", err), "RBAC")
@@ -45,7 +45,7 @@ func (s *Service) ClusterRoles() ([]*restypes.ClusterRoleDetails, error) {
 		}
 	}
 
-	results := make([]*restypes.ClusterRoleDetails, 0, len(roles.Items))
+	results := make([]*types.ClusterRoleDetails, 0, len(roles.Items))
 	for i := range roles.Items {
 		role := roles.Items[i]
 		results = append(results, s.buildClusterRoleDetails(&role, crbMap[role.Name], nil))
@@ -53,8 +53,8 @@ func (s *Service) ClusterRoles() ([]*restypes.ClusterRoleDetails, error) {
 	return results, nil
 }
 
-func (s *Service) buildClusterRoleDetails(cr *rbacv1.ClusterRole, clusterRoleBindings []string, roleBindings []string) *restypes.ClusterRoleDetails {
-	details := &restypes.ClusterRoleDetails{
+func (s *Service) buildClusterRoleDetails(cr *rbacv1.ClusterRole, clusterRoleBindings []string, roleBindings []string) *types.ClusterRoleDetails {
+	details := &types.ClusterRoleDetails{
 		Kind:                "ClusterRole",
 		Name:                cr.Name,
 		Age:                 common.FormatAge(cr.CreationTimestamp.Time),
@@ -65,7 +65,7 @@ func (s *Service) buildClusterRoleDetails(cr *rbacv1.ClusterRole, clusterRoleBin
 	}
 
 	for _, rule := range cr.Rules {
-		details.Rules = append(details.Rules, restypes.PolicyRule{
+		details.Rules = append(details.Rules, types.PolicyRule{
 			APIGroups:       rule.APIGroups,
 			Resources:       rule.Resources,
 			ResourceNames:   rule.ResourceNames,
@@ -75,7 +75,7 @@ func (s *Service) buildClusterRoleDetails(cr *rbacv1.ClusterRole, clusterRoleBin
 	}
 
 	if cr.AggregationRule != nil {
-		agg := &restypes.AggregationRule{}
+		agg := &types.AggregationRule{}
 		for _, selector := range cr.AggregationRule.ClusterRoleSelectors {
 			agg.ClusterRoleSelectors = append(agg.ClusterRoleSelectors, selector.MatchLabels)
 		}

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	apiextfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
@@ -56,19 +56,19 @@ func TestCustomResourceDefinition(t *testing.T) {
 		},
 	}
 
-	client := apiextfake.NewClientset(crd)
+	client := fake.NewClientset(crd)
 	var ensureCalled bool
 	svc := NewService(common.Dependencies{
-			Context:             context.Background(),
-			Logger:              testsupport.NoopLogger{},
-			APIExtensionsClient: client,
-			EnsureAPIExtensions: func(resource string) error {
-				ensureCalled = true
-				if resource != "CustomResourceDefinition" {
-					t.Fatalf("EnsureAPIExtensions received unexpected resource %q", resource)
-				}
-				return nil
-			},
+		Context:             context.Background(),
+		Logger:              testsupport.NoopLogger{},
+		APIExtensionsClient: client,
+		EnsureAPIExtensions: func(resource string) error {
+			ensureCalled = true
+			if resource != "CustomResourceDefinition" {
+				t.Fatalf("EnsureAPIExtensions received unexpected resource %q", resource)
+			}
+			return nil
+		},
 	})
 
 	details, err := svc.CustomResourceDefinition("widgets.example.com")
@@ -122,7 +122,7 @@ func TestCustomResourceDefinitionsList(t *testing.T) {
 		},
 	}
 
-	client := apiextfake.NewClientset(crd1, crd2)
+	client := fake.NewClientset(crd1, crd2)
 	svc := NewService(common.Dependencies{
 		Context:             context.Background(),
 		Logger:              testsupport.NoopLogger{},

@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 )
 
@@ -200,7 +200,7 @@ func TestResourceWrappersRequireClient(t *testing.T) {
 
 func TestWrapperHappyPathsWithFakeClients(t *testing.T) {
 	app := wrapperTestApp(t)
-	app.client = clientgofake.NewClientset(
+	app.client = cgofake.NewClientset(
 		&admissionv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "mw"}},
 		&admissionv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "vw"}},
 	)
@@ -230,7 +230,7 @@ func TestNetworkWrappersHappyPath(t *testing.T) {
 	pathType := networkingv1.PathTypePrefix
 	endpointPort := int32(8080)
 
-	app.client = clientgofake.NewClientset(
+	app.client = cgofake.NewClientset(
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default", CreationTimestamp: now},
 			Spec: corev1.ServiceSpec{
@@ -315,7 +315,7 @@ func TestConfigWrappersHappyPath(t *testing.T) {
 	app := wrapperTestApp(t)
 	app.Ctx = context.Background()
 
-	app.client = clientgofake.NewClientset(
+	app.client = cgofake.NewClientset(
 		&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: "settings", Namespace: "team-a", CreationTimestamp: metav1.NewTime(time.Now().Add(-1 * time.Hour))},
 			Data:       map[string]string{"env": "prod"},
@@ -355,7 +355,7 @@ func TestRBACWrappersHappyPath(t *testing.T) {
 	}
 	serviceAccount := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "builder", Namespace: "team-a"}}
 
-	app.client = clientgofake.NewClientset(clusterRole, clusterRoleBinding, role, roleBinding, serviceAccount)
+	app.client = cgofake.NewClientset(clusterRole, clusterRoleBinding, role, roleBinding, serviceAccount)
 
 	if _, err := app.GetClusterRole("viewer"); err != nil {
 		t.Fatalf("expected ClusterRole wrapper to succeed: %v", err)
@@ -404,7 +404,7 @@ func TestStorageWrappersHappyPath(t *testing.T) {
 		Provisioner: "kubernetes.io/no-provisioner",
 	}
 
-	app.client = clientgofake.NewClientset(pv, pvc, sc)
+	app.client = cgofake.NewClientset(pv, pvc, sc)
 
 	if _, err := app.GetPersistentVolume("pv1"); err != nil {
 		t.Fatalf("expected PV wrapper to succeed: %v", err)

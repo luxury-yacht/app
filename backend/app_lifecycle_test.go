@@ -19,7 +19,7 @@ import (
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 )
@@ -52,7 +52,7 @@ func TestSetupRefreshSubsystemRequiresContext(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = nil
 
-	err := app.setupRefreshSubsystem(clientgofake.NewClientset(), "")
+	err := app.setupRefreshSubsystem(cgofake.NewClientset(), "")
 	require.Error(t, err)
 }
 
@@ -67,7 +67,7 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	app.apiextensionsClient = &apiextensionsclientset.Clientset{}
 	app.restConfig = &rest.Config{}
 
-	fakeClient := clientgofake.NewClientset()
+	fakeClient := cgofake.NewClientset()
 	manager := refresh.NewManager(nil, nil, nil, nil, nil)
 	handler := http.NewServeMux()
 
@@ -196,7 +196,7 @@ func TestStdLogBridgeWritesToLogger(t *testing.T) {
 
 func TestInitKubernetesClientSkipsWhenAlreadyInitialised(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.client = clientgofake.NewClientset()
+	app.client = cgofake.NewClientset()
 
 	err := app.initKubernetesClient()
 	require.NoError(t, err)

@@ -14,7 +14,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/parallel"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,11 +23,11 @@ import (
 )
 
 // Local aliases for shared pod detail types.
-type PodDetailInfo = restypes.PodDetailInfo
-type PodDetailInfoContainer = restypes.PodDetailInfoContainer
+type PodDetailInfo = types.PodDetailInfo
+type PodDetailInfoContainer = types.PodDetailInfoContainer
 
 // Helper to fetch a single pod with full details
-func (s *Service) fetchSinglePodFull(namespace, name string) (*restypes.PodDetailInfo, error) {
+func (s *Service) fetchSinglePodFull(namespace, name string) (*types.PodDetailInfo, error) {
 	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to fetch pod %s/%s from Kubernetes API: %v", namespace, name, err), "Pod")
@@ -195,7 +195,7 @@ func (s *Service) getNodeIP(nodeName string) string {
 }
 
 // buildPodDetailInfo creates comprehensive PodDetailInfo from a pod
-func (s *Service) buildPodDetailInfo(pod corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics, rsToDeployment map[string]string) *restypes.PodDetailInfo {
+func (s *Service) buildPodDetailInfo(pod corev1.Pod, podMetrics map[string]*metricsv1beta1.PodMetrics, rsToDeployment map[string]string) *types.PodDetailInfo {
 	// Calculate resources
 	cpuRequest, cpuLimit, memRequest, memLimit := calculatePodResources(pod)
 
@@ -208,7 +208,7 @@ func (s *Service) buildPodDetailInfo(pod corev1.Pod, podMetrics map[string]*metr
 	// Get status
 	status := getPodStatus(pod)
 
-	return &restypes.PodDetailInfo{
+	return &types.PodDetailInfo{
 		// Basic info
 		Name:       pod.Name,
 		Namespace:  pod.Namespace,
@@ -643,8 +643,8 @@ func buildSecurityContextMap(sc *corev1.PodSecurityContext) map[string]any {
 }
 
 // buildContainerDetails builds detailed container information
-func buildContainerDetails(container corev1.Container, statuses []corev1.ContainerStatus, index int) restypes.PodDetailInfoContainer {
-	detail := restypes.PodDetailInfoContainer{
+func buildContainerDetails(container corev1.Container, statuses []corev1.ContainerStatus, index int) types.PodDetailInfoContainer {
+	detail := types.PodDetailInfoContainer{
 		Name:            container.Name,
 		Image:           container.Image,
 		ImagePullPolicy: string(container.ImagePullPolicy),
@@ -838,11 +838,11 @@ func (s *Service) NodeIP(nodeName string) string {
 }
 
 // SummarizePod converts a pod object and optional metrics into a PodSimpleInfo for list views.
-func SummarizePod(pod corev1.Pod, metrics map[string]*metricsv1beta1.PodMetrics, ownerKind, ownerName string) restypes.PodSimpleInfo {
+func SummarizePod(pod corev1.Pod, metrics map[string]*metricsv1beta1.PodMetrics, ownerKind, ownerName string) types.PodSimpleInfo {
 	cpuRequest, cpuLimit, memRequest, memLimit := CalculatePodResources(pod)
 	cpuUsage, memUsage := PodUsageFromMetrics(pod.Name, metrics)
 
-	return restypes.PodSimpleInfo{
+	return types.PodSimpleInfo{
 		Kind:       "Pod",
 		Name:       pod.Name,
 		Namespace:  pod.Namespace,

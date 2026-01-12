@@ -11,13 +11,13 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ValidatingWebhookConfiguration returns details for a single validating configuration.
-func (s *Service) ValidatingWebhookConfiguration(name string) (*restypes.ValidatingWebhookConfigurationDetails, error) {
+func (s *Service) ValidatingWebhookConfiguration(name string) (*types.ValidatingWebhookConfigurationDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -33,7 +33,7 @@ func (s *Service) ValidatingWebhookConfiguration(name string) (*restypes.Validat
 }
 
 // ValidatingWebhookConfigurations lists all validating webhook configurations.
-func (s *Service) ValidatingWebhookConfigurations() ([]*restypes.ValidatingWebhookConfigurationDetails, error) {
+func (s *Service) ValidatingWebhookConfigurations() ([]*types.ValidatingWebhookConfigurationDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -45,7 +45,7 @@ func (s *Service) ValidatingWebhookConfigurations() ([]*restypes.ValidatingWebho
 		return nil, fmt.Errorf("failed to list validating webhook configurations: %v", err)
 	}
 
-	result := make([]*restypes.ValidatingWebhookConfigurationDetails, 0, len(configs.Items))
+	result := make([]*types.ValidatingWebhookConfigurationDetails, 0, len(configs.Items))
 	for i := range configs.Items {
 		result = append(result, s.buildValidatingWebhookConfigurationDetails(&configs.Items[i]))
 	}
@@ -53,8 +53,8 @@ func (s *Service) ValidatingWebhookConfigurations() ([]*restypes.ValidatingWebho
 	return result, nil
 }
 
-func (s *Service) buildValidatingWebhookConfigurationDetails(config *admissionregistrationv1.ValidatingWebhookConfiguration) *restypes.ValidatingWebhookConfigurationDetails {
-	details := &restypes.ValidatingWebhookConfigurationDetails{
+func (s *Service) buildValidatingWebhookConfigurationDetails(config *admissionregistrationv1.ValidatingWebhookConfiguration) *types.ValidatingWebhookConfigurationDetails {
+	details := &types.ValidatingWebhookConfigurationDetails{
 		Kind:        "ValidatingWebhookConfiguration",
 		Name:        config.Name,
 		Age:         common.FormatAge(config.CreationTimestamp.Time),
@@ -72,8 +72,8 @@ func (s *Service) buildValidatingWebhookConfigurationDetails(config *admissionre
 	return details
 }
 
-func convertValidatingWebhooks(webhooks []admissionregistrationv1.ValidatingWebhook) []restypes.WebhookDetails {
-	result := make([]restypes.WebhookDetails, 0, len(webhooks))
+func convertValidatingWebhooks(webhooks []admissionregistrationv1.ValidatingWebhook) []types.WebhookDetails {
+	result := make([]types.WebhookDetails, 0, len(webhooks))
 	for i := range webhooks {
 		result = append(result, convertWebhook(
 			webhooks[i].Name,

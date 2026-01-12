@@ -11,13 +11,13 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	policyv1 "k8s.io/api/policy/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // PodDisruptionBudget returns a detailed description for a single PDB.
-func (s *Service) PodDisruptionBudget(namespace, name string) (*restypes.PodDisruptionBudgetDetails, error) {
+func (s *Service) PodDisruptionBudget(namespace, name string) (*types.PodDisruptionBudgetDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -33,7 +33,7 @@ func (s *Service) PodDisruptionBudget(namespace, name string) (*restypes.PodDisr
 }
 
 // PodDisruptionBudgets returns detailed descriptions for all PDBs in the namespace.
-func (s *Service) PodDisruptionBudgets(namespace string) ([]*restypes.PodDisruptionBudgetDetails, error) {
+func (s *Service) PodDisruptionBudgets(namespace string) ([]*types.PodDisruptionBudgetDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -45,7 +45,7 @@ func (s *Service) PodDisruptionBudgets(namespace string) ([]*restypes.PodDisrupt
 		return nil, fmt.Errorf("failed to list pod disruption budgets: %v", err)
 	}
 
-	result := make([]*restypes.PodDisruptionBudgetDetails, 0, len(pdbs.Items))
+	result := make([]*types.PodDisruptionBudgetDetails, 0, len(pdbs.Items))
 	for i := range pdbs.Items {
 		result = append(result, s.buildPodDisruptionBudgetDetails(&pdbs.Items[i]))
 	}
@@ -53,8 +53,8 @@ func (s *Service) PodDisruptionBudgets(namespace string) ([]*restypes.PodDisrupt
 	return result, nil
 }
 
-func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBudget) *restypes.PodDisruptionBudgetDetails {
-	details := &restypes.PodDisruptionBudgetDetails{
+func (s *Service) buildPodDisruptionBudgetDetails(pdb *policyv1.PodDisruptionBudget) *types.PodDisruptionBudgetDetails {
+	details := &types.PodDisruptionBudgetDetails{
 		Kind:               "PodDisruptionBudget",
 		Name:               pdb.Name,
 		Namespace:          pdb.Namespace,

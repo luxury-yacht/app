@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
@@ -27,13 +27,13 @@ var logStreamFunc = func(pods corev1client.PodInterface, ctx context.Context, po
 }
 
 // LogFetcher aggregates logs from pods or workloads based on the provided request.
-func (s *Service) LogFetcher(req restypes.LogFetchRequest) restypes.LogFetchResponse {
+func (s *Service) LogFetcher(req types.LogFetchRequest) types.LogFetchResponse {
 	if s.deps.KubernetesClient == nil {
-		return restypes.LogFetchResponse{Error: "kubernetes client not initialized"}
+		return types.LogFetchResponse{Error: "kubernetes client not initialized"}
 	}
 
 	if req.Namespace == "" {
-		return restypes.LogFetchResponse{Error: "namespace is required"}
+		return types.LogFetchResponse{Error: "namespace is required"}
 	}
 
 	if req.TailLines <= 0 {
@@ -42,10 +42,10 @@ func (s *Service) LogFetcher(req restypes.LogFetchRequest) restypes.LogFetchResp
 
 	pods, err := s.resolveTargetPods(req)
 	if err != nil {
-		return restypes.LogFetchResponse{Error: err.Error()}
+		return types.LogFetchResponse{Error: err.Error()}
 	}
 
-	var allEntries []restypes.PodLogEntry
+	var allEntries []types.PodLogEntry
 	for _, podName := range pods {
 		entries, err := s.fetchPodLogs(req.Namespace, podName, req.Container, req.TailLines, req.Previous, req.SinceSeconds)
 		if err != nil {
@@ -70,7 +70,7 @@ func (s *Service) LogFetcher(req restypes.LogFetchRequest) restypes.LogFetchResp
 		return i < j
 	})
 
-	return restypes.LogFetchResponse{Entries: allEntries}
+	return types.LogFetchResponse{Entries: allEntries}
 }
 
 // PodContainers returns container names (including init containers) for the specified pod.
@@ -94,7 +94,7 @@ func (s *Service) PodContainers(namespace, podName string) ([]string, error) {
 	return containers, nil
 }
 
-func (s *Service) resolveTargetPods(req restypes.LogFetchRequest) ([]string, error) {
+func (s *Service) resolveTargetPods(req types.LogFetchRequest) ([]string, error) {
 	if req.WorkloadName != "" && req.WorkloadKind != "" {
 		return s.workloadPods(req.Namespace, req.WorkloadName, req.WorkloadKind)
 	}
@@ -174,7 +174,7 @@ func (s *Service) podsForCronJob(namespace, cronJobName string) ([]string, error
 	return podNames, nil
 }
 
-func (s *Service) fetchPodLogs(namespace, podName, container string, tailLines int, previous bool, sinceSeconds int64) ([]restypes.PodLogEntry, error) {
+func (s *Service) fetchPodLogs(namespace, podName, container string, tailLines int, previous bool, sinceSeconds int64) ([]types.PodLogEntry, error) {
 	pod, err := s.deps.KubernetesClient.CoreV1().Pods(namespace).Get(s.ctx(), podName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pod: %w", err)
@@ -205,7 +205,7 @@ func (s *Service) fetchPodLogs(namespace, podName, container string, tailLines i
 		}{Name: container, IsInit: false})
 	}
 
-	var entries []restypes.PodLogEntry
+	var entries []types.PodLogEntry
 	for _, c := range containersToFetch {
 		containerEntries, err := s.fetchContainerLogs(namespace, podName, c.Name, c.IsInit, tailLines, previous, sinceSeconds)
 		if err != nil {
@@ -218,7 +218,7 @@ func (s *Service) fetchPodLogs(namespace, podName, container string, tailLines i
 	return entries, nil
 }
 
-func (s *Service) fetchContainerLogs(namespace, podName, containerName string, isInit bool, tailLines int, previous bool, sinceSeconds int64) ([]restypes.PodLogEntry, error) {
+func (s *Service) fetchContainerLogs(namespace, podName, containerName string, isInit bool, tailLines int, previous bool, sinceSeconds int64) ([]types.PodLogEntry, error) {
 	logOptions := &corev1.PodLogOptions{
 		Container:  containerName,
 		Timestamps: true,
@@ -241,13 +241,13 @@ func (s *Service) fetchContainerLogs(namespace, podName, containerName string, i
 			strings.Contains(errStr, "container not found") ||
 			(strings.Contains(errStr, "previous terminated container") && strings.Contains(errStr, "not found")) ||
 			strings.Contains(errStr, "is not valid for pod") {
-			return []restypes.PodLogEntry{}, nil
+			return []types.PodLogEntry{}, nil
 		}
 		return nil, fmt.Errorf("failed to get log stream: %w", err)
 	}
 	defer stream.Close()
 
-	var entries []restypes.PodLogEntry
+	var entries []types.PodLogEntry
 	scanner := bufio.NewScanner(stream)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -259,7 +259,7 @@ func (s *Service) fetchContainerLogs(namespace, podName, containerName string, i
 			logLine = line
 		}
 
-		entries = append(entries, restypes.PodLogEntry{
+		entries = append(entries, types.PodLogEntry{
 			Timestamp: timestamp,
 			Pod:       podName,
 			Container: containerName,

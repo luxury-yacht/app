@@ -30,7 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
 type fakeKubeClient struct{}
@@ -109,7 +109,7 @@ items:
 	service := &Service{}
 	resources := service.extractResourcesFromManifest(manifest, "default")
 
-	require.Equal(t, []restypes.HelmResource{
+	require.Equal(t, []types.HelmResource{
 		{Kind: "ConfigMap", Name: "app-config", Namespace: "default"},
 		{Kind: "Deployment", Name: "web", Namespace: "staging"},
 		{Kind: "Service", Name: "web", Namespace: "prod"},
@@ -149,7 +149,7 @@ items:
 	service := &Service{}
 	resources := service.extractResourcesFromManifest(manifest, "team-default")
 
-	require.Equal(t, []restypes.HelmResource{
+	require.Equal(t, []types.HelmResource{
 		{Kind: "Secret", Name: "credentials", Namespace: "team-a"},
 		{Kind: "Service", Name: "svc", Namespace: "other"},
 	}, resources)

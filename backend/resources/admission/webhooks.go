@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -29,14 +29,14 @@ func convertWebhook(
 	sideEffects *admissionregistrationv1.SideEffectClass,
 	timeoutSeconds *int32,
 	reinvocationPolicy *admissionregistrationv1.ReinvocationPolicyType,
-) restypes.WebhookDetails {
-	details := restypes.WebhookDetails{
+) types.WebhookDetails {
+	details := types.WebhookDetails{
 		Name:                    name,
 		AdmissionReviewVersions: append([]string{}, admissionVersions...),
 	}
 
 	if clientConfig.Service != nil {
-		details.ClientConfig.Service = &restypes.WebhookService{
+		details.ClientConfig.Service = &types.WebhookService{
 			Namespace: clientConfig.Service.Namespace,
 			Name:      clientConfig.Service.Name,
 			Path:      clientConfig.Service.Path,
@@ -64,7 +64,7 @@ func convertWebhook(
 	}
 
 	for _, rule := range rules {
-		converted := restypes.WebhookRule{
+		converted := types.WebhookRule{
 			APIGroups:   append([]string{}, rule.APIGroups...),
 			APIVersions: append([]string{}, rule.APIVersions...),
 			Resources:   append([]string{}, rule.Resources...),
@@ -88,13 +88,13 @@ func convertWebhook(
 	return details
 }
 
-func convertSelector(selector *metav1.LabelSelector) *restypes.WebhookSelector {
-	converted := &restypes.WebhookSelector{}
+func convertSelector(selector *metav1.LabelSelector) *types.WebhookSelector {
+	converted := &types.WebhookSelector{}
 	if selector.MatchLabels != nil {
 		converted.MatchLabels = selector.MatchLabels
 	}
 	for _, expr := range selector.MatchExpressions {
-		converted.MatchExpressions = append(converted.MatchExpressions, restypes.WebhookSelectorExpression{
+		converted.MatchExpressions = append(converted.MatchExpressions, types.WebhookSelectorExpression{
 			Key:      expr.Key,
 			Operator: string(expr.Operator),
 			Values:   append([]string{}, expr.Values...),

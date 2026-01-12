@@ -12,14 +12,14 @@ import (
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/stretchr/testify/require"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // MutatingWebhookConfiguration returns details for a single mutating configuration.
-func (s *Service) MutatingWebhookConfiguration(name string) (*restypes.MutatingWebhookConfigurationDetails, error) {
+func (s *Service) MutatingWebhookConfiguration(name string) (*types.MutatingWebhookConfigurationDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -35,7 +35,7 @@ func (s *Service) MutatingWebhookConfiguration(name string) (*restypes.MutatingW
 }
 
 // MutatingWebhookConfigurations lists all mutating webhook configurations.
-func (s *Service) MutatingWebhookConfigurations() ([]*restypes.MutatingWebhookConfigurationDetails, error) {
+func (s *Service) MutatingWebhookConfigurations() ([]*types.MutatingWebhookConfigurationDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -47,7 +47,7 @@ func (s *Service) MutatingWebhookConfigurations() ([]*restypes.MutatingWebhookCo
 		return nil, fmt.Errorf("failed to list mutating webhook configurations: %v", err)
 	}
 
-	result := make([]*restypes.MutatingWebhookConfigurationDetails, 0, len(configs.Items))
+	result := make([]*types.MutatingWebhookConfigurationDetails, 0, len(configs.Items))
 	for i := range configs.Items {
 		result = append(result, s.buildMutatingWebhookConfigurationDetails(&configs.Items[i]))
 	}
@@ -55,8 +55,8 @@ func (s *Service) MutatingWebhookConfigurations() ([]*restypes.MutatingWebhookCo
 	return result, nil
 }
 
-func (s *Service) buildMutatingWebhookConfigurationDetails(config *admissionregistrationv1.MutatingWebhookConfiguration) *restypes.MutatingWebhookConfigurationDetails {
-	details := &restypes.MutatingWebhookConfigurationDetails{
+func (s *Service) buildMutatingWebhookConfigurationDetails(config *admissionregistrationv1.MutatingWebhookConfiguration) *types.MutatingWebhookConfigurationDetails {
+	details := &types.MutatingWebhookConfigurationDetails{
 		Kind:        "MutatingWebhookConfiguration",
 		Name:        config.Name,
 		Age:         common.FormatAge(config.CreationTimestamp.Time),
@@ -74,8 +74,8 @@ func (s *Service) buildMutatingWebhookConfigurationDetails(config *admissionregi
 	return details
 }
 
-func convertMutatingWebhooks(webhooks []admissionregistrationv1.MutatingWebhook) []restypes.WebhookDetails {
-	result := make([]restypes.WebhookDetails, 0, len(webhooks))
+func convertMutatingWebhooks(webhooks []admissionregistrationv1.MutatingWebhook) []types.WebhookDetails {
+	result := make([]types.WebhookDetails, 0, len(webhooks))
 	for i := range webhooks {
 		result = append(result, convertWebhook(
 			webhooks[i].Name,

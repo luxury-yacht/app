@@ -11,13 +11,13 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ResourceQuota returns a detailed quota description.
-func (s *Service) ResourceQuota(namespace, name string) (*restypes.ResourceQuotaDetails, error) {
+func (s *Service) ResourceQuota(namespace, name string) (*types.ResourceQuotaDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -33,7 +33,7 @@ func (s *Service) ResourceQuota(namespace, name string) (*restypes.ResourceQuota
 }
 
 // ResourceQuotas returns all quotas in a namespace.
-func (s *Service) ResourceQuotas(namespace string) ([]*restypes.ResourceQuotaDetails, error) {
+func (s *Service) ResourceQuotas(namespace string) ([]*types.ResourceQuotaDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -45,7 +45,7 @@ func (s *Service) ResourceQuotas(namespace string) ([]*restypes.ResourceQuotaDet
 		return nil, fmt.Errorf("failed to list resource quotas: %v", err)
 	}
 
-	result := make([]*restypes.ResourceQuotaDetails, 0, len(rqs.Items))
+	result := make([]*types.ResourceQuotaDetails, 0, len(rqs.Items))
 	for i := range rqs.Items {
 		result = append(result, s.buildResourceQuotaDetails(&rqs.Items[i]))
 	}
@@ -53,8 +53,8 @@ func (s *Service) ResourceQuotas(namespace string) ([]*restypes.ResourceQuotaDet
 	return result, nil
 }
 
-func (s *Service) buildResourceQuotaDetails(rq *corev1.ResourceQuota) *restypes.ResourceQuotaDetails {
-	details := &restypes.ResourceQuotaDetails{
+func (s *Service) buildResourceQuotaDetails(rq *corev1.ResourceQuota) *types.ResourceQuotaDetails {
+	details := &types.ResourceQuotaDetails{
 		Kind:           "ResourceQuota",
 		Name:           rq.Name,
 		Namespace:      rq.Namespace,
@@ -87,9 +87,9 @@ func (s *Service) buildResourceQuotaDetails(rq *corev1.ResourceQuota) *restypes.
 	}
 
 	if rq.Spec.ScopeSelector != nil {
-		selector := &restypes.ScopeSelector{}
+		selector := &types.ScopeSelector{}
 		for _, expr := range rq.Spec.ScopeSelector.MatchExpressions {
-			req := restypes.ScopeSelectorRequirement{
+			req := types.ScopeSelectorRequirement{
 				ScopeName: string(expr.ScopeName),
 				Operator:  string(expr.Operator),
 			}

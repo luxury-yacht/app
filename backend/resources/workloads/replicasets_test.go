@@ -17,7 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 )
 
@@ -86,7 +86,7 @@ func TestReplicaSetServiceReplicaSet(t *testing.T) {
 		podB.OwnerReferences[0].Controller = ptr.To(true)
 	}
 
-	client := clientgofake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
+	client := cgofake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),
@@ -155,7 +155,7 @@ func TestReplicaSetServiceReplicaSetInactiveRevision(t *testing.T) {
 		Status: appsv1.ReplicaSetStatus{Replicas: 1, ReadyReplicas: 1},
 	}
 
-	client := clientgofake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy())
+	client := cgofake.NewClientset(deployment.DeepCopy(), replicaSet.DeepCopy())
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
 		testsupport.WithDepsKubeClient(client),

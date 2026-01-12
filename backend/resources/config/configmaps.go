@@ -13,12 +13,12 @@ import (
 	"sort"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (s *Service) ConfigMap(namespace, name string) (*restypes.ConfigMapDetails, error) {
+func (s *Service) ConfigMap(namespace, name string) (*types.ConfigMapDetails, error) {
 	cm, err := s.deps.KubernetesClient.CoreV1().ConfigMaps(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get configmap %s/%s: %v", namespace, name, err), "ResourceLoader")
@@ -29,7 +29,7 @@ func (s *Service) ConfigMap(namespace, name string) (*restypes.ConfigMapDetails,
 	return s.processConfigMapDetails(cm, pods), nil
 }
 
-func (s *Service) ConfigMaps(namespace string) ([]*restypes.ConfigMapDetails, error) {
+func (s *Service) ConfigMaps(namespace string) ([]*types.ConfigMapDetails, error) {
 	configMaps, err := s.deps.KubernetesClient.CoreV1().ConfigMaps(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to list configmaps in namespace %s: %v", namespace, err), "ResourceLoader")
@@ -38,7 +38,7 @@ func (s *Service) ConfigMaps(namespace string) ([]*restypes.ConfigMapDetails, er
 
 	pods := s.listNamespacePods(namespace)
 
-	var detailsList []*restypes.ConfigMapDetails
+	var detailsList []*types.ConfigMapDetails
 	for i := range configMaps.Items {
 		detailsList = append(detailsList, s.processConfigMapDetails(&configMaps.Items[i], pods))
 	}
@@ -46,8 +46,8 @@ func (s *Service) ConfigMaps(namespace string) ([]*restypes.ConfigMapDetails, er
 	return detailsList, nil
 }
 
-func (s *Service) processConfigMapDetails(cm *corev1.ConfigMap, pods *corev1.PodList) *restypes.ConfigMapDetails {
-	details := &restypes.ConfigMapDetails{
+func (s *Service) processConfigMapDetails(cm *corev1.ConfigMap, pods *corev1.PodList) *types.ConfigMapDetails {
+	details := &types.ConfigMapDetails{
 		Kind:        "ConfigMap",
 		Name:        cm.Name,
 		Namespace:   cm.Namespace,

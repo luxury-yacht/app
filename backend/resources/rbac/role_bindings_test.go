@@ -19,7 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	clientgotesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func TestManagerRoleBindingsList(t *testing.T) {
@@ -54,7 +54,7 @@ func TestManagerRoleBindingsList(t *testing.T) {
 
 func TestRoleBindingGetError(t *testing.T) {
 	client := fake.NewClientset()
-	client.PrependReactor("get", "rolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("get", "rolebindings", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("nope")
 	})
 
@@ -66,7 +66,7 @@ func TestRoleBindingGetError(t *testing.T) {
 
 func TestRoleBindingsListError(t *testing.T) {
 	client := fake.NewClientset(&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "ns"}})
-	client.PrependReactor("list", "rolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "rolebindings", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("rb-list")
 	})
 

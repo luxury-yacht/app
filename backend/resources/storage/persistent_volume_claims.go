@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -25,7 +25,7 @@ func (s *Service) listNamespacePods(namespace string) *corev1.PodList {
 	return pods
 }
 
-func (s *Service) PersistentVolumeClaim(namespace, name string) (*restypes.PersistentVolumeClaimDetails, error) {
+func (s *Service) PersistentVolumeClaim(namespace, name string) (*types.PersistentVolumeClaimDetails, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
@@ -40,7 +40,7 @@ func (s *Service) PersistentVolumeClaim(namespace, name string) (*restypes.Persi
 	return s.processPersistentVolumeClaimDetails(pvc, pods), nil
 }
 
-func (s *Service) PersistentVolumeClaims(namespace string) ([]*restypes.PersistentVolumeClaimDetails, error) {
+func (s *Service) PersistentVolumeClaims(namespace string) ([]*types.PersistentVolumeClaimDetails, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
@@ -53,7 +53,7 @@ func (s *Service) PersistentVolumeClaims(namespace string) ([]*restypes.Persiste
 
 	pods := s.listNamespacePods(namespace)
 
-	var detailsList []*restypes.PersistentVolumeClaimDetails
+	var detailsList []*types.PersistentVolumeClaimDetails
 	for i := range pvcs.Items {
 		detailsList = append(detailsList, s.processPersistentVolumeClaimDetails(&pvcs.Items[i], pods))
 	}
@@ -61,8 +61,8 @@ func (s *Service) PersistentVolumeClaims(namespace string) ([]*restypes.Persiste
 	return detailsList, nil
 }
 
-func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolumeClaim, pods *corev1.PodList) *restypes.PersistentVolumeClaimDetails {
-	details := &restypes.PersistentVolumeClaimDetails{
+func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolumeClaim, pods *corev1.PodList) *types.PersistentVolumeClaimDetails {
+	details := &types.PersistentVolumeClaimDetails{
 		Kind:         "PersistentVolumeClaim",
 		Name:         pvc.Name,
 		Namespace:    pvc.Namespace,
@@ -99,12 +99,12 @@ func (s *Service) processPersistentVolumeClaimDetails(pvc *corev1.PersistentVolu
 	}
 
 	if pvc.Spec.DataSource != nil {
-		details.DataSource = &restypes.DataSourceInfo{
+		details.DataSource = &types.DataSourceInfo{
 			Kind: pvc.Spec.DataSource.Kind,
 			Name: pvc.Spec.DataSource.Name,
 		}
 	} else if pvc.Spec.DataSourceRef != nil {
-		details.DataSource = &restypes.DataSourceInfo{
+		details.DataSource = &types.DataSourceInfo{
 			Kind: pvc.Spec.DataSourceRef.Kind,
 			Name: pvc.Spec.DataSourceRef.Name,
 		}

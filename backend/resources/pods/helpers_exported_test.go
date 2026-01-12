@@ -14,7 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
-	metricsfake "k8s.io/metrics/pkg/client/clientset/versioned/fake"
+	"k8s.io/metrics/pkg/client/clientset/versioned/fake"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -22,7 +22,7 @@ import (
 
 func TestGetPodMetricsForPods(t *testing.T) {
 	//lint:ignore SA1019 No replacement for the deprecated method
-	metricsClient := metricsfake.NewSimpleClientset(&metricsv1beta1.PodMetrics{
+	metricsClient := fake.NewSimpleClientset(&metricsv1beta1.PodMetrics{
 		ObjectMeta: metav1.ObjectMeta{Name: "pod-a", Namespace: "ns"},
 	})
 

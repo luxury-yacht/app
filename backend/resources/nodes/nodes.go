@@ -22,7 +22,7 @@ import (
 	policyv1beta1 "k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
-	"k8s.io/apimachinery/pkg/types"
+	pkgtypes "k8s.io/apimachinery/pkg/types"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	"k8s.io/utils/ptr"
 )
@@ -114,7 +114,7 @@ func (s *Service) patchUnschedulable(nodeName string, unschedulable bool) error 
 	_, err := s.deps.KubernetesClient.CoreV1().Nodes().Patch(
 		s.deps.Context,
 		nodeName,
-		types.StrategicMergePatchType,
+		pkgtypes.StrategicMergePatchType,
 		patch,
 		metav1.PatchOptions{},
 	)

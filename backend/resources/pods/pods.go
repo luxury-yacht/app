@@ -12,7 +12,7 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,11 +25,11 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // GetPod returns detailed information about a single pod.
-func GetPod(deps common.Dependencies, namespace string, name string, detailed bool) (*restypes.PodDetailInfo, error) {
+func GetPod(deps common.Dependencies, namespace string, name string, detailed bool) (*types.PodDetailInfo, error) {
 	return NewService(deps).GetPod(namespace, name, detailed)
 }
 
-func (s *Service) GetPod(namespace string, name string, detailed bool) (*restypes.PodDetailInfo, error) {
+func (s *Service) GetPod(namespace string, name string, detailed bool) (*types.PodDetailInfo, error) {
 	s.deps.Logger.Debug(fmt.Sprintf("GetPod called for %s/%s (detailed: %v)", namespace, name, detailed), "Pod")
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")

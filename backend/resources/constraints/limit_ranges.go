@@ -11,13 +11,13 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // LimitRange returns a detailed limit range description.
-func (s *Service) LimitRange(namespace, name string) (*restypes.LimitRangeDetails, error) {
+func (s *Service) LimitRange(namespace, name string) (*types.LimitRangeDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -33,7 +33,7 @@ func (s *Service) LimitRange(namespace, name string) (*restypes.LimitRangeDetail
 }
 
 // LimitRanges returns all limit ranges in a namespace.
-func (s *Service) LimitRanges(namespace string) ([]*restypes.LimitRangeDetails, error) {
+func (s *Service) LimitRanges(namespace string) ([]*types.LimitRangeDetails, error) {
 	client := s.deps.KubernetesClient
 	if client == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
@@ -45,7 +45,7 @@ func (s *Service) LimitRanges(namespace string) ([]*restypes.LimitRangeDetails, 
 		return nil, fmt.Errorf("failed to list limit ranges: %v", err)
 	}
 
-	result := make([]*restypes.LimitRangeDetails, 0, len(limitRanges.Items))
+	result := make([]*types.LimitRangeDetails, 0, len(limitRanges.Items))
 	for i := range limitRanges.Items {
 		result = append(result, s.buildLimitRangeDetails(&limitRanges.Items[i]))
 	}
@@ -53,8 +53,8 @@ func (s *Service) LimitRanges(namespace string) ([]*restypes.LimitRangeDetails, 
 	return result, nil
 }
 
-func (s *Service) buildLimitRangeDetails(lr *corev1.LimitRange) *restypes.LimitRangeDetails {
-	details := &restypes.LimitRangeDetails{
+func (s *Service) buildLimitRangeDetails(lr *corev1.LimitRange) *types.LimitRangeDetails {
+	details := &types.LimitRangeDetails{
 		Kind:        "LimitRange",
 		Name:        lr.Name,
 		Namespace:   lr.Namespace,
@@ -64,7 +64,7 @@ func (s *Service) buildLimitRangeDetails(lr *corev1.LimitRange) *restypes.LimitR
 	}
 
 	for _, limit := range lr.Spec.Limits {
-		item := restypes.LimitRangeItem{
+		item := types.LimitRangeItem{
 			Kind:                 string(limit.Type),
 			Max:                  make(map[string]string),
 			Min:                  make(map[string]string),

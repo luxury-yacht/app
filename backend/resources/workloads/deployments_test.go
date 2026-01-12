@@ -16,7 +16,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 )
 
@@ -67,7 +67,7 @@ func TestDeploymentServiceDeployment(t *testing.T) {
 		podB.OwnerReferences[0].UID = replicaSet.UID
 	}
 
-	client := clientgofake.NewClientset(
+	client := cgofake.NewClientset(
 		deployment.DeepCopy(),
 		replicaSet.DeepCopy(),
 		podA.DeepCopy(),

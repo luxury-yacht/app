@@ -20,8 +20,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
-	k8stesting "k8s.io/client-go/testing"
+	"k8s.io/client-go/kubernetes/fake"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func TestServiceHorizontalPodAutoscalerDetails(t *testing.T) {
@@ -79,7 +79,7 @@ func TestServiceHorizontalPodAutoscalerDetails(t *testing.T) {
 		},
 	}
 
-	client := clientgofake.NewClientset(hpa.DeepCopy())
+	client := fake.NewClientset(hpa.DeepCopy())
 	service := newHPAService(t, client)
 
 	detail, err := service.HorizontalPodAutoscaler("default", "web-hpa")
@@ -102,8 +102,8 @@ func TestHPAServiceRequiresClient(t *testing.T) {
 }
 
 func TestHPAServiceListError(t *testing.T) {
-	client := clientgofake.NewClientset()
-	client.PrependReactor("list", "horizontalpodautoscalers", func(_ k8stesting.Action) (bool, runtime.Object, error) {
+	client := fake.NewClientset()
+	client.PrependReactor("list", "horizontalpodautoscalers", func(_ cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("hpa list boom")
 	})
 
@@ -112,7 +112,7 @@ func TestHPAServiceListError(t *testing.T) {
 	require.Error(t, err)
 }
 
-func newHPAService(t testing.TB, client *clientgofake.Clientset) *Service {
+func newHPAService(t testing.TB, client *fake.Clientset) *Service {
 	t.Helper()
 	deps := testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),

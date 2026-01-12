@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/resources/types"
 	"github.com/luxury-yacht/app/backend/testsupport"
@@ -21,7 +21,7 @@ import (
 func TestWaitForPodsToTerminateReturnsWhenNoneRemain(t *testing.T) {
 	service := NewService(testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),
-		testsupport.WithDepsKubeClient(clientgofake.NewClientset()),
+		testsupport.WithDepsKubeClient(fake.NewClientset()),
 	))
 
 	options := types.DrainNodeOptions{GracePeriodSeconds: 1}
@@ -31,7 +31,7 @@ func TestWaitForPodsToTerminateReturnsWhenNoneRemain(t *testing.T) {
 func TestWaitForPodsToTerminateTimesOutWhenPodsRemain(t *testing.T) {
 	pod := testsupport.PodFixture("default", "stuck-pod")
 	pod.Spec.NodeName = "node-1"
-	client := clientgofake.NewClientset(pod)
+	client := fake.NewClientset(pod)
 
 	service := NewService(testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),

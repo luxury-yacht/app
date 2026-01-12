@@ -11,12 +11,12 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (s *Service) RoleBinding(namespace, name string) (*restypes.RoleBindingDetails, error) {
+func (s *Service) RoleBinding(namespace, name string) (*types.RoleBindingDetails, error) {
 	rb, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get role binding %s/%s: %v", namespace, name, err), "RBAC")
@@ -25,29 +25,29 @@ func (s *Service) RoleBinding(namespace, name string) (*restypes.RoleBindingDeta
 	return buildRoleBindingDetails(rb), nil
 }
 
-func (s *Service) RoleBindings(namespace string) ([]*restypes.RoleBindingDetails, error) {
+func (s *Service) RoleBindings(namespace string) ([]*types.RoleBindingDetails, error) {
 	roleBindings, err := s.deps.KubernetesClient.RbacV1().RoleBindings(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to list role bindings in namespace %s: %v", namespace, err), "RBAC")
 		return nil, fmt.Errorf("failed to list role bindings: %v", err)
 	}
 
-	results := make([]*restypes.RoleBindingDetails, 0, len(roleBindings.Items))
+	results := make([]*types.RoleBindingDetails, 0, len(roleBindings.Items))
 	for i := range roleBindings.Items {
 		results = append(results, buildRoleBindingDetails(&roleBindings.Items[i]))
 	}
 	return results, nil
 }
 
-func buildRoleBindingDetails(rb *rbacv1.RoleBinding) *restypes.RoleBindingDetails {
-	details := &restypes.RoleBindingDetails{
+func buildRoleBindingDetails(rb *rbacv1.RoleBinding) *types.RoleBindingDetails {
+	details := &types.RoleBindingDetails{
 		Kind:        "RoleBinding",
 		Name:        rb.Name,
 		Namespace:   rb.Namespace,
 		Age:         common.FormatAge(rb.CreationTimestamp.Time),
 		Labels:      rb.Labels,
 		Annotations: rb.Annotations,
-		RoleRef: restypes.RoleRef{
+		RoleRef: types.RoleRef{
 			APIGroup: rb.RoleRef.APIGroup,
 			Kind:     rb.RoleRef.Kind,
 			Name:     rb.RoleRef.Name,
@@ -56,7 +56,7 @@ func buildRoleBindingDetails(rb *rbacv1.RoleBinding) *restypes.RoleBindingDetail
 
 	subjectTypes := make(map[string]int)
 	for _, subject := range rb.Subjects {
-		details.Subjects = append(details.Subjects, restypes.Subject{
+		details.Subjects = append(details.Subjects, types.Subject{
 			Kind:      subject.Kind,
 			APIGroup:  subject.APIGroup,
 			Name:      subject.Name,

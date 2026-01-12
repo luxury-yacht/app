@@ -17,12 +17,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 )
 
 const endpointSliceTimeout = 10 * time.Second
 
-func (s *Service) GetService(namespace, name string) (*restypes.ServiceDetails, error) {
+func (s *Service) GetService(namespace, name string) (*types.ServiceDetails, error) {
 	svc, err := s.deps.KubernetesClient.CoreV1().Services(namespace).Get(s.deps.Context, name, metav1.GetOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to get service %s/%s: %v", namespace, name, err), "ResourceLoader")
@@ -39,7 +39,7 @@ func (s *Service) GetService(namespace, name string) (*restypes.ServiceDetails, 
 	return s.buildServiceDetails(svc, slices), nil
 }
 
-func (s *Service) Services(namespace string) ([]*restypes.ServiceDetails, error) {
+func (s *Service) Services(namespace string) ([]*types.ServiceDetails, error) {
 	services, err := s.deps.KubernetesClient.CoreV1().Services(namespace).List(s.deps.Context, metav1.ListOptions{})
 	if err != nil {
 		s.deps.Logger.Error(fmt.Sprintf("Failed to list services in namespace %s: %v", namespace, err), "ResourceLoader")
@@ -54,7 +54,7 @@ func (s *Service) Services(namespace string) ([]*restypes.ServiceDetails, error)
 	}
 	slicesByService := groupEndpointSlicesByService(slices)
 
-	var results []*restypes.ServiceDetails
+	var results []*types.ServiceDetails
 	for i := range services.Items {
 		svc := services.Items[i]
 		results = append(results, s.buildServiceDetails(&svc, slicesByService[svc.Name]))
@@ -74,8 +74,8 @@ func (s *Service) ctx() (context.Context, context.CancelFunc) {
 	return context.WithTimeout(base, endpointSliceTimeout)
 }
 
-func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discoveryv1.EndpointSlice) *restypes.ServiceDetails {
-	details := &restypes.ServiceDetails{
+func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discoveryv1.EndpointSlice) *types.ServiceDetails {
+	details := &types.ServiceDetails{
 		Kind:            "Service",
 		Name:            service.Name,
 		Namespace:       service.Namespace,
@@ -97,7 +97,7 @@ func (s *Service) buildServiceDetails(service *corev1.Service, slices []*discove
 	}
 
 	for _, port := range service.Spec.Ports {
-		portDetail := restypes.ServicePortDetails{
+		portDetail := types.ServicePortDetails{
 			Name:       port.Name,
 			Protocol:   string(port.Protocol),
 			Port:       port.Port,

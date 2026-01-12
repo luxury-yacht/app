@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -38,7 +38,7 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // Events fetches events matching the provided filter.
-func (s *Service) Events(filter Filter) ([]restypes.Event, error) {
+func (s *Service) Events(filter Filter) ([]types.Event, error) {
 	if err := s.ensureClient(); err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (s *Service) Events(filter Filter) ([]restypes.Event, error) {
 		return nil, fmt.Errorf("failed to list events in namespace %s: %w", filter.Namespace, err)
 	}
 
-	var events []restypes.Event
+	var events []types.Event
 	for _, kubeEvent := range eventList.Items {
 		if filter.ObjectName != "" && kubeEvent.InvolvedObject.Name != filter.ObjectName {
 			continue
@@ -90,12 +90,12 @@ func (s *Service) Events(filter Filter) ([]restypes.Event, error) {
 }
 
 // AllEvents returns events across all namespaces.
-func (s *Service) AllEvents() ([]restypes.Event, error) {
+func (s *Service) AllEvents() ([]types.Event, error) {
 	return s.Events(Filter{})
 }
 
 // NamespaceEvents returns events scoped to a namespace.
-func (s *Service) NamespaceEvents(namespace string) ([]restypes.Event, error) {
+func (s *Service) NamespaceEvents(namespace string) ([]types.Event, error) {
 	if namespace == "" {
 		return nil, fmt.Errorf("namespace cannot be empty")
 	}
@@ -103,7 +103,7 @@ func (s *Service) NamespaceEvents(namespace string) ([]restypes.Event, error) {
 }
 
 // ObjectEvents returns events tied to a specific object.
-func (s *Service) ObjectEvents(resourceKind, namespace, name string) ([]restypes.Event, error) {
+func (s *Service) ObjectEvents(resourceKind, namespace, name string) ([]types.Event, error) {
 	if name == "" {
 		return nil, fmt.Errorf("object name cannot be empty")
 	}
@@ -127,8 +127,8 @@ func (s *Service) ensureClient() error {
 	return nil
 }
 
-func convertEvent(kubeEvent corev1.Event) restypes.Event {
-	e := restypes.Event{
+func convertEvent(kubeEvent corev1.Event) types.Event {
+	e := types.Event{
 		Kind:               "event",
 		EventType:          kubeEvent.Type,
 		Reason:             kubeEvent.Reason,
@@ -168,7 +168,7 @@ func convertEvent(kubeEvent corev1.Event) restypes.Event {
 	return e
 }
 
-func sortEventsByTime(events []restypes.Event) {
+func sortEventsByTime(events []types.Event) {
 	sort.Slice(events, func(i, j int) bool {
 		ti := events[i].LastTimestamp
 		if ti.IsZero() {

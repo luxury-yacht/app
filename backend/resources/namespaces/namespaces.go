@@ -14,7 +14,7 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,7 +29,7 @@ func NewService(deps common.Dependencies) *Service {
 }
 
 // Namespace returns a detailed description for the given namespace.
-func (s *Service) Namespace(name string) (*restypes.NamespaceDetails, error) {
+func (s *Service) Namespace(name string) (*types.NamespaceDetails, error) {
 	if err := s.ensureClient("namespace"); err != nil {
 		return nil, err
 	}
@@ -44,8 +44,8 @@ func (s *Service) Namespace(name string) (*restypes.NamespaceDetails, error) {
 	return s.buildNamespaceDetails(ns), nil
 }
 
-func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *restypes.NamespaceDetails {
-	details := &restypes.NamespaceDetails{
+func (s *Service) buildNamespaceDetails(namespace *corev1.Namespace) *types.NamespaceDetails {
+	details := &types.NamespaceDetails{
 		Kind:        "Namespace",
 		Name:        namespace.Name,
 		Age:         common.FormatAge(namespace.CreationTimestamp.Time),

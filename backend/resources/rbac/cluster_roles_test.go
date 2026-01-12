@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
-	clientgotesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 func TestManagerClusterRolesIncludeBindings(t *testing.T) {
@@ -143,7 +143,7 @@ func TestManagerClusterRolesAggregatesBindingsAndSelectors(t *testing.T) {
 func TestClusterRolesWarnOnBindingListFailure(t *testing.T) {
 	role := &rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "reader"}}
 	client := fake.NewClientset(role)
-	client.PrependReactor("list", "clusterrolebindings", func(clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("list", "clusterrolebindings", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("crb-fail")
 	})
 

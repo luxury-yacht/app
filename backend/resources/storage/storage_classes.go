@@ -11,13 +11,13 @@ import (
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
-	restypes "github.com/luxury-yacht/app/backend/resources/types"
+	"github.com/luxury-yacht/app/backend/resources/types"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (s *Service) StorageClass(name string) (*restypes.StorageClassDetails, error) {
+func (s *Service) StorageClass(name string) (*types.StorageClassDetails, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
@@ -32,7 +32,7 @@ func (s *Service) StorageClass(name string) (*restypes.StorageClassDetails, erro
 	return s.processStorageClassDetails(sc, pvs), nil
 }
 
-func (s *Service) StorageClasses() ([]*restypes.StorageClassDetails, error) {
+func (s *Service) StorageClasses() ([]*types.StorageClassDetails, error) {
 	if s.deps.KubernetesClient == nil {
 		return nil, fmt.Errorf("kubernetes client not initialized")
 	}
@@ -45,7 +45,7 @@ func (s *Service) StorageClasses() ([]*restypes.StorageClassDetails, error) {
 
 	pvs := s.listPersistentVolumes()
 
-	var detailsList []*restypes.StorageClassDetails
+	var detailsList []*types.StorageClassDetails
 	for i := range storageClasses.Items {
 		detailsList = append(detailsList, s.processStorageClassDetails(&storageClasses.Items[i], pvs))
 	}
@@ -55,8 +55,8 @@ func (s *Service) StorageClasses() ([]*restypes.StorageClassDetails, error) {
 
 // processStorageClassDetails processes a StorageClass object and returns its details.
 // It includes information about the storage class itself and lists persistent volumes using this storage class.
-func (s *Service) processStorageClassDetails(storageClass *storagev1.StorageClass, pvs *corev1.PersistentVolumeList) *restypes.StorageClassDetails {
-	details := &restypes.StorageClassDetails{
+func (s *Service) processStorageClassDetails(storageClass *storagev1.StorageClass, pvs *corev1.PersistentVolumeList) *types.StorageClassDetails {
+	details := &types.StorageClassDetails{
 		Kind:         "StorageClass",
 		Name:         storageClass.Name,
 		Age:          common.FormatAge(storageClass.CreationTimestamp.Time),
@@ -91,9 +91,9 @@ func (s *Service) processStorageClassDetails(storageClass *storagev1.StorageClas
 
 	if storageClass.AllowedTopologies != nil {
 		for _, topology := range storageClass.AllowedTopologies {
-			selector := restypes.TopologySelector{}
+			selector := types.TopologySelector{}
 			for _, expr := range topology.MatchLabelExpressions {
-				selector.MatchLabelExpressions = append(selector.MatchLabelExpressions, restypes.TopologyLabelRequirement{
+				selector.MatchLabelExpressions = append(selector.MatchLabelExpressions, types.TopologyLabelRequirement{
 					Key:    expr.Key,
 					Values: expr.Values,
 				})

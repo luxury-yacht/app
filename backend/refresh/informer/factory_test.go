@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
-	k8stesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/refresh/permissions"
@@ -31,7 +31,7 @@ func TestNewFactoryRegistersPodNodeIndex(t *testing.T) {
 func TestCanListResourceCachesResults(t *testing.T) {
 	client := fake.NewClientset()
 	var sarCalls int
-	client.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		sarCalls++
 		review := &authorizationv1.SelfSubjectAccessReview{
 			Status: authorizationv1.SubjectAccessReviewStatus{Allowed: true},
@@ -72,7 +72,7 @@ func TestCanListResourceCachesResults(t *testing.T) {
 func TestPrimePermissionsDeduplicatesRequests(t *testing.T) {
 	client := fake.NewClientset()
 	var sarCalls int
-	client.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		sarCalls++
 		review := &authorizationv1.SelfSubjectAccessReview{
 			Status: authorizationv1.SubjectAccessReviewStatus{Allowed: true},
@@ -108,7 +108,7 @@ func TestPrimePermissionsDeduplicatesRequests(t *testing.T) {
 func TestProcessPendingClusterInformersSkipsWithoutPermissions(t *testing.T) {
 	client := fake.NewClientset()
 	// Deny list/watches to ensure informers are not registered.
-	client.PrependReactor("create", "selfsubjectaccessreviews", func(action k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		review := &authorizationv1.SelfSubjectAccessReview{
 			Status: authorizationv1.SubjectAccessReviewStatus{Allowed: false},
 		}

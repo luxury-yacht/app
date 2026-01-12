@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	clientgofake "k8s.io/client-go/kubernetes/fake"
+	cgofake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/workloads"
@@ -90,7 +90,7 @@ func TestStatefulSetServiceReturnsDetail(t *testing.T) {
 		RestartCount: 0,
 	}}
 
-	client := clientgofake.NewClientset(ss.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
+	client := cgofake.NewClientset(ss.DeepCopy(), podA.DeepCopy(), podB.DeepCopy())
 	deps := newDeps(t, client)
 
 	service := workloads.NewStatefulSetService(deps)
@@ -142,7 +142,7 @@ func TestDaemonSetServiceReturnsDetail(t *testing.T) {
 		RestartCount: 2,
 	}}
 
-	client := clientgofake.NewClientset(ds.DeepCopy(), pod.DeepCopy())
+	client := cgofake.NewClientset(ds.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
 	service := workloads.NewDaemonSetService(deps)
@@ -187,7 +187,7 @@ func TestJobServiceReturnsDetail(t *testing.T) {
 		RestartCount: 3,
 	}}
 
-	client := clientgofake.NewClientset(job.DeepCopy(), pod.DeepCopy())
+	client := cgofake.NewClientset(job.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
 	service := workloads.NewJobService(deps)
@@ -240,7 +240,7 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 		RestartCount: 0,
 	}}
 
-	client := clientgofake.NewClientset(cron.DeepCopy(), job.DeepCopy(), pod.DeepCopy())
+	client := cgofake.NewClientset(cron.DeepCopy(), job.DeepCopy(), pod.DeepCopy())
 	deps := newDeps(t, client)
 
 	service := workloads.NewCronJobService(deps)
@@ -280,7 +280,7 @@ func TestGetWorkloadsAggregatesKinds(t *testing.T) {
 		cron.DeepCopy(),
 	}, pods...)
 
-	client := clientgofake.NewClientset(objects...)
+	client := cgofake.NewClientset(objects...)
 	deps := newDeps(t, client)
 
 	results, err := workloads.GetWorkloads(deps, "default")
@@ -393,7 +393,7 @@ func TestGetWorkloadsSortsAndSummarizes(t *testing.T) {
 		cron.DeepCopy(),
 	}, pods...)
 
-	client := clientgofake.NewClientset(objects...)
+	client := cgofake.NewClientset(objects...)
 
 	ensureCalled := false
 	deps := testsupport.NewResourceDependencies(
@@ -435,7 +435,7 @@ func TestGetWorkloadsSortsAndSummarizes(t *testing.T) {
 	require.Equal(t, "Running", deployInfo.Status)
 }
 
-func newDeps(t testing.TB, client *clientgofake.Clientset) common.Dependencies {
+func newDeps(t testing.TB, client *cgofake.Clientset) common.Dependencies {
 	t.Helper()
 	return testsupport.NewResourceDependencies(
 		testsupport.WithDepsContext(context.Background()),

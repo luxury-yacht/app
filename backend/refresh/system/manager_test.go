@@ -16,7 +16,7 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
-	clientgotesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 
 	"helm.sh/helm/v3/pkg/action"
 )
@@ -73,7 +73,7 @@ func TestNewSubsystemRequiresHelmFactory(t *testing.T) {
 
 func TestNewSubsystemRecordsPermissionIssuesOnAuthorizationFailure(t *testing.T) {
 	client := kubernetesfake.NewClientset()
-	client.PrependReactor("create", "selfsubjectaccessreviews", func(action clientgotesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("create", "selfsubjectaccessreviews", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, errors.New("ssar denied")
 	})
 
