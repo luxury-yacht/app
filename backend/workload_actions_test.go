@@ -12,7 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	cgofake "k8s.io/client-go/kubernetes/fake"
-	kubetesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 )
 
 const workloadClusterID = "config:ctx"
@@ -205,8 +205,8 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 
 			client := cgofake.NewClientset()
 			var observed capture
-			client.Fake.PrependReactor("update", tc.resource, func(action kubetesting.Action) (handled bool, ret runtime.Object, err error) {
-				updateAction, ok := action.(kubetesting.UpdateAction)
+			client.Fake.PrependReactor("update", tc.resource, func(action cgotesting.Action) (handled bool, ret runtime.Object, err error) {
+				updateAction, ok := action.(cgotesting.UpdateAction)
 				if !ok {
 					return false, nil, nil
 				}

@@ -18,7 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	cgofake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
-	kubetesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 	metricsv1beta1 "k8s.io/metrics/pkg/apis/metrics/v1beta1"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 	metricsfake "k8s.io/metrics/pkg/client/clientset/versioned/fake"
@@ -45,7 +45,7 @@ func TestListNodeMetricsHandlesAPIErrors(t *testing.T) {
 	client := metricsfake.NewSimpleClientset()
 	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)))
 
-	client.Fake.PrependReactor("*", "*", func(action kubetesting.Action) (bool, runtime.Object, error) {
+	client.Fake.PrependReactor("*", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("list failed")
 	})
 
@@ -64,7 +64,7 @@ func TestListNodeMetricsReturnsValues(t *testing.T) {
 
 	//lint:ignore SA1019 No replacement for the deprecated method
 	client := metricsfake.NewSimpleClientset(metrics)
-	client.Fake.PrependReactor("*", "*", func(kubetesting.Action) (bool, runtime.Object, error) {
+	client.Fake.PrependReactor("*", "*", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, &metricsv1beta1.NodeMetricsList{Items: []metricsv1beta1.NodeMetrics{*metrics}}, nil
 	})
 	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)))
@@ -104,8 +104,8 @@ func TestGetNodeMetricsReturnsUsage(t *testing.T) {
 
 	//lint:ignore SA1019 No replacement for the deprecated method
 	client := metricsfake.NewSimpleClientset(metrics)
-	client.Fake.PrependReactor("*", "*", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		if get, ok := action.(kubetesting.GetAction); ok && get.GetName() == "node-1" {
+	client.Fake.PrependReactor("*", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		if get, ok := action.(cgotesting.GetAction); ok && get.GetName() == "node-1" {
 			return true, metrics, nil
 		}
 		return false, nil, nil

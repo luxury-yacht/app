@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/fake"
-	kubetesting "k8s.io/client-go/testing"
+	cgotesting "k8s.io/client-go/testing"
 
 	"github.com/luxury-yacht/app/backend/resources/nodes"
 	"github.com/luxury-yacht/app/backend/resources/types"
@@ -44,8 +44,8 @@ func TestServiceDeleteHonorsForce(t *testing.T) {
 	service, client, node := newNodeService(t)
 
 	var recordedGrace *int64
-	client.Fake.PrependReactor("delete", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		deleteAction := action.(kubetesting.DeleteAction)
+	client.Fake.PrependReactor("delete", "nodes", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		deleteAction := action.(cgotesting.DeleteAction)
 		opts := deleteAction.GetDeleteOptions()
 		if opts.GracePeriodSeconds != nil {
 			val := *opts.GracePeriodSeconds
@@ -63,8 +63,8 @@ func TestServiceDeleteWithoutForceUsesDefaultGrace(t *testing.T) {
 	service, client, node := newNodeService(t)
 
 	var recordedGraceSeen bool
-	client.Fake.PrependReactor("delete", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		deleteAction := action.(kubetesting.DeleteAction)
+	client.Fake.PrependReactor("delete", "nodes", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		deleteAction := action.(cgotesting.DeleteAction)
 		if opts := deleteAction.GetDeleteOptions(); opts.GracePeriodSeconds != nil {
 			recordedGraceSeen = true
 		}
@@ -189,8 +189,8 @@ func addNodePatchReactor(t *testing.T, client *fake.Clientset) {
 	t.Helper()
 
 	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}
-	client.Fake.PrependReactor("patch", "nodes", func(action kubetesting.Action) (bool, runtime.Object, error) {
-		patchAction := action.(kubetesting.PatchAction)
+	client.Fake.PrependReactor("patch", "nodes", func(action cgotesting.Action) (bool, runtime.Object, error) {
+		patchAction := action.(cgotesting.PatchAction)
 		current, err := client.Tracker().Get(gvr, "", patchAction.GetName())
 		if err != nil {
 			return true, nil, err
