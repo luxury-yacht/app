@@ -213,25 +213,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		gate:            gate,
 		serverHost:      serverHost,
 	}
-	if err := registerNamespaceListingDomain(deps); err != nil {
-		return nil, err
-	}
-	if err := registerClusterOverviewDomain(deps); err != nil {
-		return nil, err
-	}
-	if err := registerCatalogDomains(deps); err != nil {
-		return nil, err
-	}
-	if err := registerClusterDomains(deps); err != nil {
-		return nil, err
-	}
-	if err := registerNamespaceDomains(deps); err != nil {
-		return nil, err
-	}
-	if err := registerPodDomain(deps); err != nil {
-		return nil, err
-	}
-	if err := registerObjectPanelDomains(deps); err != nil {
+	if err := registerDomains(deps); err != nil {
 		return nil, err
 	}
 
