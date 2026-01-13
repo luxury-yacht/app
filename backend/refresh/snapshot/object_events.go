@@ -130,6 +130,9 @@ func (b *ObjectEventsBuilder) listEventsFromAPI(ctx context.Context, namespace, 
 	selectors := []fields.Selector{
 		fields.OneTermEqualSelector("involvedObject.name", name),
 	}
+	if strings.TrimSpace(kind) != "" {
+		selectors = append(selectors, fields.OneTermEqualSelector("involvedObject.kind", kind))
+	}
 	if namespace != "" {
 		selectors = append(selectors, fields.OneTermEqualSelector("involvedObject.namespace", namespace))
 	}

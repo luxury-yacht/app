@@ -131,6 +131,12 @@ func TestParseObjectScopeValidClusterScope(t *testing.T) {
 	}
 }
 
+func TestParseObjectScopeRejectsEmptyKind(t *testing.T) {
+	if _, _, _, err := parseObjectScope("default::pod-1"); err == nil {
+		t.Fatal("expected error for empty kind")
+	}
+}
+
 func TestRegisterObjectDetailsDomainRequiresClient(t *testing.T) {
 	reg := domain.New()
 	if err := RegisterObjectDetailsDomain(reg, nil, nil, nil); err == nil {
