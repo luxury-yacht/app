@@ -106,3 +106,63 @@ func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 		t.Fatal("expected no resume buffer without subscribers")
 	}
 }
+
+func TestManagerSubscribeWithResumeReplaysAndSubscribes(t *testing.T) {
+	manager := &Manager{
+		logger:      noopLogger{},
+		subscribers: make(map[string]map[uint64]*subscription),
+		buffers:     make(map[string]*eventBuffer),
+		sequences:   make(map[string]uint64),
+	}
+
+	buffer := newEventBuffer(2)
+	buffer.add(bufferedEvent{
+		sequence: 1,
+		entry: Entry{
+			Kind:    "Event",
+			Name:    "first",
+			Message: "first message",
+		},
+	})
+	buffer.add(bufferedEvent{
+		sequence: 2,
+		entry: Entry{
+			Kind:    "Event",
+			Name:    "second",
+			Message: "second message",
+		},
+	})
+	manager.buffers["cluster"] = buffer
+	manager.sequences["cluster"] = 2
+
+	resumeEvents, ch, cancel, ok, limited := manager.SubscribeWithResume("cluster", 1)
+	if limited {
+		t.Fatal("expected resume subscription to succeed without limit")
+	}
+	if !ok {
+		t.Fatal("expected resume subscription to be available")
+	}
+	defer cancel()
+
+	if len(resumeEvents) != 1 || resumeEvents[0].Sequence != 2 {
+		t.Fatalf("unexpected resume events: %+v", resumeEvents)
+	}
+
+	manager.broadcast("cluster", Entry{
+		Kind:    "Event",
+		Name:    "live",
+		Message: "live message",
+	})
+
+	select {
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for live event")
+	case event := <-ch:
+		if event.Sequence != 3 {
+			t.Fatalf("expected sequence 3, got %d", event.Sequence)
+		}
+		if event.Entry.Name != "live" {
+			t.Fatalf("unexpected entry: %+v", event.Entry)
+		}
+	}
+}

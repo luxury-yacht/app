@@ -1,13 +1,12 @@
-# Refresh HTTP Server Optimization Plan
+# Event Stream Review Plan
 
-Goal: capture potential optimization/refactor opportunities for the backend refresh HTTP server.
+Goal: capture the review findings and follow-up work for `backend/refresh/eventstream`.
 
 Plan:
-- [ ] Decide which server-level timeouts to add (e.g., ReadHeaderTimeout, MaxHeaderBytes) while avoiding Write/Idle timeouts that would break long-lived streams. Impact: medium (hardens against slow headers). Effort: low.
-- ✅ Centralize route wiring into a helper (e.g., new mux builder) to reduce duplication between `backend/refresh/system/manager.go` and `backend/app_refresh_setup.go`. Impact: low/medium (simpler maintenance, fewer drift risks). Effort: medium.
-- ✅ Split `setupRefreshSubsystem` into smaller helpers (build subsystem, build mux, start server) to improve readability and testability. Impact: medium (clearer control flow, easier tests). Effort: medium.
-- [ ] Wire `http.Server.ErrorLog` to the app logger for consistent error reporting. Impact: low (better visibility into server errors). Effort: low.
-- [ ] Use `net.JoinHostPort` (or similar) when constructing `refreshBaseURL` to handle IPv6-friendly formatting if listener behavior changes in the future. Impact: low (future-proof URL formatting). Effort: low.
+- ✅ Address the resume/subscribe gap that can drop events between `Resume` and `Subscribe` (e.g., subscribe first, then replay buffer). Impact: medium (prevents missed events). Effort: medium.
+- ✅ Handle subscriber limit hits explicitly (return an SSE error payload or HTTP 429/503 instead of keeping an idle stream). Impact: medium (clear client behavior, avoids silent failures). Effort: low/medium.
+- ✅ Reject empty namespace scopes (`scope=namespace:`) as invalid with 400 instead of falling into a snapshot error. Impact: low (cleaner client error). Effort: low.
+- ✅ Add tests for subscriber limit handling and the resume/subscribe gap behavior. Impact: low/medium (guard against regressions). Effort: low/medium.
 
 Notes:
-- Streaming endpoints (`/api/v2/stream/*`) rely on long-lived connections; timeouts must be chosen carefully to avoid unintended disconnects.
+- Current behavior: resume occurs before subscription, and the handler does not check for nil channels when the subscriber limit is exceeded.
