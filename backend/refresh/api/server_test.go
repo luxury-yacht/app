@@ -152,6 +152,39 @@ func TestSnapshotPermissionDenied(t *testing.T) {
 	}
 }
 
+func TestSnapshotEndpointRejectsMissingClusterScope(t *testing.T) {
+	// Snapshot requests must provide an explicit cluster scope.
+	reg := domain.New()
+	reg.Register(refresh.DomainConfig{
+		Name: "nodes",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			return &refresh.Snapshot{Domain: "nodes", Version: 1, Payload: map[string]int{"items": 1}}, nil
+		},
+	})
+
+	server := api.NewServer(reg, snapshotService(), &fakeQueue{}, nil, nil)
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 got %d", rr.Code)
+	}
+
+	var payload struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode error payload: %v", err)
+	}
+	if !strings.Contains(payload.Message, "cluster scope is required") {
+		t.Fatalf("unexpected error message: %s", payload.Message)
+	}
+}
+
 func snapshotService() refresh.SnapshotService {
 	return &fakeSnapshotService{snapshot: &refresh.Snapshot{Version: 1, Payload: map[string]int{"items": 1}}}
 }
@@ -188,6 +221,40 @@ func TestManualRefreshEndpoint(t *testing.T) {
 	}
 	if job.State != refresh.JobStateQueued {
 		t.Fatalf("expected job state queued, got %s", job.State)
+	}
+}
+
+func TestManualRefreshEndpointRejectsMissingClusterScope(t *testing.T) {
+	// Manual refresh must provide an explicit cluster scope.
+	reg := domain.New()
+	reg.Register(refresh.DomainConfig{
+		Name: "nodes",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			return &refresh.Snapshot{Domain: "nodes", Version: 2, Payload: map[string]int{"items": 2}}, nil
+		},
+	})
+
+	server := api.NewServer(reg, snapshotService(), &fakeQueue{}, nil, nil)
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", nil)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 got %d", rr.Code)
+	}
+
+	var payload struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode error payload: %v", err)
+	}
+	if !strings.Contains(payload.Message, "cluster scope is required") {
+		t.Fatalf("unexpected error message: %s", payload.Message)
 	}
 }
 
