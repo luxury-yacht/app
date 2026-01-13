@@ -17,5 +17,5 @@
 .gridtable-ns-events .grid-cell[data-column="objectName"],
 .gridtable-ns-events .grid-cell[data-column="reason"],
 .gridtable-ns-events .grid-cell[data-column="message"] {
-  align-items: flex-start;
+  align-items: center;
 }

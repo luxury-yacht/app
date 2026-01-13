@@ -48,6 +48,21 @@ func TestParseOptions(t *testing.T) {
 			query:       url.Values{},
 			expectError: true,
 		},
+		{
+			name:        "empty namespace",
+			query:       url.Values{"scope": []string{":pod:nginx"}},
+			expectError: true,
+		},
+		{
+			name:        "empty kind",
+			query:       url.Values{"scope": []string{"default::nginx"}},
+			expectError: true,
+		},
+		{
+			name:        "empty name",
+			query:       url.Values{"scope": []string{"default:pod:"}},
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {

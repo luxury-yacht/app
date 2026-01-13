@@ -28,6 +28,12 @@ describe('clusterScope helpers', () => {
     );
   });
 
+  it('adds a cluster prefix when scope is empty', () => {
+    expect(buildClusterScope('cluster-a', '')).toBe('cluster-a|');
+    expect(buildClusterScope('cluster-a', null)).toBe('cluster-a|');
+    expect(buildClusterScope('', '')).toBe('');
+  });
+
   it('strips cluster prefixes from scoped values', () => {
     // Diagnostics should render the scope portion without the cluster id.
     expect(stripClusterScope('cluster-a|namespace:default')).toBe('namespace:default');

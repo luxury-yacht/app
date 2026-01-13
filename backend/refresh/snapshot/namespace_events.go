@@ -109,8 +109,8 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 	events = filtered
 
 	sort.Slice(events, func(i, j int) bool {
-		iTime := events[i].CreationTimestamp.Time
-		jTime := events[j].CreationTimestamp.Time
+		iTime := eventTimestamp(events[i])
+		jTime := eventTimestamp(events[j])
 		return iTime.After(jTime)
 	})
 
@@ -136,7 +136,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			continue
 		}
 		summary := EventSummary{
-			ClusterMeta:    meta,
+			ClusterMeta:     meta,
 			Kind:            event.InvolvedObject.Kind,
 			Name:            event.Name,
 			Namespace:       event.InvolvedObject.Namespace,
@@ -146,7 +146,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			Reason:          event.Reason,
 			Object:          namespaceInvolvedObject(event),
 			Message:         event.Message,
-			Age:             formatAge(event.CreationTimestamp.Time),
+			Age:             formatAge(eventTimestamp(event)),
 		}
 		summaries = append(summaries, summary)
 		if v := resourceVersionOrTimestamp(event); v > version {

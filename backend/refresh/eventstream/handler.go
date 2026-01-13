@@ -20,14 +20,14 @@ import (
 
 // Handler exposes an SSE endpoint for streaming Kubernetes events.
 type Handler struct {
-	service   *snapshot.Service
+	service   refresh.SnapshotService
 	manager   *Manager
 	logger    Logger
 	telemetry *telemetry.Recorder
 }
 
 // NewHandler prepares an event stream handler.
-func NewHandler(service *snapshot.Service, manager *Manager, logger Logger) (*Handler, error) {
+func NewHandler(service refresh.SnapshotService, manager *Manager, logger Logger) (*Handler, error) {
 	if service == nil {
 		return nil, errors.New("eventstream: snapshot service required")
 	}
@@ -68,13 +68,59 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer h.telemetry.RecordStreamDisconnect(streamName)
 	}
 
+	// setStreamHeaders keeps the SSE response headers consistent across code paths.
+	setStreamHeaders := func() {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Connection", "keep-alive")
+	}
+
+	var (
+		entries <-chan StreamEvent
+		cancel  context.CancelFunc
+	)
 	// Prefer resume tokens to avoid full snapshot rebuilds after reconnects.
 	resumeID := parseResumeID(r)
-	var resumeEvents []StreamEvent
-	resumeOK := false
 	if resumeID > 0 {
-		resumeEvents, resumeOK = h.manager.Resume(params.ScopeKey, resumeID)
-		if !resumeOK {
+		resumeEvents, resumeEntries, resumeCancel, resumeOK, limitReached := h.manager.SubscribeWithResume(params.ScopeKey, resumeID)
+		if limitReached {
+			http.Error(w, "subscriber limit reached", http.StatusTooManyRequests)
+			return
+		}
+		if resumeOK {
+			entries = resumeEntries
+			cancel = resumeCancel
+			setStreamHeaders()
+			if len(resumeEvents) > 0 {
+				h.logger.Info(
+					fmt.Sprintf(
+						"eventstream: resuming payloads domain=%s scope=%s events=%d",
+						params.Domain,
+						params.ScopeKey,
+						len(resumeEvents),
+					),
+					"EventStream",
+				)
+				for _, streamEvent := range resumeEvents {
+					payload := Payload{
+						Domain:      params.Domain,
+						Scope:       params.ScopeKey,
+						Sequence:    streamEvent.Sequence,
+						GeneratedAt: time.Now().UnixMilli(),
+						Events:      []Entry{streamEvent.Entry},
+					}
+					if err := writeEvent(w, f, payload); err != nil {
+						if h.telemetry != nil {
+							h.telemetry.RecordStreamError(streamName, err)
+						}
+						return
+					}
+				}
+				if h.telemetry != nil {
+					h.telemetry.RecordStreamDelivery(streamName, len(resumeEvents), 0)
+				}
+			}
+		} else {
 			err := fmt.Errorf("eventstream: resume token expired for domain=%s scope=%s", params.Domain, params.ScopeKey)
 			if h.telemetry != nil {
 				h.telemetry.RecordStreamError(streamName, err)
@@ -83,15 +129,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-
-	var (
-		entries <-chan StreamEvent
-		cancel  context.CancelFunc
-	)
-	if resumeID == 0 || !resumeOK {
+	if entries == nil {
 		snapshotPayload, err := h.service.Build(r.Context(), params.Domain, params.SnapshotScope)
 		if err != nil {
 			if h.telemetry != nil {
@@ -112,10 +150,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					Error:        err.Error(),
 					ErrorDetails: status,
 				}
+				setStreamHeaders()
 				_ = writeEvent(w, f, payload)
 				return
 			}
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		entries, cancel = h.manager.Subscribe(params.ScopeKey)
+		if entries == nil {
+			http.Error(w, "subscriber limit reached", http.StatusTooManyRequests)
 			return
 		}
 
@@ -147,6 +192,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			),
 			"EventStream",
 		)
+		setStreamHeaders()
 		if err := writeEvent(w, f, payload); err != nil {
 			if h.telemetry != nil {
 				h.telemetry.RecordStreamError(streamName, err)
@@ -156,39 +202,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if h.telemetry != nil {
 			h.telemetry.RecordStreamDelivery(streamName, len(initialEvents), 0)
 		}
-		entries, cancel = h.manager.Subscribe(params.ScopeKey)
-	} else {
-		entries, cancel = h.manager.Subscribe(params.ScopeKey)
-		if len(resumeEvents) > 0 {
-			h.logger.Info(
-				fmt.Sprintf(
-					"eventstream: resuming payloads domain=%s scope=%s events=%d",
-					params.Domain,
-					params.ScopeKey,
-					len(resumeEvents),
-				),
-				"EventStream",
-			)
-			for _, streamEvent := range resumeEvents {
-				payload := Payload{
-					Domain:      params.Domain,
-					Scope:       params.ScopeKey,
-					Sequence:    streamEvent.Sequence,
-					GeneratedAt: time.Now().UnixMilli(),
-					Events:      []Entry{streamEvent.Entry},
-				}
-				if err := writeEvent(w, f, payload); err != nil {
-					if h.telemetry != nil {
-						h.telemetry.RecordStreamError(streamName, err)
-					}
-					return
-				}
-			}
-			if h.telemetry != nil {
-				h.telemetry.RecordStreamDelivery(streamName, len(resumeEvents), 0)
-			}
-		}
 	}
+
 	defer cancel()
 
 	keepAlive := time.NewTicker(config.EventStreamKeepAliveInterval)
@@ -270,6 +285,9 @@ func parseScope(raw string) scopeParams {
 	if strings.HasPrefix(trimmed, "namespace:") {
 		ns := strings.TrimPrefix(trimmed, "namespace:")
 		ns = strings.TrimSpace(ns)
+		if ns == "" {
+			return scopeParams{}
+		}
 		return scopeParams{
 			Domain:        "namespace-events",
 			ScopeKey:      refresh.JoinClusterScope(clusterID, "namespace:"+ns),

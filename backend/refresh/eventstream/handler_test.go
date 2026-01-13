@@ -14,6 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -48,6 +49,18 @@ func TestHandlerRejectsInvalidScope(t *testing.T) {
 	})
 
 	req := httptest.NewRequest(http.MethodGet, "/stream?scope=invalid", nil)
+	rec := newFlushRecorder()
+
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestHandlerRejectsEmptyNamespaceScope(t *testing.T) {
+	handler, _, _ := newTestHandler(t, func(scope string) (*refresh.Snapshot, error) {
+		return &refresh.Snapshot{Domain: "cluster-events", Payload: snapshot.ClusterEventsSnapshot{}}, nil
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/stream?scope=namespace:", nil)
 	rec := newFlushRecorder()
 
 	handler.ServeHTTP(rec, req)
@@ -97,6 +110,26 @@ func TestHandlerInitialSnapshotPermissionDenied(t *testing.T) {
 	require.NotNil(t, payloads[0].ErrorDetails)
 	require.Equal(t, "cluster-events", payloads[0].ErrorDetails.Details.Domain)
 	require.Equal(t, "core/events", payloads[0].ErrorDetails.Details.Resource)
+}
+
+func TestHandlerRejectsWhenSubscriberLimitReached(t *testing.T) {
+	handler, manager, _ := newTestHandler(t, func(scope string) (*refresh.Snapshot, error) {
+		return &refresh.Snapshot{Domain: "cluster-events", Payload: snapshot.ClusterEventsSnapshot{}}, nil
+	})
+
+	manager.mu.Lock()
+	subs := make(map[uint64]*subscription, config.EventStreamMaxSubscribersPerScope)
+	for i := 0; i < config.EventStreamMaxSubscribersPerScope; i++ {
+		subs[uint64(i+1)] = &subscription{ch: make(chan StreamEvent)}
+	}
+	manager.subscribers["cluster"] = subs
+	manager.mu.Unlock()
+
+	req := httptest.NewRequest(http.MethodGet, "/stream?scope=cluster", nil)
+	rec := newFlushRecorder()
+
+	handler.ServeHTTP(rec, req)
+	require.Equal(t, http.StatusTooManyRequests, rec.Code)
 }
 
 func TestHandlerStreamsEvents(t *testing.T) {

@@ -9,9 +9,12 @@ package backend
 
 import "github.com/luxury-yacht/app/backend/resources/policy"
 
-func (a *App) GetPodDisruptionBudget(namespace, name string) (*PodDisruptionBudgetDetails, error) {
-	deps := a.resourceDependencies()
-	return FetchNamespacedResource(a, "PodDisruptionBudget", namespace, name, func() (*PodDisruptionBudgetDetails, error) {
+func (a *App) GetPodDisruptionBudget(clusterID, namespace, name string) (*PodDisruptionBudgetDetails, error) {
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return FetchNamespacedResource(a, deps, selectionKey, "PodDisruptionBudget", namespace, name, func() (*PodDisruptionBudgetDetails, error) {
 		return policy.NewService(deps).PodDisruptionBudget(namespace, name)
 	})
 }

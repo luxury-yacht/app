@@ -117,41 +117,58 @@ func (m *Manager) Subscribe(scope string) (<-chan StreamEvent, context.CancelFun
 	}
 
 	m.mu.Lock()
-	if _, ok := m.subscribers[scope]; !ok {
-		m.subscribers[scope] = make(map[uint64]*subscription)
-	}
-
-	// Check subscriber limit before adding
-	if len(m.subscribers[scope]) >= config.EventStreamMaxSubscribersPerScope {
-		m.mu.Unlock()
-		m.logger.Warn(fmt.Sprintf("eventstream: subscriber limit (%d) reached for scope %s", config.EventStreamMaxSubscribersPerScope, scope), "EventStream")
-		if m.telemetry != nil {
-			m.telemetry.RecordStreamError(telemetry.StreamEvents, fmt.Errorf("subscriber limit reached for scope %s", scope))
-		}
+	id, sub, ok := m.addSubscriberLocked(scope)
+	m.mu.Unlock()
+	if !ok {
 		return nil, func() {}
 	}
 
-	ch := make(chan StreamEvent, config.EventStreamSubscriberBufferSize)
-	id := atomic.AddUint64(&m.nextID, 1)
-	m.subscribers[scope][id] = &subscription{ch: ch, created: time.Now()}
-	m.mu.Unlock()
+	return sub.ch, func() { m.dropSubscriber(scope, id, sub) }
+}
 
-	cancel := func() {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		if subs, ok := m.subscribers[scope]; ok {
-			if sub, exists := subs[id]; exists {
-				sub.Close()
-				delete(subs, id)
-			}
-			if len(subs) == 0 {
-				delete(m.subscribers, scope)
-				m.clearScopeStateLocked(scope)
-			}
+// SubscribeWithResume registers a subscriber and returns buffered events after `since` in one lock scope.
+// This avoids gaps between resume checks and subscription registration.
+func (m *Manager) SubscribeWithResume(
+	scope string,
+	since uint64,
+) ([]StreamEvent, <-chan StreamEvent, context.CancelFunc, bool, bool) {
+	if scope == "" {
+		scope = "cluster"
+	}
+	if since == 0 {
+		ch, cancel := m.Subscribe(scope)
+		if ch == nil {
+			return nil, nil, func() {}, false, true
 		}
+		return nil, ch, cancel, true, false
 	}
 
-	return ch, cancel
+	m.mu.Lock()
+	buffer := m.buffers[scope]
+	if buffer == nil {
+		m.mu.Unlock()
+		return nil, nil, nil, false, false
+	}
+	items, ok := buffer.since(since)
+	if !ok {
+		m.mu.Unlock()
+		return nil, nil, nil, false, false
+	}
+	id, sub, limitOK := m.addSubscriberLocked(scope)
+	m.mu.Unlock()
+	if !limitOK {
+		return nil, nil, func() {}, false, true
+	}
+
+	events := make([]StreamEvent, 0, len(items))
+	for _, item := range items {
+		events = append(events, StreamEvent{
+			Entry:    item.entry,
+			Sequence: item.sequence,
+		})
+	}
+
+	return events, sub.ch, func() { m.dropSubscriber(scope, id, sub) }, true, false
 }
 
 // Resume returns buffered events after the provided sequence for the scope.
@@ -186,6 +203,38 @@ func (m *Manager) NextSequence(scope string) uint64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.nextSequenceLocked(scope)
+}
+
+// addSubscriberLocked appends a subscriber entry while enforcing per-scope limits.
+func (m *Manager) addSubscriberLocked(scope string) (uint64, *subscription, bool) {
+	if _, ok := m.subscribers[scope]; !ok {
+		m.subscribers[scope] = make(map[uint64]*subscription)
+	}
+
+	// Check subscriber limit before adding.
+	if len(m.subscribers[scope]) >= config.EventStreamMaxSubscribersPerScope {
+		m.logger.Warn(
+			fmt.Sprintf(
+				"eventstream: subscriber limit (%d) reached for scope %s",
+				config.EventStreamMaxSubscribersPerScope,
+				scope,
+			),
+			"EventStream",
+		)
+		if m.telemetry != nil {
+			m.telemetry.RecordStreamError(
+				telemetry.StreamEvents,
+				fmt.Errorf("subscriber limit reached for scope %s", scope),
+			)
+		}
+		return 0, nil, false
+	}
+
+	ch := make(chan StreamEvent, config.EventStreamSubscriberBufferSize)
+	id := atomic.AddUint64(&m.nextID, 1)
+	sub := &subscription{ch: ch, created: time.Now()}
+	m.subscribers[scope][id] = sub
+	return id, sub, true
 }
 
 func (m *Manager) handleEvent(obj interface{}) {

@@ -138,8 +138,11 @@ func parseObjectScope(scope string) (string, string, string, error) {
 		namespace = ""
 	}
 
-	kind := parts[1]
+	kind := strings.TrimSpace(parts[1])
 	name := parts[2]
+	if kind == "" {
+		return "", "", "", fmt.Errorf("object kind missing in scope %q", scope)
+	}
 	if name == "" {
 		return "", "", "", fmt.Errorf("object name missing in scope %q", scope)
 	}

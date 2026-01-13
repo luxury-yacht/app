@@ -100,7 +100,7 @@ func TestSnapshotEndpoint(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=cluster-a|", nil)
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -131,7 +131,7 @@ func TestSnapshotPermissionDenied(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=cluster-a|", nil)
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -149,6 +149,39 @@ func TestSnapshotPermissionDenied(t *testing.T) {
 	}
 	if payload.Details.Domain != "nodes" || payload.Details.Resource != "core/nodes" {
 		t.Fatalf("unexpected details: %+v", payload.Details)
+	}
+}
+
+func TestSnapshotEndpointRejectsMissingClusterScope(t *testing.T) {
+	// Snapshot requests must provide an explicit cluster scope.
+	reg := domain.New()
+	reg.Register(refresh.DomainConfig{
+		Name: "nodes",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			return &refresh.Snapshot{Domain: "nodes", Version: 1, Payload: map[string]int{"items": 1}}, nil
+		},
+	})
+
+	server := api.NewServer(reg, snapshotService(), &fakeQueue{}, nil, nil)
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 got %d", rr.Code)
+	}
+
+	var payload struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode error payload: %v", err)
+	}
+	if !strings.Contains(payload.Message, "cluster scope is required") {
+		t.Fatalf("unexpected error message: %s", payload.Message)
 	}
 }
 
@@ -172,7 +205,7 @@ func TestManualRefreshEndpoint(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"default"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|default"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
@@ -191,6 +224,40 @@ func TestManualRefreshEndpoint(t *testing.T) {
 	}
 }
 
+func TestManualRefreshEndpointRejectsMissingClusterScope(t *testing.T) {
+	// Manual refresh must provide an explicit cluster scope.
+	reg := domain.New()
+	reg.Register(refresh.DomainConfig{
+		Name: "nodes",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			return &refresh.Snapshot{Domain: "nodes", Version: 2, Payload: map[string]int{"items": 2}}, nil
+		},
+	})
+
+	server := api.NewServer(reg, snapshotService(), &fakeQueue{}, nil, nil)
+	mux := http.NewServeMux()
+	server.Register(mux)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", nil)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400 got %d", rr.Code)
+	}
+
+	var payload struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("failed to decode error payload: %v", err)
+	}
+	if !strings.Contains(payload.Message, "cluster scope is required") {
+		t.Fatalf("unexpected error message: %s", payload.Message)
+	}
+}
+
 func TestManualRefreshHandlesQueueErrors(t *testing.T) {
 	reg := domain.New()
 	reg.Register(refresh.DomainConfig{
@@ -206,7 +273,7 @@ func TestManualRefreshHandlesQueueErrors(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"default"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|default"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()

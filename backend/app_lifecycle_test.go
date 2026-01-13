@@ -40,11 +40,11 @@ func TestSetupEnvironmentAddsHomeLocalBin(t *testing.T) {
 	require.Contains(t, pathVar, target)
 }
 
-func TestSetupRefreshSubsystemRequiresClient(t *testing.T) {
+func TestSetupRefreshSubsystemRequiresSelections(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
 
-	err := app.setupRefreshSubsystem(nil, "")
+	err := app.setupRefreshSubsystem()
 	require.Error(t, err)
 }
 
@@ -52,7 +52,7 @@ func TestSetupRefreshSubsystemRequiresContext(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = nil
 
-	err := app.setupRefreshSubsystem(cgofake.NewClientset(), "")
+	err := app.setupRefreshSubsystem()
 	require.Error(t, err)
 }
 
@@ -68,6 +68,30 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	app.restConfig = &rest.Config{}
 
 	fakeClient := cgofake.NewClientset()
+	metricsClient := &metricsclient.Clientset{}
+	restConfig := &rest.Config{}
+	dynamicClient := dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
+	apiExtensionsClient := &apiextensionsclientset.Clientset{}
+	// Seed a valid selection/cluster client entry so refresh setup skips real kubeconfig IO.
+	app.availableKubeconfigs = []KubeconfigInfo{{
+		Name:    "config",
+		Path:    "/tmp/config",
+		Context: "selection",
+	}}
+	app.selectedKubeconfigs = []string{"/tmp/config:selection"}
+	clusterID := app.clusterMetaForSelection(kubeconfigSelection{Path: "/tmp/config", Context: "selection"}).ID
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:                ClusterMeta{ID: clusterID, Name: "selection"},
+			kubeconfigPath:      "/tmp/config",
+			kubeconfigContext:   "selection",
+			client:              fakeClient,
+			metricsClient:       metricsClient,
+			restConfig:          restConfig,
+			dynamicClient:       dynamicClient,
+			apiextensionsClient: apiExtensionsClient,
+		},
+	}
 	manager := refresh.NewManager(nil, nil, nil, nil, nil)
 	handler := http.NewServeMux()
 
@@ -83,7 +107,7 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	}
 	defer func() { newRefreshSubsystemWithServices = original }()
 
-	err := app.setupRefreshSubsystem(fakeClient, "selection")
+	err := app.setupRefreshSubsystem()
 	require.NoError(t, err)
 	defer app.teardownRefreshSubsystem()
 
@@ -94,10 +118,10 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	require.NotEmpty(t, app.refreshBaseURL)
 
 	require.Equal(t, fakeClient, capturedCfg.KubernetesClient)
-	require.Equal(t, app.metricsClient, capturedCfg.MetricsClient)
-	require.Equal(t, app.restConfig, capturedCfg.RestConfig)
-	require.Equal(t, app.apiextensionsClient, capturedCfg.APIExtensionsClient)
-	require.Equal(t, app.dynamicClient, capturedCfg.DynamicClient)
+	require.Equal(t, metricsClient, capturedCfg.MetricsClient)
+	require.Equal(t, restConfig, capturedCfg.RestConfig)
+	require.Equal(t, apiExtensionsClient, capturedCfg.APIExtensionsClient)
+	require.Equal(t, dynamicClient, capturedCfg.DynamicClient)
 	require.NotNil(t, capturedCfg.HelmFactory)
 	require.NotNil(t, capturedCfg.ObjectDetailsProvider)
 
@@ -116,8 +140,9 @@ func TestRestoreKubeconfigSelectionPrefersSavedContext(t *testing.T) {
 
 	app.restoreKubeconfigSelection()
 
-	require.Equal(t, "/saved/config", app.selectedKubeconfig)
-	require.Equal(t, "saved", app.selectedContext)
+	require.Equal(t, []string{"/saved/config:saved"}, app.selectedKubeconfigs)
+	require.Empty(t, app.selectedKubeconfig)
+	require.Empty(t, app.selectedContext)
 }
 
 func TestRestoreKubeconfigSelectionUsesSelectedKubeconfigs(t *testing.T) {
@@ -133,12 +158,12 @@ func TestRestoreKubeconfigSelectionUsesSelectedKubeconfigs(t *testing.T) {
 
 	app.restoreKubeconfigSelection()
 
-	require.Equal(t, "/saved/config", app.selectedKubeconfig)
-	require.Equal(t, "saved", app.selectedContext)
 	require.Equal(t, []string{"/saved/config:saved", "/other/config:other"}, app.selectedKubeconfigs)
+	require.Empty(t, app.selectedKubeconfig)
+	require.Empty(t, app.selectedContext)
 }
 
-func TestRestoreKubeconfigSelectionFallsBack(t *testing.T) {
+func TestRestoreKubeconfigSelectionDoesNotFallback(t *testing.T) {
 	t.Run("defaults to current context", func(t *testing.T) {
 		app := newTestAppWithDefaults(t)
 		app.availableKubeconfigs = []KubeconfigInfo{
@@ -148,8 +173,9 @@ func TestRestoreKubeconfigSelectionFallsBack(t *testing.T) {
 
 		app.restoreKubeconfigSelection()
 
-		require.Equal(t, "/current/config", app.selectedKubeconfig)
-		require.Equal(t, "current", app.selectedContext)
+		require.Empty(t, app.selectedKubeconfigs)
+		require.Empty(t, app.selectedKubeconfig)
+		require.Empty(t, app.selectedContext)
 	})
 
 	t.Run("defaults to first default entry", func(t *testing.T) {
@@ -161,8 +187,9 @@ func TestRestoreKubeconfigSelectionFallsBack(t *testing.T) {
 
 		app.restoreKubeconfigSelection()
 
-		require.Equal(t, "/default/config", app.selectedKubeconfig)
-		require.Equal(t, "default", app.selectedContext)
+		require.Empty(t, app.selectedKubeconfigs)
+		require.Empty(t, app.selectedKubeconfig)
+		require.Empty(t, app.selectedContext)
 	})
 
 	t.Run("falls back to first when no defaults", func(t *testing.T) {
@@ -174,8 +201,9 @@ func TestRestoreKubeconfigSelectionFallsBack(t *testing.T) {
 
 		app.restoreKubeconfigSelection()
 
-		require.Equal(t, "/first/config", app.selectedKubeconfig)
-		require.Equal(t, "first", app.selectedContext)
+		require.Empty(t, app.selectedKubeconfigs)
+		require.Empty(t, app.selectedKubeconfig)
+		require.Empty(t, app.selectedContext)
 	})
 }
 
@@ -194,18 +222,13 @@ func TestStdLogBridgeWritesToLogger(t *testing.T) {
 	require.Equal(t, "INFO", entries[2].Level)
 }
 
-func TestInitKubernetesClientSkipsWhenAlreadyInitialised(t *testing.T) {
+func TestInitKubernetesClientRequiresSelections(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.client = cgofake.NewClientset()
+	app.Ctx = context.Background()
 
 	err := app.initKubernetesClient()
-	require.NoError(t, err)
-
-	entries := app.logger.GetEntries()
-	require.NotEmpty(t, entries)
-	last := entries[len(entries)-1]
-	require.Equal(t, "DEBUG", last.Level)
-	require.Contains(t, last.Message, "already initialized")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no kubeconfig selections available")
 }
 
 func TestInitKubernetesClientFailsWhenRefreshSubsystemFails(t *testing.T) {
@@ -235,7 +258,26 @@ users:
 	configDir := t.TempDir()
 	configPath := filepath.Join(configDir, "config")
 	require.NoError(t, os.WriteFile(configPath, []byte(kubeconfig), 0o600))
-	app.selectedKubeconfig = configPath
+	// Seed a valid selection/client pool so initKubernetesClient only exercises refresh setup.
+	app.availableKubeconfigs = []KubeconfigInfo{{
+		Name:    "config",
+		Path:    configPath,
+		Context: "test",
+	}}
+	app.selectedKubeconfigs = []string{configPath + ":test"}
+	clusterID := app.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "test"}).ID
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:                ClusterMeta{ID: clusterID, Name: "test"},
+			kubeconfigPath:      configPath,
+			kubeconfigContext:   "test",
+			client:              cgofake.NewClientset(),
+			metricsClient:       &metricsclient.Clientset{},
+			restConfig:          &rest.Config{},
+			dynamicClient:       dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+			apiextensionsClient: &apiextensionsclientset.Clientset{},
+		},
+	}
 
 	original := newRefreshSubsystemWithServices
 	newRefreshSubsystemWithServices = func(cfg system.Config) (*system.Subsystem, error) {

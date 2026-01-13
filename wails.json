@@ -12,11 +12,11 @@
   },
   "info": {
     "appName": "Luxury Yacht",
-    "copyright": "Copyright © 2025 Luxury Yacht",
+    "copyright": "Copyright © 2025-2026 Luxury Yacht",
     "description": "Luxury Yacht is a desktop app for managing Kubernetes clusters. Sail the seas of Kubernetes in style!",
     "companyName": "Luxury Yacht",
     "productName": "Luxury Yacht",
-    "productVersion": "v1.1.8",
+    "productVersion": "v1.2.0",
     "betaExpiryDays": 30
   }
 }

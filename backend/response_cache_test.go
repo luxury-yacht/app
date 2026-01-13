@@ -35,8 +35,7 @@ func TestResponseCacheEvictsOnLimit(t *testing.T) {
 
 func TestResponseCacheKeyScopesSelection(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.selectedKubeconfig = "/tmp/config"
 
-	key := app.responseCacheKey("", "detail::pod")
-	require.Equal(t, "config|detail::pod", key)
+	key := app.responseCacheKey("config:ctx", "detail::pod")
+	require.Equal(t, "config:ctx|detail::pod", key)
 }

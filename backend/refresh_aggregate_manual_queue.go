@@ -17,8 +17,9 @@ type aggregateManualQueue struct {
 	clusterOrder []string
 	queues       map[string]refresh.ManualQueue
 
-	mu   sync.RWMutex
-	jobs map[string]*aggregateManualJob
+	mu       sync.RWMutex
+	configMu sync.RWMutex
+	jobs     map[string]*aggregateManualJob
 }
 
 // aggregateManualJob tracks the child jobs created per cluster.
@@ -60,8 +61,9 @@ func (q *aggregateManualQueue) Enqueue(ctx context.Context, domain, scope, reaso
 	if domain == "" {
 		return nil, errors.New("domain is required")
 	}
+	clusterOrder, queues := q.snapshotConfig()
 	clusterIDs, scopeValue := refresh.SplitClusterScopeList(scope)
-	targets, err := q.resolveTargets(domain, clusterIDs)
+	targets, err := q.resolveTargets(domain, clusterIDs, queues, clusterOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +73,7 @@ func (q *aggregateManualQueue) Enqueue(ctx context.Context, domain, scope, reaso
 
 	clusterJobs := make(map[string]string, len(targets))
 	for _, id := range targets {
-		queue := q.queues[id]
+		queue := queues[id]
 		if queue == nil {
 			return nil, fmt.Errorf("manual queue unavailable for %s", id)
 		}
@@ -114,7 +116,8 @@ func (q *aggregateManualQueue) Status(jobID string) (*refresh.ManualRefreshJob, 
 	}
 	q.mu.RUnlock()
 
-	return q.buildAggregateStatus(&base, clusterJobs), true
+	_, queues := q.snapshotConfig()
+	return q.buildAggregateStatus(&base, clusterJobs, queues), true
 }
 
 // Update stores the aggregated job when invoked directly.
@@ -135,14 +138,19 @@ func (q *aggregateManualQueue) Next(ctx context.Context) (*refresh.ManualRefresh
 	return nil, ctx.Err()
 }
 
-func (q *aggregateManualQueue) resolveTargets(domain string, clusterIDs []string) ([]string, error) {
+func (q *aggregateManualQueue) resolveTargets(
+	domain string,
+	clusterIDs []string,
+	queues map[string]refresh.ManualQueue,
+	clusterOrder []string,
+) ([]string, error) {
 	if len(clusterIDs) > 0 {
 		if isSingleClusterDomain(domain) && len(clusterIDs) > 1 {
 			return nil, fmt.Errorf("domain %s is only available on a single cluster", domain)
 		}
 		targets := make([]string, 0, len(clusterIDs))
 		for _, id := range clusterIDs {
-			if _, ok := q.queues[id]; !ok {
+			if _, ok := queues[id]; !ok {
 				return nil, fmt.Errorf("cluster %s not active", id)
 			}
 			targets = append(targets, id)
@@ -150,16 +158,13 @@ func (q *aggregateManualQueue) resolveTargets(domain string, clusterIDs []string
 		return targets, nil
 	}
 
-	if isSingleClusterDomain(domain) {
-		return nil, fmt.Errorf("domain %s requires an explicit cluster scope", domain)
-	}
-
-	return append([]string(nil), q.clusterOrder...), nil
+	return nil, fmt.Errorf("cluster scope is required for domain %s", domain)
 }
 
 func (q *aggregateManualQueue) buildAggregateStatus(
 	base *refresh.ManualRefreshJob,
 	clusterJobs map[string]string,
+	queues map[string]refresh.ManualQueue,
 ) *refresh.ManualRefreshJob {
 	state := refresh.JobStateQueued
 	var (
@@ -174,7 +179,7 @@ func (q *aggregateManualQueue) buildAggregateStatus(
 	)
 
 	for clusterID, jobID := range clusterJobs {
-		queue := q.queues[clusterID]
+		queue := queues[clusterID]
 		if queue == nil {
 			hasFailed = true
 			if firstErr == "" {
@@ -235,6 +240,29 @@ func (q *aggregateManualQueue) buildAggregateStatus(
 	base.StartedAt = startedAt
 	base.FinishedAt = finishedAt
 	return base
+}
+
+func (q *aggregateManualQueue) snapshotConfig() ([]string, map[string]refresh.ManualQueue) {
+	q.configMu.RLock()
+	defer q.configMu.RUnlock()
+	order := append([]string(nil), q.clusterOrder...)
+	queues := make(map[string]refresh.ManualQueue, len(q.queues))
+	for id, queue := range q.queues {
+		queues[id] = queue
+	}
+	return order, queues
+}
+
+// UpdateConfig refreshes the aggregate manual queue wiring after selection changes.
+func (q *aggregateManualQueue) UpdateConfig(clusterOrder []string, subsystems map[string]*system.Subsystem) {
+	if q == nil {
+		return
+	}
+	next := newAggregateManualQueue(clusterOrder, subsystems)
+	q.configMu.Lock()
+	q.clusterOrder = next.clusterOrder
+	q.queues = next.queues
+	q.configMu.Unlock()
 }
 
 // generateAggregateJobID returns a unique identifier for aggregate manual refresh jobs.

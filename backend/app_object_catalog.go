@@ -82,17 +82,7 @@ func (a *App) catalogTargets() []catalogTarget {
 	}
 
 	if len(selections) == 0 {
-		meta := a.currentClusterMeta()
-		if meta.ID == "" {
-			return nil
-		}
-		return []catalogTarget{{
-			selection: kubeconfigSelection{
-				Path:    a.selectedKubeconfig,
-				Context: a.selectedContext,
-			},
-			meta: meta,
-		}}
+		return nil
 	}
 
 	targets := make([]catalogTarget, 0, len(selections))
@@ -276,6 +266,30 @@ func (a *App) clearObjectCatalogEntries() []*objectCatalogEntry {
 	}
 	a.objectCatalogEntries = make(map[string]*objectCatalogEntry)
 	return entries
+}
+
+func (a *App) removeObjectCatalogEntry(clusterID string) *objectCatalogEntry {
+	a.objectCatalogMu.Lock()
+	defer a.objectCatalogMu.Unlock()
+	entry := a.objectCatalogEntries[clusterID]
+	delete(a.objectCatalogEntries, clusterID)
+	return entry
+}
+
+func (a *App) stopObjectCatalogForCluster(clusterID string) {
+	if a == nil || clusterID == "" {
+		return
+	}
+	entry := a.removeObjectCatalogEntry(clusterID)
+	if entry == nil {
+		return
+	}
+	if entry.cancel != nil {
+		entry.cancel()
+	}
+	if entry.done != nil {
+		<-entry.done
+	}
 }
 
 func (a *App) snapshotObjectCatalogEntries() []*objectCatalogEntry {

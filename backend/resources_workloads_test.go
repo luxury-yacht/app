@@ -25,8 +25,9 @@ func TestGetWorkloadsRequiresClient(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
 	app.versionCache = versioning.NewCache()
+	clusterID := "config:ctx"
 
-	_, err := app.GetWorkloads("default", "")
+	_, err := app.GetWorkloads(clusterID, "default", "")
 	if err == nil {
 		t.Fatalf("expected error when client not initialised")
 	}
@@ -36,6 +37,7 @@ func TestGetWorkloadsReturnsData(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
 	app.versionCache = versioning.NewCache()
+	clusterID := "config:ctx"
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -54,9 +56,17 @@ func TestGetWorkloadsReturnsData(t *testing.T) {
 		},
 		Status: appsv1.DeploymentStatus{ReadyReplicas: 1, Replicas: 1},
 	}
-	app.client = cgofake.NewClientset(deploy)
+	client := cgofake.NewClientset(deploy)
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
 
-	resp, err := app.GetWorkloads("default", "")
+	resp, err := app.GetWorkloads(clusterID, "default", "")
 	if err != nil {
 		t.Fatalf("expected workloads to succeed: %v", err)
 	}
@@ -68,6 +78,7 @@ func TestGetWorkloadsReturnsData(t *testing.T) {
 func TestWorkloadWrappersHappyPath(t *testing.T) {
 	app := wrapperTestApp(t)
 	app.Ctx = context.Background()
+	clusterID := "config:ctx"
 
 	labels := map[string]string{"app": "web"}
 	replicas := int32(1)
@@ -182,24 +193,32 @@ func TestWorkloadWrappersHappyPath(t *testing.T) {
 		},
 	}
 
-	app.client = cgofake.NewClientset(deploy, rs, sts, ds, job, cronJob, service, &pods[0], &pods[1], &pods[2], &pods[3])
+	client := cgofake.NewClientset(deploy, rs, sts, ds, job, cronJob, service, &pods[0], &pods[1], &pods[2], &pods[3])
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
 
-	if _, err := app.GetDeployment("apps", "web"); err != nil {
+	if _, err := app.GetDeployment(clusterID, "apps", "web"); err != nil {
 		t.Fatalf("expected deployment wrapper to succeed: %v", err)
 	}
-	if _, err := app.GetReplicaSet("apps", "web-rs"); err != nil {
+	if _, err := app.GetReplicaSet(clusterID, "apps", "web-rs"); err != nil {
 		t.Fatalf("expected replicaset wrapper to succeed: %v", err)
 	}
-	if _, err := app.GetStatefulSet("apps", "db"); err != nil {
+	if _, err := app.GetStatefulSet(clusterID, "apps", "db"); err != nil {
 		t.Fatalf("expected statefulset wrapper to succeed: %v", err)
 	}
-	if _, err := app.GetDaemonSet("apps", "logger"); err != nil {
+	if _, err := app.GetDaemonSet(clusterID, "apps", "logger"); err != nil {
 		t.Fatalf("expected daemonset wrapper to succeed: %v", err)
 	}
-	if _, err := app.GetJob("apps", "backup"); err != nil {
+	if _, err := app.GetJob(clusterID, "apps", "backup"); err != nil {
 		t.Fatalf("expected job wrapper to succeed: %v", err)
 	}
-	if _, err := app.GetCronJob("apps", "nightly"); err != nil {
+	if _, err := app.GetCronJob(clusterID, "apps", "nightly"); err != nil {
 		t.Fatalf("expected cronjob wrapper to succeed: %v", err)
 	}
 }

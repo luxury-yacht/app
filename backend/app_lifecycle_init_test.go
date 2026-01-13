@@ -6,17 +6,39 @@ import (
 	"strings"
 	"testing"
 
+	"k8s.io/apimachinery/pkg/runtime"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	cgofake "k8s.io/client-go/kubernetes/fake"
 )
 
-func TestInitKubernetesClientReturnsEarlyWithExistingClient(t *testing.T) {
+func TestInitKubernetesClientUsesExistingClusterClients(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
-	app.client = cgofake.NewClientset()
+	app.Ctx = context.Background()
+
+	// Seed a selection and client pool so init uses the existing cluster client.
+	configPath := "/tmp/config"
+	app.availableKubeconfigs = []KubeconfigInfo{{
+		Name:    "config",
+		Path:    configPath,
+		Context: "ctx",
+	}}
+	app.selectedKubeconfigs = []string{configPath + ":ctx"}
+	clusterID := app.clusterMetaForSelection(kubeconfigSelection{Path: configPath, Context: "ctx"}).ID
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    configPath,
+			kubeconfigContext: "ctx",
+			client:            cgofake.NewClientset(),
+			dynamicClient:     dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()),
+		},
+	}
 
 	if err := app.initKubernetesClient(); err != nil {
 		t.Fatalf("expected nil error when client already present, got %v", err)
 	}
+	app.teardownRefreshSubsystem()
 }
 
 func TestInitKubernetesClientErrorsWithoutKubeconfig(t *testing.T) {
@@ -29,7 +51,7 @@ func TestInitKubernetesClientErrorsWithoutKubeconfig(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error when no kubeconfig available")
 	}
-	if !strings.Contains(err.Error(), "no kubeconfig available") {
+	if !strings.Contains(err.Error(), "no kubeconfig selections available") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if app.connectionStatus != ConnectionStateOffline {
@@ -65,12 +87,20 @@ users:
 	app := NewApp()
 	app.logger = NewLogger(10)
 	app.Ctx = context.Background()
-	app.selectedKubeconfig = file
+	app.availableKubeconfigs = []KubeconfigInfo{{
+		Name:    "config",
+		Path:    file,
+		Context: "test",
+	}}
+	app.selectedKubeconfigs = []string{file + ":test"}
 
 	if err := app.initKubernetesClient(); err != nil {
 		t.Fatalf("expected kubeconfig initialization to succeed, got %v", err)
 	}
-	if app.client == nil || app.restConfig == nil {
-		t.Fatalf("expected client and restConfig to be initialized")
+	clusterID := app.clusterMetaForSelection(kubeconfigSelection{Path: file, Context: "test"}).ID
+	clients := app.clusterClients[clusterID]
+	if clients == nil || clients.client == nil || clients.restConfig == nil {
+		t.Fatalf("expected cluster clients and restConfig to be initialized")
 	}
+	app.teardownRefreshSubsystem()
 }

@@ -82,12 +82,17 @@ func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh
 		return nil, err
 	}
 	cacheKey := s.cacheKey(domainName, scope)
+	groupKey := cacheKey
+	if refresh.HasCacheBypass(ctx) {
+		// Keep cache-bypass builds isolated from cached singleflight requests.
+		groupKey = cacheKey + ":bypass"
+	}
 	if !refresh.HasCacheBypass(ctx) {
 		if cached := s.loadCache(cacheKey); cached != nil {
 			return cached, nil
 		}
 	}
-	value, err, _ := s.group.Do(cacheKey, func() (interface{}, error) {
+	value, err, _ := s.group.Do(groupKey, func() (interface{}, error) {
 		if !refresh.HasCacheBypass(ctx) {
 			if cached := s.loadCache(cacheKey); cached != nil {
 				return cached, nil

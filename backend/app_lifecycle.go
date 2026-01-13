@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -117,15 +116,15 @@ func (a *App) Startup(ctx context.Context) {
 
 	a.restoreKubeconfigSelection()
 
-	if a.selectedKubeconfig != "" {
-		a.logger.Info(fmt.Sprintf("Connecting to cluster using: %s", filepath.Base(a.selectedKubeconfig)), "App")
+	if len(a.selectedKubeconfigs) > 0 {
+		a.logger.Info(fmt.Sprintf("Connecting to %d selected cluster(s)", len(a.selectedKubeconfigs)), "App")
 		if err := a.initKubernetesClient(); err != nil {
-			a.logger.Error(fmt.Sprintf("Failed to connect to cluster: %v", err), "App")
+			a.logger.Error(fmt.Sprintf("Failed to connect to cluster(s): %v", err), "App")
 		} else {
-			a.logger.Info("Successfully connected to Kubernetes cluster", "App")
+			a.logger.Info("Successfully connected to Kubernetes cluster(s)", "App")
 		}
 	} else {
-		a.logger.Warn("No kubeconfig files found - please configure kubectl access", "App")
+		a.logger.Warn("No kubeconfig selections found - please select a cluster", "App")
 	}
 
 	// Start the heartbeat loop to monitor application health.

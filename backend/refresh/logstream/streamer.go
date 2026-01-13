@@ -296,6 +296,13 @@ func (s *Streamer) consumeWatch(
 			if !ok {
 				return errors.New("watch channel closed")
 			}
+			// watch.Error events may not close the channel, so surface an error to trigger a reconnect.
+			if event.Type == watch.Error {
+				if status, ok := event.Object.(*metav1.Status); ok {
+					return fmt.Errorf("logstream: watch error: %s", status.Message)
+				}
+				return errors.New("logstream: watch error event")
+			}
 			pod, ok := event.Object.(*corev1.Pod)
 			if !ok {
 				continue

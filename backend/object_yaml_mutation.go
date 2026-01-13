@@ -510,8 +510,12 @@ func wrapKubernetesError(err error, defaultMessage string) error {
 	return fmt.Errorf("%s: %w", defaultMessage, err)
 }
 
-func (a *App) getGVRForGVK(ctx context.Context, gvk schema.GroupVersionKind) (schema.GroupVersionResource, bool, error) {
-	return getGVRForGVKWithDependencies(ctx, a.resourceDependencies(), a.currentSelectionKey(), gvk)
+func (a *App) getGVRForGVK(ctx context.Context, clusterID string, gvk schema.GroupVersionKind) (schema.GroupVersionResource, bool, error) {
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return schema.GroupVersionResource{}, false, err
+	}
+	return getGVRForGVKWithDependencies(ctx, deps, selectionKey, gvk)
 }
 
 func getGVRForGVKWithDependencies(

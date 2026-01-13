@@ -44,8 +44,22 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 	app := NewApp()
 	app.Ctx = context.Background()
 	app.client = fake.NewClientset(deploy, configMap, clusterRole, namespace)
+	// Bind the test client to a concrete cluster scope for detail fetches.
+	clusterID := "config:ctx"
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            app.client,
+		},
+	}
 
 	provider := app.objectDetailProvider()
+	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
+		ClusterID:   clusterID,
+		ClusterName: "ctx",
+	})
 
 	tests := []struct {
 		kind, namespace, name string
@@ -57,7 +71,7 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		detail, _, err := provider.FetchObjectDetails(context.Background(), tt.kind, tt.namespace, tt.name)
+		detail, _, err := provider.FetchObjectDetails(ctx, tt.kind, tt.namespace, tt.name)
 		if err != nil {
 			t.Fatalf("FetchObjectDetails(%s) returned error: %v", tt.kind, err)
 		}
@@ -205,7 +219,22 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 	app.Ctx = context.Background()
 	app.client = client
 	app.apiextensionsClient = apiExtClient
+	// Bind the test client to a concrete cluster scope for detail fetches.
+	clusterID := "config:ctx"
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:                ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:      "/path",
+			kubeconfigContext:   "ctx",
+			client:              client,
+			apiextensionsClient: apiExtClient,
+		},
+	}
 	provider := app.objectDetailProvider()
+	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
+		ClusterID:   clusterID,
+		ClusterName: "ctx",
+	})
 
 	kinds := []struct {
 		kind, ns, name string
@@ -234,7 +263,7 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 	}
 
 	for _, tt := range kinds {
-		_, _, err := provider.FetchObjectDetails(context.Background(), tt.kind, tt.ns, tt.name)
+		_, _, err := provider.FetchObjectDetails(ctx, tt.kind, tt.ns, tt.name)
 		if err != nil {
 			t.Fatalf("FetchObjectDetails(%s) returned error: %v", tt.kind, err)
 		}
@@ -255,10 +284,21 @@ func TestObjectDetailProviderFetchObjectYAML(t *testing.T) {
 	app.logger = NewLogger(10)
 	app.client = fake.NewClientset(cm)
 	app.dynamicClient = dynamicfake.NewSimpleDynamicClient(scheme, cm)
+	// Bind the test client to a concrete cluster scope for YAML fetches.
+	clusterID := "config:ctx"
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            app.client,
+			dynamicClient:     app.dynamicClient,
+		},
+	}
 
 	gvrCacheMutex.Lock()
 	gvrCache = map[string]gvrCacheEntry{
-		"ConfigMap": {
+		gvrCacheKey(clusterID, "ConfigMap"): {
 			gvr:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "configmaps"},
 			namespaced: true,
 			cachedAt:   time.Now(),
@@ -267,7 +307,11 @@ func TestObjectDetailProviderFetchObjectYAML(t *testing.T) {
 	gvrCacheMutex.Unlock()
 
 	provider := app.objectDetailProvider().(*objectDetailProvider)
-	yamlStr, err := provider.FetchObjectYAML(context.Background(), "ConfigMap", "default", "cm")
+	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
+		ClusterID:   clusterID,
+		ClusterName: "ctx",
+	})
+	yamlStr, err := provider.FetchObjectYAML(ctx, "ConfigMap", "default", "cm")
 	if err != nil {
 		t.Fatalf("FetchObjectYAML returned error: %v", err)
 	}
@@ -279,13 +323,26 @@ func TestObjectDetailProviderFetchObjectYAML(t *testing.T) {
 func TestObjectDetailProviderHelmErrorsWhenClientMissing(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
+	// Bind the test client to a concrete cluster scope for Helm detail fetches.
+	clusterID := "config:ctx"
+	app.clusterClients = map[string]*clusterClients{
+		clusterID: {
+			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+		},
+	}
 	provider := app.objectDetailProvider().(*objectDetailProvider)
+	ctx := snapshot.WithClusterMeta(context.Background(), snapshot.ClusterMeta{
+		ClusterID:   clusterID,
+		ClusterName: "ctx",
+	})
 
-	if _, _, err := provider.FetchHelmManifest(context.Background(), "ns", "release"); err == nil {
+	if _, _, err := provider.FetchHelmManifest(ctx, "ns", "release"); err == nil {
 		t.Fatal("expected error when client is missing")
 	}
 
-	if _, _, err := provider.FetchHelmValues(context.Background(), "ns", "release"); err == nil {
+	if _, _, err := provider.FetchHelmValues(ctx, "ns", "release"); err == nil {
 		t.Fatal("expected error when client is missing")
 	}
 }

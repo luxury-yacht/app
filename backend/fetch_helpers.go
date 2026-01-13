@@ -13,6 +13,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/cachekeys"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/internal/timeutil"
+	"github.com/luxury-yacht/app/backend/resources/common"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
@@ -38,14 +39,26 @@ func FetchResource[T any](
 	identifier string,
 	fetchFunc func() (T, error),
 ) (T, error) {
+	return FetchResourceWithSelection(a, "", cacheKey, resourceKind, identifier, fetchFunc)
+}
+
+// FetchResourceWithSelection runs a fetch with a cache key scoped to the provided selection key.
+func FetchResourceWithSelection[T any](
+	a *App,
+	selectionKey string,
+	cacheKey string,
+	resourceKind string,
+	identifier string,
+	fetchFunc func() (T, error),
+) (T, error) {
 	var zero T
 	if a != nil {
-		if cached, ok := a.responseCacheLookup("", cacheKey); ok {
+		if cached, ok := a.responseCacheLookup(selectionKey, cacheKey); ok {
 			if typed, ok := cached.(T); ok {
 				return typed, nil
 			}
 			// Cached value was the wrong type; evict and refetch.
-			a.responseCacheDelete("", cacheKey)
+			a.responseCacheDelete(selectionKey, cacheKey)
 		}
 	}
 	ctx := a.CtxOrBackground()
@@ -68,7 +81,7 @@ func FetchResource[T any](
 	}
 
 	if a != nil {
-		a.responseCacheStore("", cacheKey, result)
+		a.responseCacheStore(selectionKey, cacheKey, result)
 	}
 	return result, nil
 }
@@ -115,33 +128,37 @@ func FetchResourceList[T any](
 // It wraps client initialization, cache key generation, and FetchResource into one call.
 func FetchNamespacedResource[T any](
 	a *App,
+	deps common.Dependencies,
+	selectionKey string,
 	resourceKind string,
 	namespace, name string,
 	fetchFunc func() (T, error),
 ) (T, error) {
 	var zero T
-	if err := a.ensureClientInitialized(resourceKind); err != nil {
+	if err := ensureDependenciesInitialized(a, deps, resourceKind); err != nil {
 		return zero, err
 	}
 	cacheKey := cachekeys.Build(strings.ToLower(resourceKind)+"-detailed", namespace, name)
 	identifier := fmt.Sprintf("%s/%s", namespace, name)
-	return FetchResource(a, cacheKey, resourceKind, identifier, fetchFunc)
+	return FetchResourceWithSelection(a, selectionKey, cacheKey, resourceKind, identifier, fetchFunc)
 }
 
 // FetchClusterResource handles the common pattern for cluster-scoped resources.
 // It wraps client initialization, cache key generation, and FetchResource into one call.
 func FetchClusterResource[T any](
 	a *App,
+	deps common.Dependencies,
+	selectionKey string,
 	resourceKind string,
 	name string,
 	fetchFunc func() (T, error),
 ) (T, error) {
 	var zero T
-	if err := a.ensureClientInitialized(resourceKind); err != nil {
+	if err := ensureDependenciesInitialized(a, deps, resourceKind); err != nil {
 		return zero, err
 	}
 	cacheKey := cachekeys.Build(strings.ToLower(resourceKind)+"-detailed", "", name)
-	return FetchResource(a, cacheKey, resourceKind, name, fetchFunc)
+	return FetchResourceWithSelection(a, selectionKey, cacheKey, resourceKind, name, fetchFunc)
 }
 
 // EnsureClientInitialized checks if the Kubernetes client is initialized
@@ -158,6 +175,17 @@ func (a *App) ensureAPIExtensionsClientInitialized(resourceKind string) error {
 	if a.apiextensionsClient == nil {
 		a.logger.Error(fmt.Sprintf("API extensions client not initialized for %s fetch", resourceKind), "ResourceLoader")
 		return fmt.Errorf("apiextensions client not initialized")
+	}
+	return nil
+}
+
+// ensureDependenciesInitialized checks the cluster-scoped dependencies before fetching.
+func ensureDependenciesInitialized(a *App, deps common.Dependencies, resourceKind string) error {
+	if deps.KubernetesClient == nil {
+		if a != nil && a.logger != nil {
+			a.logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), "ResourceLoader")
+		}
+		return fmt.Errorf("kubernetes client not initialized")
 	}
 	return nil
 }

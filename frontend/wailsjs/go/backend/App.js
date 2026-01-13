@@ -82,72 +82,72 @@ export function GetCatalogDiagnostics() {
   return window['go']['backend']['App']['GetCatalogDiagnostics']();
 }
 
-export function GetClusterRole(arg1) {
-  return window['go']['backend']['App']['GetClusterRole'](arg1);
+export function GetClusterRole(arg1, arg2) {
+  return window['go']['backend']['App']['GetClusterRole'](arg1, arg2);
 }
 
-export function GetClusterRoleBinding(arg1) {
-  return window['go']['backend']['App']['GetClusterRoleBinding'](arg1);
+export function GetClusterRoleBinding(arg1, arg2) {
+  return window['go']['backend']['App']['GetClusterRoleBinding'](arg1, arg2);
 }
 
 export function GetClusterTabOrder() {
   return window['go']['backend']['App']['GetClusterTabOrder']();
 }
 
-export function GetConfigMap(arg1, arg2) {
-  return window['go']['backend']['App']['GetConfigMap'](arg1, arg2);
+export function GetConfigMap(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetConfigMap'](arg1, arg2, arg3);
 }
 
-export function GetCronJob(arg1, arg2) {
-  return window['go']['backend']['App']['GetCronJob'](arg1, arg2);
+export function GetCronJob(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetCronJob'](arg1, arg2, arg3);
 }
 
-export function GetCustomResourceDefinition(arg1) {
-  return window['go']['backend']['App']['GetCustomResourceDefinition'](arg1);
+export function GetCustomResourceDefinition(arg1, arg2) {
+  return window['go']['backend']['App']['GetCustomResourceDefinition'](arg1, arg2);
 }
 
-export function GetDaemonSet(arg1, arg2) {
-  return window['go']['backend']['App']['GetDaemonSet'](arg1, arg2);
+export function GetDaemonSet(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetDaemonSet'](arg1, arg2, arg3);
 }
 
-export function GetDeployment(arg1, arg2) {
-  return window['go']['backend']['App']['GetDeployment'](arg1, arg2);
+export function GetDeployment(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetDeployment'](arg1, arg2, arg3);
 }
 
-export function GetEndpointSlice(arg1, arg2) {
-  return window['go']['backend']['App']['GetEndpointSlice'](arg1, arg2);
+export function GetEndpointSlice(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetEndpointSlice'](arg1, arg2, arg3);
 }
 
 export function GetGridTablePersistence() {
   return window['go']['backend']['App']['GetGridTablePersistence']();
 }
 
-export function GetHelmManifest(arg1, arg2) {
-  return window['go']['backend']['App']['GetHelmManifest'](arg1, arg2);
+export function GetHelmManifest(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetHelmManifest'](arg1, arg2, arg3);
 }
 
-export function GetHelmReleaseDetails(arg1, arg2) {
-  return window['go']['backend']['App']['GetHelmReleaseDetails'](arg1, arg2);
+export function GetHelmReleaseDetails(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetHelmReleaseDetails'](arg1, arg2, arg3);
 }
 
-export function GetHelmValues(arg1, arg2) {
-  return window['go']['backend']['App']['GetHelmValues'](arg1, arg2);
+export function GetHelmValues(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetHelmValues'](arg1, arg2, arg3);
 }
 
-export function GetHorizontalPodAutoscaler(arg1, arg2) {
-  return window['go']['backend']['App']['GetHorizontalPodAutoscaler'](arg1, arg2);
+export function GetHorizontalPodAutoscaler(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetHorizontalPodAutoscaler'](arg1, arg2, arg3);
 }
 
-export function GetIngress(arg1, arg2) {
-  return window['go']['backend']['App']['GetIngress'](arg1, arg2);
+export function GetIngress(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetIngress'](arg1, arg2, arg3);
 }
 
-export function GetIngressClass(arg1) {
-  return window['go']['backend']['App']['GetIngressClass'](arg1);
+export function GetIngressClass(arg1, arg2) {
+  return window['go']['backend']['App']['GetIngressClass'](arg1, arg2);
 }
 
-export function GetJob(arg1, arg2) {
-  return window['go']['backend']['App']['GetJob'](arg1, arg2);
+export function GetJob(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetJob'](arg1, arg2, arg3);
 }
 
 export function GetKubeconfigSearchPaths() {
@@ -158,76 +158,76 @@ export function GetKubeconfigs() {
   return window['go']['backend']['App']['GetKubeconfigs']();
 }
 
-export function GetLimitRange(arg1, arg2) {
-  return window['go']['backend']['App']['GetLimitRange'](arg1, arg2);
+export function GetLimitRange(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetLimitRange'](arg1, arg2, arg3);
 }
 
 export function GetLogs() {
   return window['go']['backend']['App']['GetLogs']();
 }
 
-export function GetMutatingWebhookConfiguration(arg1) {
-  return window['go']['backend']['App']['GetMutatingWebhookConfiguration'](arg1);
+export function GetMutatingWebhookConfiguration(arg1, arg2) {
+  return window['go']['backend']['App']['GetMutatingWebhookConfiguration'](arg1, arg2);
 }
 
-export function GetNamespace(arg1) {
-  return window['go']['backend']['App']['GetNamespace'](arg1);
+export function GetNamespace(arg1, arg2) {
+  return window['go']['backend']['App']['GetNamespace'](arg1, arg2);
 }
 
-export function GetNetworkPolicy(arg1, arg2) {
-  return window['go']['backend']['App']['GetNetworkPolicy'](arg1, arg2);
+export function GetNetworkPolicy(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetNetworkPolicy'](arg1, arg2, arg3);
 }
 
-export function GetNode(arg1) {
-  return window['go']['backend']['App']['GetNode'](arg1);
+export function GetNode(arg1, arg2) {
+  return window['go']['backend']['App']['GetNode'](arg1, arg2);
 }
 
 export function GetObjectYAML(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['GetObjectYAML'](arg1, arg2, arg3, arg4);
 }
 
-export function GetPersistentVolume(arg1) {
-  return window['go']['backend']['App']['GetPersistentVolume'](arg1);
+export function GetPersistentVolume(arg1, arg2) {
+  return window['go']['backend']['App']['GetPersistentVolume'](arg1, arg2);
 }
 
-export function GetPersistentVolumeClaim(arg1, arg2) {
-  return window['go']['backend']['App']['GetPersistentVolumeClaim'](arg1, arg2);
+export function GetPersistentVolumeClaim(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetPersistentVolumeClaim'](arg1, arg2, arg3);
 }
 
-export function GetPod(arg1, arg2, arg3) {
-  return window['go']['backend']['App']['GetPod'](arg1, arg2, arg3);
+export function GetPod(arg1, arg2, arg3, arg4) {
+  return window['go']['backend']['App']['GetPod'](arg1, arg2, arg3, arg4);
 }
 
 export function GetPodContainers(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetPodContainers'](arg1, arg2, arg3);
 }
 
-export function GetPodDisruptionBudget(arg1, arg2) {
-  return window['go']['backend']['App']['GetPodDisruptionBudget'](arg1, arg2);
+export function GetPodDisruptionBudget(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetPodDisruptionBudget'](arg1, arg2, arg3);
 }
 
 export function GetRefreshBaseURL() {
   return window['go']['backend']['App']['GetRefreshBaseURL']();
 }
 
-export function GetReplicaSet(arg1, arg2) {
-  return window['go']['backend']['App']['GetReplicaSet'](arg1, arg2);
+export function GetReplicaSet(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetReplicaSet'](arg1, arg2, arg3);
 }
 
-export function GetResourceQuota(arg1, arg2) {
-  return window['go']['backend']['App']['GetResourceQuota'](arg1, arg2);
+export function GetResourceQuota(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetResourceQuota'](arg1, arg2, arg3);
 }
 
-export function GetRole(arg1, arg2) {
-  return window['go']['backend']['App']['GetRole'](arg1, arg2);
+export function GetRole(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetRole'](arg1, arg2, arg3);
 }
 
-export function GetRoleBinding(arg1, arg2) {
-  return window['go']['backend']['App']['GetRoleBinding'](arg1, arg2);
+export function GetRoleBinding(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetRoleBinding'](arg1, arg2, arg3);
 }
 
-export function GetSecret(arg1, arg2) {
-  return window['go']['backend']['App']['GetSecret'](arg1, arg2);
+export function GetSecret(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetSecret'](arg1, arg2, arg3);
 }
 
 export function GetSelectedKubeconfig() {
@@ -238,32 +238,32 @@ export function GetSelectedKubeconfigs() {
   return window['go']['backend']['App']['GetSelectedKubeconfigs']();
 }
 
-export function GetService(arg1, arg2) {
-  return window['go']['backend']['App']['GetService'](arg1, arg2);
+export function GetService(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetService'](arg1, arg2, arg3);
 }
 
-export function GetServiceAccount(arg1, arg2) {
-  return window['go']['backend']['App']['GetServiceAccount'](arg1, arg2);
+export function GetServiceAccount(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetServiceAccount'](arg1, arg2, arg3);
 }
 
-export function GetStatefulSet(arg1, arg2) {
-  return window['go']['backend']['App']['GetStatefulSet'](arg1, arg2);
+export function GetStatefulSet(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetStatefulSet'](arg1, arg2, arg3);
 }
 
-export function GetStorageClass(arg1) {
-  return window['go']['backend']['App']['GetStorageClass'](arg1);
+export function GetStorageClass(arg1, arg2) {
+  return window['go']['backend']['App']['GetStorageClass'](arg1, arg2);
 }
 
 export function GetThemeInfo() {
   return window['go']['backend']['App']['GetThemeInfo']();
 }
 
-export function GetValidatingWebhookConfiguration(arg1) {
-  return window['go']['backend']['App']['GetValidatingWebhookConfiguration'](arg1);
+export function GetValidatingWebhookConfiguration(arg1, arg2) {
+  return window['go']['backend']['App']['GetValidatingWebhookConfiguration'](arg1, arg2);
 }
 
-export function GetWorkloads(arg1, arg2) {
-  return window['go']['backend']['App']['GetWorkloads'](arg1, arg2);
+export function GetWorkloads(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['GetWorkloads'](arg1, arg2, arg3);
 }
 
 export function InitializeForTesting(arg1, arg2) {

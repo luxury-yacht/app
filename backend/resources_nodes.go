@@ -9,9 +9,12 @@ package backend
 
 import "github.com/luxury-yacht/app/backend/resources/nodes"
 
-func (a *App) GetNode(name string) (*NodeDetails, error) {
-	deps := a.resourceDependencies()
-	return FetchClusterResource(a, "Node", name, func() (*NodeDetails, error) {
+func (a *App) GetNode(clusterID, name string) (*NodeDetails, error) {
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return FetchClusterResource(a, deps, selectionKey, "Node", name, func() (*NodeDetails, error) {
 		return nodes.NewService(deps).Node(name)
 	})
 }
