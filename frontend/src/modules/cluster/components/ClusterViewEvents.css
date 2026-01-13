@@ -17,5 +17,5 @@
 .gridtable-cluster-events .grid-cell[data-column="objectName"],
 .gridtable-cluster-events .grid-cell[data-column="reason"],
 .gridtable-cluster-events .grid-cell[data-column="message"] {
-  align-items: flex-start;
+  align-items: center;
 }
