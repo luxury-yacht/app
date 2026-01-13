@@ -18,6 +18,8 @@ func (a *App) teardownRefreshSubsystem() {
 		a.refreshCancel()
 		a.refreshCancel = nil
 	}
+	a.refreshCtx = nil
+	a.clearRefreshPermissionCancels()
 
 	// Use timeout context for shutdown operations to prevent indefinite blocking
 	const shutdownTimeout = time.Second
@@ -54,6 +56,7 @@ func (a *App) teardownRefreshSubsystem() {
 
 	a.refreshSubsystems = make(map[string]*system.Subsystem)
 	a.refreshManager = nil
+	a.refreshAggregates = nil
 
 	serverDone := a.refreshServerDone
 	if a.refreshHTTPServer != nil {
@@ -100,6 +103,29 @@ func (a *App) teardownRefreshSubsystem() {
 	a.apiExtensionsInformerFactory = nil
 	a.refreshBaseURL = ""
 	clearGVRCache()
+}
+
+func (a *App) stopRefreshPermissionRevalidation(clusterID string) {
+	if a == nil || clusterID == "" {
+		return
+	}
+	cancel := a.refreshPermissionCancels[clusterID]
+	if cancel != nil {
+		cancel()
+	}
+	delete(a.refreshPermissionCancels, clusterID)
+}
+
+func (a *App) clearRefreshPermissionCancels() {
+	if a == nil || len(a.refreshPermissionCancels) == 0 {
+		return
+	}
+	for id, cancel := range a.refreshPermissionCancels {
+		if cancel != nil {
+			cancel()
+		}
+		delete(a.refreshPermissionCancels, id)
+	}
 }
 
 func (a *App) handlePermissionIssues(issues []system.PermissionIssue) {

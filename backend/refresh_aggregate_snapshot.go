@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
@@ -15,6 +16,7 @@ import (
 type aggregateSnapshotService struct {
 	clusterOrder []string
 	services     map[string]refresh.SnapshotService
+	mu           sync.RWMutex
 }
 
 // newAggregateSnapshotService builds an aggregator for the provided cluster snapshot services.
@@ -52,8 +54,9 @@ func newAggregateSnapshotService(
 
 // Build fans out the snapshot request and merges payloads for multi-cluster domains.
 func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
+	clusterOrder, services := s.snapshotConfig()
 	clusterIDs, scopeValue := refresh.SplitClusterScopeList(scope)
-	targets, err := s.resolveTargets(domain, clusterIDs)
+	targets, err := s.resolveTargets(domain, clusterIDs, services, clusterOrder)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +69,7 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 	warnings := make([]string, 0, len(targets))
 	var firstErr error
 	for _, id := range targets {
-		service := s.services[id]
+		service := services[id]
 		if service == nil {
 			buildErr := fmt.Errorf("snapshot service unavailable for %s", id)
 			if !allowPartial {
@@ -119,14 +122,19 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 }
 
 // resolveTargets chooses which clusters should handle the requested domain/scope pair.
-func (s *aggregateSnapshotService) resolveTargets(domain string, clusterIDs []string) ([]string, error) {
+func (s *aggregateSnapshotService) resolveTargets(
+	domain string,
+	clusterIDs []string,
+	services map[string]refresh.SnapshotService,
+	clusterOrder []string,
+) ([]string, error) {
 	if len(clusterIDs) > 0 {
 		if isSingleClusterDomain(domain) && len(clusterIDs) > 1 {
 			return nil, fmt.Errorf("domain %s is only available on a single cluster", domain)
 		}
 		targets := make([]string, 0, len(clusterIDs))
 		for _, id := range clusterIDs {
-			if _, ok := s.services[id]; !ok {
+			if _, ok := services[id]; !ok {
 				return nil, fmt.Errorf("cluster %s not active", id)
 			}
 			targets = append(targets, id)
@@ -138,7 +146,30 @@ func (s *aggregateSnapshotService) resolveTargets(domain string, clusterIDs []st
 		return nil, fmt.Errorf("domain %s requires an explicit cluster scope", domain)
 	}
 
-	return append([]string(nil), s.clusterOrder...), nil
+	return append([]string(nil), clusterOrder...), nil
+}
+
+func (s *aggregateSnapshotService) snapshotConfig() ([]string, map[string]refresh.SnapshotService) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	order := append([]string(nil), s.clusterOrder...)
+	services := make(map[string]refresh.SnapshotService, len(s.services))
+	for id, service := range s.services {
+		services[id] = service
+	}
+	return order, services
+}
+
+// Update refreshes the aggregate snapshot configuration after selection changes.
+func (s *aggregateSnapshotService) Update(clusterOrder []string, subsystems map[string]*system.Subsystem) {
+	if s == nil {
+		return
+	}
+	next := newAggregateSnapshotService(clusterOrder, subsystems)
+	s.mu.Lock()
+	s.clusterOrder = next.clusterOrder
+	s.services = next.services
+	s.mu.Unlock()
 }
 
 // isSingleClusterDomain restricts object-scoped and catalog domains to one cluster for now.

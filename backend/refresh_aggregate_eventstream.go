@@ -33,6 +33,7 @@ type aggregateEventStreamHandler struct {
 	logger          eventstream.Logger
 	buffers         map[string]*aggregateEventBuffer
 	sequences       map[string]uint64
+	configMu        sync.RWMutex
 	mu              sync.Mutex
 }
 
@@ -97,7 +98,8 @@ func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
-	targets, err := h.resolveTargets(params.ClusterIDs)
+	snapshotService, managers, clusterMeta, clusterOrder := h.snapshotConfig()
+	targets, err := h.resolveTargets(params.ClusterIDs, managers, clusterOrder)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -121,7 +123,7 @@ func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 	resumeEvents, resumeOK := h.bufferSince(params.ScopeKey, resumeID)
 	if resumeID == 0 || !resumeOK {
 		snapshotScope := refresh.JoinClusterScope(params.ClusterToken, params.SnapshotScope)
-		snapshotPayload, err := h.snapshotService.Build(ctx, params.Domain, snapshotScope)
+		snapshotPayload, err := snapshotService.Build(ctx, params.Domain, snapshotScope)
 		if err != nil {
 			if h.telemetry != nil {
 				h.telemetry.RecordStreamError(streamName, err)
@@ -173,7 +175,7 @@ func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 	entryCh := make(chan streamEntry, config.AggregateEventStreamEntryBufferSize)
 	cancelFns := make([]context.CancelFunc, 0, len(targets))
 	for _, id := range targets {
-		manager := h.managers[id]
+		manager := managers[id]
 		if manager == nil {
 			continue
 		}
@@ -213,7 +215,7 @@ func (h *aggregateEventStreamHandler) ServeHTTP(w http.ResponseWriter, r *http.R
 				Scope:       params.ScopeKey,
 				Sequence:    sequence,
 				GeneratedAt: time.Now().UnixMilli(),
-				Events:      []eventstream.Entry{h.decorateEntry(entry)},
+				Events:      []eventstream.Entry{h.decorateEntry(entry, clusterMeta)},
 			}
 			if err := writeEventPayload(w, f, payload); err != nil {
 				if h.telemetry != nil {
@@ -330,11 +332,15 @@ func (b *aggregateEventBuffer) since(sequence uint64) ([]aggregateBufferItem, bo
 }
 
 // resolveTargets selects the clusters to stream from based on the requested IDs.
-func (h *aggregateEventStreamHandler) resolveTargets(clusterIDs []string) ([]string, error) {
+func (h *aggregateEventStreamHandler) resolveTargets(
+	clusterIDs []string,
+	managers map[string]eventStreamSubscriber,
+	clusterOrder []string,
+) ([]string, error) {
 	if len(clusterIDs) > 0 {
 		targets := make([]string, 0, len(clusterIDs))
 		for _, id := range clusterIDs {
-			if _, ok := h.managers[id]; !ok {
+			if _, ok := managers[id]; !ok {
 				return nil, fmt.Errorf("cluster %s not active", id)
 			}
 			targets = append(targets, id)
@@ -342,9 +348,9 @@ func (h *aggregateEventStreamHandler) resolveTargets(clusterIDs []string) ([]str
 		return targets, nil
 	}
 
-	ordered := make([]string, 0, len(h.clusterOrder))
-	for _, id := range h.clusterOrder {
-		if _, ok := h.managers[id]; ok {
+	ordered := make([]string, 0, len(clusterOrder))
+	for _, id := range clusterOrder {
+		if _, ok := managers[id]; ok {
 			ordered = append(ordered, id)
 		}
 	}
@@ -352,8 +358,8 @@ func (h *aggregateEventStreamHandler) resolveTargets(clusterIDs []string) ([]str
 		return ordered, nil
 	}
 
-	targets := make([]string, 0, len(h.managers))
-	for id := range h.managers {
+	targets := make([]string, 0, len(managers))
+	for id := range managers {
 		targets = append(targets, id)
 	}
 	sort.Strings(targets)
@@ -361,9 +367,12 @@ func (h *aggregateEventStreamHandler) resolveTargets(clusterIDs []string) ([]str
 }
 
 // decorateEntry attaches cluster metadata to event stream entries when missing.
-func (h *aggregateEventStreamHandler) decorateEntry(entry streamEntry) eventstream.Entry {
+func (h *aggregateEventStreamHandler) decorateEntry(
+	entry streamEntry,
+	clusterMeta map[string]snapshot.ClusterMeta,
+) eventstream.Entry {
 	event := entry.entry
-	if meta, ok := h.clusterMeta[entry.clusterID]; ok {
+	if meta, ok := clusterMeta[entry.clusterID]; ok {
 		if event.ClusterID == "" {
 			event.ClusterID = meta.ClusterID
 		}
@@ -375,6 +384,44 @@ func (h *aggregateEventStreamHandler) decorateEntry(entry streamEntry) eventstre
 		event.ClusterID = entry.clusterID
 	}
 	return event
+}
+
+func (h *aggregateEventStreamHandler) snapshotConfig() (
+	refresh.SnapshotService,
+	map[string]eventStreamSubscriber,
+	map[string]snapshot.ClusterMeta,
+	[]string,
+) {
+	h.configMu.RLock()
+	defer h.configMu.RUnlock()
+	managers := make(map[string]eventStreamSubscriber, len(h.managers))
+	for id, manager := range h.managers {
+		managers[id] = manager
+	}
+	meta := make(map[string]snapshot.ClusterMeta, len(h.clusterMeta))
+	for id, entry := range h.clusterMeta {
+		meta[id] = entry
+	}
+	order := append([]string(nil), h.clusterOrder...)
+	return h.snapshotService, managers, meta, order
+}
+
+// UpdateConfig refreshes aggregate streaming targets without rebuilding buffers.
+func (h *aggregateEventStreamHandler) UpdateConfig(
+	snapshotService refresh.SnapshotService,
+	managers map[string]eventStreamSubscriber,
+	clusterMeta map[string]snapshot.ClusterMeta,
+	clusterOrder []string,
+) {
+	if h == nil {
+		return
+	}
+	h.configMu.Lock()
+	h.snapshotService = snapshotService
+	h.managers = managers
+	h.clusterMeta = clusterMeta
+	h.clusterOrder = append([]string(nil), clusterOrder...)
+	h.configMu.Unlock()
 }
 
 // parseAggregateEventScope normalizes cluster and namespace event scope tokens.

@@ -33,6 +33,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	}
 
 	ctx, cancel := context.WithCancel(a.Ctx)
+	a.refreshCtx = ctx
 	a.refreshCancel = cancel
 
 	subsystems, clusterOrder, hostSubsystem, err := a.buildRefreshSubsystems(kubeClient, selectionKey)
@@ -42,10 +43,11 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 
 	a.startRefreshSubsystems(ctx, subsystems)
 
-	mux, err := a.buildRefreshMux(hostSubsystem, subsystems, clusterOrder)
+	mux, aggregates, err := a.buildRefreshMux(hostSubsystem, subsystems, clusterOrder)
 	if err != nil {
 		return err
 	}
+	a.refreshAggregates = aggregates
 
 	return a.startRefreshHTTPServer(mux, hostSubsystem, subsystems)
 }
@@ -124,34 +126,10 @@ func (a *App) buildRefreshSubsystems(
 			if clients == nil {
 				return nil, nil, nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
 			}
-
-			cfg := system.Config{
-				KubernetesClient:      clients.client,
-				MetricsClient:         clients.metricsClient,
-				RestConfig:            clients.restConfig,
-				ResyncInterval:        config.RefreshResyncInterval,
-				MetricsInterval:       a.resolveMetricsInterval(),
-				APIExtensionsClient:   clients.apiextensionsClient,
-				DynamicClient:         clients.dynamicClient,
-				HelmFactory:           a.helmActionFactoryForSelection(selection),
-				ObjectDetailsProvider: a.objectDetailProvider(),
-				Logger:                a.logger,
-				ClusterID:             clusterMeta.ID,
-				ClusterName:           clusterMeta.Name,
-			}
-
-			cfg.ObjectCatalogService = func() *objectcatalog.Service {
-				return a.objectCatalogServiceForCluster(clusterMeta.ID)
-			}
-			cfg.ObjectCatalogNamespaces = a.catalogNamespaceGroups
-			cfg.ObjectCatalogEnabled = func() bool { return true }
-
-			subsystem, err := a.buildRefreshSubsystem(cfg)
+			subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, clusterMeta)
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			// Watch informer updates to invalidate cached detail/YAML/helm responses.
-			a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
 
 			subsystems[clusterMeta.ID] = subsystem
 			clusterOrder = append(clusterOrder, clusterMeta.ID)
@@ -168,9 +146,44 @@ func (a *App) buildRefreshSubsystems(
 	return subsystems, clusterOrder, hostSubsystem, nil
 }
 
+func (a *App) buildRefreshSubsystemForSelection(
+	selection kubeconfigSelection,
+	clients *clusterClients,
+	clusterMeta ClusterMeta,
+) (*system.Subsystem, error) {
+	cfg := system.Config{
+		KubernetesClient:      clients.client,
+		MetricsClient:         clients.metricsClient,
+		RestConfig:            clients.restConfig,
+		ResyncInterval:        config.RefreshResyncInterval,
+		MetricsInterval:       a.resolveMetricsInterval(),
+		APIExtensionsClient:   clients.apiextensionsClient,
+		DynamicClient:         clients.dynamicClient,
+		HelmFactory:           a.helmActionFactoryForSelection(selection),
+		ObjectDetailsProvider: a.objectDetailProvider(),
+		Logger:                a.logger,
+		ClusterID:             clusterMeta.ID,
+		ClusterName:           clusterMeta.Name,
+	}
+
+	cfg.ObjectCatalogService = func() *objectcatalog.Service {
+		return a.objectCatalogServiceForCluster(clusterMeta.ID)
+	}
+	cfg.ObjectCatalogNamespaces = a.catalogNamespaceGroups
+	cfg.ObjectCatalogEnabled = func() bool { return true }
+
+	subsystem, err := a.buildRefreshSubsystem(cfg)
+	if err != nil {
+		return nil, err
+	}
+	// Watch informer updates to invalidate cached detail/YAML/helm responses.
+	a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
+	return subsystem, nil
+}
+
 // startRefreshSubsystems runs the manager loops and permission revalidation for each subsystem.
 func (a *App) startRefreshSubsystems(ctx context.Context, subsystems map[string]*system.Subsystem) {
-	for _, subsystem := range subsystems {
+	for clusterID, subsystem := range subsystems {
 		manager := subsystem.Manager
 		if manager == nil {
 			continue
@@ -181,8 +194,23 @@ func (a *App) startRefreshSubsystems(ctx context.Context, subsystems map[string]
 			}
 		}(manager)
 		// Keep permission grants fresh; revoke access stops refresh informers/streams.
-		subsystem.StartPermissionRevalidation(ctx)
+		permCtx, cancel := context.WithCancel(ctx)
+		a.storeRefreshPermissionCancel(clusterID, cancel)
+		subsystem.StartPermissionRevalidation(permCtx)
 	}
+}
+
+func (a *App) storeRefreshPermissionCancel(clusterID string, cancel context.CancelFunc) {
+	if a == nil || clusterID == "" || cancel == nil {
+		return
+	}
+	if a.refreshPermissionCancels == nil {
+		a.refreshPermissionCancels = make(map[string]context.CancelFunc)
+	}
+	if prev := a.refreshPermissionCancels[clusterID]; prev != nil {
+		prev()
+	}
+	a.refreshPermissionCancels[clusterID] = cancel
 }
 
 // buildRefreshMux wires the aggregate refresh routes on top of the core API endpoints.
@@ -190,7 +218,7 @@ func (a *App) buildRefreshMux(
 	hostSubsystem *system.Subsystem,
 	subsystems map[string]*system.Subsystem,
 	clusterOrder []string,
-) (*http.ServeMux, error) {
+) (*http.ServeMux, *refreshAggregateHandlers, error) {
 	// Wrap the base refresh API with aggregate services for multi-cluster domains.
 	aggregateService := newAggregateSnapshotService(clusterOrder, subsystems)
 	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
@@ -206,7 +234,7 @@ func (a *App) buildRefreshMux(
 	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
 	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, hostSubsystem.Telemetry)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	mux := system.BuildRefreshMux(system.MuxConfig{
@@ -224,7 +252,58 @@ func (a *App) buildRefreshMux(
 	mux.Handle("/api/v2/stream/resources", aggregateResources)
 	mux.Handle("/", hostSubsystem.Handler)
 
-	return mux, nil
+	aggregates := &refreshAggregateHandlers{
+		snapshot:  aggregateService,
+		manual:    aggregateQueue,
+		events:    aggregateEvents,
+		logs:      aggregateLogs,
+		catalog:   aggregateCatalog,
+		resources: aggregateResources,
+	}
+	return mux, aggregates, nil
+}
+
+// refreshAggregateHandlers stores aggregate endpoints that need live cluster updates.
+type refreshAggregateHandlers struct {
+	snapshot  *aggregateSnapshotService
+	manual    *aggregateManualQueue
+	events    *aggregateEventStreamHandler
+	logs      *aggregateLogStreamHandler
+	catalog   *aggregateCatalogStreamHandler
+	resources *aggregateResourceStreamHandler
+}
+
+// Update refreshes aggregate endpoint wiring without rebuilding the HTTP server.
+func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[string]*system.Subsystem) error {
+	if h == nil {
+		return nil
+	}
+	if h.resources != nil {
+		if err := h.resources.Update(subsystems); err != nil {
+			return err
+		}
+	}
+	if h.snapshot != nil {
+		h.snapshot.Update(clusterOrder, subsystems)
+	}
+	if h.manual != nil {
+		h.manual.UpdateConfig(clusterOrder, subsystems)
+	}
+	if h.events != nil {
+		h.events.UpdateConfig(
+			h.snapshot,
+			collectEventManagers(subsystems),
+			collectClusterMeta(subsystems),
+			clusterOrder,
+		)
+	}
+	if h.logs != nil {
+		h.logs.Update(subsystems)
+	}
+	if h.catalog != nil {
+		h.catalog.Update(subsystems)
+	}
+	return nil
 }
 
 // startRefreshHTTPServer starts the loopback HTTP server and records the runtime wiring.

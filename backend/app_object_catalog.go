@@ -278,6 +278,30 @@ func (a *App) clearObjectCatalogEntries() []*objectCatalogEntry {
 	return entries
 }
 
+func (a *App) removeObjectCatalogEntry(clusterID string) *objectCatalogEntry {
+	a.objectCatalogMu.Lock()
+	defer a.objectCatalogMu.Unlock()
+	entry := a.objectCatalogEntries[clusterID]
+	delete(a.objectCatalogEntries, clusterID)
+	return entry
+}
+
+func (a *App) stopObjectCatalogForCluster(clusterID string) {
+	if a == nil || clusterID == "" {
+		return
+	}
+	entry := a.removeObjectCatalogEntry(clusterID)
+	if entry == nil {
+		return
+	}
+	if entry.cancel != nil {
+		entry.cancel()
+	}
+	if entry.done != nil {
+		<-entry.done
+	}
+}
+
 func (a *App) snapshotObjectCatalogEntries() []*objectCatalogEntry {
 	a.objectCatalogMu.Lock()
 	defer a.objectCatalogMu.Unlock()

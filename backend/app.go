@@ -49,6 +49,7 @@ type App struct {
 	refreshManager               *refresh.Manager
 	refreshHTTPServer            *http.Server
 	refreshListener              net.Listener
+	refreshCtx                   context.Context
 	refreshCancel                context.CancelFunc
 	refreshBaseURL               string
 	refreshServerDone            chan struct{}
@@ -56,6 +57,8 @@ type App struct {
 	sharedInformerFactory        informers.SharedInformerFactory
 	apiExtensionsInformerFactory apiextinformers.SharedInformerFactory
 	refreshSubsystems            map[string]*system.Subsystem
+	refreshAggregates            *refreshAggregateHandlers
+	refreshPermissionCancels     map[string]context.CancelFunc
 
 	objectCatalogMu      sync.Mutex
 	objectCatalogEntries map[string]*objectCatalogEntry
@@ -98,16 +101,17 @@ type App struct {
 // NewApp constructs a backend App with sane defaults.
 func NewApp() *App {
 	app := &App{
-		logger:               NewLogger(1000),
-		versionCache:         versioning.NewCache(),
-		responseCache:        newDefaultResponseCache(),
-		sidebarVisible:       true,
-		logsPanelVisible:     false,
-		refreshSubsystems:    make(map[string]*system.Subsystem),
-		clusterClients:       make(map[string]*clusterClients),
-		objectCatalogEntries: make(map[string]*objectCatalogEntry),
-		shellSessions:        make(map[string]*shellSession),
-		eventEmitter:         func(context.Context, string, ...interface{}) {},
+		logger:                   NewLogger(1000),
+		versionCache:             versioning.NewCache(),
+		responseCache:            newDefaultResponseCache(),
+		sidebarVisible:           true,
+		logsPanelVisible:         false,
+		refreshSubsystems:        make(map[string]*system.Subsystem),
+		refreshPermissionCancels: make(map[string]context.CancelFunc),
+		clusterClients:           make(map[string]*clusterClients),
+		objectCatalogEntries:     make(map[string]*objectCatalogEntry),
+		shellSessions:            make(map[string]*shellSession),
+		eventEmitter:             func(context.Context, string, ...interface{}) {},
 	}
 	app.startAuthRecovery = func(reason string) {
 		go app.runAuthRecovery(reason)

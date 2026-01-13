@@ -441,16 +441,17 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 		if err := a.saveAppSettings(); err != nil {
 			a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
 		}
-		// Rebuild the refresh subsystem so multi-cluster snapshots include the updated selection.
-		if selectionChanged {
-			if err := a.rebuildRefreshSubsystem("kubeconfig selection updated"); err != nil {
-				return err
-			}
-		}
 	}
 
 	if err := a.syncClusterClientPool(normalized); err != nil {
 		return err
+	}
+
+	// Update active clusters without forcing a full refresh subsystem rebuild.
+	if !baseChanged && selectionChanged {
+		if err := a.updateRefreshSubsystemSelections(normalized); err != nil {
+			return err
+		}
 	}
 
 	return nil
