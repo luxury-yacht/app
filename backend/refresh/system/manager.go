@@ -24,7 +24,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/api"
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
@@ -212,9 +211,15 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 
 	manager := refresh.NewManager(registry, informerFactory, snapshotService, metricsPoller, queue)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz/refresh", HealthHandler(informerFactory))
-	api.NewServer(registry, snapshotService, queue, telemetryRecorder, manager).Register(mux)
+	// Build the core refresh routes once so all server configurations stay consistent.
+	mux := BuildRefreshMux(MuxConfig{
+		Registry:        registry,
+		SnapshotService: snapshotService,
+		ManualQueue:     queue,
+		Telemetry:       telemetryRecorder,
+		Metrics:         manager,
+		HealthHub:       informerFactory,
+	})
 
 	eventManager, resourceManager, err := registerStreamHandlers(mux, streamDeps{
 		informerFactory: informerFactory,

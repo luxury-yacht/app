@@ -10,7 +10,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/api"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"helm.sh/helm/v3/pkg/action"
@@ -33,6 +32,29 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		return errors.New("application context not initialised")
 	}
 
+	ctx, cancel := context.WithCancel(a.Ctx)
+	a.refreshCancel = cancel
+
+	subsystems, clusterOrder, hostSubsystem, err := a.buildRefreshSubsystems(kubeClient, selectionKey)
+	if err != nil {
+		return err
+	}
+
+	a.startRefreshSubsystems(ctx, subsystems)
+
+	mux, err := a.buildRefreshMux(hostSubsystem, subsystems, clusterOrder)
+	if err != nil {
+		return err
+	}
+
+	return a.startRefreshHTTPServer(mux, hostSubsystem, subsystems)
+}
+
+// buildRefreshSubsystems creates refresh subsystems for the active cluster selections.
+func (a *App) buildRefreshSubsystems(
+	kubeClient kubernetes.Interface,
+	selectionKey string,
+) (map[string]*system.Subsystem, []string, *system.Subsystem, error) {
 	selections, err := a.selectedKubeconfigSelections()
 	if err != nil {
 		selections = nil
@@ -40,9 +62,6 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 
 	subsystems := make(map[string]*system.Subsystem)
 	clusterOrder := make([]string, 0)
-
-	ctx, cancel := context.WithCancel(a.Ctx)
-	a.refreshCancel = cancel
 
 	var hostSubsystem *system.Subsystem
 	hostClusterID := ""
@@ -80,7 +99,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 			ClusterName:             clusterMeta.Name,
 		})
 		if err != nil {
-			return err
+			return nil, nil, nil, err
 		}
 		// Watch informer updates to invalidate cached detail/YAML/helm responses.
 		a.registerResponseCacheInvalidation(subsystem, selectionKey)
@@ -93,17 +112,17 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	} else {
 		// Align the client pool to the selected cluster set before building managers.
 		if err := a.syncClusterClientPool(selections); err != nil {
-			return err
+			return nil, nil, nil, err
 		}
 
 		for _, selection := range selections {
 			clusterMeta := a.clusterMetaForSelection(selection)
 			if clusterMeta.ID == "" {
-				return fmt.Errorf("cluster identifier missing for selection %s", selection.String())
+				return nil, nil, nil, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
 			}
 			clients := a.clusterClientsForID(clusterMeta.ID)
 			if clients == nil {
-				return fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
+				return nil, nil, nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
 			}
 
 			cfg := system.Config{
@@ -129,7 +148,7 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 
 			subsystem, err := a.buildRefreshSubsystem(cfg)
 			if err != nil {
-				return err
+				return nil, nil, nil, err
 			}
 			// Watch informer updates to invalidate cached detail/YAML/helm responses.
 			a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
@@ -143,9 +162,14 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	}
 
 	if hostSubsystem == nil {
-		return errors.New("refresh subsystem not initialised")
+		return nil, nil, nil, errors.New("refresh subsystem not initialised")
 	}
 
+	return subsystems, clusterOrder, hostSubsystem, nil
+}
+
+// startRefreshSubsystems runs the manager loops and permission revalidation for each subsystem.
+func (a *App) startRefreshSubsystems(ctx context.Context, subsystems map[string]*system.Subsystem) {
 	for _, subsystem := range subsystems {
 		manager := subsystem.Manager
 		if manager == nil {
@@ -159,7 +183,14 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 		// Keep permission grants fresh; revoke access stops refresh informers/streams.
 		subsystem.StartPermissionRevalidation(ctx)
 	}
+}
 
+// buildRefreshMux wires the aggregate refresh routes on top of the core API endpoints.
+func (a *App) buildRefreshMux(
+	hostSubsystem *system.Subsystem,
+	subsystems map[string]*system.Subsystem,
+	clusterOrder []string,
+) (*http.ServeMux, error) {
 	// Wrap the base refresh API with aggregate services for multi-cluster domains.
 	aggregateService := newAggregateSnapshotService(clusterOrder, subsystems)
 	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
@@ -175,22 +206,33 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
 	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, hostSubsystem.Telemetry)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	mux := http.NewServeMux()
-	api.NewServer(
-		hostSubsystem.Registry,
-		aggregateService,
-		aggregateQueue,
-		hostSubsystem.Telemetry,
-		hostSubsystem.Manager,
-	).Register(mux)
+
+	mux := system.BuildRefreshMux(system.MuxConfig{
+		Registry:        hostSubsystem.Registry,
+		SnapshotService: aggregateService,
+		ManualQueue:     aggregateQueue,
+		Telemetry:       hostSubsystem.Telemetry,
+		Metrics:         hostSubsystem.Manager,
+		// HealthHub stays nil because hostSubsystem.Handler already serves /healthz/refresh.
+		HealthHub: nil,
+	})
 	mux.Handle("/api/v2/stream/events", aggregateEvents)
 	mux.Handle("/api/v2/stream/logs", aggregateLogs)
 	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)
 	mux.Handle("/api/v2/stream/resources", aggregateResources)
 	mux.Handle("/", hostSubsystem.Handler)
 
+	return mux, nil
+}
+
+// startRefreshHTTPServer starts the loopback HTTP server and records the runtime wiring.
+func (a *App) startRefreshHTTPServer(
+	mux *http.ServeMux,
+	hostSubsystem *system.Subsystem,
+	subsystems map[string]*system.Subsystem,
+) error {
 	if a.listenLoopback == nil {
 		a.listenLoopback = defaultLoopbackListener
 	}
