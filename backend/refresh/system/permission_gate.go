@@ -123,6 +123,15 @@ func (g *permissionGate) listErrors(results []listCheckResult) []error {
 	return errs
 }
 
+func (g *permissionGate) listErrFor(results []listCheckResult, group, resource string) error {
+	for _, result := range results {
+		if result.check.group == group && result.check.resource == resource {
+			return result.err
+		}
+	}
+	return nil
+}
+
 func (g *permissionGate) listWatchErrors(results []listWatchCheckResult) []error {
 	errs := make([]error, 0, len(results))
 	for _, result := range results {

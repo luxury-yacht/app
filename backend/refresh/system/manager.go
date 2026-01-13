@@ -139,12 +139,22 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 
 	// *** Metrics polling ***
 
-	metricsNodesAllowed, metricsNodesErr := informerFactory.CanListResource("metrics.k8s.io", "nodes")
-	metricsPodsAllowed, metricsPodsErr := informerFactory.CanListResource("metrics.k8s.io", "pods")
+	metricsChecks := []listCheck{
+		{group: "metrics.k8s.io", resource: "nodes"},
+		{group: "metrics.k8s.io", resource: "pods"},
+	}
+	metricsResults := gate.runListChecks(metricsChecks)
+	metricsErrs := gate.listErrors(metricsResults)
+	metricsAllowed := gate.allListAllowed(metricsResults)
+	allowedByKey := gate.listAllowedByKey(metricsResults)
+	metricsNodesAllowed := allowedByKey["metrics.k8s.io/nodes"]
+	metricsPodsAllowed := allowedByKey["metrics.k8s.io/pods"]
+	metricsNodesErr := gate.listErrFor(metricsResults, "metrics.k8s.io", "nodes")
+	metricsPodsErr := gate.listErrFor(metricsResults, "metrics.k8s.io", "pods")
 
 	// Check if metrics polling is allowed and append any permission issues.
-	appendIssue("metrics-poller", "metrics.k8s.io/nodes,pods", metricsNodesErr, metricsPodsErr)
-	if metricsNodesErr == nil && metricsPodsErr == nil && metricsNodesAllowed && metricsPodsAllowed {
+	appendIssue("metrics-poller", "metrics.k8s.io/nodes,pods", metricsErrs...)
+	if len(metricsErrs) == 0 && metricsAllowed {
 		poller := metrics.NewPoller(cfg.MetricsClient, cfg.RestConfig, cfg.MetricsInterval, telemetryRecorder)
 		idleTimeout := cfg.MetricsInterval * 3
 		demandPoller := metrics.NewDemandPoller(poller, poller, idleTimeout)

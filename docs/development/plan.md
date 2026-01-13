@@ -44,8 +44,8 @@
 8. Metadata deduplication ✅
    - Reduce repetition of domain metadata like `issueResource`, `logGroup`, `logResource`, `deniedReason` via helpers or constants.
 
-9. Metrics gating consolidation
+9. Metrics gating consolidation ✅
    - Align metrics polling permission checks with the same gating helper used for domains.
 
-10. Registration table tests
+10. Registration table tests ✅
    - Add a small test to validate registration order and required dependency checks (dynamic client, helm factory).
