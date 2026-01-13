@@ -168,6 +168,48 @@ func TestNamespaceConfigBuilderStableOrdering(t *testing.T) {
 	})
 }
 
+func TestNamespaceEventsBuilderUsesEventTimestampOrdering(t *testing.T) {
+	now := time.Now()
+	newer := now.Add(-1 * time.Minute)
+	older := now.Add(-9 * time.Minute)
+
+	eventA := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "event-a",
+			Namespace:         "default",
+			CreationTimestamp: metav1.NewTime(older),
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Namespace: "default",
+		},
+		LastTimestamp: metav1.NewTime(newer),
+	}
+	eventB := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "event-b",
+			Namespace:         "default",
+			CreationTimestamp: metav1.NewTime(newer),
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Namespace: "default",
+		},
+		LastTimestamp: metav1.NewTime(older),
+	}
+
+	builder := &NamespaceEventsBuilder{
+		eventLister: testsupport.NewEventLister(t, eventA, eventB),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "namespace:default")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(NamespaceEventsSnapshot)
+	require.True(t, ok)
+	require.Len(t, payload.Events, 2)
+	require.Equal(t, "event-a", payload.Events[0].Name)
+	require.Equal(t, "event-b", payload.Events[1].Name)
+}
+
 func TestNamespaceNetworkBuilder(t *testing.T) {
 	now := time.Now()
 	svc := &corev1.Service{
