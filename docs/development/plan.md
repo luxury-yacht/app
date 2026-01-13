@@ -34,3 +34,18 @@
 5. Declarative registration table ✅
    - Replace per-group registration helpers with an ordered table of domain registration entries.
    - Drive gating, fallbacks, and dependency checks from the table without changing behavior.
+
+6. Preflight alignment ✅
+   - Generate the permission preflight list from the registration table to prevent drift.
+
+7. Snapshot service abstraction
+   - Update event stream handler wiring to accept the snapshot service interface instead of `*snapshot.Service`.
+
+8. Metadata deduplication
+   - Reduce repetition of domain metadata like `issueResource`, `logGroup`, `logResource`, `deniedReason` via helpers or constants.
+
+9. Metrics gating consolidation
+   - Align metrics polling permission checks with the same gating helper used for domains.
+
+10. Registration table tests
+   - Add a small test to validate registration order and required dependency checks (dynamic client, helm factory).

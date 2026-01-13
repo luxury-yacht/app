@@ -101,37 +101,6 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, nil)
 	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
 	informerFactory.ConfigureRuntimePermissions(runtimePerms, cfg.Logger)
-
-	preflight := []informer.PermissionRequest{
-		{Group: "metrics.k8s.io", Resource: "nodes", Verb: "list"},
-		{Group: "metrics.k8s.io", Resource: "pods", Verb: "list"},
-		{Group: "rbac.authorization.k8s.io", Resource: "roles", Verb: "list"},
-		{Group: "rbac.authorization.k8s.io", Resource: "rolebindings", Verb: "list"},
-		{Group: "rbac.authorization.k8s.io", Resource: "clusterroles", Verb: "list"},
-		{Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings", Verb: "list"},
-		{Group: "storage.k8s.io", Resource: "storageclasses", Verb: "list"},
-		{Group: "networking.k8s.io", Resource: "ingressclasses", Verb: "list"},
-		{Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations", Verb: "list"},
-		{Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations", Verb: "list"},
-		{Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions", Verb: "list"},
-		{Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions", Verb: "watch"},
-		{Group: "", Resource: "nodes", Verb: "list"},
-		{Group: "", Resource: "nodes", Verb: "watch"},
-		{Group: "", Resource: "pods", Verb: "list"},
-		{Group: "", Resource: "pods", Verb: "watch"},
-		{Group: "", Resource: "namespaces", Verb: "list"},
-		{Group: "", Resource: "namespaces", Verb: "watch"},
-		{Group: "discovery.k8s.io", Resource: "endpointslices", Verb: "list"},
-		{Group: "discovery.k8s.io", Resource: "endpointslices", Verb: "watch"},
-		{Group: "", Resource: "persistentvolumes", Verb: "list"},
-		{Group: "", Resource: "persistentvolumes", Verb: "watch"},
-		{Group: "", Resource: "events", Verb: "list"},
-	}
-
-	// PrimePermissions checks the initial set of permissions required for the subsystem.
-	ctx, cancel := context.WithTimeout(context.Background(), config.PermissionPreflightTimeout)
-	_ = informerFactory.PrimePermissions(ctx, preflight)
-	cancel()
 	var permissionIssues []PermissionIssue
 
 	// appendIssue adds a permission issue to the list if any errors are present.
@@ -204,7 +173,6 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		metricsProvider = disabled
 	}
 
-	// *** Namespace domains ***
 	deps := registrationDeps{
 		registry:        registry,
 		informerFactory: informerFactory,
@@ -213,7 +181,19 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 		gate:            gate,
 		serverHost:      serverHost,
 	}
-	if err := registerDomains(deps); err != nil {
+
+	registrations := domainRegistrations(deps)
+	preflight := preflightRequests(registrations, []informer.PermissionRequest{
+		{Group: "metrics.k8s.io", Resource: "nodes", Verb: "list"},
+		{Group: "metrics.k8s.io", Resource: "pods", Verb: "list"},
+	})
+
+	// PrimePermissions checks the initial set of permissions required for the subsystem.
+	ctx, cancel := context.WithTimeout(context.Background(), config.PermissionPreflightTimeout)
+	_ = informerFactory.PrimePermissions(ctx, preflight)
+	cancel()
+
+	if err := registerDomains(gate, registrations); err != nil {
 		return nil, err
 	}
 

@@ -11,27 +11,29 @@ import (
 
 // registrationDeps bundles dependencies needed to register refresh domains.
 type registrationDeps struct {
-	registry        *domain.Registry
-	informerFactory *informer.Factory
-	metricsProvider metrics.Provider
-	cfg             Config
-	gate            *permissionGate
-	serverHost      string
+	registry        *domain.Registry  // Domain registry for managing domain lifecycles
+	informerFactory *informer.Factory // Factory for creating informers
+	metricsProvider metrics.Provider  // Provider for collecting metrics
+	cfg             Config            // Configuration settings
+	gate            *permissionGate   // Permission gate for access control
+	serverHost      string            // Hostname of the server
 }
 
 // domainRegistration describes a single domain registration entry.
 type domainRegistration struct {
-	name      string
-	list      *listDomainConfig
-	listWatch *listWatchDomainConfig
-	direct    func() error
-	skipIf    func() bool
-	require   func() error
+	name               string                 // Name of the domain
+	list               *listDomainConfig      // List-based domain configuration
+	listWatch          *listWatchDomainConfig // List-watch-based domain configuration
+	preflightList      []listCheck            // Preflight checks for list operations
+	preflightListWatch []listWatchCheck       // Preflight checks for list-watch operations
+	direct             func() error           // Direct registration function
+	skipIf             func() bool            // Function to determine if registration should be skipped
+	require            func() error           // Function to determine if registration is required
 }
 
 // registerDomains registers refresh domains in a fixed order to preserve behavior.
-func registerDomains(deps registrationDeps) error {
-	return runDomainRegistrations(deps.gate, domainRegistrations(deps))
+func registerDomains(gate *permissionGate, registrations []domainRegistration) error {
+	return runDomainRegistrations(gate, registrations)
 }
 
 // runDomainRegistrations applies the registration table in-order.
@@ -79,6 +81,52 @@ func runDomainRegistrations(gate *permissionGate, registrations []domainRegistra
 		}
 	}
 	return nil
+}
+
+// preflightRequests collects permission requests used to prime permission caches.
+func preflightRequests(registrations []domainRegistration, extra []informer.PermissionRequest) []informer.PermissionRequest {
+	requests := make([]informer.PermissionRequest, 0, len(extra))
+	seen := make(map[string]struct{})
+
+	add := func(group, resource, verb string) {
+		key := fmt.Sprintf("%s/%s/%s", group, resource, verb)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		requests = append(requests, informer.PermissionRequest{
+			Group:    group,
+			Resource: resource,
+			Verb:     verb,
+		})
+	}
+
+	for _, req := range extra {
+		add(req.Group, req.Resource, req.Verb)
+	}
+
+	for _, registration := range registrations {
+		if registration.list != nil {
+			for _, check := range registration.list.checks {
+				add(check.group, check.resource, "list")
+			}
+		}
+		if registration.listWatch != nil {
+			for _, check := range registration.listWatch.checks {
+				add(check.group, check.resource, "list")
+				add(check.group, check.resource, "watch")
+			}
+		}
+		for _, check := range registration.preflightList {
+			add(check.group, check.resource, "list")
+		}
+		for _, check := range registration.preflightListWatch {
+			add(check.group, check.resource, "list")
+			add(check.group, check.resource, "watch")
+		}
+	}
+
+	return requests
 }
 
 // domainRegistrations returns the ordered domain registration table.
@@ -337,11 +385,13 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			}
 			return nil
 		}),
-		directRegistration("namespace-network", func() error {
+		withPreflightListWatch(directRegistration("namespace-network", func() error {
 			return snapshot.RegisterNamespaceNetworkDomain(
 				deps.registry,
 				deps.informerFactory.SharedInformerFactory(),
 			)
+		}), []listWatchCheck{
+			{group: "discovery.k8s.io", resource: "endpointslices"},
 		}),
 		directRegistration("namespace-quotas", func() error {
 			return snapshot.RegisterNamespaceQuotasDomain(
@@ -429,5 +479,10 @@ func withSkip(registration domainRegistration, skip func() bool) domainRegistrat
 
 func withRequire(registration domainRegistration, require func() error) domainRegistration {
 	registration.require = require
+	return registration
+}
+
+func withPreflightListWatch(registration domainRegistration, checks []listWatchCheck) domainRegistration {
+	registration.preflightListWatch = append(registration.preflightListWatch, checks...)
 	return registration
 }
