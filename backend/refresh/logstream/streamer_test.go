@@ -3,6 +3,7 @@ package logstream
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
@@ -198,6 +200,45 @@ func TestPodPointersReturnsNewSlice(t *testing.T) {
 	}
 	if ptrs[0] == &pods[0] {
 		t.Fatal("expected pointers to point to copies, not original slice elements")
+	}
+}
+
+type fakeWatch struct {
+	ch chan watch.Event
+}
+
+func (f *fakeWatch) Stop() {
+	close(f.ch)
+}
+
+func (f *fakeWatch) ResultChan() <-chan watch.Event {
+	return f.ch
+}
+
+func TestConsumeWatchReturnsErrorOnWatchErrorEvent(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	streamer := NewStreamer(fake.NewClientset(), nil, nil)
+	fw := &fakeWatch{ch: make(chan watch.Event, 1)}
+	resultCh := make(chan error, 1)
+
+	go func() {
+		resultCh <- streamer.consumeWatch(ctx, fw, Options{}, map[string]bool{}, func(*corev1.Pod) {}, func(string) {})
+	}()
+
+	fw.ch <- watch.Event{
+		Type:   watch.Error,
+		Object: &metav1.Status{Message: "boom"},
+	}
+
+	select {
+	case err := <-resultCh:
+		if err == nil || !strings.Contains(err.Error(), "boom") {
+			t.Fatalf("expected watch error to propagate, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for consumeWatch to return")
 	}
 }
 

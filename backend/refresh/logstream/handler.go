@@ -312,9 +312,13 @@ func parseOptions(r *http.Request) (Options, error) {
 	if len(parts) < 3 {
 		return Options{}, errors.New("scope must be namespace:kind:name")
 	}
-	namespace := parts[0]
-	kind := parts[1]
-	name := strings.Join(parts[2:], ":")
+	namespace := strings.TrimSpace(parts[0])
+	kind := strings.TrimSpace(parts[1])
+	name := strings.TrimSpace(strings.Join(parts[2:], ":"))
+	// Reject empty segments early to avoid downstream lookups with invalid scope.
+	if namespace == "" || kind == "" || name == "" {
+		return Options{}, errors.New("scope must be namespace:kind:name")
+	}
 	container := strings.TrimSpace(r.URL.Query().Get("container"))
 	tail := defaultTailLines
 	if rawTail := strings.TrimSpace(r.URL.Query().Get("tailLines")); rawTail != "" {
