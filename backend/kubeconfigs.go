@@ -458,12 +458,15 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 
 // setBaseKubeconfig applies a single kubeconfig selection while optionally updating the selection list.
 func (a *App) setBaseKubeconfig(selection kubeconfigSelection, updateSelectionList bool) error {
-	// Update selected kubeconfig and context, reset client to force reinitialization
+	// Update selected kubeconfig and context, reset clients/config to force reinitialization.
 	a.logger.Info("Resetting Kubernetes clients for kubeconfig switch", "KubeconfigManager")
 	a.selectedKubeconfig = selection.Path
 	a.selectedContext = selection.Context
 	a.client = nil
 	a.apiextensionsClient = nil
+	// Clear dynamic/rest clients to avoid stale usage if initKubeClient fails.
+	a.dynamicClient = nil
+	a.restConfig = nil
 	clearGVRCache()
 
 	// Tear down refresh subsystem so it can be reinitialised with the new kubeconfig
