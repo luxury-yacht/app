@@ -100,7 +100,7 @@ func TestSnapshotEndpoint(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=cluster-a|", nil)
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -131,7 +131,7 @@ func TestSnapshotPermissionDenied(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/snapshots/nodes?scope=cluster-a|", nil)
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
@@ -172,7 +172,7 @@ func TestManualRefreshEndpoint(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"default"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|default"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()
@@ -206,7 +206,7 @@ func TestManualRefreshHandlesQueueErrors(t *testing.T) {
 	mux := http.NewServeMux()
 	server.Register(mux)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"default"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/refresh/nodes", strings.NewReader(`{"scope":"cluster-a|default"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", "wails://test")
 	rr := httptest.NewRecorder()

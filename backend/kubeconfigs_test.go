@@ -5,12 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/client-go/kubernetes/fake"
 )
 
 // createTempKubeconfig creates a temporary kubeconfig file for testing
@@ -280,7 +278,8 @@ func TestApp_GetSelectedKubeconfigs(t *testing.T) {
 
 	app.selectedKubeconfig = "/path/to/config"
 	app.selectedContext = "dev"
-	assert.Equal(t, []string{"/path/to/config:dev"}, app.GetSelectedKubeconfigs())
+	// Legacy single-selection fields no longer populate the multi-cluster selection list.
+	assert.Empty(t, app.GetSelectedKubeconfigs())
 
 	app.selectedKubeconfigs = []string{"/path/one:ctx", "/path/two:other"}
 	assert.Equal(t, []string{"/path/one:ctx", "/path/two:other"}, app.GetSelectedKubeconfigs())
@@ -312,19 +311,16 @@ func TestApp_SetKubeconfig(t *testing.T) {
 		kubeconfigPath string
 		expectError    bool
 		errorContains  string
-		skipClientInit bool
 	}{
 		{
 			name:           "set valid kubeconfig - validation only",
 			kubeconfigPath: configPath + ":default-context",
 			expectError:    false,
-			skipClientInit: true,
 		},
 		{
 			name:           "set another valid kubeconfig - validation only",
 			kubeconfigPath: testConfigPath + ":test-context",
 			expectError:    false,
-			skipClientInit: true,
 		},
 		{
 			name:           "set non-existent kubeconfig",
@@ -346,17 +342,12 @@ func TestApp_SetKubeconfig(t *testing.T) {
 				return invalidPath + ":invalid-context"
 			}(),
 			expectError:   true,
-			errorContains: "invalid kubeconfig file",
+			errorContains: "failed to build config from",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Pre-set a fake client to test that it gets reset
-			if tt.skipClientInit {
-				app.client = fake.NewClientset() // dummy client to test reset
-			}
-
 			err := app.SetKubeconfig(tt.kubeconfigPath)
 
 			if tt.expectError {
@@ -364,23 +355,14 @@ func TestApp_SetKubeconfig(t *testing.T) {
 				if tt.errorContains != "" {
 					assert.Contains(t, err.Error(), tt.errorContains)
 				}
-			} else if tt.skipClientInit {
-				// For validation-only tests, kubeconfig setting should work,
-				// but client initialization may or may not fail depending on the test server
-				if err != nil {
-					// Client init failed, which is acceptable in tests
-					assert.Contains(t, err.Error(), "failed to create clientset")
-				}
-				// Kubeconfig should be set regardless (path only, not path:context)
-				expectedPath := strings.Split(tt.kubeconfigPath, ":")[0]
-				assert.Equal(t, expectedPath, app.selectedKubeconfig)
-				// Client should be reset after switching kubeconfig
 			} else {
 				assert.NoError(t, err)
-				expectedPath := strings.Split(tt.kubeconfigPath, ":")[0]
-				assert.Equal(t, expectedPath, app.selectedKubeconfig)
-				assert.Nil(t, app.client)
+				assert.Equal(t, []string{tt.kubeconfigPath}, app.selectedKubeconfigs)
+				assert.Empty(t, app.selectedKubeconfig)
+				assert.Empty(t, app.selectedContext)
 			}
+			// Ensure refresh listeners don't leak across subtests.
+			app.teardownRefreshSubsystem()
 		})
 	}
 }
@@ -406,10 +388,13 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 	require.NoError(t, app.SetSelectedKubeconfigs(selections))
 
 	assert.Equal(t, selections, app.selectedKubeconfigs)
-	assert.Equal(t, configPath, app.selectedKubeconfig)
-	assert.Equal(t, "default-context", app.selectedContext)
+	assert.Empty(t, app.selectedKubeconfig)
+	assert.Empty(t, app.selectedContext)
 	require.NotNil(t, app.appSettings)
 	assert.Equal(t, selections, app.appSettings.SelectedKubeconfigs)
+	assert.Equal(t, selections[0], app.appSettings.SelectedKubeconfig)
+	// Ensure refresh listeners don't leak across tests.
+	app.teardownRefreshSubsystem()
 }
 
 func TestApp_SetSelectedKubeconfigsRejectsDuplicateContexts(t *testing.T) {

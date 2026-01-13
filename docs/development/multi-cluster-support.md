@@ -16,6 +16,7 @@ This document captures the multi-cluster decisions, rules, and constraints that 
 - Refresh scopes and keys are `clusterId|<scope>` (multi-cluster: `clusters=id1,id2|<scope>`).
 - Duplicate context names may exist, but only one can be active at a time.
 - Namespace selection stays in the frontend; do not add it to catalog snapshots.
+- Backend APIs that fetch or mutate resources must require an explicit `clusterId`; no implicit fallback.
 
 ## Cluster selection rules
 
@@ -42,6 +43,7 @@ This document captures the multi-cluster decisions, rules, and constraints that 
 - Set the header title to "No Active Clusters".
 - Clear snapshot state and stop all refresh/streams.
 - Kubeconfig dropdown, command palette, settings/about, and logs still work.
+- Do not auto-select a default kubeconfig or context; activation only happens through explicit user action or persisted selections.
 
 ## Cluster tabs
 
@@ -104,6 +106,7 @@ This document captures the multi-cluster decisions, rules, and constraints that 
 - Refresh base URL may change when the backend rebuilds the refresh subsystem.
 - Frontend invalidates the base URL and suppresses transient network errors during selection transitions.
 - In-flight refreshes tied to removed clusters must be ignored or canceled.
+- Missing cluster scope is a hard error (HTTP 400) for refresh/manual/stream endpoints; no legacy fallback.
 
 ## Risks
 
@@ -111,6 +114,7 @@ This document captures the multi-cluster decisions, rules, and constraints that 
 - Stream merge volume/order can create backpressure; throttle if needed.
 - Single-cluster domain restrictions must allow explicit cluster scopes.
 
-## Audit notes
+## Backend scope requirements
 
-- Remaining backend fallback behavior: if cluster metadata is missing in a request, some backend getters still fall back to base selection (single-cluster path).
+- Resource/detail/YAML/Helm endpoints require `clusterId`; reject empty scope early.
+- Response cache keys must be scoped by `clusterId` to prevent cross-cluster reuse.

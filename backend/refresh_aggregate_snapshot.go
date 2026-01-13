@@ -64,7 +64,7 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 		return nil, fmt.Errorf("no clusters available for %s", domain)
 	}
 
-	allowPartial := len(clusterIDs) > 1 || (len(clusterIDs) == 0 && len(targets) > 1)
+	allowPartial := len(clusterIDs) > 1
 	snapshots := make([]*refresh.Snapshot, 0, len(targets))
 	warnings := make([]string, 0, len(targets))
 	var firstErr error
@@ -142,11 +142,7 @@ func (s *aggregateSnapshotService) resolveTargets(
 		return targets, nil
 	}
 
-	if isSingleClusterDomain(domain) {
-		return nil, fmt.Errorf("domain %s requires an explicit cluster scope", domain)
-	}
-
-	return append([]string(nil), clusterOrder...), nil
+	return nil, fmt.Errorf("cluster scope is required for domain %s", domain)
 }
 
 func (s *aggregateSnapshotService) snapshotConfig() ([]string, map[string]refresh.SnapshotService) {

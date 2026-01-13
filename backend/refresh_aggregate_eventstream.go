@@ -431,6 +431,9 @@ func parseAggregateEventScope(raw string) (aggregateEventScope, error) {
 	}
 	clusterToken, _ := refresh.SplitClusterScope(raw)
 	clusterIDs, scopeValue := refresh.SplitClusterScopeList(raw)
+	if len(clusterIDs) == 0 {
+		return aggregateEventScope{}, fmt.Errorf("cluster scope is required")
+	}
 	scopeValue = strings.TrimSpace(scopeValue)
 	if scopeValue == "" || scopeValue == "cluster" {
 		return aggregateEventScope{

@@ -54,9 +54,11 @@ func TestEvaluateCapabilitiesSuccess(t *testing.T) {
 		},
 	}
 
+	// Scope the GVR cache to the selected cluster to mirror production lookups.
+	cacheKey := gvrCacheKey(capabilitiesClusterID, "Deployment")
 	gvrCacheMutex.Lock()
-	original, hadOriginal := gvrCache["Deployment"]
-	gvrCache["Deployment"] = gvrCacheEntry{
+	original, hadOriginal := gvrCache[cacheKey]
+	gvrCache[cacheKey] = gvrCacheEntry{
 		gvr: schema.GroupVersionResource{
 			Group:    "apps",
 			Version:  "v1",
@@ -69,9 +71,9 @@ func TestEvaluateCapabilitiesSuccess(t *testing.T) {
 	defer func() {
 		gvrCacheMutex.Lock()
 		if hadOriginal {
-			gvrCache["Deployment"] = original
+			gvrCache[cacheKey] = original
 		} else {
-			delete(gvrCache, "Deployment")
+			delete(gvrCache, cacheKey)
 		}
 		gvrCacheMutex.Unlock()
 	}()
@@ -153,8 +155,10 @@ func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
 		},
 	}
 
+	// Scope the GVR cache to the selected cluster to mirror production lookups.
+	cacheKey := gvrCacheKey(capabilitiesClusterID, "Deployment")
 	gvrCacheMutex.Lock()
-	gvrCache["Deployment"] = gvrCacheEntry{
+	gvrCache[cacheKey] = gvrCacheEntry{
 		gvr: schema.GroupVersionResource{
 			Group:    "apps",
 			Version:  "v1",
@@ -166,7 +170,7 @@ func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
 	gvrCacheMutex.Unlock()
 	defer func() {
 		gvrCacheMutex.Lock()
-		delete(gvrCache, "Deployment")
+		delete(gvrCache, cacheKey)
 		gvrCacheMutex.Unlock()
 	}()
 

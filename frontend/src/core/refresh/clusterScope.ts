@@ -26,14 +26,14 @@ const splitClusterScope = (value: string): { clusterId: string; scope: string } 
 // buildClusterScope prefixes scope with cluster identity for stable keying.
 export const buildClusterScope = (clusterId: string | undefined, scope?: string | null): string => {
   const raw = (scope ?? '').trim();
-  if (!raw) {
-    return '';
-  }
   const { clusterId: existingClusterId } = splitClusterScope(raw);
   if (existingClusterId) {
     return raw;
   }
   const id = (clusterId ?? '').trim();
+  if (!raw) {
+    return id ? `${id}${CLUSTER_SCOPE_DELIMITER}` : '';
+  }
   if (!id) {
     return raw;
   }

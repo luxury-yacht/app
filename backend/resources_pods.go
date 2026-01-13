@@ -10,8 +10,12 @@ package backend
 
 import "github.com/luxury-yacht/app/backend/resources/pods"
 
-func (a *App) GetPod(namespace string, name string, detailed bool) (*PodDetailInfo, error) {
-	return pods.GetPod(a.resourceDependencies(), namespace, name, detailed)
+func (a *App) GetPod(clusterID, namespace, name string, detailed bool) (*PodDetailInfo, error) {
+	deps, _, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return pods.GetPod(deps, namespace, name, detailed)
 }
 
 func (a *App) DeletePod(clusterID, namespace, name string) error {

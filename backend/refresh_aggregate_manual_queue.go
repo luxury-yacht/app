@@ -158,11 +158,7 @@ func (q *aggregateManualQueue) resolveTargets(
 		return targets, nil
 	}
 
-	if isSingleClusterDomain(domain) {
-		return nil, fmt.Errorf("domain %s requires an explicit cluster scope", domain)
-	}
-
-	return append([]string(nil), clusterOrder...), nil
+	return nil, fmt.Errorf("cluster scope is required for domain %s", domain)
 }
 
 func (q *aggregateManualQueue) buildAggregateStatus(

@@ -108,9 +108,11 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 		},
 	}
 
+	// Scope the GVR cache to the test cluster selection.
+	cacheKey := gvrCacheKey(clusterID, "Deployment")
 	gvrCacheMutex.Lock()
-	original, hadOriginal := gvrCache["Deployment"]
-	gvrCache["Deployment"] = gvrCacheEntry{
+	original, hadOriginal := gvrCache[cacheKey]
+	gvrCache[cacheKey] = gvrCacheEntry{
 		gvr: schema.GroupVersionResource{
 			Group:    "apps",
 			Version:  "v1",
@@ -125,9 +127,9 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 		gvrCacheMutex.Lock()
 		defer gvrCacheMutex.Unlock()
 		if hadOriginal {
-			gvrCache["Deployment"] = original
+			gvrCache[cacheKey] = original
 		} else {
-			delete(gvrCache, "Deployment")
+			delete(gvrCache, cacheKey)
 		}
 	})
 
@@ -389,9 +391,9 @@ func TestWrapKubernetesErrorUsesDefaultMessage(t *testing.T) {
 }
 
 func TestGetGVRForGVKFallsBackToCache(t *testing.T) {
-	app, _, _ := setupYAMLTestApp(t)
+	app, _, clusterID := setupYAMLTestApp(t)
 
-	gvr, namespaced, err := app.getGVRForGVK(context.Background(), schema.GroupVersionKind{
+	gvr, namespaced, err := app.getGVRForGVK(context.Background(), clusterID, schema.GroupVersionKind{
 		Group:   "apps",
 		Version: "v1",
 		Kind:    "Deployment",
@@ -409,7 +411,7 @@ func TestGetGVRForGVKFallsBackToCache(t *testing.T) {
 
 func TestGetGVRForGVKWithoutClientFails(t *testing.T) {
 	app := NewApp()
-	_, _, err := app.getGVRForGVK(context.Background(), schema.GroupVersionKind{Kind: "Deployment"})
+	_, _, err := app.getGVRForGVK(context.Background(), "missing", schema.GroupVersionKind{Kind: "Deployment"})
 	if err == nil {
 		t.Fatalf("expected error for missing client")
 	}

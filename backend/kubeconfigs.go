@@ -335,9 +335,6 @@ func (a *App) GetSelectedKubeconfigs() []string {
 	if len(a.selectedKubeconfigs) > 0 {
 		return append([]string(nil), a.selectedKubeconfigs...)
 	}
-	if selection := a.GetSelectedKubeconfig(); selection != "" {
-		return []string{selection}
-	}
 	return []string{}
 }
 
@@ -346,34 +343,19 @@ func (a *App) GetSelectedKubeconfigs() []string {
 func (a *App) SetKubeconfig(selection string) error {
 	a.logger.Info(fmt.Sprintf("Switching kubeconfig to: %s", selection), "KubeconfigManager")
 
+	if strings.TrimSpace(selection) == "" {
+		return a.clearKubeconfigSelection()
+	}
+
+	// Delegate to the multi-cluster selection flow to avoid implicit base routing.
+	if err := a.SetSelectedKubeconfigs([]string{selection}); err != nil {
+		return err
+	}
+
 	parsed, err := parseKubeconfigSelection(selection)
-	if err != nil || parsed.Context == "" {
-		a.logger.Error(fmt.Sprintf("Invalid kubeconfig selection format: %s (expected 'path:context')", selection), "KubeconfigManager")
-		return fmt.Errorf("invalid selection format, expected 'path:context'")
+	if err == nil {
+		a.logger.Info(fmt.Sprintf("Successfully switched to kubeconfig %s with context %s", parsed.Path, parsed.Context), "KubeconfigManager")
 	}
-	if err := a.validateKubeconfigSelection(parsed); err != nil {
-		a.logger.Error(fmt.Sprintf("Kubeconfig context not found: %s in %s", parsed.Context, parsed.Path), "KubeconfigManager")
-		return err
-	}
-
-	// Validate that the file can be loaded
-	a.logger.Debug(fmt.Sprintf("Validating kubeconfig file: %s", parsed.Path), "KubeconfigManager")
-	_, err = clientcmd.LoadFromFile(parsed.Path)
-	if err != nil {
-		a.logger.Error(fmt.Sprintf("Invalid kubeconfig file %s: %v", parsed.Path, err), "KubeconfigManager")
-		return fmt.Errorf("invalid kubeconfig file: %w", err)
-	}
-
-	a.selectedKubeconfigs = []string{parsed.String()}
-	if err := a.setBaseKubeconfig(parsed, true); err != nil {
-		return err
-	}
-
-	if err := a.syncClusterClientPool([]kubeconfigSelection{parsed}); err != nil {
-		return err
-	}
-
-	a.logger.Info(fmt.Sprintf("Successfully switched to kubeconfig %s with context %s", parsed.Path, parsed.Context), "KubeconfigManager")
 	return nil
 }
 
@@ -406,16 +388,6 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 		normalizedStrings = append(normalizedStrings, parsed.String())
 	}
 
-	baseSelection := normalized[0]
-	if a.selectedKubeconfig != "" || a.selectedContext != "" {
-		for _, selection := range normalized {
-			if selection.Path == a.selectedKubeconfig && selection.Context == a.selectedContext {
-				baseSelection = selection
-				break
-			}
-		}
-	}
-	baseChanged := a.selectedKubeconfig != baseSelection.Path || a.selectedContext != baseSelection.Context
 	selectionChanged := len(previousSelections) != len(normalizedStrings)
 	if !selectionChanged {
 		for i, selection := range previousSelections {
@@ -431,71 +403,31 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 		a.appSettings = getDefaultAppSettings()
 	}
 	a.appSettings.SelectedKubeconfigs = normalizedStrings
-
-	if baseChanged {
-		if err := a.setBaseKubeconfig(baseSelection, false); err != nil {
-			return err
-		}
+	if len(normalizedStrings) > 0 {
+		a.appSettings.SelectedKubeconfig = normalizedStrings[0]
 	} else {
-		a.appSettings.SelectedKubeconfig = baseSelection.String()
-		if err := a.saveAppSettings(); err != nil {
-			a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
-		}
+		a.appSettings.SelectedKubeconfig = ""
+	}
+
+	// Clear legacy single-selection fields to avoid implicit base usage.
+	a.selectedKubeconfig = ""
+	a.selectedContext = ""
+	if err := a.saveAppSettings(); err != nil {
+		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
 	}
 
 	if err := a.syncClusterClientPool(normalized); err != nil {
 		return err
 	}
 
-	// Update active clusters without forcing a full refresh subsystem rebuild.
-	if !baseChanged && selectionChanged {
-		if err := a.updateRefreshSubsystemSelections(normalized); err != nil {
+	if selectionChanged {
+		if a.refreshHTTPServer == nil || a.refreshAggregates == nil || a.refreshCtx == nil {
+			if err := a.setupRefreshSubsystem(); err != nil {
+				return err
+			}
+		} else if err := a.updateRefreshSubsystemSelections(normalized); err != nil {
 			return err
 		}
-	}
-
-	return nil
-}
-
-// setBaseKubeconfig applies a single kubeconfig selection while optionally updating the selection list.
-func (a *App) setBaseKubeconfig(selection kubeconfigSelection, updateSelectionList bool) error {
-	// Update selected kubeconfig and context, reset clients/config to force reinitialization.
-	a.logger.Info("Resetting Kubernetes clients for kubeconfig switch", "KubeconfigManager")
-	a.selectedKubeconfig = selection.Path
-	a.selectedContext = selection.Context
-	a.client = nil
-	a.apiextensionsClient = nil
-	// Clear dynamic/rest clients to avoid stale usage if initKubeClient fails.
-	a.dynamicClient = nil
-	a.restConfig = nil
-	clearGVRCache()
-
-	// Tear down refresh subsystem so it can be reinitialised with the new kubeconfig
-	a.teardownRefreshSubsystem()
-
-	// Reset metrics client so it reconnects using the new REST config
-	a.metricsClient = nil
-
-	// Save the selection to app settings
-	a.logger.Debug("Saving kubeconfig selection to app settings", "KubeconfigManager")
-	if a.appSettings == nil {
-		a.appSettings = getDefaultAppSettings()
-	}
-	a.appSettings.SelectedKubeconfig = selection.String()
-	if updateSelectionList {
-		a.appSettings.SelectedKubeconfigs = []string{selection.String()}
-	}
-	if err := a.saveAppSettings(); err != nil {
-		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
-	} else {
-		a.logger.Debug("Successfully saved kubeconfig selection", "KubeconfigManager")
-	}
-
-	// Reinitialize client with new kubeconfig
-	a.logger.Info(fmt.Sprintf("Reinitializing Kubernetes client with %s:%s", selection.Path, selection.Context), "KubeconfigManager")
-	if err := a.initKubeClient(); err != nil {
-		a.logger.Error(fmt.Sprintf("Failed to initialize client with new kubeconfig: %v", err), "KubeconfigManager")
-		return err
 	}
 
 	return nil
@@ -512,6 +444,9 @@ func (a *App) clearKubeconfigSelection() error {
 	a.dynamicClient = nil
 	a.restConfig = nil
 	a.metricsClient = nil
+	a.clusterClientsMu.Lock()
+	a.clusterClients = make(map[string]*clusterClients)
+	a.clusterClientsMu.Unlock()
 	clearGVRCache()
 	a.teardownRefreshSubsystem()
 

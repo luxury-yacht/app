@@ -325,8 +325,12 @@ func listEndpointSlicesForServiceWithDependencies(
 
 // getGVR finds the GVR for any resource type using discovery
 // Returns the GVR and whether the resource is namespaced
-func (a *App) getGVR(resourceKind string) (schema.GroupVersionResource, bool, error) {
-	return getGVRForDependencies(a.resourceDependencies(), a.currentSelectionKey(), resourceKind)
+func (a *App) getGVR(clusterID, resourceKind string) (schema.GroupVersionResource, bool, error) {
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return schema.GroupVersionResource{}, false, err
+	}
+	return getGVRForDependencies(deps, selectionKey, resourceKind)
 }
 
 // getGVRForDependencies discovers the GVR for a kind using the provided dependencies and cache key.
@@ -335,20 +339,10 @@ func getGVRForDependencies(
 	selectionKey, resourceKind string,
 ) (schema.GroupVersionResource, bool, error) {
 	cacheKey := gvrCacheKey(selectionKey, resourceKind)
-	legacyKey := strings.TrimSpace(resourceKind)
 
-	// Check cache first (scoped key) with legacy fallbacks for compatibility.
+	// Check cache first (scoped key).
 	if cached, found := loadGVRCached(cacheKey); found {
 		return cached.gvr, cached.namespaced, nil
-	}
-	if legacyKey != "" {
-		if cached, found := loadGVRCached(legacyKey); found {
-			return cached.gvr, cached.namespaced, nil
-		}
-		legacyLower := strings.ToLower(legacyKey)
-		if cached, found := loadGVRCached(legacyLower); found {
-			return cached.gvr, cached.namespaced, nil
-		}
 	}
 
 	baseCtx := deps.Context

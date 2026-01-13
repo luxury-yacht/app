@@ -82,17 +82,7 @@ func (a *App) catalogTargets() []catalogTarget {
 	}
 
 	if len(selections) == 0 {
-		meta := a.currentClusterMeta()
-		if meta.ID == "" {
-			return nil
-		}
-		return []catalogTarget{{
-			selection: kubeconfigSelection{
-				Path:    a.selectedKubeconfig,
-				Context: a.selectedContext,
-			},
-			meta: meta,
-		}}
+		return nil
 	}
 
 	targets := make([]catalogTarget, 0, len(selections))

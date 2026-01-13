@@ -24,6 +24,7 @@ const (
 var (
 	errDomainNotSpecified = errors.New("domain not specified")
 	errJobIDNotSpecified  = errors.New("job id not specified")
+	errClusterScopeNeeded = errors.New("cluster scope is required")
 )
 
 // Server exposes HTTP endpoints for snapshot retrieval and manual refresh.
@@ -79,6 +80,10 @@ func (s *Server) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scope := r.URL.Query().Get("scope")
+	if err := requireClusterScope(scope); err != nil {
+		writeError(w, http.StatusBadRequest, err, correlationID)
+		return
+	}
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -147,6 +152,10 @@ func (s *Server) handleManualRefresh(w http.ResponseWriter, r *http.Request) {
 			_ = json.Unmarshal(data, &body)
 		}
 	}
+	if err := requireClusterScope(body.Scope); err != nil {
+		writeError(w, http.StatusBadRequest, err, correlationID)
+		return
+	}
 
 	job, err := s.queue.Enqueue(r.Context(), domainName, body.Scope, body.Reason)
 	if err != nil {
@@ -158,6 +167,14 @@ func (s *Server) handleManualRefresh(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
 	_ = json.NewEncoder(w).Encode(job)
+}
+
+func requireClusterScope(scope string) error {
+	clusterIDs, _ := refresh.SplitClusterScopeList(scope)
+	if len(clusterIDs) == 0 {
+		return errClusterScopeNeeded
+	}
+	return nil
 }
 
 func (s *Server) handleJobStatus(w http.ResponseWriter, r *http.Request) {

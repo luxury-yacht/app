@@ -14,7 +14,6 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/cli"
-	"k8s.io/client-go/kubernetes"
 )
 
 func (a *App) resolveMetricsInterval() time.Duration {
@@ -24,10 +23,7 @@ func (a *App) resolveMetricsInterval() time.Duration {
 	return config.RefreshMetricsInterval
 }
 
-func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKey string) error {
-	if kubeClient == nil {
-		return errors.New("kubernetes client is nil")
-	}
+func (a *App) setupRefreshSubsystem() error {
 	if a.Ctx == nil {
 		return errors.New("application context not initialised")
 	}
@@ -36,7 +32,11 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 	a.refreshCtx = ctx
 	a.refreshCancel = cancel
 
-	subsystems, clusterOrder, hostSubsystem, err := a.buildRefreshSubsystems(kubeClient, selectionKey)
+	selections, err := a.selectedKubeconfigSelections()
+	if err != nil {
+		return err
+	}
+	subsystems, clusterOrder, hostSubsystem, err := a.buildRefreshSubsystems(selections)
 	if err != nil {
 		return err
 	}
@@ -54,88 +54,40 @@ func (a *App) setupRefreshSubsystem(kubeClient kubernetes.Interface, selectionKe
 
 // buildRefreshSubsystems creates refresh subsystems for the active cluster selections.
 func (a *App) buildRefreshSubsystems(
-	kubeClient kubernetes.Interface,
-	selectionKey string,
+	selections []kubeconfigSelection,
 ) (map[string]*system.Subsystem, []string, *system.Subsystem, error) {
-	selections, err := a.selectedKubeconfigSelections()
-	if err != nil {
-		selections = nil
-	}
-
 	subsystems := make(map[string]*system.Subsystem)
-	clusterOrder := make([]string, 0)
-
-	var hostSubsystem *system.Subsystem
-	hostClusterID := ""
+	clusterOrder := make([]string, 0, len(selections))
 
 	if len(selections) == 0 {
-		clusterMeta := a.currentClusterMeta()
-		if clusterMeta.ID != "" {
-			hostClusterID = clusterMeta.ID
-		} else if selectionKey != "" {
-			hostClusterID = selectionKey
-		}
+		return nil, nil, nil, errors.New("no kubeconfig selections available")
+	}
 
-		catalogClusterID := clusterMeta.ID
-		if catalogClusterID == "" {
-			catalogClusterID = selectionKey
-		}
+	// Align the client pool to the selected cluster set before building managers.
+	if err := a.syncClusterClientPool(selections); err != nil {
+		return nil, nil, nil, err
+	}
 
-		subsystem, err := a.buildRefreshSubsystem(system.Config{
-			KubernetesClient:      kubeClient,
-			MetricsClient:         a.metricsClient,
-			RestConfig:            a.restConfig,
-			ResyncInterval:        config.RefreshResyncInterval,
-			MetricsInterval:       a.resolveMetricsInterval(),
-			APIExtensionsClient:   a.apiextensionsClient,
-			DynamicClient:         a.dynamicClient,
-			HelmFactory:           a.helmActionFactory(),
-			ObjectDetailsProvider: a.objectDetailProvider(),
-			Logger:                a.logger,
-			ObjectCatalogService: func() *objectcatalog.Service {
-				return a.objectCatalogServiceForCluster(catalogClusterID)
-			},
-			ObjectCatalogNamespaces: a.catalogNamespaceGroups,
-			ObjectCatalogEnabled:    func() bool { return true },
-			ClusterID:               clusterMeta.ID,
-			ClusterName:             clusterMeta.Name,
-		})
+	// hostSubsystem anchors shared mux/telemetry wiring without implying a primary cluster.
+	var hostSubsystem *system.Subsystem
+	for _, selection := range selections {
+		clusterMeta := a.clusterMetaForSelection(selection)
+		if clusterMeta.ID == "" {
+			return nil, nil, nil, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
+		}
+		clients := a.clusterClientsForID(clusterMeta.ID)
+		if clients == nil {
+			return nil, nil, nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
+		}
+		subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, clusterMeta)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		// Watch informer updates to invalidate cached detail/YAML/helm responses.
-		a.registerResponseCacheInvalidation(subsystem, selectionKey)
 
-		if hostClusterID != "" {
-			subsystems[hostClusterID] = subsystem
-			clusterOrder = append(clusterOrder, hostClusterID)
-		}
-		hostSubsystem = subsystem
-	} else {
-		// Align the client pool to the selected cluster set before building managers.
-		if err := a.syncClusterClientPool(selections); err != nil {
-			return nil, nil, nil, err
-		}
-
-		for _, selection := range selections {
-			clusterMeta := a.clusterMetaForSelection(selection)
-			if clusterMeta.ID == "" {
-				return nil, nil, nil, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
-			}
-			clients := a.clusterClientsForID(clusterMeta.ID)
-			if clients == nil {
-				return nil, nil, nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
-			}
-			subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, clusterMeta)
-			if err != nil {
-				return nil, nil, nil, err
-			}
-
-			subsystems[clusterMeta.ID] = subsystem
-			clusterOrder = append(clusterOrder, clusterMeta.ID)
-			if hostSubsystem == nil {
-				hostSubsystem = subsystem
-			}
+		subsystems[clusterMeta.ID] = subsystem
+		clusterOrder = append(clusterOrder, clusterMeta.ID)
+		if hostSubsystem == nil {
+			hostSubsystem = subsystem
 		}
 	}
 
@@ -358,13 +310,6 @@ func (a *App) buildRefreshSubsystem(cfg system.Config) (*system.Subsystem, error
 		a.handlePermissionIssues(subsystem.PermissionIssues)
 	}
 	return subsystem, nil
-}
-
-func (a *App) helmActionFactory() snapshot.HelmActionFactory {
-	return a.helmActionFactoryForSelection(kubeconfigSelection{
-		Path:    a.selectedKubeconfig,
-		Context: a.selectedContext,
-	})
 }
 
 // helmActionFactoryForSelection wires Helm actions to a specific kubeconfig selection.

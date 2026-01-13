@@ -17,7 +17,7 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 		return nil
 	}
 	if a.refreshHTTPServer == nil || a.refreshAggregates == nil || a.refreshCtx == nil {
-		return a.rebuildRefreshSubsystem("kubeconfig selection updated")
+		return a.setupRefreshSubsystem()
 	}
 
 	clusterOrder := make([]string, 0, len(selections))

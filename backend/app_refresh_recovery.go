@@ -197,6 +197,9 @@ func (a *App) rebuildRefreshSubsystem(reason string) error {
 	a.dynamicClient = nil
 	a.metricsClient = nil
 	a.restConfig = nil
+	a.clusterClientsMu.Lock()
+	a.clusterClients = make(map[string]*clusterClients)
+	a.clusterClientsMu.Unlock()
 
 	if err := a.initKubeClient(); err != nil {
 		return err

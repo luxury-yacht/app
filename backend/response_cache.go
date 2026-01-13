@@ -92,9 +92,6 @@ func (a *App) responseCacheKey(selectionKey, cacheKey string) string {
 	if cacheKey == "" {
 		return ""
 	}
-	if selectionKey == "" && a != nil {
-		selectionKey = strings.TrimSpace(a.currentSelectionKey())
-	}
 	if selectionKey == "" {
 		return cacheKey
 	}

@@ -23,33 +23,6 @@ type clusterClients struct {
 	restConfig          *rest.Config
 }
 
-// registerSelectedClusterClient keeps the client pool aligned with the selected cluster.
-func (a *App) registerSelectedClusterClient() {
-	if a == nil || a.client == nil {
-		return
-	}
-	meta := a.currentClusterMeta()
-	if meta.ID == "" {
-		return
-	}
-
-	a.clusterClientsMu.Lock()
-	defer a.clusterClientsMu.Unlock()
-	if a.clusterClients == nil {
-		a.clusterClients = make(map[string]*clusterClients)
-	}
-	a.clusterClients[meta.ID] = &clusterClients{
-		meta:                meta,
-		kubeconfigPath:      a.selectedKubeconfig,
-		kubeconfigContext:   a.selectedContext,
-		client:              a.client,
-		apiextensionsClient: a.apiextensionsClient,
-		dynamicClient:       a.dynamicClient,
-		metricsClient:       a.metricsClient,
-		restConfig:          a.restConfig,
-	}
-}
-
 func (a *App) clusterClientsForID(clusterID string) *clusterClients {
 	if a == nil || clusterID == "" {
 		return nil

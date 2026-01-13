@@ -91,8 +91,10 @@ func TestGetObjectYAMLNamespacedResource(t *testing.T) {
 			}},
 		},
 	}
+	// Scope the GVR cache to the test cluster selection.
+	cacheKey := gvrCacheKey(testClusterID, "Pod")
 	gvrCacheMutex.Lock()
-	gvrCache["Pod"] = gvrCacheEntry{
+	gvrCache[cacheKey] = gvrCacheEntry{
 		gvr:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
 		namespaced: true,
 		cachedAt:   time.Now(),
@@ -182,8 +184,10 @@ func TestGetObjectYAMLClusterScopedResource(t *testing.T) {
 			}},
 		},
 	}
+	// Scope the GVR cache to the test cluster selection.
+	cacheKey := gvrCacheKey(testClusterID, "node")
 	gvrCacheMutex.Lock()
-	gvrCache["node"] = gvrCacheEntry{
+	gvrCache[cacheKey] = gvrCacheEntry{
 		gvr:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"},
 		namespaced: false,
 		cachedAt:   time.Now(),
@@ -260,8 +264,9 @@ func TestGetGVRFallsBackToCRD(t *testing.T) {
 		},
 	}
 	app.apiextensionsClient = apiextensionsfake.NewClientset(crd)
+	registerTestCluster(app, testClusterID)
 
-	gvr, namespaced, err := app.getGVR("Widget")
+	gvr, namespaced, err := app.getGVR(testClusterID, "Widget")
 	if err != nil {
 		t.Fatalf("getGVR error: %v", err)
 	}

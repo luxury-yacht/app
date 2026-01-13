@@ -9,23 +9,32 @@ package backend
 
 import "github.com/luxury-yacht/app/backend/resources/storage"
 
-func (a *App) GetPersistentVolume(name string) (*PersistentVolumeDetails, error) {
-	deps := a.resourceDependencies()
-	return FetchClusterResource(a, "PersistentVolume", name, func() (*PersistentVolumeDetails, error) {
+func (a *App) GetPersistentVolume(clusterID, name string) (*PersistentVolumeDetails, error) {
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return FetchClusterResource(a, deps, selectionKey, "PersistentVolume", name, func() (*PersistentVolumeDetails, error) {
 		return storage.NewService(deps).PersistentVolume(name)
 	})
 }
 
-func (a *App) GetPersistentVolumeClaim(namespace, name string) (*PersistentVolumeClaimDetails, error) {
-	deps := a.resourceDependencies()
-	return FetchNamespacedResource(a, "PVC", namespace, name, func() (*PersistentVolumeClaimDetails, error) {
+func (a *App) GetPersistentVolumeClaim(clusterID, namespace, name string) (*PersistentVolumeClaimDetails, error) {
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return FetchNamespacedResource(a, deps, selectionKey, "PVC", namespace, name, func() (*PersistentVolumeClaimDetails, error) {
 		return storage.NewService(deps).PersistentVolumeClaim(namespace, name)
 	})
 }
 
-func (a *App) GetStorageClass(name string) (*StorageClassDetails, error) {
-	deps := a.resourceDependencies()
-	return FetchClusterResource(a, "StorageClass", name, func() (*StorageClassDetails, error) {
+func (a *App) GetStorageClass(clusterID, name string) (*StorageClassDetails, error) {
+	deps, selectionKey, err := a.resolveClusterDependencies(clusterID)
+	if err != nil {
+		return nil, err
+	}
+	return FetchClusterResource(a, deps, selectionKey, "StorageClass", name, func() (*StorageClassDetails, error) {
 		return storage.NewService(deps).StorageClass(name)
 	})
 }
