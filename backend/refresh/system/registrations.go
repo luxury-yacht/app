@@ -31,6 +31,14 @@ type domainRegistration struct {
 	require            func() error           // Function to determine if registration is required
 }
 
+// domainMeta captures shared metadata for gated domain registrations.
+type domainMeta struct {
+	issueResource string
+	logGroup      string
+	logResource   string
+	deniedReason  string
+}
+
 // registerDomains registers refresh domains in a fixed order to preserve behavior.
 func registerDomains(gate *permissionGate, registrations []domainRegistration) error {
 	return runDomainRegistrations(gate, registrations)
@@ -137,6 +145,18 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		Logger:          deps.cfg.Logger,
 	}
 
+	crdGroup := "apiextensions.k8s.io"
+	crdResource := "customresourcedefinitions"
+	crdIssue := crdGroup + "/" + crdResource
+	crdMeta := domainMeta{
+		issueResource: crdIssue,
+		logGroup:      crdGroup,
+		logResource:   crdResource,
+		deniedReason:  crdIssue,
+	}
+	crdListCheck := listCheck{group: crdGroup, resource: crdResource}
+	crdListWatchCheck := listWatchCheck{group: crdGroup, resource: crdResource}
+
 	yamlProvider, yamlOK := deps.cfg.ObjectDetailsProvider.(snapshot.ObjectYAMLProvider)
 	helmProvider, helmOK := deps.cfg.ObjectDetailsProvider.(snapshot.HelmContentProvider)
 
@@ -240,31 +260,20 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			deniedReason: "cluster configuration resources",
 		}),
 
-		listWatchRegistration(listWatchDomainConfig{
-			name:          "cluster-crds",
-			issueResource: "apiextensions.k8s.io/customresourcedefinitions",
-			logGroup:      "apiextensions.k8s.io",
-			logResource:   "customresourcedefinitions",
-			checks: []listWatchCheck{
-				{group: "apiextensions.k8s.io", resource: "customresourcedefinitions"},
-			},
+		listWatchRegistration(applyListWatchMeta(listWatchDomainConfig{
+			name:   "cluster-crds",
+			checks: []listWatchCheck{crdListWatchCheck},
 			registerInformer: func() error {
 				return snapshot.RegisterClusterCRDDomain(
 					deps.registry,
 					deps.informerFactory.APIExtensionsInformerFactory(),
 				)
 			},
-			deniedReason: "apiextensions.k8s.io/customresourcedefinitions",
-		}),
+		}, crdMeta)),
 
-		listRegistration(listDomainConfig{
-			name:          "cluster-custom",
-			issueResource: "apiextensions.k8s.io/customresourcedefinitions",
-			logGroup:      "apiextensions.k8s.io",
-			logResource:   "customresourcedefinitions",
-			checks: []listCheck{
-				{group: "apiextensions.k8s.io", resource: "customresourcedefinitions"},
-			},
+		listRegistration(applyListMeta(listDomainConfig{
+			name:   "cluster-custom",
+			checks: []listCheck{crdListCheck},
 			register: func(_ map[string]bool) error {
 				return snapshot.RegisterClusterCustomDomain(
 					deps.registry,
@@ -273,8 +282,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.cfg.Logger,
 				)
 			},
-			deniedReason: "apiextensions.k8s.io/customresourcedefinitions",
-		}),
+		}, crdMeta)),
 
 		listRegistration(listDomainConfig{
 			name:          "cluster-events",
@@ -346,14 +354,9 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			)
 		}),
 
-		withRequire(listRegistration(listDomainConfig{
-			name:          "namespace-custom",
-			issueResource: "apiextensions.k8s.io/customresourcedefinitions",
-			logGroup:      "apiextensions.k8s.io",
-			logResource:   "customresourcedefinitions",
-			checks: []listCheck{
-				{group: "apiextensions.k8s.io", resource: "customresourcedefinitions"},
-			},
+		withRequire(listRegistration(applyListMeta(listDomainConfig{
+			name:   "namespace-custom",
+			checks: []listCheck{crdListCheck},
 			register: func(_ map[string]bool) error {
 				return snapshot.RegisterNamespaceCustomDomain(
 					deps.registry,
@@ -362,8 +365,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 					deps.cfg.Logger,
 				)
 			},
-			deniedReason: "apiextensions.k8s.io/customresourcedefinitions",
-		}), func() error {
+		}, crdMeta)), func() error {
 			if deps.cfg.DynamicClient == nil {
 				return fmt.Errorf("dynamic client must be provided for namespace custom resources")
 			}
@@ -480,6 +482,24 @@ func withSkip(registration domainRegistration, skip func() bool) domainRegistrat
 func withRequire(registration domainRegistration, require func() error) domainRegistration {
 	registration.require = require
 	return registration
+}
+
+// applyListMeta copies shared metadata into a list-gated registration config.
+func applyListMeta(cfg listDomainConfig, meta domainMeta) listDomainConfig {
+	cfg.issueResource = meta.issueResource
+	cfg.logGroup = meta.logGroup
+	cfg.logResource = meta.logResource
+	cfg.deniedReason = meta.deniedReason
+	return cfg
+}
+
+// applyListWatchMeta copies shared metadata into a list/watch-gated registration config.
+func applyListWatchMeta(cfg listWatchDomainConfig, meta domainMeta) listWatchDomainConfig {
+	cfg.issueResource = meta.issueResource
+	cfg.logGroup = meta.logGroup
+	cfg.logResource = meta.logResource
+	cfg.deniedReason = meta.deniedReason
+	return cfg
 }
 
 func withPreflightListWatch(registration domainRegistration, checks []listWatchCheck) domainRegistration {

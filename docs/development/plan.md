@@ -38,10 +38,10 @@
 6. Preflight alignment ✅
    - Generate the permission preflight list from the registration table to prevent drift.
 
-7. Snapshot service abstraction
+7. Snapshot service abstraction ✅
    - Update event stream handler wiring to accept the snapshot service interface instead of `*snapshot.Service`.
 
-8. Metadata deduplication
+8. Metadata deduplication ✅
    - Reduce repetition of domain metadata like `issueResource`, `logGroup`, `logResource`, `deniedReason` via helpers or constants.
 
 9. Metrics gating consolidation

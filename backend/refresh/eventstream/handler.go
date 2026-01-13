@@ -20,14 +20,14 @@ import (
 
 // Handler exposes an SSE endpoint for streaming Kubernetes events.
 type Handler struct {
-	service   *snapshot.Service
+	service   refresh.SnapshotService
 	manager   *Manager
 	logger    Logger
 	telemetry *telemetry.Recorder
 }
 
 // NewHandler prepares an event stream handler.
-func NewHandler(service *snapshot.Service, manager *Manager, logger Logger) (*Handler, error) {
+func NewHandler(service refresh.SnapshotService, manager *Manager, logger Logger) (*Handler, error) {
 	if service == nil {
 		return nil, errors.New("eventstream: snapshot service required")
 	}

@@ -3,6 +3,7 @@ package system
 import (
 	"net/http"
 
+	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/eventstream"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/logstream"
@@ -15,7 +16,7 @@ import (
 // streamDeps bundles dependencies required to wire refresh stream handlers.
 type streamDeps struct {
 	informerFactory *informer.Factory
-	snapshotService *snapshot.Service
+	snapshotService refresh.SnapshotService
 	metricsProvider metrics.Provider
 	cfg             Config
 	telemetry       *telemetry.Recorder
