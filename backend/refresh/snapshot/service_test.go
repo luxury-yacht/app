@@ -3,6 +3,7 @@ package snapshot
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -124,6 +125,57 @@ func TestServiceBuildCachesAndBypasses(t *testing.T) {
 	}
 	if snap3.Sequence == snap2.Sequence {
 		t.Fatalf("expected cache bypass to issue a new sequence")
+	}
+}
+
+func TestServiceBuildBypassUsesSeparateSingleflightKey(t *testing.T) {
+	reg := domain.New()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var mu sync.Mutex
+	callCount := 0
+
+	if err := reg.Register(refresh.DomainConfig{
+		Name: "demo-bypass",
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			mu.Lock()
+			callCount++
+			count := callCount
+			mu.Unlock()
+			if count == 1 {
+				close(started)
+				<-release
+			}
+			return &refresh.Snapshot{
+				Domain:  "demo-bypass",
+				Scope:   scope,
+				Version: uint64(count),
+			}, nil
+		},
+	}); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	service := NewService(reg, nil, ClusterMeta{})
+	ctx := context.Background()
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = service.Build(ctx, "demo-bypass", "scope-a")
+		close(done)
+	}()
+
+	<-started
+	if _, err := service.Build(refresh.WithCacheBypass(ctx), "demo-bypass", "scope-a"); err != nil {
+		t.Fatalf("Build returned error: %v", err)
+	}
+	close(release)
+	<-done
+
+	mu.Lock()
+	defer mu.Unlock()
+	if callCount != 2 {
+		t.Fatalf("expected bypass build to avoid singleflight join, got %d calls", callCount)
 	}
 }
 
