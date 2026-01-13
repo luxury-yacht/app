@@ -99,6 +99,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const kubeconfigsRef = useRef<types.KubeconfigInfo[]>([]);
   const selectedKubeconfigsRef = useRef<string[]>([]);
   const selectedKubeconfigRef = useRef<string>('');
+  // Prevent refresh context churn until the backend confirms selection updates.
+  const selectionPendingRef = useRef(false);
 
   // Resolve cluster identity metadata from the current selection and config list.
   const resolveClusterMeta = useCallback((selection: string, configs: types.KubeconfigInfo[]) => {
@@ -189,24 +191,25 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     return Array.from(ids);
   }, [kubeconfigs, resolveClusterMeta, selectedKubeconfigs]);
 
+  const updateRefreshContext = useCallback(
+    (meta: { id: string; name: string }, clusterIds: string[]) => {
+      const refreshClusterIds = backgroundRefreshEnabled ? clusterIds : meta.id ? [meta.id] : [];
+      refreshOrchestrator.updateContext({
+        selectedClusterId: meta.id || undefined,
+        selectedClusterName: meta.name || undefined,
+        selectedClusterIds: refreshClusterIds,
+      });
+    },
+    [backgroundRefreshEnabled]
+  );
+
   // Keep refresh context aligned with the active kubeconfig selection.
   useEffect(() => {
-    const refreshClusterIds = backgroundRefreshEnabled
-      ? selectedClusterIds
-      : selectedClusterMeta.id
-        ? [selectedClusterMeta.id]
-        : [];
-    refreshOrchestrator.updateContext({
-      selectedClusterId: selectedClusterMeta.id || undefined,
-      selectedClusterName: selectedClusterMeta.name || undefined,
-      selectedClusterIds: refreshClusterIds,
-    });
-  }, [
-    backgroundRefreshEnabled,
-    selectedClusterMeta.id,
-    selectedClusterMeta.name,
-    selectedClusterIds,
-  ]);
+    if (selectionPendingRef.current) {
+      return;
+    }
+    updateRefreshContext(selectedClusterMeta, selectedClusterIds);
+  }, [selectedClusterIds, selectedClusterMeta, updateRefreshContext]);
 
   const loadKubeconfigs = useCallback(async () => {
     setKubeconfigsLoading(true);
@@ -262,10 +265,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       const shouldEmitChanged = !willBeEmpty && wasEmpty;
       const shouldEmitSelectionChanged = selectionChanged && !willBeEmpty;
       try {
-        if (shouldEmitSelectionChanged) {
-          eventBus.emit('kubeconfig:selection-changed');
-        }
-
+        selectionPendingRef.current = true;
         // Keep refs in sync immediately so queued requests read the latest state.
         selectedKubeconfigsRef.current = normalizedSelections;
         selectedKubeconfigRef.current = nextActive;
@@ -284,11 +284,28 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         // Perform the actual kubeconfig switch.
         await SetSelectedKubeconfigs(normalizedSelections);
 
+        // Emit after backend updates to avoid refreshing with inactive clusters.
+        if (shouldEmitSelectionChanged) {
+          eventBus.emit('kubeconfig:selection-changed');
+        }
+        selectionPendingRef.current = false;
+        const nextMeta = resolveClusterMeta(nextActive, kubeconfigsRef.current);
+        const nextClusterIds = new Set<string>();
+        normalizedSelections.forEach((selection) => {
+          const meta = resolveClusterMeta(selection, kubeconfigsRef.current);
+          if (meta.id) {
+            nextClusterIds.add(meta.id);
+          }
+        });
+        // Push refresh context after the backend activates the new selection.
+        updateRefreshContext(nextMeta, Array.from(nextClusterIds));
+
         // 4. Perform a manual refresh (will be triggered by kubeconfig:changed event).
         if (shouldEmitChanged) {
           eventBus.emit('kubeconfig:changed', '');
         }
       } catch (error) {
+        selectionPendingRef.current = false;
         // Roll back the UI to the previous value if the backend switch failed.
         selectedKubeconfigsRef.current = previousSelections;
         selectedKubeconfigRef.current = previousActive;
@@ -305,7 +322,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         throw error;
       }
     },
-    [normalizeSelections]
+    [normalizeSelections, resolveClusterMeta, updateRefreshContext]
   );
 
   const setSelectedKubeconfigs = useCallback(
