@@ -37,6 +37,6 @@ Remove the backend "base" kubeconfig dependency so all cluster tabs are treated 
 
 5) Tests and docs
 - ✅ Add/adjust tests to cover "no base" behavior (selection changes, missing scope errors, multi-tab operations).
-- Add coverage to ensure opening/closing tabs does not trigger refresh subsystem rebuilds.
+- ✅ Add coverage to ensure opening/closing tabs does not trigger refresh subsystem rebuilds.
 - ✅ Update `docs/development/multi-cluster-support.md` to reflect explicit scope requirements.
 - Impact: medium (confidence + developer clarity). Effort: medium.
