@@ -70,6 +70,30 @@ func TestCaptureIfInterestingIgnoresTokenSubstrings(t *testing.T) {
 	})
 
 	c.captureIfInteresting(`I0102 19:05:24.494180   77320 reflector.go:446] "Caches populated" type="generators.external-secrets.io/v1alpha1, Resource=cloudsmithaccesstokens"`)
+	c.captureIfInteresting(`I0113 16:53:29.716676   50650 reflector.go:446] "Caches populated" type="eks.services.k8s.aws/v1alpha1, Resource=podidentityassociations"`)
+
+	if last := c.last(); last != "" {
+		t.Fatalf("expected last error to remain empty, got %q", last)
+	}
+	if len(emitted) != 0 {
+		t.Fatalf("expected no emitted events, got %d", len(emitted))
+	}
+}
+
+func TestCaptureIfInterestingIgnoresInfoSeverity(t *testing.T) {
+	c := &Capture{buffer: &bytes.Buffer{}}
+	global = c
+	defer func() {
+		global = nil
+		eventEmitter = nil
+	}()
+
+	var emitted []string
+	SetEventEmitter(func(msg string) {
+		emitted = append(emitted, msg)
+	})
+
+	c.captureIfInteresting(`I0102 19:05:24.494180   77320 reflector.go:446] "token expired while authenticating"`)
 
 	if last := c.last(); last != "" {
 		t.Fatalf("expected last error to remain empty, got %q", last)

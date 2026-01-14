@@ -32,10 +32,32 @@ type Capture struct {
 }
 
 var (
-	global       *Capture                            // global capture instance
-	eventEmitter func(string)                        // function to emit events
-	logSink      func(level string, message string)  // function to handle log messages
-	tokenPattern = regexp.MustCompile(`\btokens?\b`) // regex pattern to match token-related errors
+	global       *Capture                           // global capture instance
+	eventEmitter func(string)                       // function to emit events
+	logSink      func(level string, message string) // function to handle log messages
+	// Word-boundary matching avoids false positives from resource names like "podidentityassociations".
+	tokenPattern   = regexp.MustCompile(`\btokens?\b`)
+	ssoPattern     = regexp.MustCompile(`\bsso\b`)
+	expiredPattern = regexp.MustCompile(`\bexpired\b`)
+	authPatterns   = []*regexp.Regexp{
+		tokenPattern,
+		ssoPattern,
+		expiredPattern,
+		regexp.MustCompile(`\bauthentication\b`),
+		regexp.MustCompile(`\bunauthorized\b`),
+		regexp.MustCompile(`\bforbidden\b`),
+		regexp.MustCompile(`\bpermission\s+denied\b`),
+		regexp.MustCompile(`\baccess\s+denied\b`),
+	}
+	fallbackErrorPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`\berrors?\b`),
+		regexp.MustCompile(`\bfailed\b`),
+		regexp.MustCompile(`\bunauthorized\b`),
+		regexp.MustCompile(`\bforbidden\b`),
+		expiredPattern,
+		regexp.MustCompile(`\bpermission\s+denied\b`),
+		regexp.MustCompile(`\baccess\s+denied\b`),
+	}
 )
 
 // Init installs a stderr capture for klog/k8s client noise.
@@ -108,25 +130,45 @@ func (c *Capture) readPipe() {
 
 // isAuthRelated determines if a log message is related to authentication or token issues.
 func isAuthRelated(lower string) bool {
-	// Word-boundary token matching avoids false positives from resource names.
-	return tokenPattern.MatchString(lower) ||
-		containsAny(lower, "expired", "sso", "authentication", "unauthorized", "forbidden", "permission denied")
+	return matchAnyPattern(lower, authPatterns)
 }
 
-// containsAny reports whether lower contains any of the provided substrings.
-func containsAny(lower string, needles ...string) bool {
-	for _, needle := range needles {
-		if strings.Contains(lower, needle) {
+// matchAnyPattern reports whether lower matches at least one regex.
+func matchAnyPattern(lower string, patterns []*regexp.Regexp) bool {
+	for _, pattern := range patterns {
+		if pattern.MatchString(lower) {
 			return true
 		}
 	}
 	return false
 }
 
+// parseKlogSeverity extracts klog severity for lines starting with the standard prefix.
+func parseKlogSeverity(line string) (byte, bool) {
+	if len(line) < 2 {
+		return 0, false
+	}
+	sev := line[0]
+	switch sev {
+	case 'I', 'W', 'E', 'F', 'D':
+		if line[1] >= '0' && line[1] <= '9' {
+			return sev, true
+		}
+	}
+	return 0, false
+}
+
+// isErrorSeverity reports whether a klog severity should be treated as an error.
+func isErrorSeverity(sev byte) bool {
+	return sev == 'E' || sev == 'F'
+}
+
 // isFallbackErrorLine matches the broader error scan used in capturedError.
-func isFallbackErrorLine(lower string) bool {
-	return tokenPattern.MatchString(lower) ||
-		containsAny(lower, "error", "failed", "unauthorized", "forbidden", "expired")
+func isFallbackErrorLine(line string) bool {
+	if sev, ok := parseKlogSeverity(line); ok {
+		return isErrorSeverity(sev)
+	}
+	return matchAnyPattern(strings.ToLower(line), fallbackErrorPatterns)
 }
 
 // forEachTrimmedLine iterates through non-empty, trimmed lines in input.
@@ -167,6 +209,9 @@ func tailString(data []byte, max int) string {
 // "Interesting" errors are those related to authentication or token issues, as defined by `isAuthRelated`.
 func (c *Capture) captureIfInteresting(output string) {
 	forEachTrimmedLine(output, func(msg string) {
+		if sev, ok := parseKlogSeverity(msg); ok && !isErrorSeverity(sev) {
+			return
+		}
 		lower := strings.ToLower(msg)
 		if !isAuthRelated(lower) {
 			return
@@ -231,7 +276,7 @@ func scanRecentError(recent string) string {
 			continue
 		}
 
-		if isFallbackErrorLine(strings.ToLower(line)) {
+		if isFallbackErrorLine(line) {
 			return line
 		}
 	}
@@ -251,7 +296,7 @@ func Enhance(err error) error {
 
 	orig := err.Error()
 	lower := strings.ToLower(extra)
-	if len(extra) <= len(orig) && !tokenPattern.MatchString(lower) && !containsAny(lower, "sso", "expired") {
+	if len(extra) <= len(orig) && !matchAnyPattern(lower, authPatterns) {
 		return err
 	}
 

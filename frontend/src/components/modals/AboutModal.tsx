@@ -176,7 +176,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
                   </a>{' '}
                   for more details.
                 </p>
-                <p className="about-copyright">Copyright © 2025 Luxury Yacht</p>
+                <p className="about-copyright">Copyright © 2025-2026 Luxury Yacht</p>
               </div>
             </div>
           </div>
