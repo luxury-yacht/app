@@ -186,7 +186,7 @@ func PublishHomebrew(cfg BuildConfig) error {
 	}
 
 	// Write the updated cask file.
-	caskPath := filepath.Join(tmpDir, "casks", "luxury-yacht.rb")
+	caskPath := filepath.Join(tmpDir, "Casks", "luxury-yacht.rb")
 	if err := os.WriteFile(caskPath, cask, 0o644); err != nil {
 		return fmt.Errorf("failed to update cask at %s: %w", caskPath, err)
 	}
@@ -209,7 +209,7 @@ func PublishHomebrew(cfg BuildConfig) error {
 	}
 
 	// Stage and commit the changes.
-	if err := sh.Run("git", "-C", tmpDir, "add", "casks/luxury-yacht.rb"); err != nil {
+	if err := sh.Run("git", "-C", tmpDir, "add", "Casks/luxury-yacht.rb"); err != nil {
 		return fmt.Errorf("failed to stage cask update: %w", err)
 	}
 	if err := sh.Run("git", "-C", tmpDir, "commit", "-m", fmt.Sprintf("Update luxury-yacht cask to %s", cfg.Version)); err != nil {
