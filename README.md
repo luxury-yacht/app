@@ -13,6 +13,7 @@ Go to the [Releases](https://github.com/luxury-yacht/app/releases) page to downl
 Packages are available for `amd64 (x86_64)` and `arm64 (aarch64)`. Be sure to download the correct package for your architecture.
 
 ### macOS
+
 Uses a standard DMG. Open the DMG and drag to `Applications`.
 
 Can also be installed via [Homebrew](https://brew.sh).
@@ -23,14 +24,29 @@ brew install --cask luxury-yacht
 ```
 
 ### Linux
+
 Install via `.deb` or `.rpm` package.
 
 ### Windows
+
 Uses a standard installer. Note that these are unsigned, so will require extra confirmation steps to run. Given the cost of a code-signing certificate, these will likely remain unsigned.
 
 ### Building from Source
 
 If you prefer to build the app from source, see the Development section.
+
+### Troubleshooting
+
+#### The app won't start on Linux
+
+Luxury Yacht requires webkit2 4.1. Some distros don't include it, or don't install it by default. Installation will vary depending on your distro.
+
+| Distro       | Installation                           |
+| ------------ | -------------------------------------- |
+| Ubuntu 20.04 | Unsupported                            |
+| Ubuntu 22.04 | `sudo apt install libwebkit2gtk-4.1-0` |
+
+If your distro isn't on this (admittedly short) list, you'll have to search your package manager to determine the exact package name. If you have info you'd like to add to this list, email [admin@luxury-yacht.app](mailto:admin@luxury-yacht.app) or open an issue.
 
 ## Development
 
@@ -40,6 +56,7 @@ If you prefer to build the app from source, see the Development section.
 - Node 25
 - [Wails](https://wails.io/)
 - [Mage](https://magefile.org/)
+- [Staticcheck](https://staticcheck.dev/)
 
 #### Wails
 
@@ -52,6 +69,16 @@ To install Wails:
 ```
 
 Once Wails is installed, run `wails doctor` to see what other dependencies are required for your OS.
+
+#### Staticcheck
+
+Staticcheck is a static analysis linter for Go.
+
+To install Staticcheck:
+
+```bash
+go install honnef.co/go/tools/cmd/staticcheck@latest
+```
 
 #### Mage
 
