@@ -353,8 +353,7 @@ func (a *App) SetKubeconfig(selection string) error {
 // SetSelectedKubeconfigs updates the active kubeconfig selection set for multi-cluster support.
 //
 // This function is the primary entry point for changing which Kubernetes clusters the application
-// is connected to. It is called by the frontend when the user selects one or more clusters from
-// the cluster selection UI.
+// is connected to. It's called by the frontend when the user selects one or more clusters from the UI.
 //
 // The function performs several critical operations in sequence:
 //  1. Validates and normalizes the incoming selection strings
@@ -530,19 +529,9 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 		// ===========================================================================================
 		// STEP 9: Start the object catalog service
 		// ===========================================================================================
-		// The object catalog is a specialized service that powers the "Browse" and "All Objects"
-		// views in the frontend. It maintains an in-memory index of all Kubernetes objects
-		// across all selected clusters, enabling fast filtering and searching.
-		//
-		// CRITICAL: This call was previously missing, which caused the "503 Service Unavailable"
-		// error on first app run. The refresh subsystem (started above) registers an HTTP handler
-		// for /api/v2/stream/catalog, but that handler returns 503 if the catalog service hasn't
-		// been started. Without this call, the catalog service was never started when the user
-		// selected clusters for the first time.
-		//
-		// On subsequent app runs, initKubernetesClient() calls startObjectCatalog() at startup,
-		// so the issue only manifested on first run when this function was the entry point
-		// instead of initKubernetesClient().
+		// The object catalog powers the "Browse" and "All Objects" views in the frontend.
+		// This call is required to start the object catalog on the initial app run.
+		// On subsequent app runs, initKubernetesClient() handles this.
 		a.startObjectCatalog()
 	}
 
