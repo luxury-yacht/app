@@ -17,7 +17,10 @@ import {
   upsertNamespaceColumn,
   type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
-import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 
 interface RowSample {
   id: string;
@@ -100,7 +103,7 @@ describe('columnFactories', () => {
 
   describe('createKindColumn', () => {
     it('prefers aliases when short names are enabled and handles interactions', () => {
-      localStorage.setItem('useShortResourceNames', 'true');
+      setAppPreferencesForTesting({ useShortResourceNames: true });
       const onKindClick = vi.fn();
       const column = createKindColumn<RowSample>({
         getKind: (row) => row.kind ?? '',

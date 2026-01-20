@@ -10,9 +10,10 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { useBackgroundRefresh, getBackgroundRefreshEnabled } from './useBackgroundRefresh';
 import { eventBus } from '@/core/events';
-import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
-
-const STORAGE_KEY = 'refreshBackgroundClustersEnabled';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 
 const renderHookComponent = async () => {
   const container = document.createElement('div');
@@ -54,7 +55,6 @@ describe('useBackgroundRefresh', () => {
 
   beforeEach(() => {
     resetAppPreferencesCacheForTesting();
-    localStorage.clear();
   });
 
   afterEach(() => {
@@ -63,7 +63,7 @@ describe('useBackgroundRefresh', () => {
 
   const getValue = () => document.querySelector('[data-testid="value"]')?.textContent;
 
-  it('defaults to enabled when the storage key is absent', async () => {
+  it('defaults to enabled when using default preferences', async () => {
     const { unmount } = await renderHookComponent();
 
     expect(getValue()).toBe('true');
@@ -72,8 +72,8 @@ describe('useBackgroundRefresh', () => {
     unmount();
   });
 
-  it('hydrates from storage and responds to event bus updates', async () => {
-    localStorage.setItem(STORAGE_KEY, 'false');
+  it('hydrates from preference cache and responds to event bus updates', async () => {
+    setAppPreferencesForTesting({ refreshBackgroundClustersEnabled: false });
     const { unmount } = await renderHookComponent();
 
     expect(getValue()).toBe('false');

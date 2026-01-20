@@ -35,9 +35,7 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 
 describe('appPreferences', () => {
   beforeEach(() => {
-    // Reset cache and mocks between test cases to avoid shared state.
     resetAppPreferencesCacheForTesting();
-    localStorage.clear();
     appMocks.GetAppSettings.mockReset();
     appMocks.SetTheme.mockReset();
     appMocks.SetUseShortResourceNames.mockReset();
@@ -53,15 +51,10 @@ describe('appPreferences', () => {
   });
 
   afterEach(() => {
-    // Clean up global stubs so other tests get a fresh environment.
     delete (window as any).go;
   });
 
-  it('prefers backend values when they differ from defaults', async () => {
-    // Backend non-default settings should override legacy localStorage values.
-    localStorage.setItem('app-theme-preference', 'dark');
-    localStorage.setItem('useShortResourceNames', 'false');
-
+  it('hydrates preferences from backend settings', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       theme: 'light',
       useShortResourceNames: true,
@@ -81,24 +74,7 @@ describe('appPreferences', () => {
     expect(getGridTablePersistenceMode()).toBe('namespaced');
   });
 
-  it('uses legacy values when backend is still default', async () => {
-    // Legacy values are applied only if backend values are defaults.
-    localStorage.setItem('app-theme-preference', 'dark');
-    localStorage.setItem('useShortResourceNames', 'true');
-
-    appMocks.GetAppSettings.mockResolvedValue({
-      theme: 'system',
-      useShortResourceNames: false,
-    });
-
-    await hydrateAppPreferences({ force: true });
-
-    expect(getThemePreference()).toBe('dark');
-    expect(getUseShortResourceNames()).toBe(true);
-  });
-
   it('persists preference updates and updates the cache', async () => {
-    // Setters should call the backend and update local cache values.
     appMocks.GetAppSettings.mockResolvedValue({
       theme: 'system',
       useShortResourceNames: false,
