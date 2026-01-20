@@ -79,9 +79,6 @@ func (a *App) Startup(ctx context.Context) {
 	a.setupEnvironment()
 	a.logger.Debug("Environment setup completed", "App")
 
-	// Migrate legacy backend settings before loading persisted window state.
-	a.migrateLegacyBackendFiles()
-
 	if settings, err := a.LoadWindowSettings(); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to load window settings: %v", err), "App")
 	} else if settings != nil {

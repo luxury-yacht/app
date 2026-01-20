@@ -87,8 +87,7 @@ func FetchResourceWithSelection[T any](
 }
 
 // FetchResourceList executes a list fetch function for a given resource kind
-// and namespace. No caching is performed; the parameters mirror the legacy
-// helper so existing callers can migrate without sweeping changes.
+// and namespace. No caching is performed.
 func FetchResourceList[T any](
 	a *App,
 	_ string,
@@ -189,8 +188,6 @@ func ensureDependenciesInitialized(a *App, deps common.Dependencies, resourceKin
 	}
 	return nil
 }
-
-// Legacy optional fetch helpers have been removed as part of the domain refactor.
 
 func executeWithRetry[T any](ctx context.Context, a *App, resourceKind, target string, fetchFunc func() (T, error)) (T, error) {
 	var zero T

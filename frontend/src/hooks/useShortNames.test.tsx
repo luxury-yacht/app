@@ -11,7 +11,10 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { useShortNames } from './useShortNames';
 import { eventBus } from '@/core/events';
-import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 
 const renderHookComponent = async () => {
   const container = document.createElement('div');
@@ -45,7 +48,6 @@ describe('useShortNames', () => {
 
   beforeEach(() => {
     resetAppPreferencesCacheForTesting();
-    localStorage.clear();
   });
 
   afterEach(() => {
@@ -54,8 +56,8 @@ describe('useShortNames', () => {
 
   const getValue = () => document.querySelector('[data-testid="value"]')?.textContent;
 
-  it('initialises from localStorage', async () => {
-    localStorage.setItem('useShortResourceNames', 'true');
+  it('initialises from preference cache', async () => {
+    setAppPreferencesForTesting({ useShortResourceNames: true });
     const { unmount } = await renderHookComponent();
 
     expect(getValue()).toBe('true');
@@ -64,7 +66,7 @@ describe('useShortNames', () => {
   });
 
   it('responds to event bus updates', async () => {
-    localStorage.setItem('useShortResourceNames', 'false');
+    setAppPreferencesForTesting({ useShortResourceNames: false });
     const { unmount } = await renderHookComponent();
 
     expect(getValue()).toBe('false');

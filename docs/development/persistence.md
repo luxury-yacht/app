@@ -64,26 +64,6 @@ Higher-churn UI state.
   preference cache and syncs updates to the backend.
 - GridTable persistence and cluster tab order are hydrated from the backend and
   cached in memory.
-- Legacy localStorage reads remain only for migration hydration, not for
-  durable writes.
-
-## Legacy migration
-
-Migration happens on startup when legacy stores exist.
-
-### Legacy sources
-
-- Backend files:
-  - `window-settings.json`
-  - `app-preferences.json`
-- Frontend localStorage keys:
-  - `app-theme-preference`
-  - `useShortResourceNames`
-  - `autoRefreshEnabled`
-  - `refreshBackgroundClustersEnabled`
-  - `gridtable:persistenceMode`
-  - `clusterTabs:order`
-  - `gridtable:v1:*`
 
 ### Rules
 
@@ -91,17 +71,6 @@ Migration happens on startup when legacy stores exist.
 - localStorage values are only applied if backend values are still defaults.
 - `clusterTabs.order` is converted to full `path:context` entries and skips
   ambiguous or missing matches.
-- Legacy stores are deleted only after a successful migration.
-
-### Logging
-
-All migration activity is written to Application Logs under the `Migration`
-source, including:
-
-- Which legacy files were detected.
-- Which fields were applied.
-- GridTable persistence import counts.
-- Which legacy files were deleted.
 
 ## Reset App State
 

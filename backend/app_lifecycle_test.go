@@ -130,21 +130,6 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	require.Nil(t, summary.Catalog)
 }
 
-func TestRestoreKubeconfigSelectionPrefersSavedContext(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.availableKubeconfigs = []KubeconfigInfo{
-		{Path: "/other/config", Context: "other"},
-		{Path: "/saved/config", Context: "saved"},
-	}
-	app.appSettings = &AppSettings{SelectedKubeconfig: "/saved/config:saved"}
-
-	app.restoreKubeconfigSelection()
-
-	require.Equal(t, []string{"/saved/config:saved"}, app.selectedKubeconfigs)
-	require.Empty(t, app.selectedKubeconfig)
-	require.Empty(t, app.selectedContext)
-}
-
 func TestRestoreKubeconfigSelectionUsesSelectedKubeconfigs(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.availableKubeconfigs = []KubeconfigInfo{
@@ -152,19 +137,16 @@ func TestRestoreKubeconfigSelectionUsesSelectedKubeconfigs(t *testing.T) {
 		{Path: "/saved/config", Context: "saved"},
 	}
 	app.appSettings = &AppSettings{
-		SelectedKubeconfig:  "/other/config:other",
 		SelectedKubeconfigs: []string{"/saved/config:saved", "/other/config:other"},
 	}
 
 	app.restoreKubeconfigSelection()
 
 	require.Equal(t, []string{"/saved/config:saved", "/other/config:other"}, app.selectedKubeconfigs)
-	require.Empty(t, app.selectedKubeconfig)
-	require.Empty(t, app.selectedContext)
 }
 
-func TestRestoreKubeconfigSelectionDoesNotFallback(t *testing.T) {
-	t.Run("defaults to current context", func(t *testing.T) {
+func TestRestoreKubeconfigSelectionNoSettingsLeavesEmpty(t *testing.T) {
+	t.Run("no saved selections returns empty", func(t *testing.T) {
 		app := newTestAppWithDefaults(t)
 		app.availableKubeconfigs = []KubeconfigInfo{
 			{Path: "/current/config", Context: "current", IsDefault: true, IsCurrentContext: true},
@@ -174,26 +156,11 @@ func TestRestoreKubeconfigSelectionDoesNotFallback(t *testing.T) {
 		app.restoreKubeconfigSelection()
 
 		require.Empty(t, app.selectedKubeconfigs)
-		require.Empty(t, app.selectedKubeconfig)
-		require.Empty(t, app.selectedContext)
 	})
 
-	t.Run("defaults to first default entry", func(t *testing.T) {
+	t.Run("empty settings returns empty", func(t *testing.T) {
 		app := newTestAppWithDefaults(t)
-		app.availableKubeconfigs = []KubeconfigInfo{
-			{Path: "/default/config", Context: "default", IsDefault: true},
-			{Path: "/other/config", Context: "other"},
-		}
-
-		app.restoreKubeconfigSelection()
-
-		require.Empty(t, app.selectedKubeconfigs)
-		require.Empty(t, app.selectedKubeconfig)
-		require.Empty(t, app.selectedContext)
-	})
-
-	t.Run("falls back to first when no defaults", func(t *testing.T) {
-		app := newTestAppWithDefaults(t)
+		app.appSettings = &AppSettings{}
 		app.availableKubeconfigs = []KubeconfigInfo{
 			{Path: "/first/config", Context: "first"},
 			{Path: "/second/config", Context: "second"},
@@ -202,8 +169,6 @@ func TestRestoreKubeconfigSelectionDoesNotFallback(t *testing.T) {
 		app.restoreKubeconfigSelection()
 
 		require.Empty(t, app.selectedKubeconfigs)
-		require.Empty(t, app.selectedKubeconfig)
-		require.Empty(t, app.selectedContext)
 	})
 }
 

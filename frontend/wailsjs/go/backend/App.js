@@ -230,10 +230,6 @@ export function GetSecret(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetSecret'](arg1, arg2, arg3);
 }
 
-export function GetSelectedKubeconfig() {
-  return window['go']['backend']['App']['GetSelectedKubeconfig']();
-}
-
 export function GetSelectedKubeconfigs() {
   return window['go']['backend']['App']['GetSelectedKubeconfigs']();
 }
@@ -292,10 +288,6 @@ export function LogFetcher(arg1, arg2) {
 
 export function LogFrontend(arg1, arg2, arg3) {
   return window['go']['backend']['App']['LogFrontend'](arg1, arg2, arg3);
-}
-
-export function MigrateLegacyLocalStorage(arg1) {
-  return window['go']['backend']['App']['MigrateLegacyLocalStorage'](arg1);
 }
 
 export function OpenKubeconfigSearchPathDialog() {

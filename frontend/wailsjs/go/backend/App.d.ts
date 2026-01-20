@@ -125,8 +125,6 @@ export function GetRoleBinding(arg1:string,arg2:string,arg3:string):Promise<type
 
 export function GetSecret(arg1:string,arg2:string,arg3:string):Promise<types.SecretDetails>;
 
-export function GetSelectedKubeconfig():Promise<string>;
-
 export function GetSelectedKubeconfigs():Promise<Array<string>>;
 
 export function GetService(arg1:string,arg2:string,arg3:string):Promise<types.ServiceDetails>;
@@ -156,8 +154,6 @@ export function LoadWindowSettings():Promise<types.WindowSettings>;
 export function LogFetcher(arg1:string,arg2:types.LogFetchRequest):Promise<types.LogFetchResponse>;
 
 export function LogFrontend(arg1:string,arg2:string,arg3:string):Promise<void>;
-
-export function MigrateLegacyLocalStorage(arg1:backend.legacyLocalStoragePayload):Promise<void>;
 
 export function OpenKubeconfigSearchPathDialog():Promise<string>;
 

@@ -5,38 +5,37 @@
  * Covers key behaviors and edge cases for kindAliasMap.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { getDisplayKind, getTypeAlias } from './kindAliasMap';
-import { resetAppPreferencesCacheForTesting } from '@/core/settings/appPreferences';
+import {
+  resetAppPreferencesCacheForTesting,
+  setAppPreferencesForTesting,
+} from '@/core/settings/appPreferences';
 
 describe('kindAliasMap utility', () => {
   beforeEach(() => {
     resetAppPreferencesCacheForTesting();
   });
 
-  afterEach(() => {
-    localStorage.removeItem('useShortResourceNames');
-  });
-
   it('returns undefined alias when short names are disabled', () => {
-    localStorage.setItem('useShortResourceNames', 'false');
+    setAppPreferencesForTesting({ useShortResourceNames: false });
     expect(getTypeAlias('Pod')).toBeUndefined();
   });
 
-  it('returns short alias from localStorage flag', () => {
-    localStorage.setItem('useShortResourceNames', 'true');
+  it('returns short alias when short names are enabled', () => {
+    setAppPreferencesForTesting({ useShortResourceNames: true });
     expect(getTypeAlias('Deployment')).toBe('deploy');
     expect(getTypeAlias('UnknownKind')).toBeUndefined();
   });
 
   it('uses display overrides when short names disabled', () => {
-    localStorage.setItem('useShortResourceNames', 'false');
+    setAppPreferencesForTesting({ useShortResourceNames: false });
     expect(getDisplayKind('MutatingWebhookConfiguration')).toBe('MutatingWebhook');
     expect(getDisplayKind('CustomResourceDefinition')).toBe('CustomResourceDefinition');
   });
 
-  it('prefers explicit useShortNames parameter over localStorage', () => {
-    localStorage.setItem('useShortResourceNames', 'false');
+  it('prefers explicit useShortNames parameter over preference setting', () => {
+    setAppPreferencesForTesting({ useShortResourceNames: false });
     expect(getDisplayKind('Service', true)).toBe('svc');
     expect(getDisplayKind('UnknownKind', true)).toBe('UnknownKind');
   });

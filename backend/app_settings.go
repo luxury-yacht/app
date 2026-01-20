@@ -9,7 +9,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
-	"k8s.io/client-go/util/homedir"
 )
 
 var (
@@ -203,21 +202,6 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	return os.Rename(tempFile.Name(), path)
 }
 
-// getConfigFilePath returns the legacy window settings location for migration/reset.
-func (a *App) getConfigFilePath() (string, error) {
-	home := homedir.HomeDir()
-	if home == "" {
-		return "", fmt.Errorf("could not find home directory")
-	}
-
-	configDir := filepath.Join(home, ".config", "luxury-yacht")
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		return "", fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	return filepath.Join(configDir, "window-settings.json"), nil
-}
-
 func (a *App) SaveWindowSettings() error {
 	x, y := runtimeWindowGetPosition(a.Ctx)
 	width, height := runtimeWindowGetSize(a.Ctx)
@@ -253,7 +237,6 @@ func (a *App) LoadWindowSettings() (*WindowSettings, error) {
 func getDefaultAppSettings() *AppSettings {
 	return &AppSettings{
 		Theme:                            "system",
-		SelectedKubeconfig:               "",
 		SelectedKubeconfigs:              nil,
 		UseShortResourceNames:            false,
 		AutoRefreshEnabled:               true,
@@ -271,7 +254,6 @@ func (a *App) loadAppSettings() error {
 
 	a.appSettings = &AppSettings{
 		Theme:                            settings.Preferences.Theme,
-		SelectedKubeconfig:               settings.Kubeconfig.Active,
 		SelectedKubeconfigs:              append([]string(nil), settings.Kubeconfig.Selected...),
 		UseShortResourceNames:            settings.Preferences.UseShortResourceNames,
 		AutoRefreshEnabled:               settings.Preferences.Refresh.Auto,
@@ -302,14 +284,7 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
 
-	if len(a.appSettings.SelectedKubeconfigs) > 0 {
-		settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
-	} else if a.appSettings.SelectedKubeconfig != "" {
-		settings.Kubeconfig.Selected = []string{a.appSettings.SelectedKubeconfig}
-	} else {
-		settings.Kubeconfig.Selected = nil
-	}
-	settings.Kubeconfig.Active = a.appSettings.SelectedKubeconfig
+	settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
 
 	return a.saveSettingsFile(settings)
 }
@@ -322,37 +297,18 @@ func (a *App) ClearAppState() error {
 
 	var errs []error
 
-	windowSettingsFile, err := a.getConfigFilePath()
+	settingsFile, err := a.getSettingsFilePath()
 	if err == nil {
-		if err := removeFileIfExists(windowSettingsFile); err != nil {
+		if err := removeFileIfExists(settingsFile); err != nil {
 			errs = append(errs, err)
 		}
 	} else {
 		errs = append(errs, err)
 	}
 
-	appSettingsFile, err := a.getAppSettingsFilePath()
+	persistenceFile, err := a.getPersistenceFilePath()
 	if err == nil {
-		if err := removeFileIfExists(appSettingsFile); err != nil {
-			errs = append(errs, err)
-		}
-		legacyDir := filepath.Dir(appSettingsFile)
-		if err := removeFileIfExists(filepath.Join(legacyDir, "settings.json")); err != nil {
-			errs = append(errs, err)
-		}
-		if err := removeFileIfExists(filepath.Join(legacyDir, "persistence.json")); err != nil {
-			errs = append(errs, err)
-		}
-	} else {
-		errs = append(errs, err)
-	}
-
-	if configDir, err := os.UserConfigDir(); err == nil {
-		newDir := filepath.Join(configDir, "luxury-yacht")
-		if err := removeFileIfExists(filepath.Join(newDir, "settings.json")); err != nil {
-			errs = append(errs, err)
-		}
-		if err := removeFileIfExists(filepath.Join(newDir, "persistence.json")); err != nil {
+		if err := removeFileIfExists(persistenceFile); err != nil {
 			errs = append(errs, err)
 		}
 	} else {
@@ -375,21 +331,6 @@ func removeFileIfExists(path string) error {
 		return err
 	}
 	return nil
-}
-
-// getAppSettingsFilePath returns the legacy app settings location for migration/reset.
-func (a *App) getAppSettingsFilePath() (string, error) {
-	home := homedir.HomeDir()
-	if home == "" {
-		return "", fmt.Errorf("could not find home directory")
-	}
-
-	configDir := filepath.Join(home, ".config", "luxury-yacht")
-	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		return "", fmt.Errorf("failed to create config directory: %w", err)
-	}
-
-	return filepath.Join(configDir, "app-preferences.json"), nil
 }
 
 func (a *App) GetAppSettings() (*AppSettings, error) {

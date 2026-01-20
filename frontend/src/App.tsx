@@ -20,7 +20,6 @@ import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { hydrateAppPreferences } from '@/core/settings/appPreferences';
-import { migrateLegacyLocalStorage } from '@/core/settings/legacyMigration';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
@@ -58,7 +57,6 @@ function AppContent() {
     let active = true;
     const initializePreferences = async () => {
       try {
-        await migrateLegacyLocalStorage();
         await hydrateAppPreferences();
       } finally {
         if (active) {
