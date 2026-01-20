@@ -374,30 +374,6 @@ export namespace backend {
 	        this.notModified = source["notModified"];
 	    }
 	}
-	export class legacyLocalStoragePayload {
-	    theme?: string;
-	    useShortResourceNames?: boolean;
-	    autoRefreshEnabled?: boolean;
-	    refreshBackgroundClustersEnabled?: boolean;
-	    gridTablePersistenceMode?: string;
-	    clusterTabsOrder: string[];
-	    gridTableEntries: Record<string, Array<number>>;
-	
-	    static createFrom(source: any = {}) {
-	        return new legacyLocalStoragePayload(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.theme = source["theme"];
-	        this.useShortResourceNames = source["useShortResourceNames"];
-	        this.autoRefreshEnabled = source["autoRefreshEnabled"];
-	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
-	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
-	        this.clusterTabsOrder = source["clusterTabsOrder"];
-	        this.gridTableEntries = source["gridTableEntries"];
-	    }
-	}
 
 }
 

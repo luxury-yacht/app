@@ -290,10 +290,6 @@ export function LogFrontend(arg1, arg2, arg3) {
   return window['go']['backend']['App']['LogFrontend'](arg1, arg2, arg3);
 }
 
-export function MigrateLegacyLocalStorage(arg1) {
-  return window['go']['backend']['App']['MigrateLegacyLocalStorage'](arg1);
-}
-
 export function OpenKubeconfigSearchPathDialog() {
   return window['go']['backend']['App']['OpenKubeconfigSearchPathDialog']();
 }

@@ -29,17 +29,6 @@ func setTestConfigEnv(t *testing.T) {
 	t.Setenv("APPDATA", filepath.Join(baseDir, "AppData", "Roaming"))
 }
 
-func TestAppGetConfigFilePathCreatesDirectory(t *testing.T) {
-	setTestConfigEnv(t)
-	app := newTestAppWithDefaults(t)
-
-	path, err := app.getConfigFilePath()
-	require.NoError(t, err)
-
-	require.DirExists(t, filepath.Dir(path))
-	require.Equal(t, "window-settings.json", filepath.Base(path))
-}
-
 func TestAppLoadWindowSettingsDefaultWhenMissing(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
