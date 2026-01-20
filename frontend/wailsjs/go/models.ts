@@ -615,7 +615,6 @@ export namespace types {
 	}
 	export class AppSettings {
 	    theme: string;
-	    selectedKubeconfig: string;
 	    selectedKubeconfigs: string[];
 	    useShortResourceNames: boolean;
 	    autoRefreshEnabled: boolean;
@@ -630,7 +629,6 @@ export namespace types {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.theme = source["theme"];
-	        this.selectedKubeconfig = source["selectedKubeconfig"];
 	        this.selectedKubeconfigs = source["selectedKubeconfigs"];
 	        this.useShortResourceNames = source["useShortResourceNames"];
 	        this.autoRefreshEnabled = source["autoRefreshEnabled"];

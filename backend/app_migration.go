@@ -515,18 +515,14 @@ func applyLegacyAppPreferences(
 		}
 	}
 
-	if len(settings.Kubeconfig.Selected) == 0 && settings.Kubeconfig.Active == "" {
+	if len(settings.Kubeconfig.Selected) == 0 {
 		selections := normalizeSelections(prefs.SelectedKubeconfigs)
 		active := strings.TrimSpace(prefs.SelectedKubeconfig)
 		if len(selections) == 0 && active != "" {
 			selections = []string{active}
 		}
-		if active == "" && len(selections) > 0 {
-			active = selections[0]
-		}
 		if len(selections) > 0 {
 			settings.Kubeconfig.Selected = selections
-			settings.Kubeconfig.Active = active
 			applied = append(applied, "kubeconfig")
 			changed = true
 		}

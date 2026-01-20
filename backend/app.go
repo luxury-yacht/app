@@ -31,10 +31,8 @@ type App struct {
 	apiextensionsClient  apiextensionsclientset.Interface
 	dynamicClient        dynamic.Interface
 	metricsClient        *metricsclient.Clientset
-	restConfig           *rest.Config
-	selectedKubeconfig   string
-	selectedContext      string
-	selectedKubeconfigs  []string
+	restConfig          *rest.Config
+	selectedKubeconfigs []string
 	availableKubeconfigs []KubeconfigInfo
 	windowSettings       *WindowSettings
 	appSettings          *AppSettings
@@ -131,20 +129,6 @@ func (a *App) initKubeClient() error {
 		return a.kubeClientInitializer()
 	}
 	return a.initKubernetesClient()
-}
-
-func (a *App) currentSelectionKey() string {
-	meta := a.currentClusterMeta()
-	if meta.ID != "" {
-		return meta.ID
-	}
-	if a.selectedKubeconfig == "" {
-		return ""
-	}
-	if a.selectedContext == "" {
-		return a.selectedKubeconfig
-	}
-	return a.selectedKubeconfig + ":" + a.selectedContext
 }
 
 func (a *App) emitEvent(name string, args ...interface{}) {

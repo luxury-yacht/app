@@ -230,10 +230,6 @@ export function GetSecret(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetSecret'](arg1, arg2, arg3);
 }
 
-export function GetSelectedKubeconfig() {
-  return window['go']['backend']['App']['GetSelectedKubeconfig']();
-}
-
 export function GetSelectedKubeconfigs() {
   return window['go']['backend']['App']['GetSelectedKubeconfigs']();
 }

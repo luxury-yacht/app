@@ -125,8 +125,6 @@ export function GetRoleBinding(arg1:string,arg2:string,arg3:string):Promise<type
 
 export function GetSecret(arg1:string,arg2:string,arg3:string):Promise<types.SecretDetails>;
 
-export function GetSelectedKubeconfig():Promise<string>;
-
 export function GetSelectedKubeconfigs():Promise<Array<string>>;
 
 export function GetService(arg1:string,arg2:string,arg3:string):Promise<types.ServiceDetails>;

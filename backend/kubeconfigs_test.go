@@ -260,25 +260,9 @@ func TestApp_SetKubeconfigSearchPathsPersistsAndDiscovers(t *testing.T) {
 	assert.True(t, hasKubeconfig(app.availableKubeconfigs, fileOnlyPath, "file-context"))
 }
 
-func TestApp_GetSelectedKubeconfig(t *testing.T) {
-	app := NewApp()
-
-	// Initially should be empty
-	assert.Empty(t, app.GetSelectedKubeconfig())
-
-	// Set a kubeconfig
-	app.selectedKubeconfig = "/path/to/config"
-	assert.Equal(t, "/path/to/config", app.GetSelectedKubeconfig())
-}
-
 func TestApp_GetSelectedKubeconfigs(t *testing.T) {
 	app := NewApp()
 
-	assert.Empty(t, app.GetSelectedKubeconfigs())
-
-	app.selectedKubeconfig = "/path/to/config"
-	app.selectedContext = "dev"
-	// Legacy single-selection fields no longer populate the multi-cluster selection list.
 	assert.Empty(t, app.GetSelectedKubeconfigs())
 
 	app.selectedKubeconfigs = []string{"/path/one:ctx", "/path/two:other"}
@@ -358,8 +342,6 @@ func TestApp_SetKubeconfig(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, []string{tt.kubeconfigPath}, app.selectedKubeconfigs)
-				assert.Empty(t, app.selectedKubeconfig)
-				assert.Empty(t, app.selectedContext)
 			}
 			// Ensure refresh listeners don't leak across subtests.
 			app.teardownRefreshSubsystem()
@@ -388,11 +370,8 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 	require.NoError(t, app.SetSelectedKubeconfigs(selections))
 
 	assert.Equal(t, selections, app.selectedKubeconfigs)
-	assert.Empty(t, app.selectedKubeconfig)
-	assert.Empty(t, app.selectedContext)
 	require.NotNil(t, app.appSettings)
 	assert.Equal(t, selections, app.appSettings.SelectedKubeconfigs)
-	assert.Equal(t, selections[0], app.appSettings.SelectedKubeconfig)
 	// Ensure refresh listeners don't leak across tests.
 	app.teardownRefreshSubsystem()
 }
@@ -427,20 +406,15 @@ func TestApp_SetSelectedKubeconfigsClearsSelection(t *testing.T) {
 
 	app := NewApp()
 	app.Ctx = context.Background()
-	app.selectedKubeconfig = "/path/to/config"
-	app.selectedContext = "ctx"
 	app.selectedKubeconfigs = []string{"/path/to/config:ctx"}
 
 	require.NoError(t, app.SetSelectedKubeconfigs(nil))
-	assert.Empty(t, app.selectedKubeconfig)
-	assert.Empty(t, app.selectedContext)
 	assert.Empty(t, app.selectedKubeconfigs)
 	require.NotNil(t, app.appSettings)
-	assert.Empty(t, app.appSettings.SelectedKubeconfig)
 	assert.Empty(t, app.appSettings.SelectedKubeconfigs)
 }
 
-func TestApp_startup_withKubeconfigs(t *testing.T) {
+func TestApp_discoverKubeconfigs_noAutoSelection(t *testing.T) {
 	setTestConfigEnv(t)
 	// Setup temp directory with multiple kubeconfigs
 	tempDir := t.TempDir()
@@ -463,39 +437,12 @@ func TestApp_startup_withKubeconfigs(t *testing.T) {
 	err = app.discoverKubeconfigs()
 	require.NoError(t, err)
 
-	// Manually trigger kubeconfig selection logic (normally in startup)
-	if app.selectedKubeconfig == "" && len(app.availableKubeconfigs) > 0 {
-		// First try to find the current context in the default config
-		for _, kc := range app.availableKubeconfigs {
-			if kc.IsDefault && kc.IsCurrentContext {
-				app.selectedKubeconfig = kc.Path
-				app.selectedContext = kc.Context
-				break
-			}
-		}
-		// If no current context in default, use any default context
-		if app.selectedKubeconfig == "" {
-			for _, kc := range app.availableKubeconfigs {
-				if kc.IsDefault {
-					app.selectedKubeconfig = kc.Path
-					app.selectedContext = kc.Context
-					break
-				}
-			}
-		}
-		// If no default found, use the first one
-		if app.selectedKubeconfig == "" {
-			app.selectedKubeconfig = app.availableKubeconfigs[0].Path
-			app.selectedContext = app.availableKubeconfigs[0].Context
-		}
-	}
-
-	// Verify state (ignoring client initialization failure)
+	// Verify kubeconfigs were discovered but not auto-selected
 	assert.Equal(t, ctx, app.Ctx)
 	assert.Len(t, app.availableKubeconfigs, 2)
-	assert.Equal(t, configPath, app.selectedKubeconfig) // Should select default
+	assert.Empty(t, app.selectedKubeconfigs) // No auto-selection
 
-	// Verify default config is selected
+	// Verify default config is marked correctly
 	foundDefault := false
 	for _, kc := range app.availableKubeconfigs {
 		if kc.IsDefault {
@@ -504,7 +451,4 @@ func TestApp_startup_withKubeconfigs(t *testing.T) {
 		}
 	}
 	assert.True(t, foundDefault)
-
-	// Client initialization may succeed or fail in tests, both are acceptable
-	// The important thing is that kubeconfig discovery and selection worked
 }

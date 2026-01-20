@@ -94,7 +94,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 
 	app.appSettings = &AppSettings{
 		Theme:                            "dark",
-		SelectedKubeconfig:               "/tmp/config",
+		SelectedKubeconfigs:              []string{"/tmp/config:ctx"},
 		UseShortResourceNames:            true,
 		AutoRefreshEnabled:               false,
 		RefreshBackgroundClustersEnabled: false,
@@ -108,7 +108,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.NoError(t, app.loadAppSettings())
 	require.Equal(t, "dark", app.appSettings.Theme)
 	require.True(t, app.appSettings.UseShortResourceNames)
-	require.Equal(t, "/tmp/config", app.appSettings.SelectedKubeconfig)
+	require.Equal(t, []string{"/tmp/config:ctx"}, app.appSettings.SelectedKubeconfigs)
 	require.False(t, app.appSettings.AutoRefreshEnabled)
 	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
 	require.Equal(t, 7000, app.appSettings.MetricsRefreshIntervalMs)

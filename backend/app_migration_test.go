@@ -52,7 +52,6 @@ func TestMigrateLegacyBackendFilesImportsAndDeletes(t *testing.T) {
 	require.False(t, settings.Preferences.Refresh.Background)
 	require.Equal(t, "namespaced", settings.Preferences.GridTablePersistenceMode)
 	require.Equal(t, []string{"/tmp/config:dev"}, settings.Kubeconfig.Selected)
-	require.Equal(t, "/tmp/config:dev", settings.Kubeconfig.Active)
 
 	_, err = os.Stat(filepath.Join(legacyDir, "window-settings.json"))
 	require.True(t, os.IsNotExist(err))

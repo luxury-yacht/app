@@ -321,15 +321,6 @@ func (a *App) GetKubeconfigs() ([]KubeconfigInfo, error) {
 	return a.availableKubeconfigs, nil
 }
 
-// GetSelectedKubeconfig returns the currently selected kubeconfig and context
-// Returns in the format "path:context"
-func (a *App) GetSelectedKubeconfig() string {
-	if a.selectedContext != "" {
-		return a.selectedKubeconfig + ":" + a.selectedContext
-	}
-	return a.selectedKubeconfig
-}
-
 // GetSelectedKubeconfigs returns the active kubeconfig selections for multi-cluster support.
 func (a *App) GetSelectedKubeconfigs() []string {
 	if len(a.selectedKubeconfigs) > 0 {
@@ -487,20 +478,6 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 	}
 	a.appSettings.SelectedKubeconfigs = normalizedStrings
 
-	// Also set the legacy single-selection field for backward compatibility.
-	// Some older code paths may still reference SelectedKubeconfig (singular).
-	if len(normalizedStrings) > 0 {
-		a.appSettings.SelectedKubeconfig = normalizedStrings[0]
-	} else {
-		a.appSettings.SelectedKubeconfig = ""
-	}
-
-	// Clear legacy single-selection fields on the App struct to avoid implicit base usage.
-	// These fields predate multi-cluster support and should not be used, but we clear them
-	// to prevent any old code from accidentally using stale values.
-	a.selectedKubeconfig = ""
-	a.selectedContext = ""
-
 	// Write the settings to disk. We log but don't fail on error because the selection
 	// can still work for this session even if persistence fails.
 	if err := a.saveAppSettings(); err != nil {
@@ -575,8 +552,6 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 // clearKubeconfigSelection clears the active selection and resets client state.
 func (a *App) clearKubeconfigSelection() error {
 	a.logger.Info("Clearing kubeconfig selection", "KubeconfigManager")
-	a.selectedKubeconfig = ""
-	a.selectedContext = ""
 	a.selectedKubeconfigs = nil
 	a.client = nil
 	a.apiextensionsClient = nil
@@ -592,7 +567,6 @@ func (a *App) clearKubeconfigSelection() error {
 	if a.appSettings == nil {
 		a.appSettings = getDefaultAppSettings()
 	}
-	a.appSettings.SelectedKubeconfig = ""
 	a.appSettings.SelectedKubeconfigs = nil
 	if err := a.saveAppSettings(); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")

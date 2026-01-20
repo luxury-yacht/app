@@ -1,9 +1,6 @@
 package backend
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
 func (a *App) initKubernetesClient() (err error) {
 	a.logger.Info("Initializing Kubernetes client", "KubernetesClient")
@@ -43,9 +40,6 @@ func (a *App) initKubernetesClient() (err error) {
 }
 
 func (a *App) restoreKubeconfigSelection() {
-	// Reset legacy single-selection state to avoid implicit base usage.
-	a.selectedKubeconfig = ""
-	a.selectedContext = ""
 	a.selectedKubeconfigs = nil
 
 	if a.appSettings != nil && len(a.appSettings.SelectedKubeconfigs) > 0 {
@@ -63,16 +57,6 @@ func (a *App) restoreKubeconfigSelection() {
 		if len(normalized) > 0 {
 			a.selectedKubeconfigs = normalized
 			a.appSettings.SelectedKubeconfigs = normalized
-			a.appSettings.SelectedKubeconfig = normalized[0]
-			return
-		}
-	}
-
-	if a.appSettings != nil && strings.TrimSpace(a.appSettings.SelectedKubeconfig) != "" {
-		parsed, err := a.normalizeKubeconfigSelection(a.appSettings.SelectedKubeconfig)
-		if err == nil && a.validateKubeconfigSelection(parsed) == nil {
-			a.selectedKubeconfigs = []string{parsed.String()}
-			a.appSettings.SelectedKubeconfigs = a.selectedKubeconfigs
 		}
 	}
 }

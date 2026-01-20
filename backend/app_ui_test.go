@@ -188,18 +188,6 @@ func TestToggleDiagnosticsPanelTogglesAndEmits(t *testing.T) {
 	}
 }
 
-func TestCurrentSelectionKey(t *testing.T) {
-	app := newUIApp(t)
-	app.selectedKubeconfig = "config1"
-	require.Equal(t, "config1", app.currentSelectionKey())
-
-	app.selectedContext = "ctx"
-	require.Equal(t, "config1:ctx", app.currentSelectionKey())
-
-	app.selectedKubeconfig = ""
-	require.Equal(t, "", app.currentSelectionKey())
-}
-
 // Legacy permission cache behavior retained for compatibility.
 func TestEmitEventNoContext(t *testing.T) {
 	app := newUIApp(t)

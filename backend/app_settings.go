@@ -253,7 +253,6 @@ func (a *App) LoadWindowSettings() (*WindowSettings, error) {
 func getDefaultAppSettings() *AppSettings {
 	return &AppSettings{
 		Theme:                            "system",
-		SelectedKubeconfig:               "",
 		SelectedKubeconfigs:              nil,
 		UseShortResourceNames:            false,
 		AutoRefreshEnabled:               true,
@@ -271,7 +270,6 @@ func (a *App) loadAppSettings() error {
 
 	a.appSettings = &AppSettings{
 		Theme:                            settings.Preferences.Theme,
-		SelectedKubeconfig:               settings.Kubeconfig.Active,
 		SelectedKubeconfigs:              append([]string(nil), settings.Kubeconfig.Selected...),
 		UseShortResourceNames:            settings.Preferences.UseShortResourceNames,
 		AutoRefreshEnabled:               settings.Preferences.Refresh.Auto,
@@ -302,14 +300,7 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
 
-	if len(a.appSettings.SelectedKubeconfigs) > 0 {
-		settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
-	} else if a.appSettings.SelectedKubeconfig != "" {
-		settings.Kubeconfig.Selected = []string{a.appSettings.SelectedKubeconfig}
-	} else {
-		settings.Kubeconfig.Selected = nil
-	}
-	settings.Kubeconfig.Active = a.appSettings.SelectedKubeconfig
+	settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
 
 	return a.saveSettingsFile(settings)
 }
