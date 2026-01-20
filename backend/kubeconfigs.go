@@ -428,6 +428,7 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 		} else if err := a.updateRefreshSubsystemSelections(normalized); err != nil {
 			return err
 		}
+		a.startObjectCatalog()
 	}
 
 	return nil
