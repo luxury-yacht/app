@@ -240,7 +240,9 @@ func (s *Service) fetchContainerLogs(namespace, podName, containerName string, i
 		if strings.Contains(errStr, "waiting to start") ||
 			strings.Contains(errStr, "container not found") ||
 			(strings.Contains(errStr, "previous terminated container") && strings.Contains(errStr, "not found")) ||
-			strings.Contains(errStr, "is not valid for pod") {
+			strings.Contains(errStr, "is not valid for pod") ||
+			strings.Contains(errStr, "ContainerCreating") ||
+			strings.Contains(errStr, "PodInitializing") {
 			return []types.PodLogEntry{}, nil
 		}
 		return nil, fmt.Errorf("failed to get log stream: %w", err)

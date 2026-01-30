@@ -348,13 +348,31 @@ func (s *Streamer) followContainer(ctx context.Context, target containerTarget, 
 		stream, err := req.Stream(ctx)
 		if err != nil {
 			if !errors.Is(err, context.Canceled) {
-				msg := fmt.Sprintf("logstream: follow failed for %s/%s/%s: %v", target.namespace, target.pod, target.container, err)
-				s.logger.Warn(msg, "LogStream")
-				streamErr := fmt.Errorf("logstream: follow failed for %s/%s/%s: %w", target.namespace, target.pod, target.container, err)
-				select {
-				case errCh <- streamErr:
-				default:
+				// Check if this is a transient error that shouldn't be shown to users
+				errStr := err.Error()
+				isTransient := apierrors.IsNotFound(err) ||
+					strings.Contains(errStr, "waiting to start") ||
+					strings.Contains(errStr, "container not found") ||
+					(strings.Contains(errStr, "previous terminated container") && strings.Contains(errStr, "not found")) ||
+					strings.Contains(errStr, "is not valid for pod") ||
+					strings.Contains(errStr, "ContainerCreating") ||
+					strings.Contains(errStr, "PodInitializing")
+
+				if !isTransient {
+					msg := fmt.Sprintf("logstream: follow failed for %s/%s/%s: %v", target.namespace, target.pod, target.container, err)
+					s.logger.Warn(msg, "LogStream")
+					streamErr := fmt.Errorf("logstream: follow failed for %s/%s/%s: %w", target.namespace, target.pod, target.container, err)
+					select {
+					case errCh <- streamErr:
+					default:
+					}
 				}
+
+				// For NotFound errors, stop streaming this container - pod is gone
+				if apierrors.IsNotFound(err) {
+					return
+				}
+
 				select {
 				case <-time.After(backoff):
 				case <-ctx.Done():

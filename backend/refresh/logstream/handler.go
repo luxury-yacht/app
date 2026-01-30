@@ -88,8 +88,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // Disable nginx buffering
+	f.Flush()                                 // Send headers immediately
 
 	sequence := uint64(1)
+
+	// Send an immediate "connected" event so the frontend knows the stream is active
+	// This prevents the UI from staying in loading state when there are no initial logs
+	connectedPayload := EventPayload{
+		Domain:      "object-logs",
+		Scope:       opts.ScopeString,
+		Sequence:    sequence,
+		GeneratedAt: time.Now().UnixMilli(),
+		Reset:       true,
+		Entries:     []Entry{},
+	}
+	sequence++
+	if writeEvent(w, f, connectedPayload) != nil {
+		return
+	}
+
 	ctx := r.Context()
 	if deadline, ok := ctx.Deadline(); ok {
 		h.streamer.logger.Debug(fmt.Sprintf("logstream: client deadline %s", deadline.Format(time.RFC3339)), "LogStream")
@@ -117,25 +135,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(initial) > 0 {
-		event := EventPayload{
-			Domain:      "object-logs",
-			Scope:       opts.ScopeString,
-			Sequence:    sequence,
-			GeneratedAt: time.Now().UnixMilli(),
-			Reset:       true,
-			Entries:     initial,
-		}
-		sequence++
-		if err := writeEvent(w, f, event); err != nil {
-			if h.telemetry != nil {
-				h.telemetry.RecordStreamError(streamName, err)
-			}
-			return
-		}
+	// Always send the initial event so frontend knows initial fetch is complete
+	// (even if there are no logs). This allows the frontend to distinguish between
+	// "still loading" and "no logs available".
+	event := EventPayload{
+		Domain:      "object-logs",
+		Scope:       opts.ScopeString,
+		Sequence:    sequence,
+		GeneratedAt: time.Now().UnixMilli(),
+		Reset:       false, // Already sent reset in connected event
+		Entries:     initial,
+	}
+	sequence++
+	if err := writeEvent(w, f, event); err != nil {
 		if h.telemetry != nil {
-			h.telemetry.RecordStreamDelivery(streamName, len(event.Entries), 0)
+			h.telemetry.RecordStreamError(streamName, err)
 		}
+		return
+	}
+	if h.telemetry != nil && len(initial) > 0 {
+		h.telemetry.RecordStreamDelivery(streamName, len(event.Entries), 0)
 	}
 
 	entriesCh := make(chan Entry, 256)

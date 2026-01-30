@@ -96,6 +96,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const hasPrimedScopeRef = useRef(false);
   const fallbackRecoveringRef = useRef(false);
   const previousActivePodsRef = useRef<string[] | null>(null);
+  const previousLogScopeRef = useRef<string | null>(null);
   const resolvedClusterId = clusterId?.trim() ?? '';
 
   // Refs
@@ -117,11 +118,28 @@ const LogViewer: React.FC<LogViewerProps> = ({
     return buildClusterScope(clusterId ?? undefined, rawScope);
   }, [clusterId, resourceName, resourceKindKey, scopeNamespace]);
 
+  // Reset state when scope changes - do this during render, not in an effect,
+  // to avoid causing a re-render that would interrupt streaming startup
+  if (logScope !== previousLogScopeRef.current) {
+    const hadPreviousScope = previousLogScopeRef.current !== null;
+    previousLogScopeRef.current = logScope;
+    hasPrimedScopeRef.current = false;
+    previousActivePodsRef.current = null;
+    // Only dispatch RESET_FOR_NEW_SCOPE if we had a previous scope (not on initial render)
+    // This prevents a re-render that would interrupt streaming startup
+    if (hadPreviousScope) {
+      dispatch({ type: 'RESET_FOR_NEW_SCOPE', isWorkload });
+    }
+  }
+
   const logSnapshot = useRefreshScopedDomain(LOG_DOMAIN, logScope ?? INACTIVE_SCOPE);
   const payloadEntries = logScope ? logSnapshot.data?.entries : undefined;
   const logEntries: ObjectLogEntry[] = useMemo(() => payloadEntries ?? [], [payloadEntries]);
   const snapshotStatus = logScope ? logSnapshot.status : 'idle';
   const snapshotError = logScope ? logSnapshot.error : null;
+  // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
+  const snapshotSequence = logScope ? (logSnapshot.data?.sequence ?? 0) : 0;
+  const hasReceivedInitialLogs = snapshotSequence >= 2;
   const loading = snapshotStatus === 'loading' && logEntries.length === 0;
   const displayError = snapshotError && !isLogDataUnavailable(snapshotError) ? snapshotError : null;
   const fallbackDisplayError =
@@ -162,7 +180,8 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const isPendingLogs = showPreviousLogs
     ? isLoadingPreviousLogs && logEntries.length === 0
     : logEntries.length === 0 &&
-      (!hasPrimedScopeRef.current ||
+      (!hasReceivedInitialLogs ||
+        !hasPrimedScopeRef.current ||
         ['loading', 'updating', 'initialising'].includes(snapshotStatus) ||
         fallbackActive ||
         pendingFallback);
@@ -332,22 +351,12 @@ const LogViewer: React.FC<LogViewerProps> = ({
     };
   }, [fallbackActive, isActive, logScope, showPreviousLogs]);
 
-  useEffect(() => {
-    if (!logScope || !isActive || fallbackActive || showPreviousLogs) {
-      return;
-    }
-    if (autoRefresh) {
-      void refreshOrchestrator.startStreamingDomain(LOG_DOMAIN, logScope);
-    } else {
-      refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
-    }
-  }, [autoRefresh, fallbackActive, isActive, logScope, showPreviousLogs]);
-
-  useEffect(() => {
-    dispatch({ type: 'RESET_FOR_NEW_SCOPE', isWorkload });
-    hasPrimedScopeRef.current = false;
-    previousActivePodsRef.current = null;
-  }, [logScope, isWorkload]);
+  // RESET_FOR_NEW_SCOPE is now handled during render (above) to avoid
+  // causing a re-render that would interrupt streaming startup.
+  //
+  // Note: We don't call startStreamingDomain separately because setScopedDomainEnabled
+  // already handles starting streaming internally. Calling both creates a race condition
+  // with the orchestrator's deduplication during React Strict Mode.
 
   useEffect(() => {
     if (!isWorkload || !logScope || showPreviousLogs) {

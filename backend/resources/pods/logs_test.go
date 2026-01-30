@@ -9,6 +9,7 @@ package pods
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -285,26 +286,42 @@ func TestFetchContainerLogsParsesTimestamps(t *testing.T) {
 }
 
 func TestFetchContainerLogsSwallowsCommonErrors(t *testing.T) {
-	defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
-		logStreamFunc = orig
-	}(logStreamFunc)
-
-	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}}
-	client := fake.NewClientset(pod)
-
-	logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
-		return nil, fmt.Errorf("waiting to start: container not found")
+	testCases := []struct {
+		name     string
+		errorMsg string
+	}{
+		{"waiting to start", "waiting to start: container not found"},
+		{"container not found", "container not found"},
+		{"previous terminated not found", "previous terminated container \"app\" in pod not found"},
+		{"not valid for pod", "container app is not valid for pod demo"},
+		{"ContainerCreating", "container \"app\" in pod \"demo\" is ContainerCreating"},
+		{"PodInitializing", "container \"app\" in pod \"demo\" is PodInitializing"},
 	}
 
-	service := NewService(common.Dependencies{
-		Context:          context.Background(),
-		Logger:           testsupport.NoopLogger{},
-		KubernetesClient: client,
-	})
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func(orig func(corev1client.PodInterface, context.Context, string, *corev1.PodLogOptions) (io.ReadCloser, error)) {
+				logStreamFunc = orig
+			}(logStreamFunc)
 
-	entries, err := service.fetchContainerLogs("default", "demo", "app", false, 10, true, 5)
-	require.NoError(t, err)
-	require.Empty(t, entries)
+			pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"}}
+			client := fake.NewClientset(pod)
+
+			logStreamFunc = func(_ corev1client.PodInterface, _ context.Context, _ string, _ *corev1.PodLogOptions) (io.ReadCloser, error) {
+				return nil, errors.New(tc.errorMsg)
+			}
+
+			service := NewService(common.Dependencies{
+				Context:          context.Background(),
+				Logger:           testsupport.NoopLogger{},
+				KubernetesClient: client,
+			})
+
+			entries, err := service.fetchContainerLogs("default", "demo", "app", false, 10, true, 5)
+			require.NoError(t, err)
+			require.Empty(t, entries)
+		})
+	}
 }
 
 func TestFetchContainerLogsUnexpectedErrorPropagates(t *testing.T) {

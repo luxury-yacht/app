@@ -152,24 +152,15 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 		close(done)
 	}()
 
-	var payload EventPayload
+	var events []EventPayload
 	require.Eventually(t, func() bool {
-		raw := rec.Body()
-		idx := strings.Index(raw, "data: ")
-		if idx == -1 {
+		events = parseSSEEvents(rec.Body())
+		// Expect at least 2 events: connected event + initial entries event
+		if len(events) < 2 {
 			return false
 		}
-		start := idx + len("data: ")
-		rest := raw[start:]
-		end := strings.IndexByte(rest, '\n')
-		if end == -1 {
-			return false
-		}
-		jsonStr := rest[:end]
-		if err := json.Unmarshal([]byte(jsonStr), &payload); err != nil {
-			return false
-		}
-		return len(payload.Entries) > 0
+		// Second event should have entries
+		return len(events[1].Entries) > 0
 	}, time.Second, 10*time.Millisecond, "expected initial log snapshot")
 
 	cancel()
@@ -179,11 +170,19 @@ func TestServeHTTPEmitsInitialSnapshot(t *testing.T) {
 		t.Fatal("log handler did not exit after cancel")
 	}
 
-	require.True(t, payload.Reset)
-	require.Equal(t, "default:pod:my-pod", payload.Scope)
-	require.Len(t, payload.Entries, 1)
+	// First event is the "connected" event with Reset: true and empty entries
+	connected := events[0]
+	require.True(t, connected.Reset)
+	require.Equal(t, "default:pod:my-pod", connected.Scope)
+	require.Empty(t, connected.Entries)
 
-	entry := payload.Entries[0]
+	// Second event has the initial log entries with Reset: false
+	initial := events[1]
+	require.False(t, initial.Reset)
+	require.Equal(t, "default:pod:my-pod", initial.Scope)
+	require.Len(t, initial.Entries, 1)
+
+	entry := initial.Entries[0]
 	require.NotEmpty(t, entry.Line)
 	require.Equal(t, "my-pod", entry.Pod)
 	require.Equal(t, "app", entry.Container)
@@ -210,11 +209,20 @@ func TestServeHTTPEmitsPermissionDeniedPayload(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 
 	events := parseSSEEvents(rec.Body())
-	require.Len(t, events, 1)
-	require.NotEmpty(t, events[0].Error)
-	require.NotNil(t, events[0].ErrorDetails)
-	require.Equal(t, "object-logs", events[0].ErrorDetails.Details.Domain)
-	require.Equal(t, logPermissionResource, events[0].ErrorDetails.Details.Resource)
+	// Expect 2 events: connected event + error event
+	require.Len(t, events, 2)
+
+	// First event is the "connected" event
+	connected := events[0]
+	require.True(t, connected.Reset)
+	require.Empty(t, connected.Error)
+
+	// Second event is the permission denied error
+	errEvent := events[1]
+	require.NotEmpty(t, errEvent.Error)
+	require.NotNil(t, errEvent.ErrorDetails)
+	require.Equal(t, "object-logs", errEvent.ErrorDetails.Details.Domain)
+	require.Equal(t, logPermissionResource, errEvent.ErrorDetails.Details.Resource)
 }
 
 func TestServeHTTPStreamsUpdates(t *testing.T) {
@@ -262,8 +270,9 @@ func TestServeHTTPStreamsUpdates(t *testing.T) {
 	var events []EventPayload
 	require.Eventually(t, func() bool {
 		events = parseSSEEvents(rec.Body())
-		return len(events) >= 2
-	}, 4*time.Second, 20*time.Millisecond, "expected at least two SSE events")
+		// Expect at least 3 events: connected + initial + update
+		return len(events) >= 3
+	}, 4*time.Second, 20*time.Millisecond, "expected at least three SSE events")
 
 	cancel()
 	select {
@@ -272,15 +281,22 @@ func TestServeHTTPStreamsUpdates(t *testing.T) {
 		t.Fatal("ServeHTTP did not exit after cancellation")
 	}
 
-	first := events[0]
-	require.True(t, first.Reset)
-	require.Len(t, first.Entries, 1)
-	require.Equal(t, "initial", first.Entries[0].Line)
+	// First event is the "connected" event with Reset: true and empty entries
+	connected := events[0]
+	require.True(t, connected.Reset)
+	require.Empty(t, connected.Entries)
 
-	second := events[1]
-	require.False(t, second.Reset)
-	require.Len(t, second.Entries, 1)
-	require.Equal(t, "update", second.Entries[0].Line)
+	// Second event has initial log entries
+	initial := events[1]
+	require.False(t, initial.Reset)
+	require.Len(t, initial.Entries, 1)
+	require.Equal(t, "initial", initial.Entries[0].Line)
+
+	// Third event has update log entries
+	update := events[2]
+	require.False(t, update.Reset)
+	require.Len(t, update.Entries, 1)
+	require.Equal(t, "update", update.Entries[0].Line)
 }
 
 func TestServeHTTPEmitsErrorEvent(t *testing.T) {
