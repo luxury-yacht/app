@@ -70,6 +70,10 @@ export function ForceDeleteNode(arg1, arg2) {
   return window['go']['backend']['App']['ForceDeleteNode'](arg1, arg2);
 }
 
+export function GetAllClusterAuthStates() {
+  return window['go']['backend']['App']['GetAllClusterAuthStates']();
+}
+
 export function GetAppInfo() {
   return window['go']['backend']['App']['GetAppInfo']();
 }
@@ -80,6 +84,10 @@ export function GetAppSettings() {
 
 export function GetCatalogDiagnostics() {
   return window['go']['backend']['App']['GetCatalogDiagnostics']();
+}
+
+export function GetClusterAuthState(arg1) {
+  return window['go']['backend']['App']['GetClusterAuthState'](arg1);
 }
 
 export function GetClusterRole(arg1, arg2) {
@@ -300,6 +308,14 @@ export function ResizeShellSession(arg1, arg2, arg3) {
 
 export function RestartWorkload(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['RestartWorkload'](arg1, arg2, arg3, arg4);
+}
+
+export function RetryAuth() {
+  return window['go']['backend']['App']['RetryAuth']();
+}
+
+export function RetryClusterAuth(arg1) {
+  return window['go']['backend']['App']['RetryClusterAuth'](arg1);
 }
 
 export function SaveWindowSettings() {

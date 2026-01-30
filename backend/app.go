@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/versioning"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -89,6 +90,11 @@ type App struct {
 	connectionStatusNextRetry int64
 	connectionStatusUpdatedAt int64
 
+	// authManager is deprecated. Auth state tracking is now per-cluster.
+	// See clusterClients.authManager for per-cluster auth state management.
+	// This field is kept for backwards compatibility but is no longer used.
+	authManager *authstate.Manager
+
 	listenLoopback func() (net.Listener, error)
 
 	eventEmitter          func(context.Context, string, ...interface{})
@@ -119,6 +125,7 @@ func NewApp() *App {
 	}
 	app.listenLoopback = defaultLoopbackListener
 	app.setupEnvironment()
+	app.initAuthManager()
 	app.connectionStatus = ConnectionStateHealthy
 	app.connectionStatusMessage = connectionStateDefinitions[ConnectionStateHealthy].DefaultMessage
 	return app
@@ -136,4 +143,35 @@ func (a *App) emitEvent(name string, args ...interface{}) {
 		return
 	}
 	a.eventEmitter(a.Ctx, name, args...)
+}
+
+// initAuthManager is kept for backwards compatibility but is now a no-op.
+// Auth state management is now per-cluster, handled by each cluster's authManager
+// in the clusterClients struct. See cluster_auth.go for details.
+func (a *App) initAuthManager() {
+	// Per-cluster auth managers are created in buildClusterClients().
+	// This function is kept for compatibility but does nothing.
+}
+
+// handleAuthStateChange is deprecated in favor of per-cluster auth state handling.
+// See handleClusterAuthStateChange in cluster_auth.go.
+// This is kept for backwards compatibility with any code that still references it.
+func (a *App) handleAuthStateChange(_ authstate.State, _ string) {
+	// Per-cluster auth state changes are handled by handleClusterAuthStateChange.
+	// This function is kept for compatibility but delegates to aggregate status update.
+	a.updateAggregateConnectionStatus()
+}
+
+// RetryAuth triggers a manual authentication recovery attempt for ALL clusters.
+// Called when user clicks "Retry" after re-authenticating externally.
+// For per-cluster retry, use RetryClusterAuth instead.
+func (a *App) RetryAuth() {
+	a.clusterClientsMu.Lock()
+	defer a.clusterClientsMu.Unlock()
+
+	for _, clients := range a.clusterClients {
+		if clients != nil && clients.authManager != nil {
+			clients.authManager.TriggerRetry()
+		}
+	}
 }

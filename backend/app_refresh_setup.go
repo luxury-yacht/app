@@ -79,6 +79,32 @@ func (a *App) buildRefreshSubsystems(
 		if clients == nil {
 			return nil, nil, nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
 		}
+
+		// Skip subsystem creation if auth is not valid for this cluster.
+		// Check both the explicit flag (set during pre-flight check) and the auth state.
+		if clients.authFailedOnInit {
+			if a.logger != nil {
+				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", clusterMeta.Name), "Refresh")
+			}
+			// Still add to clusterOrder so the cluster appears in the UI
+			clusterOrder = append(clusterOrder, clusterMeta.ID)
+			continue
+		}
+		if clients.authManager != nil {
+			state, reason := clients.authManager.State()
+			if a.logger != nil {
+				a.logger.Info(fmt.Sprintf("Auth state for cluster %s: %s (reason: %s)", clusterMeta.Name, state.String(), reason), "Refresh")
+			}
+			if !clients.authManager.IsValid() {
+				if a.logger != nil {
+					a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", clusterMeta.Name, state.String()), "Refresh")
+				}
+				// Still add to clusterOrder so the cluster appears in the UI
+				clusterOrder = append(clusterOrder, clusterMeta.ID)
+				continue
+			}
+		}
+
 		subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, clusterMeta)
 		if err != nil {
 			return nil, nil, nil, err

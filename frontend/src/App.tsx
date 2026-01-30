@@ -34,6 +34,7 @@ import { useAppLogsPanel } from '@/components/content/AppLogsPanel/AppLogsPanel'
 import { AppErrorBoundary } from '@/components/errors';
 
 // Custom hooks
+import { useAuthErrorHandler } from '@/hooks/useAuthErrorHandler';
 import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';
 import { useWailsRuntimeEvents, useConnectionStatusListener } from '@/hooks/useWailsRuntimeEvents';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
@@ -73,6 +74,9 @@ function AppContent() {
 
   // Handle backend errors from Wails runtime
   useBackendErrorHandler();
+
+  // Handle authentication state changes from backend
+  useAuthErrorHandler();
 
   // Handle connection status events from Wails runtime
   useConnectionStatusListener();

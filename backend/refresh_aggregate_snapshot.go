@@ -122,6 +122,7 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 }
 
 // resolveTargets chooses which clusters should handle the requested domain/scope pair.
+// Clusters without services (e.g., due to auth failure) are skipped gracefully.
 func (s *aggregateSnapshotService) resolveTargets(
 	domain string,
 	clusterIDs []string,
@@ -134,10 +135,16 @@ func (s *aggregateSnapshotService) resolveTargets(
 		}
 		targets := make([]string, 0, len(clusterIDs))
 		for _, id := range clusterIDs {
+			// Skip clusters without services (e.g., auth failure caused subsystem to be skipped).
+			// This allows multi-cluster views to show data from working clusters.
 			if _, ok := services[id]; !ok {
-				return nil, fmt.Errorf("cluster %s not active", id)
+				continue
 			}
 			targets = append(targets, id)
+		}
+		// Only error if NO clusters are available
+		if len(targets) == 0 {
+			return nil, fmt.Errorf("no active clusters available (requested: %v)", clusterIDs)
 		}
 		return targets, nil
 	}
