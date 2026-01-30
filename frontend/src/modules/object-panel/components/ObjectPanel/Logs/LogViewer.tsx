@@ -870,18 +870,23 @@ const LogViewer: React.FC<LogViewerProps> = ({
     };
   }, [namespace, podName, isWorkload, resolvedClusterId]);
 
+  // Track previous view to detect view switches
+  const previousIsParsedViewRef = useRef(isParsedView);
+
   // Auto-scroll effect - only scroll when there are new logs or view changes
   useEffect(() => {
     if (autoScroll && logsContentRef.current) {
       const currentLogCount = isParsedView ? parsedLogs.length : logEntries.length;
       const hasNewLogs = currentLogCount > previousLogCountRef.current;
-      const isViewChange = previousLogCountRef.current === 0; // Initial load or view switch
+      const isViewChange = previousIsParsedViewRef.current !== isParsedView;
+      const isInitialLoad = previousLogCountRef.current === 0;
 
-      // Update the previous count for next comparison
+      // Update refs for next comparison
       previousLogCountRef.current = currentLogCount;
+      previousIsParsedViewRef.current = isParsedView;
 
-      // Only scroll if there are new logs or it's an initial load/view change
-      if (!hasNewLogs && !isViewChange) {
+      // Only scroll if there are new logs, view switch, or initial load
+      if (!hasNewLogs && !isViewChange && !isInitialLoad) {
         return;
       }
 
@@ -889,11 +894,10 @@ const LogViewer: React.FC<LogViewerProps> = ({
         if (!logsContentRef.current) return;
 
         if (isParsedView) {
-          // For parsed view, find the last row and scroll it into view
-          const rows = logsContentRef.current.querySelectorAll('tbody tr');
-          if (rows && rows.length > 0) {
-            const lastRow = rows[rows.length - 1];
-            lastRow.scrollIntoView({ behavior: 'auto', block: 'end' });
+          // For parsed view with virtualization, find the gridtable-wrapper and scroll it
+          const wrapper = logsContentRef.current.querySelector('.gridtable-wrapper');
+          if (wrapper) {
+            wrapper.scrollTop = wrapper.scrollHeight;
           }
         } else {
           // For raw view, scroll the container to bottom
@@ -902,14 +906,14 @@ const LogViewer: React.FC<LogViewerProps> = ({
       };
 
       if (isParsedView && parsedLogs.length > 0) {
-        // For parsed view, wait for table rows to render
+        // For parsed view, wait for the gridtable-wrapper to be rendered
         let attempts = 0;
         const maxAttempts = 20; // About 333ms at 60fps
 
         const checkAndScroll = () => {
-          const rows = logsContentRef.current?.querySelectorAll('tbody tr');
-          if (rows && rows.length > 0) {
-            // Table rows are rendered, scroll to last one
+          const wrapper = logsContentRef.current?.querySelector('.gridtable-wrapper');
+          if (wrapper && wrapper.scrollHeight > 0) {
+            // Wrapper is rendered, scroll to bottom
             requestAnimationFrame(scrollToBottom);
           } else if (attempts < maxAttempts) {
             // Try again next frame
@@ -925,11 +929,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
       }
     }
   }, [autoScroll, displayLogs, isParsedView, logEntries.length, parsedLogs.length]);
-
-  // Reset previous count when switching views
-  useEffect(() => {
-    previousLogCountRef.current = 0;
-  }, [isParsedView]);
 
   // Table columns for parsed view - track field keys from parsed logs
   // Note: We use a ref to track previous keys to avoid infinite loops
