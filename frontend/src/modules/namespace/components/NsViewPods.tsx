@@ -25,7 +25,8 @@ import GridTable, {
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { PODS_UNHEALTHY_STORAGE_KEY } from '@modules/namespace/components/podsFilterSignals';
+import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeletePod } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
@@ -98,6 +99,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const clusterMetrics = useClusterMetricsAvailability();
     const effectiveMetrics = metrics ?? clusterMetrics ?? null;
     const permissionMap = useUserPermissions();
+    const { selectedClusterId } = useKubeconfig();
 
     const [showUnhealthyOnly, setShowUnhealthyOnly] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -353,9 +355,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       ) : null;
 
     useEffect(() => {
-      if (typeof window === 'undefined') {
+      if (typeof window === 'undefined' || !selectedClusterId) {
         return;
       }
+
+      const storageKey = getPodsUnhealthyStorageKey(selectedClusterId);
 
       const applyPendingFilter = (scope: string | null | undefined, shouldClearStorage = false) => {
         if (!scope || scope !== namespace) {
@@ -367,7 +371,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         setShowUnhealthyOnly(true);
         if (shouldClearStorage) {
           try {
-            window.sessionStorage.removeItem(PODS_UNHEALTHY_STORAGE_KEY);
+            window.sessionStorage.removeItem(storageKey);
           } catch {
             // Ignore sessionStorage failures
           }
@@ -376,7 +380,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
       const pendingScope = (() => {
         try {
-          return window.sessionStorage.getItem(PODS_UNHEALTHY_STORAGE_KEY);
+          return window.sessionStorage.getItem(storageKey);
         } catch {
           return null;
         }
@@ -385,10 +389,14 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         applyPendingFilter(pendingScope, true);
       }
 
-      return eventBus.on('pods:show-unhealthy', ({ scope }) => {
+      return eventBus.on('pods:show-unhealthy', ({ clusterId, scope }) => {
+        // Only apply the filter if the event is for the current cluster.
+        if (clusterId !== selectedClusterId) {
+          return;
+        }
         applyPendingFilter(scope, true);
       });
-    }, [namespace, unhealthyCount]);
+    }, [namespace, selectedClusterId, unhealthyCount]);
 
     const getContextMenuItems = useCallback(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {

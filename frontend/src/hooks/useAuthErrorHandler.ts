@@ -2,8 +2,8 @@
  * frontend/src/hooks/useAuthErrorHandler.ts
  *
  * Hook for handling authentication state changes from the backend.
- * Subscribes to auth:failed and auth:recovered events from the Wails runtime
- * and integrates with the error notification system.
+ * Subscribes to cluster:auth:failed, cluster:auth:recovering, and cluster:auth:recovered
+ * events from the Wails runtime and integrates with the error notification system.
  */
 import { useEffect, useRef, useCallback } from 'react';
 import { errorHandler } from '@utils/errorHandler';
@@ -43,6 +43,8 @@ export function useAuthErrorHandler(): void {
 
     // Handler for auth failure events.
     const handleAuthFailed = (...args: unknown[]) => {
+      console.log('[AuthErrorHandler] Received cluster:auth:failed', args);
+
       // Prevent duplicate notifications for the same auth failure.
       if (hasActiveAuthError.current) {
         return;
@@ -62,20 +64,30 @@ export function useAuthErrorHandler(): void {
       );
     };
 
+    // Handler for auth recovering events (auth is being retried).
+    const handleAuthRecovering = (...args: unknown[]) => {
+      // Handle recovering state - show "Reconnecting..." UI.
+      // The hasActiveAuthError flag remains true since we're still in an error state.
+      console.log('[AuthErrorHandler] Received cluster:auth:recovering', args);
+    };
+
     // Handler for auth recovery events.
-    const handleAuthRecovered = () => {
+    const handleAuthRecovered = (...args: unknown[]) => {
+      console.log('[AuthErrorHandler] Received cluster:auth:recovered', args);
       hasActiveAuthError.current = false;
       // The error will be dismissed by the backend state change updating the connection status.
       // We don't need to manually dismiss here as the error handler manages the lifecycle.
     };
 
-    // Subscribe to auth events.
-    runtime.EventsOn('auth:failed', handleAuthFailed);
-    runtime.EventsOn('auth:recovered', handleAuthRecovered);
+    // Subscribe to cluster auth events.
+    runtime.EventsOn('cluster:auth:failed', handleAuthFailed);
+    runtime.EventsOn('cluster:auth:recovering', handleAuthRecovering);
+    runtime.EventsOn('cluster:auth:recovered', handleAuthRecovered);
 
     return () => {
-      runtime.EventsOff?.('auth:failed');
-      runtime.EventsOff?.('auth:recovered');
+      runtime.EventsOff?.('cluster:auth:failed');
+      runtime.EventsOff?.('cluster:auth:recovering');
+      runtime.EventsOff?.('cluster:auth:recovered');
     };
   }, [handleRetry]);
 }
