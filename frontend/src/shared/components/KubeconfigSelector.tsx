@@ -40,26 +40,6 @@ function KubeconfigSelector() {
     setSelectedKubeconfigs(selections);
   };
 
-  const configByValue = React.useMemo(() => {
-    const map = new Map<string, KubeconfigInfo>();
-    kubeconfigs.forEach((config) => {
-      map.set(`${config.path}:${config.context}`, config);
-    });
-    return map;
-  }, [kubeconfigs]);
-
-  const selectedContextNames = React.useMemo(() => {
-    // Track active context names to disable duplicate selections.
-    const contexts = new Set<string>();
-    selectedKubeconfigs.forEach((selection) => {
-      const contextName = configByValue.get(selection)?.context;
-      if (contextName) {
-        contexts.add(contextName);
-      }
-    });
-    return contexts;
-  }, [configByValue, selectedKubeconfigs]);
-
   // Track which configs are first in their group
   const filenameFirstOccurrence = new Set<string>();
 
@@ -71,21 +51,15 @@ function KubeconfigSelector() {
     }
 
     const value = getConfigValue(config);
-    const isSelected = selectedKubeconfigs.includes(value);
-    const isDuplicateContext = Boolean(
-      config.context && selectedContextNames.has(config.context) && !isSelected
-    );
 
     return {
       value,
       label: getDisplayName(config),
-      disabled: isDuplicateContext,
       metadata: {
         isFirstForFile,
         filename: config.name,
         context: config.context,
         isCurrentContext: config.isCurrentContext,
-        isDuplicateContext,
       },
     };
   });
@@ -118,11 +92,6 @@ function KubeconfigSelector() {
         renderOption={(option, isSelected) => (
           <div
             className={`kubeconfig-option ${!option.metadata?.isFirstForFile ? 'no-filename' : ''} ${option.metadata?.isCurrentContext ? 'current-context' : ''}`}
-            title={
-              option.metadata?.isDuplicateContext
-                ? `${option.metadata?.context} is already active. Duplicate context names are not allowed.`
-                : undefined
-            }
           >
             {option.metadata?.isFirstForFile && (
               <div className="kubeconfig-filename">{option.metadata.filename}</div>

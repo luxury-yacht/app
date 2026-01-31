@@ -417,14 +417,16 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 			return err
 		}
 
-		// Check for duplicate context selections. Selecting the same context twice would
-		// create duplicate connections and cause confusion in the UI. This can happen if
-		// the same context appears in multiple kubeconfig files.
-		if parsed.Context != "" {
-			if _, exists := seenContexts[parsed.Context]; exists {
-				return fmt.Errorf("duplicate context selected: %s", parsed.Context)
+		// Check for duplicate selections. Selecting the same kubeconfig:context twice would
+		// create duplicate connections and cause confusion in the UI.
+		// We use the full path:context string to allow the same context name from different
+		// kubeconfig files (e.g., "dev" context in both ~/.kube/config and ~/.kube/staging).
+		selectionKey := parsed.String()
+		if selectionKey != "" {
+			if _, exists := seenContexts[selectionKey]; exists {
+				return fmt.Errorf("duplicate selection: %s", selectionKey)
 			}
-			seenContexts[parsed.Context] = struct{}{}
+			seenContexts[selectionKey] = struct{}{}
 		}
 
 		// Add the validated selection to our normalized slices.

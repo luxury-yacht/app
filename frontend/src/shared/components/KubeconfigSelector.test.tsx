@@ -136,7 +136,7 @@ describe('KubeconfigSelector', () => {
     expect(state.setSelectedKubeconfigs).toHaveBeenCalledWith(newValue);
   });
 
-  it('disables duplicate context names when one is already selected', async () => {
+  it('allows same context name from different kubeconfig files', async () => {
     await renderSelector({
       kubeconfigs: [
         {
@@ -162,7 +162,8 @@ describe('KubeconfigSelector', () => {
     );
     const betaOption = options.find((option: any) => option.value === '/clusters/beta.yaml:shared');
 
-    expect(alphaOption?.disabled).toBe(false);
-    expect(betaOption?.disabled).toBe(true);
+    // Both should be enabled - same context name from different files is allowed
+    expect(alphaOption?.disabled).toBeFalsy();
+    expect(betaOption?.disabled).toBeFalsy();
   });
 });

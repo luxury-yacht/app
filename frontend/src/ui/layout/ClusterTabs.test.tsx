@@ -134,4 +134,24 @@ describe('ClusterTabs', () => {
 
     expect(mockState.setSelectedKubeconfigs).toHaveBeenCalledWith(['a']);
   });
+
+  it('shows filename:context for tabs with name collisions', async () => {
+    // Two clusters with the same context name but different files.
+    mockState.getClusterMeta = (config: string) => {
+      if (config === '/kube/alpha:dev') return { id: 'alpha:dev', name: 'dev' };
+      if (config === '/kube/beta:dev') return { id: 'beta:dev', name: 'dev' };
+      if (config === '/kube/gamma:prod') return { id: 'gamma:prod', name: 'prod' };
+      return { id: config, name: config };
+    };
+    mockState.selectedKubeconfigs = ['/kube/alpha:dev', '/kube/beta:dev', '/kube/gamma:prod'];
+    mockState.selectedKubeconfig = '/kube/alpha:dev';
+    await renderTabs();
+
+    const labels = Array.from(container.querySelectorAll('.cluster-tab__label')).map((node) =>
+      (node as HTMLElement).textContent?.trim()
+    );
+    // "dev" appears twice, so those tabs should show filename:context (alpha:dev, beta:dev).
+    // "prod" is unique, so it shows just the context name.
+    expect(labels).toEqual(['alpha:dev', 'beta:dev', 'prod']);
+  });
 });

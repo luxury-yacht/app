@@ -26,7 +26,7 @@ ClusterMeta{
 }
 ```
 
-Duplicate context names may exist across kubeconfigs, but only one can be active at a time.
+The same context name may exist in multiple kubeconfig files (e.g., "dev" in both `~/.kube/config` and `~/.kube/staging`). These are treated as separate clusters and can be active simultaneously since they have different cluster IDs.
 
 ## Refresh Scope Keys
 

@@ -376,7 +376,7 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 	app.teardownRefreshSubsystem()
 }
 
-func TestApp_SetSelectedKubeconfigsRejectsDuplicateContexts(t *testing.T) {
+func TestApp_SetSelectedKubeconfigsAllowsSameContextNameFromDifferentFiles(t *testing.T) {
 	setTestConfigEnv(t)
 	tempDir := t.TempDir()
 	kubeDir := filepath.Join(tempDir, ".kube")
@@ -393,10 +393,33 @@ func TestApp_SetSelectedKubeconfigsRejectsDuplicateContexts(t *testing.T) {
 
 	require.NoError(t, app.discoverKubeconfigs())
 
+	// Same context name from different files should be allowed.
 	selections := []string{configPath + ":same-context", testConfigPath + ":same-context"}
 	err := app.SetSelectedKubeconfigs(selections)
+	require.NoError(t, err)
+}
+
+func TestApp_SetSelectedKubeconfigsRejectsDuplicateSelections(t *testing.T) {
+	setTestConfigEnv(t)
+	tempDir := t.TempDir()
+	kubeDir := filepath.Join(tempDir, ".kube")
+	require.NoError(t, os.MkdirAll(kubeDir, 0755))
+
+	configPath := createTempKubeconfig(t, kubeDir, "config", "my-context")
+
+	t.Setenv("HOME", tempDir)
+
+	app := NewApp()
+	app.Ctx = context.Background()
+	app.kubeClientInitializer = func() error { return nil }
+
+	require.NoError(t, app.discoverKubeconfigs())
+
+	// Exact same selection twice should be rejected.
+	selections := []string{configPath + ":my-context", configPath + ":my-context"}
+	err := app.SetSelectedKubeconfigs(selections)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "duplicate context selected")
+	assert.Contains(t, err.Error(), "duplicate selection")
 }
 
 func TestApp_SetSelectedKubeconfigsClearsSelection(t *testing.T) {

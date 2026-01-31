@@ -66,9 +66,19 @@ const ClusterTabs: React.FC = () => {
   }, []);
 
   const tabs = useMemo<ClusterTab[]>(() => {
+    // Count occurrences of each context name to detect collisions.
+    const nameCounts = new Map<string, number>();
+    selectedKubeconfigs.forEach((selection) => {
+      const meta = getClusterMeta(selection);
+      const name = meta.name || '';
+      nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
+    });
+
     return selectedKubeconfigs.map((selection) => {
       const meta = getClusterMeta(selection);
-      const label = meta.name || selection;
+      // Use filename:context format when there are name collisions.
+      const hasCollision = (nameCounts.get(meta.name || '') || 0) > 1;
+      const label = hasCollision ? meta.id || selection : meta.name || selection;
       return { id: selection, label, selection };
     });
   }, [getClusterMeta, selectedKubeconfigs]);
