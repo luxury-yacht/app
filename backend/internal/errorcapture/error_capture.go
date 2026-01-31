@@ -310,6 +310,20 @@ func Enhance(err error) error {
 	return fmt.Errorf("%s", extra)
 }
 
+// CaptureWithCluster prefixes a message with the cluster ID and captures it.
+// Use this when you have cluster context and want to explicitly log an error
+// that will be associated with that cluster.
+func CaptureWithCluster(clusterID string, message string) {
+	if global == nil {
+		return
+	}
+	prefixed := fmt.Sprintf("[%s] %s", clusterID, message)
+	global.setLastError(prefixed)
+	if eventEmitter != nil {
+		eventEmitter(prefixed)
+	}
+}
+
 // SetEventEmitter configures a callback invoked when interesting errors are captured.
 func SetEventEmitter(emitter func(string)) {
 	eventEmitter = emitter

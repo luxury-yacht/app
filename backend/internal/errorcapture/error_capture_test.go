@@ -247,3 +247,44 @@ func TestCapturedErrorFallsBackToRecent(t *testing.T) {
 		t.Fatalf("expected last error line, got %q", out)
 	}
 }
+
+func TestCaptureWithClusterPrefixesMessage(t *testing.T) {
+	c := &Capture{buffer: &bytes.Buffer{}}
+	global = c
+	defer func() {
+		global = nil
+		eventEmitter = nil
+	}()
+
+	var emitted string
+	SetEventEmitter(func(msg string) {
+		emitted = msg
+	})
+
+	CaptureWithCluster("prod-cluster", "token expired")
+
+	expectedPrefix := "[prod-cluster] token expired"
+	if last := c.last(); last != expectedPrefix {
+		t.Fatalf("expected last error to be prefixed, got %q", last)
+	}
+	if emitted != expectedPrefix {
+		t.Fatalf("expected emitted message to be prefixed, got %q", emitted)
+	}
+}
+
+func TestCaptureWithClusterNoOpWhenGlobalNil(t *testing.T) {
+	global = nil
+	defer func() { eventEmitter = nil }()
+
+	var emitted bool
+	SetEventEmitter(func(msg string) {
+		emitted = true
+	})
+
+	// Should not panic or emit when global is nil
+	CaptureWithCluster("cluster-1", "some error")
+
+	if emitted {
+		t.Fatalf("expected no event emission when global is nil")
+	}
+}

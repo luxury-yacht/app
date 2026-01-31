@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
+	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -64,6 +65,8 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 		if a.logger != nil {
 			a.logger.Error(fmt.Sprintf("Cluster %s: auth failed - %s", clusterName, reason), "Auth")
 		}
+		// Capture the auth failure with cluster context for error enhancement
+		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("auth failed: %s", reason))
 		// Emit per-cluster failure event for the frontend
 		runtime.EventsEmit(a.Ctx, "cluster:auth:failed", map[string]any{
 			"clusterId":   clusterID,
@@ -182,6 +185,8 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		if a.logger != nil {
 			a.logger.Error(fmt.Sprintf("Failed to rebuild subsystem for cluster %s: %v", clusterID, err), "Auth")
 		}
+		// Capture the rebuild failure with cluster context for error enhancement
+		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("subsystem rebuild failed: %v", err))
 		return
 	}
 
