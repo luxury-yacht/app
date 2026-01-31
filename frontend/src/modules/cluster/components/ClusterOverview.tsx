@@ -261,11 +261,17 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       setActiveNamespaceTab('pods');
       setSidebarSelection({ type: 'namespace', value: ALL_NAMESPACES_SCOPE });
       navigateToNamespace();
-      if (key !== 'running') {
-        emitPodsUnhealthySignal(ALL_NAMESPACES_SCOPE);
+      if (key !== 'running' && selectedClusterId) {
+        emitPodsUnhealthySignal(selectedClusterId, ALL_NAMESPACES_SCOPE);
       }
     },
-    [navigateToNamespace, setActiveNamespaceTab, setSelectedNamespace, setSidebarSelection]
+    [
+      navigateToNamespace,
+      selectedClusterId,
+      setActiveNamespaceTab,
+      setSelectedNamespace,
+      setSidebarSelection,
+    ]
   );
 
   const handlePodStatusKeyDown = useCallback(

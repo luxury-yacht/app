@@ -224,6 +224,8 @@ func (s *Service) recordTelemetry(
 	s.telemetry.RecordSnapshot(
 		domain,
 		scope,
+		s.cluster.ClusterID,
+		s.cluster.ClusterName,
 		duration,
 		err,
 		truncated,

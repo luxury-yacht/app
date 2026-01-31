@@ -5,13 +5,11 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/api"
-	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
 // MuxConfig groups the dependencies needed to wire core refresh HTTP routes.
 type MuxConfig struct {
-	Registry        *domain.Registry
 	SnapshotService refresh.SnapshotService
 	ManualQueue     refresh.ManualQueue
 	Telemetry       *telemetry.Recorder
@@ -25,6 +23,6 @@ func BuildRefreshMux(cfg MuxConfig) *http.ServeMux {
 	if cfg.HealthHub != nil {
 		mux.HandleFunc("/healthz/refresh", HealthHandler(cfg.HealthHub))
 	}
-	api.NewServer(cfg.Registry, cfg.SnapshotService, cfg.ManualQueue, cfg.Telemetry, cfg.Metrics).Register(mux)
+	api.NewServer(cfg.SnapshotService, cfg.ManualQueue, cfg.Telemetry, cfg.Metrics).Register(mux)
 	return mux
 }

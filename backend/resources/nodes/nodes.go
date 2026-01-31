@@ -126,7 +126,13 @@ func (s *Service) patchUnschedulable(nodeName string, unschedulable bool) error 
 
 // Drain evicts or deletes pods on the node according to the provided options.
 func (s *Service) Drain(nodeName string, options restypes.DrainNodeOptions) (err error) {
-	job := nodemaintenance.GlobalStore().StartDrain(nodeName, options)
+	store := nodemaintenance.GlobalStore()
+	job := store.StartDrain(nodeName, options)
+	// Associate this drain job with its cluster context for isolation purposes.
+	// This ensures drain jobs from different clusters don't interfere.
+	if s.deps.ClusterID != "" {
+		store.SetJobCluster(job.ID, s.deps.ClusterID, s.deps.ClusterName)
+	}
 	cordoned := false
 
 	defer func() {

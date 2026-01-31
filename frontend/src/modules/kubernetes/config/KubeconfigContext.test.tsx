@@ -165,7 +165,7 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
-  it('dedupes duplicate context names when setting selections', async () => {
+  it('allows same context name from different kubeconfig files', async () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
         name: 'alpha',
@@ -193,6 +193,38 @@ describe('KubeconfigContext', () => {
       await flushPromises();
     });
 
+    // Both should be allowed since they're from different files
+    expect(setSelectedKubeconfigsMock).toHaveBeenLastCalledWith([
+      '/kube/alpha:dev',
+      '/kube/beta:dev',
+    ]);
+    expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev', '/kube/beta:dev']);
+
+    unmount();
+  });
+
+  it('dedupes exact duplicate selections', async () => {
+    const kubeconfigs: types.KubeconfigInfo[] = [
+      {
+        name: 'alpha',
+        path: '/kube/alpha',
+        context: 'dev',
+        isDefault: false,
+        isCurrentContext: false,
+      },
+    ];
+    getKubeconfigsMock.mockResolvedValue(kubeconfigs);
+    getSelectedKubeconfigsMock.mockResolvedValue([]);
+    setSelectedKubeconfigsMock.mockResolvedValue(undefined);
+
+    const { getContext, unmount } = await renderProvider();
+
+    await act(async () => {
+      await getContext().setSelectedKubeconfigs(['/kube/alpha:dev', '/kube/alpha:dev']);
+      await flushPromises();
+    });
+
+    // Exact duplicates should be deduped
     expect(setSelectedKubeconfigsMock).toHaveBeenLastCalledWith(['/kube/alpha:dev']);
     expect(getContext().selectedKubeconfigs).toEqual(['/kube/alpha:dev']);
 

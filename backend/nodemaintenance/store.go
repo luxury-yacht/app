@@ -249,3 +249,33 @@ func ParseScope(scope string) string {
 	}
 	return trimmed
 }
+
+// SetJobCluster sets the cluster ID and name for a drain job.
+// This allows associating a drain job with a specific cluster for isolation purposes.
+func (s *Store) SetJobCluster(jobID, clusterID, clusterName string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	job := s.jobs[jobID]
+	if job == nil {
+		return
+	}
+	job.ClusterID = clusterID
+	job.ClusterName = clusterName
+	s.version++
+}
+
+// GetJobsForCluster returns all drain jobs that belong to a specific cluster.
+// This enables cluster isolation by filtering jobs by their ClusterID.
+func (s *Store) GetJobsForCluster(clusterID string) []*DrainJob {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var result []*DrainJob
+	for _, job := range s.jobs {
+		if job.ClusterID == clusterID {
+			result = append(result, job)
+		}
+	}
+	return result
+}

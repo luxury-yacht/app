@@ -12,7 +12,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/api"
-	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
@@ -85,17 +84,9 @@ func (f *fakeMetricsController) SetMetricsActive(active bool) {
 }
 
 func TestSnapshotEndpoint(t *testing.T) {
-	reg := domain.New()
-	reg.Register(refresh.DomainConfig{
-		Name: "nodes",
-		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-			return &refresh.Snapshot{Domain: "nodes", Version: 1, Payload: map[string]int{"items": 1}}, nil
-		},
-	})
-
 	svc := snapshotService()
 	queue := &fakeQueue{}
-	server := api.NewServer(reg, svc, queue, nil, nil)
+	server := api.NewServer(svc, queue, nil, nil)
 
 	mux := http.NewServeMux()
 	server.Register(mux)
@@ -126,7 +117,7 @@ func TestSnapshotPermissionDenied(t *testing.T) {
 	svc := &errorSnapshotService{
 		err: refresh.NewPermissionDeniedError("nodes", "core/nodes"),
 	}
-	server := api.NewServer(domain.New(), svc, &fakeQueue{}, nil, nil)
+	server := api.NewServer(svc, &fakeQueue{}, nil, nil)
 
 	mux := http.NewServeMux()
 	server.Register(mux)
@@ -154,15 +145,7 @@ func TestSnapshotPermissionDenied(t *testing.T) {
 
 func TestSnapshotEndpointRejectsMissingClusterScope(t *testing.T) {
 	// Snapshot requests must provide an explicit cluster scope.
-	reg := domain.New()
-	reg.Register(refresh.DomainConfig{
-		Name: "nodes",
-		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-			return &refresh.Snapshot{Domain: "nodes", Version: 1, Payload: map[string]int{"items": 1}}, nil
-		},
-	})
-
-	server := api.NewServer(reg, snapshotService(), &fakeQueue{}, nil, nil)
+	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, nil)
 	mux := http.NewServeMux()
 	server.Register(mux)
 
@@ -190,17 +173,9 @@ func snapshotService() refresh.SnapshotService {
 }
 
 func TestManualRefreshEndpoint(t *testing.T) {
-	reg := domain.New()
-	reg.Register(refresh.DomainConfig{
-		Name: "nodes",
-		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-			return &refresh.Snapshot{Domain: "nodes", Version: 2, Payload: map[string]int{"items": 2}}, nil
-		},
-	})
-
 	svc := snapshotService()
 	queue := &fakeQueue{}
-	server := api.NewServer(reg, svc, queue, nil, nil)
+	server := api.NewServer(svc, queue, nil, nil)
 
 	mux := http.NewServeMux()
 	server.Register(mux)
@@ -226,15 +201,7 @@ func TestManualRefreshEndpoint(t *testing.T) {
 
 func TestManualRefreshEndpointRejectsMissingClusterScope(t *testing.T) {
 	// Manual refresh must provide an explicit cluster scope.
-	reg := domain.New()
-	reg.Register(refresh.DomainConfig{
-		Name: "nodes",
-		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-			return &refresh.Snapshot{Domain: "nodes", Version: 2, Payload: map[string]int{"items": 2}}, nil
-		},
-	})
-
-	server := api.NewServer(reg, snapshotService(), &fakeQueue{}, nil, nil)
+	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, nil)
 	mux := http.NewServeMux()
 	server.Register(mux)
 
@@ -259,16 +226,8 @@ func TestManualRefreshEndpointRejectsMissingClusterScope(t *testing.T) {
 }
 
 func TestManualRefreshHandlesQueueErrors(t *testing.T) {
-	reg := domain.New()
-	reg.Register(refresh.DomainConfig{
-		Name: "nodes",
-		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-			return &refresh.Snapshot{Domain: "nodes", Version: 2, Payload: map[string]int{"items": 2}}, nil
-		},
-	})
-
 	svc := snapshotService()
-	server := api.NewServer(reg, svc, errorQueue{}, nil, nil)
+	server := api.NewServer(svc, errorQueue{}, nil, nil)
 
 	mux := http.NewServeMux()
 	server.Register(mux)
@@ -297,10 +256,9 @@ func TestManualRefreshHandlesQueueErrors(t *testing.T) {
 }
 
 func TestOptionsPreflight(t *testing.T) {
-	reg := domain.New()
 	svc := snapshotService()
 	queue := &fakeQueue{}
-	server := api.NewServer(reg, svc, queue, nil, nil)
+	server := api.NewServer(svc, queue, nil, nil)
 	mux := http.NewServeMux()
 	server.Register(mux)
 
@@ -320,13 +278,12 @@ func TestOptionsPreflight(t *testing.T) {
 
 func TestTelemetrySummary(t *testing.T) {
 	recorder := telemetry.NewRecorder()
-	recorder.RecordSnapshot("nodes", "", 50*time.Millisecond, nil, false, 0, nil, 0, 0, 0, true, 50)
+	recorder.RecordSnapshot("nodes", "", "test-cluster", "test", 50*time.Millisecond, nil, false, 0, nil, 0, 0, 0, true, 50)
 	recorder.RecordMetrics(25*time.Millisecond, time.Now(), nil, 0, true)
 
-	reg := domain.New()
 	svc := snapshotService()
 	queue := &fakeQueue{}
-	server := api.NewServer(reg, svc, queue, recorder, nil)
+	server := api.NewServer(svc, queue, recorder, nil)
 
 	mux := http.NewServeMux()
 	server.Register(mux)
@@ -354,7 +311,7 @@ func TestTelemetrySummary(t *testing.T) {
 
 func TestMetricsActiveEndpoint(t *testing.T) {
 	controller := &fakeMetricsController{}
-	server := api.NewServer(domain.New(), snapshotService(), &fakeQueue{}, nil, controller)
+	server := api.NewServer(snapshotService(), &fakeQueue{}, nil, controller)
 	mux := http.NewServeMux()
 	server.Register(mux)
 
@@ -375,7 +332,7 @@ func TestJobStatusEndpoint(t *testing.T) {
 	job := &refresh.ManualRefreshJob{ID: "job-42", Domain: "nodes", State: refresh.JobStateQueued}
 	queue := &fakeQueue{job: job}
 
-	server := api.NewServer(domain.New(), snapshotService(), queue, nil, nil)
+	server := api.NewServer(snapshotService(), queue, nil, nil)
 	mux := http.NewServeMux()
 	server.Register(mux)
 

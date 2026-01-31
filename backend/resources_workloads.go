@@ -117,10 +117,16 @@ func (a *App) resourceDependenciesForSelection(selection kubeconfigSelection, cl
 		RestConfig:          nil,
 		SelectedKubeconfig:  selection.Path,
 		SelectedContext:     selection.Context,
+		ClusterID:           clusterID,
 	}
 
 	if clients == nil {
 		return deps
+	}
+
+	// Populate cluster name from clients metadata if available.
+	if clients.meta.Name != "" {
+		deps.ClusterName = clients.meta.Name
 	}
 
 	deps.KubernetesClient = clients.client

@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -33,21 +32,35 @@ var (
 func (a *App) Startup(ctx context.Context) {
 	a.Ctx = ctx
 	a.eventEmitter = runtimeEventsEmit
-	if ms := a.connectionStatusNextRetry; ms > 0 {
-		a.updateConnectionStatus(a.connectionStatus, a.connectionStatusMessage, time.Duration(ms)*time.Millisecond)
-	} else {
-		a.updateConnectionStatus(a.connectionStatus, a.connectionStatusMessage, 0)
-	}
 	a.logger.Info("Application startup initiated", "App")
 
 	errorcapture.Init()
 	errorcapture.SetEventEmitter(func(message string) {
+		// Note: Auth state management is now per-cluster via transport wrappers.
+		// Stderr errors don't have cluster context, so we only emit to frontend
+		// for UI display. The per-cluster auth managers handle state based on
+		// 401 responses, which DO have cluster context.
+		// clusterId is empty here because stderr errors are not associated with
+		// a specific cluster.
 		a.emitEvent("backend-error", map[string]any{
-			"message": strings.TrimSpace(message),
-			"source":  "stderr",
+			"clusterId": "",
+			"message":   strings.TrimSpace(message),
+			"source":    "stderr",
 		})
 	})
 	errorcapture.SetLogSink(func(level string, message string) {
+		// Suppress logging when ANY cluster has auth issues to prevent log spam.
+		// Auth-related errors are already being handled by the per-cluster auth managers.
+		if a.anyClusterAuthInvalid() {
+			return
+		}
+		// Also suppress auth-related messages that match known patterns.
+		// This provides belt-and-suspenders protection against timing issues
+		// where auth errors arrive before state transitions complete.
+		lower := strings.ToLower(message)
+		if containsAuthPattern(lower) {
+			return
+		}
 		switch strings.ToLower(level) {
 		case "error":
 			a.logger.Error(message, "ErrorCapture")
@@ -124,8 +137,7 @@ func (a *App) Startup(ctx context.Context) {
 		a.logger.Warn("No kubeconfig selections found - please select a cluster", "App")
 	}
 
-	// Start the heartbeat loop to monitor application health.
-	a.startHeartbeatLoop()
+	// Per-cluster heartbeat is now handled via runHeartbeatIteration in the refresh subsystem.
 	// Run update checks in the background so the UI can surface them on startup.
 	a.startUpdateCheck()
 }
@@ -179,7 +191,57 @@ func NewBeforeCloseHandler(app *App) func(context.Context) bool {
 func (a *App) Shutdown(ctx context.Context) {
 	a.logger.Info("Application shutdown initiated", "App")
 
+	// Shutdown all per-cluster auth managers to stop any recovery goroutines.
+	a.clusterClientsMu.Lock()
+	for _, clients := range a.clusterClients {
+		if clients != nil && clients.authManager != nil {
+			clients.authManager.Shutdown()
+		}
+	}
+	a.clusterClientsMu.Unlock()
+
 	a.teardownRefreshSubsystem()
 
 	a.logger.Info("Application shutdown completed", "App")
+}
+
+// anyClusterAuthInvalid returns true if any cluster has an auth state that is not Valid.
+// Used to suppress auth error logging when we know auth issues exist.
+func (a *App) anyClusterAuthInvalid() bool {
+	if a == nil {
+		return false
+	}
+	a.clusterClientsMu.Lock()
+	defer a.clusterClientsMu.Unlock()
+
+	for _, clients := range a.clusterClients {
+		if clients == nil || clients.authManager == nil {
+			continue
+		}
+		if !clients.authManager.IsValid() {
+			return true
+		}
+	}
+	return false
+}
+
+// containsAuthPattern checks if a lowercased message contains auth-related patterns.
+// Used to suppress auth error logging even if state hasn't transitioned yet.
+func containsAuthPattern(lower string) bool {
+	authPatterns := []string{
+		"token",
+		"sso",
+		"expired",
+		"authentication",
+		"unauthorized",
+		"forbidden",
+		"permission denied",
+		"access denied",
+	}
+	for _, pattern := range authPatterns {
+		if strings.Contains(lower, pattern) {
+			return true
+		}
+	}
+	return false
 }

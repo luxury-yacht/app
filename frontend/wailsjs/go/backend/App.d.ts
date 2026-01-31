@@ -45,11 +45,15 @@ export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Prom
 
 export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;
 
+export function GetAllClusterAuthStates():Promise<Record<string, Record<string, any>>>;
+
 export function GetAppInfo():Promise<backend.AppInfo>;
 
 export function GetAppSettings():Promise<types.AppSettings>;
 
 export function GetCatalogDiagnostics():Promise<backend.CatalogDiagnostics>;
+
+export function GetClusterAuthState(arg1:string):Promise<string|string>;
 
 export function GetClusterRole(arg1:string,arg2:string):Promise<types.ClusterRoleDetails>;
 
@@ -161,13 +165,17 @@ export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<
 
 export function RestartWorkload(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 
+export function RetryAuth():Promise<void>;
+
+export function RetryClusterAuth(arg1:string):Promise<void>;
+
 export function SaveWindowSettings():Promise<void>;
 
 export function ScaleWorkload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<void>;
 
 export function SendShellInput(arg1:string,arg2:string):Promise<void>;
 
-export function SetApiExtensionsClient(arg1:clientset.Clientset):Promise<void>;
+export function SetApiExtensionsClient(arg1:clientset.Interface):Promise<void>;
 
 export function SetAutoRefreshEnabled(arg1:boolean):Promise<void>;
 

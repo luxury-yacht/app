@@ -115,16 +115,20 @@ func (c *Capture) readPipe() {
 		}
 
 		chunk := scanner[:n]
-		if logSink != nil {
-			c.emitToLogSink(chunk)
-		}
 
 		c.mu.Lock()
 		c.buffer.Write(chunk)
 		trimBuffer(c.buffer, 100000, 50000)
 		c.mu.Unlock()
 
+		// Process auth-related errors FIRST so state transitions happen before
+		// logSink decides whether to suppress the message. This ensures the
+		// auth manager knows about failures before logs are emitted.
 		c.captureIfInteresting(string(chunk))
+
+		if logSink != nil {
+			c.emitToLogSink(chunk)
+		}
 	}
 }
 
@@ -304,6 +308,20 @@ func Enhance(err error) error {
 		return fmt.Errorf("%s. STDERR: %s", orig, extra)
 	}
 	return fmt.Errorf("%s", extra)
+}
+
+// CaptureWithCluster prefixes a message with the cluster ID and captures it.
+// Use this when you have cluster context and want to explicitly log an error
+// that will be associated with that cluster.
+func CaptureWithCluster(clusterID string, message string) {
+	if global == nil {
+		return
+	}
+	prefixed := fmt.Sprintf("[%s] %s", clusterID, message)
+	global.setLastError(prefixed)
+	if eventEmitter != nil {
+		eventEmitter(prefixed)
+	}
 }
 
 // SetEventEmitter configures a callback invoked when interesting errors are captured.

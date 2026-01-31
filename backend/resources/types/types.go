@@ -92,6 +92,7 @@ type ShellSession struct {
 // ShellOutputEvent is emitted whenever stdout/stderr data is available.
 type ShellOutputEvent struct {
 	SessionID string `json:"sessionId"`
+	ClusterID string `json:"clusterId"`
 	Stream    string `json:"stream"`
 	Data      string `json:"data"`
 }
@@ -99,6 +100,7 @@ type ShellOutputEvent struct {
 // ShellStatusEvent reports lifecycle changes for a shell session.
 type ShellStatusEvent struct {
 	SessionID string `json:"sessionId"`
+	ClusterID string `json:"clusterId"`
 	Status    string `json:"status"`
 	Reason    string `json:"reason,omitempty"`
 }

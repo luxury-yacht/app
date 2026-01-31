@@ -300,7 +300,7 @@ describe('ClusterOverview', () => {
       value: ALL_NAMESPACES_SCOPE,
     });
     expect(navigateToNamespaceMock).toHaveBeenCalled();
-    expect(emitPodsUnhealthySignalMock).toHaveBeenCalledWith(ALL_NAMESPACES_SCOPE);
+    expect(emitPodsUnhealthySignalMock).toHaveBeenCalledWith('cluster-1', ALL_NAMESPACES_SCOPE);
   });
 
   it('navigates to the pods view without unhealthy filter when clicking the running card', () => {

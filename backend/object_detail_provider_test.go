@@ -43,15 +43,15 @@ func TestObjectDetailProviderFetchesKnownKinds(t *testing.T) {
 
 	app := NewApp()
 	app.Ctx = context.Background()
-	app.client = fake.NewClientset(deploy, configMap, clusterRole, namespace)
-	// Bind the test client to a concrete cluster scope for detail fetches.
+	// Per-cluster clients are stored in clusterClients, not in global fields.
 	clusterID := "config:ctx"
+	fakeClient := fake.NewClientset(deploy, configMap, clusterRole, namespace)
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
-			client:            app.client,
+			client:            fakeClient,
 		},
 	}
 
@@ -217,9 +217,7 @@ func TestObjectDetailProviderCoversAdditionalKinds(t *testing.T) {
 
 	app := NewApp()
 	app.Ctx = context.Background()
-	app.client = client
-	app.apiextensionsClient = apiExtClient
-	// Bind the test client to a concrete cluster scope for detail fetches.
+	// Per-cluster clients are stored in clusterClients, not in global fields.
 	clusterID := "config:ctx"
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {
@@ -282,17 +280,17 @@ func TestObjectDetailProviderFetchObjectYAML(t *testing.T) {
 	app := NewApp()
 	app.Ctx = context.Background()
 	app.logger = NewLogger(10)
-	app.client = fake.NewClientset(cm)
-	app.dynamicClient = dynamicfake.NewSimpleDynamicClient(scheme, cm)
-	// Bind the test client to a concrete cluster scope for YAML fetches.
+	// Per-cluster clients are stored in clusterClients, not in global fields.
+	fakeClient := fake.NewClientset(cm)
+	dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme, cm)
 	clusterID := "config:ctx"
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {
 			meta:              ClusterMeta{ID: clusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
-			client:            app.client,
-			dynamicClient:     app.dynamicClient,
+			client:            fakeClient,
+			dynamicClient:     dynamicClient,
 		},
 	}
 

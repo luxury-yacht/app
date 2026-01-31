@@ -4,11 +4,6 @@ import "fmt"
 
 func (a *App) initKubernetesClient() (err error) {
 	a.logger.Info("Initializing Kubernetes client", "KubernetesClient")
-	defer func() {
-		if err != nil {
-			a.updateConnectionStatus(ConnectionStateOffline, err.Error(), 0)
-		}
-	}()
 
 	selections, err := a.selectedKubeconfigSelections()
 	if err != nil {
@@ -34,7 +29,8 @@ func (a *App) initKubernetesClient() (err error) {
 	a.startObjectCatalog()
 
 	a.logger.Info(fmt.Sprintf("Successfully established Kubernetes clients for %d cluster(s)", len(selections)), "KubernetesClient")
-	a.updateConnectionStatus(ConnectionStateHealthy, "", 0)
+	// Note: Global connection status tracking has been removed. Connection health
+	// is now tracked per-cluster via cluster:health:* and cluster:auth:* events.
 
 	return nil
 }

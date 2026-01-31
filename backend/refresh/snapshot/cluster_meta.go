@@ -2,7 +2,7 @@ package snapshot
 
 import (
 	"context"
-	"sync"
+	"log"
 )
 
 // ClusterMeta carries stable cluster identifiers for snapshot payloads.
@@ -10,11 +10,6 @@ type ClusterMeta struct {
 	ClusterID   string `json:"clusterId"`
 	ClusterName string `json:"clusterName"`
 }
-
-var (
-	clusterMetaMu    sync.RWMutex
-	currentMetaState ClusterMeta
-)
 
 type clusterMetaContextKey struct{}
 
@@ -26,26 +21,17 @@ func WithClusterMeta(ctx context.Context, meta ClusterMeta) context.Context {
 	return context.WithValue(ctx, clusterMetaContextKey{}, meta)
 }
 
-// ClusterMetaFromContext returns cluster identifiers from context or the fallback state.
+// ClusterMetaFromContext returns cluster identifiers from context, or an empty
+// ClusterMeta if the context is nil or missing cluster meta. In multi-cluster mode,
+// callers must ensure context is properly scoped via WithClusterMeta.
 func ClusterMetaFromContext(ctx context.Context) ClusterMeta {
-	if ctx != nil {
-		if meta, ok := ctx.Value(clusterMetaContextKey{}).(ClusterMeta); ok {
-			return meta
-		}
+	if ctx == nil {
+		log.Println("snapshot: ClusterMetaFromContext called with nil context")
+		return ClusterMeta{}
 	}
-	return CurrentClusterMeta()
-}
-
-// SetClusterMeta updates the process-wide cluster identifiers for snapshot payloads.
-func SetClusterMeta(clusterID, clusterName string) {
-	clusterMetaMu.Lock()
-	defer clusterMetaMu.Unlock()
-	currentMetaState = ClusterMeta{ClusterID: clusterID, ClusterName: clusterName}
-}
-
-// CurrentClusterMeta returns the latest cluster identifiers for snapshot payloads.
-func CurrentClusterMeta() ClusterMeta {
-	clusterMetaMu.RLock()
-	defer clusterMetaMu.RUnlock()
-	return currentMetaState
+	if meta, ok := ctx.Value(clusterMetaContextKey{}).(ClusterMeta); ok {
+		return meta
+	}
+	log.Println("snapshot: ClusterMetaFromContext called with context missing cluster meta")
+	return ClusterMeta{}
 }

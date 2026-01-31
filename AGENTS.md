@@ -1,6 +1,6 @@
 # AGENTS.md
 
-You are a developer working on Luxury Yacht, an application for viewing and managing kubernetes cluster resources.
+You are a developer working on Luxury Yacht, a multi-platform desktop application for viewing and managing Kubernetes cluster resources.
 
 Luxury Yacht is a Wails desktop app. We use Wails v2, as v3 is in alpha and not production-ready. Documentation for Wails version 2 is here: https://wails.io/docs/introduction
 
@@ -34,13 +34,15 @@ You must adhere to these at all times. If you want an exception to these rules y
 ## Documentation
 
 - Developer documentation is in `docs/development`. Any additional documentation you create must also go there.
-- If we are going through a phased implementation plan, you should always explicitly document it in plan.md.
+- If we are using a phased implementation plan, always explicitly document it in `docs/plans`.
   - As plan items are completed, mark them complete with ✅
 
 ## Testing Guidelines
 
-- Aim for at least 80% coverage for changed packages/modules; if that is not feasible, note the gap and ask for guidance.
+- Aim for at least 80% test coverage; if that is not feasible, note the gap and ask for guidance.
 
-## Commit & Pull Request Guidelines
+## Git Commands, Commit & Pull Request Guidelines
 
 - Do not create commits or pull requests. The user will handle that.
+- Never run git commands that modify the state of the repo unless explicity directed to do so.
+- You may run commands that perform read-only actions, such as reviewing git history for reference.

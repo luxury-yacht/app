@@ -37,6 +37,8 @@ import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotifica
 import { PanelErrorBoundary, RouteErrorBoundary } from '@components/errors';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
 import { DockablePanelProvider } from '@/components/dockable';
+// Auth Failure Overlay
+import { AuthFailureOverlay } from '@/components/overlays/AuthFailureOverlay';
 
 const Sidebar = withLazyBoundary(() => import('@ui/layout/Sidebar'), 'Loading sidebar...');
 
@@ -261,6 +263,8 @@ export const AppLayout: React.FC = () => {
               </div>
             </div>
           )}
+          {/* Per-cluster auth failure overlay - blocks sidebar and content when active cluster has auth error */}
+          {hasActiveClusters && <AuthFailureOverlay />}
         </main>
 
         <PanelErrorBoundary onClose={() => {}} panelName="app-logs">

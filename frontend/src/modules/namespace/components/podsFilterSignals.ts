@@ -6,16 +6,22 @@
  */
 import { eventBus } from '@/core/events';
 
-export const PODS_UNHEALTHY_STORAGE_KEY = 'pods:unhealthy-filter-scope';
+/**
+ * Generate a cluster-specific storage key for the pods unhealthy filter.
+ * This ensures filter state is isolated per cluster and doesn't leak between cluster tabs.
+ */
+export const getPodsUnhealthyStorageKey = (clusterId: string) =>
+  `pods:unhealthy-filter-scope:${clusterId}`;
 
-export const emitPodsUnhealthySignal = (scope: string) => {
+export const emitPodsUnhealthySignal = (clusterId: string, scope: string) => {
   if (typeof window === 'undefined') {
     return;
   }
+  const storageKey = getPodsUnhealthyStorageKey(clusterId);
   try {
-    window.sessionStorage.setItem(PODS_UNHEALTHY_STORAGE_KEY, scope);
+    window.sessionStorage.setItem(storageKey, scope);
   } catch {
     // Ignore sessionStorage failures (for private browsing, etc.)
   }
-  eventBus.emit('pods:show-unhealthy', { scope });
+  eventBus.emit('pods:show-unhealthy', { clusterId, scope });
 };

@@ -1,79 +1,17 @@
 package backend
 
 import (
-	"context"
 	"errors"
 	"net"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh/system"
-	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
-	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	"k8s.io/apimachinery/pkg/runtime"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
-	kubernetesfake "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/rest"
-	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
-func TestHandlePermissionIssuesSchedulesRecovery(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
-
-	reasons := make([]string, 0, 1)
-	app.startAuthRecovery = func(reason string) {
-		reasons = append(reasons, reason)
-		app.authRecoveryMu.Lock()
-		app.authRecoveryScheduled = false
-		app.authRecoveryMu.Unlock()
-	}
-
-	issues := []system.PermissionIssue{{Domain: "namespace", Resource: "pods", Err: errors.New("forbidden")}}
-	app.handlePermissionIssues(issues)
-
-	require.Equal(t, []string{"namespace (pods)"}, reasons)
-}
-
-func TestScheduleAuthRecoveryOnlyOnce(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
-
-	calls := 0
-	app.startAuthRecovery = func(reason string) {
-		calls++
-	}
-
-	issue := system.PermissionIssue{Domain: "cluster", Resource: "nodes", Err: errors.New("unauthorized")}
-	app.scheduleAuthRecovery(issue)
-	app.scheduleAuthRecovery(issue)
-
-	require.Equal(t, 1, calls)
-
-	app.authRecoveryMu.Lock()
-	app.authRecoveryScheduled = false
-	app.authRecoveryMu.Unlock()
-}
-
-func TestRunAuthRecoveryStopsWhenContextCancelled(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	app := newTestAppWithDefaults(t)
-	app.Ctx = ctx
-	app.authRecoveryMu.Lock()
-	app.authRecoveryScheduled = true
-	app.authRecoveryMu.Unlock()
-
-	app.runAuthRecovery("reason")
-
-	app.authRecoveryMu.Lock()
-	scheduled := app.authRecoveryScheduled
-	app.authRecoveryMu.Unlock()
-	require.False(t, scheduled)
-}
-
+// stubListener is a minimal net.Listener implementation for testing.
 type stubListener struct {
 	closed bool
 }
@@ -102,108 +40,206 @@ func TestTeardownRefreshSubsystem(t *testing.T) {
 	require.Empty(t, app.refreshBaseURL)
 }
 
-func TestRebuildRefreshSubsystemResetsClients(t *testing.T) {
+// TestHandlePermissionIssuesLogsWarning verifies that permission issues are logged
+// without triggering global auth recovery (per-cluster recovery is now used).
+func TestHandlePermissionIssuesLogsWarning(t *testing.T) {
 	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
-
-	app.client = kubernetesfake.NewClientset()
-	app.apiextensionsClient = &apiextensionsclientset.Clientset{}
-	app.dynamicClient = dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-	app.metricsClient = &metricsclient.Clientset{}
-	app.restConfig = &rest.Config{}
-
-	cancelled := false
-	app.refreshCancel = func() { cancelled = true }
-	app.refreshListener = &stubListener{}
-	app.refreshHTTPServer = &http.Server{}
-	app.refreshBaseURL = "http://example"
-
-	app.kubeClientInitializer = func() error { return nil }
-
-	err := app.rebuildRefreshSubsystem("test")
-	require.NoError(t, err)
-	require.True(t, cancelled)
-	require.Nil(t, app.client)
-	require.Nil(t, app.apiextensionsClient)
-	require.Nil(t, app.dynamicClient)
-	require.Nil(t, app.metricsClient)
-	require.Nil(t, app.restConfig)
-	require.Empty(t, app.refreshBaseURL)
-}
-
-func TestRebuildRefreshSubsystemPropagatesError(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
-	app.kubeClientInitializer = func() error { return errors.New("boom") }
-
-	err := app.rebuildRefreshSubsystem("test")
-	require.Error(t, err)
-}
-
-func TestRunTransportRebuildSuccess(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
 	app.logger = NewLogger(10)
-	app.telemetryRecorder = telemetry.NewRecorder()
-	app.kubeClientInitializer = func() error { return nil }
-	app.transportFailureCount = 2
-	app.transportRebuildInProgress = true
 
-	app.runTransportRebuild("retry", errors.New("original failure"))
+	issues := []system.PermissionIssue{{Domain: "namespace", Resource: "pods", Err: errors.New("forbidden")}}
+	app.handlePermissionIssues(issues)
 
-	summary := app.telemetryRecorder.SnapshotSummary()
-	require.Equal(t, uint64(1), summary.Connection.TransportRebuilds)
-	require.Equal(t, "retry", summary.Connection.LastTransportReason)
-	require.Equal(t, ConnectionStateHealthy, app.connectionStatus)
-	require.Zero(t, app.transportFailureCount)
-	require.False(t, app.transportRebuildInProgress)
-	require.True(t, app.transportWindowStart.IsZero())
 	entries := app.logger.GetEntries()
 	require.NotEmpty(t, entries)
-	require.Contains(t, entries[len(entries)-1].Message, "Transport rebuild complete")
+	require.Contains(t, entries[len(entries)-1].Message, "Refresh domain namespace unavailable (pods)")
 }
 
-func TestRunTransportRebuildFailureSetsOffline(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
-	app.logger = NewLogger(10)
-	app.telemetryRecorder = telemetry.NewRecorder()
-	app.kubeClientInitializer = func() error { return errors.New("still broken") }
-	app.transportRebuildInProgress = true
-
-	app.runTransportRebuild("retry", nil)
-
-	summary := app.telemetryRecorder.SnapshotSummary()
-	require.Equal(t, uint64(1), summary.Connection.TransportRebuilds)
-	require.Equal(t, ConnectionStateOffline, app.connectionStatus)
-	require.Zero(t, app.transportFailureCount)
-	require.False(t, app.transportRebuildInProgress)
-}
-
-func TestRecordTransportSuccessResetsFailures(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.connectionStatus = ConnectionStateRetrying
-	app.transportFailureCount = 2
-
-	app.recordTransportSuccess()
-
-	require.Equal(t, 0, app.transportFailureCount)
-	require.Equal(t, ConnectionStateHealthy, app.connectionStatus)
-}
-
-func TestRecordTransportFailureTriggersRebuildAfterThreshold(t *testing.T) {
+// TestHandlePermissionIssuesSkipsNilErrors verifies that permission issues
+// with nil errors are skipped without logging.
+func TestHandlePermissionIssuesSkipsNilErrors(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.logger = NewLogger(10)
-	app.Ctx = context.Background()
 
-	app.recordTransportFailure("tls", errors.New("boom"))
-	app.recordTransportFailure("tls", errors.New("boom"))
-	app.recordTransportFailure("tls", errors.New("boom"))
+	issues := []system.PermissionIssue{{Domain: "namespace", Resource: "pods", Err: nil}}
+	app.handlePermissionIssues(issues)
 
-	app.transportMu.Lock()
-	inProgress := app.transportRebuildInProgress
-	app.transportMu.Unlock()
+	entries := app.logger.GetEntries()
+	require.Empty(t, entries)
+}
 
-	require.True(t, inProgress, "expected rebuild flag after threshold failures")
-	require.Equal(t, ConnectionStateRebuilding, app.connectionStatus)
+// TestPerClusterTransportFailure verifies that transport failure tracking is
+// isolated per cluster. Failures in one cluster should not affect another.
+func TestPerClusterTransportFailure(t *testing.T) {
+	app := &App{}
+	app.initTransportStates()
+
+	// Record failures for cluster A
+	app.recordClusterTransportFailure("cluster-a", "test failure", nil)
+	app.recordClusterTransportFailure("cluster-a", "test failure", nil)
+
+	// Cluster B should be unaffected
+	stateA := app.getTransportState("cluster-a")
+	stateB := app.getTransportState("cluster-b")
+
+	require.Equal(t, 2, stateA.failureCount)
+	require.Equal(t, 0, stateB.failureCount)
+}
+
+// TestPerClusterTransportSuccessResets verifies that recording a success for
+// one cluster resets its failure count without affecting other clusters.
+func TestPerClusterTransportSuccessResets(t *testing.T) {
+	app := &App{}
+	app.initTransportStates()
+
+	// Record failures for both clusters
+	app.recordClusterTransportFailure("cluster-a", "failure", nil)
+	app.recordClusterTransportFailure("cluster-a", "failure", nil)
+	app.recordClusterTransportFailure("cluster-b", "failure", nil)
+
+	// Reset cluster A
+	app.recordClusterTransportSuccess("cluster-a")
+
+	stateA := app.getTransportState("cluster-a")
+	stateB := app.getTransportState("cluster-b")
+
+	require.Equal(t, 0, stateA.failureCount)
+	require.Equal(t, 1, stateB.failureCount)
+}
+
+// TestPerClusterTransportStateInitialization verifies that getTransportState
+// lazily initializes state for new clusters.
+func TestPerClusterTransportStateInitialization(t *testing.T) {
+	app := &App{}
+	// Do NOT call initTransportStates - getTransportState should handle nil map
+
+	state := app.getTransportState("new-cluster")
+	require.NotNil(t, state)
+	require.Equal(t, 0, state.failureCount)
+	require.False(t, state.rebuildInProgress)
+}
+
+// TestPerClusterTransportWindowReset verifies that the failure window resets
+// after the window duration expires.
+func TestPerClusterTransportWindowReset(t *testing.T) {
+	app := &App{}
+	app.initTransportStates()
+
+	// Record a failure
+	app.recordClusterTransportFailure("cluster-a", "failure", nil)
+
+	stateA := app.getTransportState("cluster-a")
+	require.Equal(t, 1, stateA.failureCount)
+
+	// Manually expire the window by setting windowStart in the past
+	stateA.mu.Lock()
+	stateA.windowStart = time.Now().Add(-31 * time.Second)
+	stateA.mu.Unlock()
+
+	// Record another failure - should reset the count first
+	app.recordClusterTransportFailure("cluster-a", "failure", nil)
+
+	stateA.mu.Lock()
+	count := stateA.failureCount
+	stateA.mu.Unlock()
+
+	// The count should be 1 (reset + 1 new failure), not 2
+	require.Equal(t, 1, count)
+}
+
+// TestPerClusterTransportRebuildTriggersAtThreshold verifies that reaching
+// the failure threshold triggers a rebuild for that specific cluster.
+func TestPerClusterTransportRebuildTriggersAtThreshold(t *testing.T) {
+	app := &App{}
+	app.initTransportStates()
+
+	// Record 3 failures (threshold) for cluster A
+	app.recordClusterTransportFailure("cluster-a", "test", nil)
+	app.recordClusterTransportFailure("cluster-a", "test", nil)
+	app.recordClusterTransportFailure("cluster-a", "test", nil)
+
+	stateA := app.getTransportState("cluster-a")
+	stateA.mu.Lock()
+	inProgress := stateA.rebuildInProgress
+	stateA.mu.Unlock()
+
+	// Rebuild should be triggered (or just triggered)
+	// Note: The rebuild runs asynchronously so we can't check completion here
+	require.True(t, inProgress || stateA.failureCount == 0, "expected rebuild to be triggered or already completed")
+}
+
+// TestPerClusterTransportRebuildCooldown verifies that the cooldown period
+// prevents rapid successive rebuilds for the same cluster.
+func TestPerClusterTransportRebuildCooldown(t *testing.T) {
+	app := &App{}
+	app.initTransportStates()
+
+	stateA := app.getTransportState("cluster-a")
+	// Simulate a recent rebuild
+	stateA.mu.Lock()
+	stateA.lastRebuild = time.Now()
+	stateA.mu.Unlock()
+
+	// Record 3 failures (threshold)
+	app.recordClusterTransportFailure("cluster-a", "test", nil)
+	app.recordClusterTransportFailure("cluster-a", "test", nil)
+	app.recordClusterTransportFailure("cluster-a", "test", nil)
+
+	stateA.mu.Lock()
+	inProgress := stateA.rebuildInProgress
+	count := stateA.failureCount
+	stateA.mu.Unlock()
+
+	// Rebuild should NOT be triggered due to cooldown
+	require.False(t, inProgress, "rebuild should not trigger during cooldown")
+	require.Equal(t, 3, count, "failure count should still be tracked")
+}
+
+// TestPerClusterAuthRecoveryScheduling verifies that auth recovery scheduling
+// is tracked per-cluster, allowing independent scheduling without conflicts.
+func TestPerClusterAuthRecoveryScheduling(t *testing.T) {
+	app := &App{}
+	app.initAuthRecoveryState()
+
+	// Schedule recovery for cluster A
+	scheduled := app.scheduleClusterAuthRecovery("cluster-a")
+	require.True(t, scheduled, "first schedule for cluster-a should succeed")
+
+	// Try to schedule again - should return false (already scheduled)
+	scheduledAgain := app.scheduleClusterAuthRecovery("cluster-a")
+	require.False(t, scheduledAgain, "second schedule for cluster-a should fail")
+
+	// Cluster B should be schedulable independently
+	scheduledB := app.scheduleClusterAuthRecovery("cluster-b")
+	require.True(t, scheduledB, "cluster-b should be schedulable independently")
+
+	// Clear cluster A and verify it can be scheduled again
+	app.clearClusterAuthRecoveryScheduled("cluster-a")
+	scheduledAfterClear := app.scheduleClusterAuthRecovery("cluster-a")
+	require.True(t, scheduledAfterClear, "cluster-a should be schedulable after clear")
+
+	// Cluster B should still be scheduled (unaffected by cluster A operations)
+	scheduledBAgain := app.scheduleClusterAuthRecovery("cluster-b")
+	require.False(t, scheduledBAgain, "cluster-b should still be scheduled")
+}
+
+// TestPerClusterAuthRecoveryLazyInit verifies that scheduleClusterAuthRecovery
+// initializes the map lazily if it hasn't been initialized.
+func TestPerClusterAuthRecoveryLazyInit(t *testing.T) {
+	app := &App{}
+	// Do NOT call initAuthRecoveryState - scheduleClusterAuthRecovery should handle nil map
+
+	scheduled := app.scheduleClusterAuthRecovery("cluster-a")
+	require.True(t, scheduled, "should work even without explicit init")
+}
+
+// TestPerClusterAuthRecoveryClearNonExistent verifies that clearing a
+// non-existent cluster ID doesn't panic or cause issues.
+func TestPerClusterAuthRecoveryClearNonExistent(t *testing.T) {
+	app := &App{}
+	app.initAuthRecoveryState()
+
+	// Should not panic when clearing a cluster that was never scheduled
+	require.NotPanics(t, func() {
+		app.clearClusterAuthRecoveryScheduled("non-existent-cluster")
+	})
 }

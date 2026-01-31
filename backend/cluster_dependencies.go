@@ -33,6 +33,17 @@ func (a *App) resolveClusterDependencies(clusterID string) (common.Dependencies,
 		return common.Dependencies{}, "", fmt.Errorf("cluster id is required")
 	}
 
+	// Check auth state before returning dependencies.
+	// This prevents making requests to clusters with invalid auth.
+	clients := a.clusterClientsForID(trimmed)
+	if clients != nil && clients.authManager != nil && !clients.authManager.IsValid() {
+		clusterName := trimmed
+		if clients.meta.Name != "" {
+			clusterName = clients.meta.Name
+		}
+		return common.Dependencies{}, "", fmt.Errorf("auth failed for %s: check your kubeconfig credentials", clusterName)
+	}
+
 	deps, ok := a.resourceDependenciesForClusterID(trimmed)
 	if !ok {
 		return common.Dependencies{}, "", fmt.Errorf("cluster %s not active", trimmed)

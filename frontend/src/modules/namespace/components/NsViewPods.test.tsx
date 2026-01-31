@@ -10,7 +10,7 @@ import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
-import { PODS_UNHEALTHY_STORAGE_KEY } from '@modules/namespace/components/podsFilterSignals';
+import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { eventBus } from '@/core/events';
 
 const {
@@ -116,7 +116,10 @@ vi.mock('@/core/refresh/hooks/useMetricsAvailability', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'mock-path:mock-context' }),
+  useKubeconfig: () => ({
+    selectedKubeconfig: 'mock-path:mock-context',
+    selectedClusterId: 'alpha:ctx',
+  }),
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -472,7 +475,7 @@ describe('NsViewPods', () => {
     expect(gridTablePropsRef.current.data).toEqual([pods[2]]);
   });
 
-  it('enables the unhealthy filter when an event targets the namespace', async () => {
+  it('enables the unhealthy filter when an event targets the namespace and cluster', async () => {
     const pods = [
       createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
       createPod({ name: 'pending', status: 'Pending', ready: '0/1', restarts: 0 }),
@@ -481,14 +484,34 @@ describe('NsViewPods', () => {
     await renderPods({ data: pods });
 
     act(() => {
-      eventBus.emit('pods:show-unhealthy', { scope: 'team-a' });
+      // Event must include clusterId to match the current cluster context.
+      eventBus.emit('pods:show-unhealthy', { clusterId: 'alpha:ctx', scope: 'team-a' });
     });
 
     expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
   });
 
+  it('ignores unhealthy filter events for other clusters', async () => {
+    const pods = [
+      createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
+      createPod({ name: 'pending', status: 'Pending', ready: '0/1', restarts: 0 }),
+    ];
+
+    await renderPods({ data: pods });
+
+    act(() => {
+      // Event for a different cluster should be ignored.
+      eventBus.emit('pods:show-unhealthy', { clusterId: 'other-cluster', scope: 'team-a' });
+    });
+
+    // Should still show all pods since the event was for a different cluster.
+    expect(gridTablePropsRef.current.data).toEqual(pods);
+  });
+
   it('applies pending unhealthy filter requests from session storage', async () => {
-    window.sessionStorage.setItem(PODS_UNHEALTHY_STORAGE_KEY, 'team-a');
+    // Use the cluster-specific storage key.
+    const storageKey = getPodsUnhealthyStorageKey('alpha:ctx');
+    window.sessionStorage.setItem(storageKey, 'team-a');
     const pods = [
       createPod({ name: 'healthy', status: 'Running', ready: '1/1', restarts: 0 }),
       createPod({ name: 'failing', status: 'CrashLoopBackOff', ready: '0/1', restarts: 5 }),
@@ -497,7 +520,7 @@ describe('NsViewPods', () => {
     await renderPods({ data: pods });
 
     expect(gridTablePropsRef.current.data).toEqual([pods[1]]);
-    expect(window.sessionStorage.getItem(PODS_UNHEALTHY_STORAGE_KEY)).toBeNull();
+    expect(window.sessionStorage.getItem(storageKey)).toBeNull();
   });
 
   it('deletes a pod when confirmation succeeds', async () => {

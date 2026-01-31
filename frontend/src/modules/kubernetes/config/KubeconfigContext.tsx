@@ -152,33 +152,28 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     [resolveClusterMeta, kubeconfigs]
   );
 
-  const normalizeSelections = useCallback(
-    (selections: string[], configs: types.KubeconfigInfo[]) => {
-      const deduped: string[] = [];
-      const seenContexts = new Set<string>();
+  const normalizeSelections = useCallback((selections: string[]) => {
+    const deduped: string[] = [];
+    const seenSelections = new Set<string>();
 
-      selections.forEach((selection) => {
-        const trimmed = selection.trim();
-        if (!trimmed) {
-          return;
-        }
+    selections.forEach((selection) => {
+      const trimmed = selection.trim();
+      if (!trimmed) {
+        return;
+      }
 
-        // Enforce a single active selection per context name.
-        const contextName = resolveClusterMeta(trimmed, configs).name;
-        if (contextName) {
-          if (seenContexts.has(contextName)) {
-            return;
-          }
-          seenContexts.add(contextName);
-        }
+      // Dedupe by full selection string (path:context) to allow the same context name
+      // from different kubeconfig files (e.g., "dev" in both ~/.kube/config and ~/.kube/staging).
+      if (seenSelections.has(trimmed)) {
+        return;
+      }
+      seenSelections.add(trimmed);
 
-        deduped.push(trimmed);
-      });
+      deduped.push(trimmed);
+    });
 
-      return deduped;
-    },
-    [resolveClusterMeta]
-  );
+    return deduped;
+  }, []);
 
   const selectedClusterIds = useMemo(() => {
     const ids = new Set<string>();
@@ -223,7 +218,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       setKubeconfigs(configs || []);
 
       // Set the selection from the backend
-      const normalizedSelection = normalizeSelections(currentSelection || [], configs || []);
+      const normalizedSelection = normalizeSelections(currentSelection || []);
       selectedKubeconfigsRef.current = normalizedSelection;
       selectedKubeconfigRef.current = normalizedSelection[0] || '';
       setSelectedKubeconfigsState(normalizedSelection);
@@ -246,7 +241,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
     async (configs: string[]) => {
       const previousSelections = selectedKubeconfigsRef.current;
       const previousActive = selectedKubeconfigRef.current;
-      const normalizedSelections = normalizeSelections(configs, kubeconfigsRef.current);
+      const normalizedSelections = normalizeSelections(configs);
       const removedActive = previousActive && !normalizedSelections.includes(previousActive);
       const addedSelections = normalizedSelections.filter(
         (selection) => !previousSelections.includes(selection)

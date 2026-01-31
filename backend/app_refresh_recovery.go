@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -25,9 +26,6 @@ func (a *App) teardownRefreshSubsystem() {
 	const shutdownTimeout = time.Second
 
 	subsystems := a.refreshSubsystems
-	if len(subsystems) == 0 && a.refreshManager != nil {
-		subsystems = map[string]*system.Subsystem{"standalone": {Manager: a.refreshManager}}
-	}
 
 	for _, subsystem := range subsystems {
 		if subsystem == nil || subsystem.Manager == nil {
@@ -137,149 +135,171 @@ func (a *App) handlePermissionIssues(issues []system.PermissionIssue) {
 			fmt.Sprintf("Refresh domain %s unavailable (%s): %v", issue.Domain, issue.Resource, issue.Err),
 			"Refresh",
 		)
-		a.scheduleAuthRecovery(issue)
+		// NOTE: Per-cluster auth recovery is now handled by the auth manager via 401 responses.
+		// Permission issues without cluster context are logged but not auto-recovered.
 	}
 }
 
-func (a *App) scheduleAuthRecovery(issue system.PermissionIssue) {
-	a.authRecoveryMu.Lock()
-	if a.authRecoveryScheduled {
-		a.authRecoveryMu.Unlock()
-		return
-	}
-	a.authRecoveryScheduled = true
-	a.authRecoveryMu.Unlock()
-
-	reason := fmt.Sprintf("%s (%s)", issue.Domain, issue.Resource)
-	a.updateConnectionStatus(ConnectionStateAuthFailed, fmt.Sprintf("Authentication required for %s", reason), 0)
-	if a.startAuthRecovery != nil {
-		a.startAuthRecovery(reason)
-	} else {
-		go a.runAuthRecovery(reason)
-	}
-}
-
-func (a *App) runAuthRecovery(reason string) {
-	defer func() {
-		a.authRecoveryMu.Lock()
-		a.authRecoveryScheduled = false
-		a.authRecoveryMu.Unlock()
-	}()
-
-	backoff := 5 * time.Second
-	for {
-		select {
-		case <-a.Ctx.Done():
-			return
-		case <-time.After(backoff):
-		}
-
-		if err := a.rebuildRefreshSubsystem(reason); err != nil {
-			a.logger.Warn(fmt.Sprintf("Refresh subsystem recovery attempt failed: %v", err), "Refresh")
-			if backoff < time.Minute {
-				backoff *= 2
-			}
-			continue
-		}
-
-		a.logger.Info("Refresh subsystem recovered after authentication failure", "Refresh")
-		a.updateConnectionStatus(ConnectionStateHealthy, "", 0)
-		return
-	}
-}
-
-func (a *App) rebuildRefreshSubsystem(reason string) error {
-	a.logger.Info(fmt.Sprintf("Rebuilding refresh subsystem (%s)", reason), "Refresh")
-	a.teardownRefreshSubsystem()
-
-	a.client = nil
-	a.apiextensionsClient = nil
-	a.dynamicClient = nil
-	a.metricsClient = nil
-	a.restConfig = nil
-	a.clusterClientsMu.Lock()
-	a.clusterClients = make(map[string]*clusterClients)
-	a.clusterClientsMu.Unlock()
-
-	if err := a.initKubeClient(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
+// Transport failure tracking constants used by per-cluster functions.
 const (
 	transportFailureThreshold = 3
 	transportFailureWindow    = 30 * time.Second
 	transportRebuildCooldown  = time.Minute
 )
 
-func (a *App) recordTransportSuccess() {
-	if a == nil {
-		return
+// initAuthRecoveryState initializes the per-cluster auth recovery scheduling map.
+// Safe to call multiple times.
+func (a *App) initAuthRecoveryState() {
+	a.clusterAuthRecoveryMu.Lock()
+	defer a.clusterAuthRecoveryMu.Unlock()
+	if a.clusterAuthRecoveryScheduled == nil {
+		a.clusterAuthRecoveryScheduled = make(map[string]bool)
 	}
-	a.transportMu.Lock()
-	a.transportFailureCount = 0
-	a.transportWindowStart = time.Time{}
-	a.transportMu.Unlock()
-	a.updateConnectionStatus(ConnectionStateHealthy, "", 0)
 }
 
-func (a *App) recordTransportFailure(reason string, err error) {
+// scheduleClusterAuthRecovery marks a cluster as having auth recovery scheduled.
+// Returns true if newly scheduled, false if already scheduled.
+// This allows per-cluster auth recovery scheduling without affecting other clusters.
+func (a *App) scheduleClusterAuthRecovery(clusterID string) bool {
+	a.clusterAuthRecoveryMu.Lock()
+	defer a.clusterAuthRecoveryMu.Unlock()
+
+	// Lazy initialization if not already done
+	if a.clusterAuthRecoveryScheduled == nil {
+		a.clusterAuthRecoveryScheduled = make(map[string]bool)
+	}
+
+	if a.clusterAuthRecoveryScheduled[clusterID] {
+		return false // Already scheduled
+	}
+
+	a.clusterAuthRecoveryScheduled[clusterID] = true
+	return true
+}
+
+// clearClusterAuthRecoveryScheduled clears the auth recovery scheduled flag for a cluster.
+// Called when auth recovery completes (successfully or not) for that cluster.
+func (a *App) clearClusterAuthRecoveryScheduled(clusterID string) {
+	a.clusterAuthRecoveryMu.Lock()
+	defer a.clusterAuthRecoveryMu.Unlock()
+	delete(a.clusterAuthRecoveryScheduled, clusterID)
+}
+
+// transportFailureState tracks transport failures for a single cluster.
+// This allows isolated recovery per-cluster without affecting other clusters.
+type transportFailureState struct {
+	mu                sync.Mutex
+	failureCount      int
+	windowStart       time.Time
+	rebuildInProgress bool
+	lastRebuild       time.Time
+}
+
+// initTransportStates initializes the per-cluster transport state map.
+// Safe to call multiple times.
+func (a *App) initTransportStates() {
+	a.transportStatesMu.Lock()
+	defer a.transportStatesMu.Unlock()
+	if a.transportStates == nil {
+		a.transportStates = make(map[string]*transportFailureState)
+	}
+}
+
+// getTransportState returns the transport failure state for a given cluster,
+// creating a new one if it doesn't exist. This method is thread-safe and
+// lazily initializes the transportStates map if needed.
+func (a *App) getTransportState(clusterID string) *transportFailureState {
+	a.transportStatesMu.Lock()
+	defer a.transportStatesMu.Unlock()
+	if a.transportStates == nil {
+		a.transportStates = make(map[string]*transportFailureState)
+	}
+	if a.transportStates[clusterID] == nil {
+		a.transportStates[clusterID] = &transportFailureState{}
+	}
+	return a.transportStates[clusterID]
+}
+
+// recordClusterTransportFailure records a transport failure for a specific cluster.
+// If the failure threshold is reached within the time window, it triggers a
+// per-cluster rebuild. This isolates failures so one cluster's problems don't
+// affect others.
+func (a *App) recordClusterTransportFailure(clusterID, reason string, err error) {
 	if a == nil {
 		return
 	}
-	a.transportMu.Lock()
+	state := a.getTransportState(clusterID)
+	state.mu.Lock()
+
 	now := time.Now()
-	if a.transportFailureCount == 0 || now.Sub(a.transportWindowStart) > transportFailureWindow {
-		a.transportFailureCount = 0
-		a.transportWindowStart = now
+	// Reset window if expired (uses same window as global tracking: 30 seconds)
+	if now.Sub(state.windowStart) > transportFailureWindow {
+		state.failureCount = 0
+		state.windowStart = now
 	}
-	a.transportFailureCount++
-	count := a.transportFailureCount
+
+	state.failureCount++
+	count := state.failureCount
+
+	// Check if threshold reached (same as global: 3 failures)
 	shouldTrigger := count >= transportFailureThreshold &&
-		!a.transportRebuildInProgress &&
-		now.Sub(a.lastTransportRebuild) >= transportRebuildCooldown
+		!state.rebuildInProgress &&
+		now.Sub(state.lastRebuild) >= transportRebuildCooldown
 	if shouldTrigger {
-		a.transportRebuildInProgress = true
-		a.lastTransportRebuild = now
+		state.rebuildInProgress = true
+		state.lastRebuild = now
 	}
-	a.transportMu.Unlock()
+	state.mu.Unlock()
 
 	if shouldTrigger {
-		a.updateConnectionStatus(ConnectionStateRebuilding, fmt.Sprintf("Rebuilding after %s", reason), 0)
 		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Transport connectivity degraded (%s); rebuilding Kubernetes clients", reason), "KubernetesClient")
+			a.logger.Warn(fmt.Sprintf("Transport connectivity degraded for cluster %s (%s); rebuilding", clusterID, reason), "KubernetesClient")
 		}
-		go a.runTransportRebuild(fmt.Sprintf("transport failure (%s)", reason), err)
+		go a.runClusterTransportRebuild(clusterID, reason, err)
 	}
 }
 
-func (a *App) runTransportRebuild(reason string, cause error) {
+// recordClusterTransportSuccess records a successful transport operation for
+// a specific cluster, resetting its failure count.
+func (a *App) recordClusterTransportSuccess(clusterID string) {
+	if a == nil {
+		return
+	}
+	state := a.getTransportState(clusterID)
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	state.failureCount = 0
+}
+
+// runClusterTransportRebuild performs a transport rebuild for a specific cluster.
+// It uses the existing rebuildClusterSubsystem which rebuilds only that cluster.
+func (a *App) runClusterTransportRebuild(clusterID, reason string, cause error) {
+	state := a.getTransportState(clusterID)
+
 	defer func() {
-		a.transportMu.Lock()
-		a.transportFailureCount = 0
-		a.transportWindowStart = time.Time{}
-		a.transportRebuildInProgress = false
-		a.transportMu.Unlock()
+		state.mu.Lock()
+		state.failureCount = 0
+		state.windowStart = time.Time{}
+		state.rebuildInProgress = false
+		state.mu.Unlock()
 	}()
 
 	if a.telemetryRecorder != nil {
-		a.telemetryRecorder.RecordTransportRebuild(reason)
+		a.telemetryRecorder.RecordTransportRebuild(fmt.Sprintf("cluster:%s - %s", clusterID, reason))
 	}
-	if err := a.rebuildRefreshSubsystem(reason); err != nil {
-		if a.logger != nil {
-			a.logger.Warn(fmt.Sprintf("Transport rebuild failed: %v", err), "KubernetesClient")
-		}
-		a.updateConnectionStatus(ConnectionStateOffline, err.Error(), 0)
-		return
-	}
+
 	if a.logger != nil {
-		msg := "Transport rebuild complete"
+		a.logger.Info(fmt.Sprintf("Starting transport rebuild for cluster %s", clusterID), "KubernetesClient")
+	}
+
+	// Use existing per-cluster rebuild mechanism
+	a.rebuildClusterSubsystem(clusterID)
+
+	if a.logger != nil {
+		msg := fmt.Sprintf("Transport rebuild complete for cluster %s", clusterID)
 		if cause != nil {
 			msg = fmt.Sprintf("%s after %v", msg, cause)
 		}
 		a.logger.Info(msg, "KubernetesClient")
 	}
-	a.updateConnectionStatus(ConnectionStateHealthy, "", 0)
 }

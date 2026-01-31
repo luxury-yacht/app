@@ -61,9 +61,9 @@ func (q *aggregateManualQueue) Enqueue(ctx context.Context, domain, scope, reaso
 	if domain == "" {
 		return nil, errors.New("domain is required")
 	}
-	clusterOrder, queues := q.snapshotConfig()
+	queues := q.snapshotConfig()
 	clusterIDs, scopeValue := refresh.SplitClusterScopeList(scope)
-	targets, err := q.resolveTargets(domain, clusterIDs, queues, clusterOrder)
+	targets, err := q.resolveTargets(domain, clusterIDs, queues)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func (q *aggregateManualQueue) Status(jobID string) (*refresh.ManualRefreshJob, 
 	}
 	q.mu.RUnlock()
 
-	_, queues := q.snapshotConfig()
+	queues := q.snapshotConfig()
 	return q.buildAggregateStatus(&base, clusterJobs, queues), true
 }
 
@@ -142,7 +142,6 @@ func (q *aggregateManualQueue) resolveTargets(
 	domain string,
 	clusterIDs []string,
 	queues map[string]refresh.ManualQueue,
-	clusterOrder []string,
 ) ([]string, error) {
 	if len(clusterIDs) > 0 {
 		if isSingleClusterDomain(domain) && len(clusterIDs) > 1 {
@@ -242,15 +241,14 @@ func (q *aggregateManualQueue) buildAggregateStatus(
 	return base
 }
 
-func (q *aggregateManualQueue) snapshotConfig() ([]string, map[string]refresh.ManualQueue) {
+func (q *aggregateManualQueue) snapshotConfig() map[string]refresh.ManualQueue {
 	q.configMu.RLock()
 	defer q.configMu.RUnlock()
-	order := append([]string(nil), q.clusterOrder...)
 	queues := make(map[string]refresh.ManualQueue, len(q.queues))
 	for id, queue := range q.queues {
 		queues[id] = queue
 	}
-	return order, queues
+	return queues
 }
 
 // UpdateConfig refreshes the aggregate manual queue wiring after selection changes.

@@ -76,7 +76,7 @@ export interface AppEvents {
   'settings:metrics-interval': number;
 
   // Feature events
-  'pods:show-unhealthy': { scope: string };
+  'pods:show-unhealthy': { clusterId: string; scope: string };
   'gridtable:persistence-mode': 'namespaced' | 'shared';
 
   // App visibility events

@@ -173,7 +173,10 @@ class ErrorHandler {
       case ErrorCategory.NETWORK:
         return 'Unable to connect to the Kubernetes cluster. Please check your network connection.';
       case ErrorCategory.AUTHENTICATION:
-        return 'Authentication failed. Please check your kubeconfig credentials.';
+        // Use original message if it contains cluster info, otherwise use generic message
+        return (
+          originalMessage || 'Authentication failed. Please check your kubeconfig credentials.'
+        );
       case ErrorCategory.PERMISSION:
         return 'You do not have permission to perform this operation.';
       case ErrorCategory.NOT_FOUND:
@@ -300,7 +303,13 @@ class ErrorHandler {
     // Log the error
     this.logError(errorDetails);
 
-    const suppressNotification = category === ErrorCategory.PERMISSION;
+    // Suppress notifications for auth-related errors that are handled by the AuthFailureOverlay.
+    const isAuthOverlayError =
+      errorString.includes('no active clusters available') ||
+      errorString.includes('Error loading SSO Token') ||
+      errorString.includes('auth failed:');
+
+    const suppressNotification = category === ErrorCategory.PERMISSION || isAuthOverlayError;
 
     if (!suppressNotification) {
       // Store in history

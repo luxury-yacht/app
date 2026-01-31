@@ -5,19 +5,13 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/versioning"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
-	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
-	"k8s.io/client-go/dynamic"
 	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 var defaultLoopbackListener = func() (net.Listener, error) {
@@ -27,12 +21,7 @@ var defaultLoopbackListener = func() (net.Listener, error) {
 // App provides the backend façade exposed to Wails.
 type App struct {
 	Ctx                  context.Context
-	client               kubernetes.Interface
-	apiextensionsClient  apiextensionsclientset.Interface
-	dynamicClient        dynamic.Interface
-	metricsClient        *metricsclient.Clientset
-	restConfig          *rest.Config
-	selectedKubeconfigs []string
+	selectedKubeconfigs  []string
 	availableKubeconfigs []KubeconfigInfo
 	windowSettings       *WindowSettings
 	appSettings          *AppSettings
@@ -74,25 +63,21 @@ type App struct {
 	updateCheckMu   sync.RWMutex
 	updateInfo      *UpdateInfo
 
-	authRecoveryMu        sync.Mutex
-	authRecoveryScheduled bool
+	// Per-cluster auth recovery scheduling.
+	// Tracks auth recovery scheduling per-cluster, allowing isolated
+	// recovery scheduling without affecting other clusters.
+	clusterAuthRecoveryMu        sync.Mutex
+	clusterAuthRecoveryScheduled map[string]bool
 
-	transportMu                sync.Mutex
-	transportFailureCount      int
-	transportWindowStart       time.Time
-	transportRebuildInProgress bool
-	lastTransportRebuild       time.Time
-
-	connectionStatusMu        sync.Mutex
-	connectionStatus          ConnectionState
-	connectionStatusMessage   string
-	connectionStatusNextRetry int64
-	connectionStatusUpdatedAt int64
+	// Per-cluster transport failure tracking.
+	// Tracks transport failures per-cluster, allowing isolated
+	// recovery without affecting other clusters.
+	transportStatesMu sync.RWMutex
+	transportStates   map[string]*transportFailureState
 
 	listenLoopback func() (net.Listener, error)
 
 	eventEmitter          func(context.Context, string, ...interface{})
-	startAuthRecovery     func(string)
 	kubeClientInitializer func() error
 }
 
@@ -111,24 +96,13 @@ func NewApp() *App {
 		shellSessions:            make(map[string]*shellSession),
 		eventEmitter:             func(context.Context, string, ...interface{}) {},
 	}
-	app.startAuthRecovery = func(reason string) {
-		go app.runAuthRecovery(reason)
-	}
 	app.kubeClientInitializer = func() error {
 		return app.initKubernetesClient()
 	}
 	app.listenLoopback = defaultLoopbackListener
 	app.setupEnvironment()
-	app.connectionStatus = ConnectionStateHealthy
-	app.connectionStatusMessage = connectionStateDefinitions[ConnectionStateHealthy].DefaultMessage
+	app.initAuthManager()
 	return app
-}
-
-func (a *App) initKubeClient() error {
-	if a.kubeClientInitializer != nil {
-		return a.kubeClientInitializer()
-	}
-	return a.initKubernetesClient()
 }
 
 func (a *App) emitEvent(name string, args ...interface{}) {
@@ -136,4 +110,26 @@ func (a *App) emitEvent(name string, args ...interface{}) {
 		return
 	}
 	a.eventEmitter(a.Ctx, name, args...)
+}
+
+// initAuthManager is kept for backwards compatibility but is now a no-op.
+// Auth state management is now per-cluster, handled by each cluster's authManager
+// in the clusterClients struct. See cluster_auth.go for details.
+func (a *App) initAuthManager() {
+	// Per-cluster auth managers are created in buildClusterClients().
+	// This function is kept for compatibility but does nothing.
+}
+
+// RetryAuth triggers a manual authentication recovery attempt for ALL clusters.
+// Called when user clicks "Retry" after re-authenticating externally.
+// For per-cluster retry, use RetryClusterAuth instead.
+func (a *App) RetryAuth() {
+	a.clusterClientsMu.Lock()
+	defer a.clusterClientsMu.Unlock()
+
+	for _, clients := range a.clusterClients {
+		if clients != nil && clients.authManager != nil {
+			clients.authManager.TriggerRetry()
+		}
+	}
 }

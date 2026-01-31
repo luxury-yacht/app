@@ -3,6 +3,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -54,9 +55,9 @@ func newAggregateSnapshotService(
 
 // Build fans out the snapshot request and merges payloads for multi-cluster domains.
 func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-	clusterOrder, services := s.snapshotConfig()
+	services := s.snapshotConfig()
 	clusterIDs, scopeValue := refresh.SplitClusterScopeList(scope)
-	targets, err := s.resolveTargets(domain, clusterIDs, services, clusterOrder)
+	targets, err := s.resolveTargets(domain, clusterIDs, services)
 	if err != nil {
 		return nil, err
 	}
@@ -122,11 +123,11 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 }
 
 // resolveTargets chooses which clusters should handle the requested domain/scope pair.
+// Clusters without services (e.g., due to auth failure) are skipped gracefully.
 func (s *aggregateSnapshotService) resolveTargets(
 	domain string,
 	clusterIDs []string,
 	services map[string]refresh.SnapshotService,
-	clusterOrder []string,
 ) ([]string, error) {
 	if len(clusterIDs) > 0 {
 		if isSingleClusterDomain(domain) && len(clusterIDs) > 1 {
@@ -134,10 +135,16 @@ func (s *aggregateSnapshotService) resolveTargets(
 		}
 		targets := make([]string, 0, len(clusterIDs))
 		for _, id := range clusterIDs {
+			// Skip clusters without services (e.g., auth failure caused subsystem to be skipped).
+			// This allows multi-cluster views to show data from working clusters.
 			if _, ok := services[id]; !ok {
-				return nil, fmt.Errorf("cluster %s not active", id)
+				continue
 			}
 			targets = append(targets, id)
+		}
+		// Only error if NO clusters are available
+		if len(targets) == 0 {
+			return nil, fmt.Errorf("no active clusters available (requested: %v)", clusterIDs)
 		}
 		return targets, nil
 	}
@@ -145,15 +152,12 @@ func (s *aggregateSnapshotService) resolveTargets(
 	return nil, fmt.Errorf("cluster scope is required for domain %s", domain)
 }
 
-func (s *aggregateSnapshotService) snapshotConfig() ([]string, map[string]refresh.SnapshotService) {
+func (s *aggregateSnapshotService) snapshotConfig() map[string]refresh.SnapshotService {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	order := append([]string(nil), s.clusterOrder...)
 	services := make(map[string]refresh.SnapshotService, len(s.services))
-	for id, service := range s.services {
-		services[id] = service
-	}
-	return order, services
+	maps.Copy(services, s.services)
+	return services
 }
 
 // Update refreshes the aggregate snapshot configuration after selection changes.

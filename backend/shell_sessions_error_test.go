@@ -12,11 +12,14 @@ const shellClusterID = "config:ctx"
 func TestStartShellSessionRequiresClient(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
+	// Per-cluster clients are stored in clusterClients, not in global fields.
+	// Create a cluster entry WITHOUT a client to test the error path.
 	app.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
+			// client is intentionally nil
 		},
 	}
 
@@ -29,13 +32,15 @@ func TestStartShellSessionRequiresClient(t *testing.T) {
 func TestStartShellSessionRequiresRestConfig(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
-	app.client = fake.NewClientset()
+	// Per-cluster clients are stored in clusterClients, not in global fields.
+	fakeClient := fake.NewClientset()
 	app.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
-			client:            app.client,
+			client:            fakeClient,
+			// restConfig is intentionally nil
 		},
 	}
 
@@ -48,15 +53,16 @@ func TestStartShellSessionRequiresRestConfig(t *testing.T) {
 func TestStartShellSessionRequiresNamespace(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
-	app.client = fake.NewClientset()
-	app.restConfig = &rest.Config{}
+	// Per-cluster clients are stored in clusterClients, not in global fields.
+	fakeClient := fake.NewClientset()
+	restConfig := &rest.Config{}
 	app.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
-			client:            app.client,
-			restConfig:        app.restConfig,
+			client:            fakeClient,
+			restConfig:        restConfig,
 		},
 	}
 
@@ -69,15 +75,16 @@ func TestStartShellSessionRequiresNamespace(t *testing.T) {
 func TestStartShellSessionRequiresPodName(t *testing.T) {
 	app := NewApp()
 	app.logger = NewLogger(10)
-	app.client = fake.NewClientset()
-	app.restConfig = &rest.Config{}
+	// Per-cluster clients are stored in clusterClients, not in global fields.
+	fakeClient := fake.NewClientset()
+	restConfig := &rest.Config{}
 	app.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
-			client:            app.client,
-			restConfig:        app.restConfig,
+			client:            fakeClient,
+			restConfig:        restConfig,
 		},
 	}
 

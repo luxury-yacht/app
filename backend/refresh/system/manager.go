@@ -213,7 +213,6 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 
 	// Build the core refresh routes once so all server configurations stay consistent.
 	mux := BuildRefreshMux(MuxConfig{
-		Registry:        registry,
 		SnapshotService: snapshotService,
 		ManualQueue:     queue,
 		Telemetry:       telemetryRecorder,

@@ -25,6 +25,7 @@ import { hydrateAppPreferences } from '@/core/settings/appPreferences';
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { ErrorProvider } from '@core/contexts/ErrorContext';
+import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
 
 // App components
 import { AppLayout } from '@ui/layout/AppLayout';
@@ -165,13 +166,15 @@ function App() {
       <ErrorProvider>
         <KeyboardProvider>
           <ConnectionStatusProvider>
-            <div className="app-window-frame">
-              <div className="app">
-                <KubernetesProvider>
-                  <AppContent />
-                </KubernetesProvider>
+            <AuthErrorProvider>
+              <div className="app-window-frame">
+                <div className="app">
+                  <KubernetesProvider>
+                    <AppContent />
+                  </KubernetesProvider>
+                </div>
               </div>
-            </div>
+            </AuthErrorProvider>
           </ConnectionStatusProvider>
         </KeyboardProvider>
       </ErrorProvider>

@@ -44,7 +44,7 @@ func TestEvaluateCapabilitiesSuccess(t *testing.T) {
 
 	app := NewApp()
 	app.Ctx = context.Background()
-	app.client = client
+	// Per-cluster client is stored in clusterClients, not in global fields.
 	app.clusterClients = map[string]*clusterClients{
 		capabilitiesClusterID: {
 			meta:              ClusterMeta{ID: capabilitiesClusterID, Name: "ctx"},
@@ -145,7 +145,7 @@ func TestEvaluateCapabilitiesDeduplicatesRequests(t *testing.T) {
 
 	app := NewApp()
 	app.Ctx = context.Background()
-	app.client = client
+	// Per-cluster client is stored in clusterClients, not in global fields.
 	app.clusterClients = map[string]*clusterClients{
 		capabilitiesClusterID: {
 			meta:              ClusterMeta{ID: capabilitiesClusterID, Name: "ctx"},

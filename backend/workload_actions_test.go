@@ -119,8 +119,8 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			// Per-cluster clients are stored in clusterClients, not in global fields.
 			app := &App{
-				client: tc.object,
 				logger: NewLogger(100),
 			}
 			app.clusterClients = map[string]*clusterClients{
@@ -151,8 +151,9 @@ func TestRestartWorkloadAddsRestartAnnotation(t *testing.T) {
 func TestRestartWorkloadErrors(t *testing.T) {
 	t.Helper()
 
+	// Per-cluster clients are stored in clusterClients, not in global fields.
+	fakeClient := cgofake.NewClientset()
 	app := &App{
-		client: cgofake.NewClientset(),
 		logger: NewLogger(10),
 	}
 	app.clusterClients = map[string]*clusterClients{
@@ -160,7 +161,7 @@ func TestRestartWorkloadErrors(t *testing.T) {
 			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
-			client:            app.client,
+			client:            fakeClient,
 		},
 	}
 
@@ -224,8 +225,8 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 				return true, scale, nil
 			})
 
+			// Per-cluster clients are stored in clusterClients, not in global fields.
 			app := &App{
-				client: client,
 				logger: NewLogger(100),
 			}
 			app.clusterClients = map[string]*clusterClients{
@@ -249,9 +250,9 @@ func TestScaleWorkloadUpdatesScaleSubresource(t *testing.T) {
 func TestScaleWorkloadErrors(t *testing.T) {
 	t.Helper()
 
+	// Per-cluster clients are stored in clusterClients, not in global fields.
 	client := cgofake.NewClientset()
 	app := &App{
-		client: client,
 		logger: NewLogger(10),
 	}
 	app.clusterClients = map[string]*clusterClients{
