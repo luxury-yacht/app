@@ -25,6 +25,7 @@ import { hydrateAppPreferences } from '@/core/settings/appPreferences';
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { ErrorProvider } from '@core/contexts/ErrorContext';
+import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
 
 // App components
 import { AppLayout } from '@ui/layout/AppLayout';
@@ -34,7 +35,6 @@ import { useAppLogsPanel } from '@/components/content/AppLogsPanel/AppLogsPanel'
 import { AppErrorBoundary } from '@/components/errors';
 
 // Custom hooks
-import { useAuthErrorHandler } from '@/hooks/useAuthErrorHandler';
 import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';
 import { useWailsRuntimeEvents, useConnectionStatusListener } from '@/hooks/useWailsRuntimeEvents';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
@@ -74,10 +74,6 @@ function AppContent() {
 
   // Handle backend errors from Wails runtime
   useBackendErrorHandler();
-
-  // Handle authentication state changes from backend.
-  // Pass selectedClusterId for per-cluster auth state tracking.
-  useAuthErrorHandler(selectedClusterId);
 
   // Handle connection status events from Wails runtime
   useConnectionStatusListener();
@@ -170,13 +166,15 @@ function App() {
       <ErrorProvider>
         <KeyboardProvider>
           <ConnectionStatusProvider>
-            <div className="app-window-frame">
-              <div className="app">
-                <KubernetesProvider>
-                  <AppContent />
-                </KubernetesProvider>
+            <AuthErrorProvider>
+              <div className="app-window-frame">
+                <div className="app">
+                  <KubernetesProvider>
+                    <AppContent />
+                  </KubernetesProvider>
+                </div>
               </div>
-            </div>
+            </AuthErrorProvider>
           </ConnectionStatusProvider>
         </KeyboardProvider>
       </ErrorProvider>

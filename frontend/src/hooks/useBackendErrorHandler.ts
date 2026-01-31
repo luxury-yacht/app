@@ -33,6 +33,16 @@ export function useBackendErrorHandler(): void {
       }
 
       const message = getBackendErrorMessage(payload);
+
+      // Suppress auth-related errors that are already shown in the AuthFailureOverlay.
+      // These errors occur when requesting data for clusters with auth failures.
+      if (
+        message.includes('no active clusters available') ||
+        message.includes('Error loading SSO Token')
+      ) {
+        return;
+      }
+
       const key = getBackendErrorKey(payload);
 
       // Deduplicate errors

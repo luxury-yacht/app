@@ -301,7 +301,13 @@ class ErrorHandler {
     // Log the error
     this.logError(errorDetails);
 
-    const suppressNotification = category === ErrorCategory.PERMISSION;
+    // Suppress notifications for auth-related errors that are handled by the AuthFailureOverlay.
+    const isAuthOverlayError =
+      errorString.includes('no active clusters available') ||
+      errorString.includes('Error loading SSO Token') ||
+      errorString.includes('auth failed:');
+
+    const suppressNotification = category === ErrorCategory.PERMISSION || isAuthOverlayError;
 
     if (!suppressNotification) {
       // Store in history

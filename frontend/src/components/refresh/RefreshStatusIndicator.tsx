@@ -4,13 +4,15 @@
  * UI component for RefreshStatusIndicator.
  * Handles rendering and interactions for the shared components.
  * Shows status for the active cluster only using per-cluster health and auth state.
+ *
+ * When auth has failed, clicking the indicator triggers retry for the active cluster.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
-import { useAuthErrorHandler } from '@/hooks/useAuthErrorHandler';
+import { useAuthError, useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { eventBus } from '@/core/events';
 import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
@@ -25,7 +27,8 @@ const RefreshStatusIndicator: React.FC = () => {
 
   // Use per-cluster health and auth state instead of global connection status.
   const { getActiveClusterHealth } = useClusterHealthListener(selectedClusterId);
-  const { getActiveClusterAuthState } = useAuthErrorHandler(selectedClusterId);
+  const { handleRetry } = useAuthError();
+  const authState = useActiveClusterAuthState(selectedClusterId);
 
   const metricsInfo = useClusterMetricsAvailability();
 
@@ -55,8 +58,7 @@ const RefreshStatusIndicator: React.FC = () => {
       ? 'Metrics API unavailable'
       : 'Metrics are up to date';
 
-  // Get current auth state and health for the active cluster.
-  const authState = getActiveClusterAuthState();
+  // Get current health for the active cluster.
   const health = getActiveClusterHealth();
 
   // Disable manual refresh when auth has error OR health is degraded.
@@ -109,17 +111,42 @@ const RefreshStatusIndicator: React.FC = () => {
     const pieces = [
       getStatusLabel(),
       authState.hasError && authState.reason ? authState.reason : undefined,
-      manualRefreshDisabled ? 'Manual refresh unavailable' : 'Click to refresh now (⌘R)',
+      // When auth has failed, clicking retries; otherwise it refreshes
+      authState.hasError
+        ? 'Click to retry authentication'
+        : manualRefreshDisabled
+          ? 'Manual refresh unavailable'
+          : 'Click to refresh now (⌘R)',
     ];
     return pieces.filter(Boolean).join(' • ');
   };
 
+  /**
+   * Handle retry auth for the active cluster.
+   * Called when auth has failed and user clicks the status indicator.
+   */
+  const handleRetryAuth = useCallback(() => {
+    if (!selectedClusterId) {
+      return;
+    }
+    void handleRetry(selectedClusterId);
+  }, [selectedClusterId, handleRetry]);
+
   const handleClick = () => {
+    // When auth has failed, clicking triggers retry instead of refresh
+    if (authState.hasError && !authState.isRecovering) {
+      handleRetryAuth();
+      return;
+    }
+    // Don't allow manual refresh when recovering or connection restricted
     if (manualRefreshDisabled) {
       return;
     }
     void refreshOrchestrator.triggerManualRefreshForContext();
   };
+
+  // Show pointer cursor when auth failed (for retry) or when refresh is available
+  const isClickable = (authState.hasError && !authState.isRecovering) || !manualRefreshDisabled;
 
   return (
     <div className="refresh-status-wrapper">
@@ -127,7 +154,7 @@ const RefreshStatusIndicator: React.FC = () => {
         className={`refresh-status-indicator ${getStatusClass()}`}
         title={getTooltipText()}
         onClick={handleClick}
-        style={{ cursor: manualRefreshDisabled ? 'default' : 'pointer' }}
+        style={{ cursor: isClickable ? 'pointer' : 'default' }}
       >
         <div className="status-dot"></div>
       </div>

@@ -1,11 +1,10 @@
 /**
- * frontend/src/hooks/useAuthErrorHandler.ts
+ * frontend/src/core/contexts/AuthErrorContext.tsx
  *
- * Hook for handling authentication state changes from the backend.
- * Subscribes to cluster:auth:failed, cluster:auth:recovering, and cluster:auth:recovered
- * events from the Wails runtime and tracks auth state per cluster.
+ * Context for sharing authentication error state across the application.
+ * Subscribes to backend auth events and provides auth state to all consumers.
  */
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 
 /**
  * Auth state for a single cluster.
@@ -41,51 +40,88 @@ interface AuthEventPayload {
 }
 
 /**
- * Return type for the useAuthErrorHandler hook.
+ * Context value for auth error state.
  */
-export interface UseAuthErrorHandlerResult {
+export interface AuthErrorContextValue {
   /** Map of cluster IDs to their auth state. */
   clusterAuthErrors: Map<string, ClusterAuthState>;
   /** Get auth state for a specific cluster. Returns default state if not found. */
   getClusterAuthState: (clusterId: string) => ClusterAuthState;
-  /** Get auth state for the active cluster. Returns default state if no active cluster. */
-  getActiveClusterAuthState: () => ClusterAuthState;
   /** Retry authentication for a specific cluster. */
   handleRetry: (clusterId: string) => Promise<void>;
 }
 
+const AuthErrorContext = createContext<AuthErrorContextValue | null>(null);
+
 /**
- * Subscribes to backend authentication events and tracks auth state per cluster.
- * When auth fails, records the error for that specific cluster.
- * When auth recovers, clears the error for that cluster.
- *
- * @param activeClusterId - The currently active cluster ID for getActiveClusterAuthState()
- * @returns Object with clusterAuthErrors Map and accessor functions
+ * Provider component that subscribes to backend auth events and shares state.
  */
-export function useAuthErrorHandler(activeClusterId: string = ''): UseAuthErrorHandlerResult {
-  // Track auth errors per cluster instead of a single global boolean.
+export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Track auth errors per cluster.
   const [clusterAuthErrors, setClusterAuthErrors] = useState<Map<string, ClusterAuthState>>(
     () => new Map()
   );
 
   /**
    * Retry authentication for a specific cluster.
-   * Calls the backend RetryClusterAuth method for the given cluster ID.
-   *
-   * @param clusterId - The ID of the cluster to retry authentication for
    */
   const handleRetry = useCallback(async (clusterId: string): Promise<void> => {
     if (!clusterId) {
-      console.warn('[AuthErrorHandler] handleRetry called without clusterId');
+      console.warn('[AuthErrorContext] handleRetry called without clusterId');
       return;
     }
 
     try {
-      const module = await import('../../wailsjs/go/backend/App');
+      const module = await import('../../../wailsjs/go/backend/App');
       await module.RetryClusterAuth(clusterId);
     } catch (err) {
-      console.error(`[AuthErrorHandler] RetryClusterAuth failed for ${clusterId}:`, err);
+      console.error(`[AuthErrorContext] RetryClusterAuth failed for ${clusterId}:`, err);
     }
+  }, []);
+
+  // Fetch initial auth state from backend on mount.
+  // This catches any auth failures that occurred before React was loaded.
+  useEffect(() => {
+    const fetchInitialState = async () => {
+      try {
+        const module = await import('../../../wailsjs/go/backend/App');
+        const states = await module.GetAllClusterAuthStates();
+        if (!states) return;
+
+        const initialErrors = new Map<string, ClusterAuthState>();
+        for (const [clusterId, stateInfo] of Object.entries(states)) {
+          const state = stateInfo.state;
+          const reason = stateInfo.reason || '';
+          const clusterName = stateInfo.clusterName || clusterId;
+
+          // Only add clusters that are in error or recovering state
+          if (state === 'recovering') {
+            initialErrors.set(clusterId, {
+              hasError: true,
+              reason: reason || 'Authentication failed',
+              clusterName,
+              isRecovering: true,
+            });
+          } else if (state === 'invalid') {
+            initialErrors.set(clusterId, {
+              hasError: true,
+              reason: reason || 'Authentication failed',
+              clusterName,
+              isRecovering: false,
+            });
+          }
+        }
+
+        if (initialErrors.size > 0) {
+          console.log('[AuthErrorContext] Loaded initial auth errors:', initialErrors);
+          setClusterAuthErrors(initialErrors);
+        }
+      } catch (err) {
+        console.error('[AuthErrorContext] Failed to fetch initial auth state:', err);
+      }
+    };
+
+    void fetchInitialState();
   }, []);
 
   useEffect(() => {
@@ -96,20 +132,16 @@ export function useAuthErrorHandler(activeClusterId: string = ''): UseAuthErrorH
 
     // Handler for auth failure events.
     const handleAuthFailed = (...args: unknown[]) => {
-      console.log('[AuthErrorHandler] Received cluster:auth:failed', args);
+      console.log('[AuthErrorContext] Received cluster:auth:failed', args);
 
-      // Parse the payload from the backend.
       const payload = args[0] as AuthEventPayload | undefined;
       if (!payload?.clusterId) {
-        console.warn('[AuthErrorHandler] Received auth:failed without clusterId', args);
+        console.warn('[AuthErrorContext] Received auth:failed without clusterId', args);
         return;
       }
 
       const { clusterId, clusterName, reason } = payload;
 
-      // Update the auth state for this specific cluster.
-      // The AuthFailureOverlay component will display the error and retry button,
-      // so we don't need to show a toast notification here.
       setClusterAuthErrors((prev) => {
         const next = new Map(prev);
         next.set(clusterId, {
@@ -124,18 +156,16 @@ export function useAuthErrorHandler(activeClusterId: string = ''): UseAuthErrorH
 
     // Handler for auth recovering events (auth is being retried).
     const handleAuthRecovering = (...args: unknown[]) => {
-      console.log('[AuthErrorHandler] Received cluster:auth:recovering', args);
+      console.log('[AuthErrorContext] Received cluster:auth:recovering', args);
 
-      // Parse the payload from the backend.
       const payload = args[0] as AuthEventPayload | undefined;
       if (!payload?.clusterId) {
-        console.warn('[AuthErrorHandler] Received auth:recovering without clusterId', args);
+        console.warn('[AuthErrorContext] Received auth:recovering without clusterId', args);
         return;
       }
 
       const { clusterId, clusterName, reason } = payload;
 
-      // Update the auth state to show recovery in progress.
       setClusterAuthErrors((prev) => {
         const next = new Map(prev);
         const existing = prev.get(clusterId);
@@ -151,18 +181,16 @@ export function useAuthErrorHandler(activeClusterId: string = ''): UseAuthErrorH
 
     // Handler for auth recovery events.
     const handleAuthRecovered = (...args: unknown[]) => {
-      console.log('[AuthErrorHandler] Received cluster:auth:recovered', args);
+      console.log('[AuthErrorContext] Received cluster:auth:recovered', args);
 
-      // Parse the payload from the backend.
       const payload = args[0] as AuthEventPayload | undefined;
       if (!payload?.clusterId) {
-        console.warn('[AuthErrorHandler] Received auth:recovered without clusterId', args);
+        console.warn('[AuthErrorContext] Received auth:recovered without clusterId', args);
         return;
       }
 
       const { clusterId } = payload;
 
-      // Remove the cluster from the errors map.
       setClusterAuthErrors((prev) => {
         const next = new Map(prev);
         next.delete(clusterId);
@@ -180,7 +208,7 @@ export function useAuthErrorHandler(activeClusterId: string = ''): UseAuthErrorH
       runtime.EventsOff?.('cluster:auth:recovering');
       runtime.EventsOff?.('cluster:auth:recovered');
     };
-  }, [handleRetry]);
+  }, []);
 
   // Accessor to get auth state for a specific cluster.
   const getClusterAuthState = useCallback(
@@ -190,24 +218,37 @@ export function useAuthErrorHandler(activeClusterId: string = ''): UseAuthErrorH
     [clusterAuthErrors]
   );
 
-  // Accessor to get auth state for the active cluster.
-  const getActiveClusterAuthState = useCallback((): ClusterAuthState => {
-    if (!activeClusterId) {
-      return DEFAULT_AUTH_STATE;
-    }
-    return getClusterAuthState(activeClusterId);
-  }, [activeClusterId, getClusterAuthState]);
-
-  // Memoize the result object to prevent unnecessary re-renders.
-  const result = useMemo(
+  const value = useMemo(
     () => ({
       clusterAuthErrors,
       getClusterAuthState,
-      getActiveClusterAuthState,
       handleRetry,
     }),
-    [clusterAuthErrors, getClusterAuthState, getActiveClusterAuthState, handleRetry]
+    [clusterAuthErrors, getClusterAuthState, handleRetry]
   );
 
-  return result;
+  return <AuthErrorContext.Provider value={value}>{children}</AuthErrorContext.Provider>;
+};
+
+/**
+ * Hook to access auth error context.
+ * Must be used within an AuthErrorProvider.
+ */
+export function useAuthError(): AuthErrorContextValue {
+  const context = useContext(AuthErrorContext);
+  if (!context) {
+    throw new Error('useAuthError must be used within an AuthErrorProvider');
+  }
+  return context;
+}
+
+/**
+ * Hook to get auth state for the active cluster.
+ */
+export function useActiveClusterAuthState(activeClusterId: string): ClusterAuthState {
+  const { getClusterAuthState } = useAuthError();
+  return useMemo(
+    () => (activeClusterId ? getClusterAuthState(activeClusterId) : DEFAULT_AUTH_STATE),
+    [activeClusterId, getClusterAuthState]
+  );
 }
