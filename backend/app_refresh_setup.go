@@ -10,7 +10,6 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -206,21 +205,12 @@ func (a *App) buildRefreshMux(
 		return nil, nil, errors.New("no subsystems available for mux")
 	}
 
-	// Use first available subsystem for shared telemetry and registry.
-	// Any cluster works since these are used for aggregate handling.
+	// Use first available subsystem for shared telemetry (aggregate diagnostics).
 	var sharedTelemetry *telemetry.Recorder
-	var sharedRegistry *domain.Registry
 	for _, id := range clusterOrder {
-		if sub := subsystems[id]; sub != nil {
-			if sharedTelemetry == nil && sub.Telemetry != nil {
-				sharedTelemetry = sub.Telemetry
-			}
-			if sharedRegistry == nil && sub.Registry != nil {
-				sharedRegistry = sub.Registry
-			}
-			if sharedTelemetry != nil && sharedRegistry != nil {
-				break
-			}
+		if sub := subsystems[id]; sub != nil && sub.Telemetry != nil {
+			sharedTelemetry = sub.Telemetry
+			break
 		}
 	}
 
@@ -243,7 +233,6 @@ func (a *App) buildRefreshMux(
 	}
 
 	mux := system.BuildRefreshMux(system.MuxConfig{
-		Registry:        sharedRegistry,
 		SnapshotService: aggregateService,
 		ManualQueue:     aggregateQueue,
 		Telemetry:       sharedTelemetry,

@@ -60,24 +60,26 @@ Date: 2026-01-31
 
 ---
 
-### Issue 2: Aggregate mux uses single cluster registry/telemetry
+### Issue 2: Aggregate mux uses single cluster registry/telemetry ✅ FIXED
 **Priority:** Low | **Effort:** Medium | **Risk:** Medium
 
 **Problem:** First cluster's registry determines domain availability for all clusters.
 
-**Plan:**
-1. For registry: Create a merged registry that unions domain registrations from all clusters, or check per-cluster registry when routing requests
-2. For telemetry: See Issue 3 - telemetry should be per-request, not per-mux
+**Analysis:** The `registry` field in `api.Server` was dead code - stored but never accessed. The actual snapshot building correctly uses per-cluster registries via each cluster's `SnapshotService`.
 
-**Option A (simpler):** Accept current behavior with documentation - registries are typically identical across clusters since they're code-defined, not runtime-configured.
+**Fix applied:**
+1. Removed dead `registry` field from `api.Server`
+2. Removed `Registry` from `MuxConfig` struct
+3. Removed `sharedRegistry` selection logic from `buildRefreshMux()`
+4. Cleaned up unused imports and test code
 
-**Option B (complete fix):**
-- Create `AggregateRegistry` that wraps per-cluster registries
-- Route domain lookups to the appropriate cluster's registry based on scope
-
-**Files:**
-- `backend/app_refresh_setup.go` - buildRefreshMux()
-- `backend/refresh/domain/registry.go` - potentially add AggregateRegistry
+**Files changed:**
+- `backend/refresh/api/server.go` - removed registry field and parameter
+- `backend/refresh/system/routes.go` - removed Registry from MuxConfig
+- `backend/refresh/system/manager.go` - removed Registry from MuxConfig usage
+- `backend/app_refresh_setup.go` - removed sharedRegistry logic
+- `backend/refresh/api/server_test.go` - removed dead registry code
+- `backend/app_lifecycle_test.go` - removed Registry field
 
 ---
 
@@ -165,5 +167,5 @@ Date: 2026-01-31
 2. ~~**Issue 1** (Medium priority, Low effort) - Removes footgun, low risk~~ ✅ DONE
 3. ~~**Issue 5** (Medium priority, Low effort) - Improves debugging, prevents collisions~~ ✅ DONE
 4. ~~**Issue 6** (Documentation only) - No code changes needed~~ ✅ DONE
-5. **Issue 2** (Low priority) - Consider Option A (accept with docs)
+5. ~~**Issue 2** (Low priority) - Consider Option A (accept with docs)~~ ✅ DONE
 6. ~~**Issue 3** (Low priority) - Consider accepting current behavior~~ ✅ DONE

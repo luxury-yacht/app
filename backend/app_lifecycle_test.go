@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
@@ -100,7 +99,6 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 			Manager:   manager,
 			Handler:   handler,
 			Telemetry: telemetry.NewRecorder(),
-			Registry:  domain.New(), // Required for aggregate mux building
 		}, nil
 	}
 	defer func() { newRefreshSubsystemWithServices = original }()

@@ -12,7 +12,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/luxury-yacht/app/backend/refresh"
-	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
@@ -29,7 +28,6 @@ var (
 
 // Server exposes HTTP endpoints for snapshot retrieval and manual refresh.
 type Server struct {
-	registry  *domain.Registry
 	snapshots refresh.SnapshotService
 	queue     refresh.ManualQueue
 	telemetry *telemetry.Recorder
@@ -42,14 +40,12 @@ type metricsController interface {
 
 // NewServer constructs an API server instance.
 func NewServer(
-	reg *domain.Registry,
 	snapshots refresh.SnapshotService,
 	queue refresh.ManualQueue,
 	recorder *telemetry.Recorder,
 	metrics metricsController,
 ) *Server {
 	return &Server{
-		registry:  reg,
 		snapshots: snapshots,
 		queue:     queue,
 		telemetry: recorder,
