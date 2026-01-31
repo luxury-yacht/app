@@ -268,7 +268,7 @@ func TestConcurrentRequestsBlockedDuringRecovery(t *testing.T) {
 
 	manager := New(Config{
 		MaxAttempts:     4,
-		BackoffSchedule: []time.Duration{100 * time.Millisecond, 100 * time.Millisecond, 100 * time.Millisecond, 100 * time.Millisecond},
+		BackoffSchedule: []time.Duration{time.Second, time.Second, time.Second, time.Second},
 		RecoveryTest: func() error {
 			select {
 			case <-recoveryDone:

@@ -7,7 +7,11 @@
  */
 
 import React, { useCallback } from 'react';
-import { useAuthError, useActiveClusterAuthState, ClusterAuthState } from '@/core/contexts/AuthErrorContext';
+import {
+  useAuthError,
+  useActiveClusterAuthState,
+  ClusterAuthState,
+} from '@/core/contexts/AuthErrorContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import './AuthFailureOverlay.css';
 
