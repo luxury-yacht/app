@@ -142,10 +142,31 @@ func (a *App) buildClusterClients(selection kubeconfigSelection, meta ClusterMet
 		metrics = metricsClient
 	}
 
-	// Configure the recovery test now that we have the clientset.
-	// This allows the auth manager to test connectivity for THIS specific cluster.
+	// Configure the recovery test to rebuild credentials from kubeconfig.
+	// We can't use the existing clientset because it caches stale credentials.
+	// By rebuilding from the kubeconfig, we pick up refreshed SSO tokens.
 	clusterAuthMgr.SetRecoveryTest(func() error {
-		_, err := clientset.Discovery().ServerVersion()
+		// Rebuild rest config from kubeconfig to get fresh credentials
+		loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+		loadingRules.ExplicitPath = selection.Path
+		overrides := &clientcmd.ConfigOverrides{}
+		if selection.Context != "" {
+			overrides.CurrentContext = selection.Context
+		}
+		clientConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
+		freshConfig, err := clientConfig.ClientConfig()
+		if err != nil {
+			return fmt.Errorf("failed to load kubeconfig: %w", err)
+		}
+
+		// Build a fresh clientset with the new credentials
+		freshClient, err := kubernetes.NewForConfig(freshConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create client: %w", err)
+		}
+
+		// Test connectivity with fresh credentials
+		_, err = freshClient.Discovery().ServerVersion()
 		return err
 	})
 
@@ -194,6 +215,9 @@ func (a *App) createClusterAuthManager(meta ClusterMeta) *authstate.Manager {
 		BackoffSchedule: []time.Duration{0, 5 * time.Second, 10 * time.Second, 15 * time.Second},
 		OnStateChange: func(state authstate.State, reason string) {
 			a.handleClusterAuthStateChange(meta.ID, state, reason)
+		},
+		OnRecoveryProgress: func(progress authstate.RecoveryProgress) {
+			a.handleClusterAuthRecoveryProgress(meta.ID, progress)
 		},
 		// RecoveryTest is set later once we have the clientset
 	})

@@ -131,8 +131,9 @@ func (a *App) teardownClusterSubsystem(clusterID string) {
 	}
 }
 
-// rebuildClusterSubsystem rebuilds the refresh subsystem for a specific cluster
-// after auth recovery.
+// rebuildClusterSubsystem rebuilds the cluster clients and refresh subsystem
+// for a specific cluster after auth recovery. This rebuilds everything with
+// fresh credentials from the kubeconfig to pick up refreshed SSO tokens.
 func (a *App) rebuildClusterSubsystem(clusterID string) {
 	if a == nil || clusterID == "" {
 		return
@@ -142,9 +143,9 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		a.logger.Info(fmt.Sprintf("Rebuilding subsystem for cluster %s", clusterID), "Auth")
 	}
 
-	// Get the cluster clients
-	clients := a.clusterClientsForID(clusterID)
-	if clients == nil {
+	// Get the old cluster clients to preserve the auth manager
+	oldClients := a.clusterClientsForID(clusterID)
+	if oldClients == nil {
 		if a.logger != nil {
 			a.logger.Warn(fmt.Sprintf("Cannot rebuild subsystem for cluster %s: clients not found", clusterID), "Auth")
 		}
@@ -176,13 +177,37 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 		return
 	}
 
-	// Build the subsystem
-	subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, clients.meta)
+	// Rebuild the cluster clients with fresh credentials from kubeconfig.
+	// This picks up refreshed SSO tokens that weren't available when the
+	// original clients were created.
+	newClients, err := a.buildClusterClients(selection, oldClients.meta)
+	if err != nil {
+		if a.logger != nil {
+			a.logger.Error(fmt.Sprintf("Failed to rebuild clients for cluster %s: %v", clusterID, err), "Auth")
+		}
+		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("client rebuild failed: %v", err))
+		return
+	}
+
+	// Preserve the auth manager from the old clients (it's already in valid state)
+	// and shutdown the new one we just created
+	if newClients.authManager != nil {
+		newClients.authManager.Shutdown()
+	}
+	newClients.authManager = oldClients.authManager
+	newClients.authFailedOnInit = false // Clear the init failure flag
+
+	// Update the cluster clients map
+	a.clusterClientsMu.Lock()
+	a.clusterClients[clusterID] = newClients
+	a.clusterClientsMu.Unlock()
+
+	// Build the subsystem with the new clients
+	subsystem, err := a.buildRefreshSubsystemForSelection(selection, newClients, newClients.meta)
 	if err != nil {
 		if a.logger != nil {
 			a.logger.Error(fmt.Sprintf("Failed to rebuild subsystem for cluster %s: %v", clusterID, err), "Auth")
 		}
-		// Capture the rebuild failure with cluster context for error enhancement
 		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("subsystem rebuild failed: %v", err))
 		return
 	}
@@ -198,6 +223,30 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 
 	// Store the subsystem
 	a.refreshSubsystems[clusterID] = subsystem
+
+	// Build cluster order from current subsystems
+	clusterOrder := make([]string, 0, len(a.refreshSubsystems))
+	for id := range a.refreshSubsystems {
+		clusterOrder = append(clusterOrder, id)
+	}
+
+	// Update the aggregate handlers so they know about the new subsystem
+	if a.refreshAggregates != nil {
+		if err := a.refreshAggregates.Update(clusterOrder, a.refreshSubsystems); err != nil {
+			if a.logger != nil {
+				a.logger.Error(fmt.Sprintf("Failed to update aggregates for cluster %s: %v", clusterID, err), "Auth")
+			}
+		}
+	}
+
+	// Start the object catalog for this cluster
+	target := catalogTarget{
+		selection: selection,
+		meta:      newClients.meta,
+	}
+	if err := a.startObjectCatalogForTarget(target); err != nil && a.logger != nil {
+		a.logger.Warn(fmt.Sprintf("Object catalog skipped for %s: %v", clusterID, err), "Auth")
+	}
 
 	if a.logger != nil {
 		a.logger.Info(fmt.Sprintf("Successfully rebuilt subsystem for cluster %s", clusterID), "Auth")
@@ -235,7 +284,7 @@ func (a *App) GetClusterAuthState(clusterID string) (string, string) {
 }
 
 // GetAllClusterAuthStates returns the auth state for all clusters.
-func (a *App) GetAllClusterAuthStates() map[string]map[string]string {
+func (a *App) GetAllClusterAuthStates() map[string]map[string]any {
 	if a == nil {
 		return nil
 	}
@@ -243,18 +292,45 @@ func (a *App) GetAllClusterAuthStates() map[string]map[string]string {
 	a.clusterClientsMu.Lock()
 	defer a.clusterClientsMu.Unlock()
 
-	states := make(map[string]map[string]string)
+	states := make(map[string]map[string]any)
 	for id, clients := range a.clusterClients {
 		if clients == nil || clients.authManager == nil {
-			states[id] = map[string]string{"state": "unknown", "reason": ""}
+			states[id] = map[string]any{"state": "unknown", "reason": ""}
 			continue
 		}
 		state, reason := clients.authManager.State()
-		states[id] = map[string]string{
-			"state":       state.String(),
-			"reason":      reason,
-			"clusterName": clients.meta.Name,
+		info := clients.authManager.RecoveryInfo()
+		states[id] = map[string]any{
+			"state":             state.String(),
+			"reason":            reason,
+			"clusterName":       clients.meta.Name,
+			"currentAttempt":    info.CurrentAttempt,
+			"maxAttempts":       info.MaxAttempts,
+			"secondsUntilRetry": info.SecondsUntilRetry,
 		}
 	}
 	return states
+}
+
+// handleClusterAuthRecoveryProgress handles recovery progress updates for a specific cluster.
+// This is called periodically during recovery to allow the frontend to show countdowns.
+func (a *App) handleClusterAuthRecoveryProgress(clusterID string, progress authstate.RecoveryProgress) {
+	if a == nil || clusterID == "" {
+		return
+	}
+
+	// Get cluster name for better logging/events
+	clusterName := clusterID
+	if clients := a.clusterClientsForID(clusterID); clients != nil {
+		clusterName = clients.meta.Name
+	}
+
+	// Emit per-cluster progress event for the frontend
+	runtime.EventsEmit(a.Ctx, "cluster:auth:progress", map[string]any{
+		"clusterId":         clusterID,
+		"clusterName":       clusterName,
+		"currentAttempt":    progress.CurrentAttempt,
+		"maxAttempts":       progress.MaxAttempts,
+		"secondsUntilRetry": progress.SecondsUntilRetry,
+	})
 }

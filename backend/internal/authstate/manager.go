@@ -13,6 +13,17 @@ const DefaultMaxAttempts = 4
 // The first attempt happens immediately, then waits increase.
 var DefaultBackoffSchedule = []time.Duration{0, 5 * time.Second, 10 * time.Second, 15 * time.Second}
 
+// RecoveryProgress contains information about the current recovery attempt.
+type RecoveryProgress struct {
+	// CurrentAttempt is the current attempt number (1-based).
+	CurrentAttempt int
+	// MaxAttempts is the total number of attempts that will be made.
+	MaxAttempts int
+	// SecondsUntilRetry is the number of seconds until the next retry attempt.
+	// This is 0 when a retry is in progress.
+	SecondsUntilRetry int
+}
+
 // Config holds the configuration for the auth state Manager.
 type Config struct {
 	// MaxAttempts is the number of recovery attempts before giving up.
@@ -28,6 +39,10 @@ type Config struct {
 	// OnStateChange is called whenever the auth state changes.
 	// The reason is provided for failure states.
 	OnStateChange func(state State, reason string)
+
+	// OnRecoveryProgress is called periodically during recovery to report progress.
+	// This allows the UI to show countdown timers and attempt counts.
+	OnRecoveryProgress func(progress RecoveryProgress)
 
 	// RecoveryTest is a function that tests whether authentication is working.
 	// It should return nil if auth is valid, an error otherwise.
@@ -45,6 +60,12 @@ type Manager struct {
 
 	// failureReason stores the reason for the current failure.
 	failureReason string
+
+	// currentAttempt tracks the current recovery attempt (1-based, 0 if not recovering).
+	currentAttempt int
+
+	// secondsUntilRetry tracks seconds until next retry (0 if retry in progress or not recovering).
+	secondsUntilRetry int
 
 	// config holds the manager configuration.
 	config Config
@@ -78,10 +99,11 @@ func New(cfg Config) *Manager {
 	return &Manager{
 		state:  StateValid,
 		config: Config{
-			MaxAttempts:     cfg.MaxAttempts,
-			BackoffSchedule: backoff,
-			OnStateChange:   cfg.OnStateChange,
-			RecoveryTest:    cfg.RecoveryTest,
+			MaxAttempts:        cfg.MaxAttempts,
+			BackoffSchedule:    backoff,
+			OnStateChange:      cfg.OnStateChange,
+			OnRecoveryProgress: cfg.OnRecoveryProgress,
+			RecoveryTest:       cfg.RecoveryTest,
 		},
 		ctx:    ctx,
 		cancel: cancel,
@@ -141,19 +163,29 @@ func (m *Manager) ReportSuccess() {
 }
 
 // TriggerRetry manually triggers a recovery attempt.
-// This is useful when in StateInvalid and the user wants to retry.
-// If not in StateInvalid, this call is ignored.
+// If in StateInvalid, starts a new recovery cycle.
+// If in StateRecovering, cancels the current recovery and starts fresh immediately.
+// If in StateValid, this call is ignored.
 func (m *Manager) TriggerRetry() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Only trigger retry if in invalid state
-	if m.state != StateInvalid {
+	// Ignore if already valid
+	if m.state == StateValid {
 		return
+	}
+
+	// Cancel any ongoing recovery before starting fresh
+	if m.recoveryCancel != nil {
+		m.recoveryCancel()
+		m.recoveryCancel = nil
 	}
 
 	reason := m.failureReason
 	if m.config.MaxAttempts > 0 {
+		// Reset attempt tracking for fresh start
+		m.currentAttempt = 0
+		m.secondsUntilRetry = 0
 		m.setState(StateRecovering, reason)
 		m.startRecoveryLocked()
 	}
@@ -220,12 +252,22 @@ func (m *Manager) runRecovery(ctx context.Context) {
 		// Get backoff delay for this attempt
 		delay := m.getBackoffDelay(attempt)
 		if delay > 0 {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(delay):
+			// Emit progress every second during the countdown
+			remaining := int(delay.Seconds())
+			for remaining > 0 {
+				m.emitProgress(attempt+1, remaining)
+
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(time.Second):
+					remaining--
+				}
 			}
 		}
+
+		// Emit progress with 0 seconds remaining (retry in progress)
+		m.emitProgress(attempt+1, 0)
 
 		// Check if cancelled before testing
 		select {
@@ -253,6 +295,38 @@ func (m *Manager) runRecovery(ctx context.Context) {
 		m.setState(StateInvalid, "Recovery failed after maximum attempts. Please re-authenticate.")
 	}
 	m.mu.Unlock()
+}
+
+// emitProgress updates tracked progress and calls the OnRecoveryProgress callback if set.
+func (m *Manager) emitProgress(currentAttempt, secondsUntilRetry int) {
+	m.mu.Lock()
+	m.currentAttempt = currentAttempt
+	m.secondsUntilRetry = secondsUntilRetry
+	m.mu.Unlock()
+
+	if m.config.OnRecoveryProgress == nil {
+		return
+	}
+	m.config.OnRecoveryProgress(RecoveryProgress{
+		CurrentAttempt:    currentAttempt,
+		MaxAttempts:       m.config.MaxAttempts,
+		SecondsUntilRetry: secondsUntilRetry,
+	})
+}
+
+// RecoveryInfo returns the current recovery progress.
+// Returns zero values if not in recovery state.
+func (m *Manager) RecoveryInfo() RecoveryProgress {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.state != StateRecovering {
+		return RecoveryProgress{}
+	}
+	return RecoveryProgress{
+		CurrentAttempt:    m.currentAttempt,
+		MaxAttempts:       m.config.MaxAttempts,
+		SecondsUntilRetry: m.secondsUntilRetry,
+	}
 }
 
 // getBackoffDelay returns the delay for the given attempt index.

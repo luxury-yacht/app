@@ -45,7 +45,7 @@ export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Prom
 
 export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;
 
-export function GetAllClusterAuthStates():Promise<Record<string, Record<string, string>>>;
+export function GetAllClusterAuthStates():Promise<Record<string, Record<string, any>>>;
 
 export function GetAppInfo():Promise<backend.AppInfo>;
 

@@ -18,6 +18,12 @@ export interface ClusterAuthState {
   clusterName: string;
   /** Whether auth recovery is in progress. */
   isRecovering: boolean;
+  /** Current retry attempt number (1-based). */
+  currentAttempt: number;
+  /** Maximum number of retry attempts. */
+  maxAttempts: number;
+  /** Seconds until next retry attempt (0 if retry in progress). */
+  secondsUntilRetry: number;
 }
 
 /**
@@ -28,6 +34,9 @@ const DEFAULT_AUTH_STATE: ClusterAuthState = {
   reason: '',
   clusterName: '',
   isRecovering: false,
+  currentAttempt: 0,
+  maxAttempts: 0,
+  secondsUntilRetry: 0,
 };
 
 /**
@@ -37,6 +46,17 @@ interface AuthEventPayload {
   clusterId?: string;
   clusterName?: string;
   reason?: string;
+}
+
+/**
+ * Payload structure sent by the backend for auth progress events.
+ */
+interface AuthProgressPayload {
+  clusterId?: string;
+  clusterName?: string;
+  currentAttempt?: number;
+  maxAttempts?: number;
+  secondsUntilRetry?: number;
 }
 
 /**
@@ -90,9 +110,12 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
         const initialErrors = new Map<string, ClusterAuthState>();
         for (const [clusterId, stateInfo] of Object.entries(states)) {
-          const state = stateInfo.state;
-          const reason = stateInfo.reason || '';
-          const clusterName = stateInfo.clusterName || clusterId;
+          const state = stateInfo.state as string;
+          const reason = (stateInfo.reason as string) || '';
+          const clusterName = (stateInfo.clusterName as string) || clusterId;
+          const currentAttempt = (stateInfo.currentAttempt as number) || 0;
+          const maxAttempts = (stateInfo.maxAttempts as number) || 0;
+          const secondsUntilRetry = (stateInfo.secondsUntilRetry as number) || 0;
 
           // Only add clusters that are in error or recovering state
           if (state === 'recovering') {
@@ -101,6 +124,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               reason: reason || 'Authentication failed',
               clusterName,
               isRecovering: true,
+              currentAttempt,
+              maxAttempts,
+              secondsUntilRetry,
             });
           } else if (state === 'invalid') {
             initialErrors.set(clusterId, {
@@ -108,6 +134,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
               reason: reason || 'Authentication failed',
               clusterName,
               isRecovering: false,
+              currentAttempt: 0,
+              maxAttempts: 0,
+              secondsUntilRetry: 0,
             });
           }
         }
@@ -149,6 +178,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           reason: reason || 'Authentication failed',
           clusterName: clusterName || clusterId,
           isRecovering: false,
+          currentAttempt: 0,
+          maxAttempts: 0,
+          secondsUntilRetry: 0,
         });
         return next;
       });
@@ -174,6 +206,36 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           reason: existing?.reason || reason || 'Authentication failed',
           clusterName: existing?.clusterName || clusterName || clusterId,
           isRecovering: true,
+          currentAttempt: existing?.currentAttempt || 1,
+          maxAttempts: existing?.maxAttempts || 4,
+          secondsUntilRetry: existing?.secondsUntilRetry || 0,
+        });
+        return next;
+      });
+    };
+
+    // Handler for auth progress events (countdown updates during recovery).
+    const handleAuthProgress = (...args: unknown[]) => {
+      const payload = args[0] as AuthProgressPayload | undefined;
+      if (!payload?.clusterId) {
+        return;
+      }
+
+      const { clusterId, clusterName, currentAttempt, maxAttempts, secondsUntilRetry } = payload;
+
+      setClusterAuthErrors((prev) => {
+        const existing = prev.get(clusterId);
+        // Only update if we have an existing error for this cluster
+        if (!existing?.hasError) {
+          return prev;
+        }
+        const next = new Map(prev);
+        next.set(clusterId, {
+          ...existing,
+          clusterName: clusterName || existing.clusterName,
+          currentAttempt: currentAttempt ?? existing.currentAttempt,
+          maxAttempts: maxAttempts ?? existing.maxAttempts,
+          secondsUntilRetry: secondsUntilRetry ?? existing.secondsUntilRetry,
         });
         return next;
       });
@@ -202,11 +264,13 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     runtime.EventsOn('cluster:auth:failed', handleAuthFailed);
     runtime.EventsOn('cluster:auth:recovering', handleAuthRecovering);
     runtime.EventsOn('cluster:auth:recovered', handleAuthRecovered);
+    runtime.EventsOn('cluster:auth:progress', handleAuthProgress);
 
     return () => {
       runtime.EventsOff?.('cluster:auth:failed');
       runtime.EventsOff?.('cluster:auth:recovering');
       runtime.EventsOff?.('cluster:auth:recovered');
+      runtime.EventsOff?.('cluster:auth:progress');
     };
   }, []);
 

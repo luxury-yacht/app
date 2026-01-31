@@ -27,6 +27,30 @@ const AuthFailureOverlayContent: React.FC<AuthFailureOverlayContentProps> = ({
   onRetry,
 }) => {
   const clusterName = authState.clusterName || clusterId;
+  const { isRecovering, currentAttempt, maxAttempts, secondsUntilRetry } = authState;
+
+  // Build the retry status message
+  const getRetryStatusMessage = () => {
+    if (!isRecovering) {
+      return 'Auto-retry attempts failed. Click the Retry button when the problem has been resolved.';
+    }
+
+    if (secondsUntilRetry > 0) {
+      return `Retrying in ${secondsUntilRetry} second${secondsUntilRetry !== 1 ? 's' : ''}...`;
+    }
+
+    return 'Retrying now...';
+  };
+
+  // Build the attempt counter text
+  const getAttemptText = () => {
+    if (!isRecovering || maxAttempts === 0) {
+      return null;
+    }
+    return `Attempt ${currentAttempt} of ${maxAttempts}`;
+  };
+
+  const attemptText = getAttemptText();
 
   return (
     <div className="auth-failure-overlay-content">
@@ -34,26 +58,16 @@ const AuthFailureOverlayContent: React.FC<AuthFailureOverlayContentProps> = ({
       <h2 className="auth-failure-title">Authentication Failure</h2>
       <p className="auth-failure-cluster">Cluster: {clusterName}</p>
 
-      {authState.isRecovering ? (
-        <p className="auth-failure-message auth-failure-recovering">
-          Authentication failure. Retrying...
-        </p>
-      ) : (
-        <p className="auth-failure-message">
-          Auto-retry attempts failed. Click the Retry button when the problem has been resolved.
-        </p>
-      )}
+      <p className={`auth-failure-message ${isRecovering ? 'auth-failure-recovering' : ''}`}>
+        {getRetryStatusMessage()}
+      </p>
 
-      {authState.reason && (
-        <p className="auth-failure-reason">{authState.reason}</p>
-      )}
+      {attemptText && <p className="auth-failure-attempts">{attemptText}</p>}
 
-      <button
-        className="auth-failure-retry-button"
-        onClick={onRetry}
-        disabled={authState.isRecovering}
-      >
-        {authState.isRecovering ? 'Retrying...' : 'Retry'}
+      {authState.reason && <p className="auth-failure-reason">{authState.reason}</p>}
+
+      <button className="button generic" onClick={onRetry}>
+        Retry Now
       </button>
     </div>
   );
