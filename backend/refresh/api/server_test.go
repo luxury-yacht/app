@@ -320,7 +320,7 @@ func TestOptionsPreflight(t *testing.T) {
 
 func TestTelemetrySummary(t *testing.T) {
 	recorder := telemetry.NewRecorder()
-	recorder.RecordSnapshot("nodes", "", 50*time.Millisecond, nil, false, 0, nil, 0, 0, 0, true, 50)
+	recorder.RecordSnapshot("nodes", "", "test-cluster", "test", 50*time.Millisecond, nil, false, 0, nil, 0, 0, 0, true, 50)
 	recorder.RecordMetrics(25*time.Millisecond, time.Now(), nil, 0, true)
 
 	reg := domain.New()

@@ -81,23 +81,22 @@ Date: 2026-01-31
 
 ---
 
-### Issue 3: Telemetry recorder bound to single cluster
+### Issue 3: Telemetry recorder bound to single cluster ✅ FIXED
 **Priority:** Low | **Effort:** Medium | **Risk:** Low
 
 **Problem:** Aggregate snapshot telemetry is attributed to first cluster, not actual cluster(s).
 
-**Plan:**
-1. Modify `RecordSnapshot()` to accept cluster ID/name as parameters instead of using instance fields
-2. Update aggregate handlers to pass the correct cluster ID when recording
-3. For multi-cluster aggregates, either:
-   - Record once per cluster involved, or
-   - Record with a synthetic "aggregate" cluster identifier
+**Fix applied:**
+1. Added `clusterID` and `clusterName` parameters to `RecordSnapshot()` signature
+2. Updated `snapshot.Service.recordTelemetry()` to pass its cluster metadata
+3. Telemetry is now correctly attributed to the cluster that produced the snapshot
 
-**Alternative:** Accept current behavior - this is diagnostic-only and doesn't affect functionality. Document the limitation.
-
-**Files:**
-- `backend/refresh/telemetry/recorder.go` - RecordSnapshot signature
-- `backend/refresh/snapshot/*.go` - callers of RecordSnapshot
+**Files changed:**
+- `backend/refresh/telemetry/recorder.go` - added cluster params to RecordSnapshot
+- `backend/refresh/snapshot/service.go` - passes cluster metadata to RecordSnapshot
+- `backend/refresh/telemetry/recorder_test.go` - updated test calls
+- `backend/refresh/api/server_test.go` - updated test calls
+- `backend/app_object_catalog_test.go` - updated test calls
 
 ---
 
@@ -140,24 +139,23 @@ Date: 2026-01-31
 
 ---
 
-### Issue 6: Single-cluster-only streaming domains
+### Issue 6: Single-cluster-only streaming domains ✅ DOCUMENTED
 **Priority:** N/A (Intentional) | **Effort:** N/A | **Risk:** Documentation
 
 **Problem:** Not a bug - certain domains are intentionally single-cluster only.
 
-**Plan:**
-1. Document which domains are single-cluster only and why
-2. Ensure frontend scope builders don't attempt multi-cluster for these domains
-3. Improve error messages to be more user-friendly
+**Documentation added:**
+- Added "Single-Cluster Domains" section to `docs/development/multi-cluster-support.md`
+- Documents which domains are single-cluster only and why
+- Shows the `isSingleClusterDomain()` implementation
+- Notes frontend scope building requirements
 
 **Domains that are single-cluster only:**
-- `catalog`, `catalog-diff`, `node-maintenance` - object-scoped, require single target
+- `object-*` (details, events, yaml) - operates on a specific object in one cluster
+- `catalog`, `catalog-diff` - catalog is per-cluster
+- `node-maintenance` - node operations (cordon, uncordon, drain, delete) target a specific node
 - Log streams - container logs are inherently single-pod
-- Catalog streams - catalog diff requires single source
-
-**Files:**
-- `docs/development/multi-cluster.md` - document single-cluster domains
-- `backend/refresh_aggregate_*.go` - improve error messages
+- Catalog streams - catalog operations require single source
 
 ---
 
@@ -166,6 +164,6 @@ Date: 2026-01-31
 1. ~~**Issue 4** (High priority, Low effort) - Unblocks legitimate multi-cluster configs~~ ✅ DONE
 2. ~~**Issue 1** (Medium priority, Low effort) - Removes footgun, low risk~~ ✅ DONE
 3. ~~**Issue 5** (Medium priority, Low effort) - Improves debugging, prevents collisions~~ ✅ DONE
-4. **Issue 6** (Documentation only) - No code changes needed
+4. ~~**Issue 6** (Documentation only) - No code changes needed~~ ✅ DONE
 5. **Issue 2** (Low priority) - Consider Option A (accept with docs)
-6. **Issue 3** (Low priority) - Consider accepting current behavior
+6. ~~**Issue 3** (Low priority) - Consider accepting current behavior~~ ✅ DONE

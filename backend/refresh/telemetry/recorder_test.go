@@ -84,8 +84,8 @@ func TestConnectionStatsRecording(t *testing.T) {
 func TestRecordSnapshotAggregatesWarningsAndAverages(t *testing.T) {
 	rec := NewRecorder()
 
-	rec.RecordSnapshot("domains", "scopeA", 100*time.Millisecond, errors.New("boom"), false, 10, []string{"catalog fallback on namespaces", "hydration failed"}, 0, 2, 5, false, 12)
-	rec.RecordSnapshot("domains", "scopeB", 200*time.Millisecond, nil, true, 5, nil, 1, 2, 3, true, 0)
+	rec.RecordSnapshot("domains", "scopeA", "cluster-1", "cluster-one", 100*time.Millisecond, errors.New("boom"), false, 10, []string{"catalog fallback on namespaces", "hydration failed"}, 0, 2, 5, false, 12)
+	rec.RecordSnapshot("domains", "scopeB", "cluster-1", "cluster-one", 200*time.Millisecond, nil, true, 5, nil, 1, 2, 3, true, 0)
 
 	summary := rec.SnapshotSummary()
 	require.Len(t, summary.Snapshots, 1)

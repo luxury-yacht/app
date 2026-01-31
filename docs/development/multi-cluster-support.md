@@ -374,6 +374,39 @@ jobs := store.GetJobsForCluster(clusterID)
 
 This prevents cross-cluster bleed when node names overlap.
 
+## Single-Cluster Domains
+
+Some domains are intentionally restricted to single-cluster scope. Attempting multi-cluster operations on these domains returns an error.
+
+### Why Some Domains Are Single-Cluster Only
+
+| Domain                             | Reason                                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------------------- |
+| `object-*` (details, events, yaml) | Operates on a specific object that exists in exactly one cluster                        |
+| `catalog`, `catalog-diff`          | Catalog is per-cluster; diff compares states within one cluster                         |
+| `node-maintenance`                 | Node operations (cordon, uncordon, drain, delete) target a specific node in one cluster |
+| Log streams                        | Container logs come from a specific pod in one cluster                                  |
+| Catalog streams                    | Catalog operations require a single source                                              |
+
+### Implementation
+
+The `isSingleClusterDomain()` function in `refresh_aggregate_snapshot.go` enforces this:
+
+```go
+func isSingleClusterDomain(domain string) bool {
+    switch domain {
+    case "catalog", "catalog-diff", "node-maintenance":
+        return true
+    default:
+        return strings.HasPrefix(domain, "object-")
+    }
+}
+```
+
+### Frontend Considerations
+
+When building scopes for these domains, the frontend must ensure only a single cluster is targeted. The scope should use `clusterId|<scope>` format, not `clusters=id1,id2|<scope>`.
+
 ## Risks and Considerations
 
 - Refresh fan-out can increase load per cluster; watch for timeouts

@@ -162,9 +162,12 @@ func (r *Recorder) RecordCatalog(enabled bool, itemCount, resourceCount int, dur
 	}
 }
 
-// RecordSnapshot logs a snapshot outcome.
+// RecordSnapshot logs a snapshot outcome. The clusterID and clusterName parameters
+// identify the cluster that produced this snapshot, allowing accurate attribution
+// even when the recorder is shared across clusters (e.g., in aggregate handlers).
 func (r *Recorder) RecordSnapshot(
 	domain, scope string,
+	clusterID, clusterName string,
 	duration time.Duration,
 	err error,
 	truncated bool,
@@ -190,8 +193,10 @@ func (r *Recorder) RecordSnapshot(
 	}
 
 	entry.Scope = scope
-	entry.ClusterID = r.clusterID
-	entry.ClusterName = r.clusterName
+	// Use the provided cluster identifiers instead of instance fields to ensure
+	// correct attribution when the recorder is shared across clusters.
+	entry.ClusterID = clusterID
+	entry.ClusterName = clusterName
 	entry.LastDurationMs = duration.Milliseconds()
 	entry.LastUpdated = time.Now().UnixMilli()
 	entry.Truncated = truncated
