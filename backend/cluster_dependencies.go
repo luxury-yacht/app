@@ -41,7 +41,7 @@ func (a *App) resolveClusterDependencies(clusterID string) (common.Dependencies,
 		if clients.meta.Name != "" {
 			clusterName = clients.meta.Name
 		}
-		return common.Dependencies{}, "", fmt.Errorf("Auth failed for %s. Check your kubeconfig credentials.", clusterName)
+		return common.Dependencies{}, "", fmt.Errorf("auth failed for %s: check your kubeconfig credentials", clusterName)
 	}
 
 	deps, ok := a.resourceDependenciesForClusterID(trimmed)

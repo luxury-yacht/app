@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/versioning"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -22,7 +21,7 @@ var defaultLoopbackListener = func() (net.Listener, error) {
 // App provides the backend façade exposed to Wails.
 type App struct {
 	Ctx                  context.Context
-	selectedKubeconfigs []string
+	selectedKubeconfigs  []string
 	availableKubeconfigs []KubeconfigInfo
 	windowSettings       *WindowSettings
 	appSettings          *AppSettings
@@ -106,13 +105,6 @@ func NewApp() *App {
 	return app
 }
 
-func (a *App) initKubeClient() error {
-	if a.kubeClientInitializer != nil {
-		return a.kubeClientInitializer()
-	}
-	return a.initKubernetesClient()
-}
-
 func (a *App) emitEvent(name string, args ...interface{}) {
 	if a == nil || a.eventEmitter == nil || a.Ctx == nil {
 		return
@@ -126,16 +118,6 @@ func (a *App) emitEvent(name string, args ...interface{}) {
 func (a *App) initAuthManager() {
 	// Per-cluster auth managers are created in buildClusterClients().
 	// This function is kept for compatibility but does nothing.
-}
-
-// handleAuthStateChange is deprecated in favor of per-cluster auth state handling.
-// See handleClusterAuthStateChange in cluster_auth.go.
-// This is kept for backwards compatibility with any code that still references it.
-func (a *App) handleAuthStateChange(_ authstate.State, _ string) {
-	// Per-cluster auth state changes are handled by handleClusterAuthStateChange.
-	// This function is kept for compatibility but is now a no-op.
-	// Global connection status tracking has been removed in favor of per-cluster
-	// events (cluster:health:*, cluster:auth:*).
 }
 
 // RetryAuth triggers a manual authentication recovery attempt for ALL clusters.

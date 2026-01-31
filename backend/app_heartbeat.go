@@ -6,8 +6,7 @@ import (
 )
 
 const (
-	heartbeatInterval = 15 * time.Second
-	heartbeatTimeout  = 5 * time.Second
+	heartbeatTimeout = 5 * time.Second
 )
 
 // runHeartbeatIteration iterates all clusters and checks their health independently.

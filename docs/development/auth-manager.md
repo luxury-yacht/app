@@ -166,8 +166,8 @@ credentialPatterns := []string{
 If the cluster is idle, the heartbeat detects failures:
 
 ```go
-// app_heartbeat.go:9
-heartbeatInterval = 15 * time.Second
+// config.go:78
+StreamHeartbeatInterval = 15 * time.Second
 ```
 
 ## Frontend Integration
