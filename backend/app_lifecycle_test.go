@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
@@ -62,11 +63,7 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	defer cancel()
 	app.Ctx = ctx
 
-	app.metricsClient = &metricsclient.Clientset{}
-	app.dynamicClient = dynamicfake.NewSimpleDynamicClient(runtime.NewScheme())
-	app.apiextensionsClient = &apiextensionsclientset.Clientset{}
-	app.restConfig = &rest.Config{}
-
+	// Create per-cluster clients - there are no global client fields anymore.
 	fakeClient := cgofake.NewClientset()
 	metricsClient := &metricsclient.Clientset{}
 	restConfig := &rest.Config{}
@@ -103,6 +100,7 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 			Manager:   manager,
 			Handler:   handler,
 			Telemetry: telemetry.NewRecorder(),
+			Registry:  domain.New(), // Required for aggregate mux building
 		}, nil
 	}
 	defer func() { newRefreshSubsystemWithServices = original }()
@@ -111,7 +109,8 @@ func TestSetupRefreshSubsystemDoesNotStorePermissionCache(t *testing.T) {
 	require.NoError(t, err)
 	defer app.teardownRefreshSubsystem()
 
-	require.NotNil(t, app.refreshManager)
+	// Note: app.refreshManager is now nil by design - there is no global primary cluster.
+	// The manager is per-cluster, accessible via refreshSubsystems[clusterID].Manager.
 	require.NotNil(t, app.refreshHTTPServer)
 	require.NotNil(t, app.refreshListener)
 	require.NotNil(t, app.refreshCancel)
@@ -255,7 +254,8 @@ users:
 	require.Contains(t, err.Error(), "failed to initialise refresh subsystem")
 	require.Nil(t, app.objectCatalogServiceForCluster(""))
 	require.Nil(t, app.telemetryRecorder)
-	require.Nil(t, app.client)
+	// Note: clusterClients were pre-seeded by this test and are not cleared on refresh failure.
+	// The test verifies that an error is returned and no object catalog is created.
 }
 
 func TestStartupAppliesWindowSettings(t *testing.T) {

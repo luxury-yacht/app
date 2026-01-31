@@ -46,8 +46,36 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 		}
 		clients := a.clusterClientsForID(id)
 		if clients == nil {
-			return fmt.Errorf("cluster clients unavailable for %s", id)
+			// Cluster clients don't exist yet - need to sync the pool first.
+			// This can happen if SetSelectedKubeconfigs was called with a new cluster.
+			if err := a.syncClusterClientPool(selections); err != nil {
+				return err
+			}
+			clients = a.clusterClientsForID(id)
+			if clients == nil {
+				return fmt.Errorf("cluster clients unavailable for %s", id)
+			}
 		}
+
+		// Skip subsystem creation if auth is not valid for this cluster.
+		// This mirrors the logic in buildRefreshSubsystems to ensure auth-failed
+		// clusters don't block the addition of new healthy clusters.
+		if clients.authFailedOnInit {
+			if a.logger != nil {
+				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", metaByID[id].Name), "Refresh")
+			}
+			// Cluster is in clusterOrder but has no subsystem - this is expected for auth-failed clusters.
+			continue
+		}
+		if clients.authManager != nil && !clients.authManager.IsValid() {
+			if a.logger != nil {
+				state, _ := clients.authManager.State()
+				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", metaByID[id].Name, state.String()), "Refresh")
+			}
+			// Cluster is in clusterOrder but has no subsystem - this is expected for auth-failed clusters.
+			continue
+		}
+
 		subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, metaByID[id])
 		if err != nil {
 			a.stopRefreshSubsystems(newSubsystems)

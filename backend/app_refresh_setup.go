@@ -10,8 +10,10 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/objectcatalog"
 	"github.com/luxury-yacht/app/backend/refresh"
+	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/system"
+	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/cli"
 )
@@ -36,48 +38,55 @@ func (a *App) setupRefreshSubsystem() error {
 	if err != nil {
 		return err
 	}
-	subsystems, clusterOrder, hostSubsystem, err := a.buildRefreshSubsystems(selections)
+	subsystems, clusterOrder, err := a.buildRefreshSubsystems(selections)
 	if err != nil {
 		return err
 	}
 
+	// Handle case where no subsystems were created (all auth failed).
+	if len(subsystems) == 0 {
+		a.logger.Warn("No refresh subsystems created (all clusters may have auth failures)", "Refresh")
+		// Initialize empty state but don't fail - clusters may recover later.
+		a.refreshSubsystems = make(map[string]*system.Subsystem)
+		return nil
+	}
+
 	a.startRefreshSubsystems(ctx, subsystems)
 
-	mux, aggregates, err := a.buildRefreshMux(hostSubsystem, subsystems, clusterOrder)
+	mux, aggregates, err := a.buildRefreshMux(subsystems, clusterOrder)
 	if err != nil {
 		return err
 	}
 	a.refreshAggregates = aggregates
 
-	return a.startRefreshHTTPServer(mux, hostSubsystem, subsystems)
+	return a.startRefreshHTTPServer(mux, subsystems)
 }
 
 // buildRefreshSubsystems creates refresh subsystems for the active cluster selections.
+// All clusters are treated equally - there is no "primary" or "host" cluster.
 func (a *App) buildRefreshSubsystems(
 	selections []kubeconfigSelection,
-) (map[string]*system.Subsystem, []string, *system.Subsystem, error) {
+) (map[string]*system.Subsystem, []string, error) {
 	subsystems := make(map[string]*system.Subsystem)
 	clusterOrder := make([]string, 0, len(selections))
 
 	if len(selections) == 0 {
-		return nil, nil, nil, errors.New("no kubeconfig selections available")
+		return nil, nil, errors.New("no kubeconfig selections available")
 	}
 
 	// Align the client pool to the selected cluster set before building managers.
 	if err := a.syncClusterClientPool(selections); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
-	// hostSubsystem anchors shared mux/telemetry wiring without implying a primary cluster.
-	var hostSubsystem *system.Subsystem
 	for _, selection := range selections {
 		clusterMeta := a.clusterMetaForSelection(selection)
 		if clusterMeta.ID == "" {
-			return nil, nil, nil, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
+			return nil, nil, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
 		}
 		clients := a.clusterClientsForID(clusterMeta.ID)
 		if clients == nil {
-			return nil, nil, nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
+			return nil, nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
 		}
 
 		// Skip subsystem creation if auth is not valid for this cluster.
@@ -86,7 +95,7 @@ func (a *App) buildRefreshSubsystems(
 			if a.logger != nil {
 				a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth failed during initialization", clusterMeta.Name), "Refresh")
 			}
-			// Still add to clusterOrder so the cluster appears in the UI
+			// Still add to clusterOrder so the cluster appears in the UI.
 			clusterOrder = append(clusterOrder, clusterMeta.ID)
 			continue
 		}
@@ -99,7 +108,7 @@ func (a *App) buildRefreshSubsystems(
 				if a.logger != nil {
 					a.logger.Warn(fmt.Sprintf("Skipping subsystem for cluster %s: auth not valid (state=%s)", clusterMeta.Name, state.String()), "Refresh")
 				}
-				// Still add to clusterOrder so the cluster appears in the UI
+				// Still add to clusterOrder so the cluster appears in the UI.
 				clusterOrder = append(clusterOrder, clusterMeta.ID)
 				continue
 			}
@@ -107,21 +116,16 @@ func (a *App) buildRefreshSubsystems(
 
 		subsystem, err := a.buildRefreshSubsystemForSelection(selection, clients, clusterMeta)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 
 		subsystems[clusterMeta.ID] = subsystem
 		clusterOrder = append(clusterOrder, clusterMeta.ID)
-		if hostSubsystem == nil {
-			hostSubsystem = subsystem
-		}
 	}
 
-	if hostSubsystem == nil {
-		return nil, nil, nil, errors.New("refresh subsystem not initialised")
-	}
-
-	return subsystems, clusterOrder, hostSubsystem, nil
+	// Note: It's valid to return an empty subsystems map if all clusters have auth failures.
+	// The caller should handle this case gracefully.
+	return subsystems, clusterOrder, nil
 }
 
 func (a *App) buildRefreshSubsystemForSelection(
@@ -192,11 +196,34 @@ func (a *App) storeRefreshPermissionCancel(clusterID string, cancel context.Canc
 }
 
 // buildRefreshMux wires the aggregate refresh routes on top of the core API endpoints.
+// All clusters are treated equally - telemetry and registry are taken from
+// the first available cluster, but no single cluster is "special".
 func (a *App) buildRefreshMux(
-	hostSubsystem *system.Subsystem,
 	subsystems map[string]*system.Subsystem,
 	clusterOrder []string,
 ) (*http.ServeMux, *refreshAggregateHandlers, error) {
+	if len(subsystems) == 0 {
+		return nil, nil, errors.New("no subsystems available for mux")
+	}
+
+	// Use first available subsystem for shared telemetry and registry.
+	// Any cluster works since these are used for aggregate handling.
+	var sharedTelemetry *telemetry.Recorder
+	var sharedRegistry *domain.Registry
+	for _, id := range clusterOrder {
+		if sub := subsystems[id]; sub != nil {
+			if sharedTelemetry == nil && sub.Telemetry != nil {
+				sharedTelemetry = sub.Telemetry
+			}
+			if sharedRegistry == nil && sub.Registry != nil {
+				sharedRegistry = sub.Registry
+			}
+			if sharedTelemetry != nil && sharedRegistry != nil {
+				break
+			}
+		}
+	}
+
 	// Wrap the base refresh API with aggregate services for multi-cluster domains.
 	aggregateService := newAggregateSnapshotService(clusterOrder, subsystems)
 	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
@@ -205,30 +232,30 @@ func (a *App) buildRefreshMux(
 		collectEventManagers(subsystems),
 		collectClusterMeta(subsystems),
 		clusterOrder,
-		hostSubsystem.Telemetry,
+		sharedTelemetry,
 		a.logger,
 	)
 	aggregateLogs := newAggregateLogStreamHandler(subsystems)
 	aggregateCatalog := newAggregateCatalogStreamHandler(subsystems)
-	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, hostSubsystem.Telemetry)
+	aggregateResources, err := newAggregateResourceStreamHandler(subsystems, a.logger, sharedTelemetry)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	mux := system.BuildRefreshMux(system.MuxConfig{
-		Registry:        hostSubsystem.Registry,
+		Registry:        sharedRegistry,
 		SnapshotService: aggregateService,
 		ManualQueue:     aggregateQueue,
-		Telemetry:       hostSubsystem.Telemetry,
-		Metrics:         hostSubsystem.Manager,
-		// HealthHub stays nil because hostSubsystem.Handler already serves /healthz/refresh.
-		HealthHub: nil,
+		Telemetry:       sharedTelemetry,
+		Metrics:         nil, // Don't tie metrics to a single cluster.
+		HealthHub:       nil, // Health is per-cluster, not global.
 	})
 	mux.Handle("/api/v2/stream/events", aggregateEvents)
 	mux.Handle("/api/v2/stream/logs", aggregateLogs)
 	mux.Handle("/api/v2/stream/catalog", aggregateCatalog)
 	mux.Handle("/api/v2/stream/resources", aggregateResources)
-	mux.Handle("/", hostSubsystem.Handler)
+	// NOTE: Do NOT mount "/" to any single subsystem's handler.
+	// Requests to "/" should return 404, not route to one cluster.
 
 	aggregates := &refreshAggregateHandlers{
 		snapshot:  aggregateService,
@@ -285,9 +312,9 @@ func (h *refreshAggregateHandlers) Update(clusterOrder []string, subsystems map[
 }
 
 // startRefreshHTTPServer starts the loopback HTTP server and records the runtime wiring.
+// All clusters are treated equally - no single cluster is primary.
 func (a *App) startRefreshHTTPServer(
 	mux *http.ServeMux,
-	hostSubsystem *system.Subsystem,
 	subsystems map[string]*system.Subsystem,
 ) error {
 	if a.listenLoopback == nil {
@@ -300,19 +327,32 @@ func (a *App) startRefreshHTTPServer(
 	}
 
 	srv := &http.Server{Handler: mux}
-	a.refreshManager = hostSubsystem.Manager
+	// Don't set refreshManager from a single cluster - it's per-cluster now.
+	a.refreshManager = nil
 	a.refreshHTTPServer = srv
 	a.refreshListener = listener
 	a.refreshBaseURL = "http://" + listener.Addr().String()
-	a.telemetryRecorder = hostSubsystem.Telemetry
 	a.refreshServerDone = make(chan struct{})
 	a.refreshSubsystems = subsystems
-	if hostSubsystem.InformerFactory != nil {
-		a.sharedInformerFactory = hostSubsystem.InformerFactory.SharedInformerFactory()
-		a.apiExtensionsInformerFactory = hostSubsystem.InformerFactory.APIExtensionsInformerFactory()
-	} else {
-		a.sharedInformerFactory = nil
-		a.apiExtensionsInformerFactory = nil
+
+	// Use first available subsystem for telemetry (for global telemetry needs).
+	a.telemetryRecorder = nil
+	for _, sub := range subsystems {
+		if sub != nil && sub.Telemetry != nil {
+			a.telemetryRecorder = sub.Telemetry
+			break
+		}
+	}
+
+	// Use first available subsystem for informer factories (for discovery).
+	a.sharedInformerFactory = nil
+	a.apiExtensionsInformerFactory = nil
+	for _, sub := range subsystems {
+		if sub != nil && sub.InformerFactory != nil {
+			a.sharedInformerFactory = sub.InformerFactory.SharedInformerFactory()
+			a.apiExtensionsInformerFactory = sub.InformerFactory.APIExtensionsInformerFactory()
+			break
+		}
 	}
 
 	go func() {

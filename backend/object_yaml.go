@@ -258,36 +258,6 @@ func getObjectYAMLWithDependencies(
 	return string(yamlBytes), nil
 }
 
-func (a *App) listEndpointSlicesForService(namespace, name string) (*discoveryv1.EndpointSliceList, error) {
-	if a.client == nil {
-		return nil, fmt.Errorf("kubernetes client not initialized")
-	}
-	ctx := a.Ctx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	selector := labels.Set{discoveryv1.LabelServiceName: name}.AsSelector().String()
-	list, err := a.client.DiscoveryV1().EndpointSlices(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector})
-	if err != nil {
-		return nil, err
-	}
-	if list == nil {
-		return &discoveryv1.EndpointSliceList{
-			TypeMeta: metav1.TypeMeta{
-				Kind:       "EndpointSliceList",
-				APIVersion: discoveryv1.SchemeGroupVersion.String(),
-			},
-			Items: []discoveryv1.EndpointSlice{},
-		}, nil
-	}
-	list.TypeMeta = metav1.TypeMeta{
-		Kind:       "EndpointSliceList",
-		APIVersion: discoveryv1.SchemeGroupVersion.String(),
-	}
-	return list, nil
-}
-
 // listEndpointSlicesForServiceWithDependencies loads endpoint slices with explicit dependencies.
 func listEndpointSlicesForServiceWithDependencies(
 	deps common.Dependencies,

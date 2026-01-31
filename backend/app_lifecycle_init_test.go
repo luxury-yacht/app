@@ -54,9 +54,8 @@ func TestInitKubernetesClientErrorsWithoutKubeconfig(t *testing.T) {
 	if !strings.Contains(err.Error(), "no kubeconfig selections available") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if app.connectionStatus != ConnectionStateOffline {
-		t.Fatalf("expected connection status to be marked offline on failure, got %s", app.connectionStatus)
-	}
+	// Note: Global connection status tracking has been removed.
+	// Connection health is now tracked per-cluster via cluster:health:* and cluster:auth:* events.
 }
 
 func TestInitKubernetesClientFromKubeconfigPath(t *testing.T) {

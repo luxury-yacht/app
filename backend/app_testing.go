@@ -1,7 +1,8 @@
 /*
  * backend/app_testing.go
 *
- * Tests for application testing functionality.
+ * Test helpers for application testing functionality.
+ * These helpers are used by tests to configure the App with mock clients.
 */
 
 package backend
@@ -17,6 +18,10 @@ import (
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
+// InitializeForTesting sets up the app for testing with a provided Kubernetes client.
+// It creates a test cluster entry in clusterClients so the app behaves as if
+// a real cluster is connected. The client is stored only in the per-cluster
+// clusterClients map - there are no global client fields.
 func (a *App) InitializeForTesting(ctx context.Context, client kubernetes.Interface) {
 	a.Ctx = ctx
 	if a.logger == nil {
@@ -35,15 +40,14 @@ func (a *App) InitializeForTesting(ctx context.Context, client kubernetes.Interf
 		if a.clusterClients == nil {
 			a.clusterClients = make(map[string]*clusterClients)
 		}
+		// Create cluster clients with only the provided client.
+		// Additional clients (apiextensions, dynamic, metrics, restConfig) can be set
+		// using the SetRestConfig, SetMetricsClient, etc. helper methods after this call.
 		a.clusterClients[meta.ID] = &clusterClients{
-			meta:                meta,
-			kubeconfigPath:      selection.Path,
-			kubeconfigContext:   selection.Context,
-			client:              client,
-			apiextensionsClient: a.apiextensionsClient,
-			dynamicClient:       a.dynamicClient,
-			metricsClient:       a.metricsClient,
-			restConfig:          a.restConfig,
+			meta:              meta,
+			kubeconfigPath:    selection.Path,
+			kubeconfigContext: selection.Context,
+			client:            client,
 		}
 
 		if err := a.setupRefreshSubsystem(); err != nil {
@@ -54,8 +58,9 @@ func (a *App) InitializeForTesting(ctx context.Context, client kubernetes.Interf
 	}
 }
 
+// SetRestConfig sets the REST config for all cluster clients.
+// This is a test helper for configuring mock clients.
 func (a *App) SetRestConfig(config *rest.Config) {
-	a.restConfig = config
 	a.clusterClientsMu.Lock()
 	for _, clients := range a.clusterClients {
 		if clients != nil {
@@ -65,8 +70,9 @@ func (a *App) SetRestConfig(config *rest.Config) {
 	a.clusterClientsMu.Unlock()
 }
 
+// SetMetricsClient sets the metrics client for all cluster clients.
+// This is a test helper for configuring mock clients.
 func (a *App) SetMetricsClient(client *metricsclient.Clientset) {
-	a.metricsClient = client
 	a.clusterClientsMu.Lock()
 	for _, clients := range a.clusterClients {
 		if clients != nil {
@@ -76,8 +82,9 @@ func (a *App) SetMetricsClient(client *metricsclient.Clientset) {
 	a.clusterClientsMu.Unlock()
 }
 
-func (a *App) SetApiExtensionsClient(client *apiextensionsclientset.Clientset) {
-	a.apiextensionsClient = client
+// SetApiExtensionsClient sets the API extensions client for all cluster clients.
+// This is a test helper for configuring mock clients.
+func (a *App) SetApiExtensionsClient(client apiextensionsclientset.Interface) {
 	a.clusterClientsMu.Lock()
 	for _, clients := range a.clusterClients {
 		if clients != nil {
@@ -87,8 +94,9 @@ func (a *App) SetApiExtensionsClient(client *apiextensionsclientset.Clientset) {
 	a.clusterClientsMu.Unlock()
 }
 
+// SetDynamicClient sets the dynamic client for all cluster clients.
+// This is a test helper for configuring mock clients.
 func (a *App) SetDynamicClient(client dynamic.Interface) {
-	a.dynamicClient = client
 	a.clusterClientsMu.Lock()
 	for _, clients := range a.clusterClients {
 		if clients != nil {

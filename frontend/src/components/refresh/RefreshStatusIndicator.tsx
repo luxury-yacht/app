@@ -3,12 +3,15 @@
  *
  * UI component for RefreshStatusIndicator.
  * Handles rendering and interactions for the shared components.
+ * Shows status for the active cluster only using per-cluster health and auth state.
  */
 
 import React, { useEffect, useState } from 'react';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
-import { useConnectionStatus } from '@/core/connection/connectionStatus';
+import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
+import { useAuthErrorHandler } from '@/hooks/useAuthErrorHandler';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { eventBus } from '@/core/events';
 import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 import './RefreshStatusIndicator.css';
@@ -16,7 +19,14 @@ import './RefreshStatusIndicator.css';
 const RefreshStatusIndicator: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const connectionStatus = useConnectionStatus();
+
+  // Get the active cluster ID from the kubeconfig context.
+  const { selectedClusterId } = useKubeconfig();
+
+  // Use per-cluster health and auth state instead of global connection status.
+  const { getActiveClusterHealth } = useClusterHealthListener(selectedClusterId);
+  const { getActiveClusterAuthState } = useAuthErrorHandler(selectedClusterId);
+
   const metricsInfo = useClusterMetricsAvailability();
 
   useEffect(() => {
@@ -45,27 +55,51 @@ const RefreshStatusIndicator: React.FC = () => {
       ? 'Metrics API unavailable'
       : 'Metrics are up to date';
 
-  const isConnectionRestricted = ['offline', 'auth_failed', 'rebuilding'].includes(
-    connectionStatus.state
-  );
+  // Get current auth state and health for the active cluster.
+  const authState = getActiveClusterAuthState();
+  const health = getActiveClusterHealth();
+
+  // Disable manual refresh when auth has error OR health is degraded.
+  const isConnectionRestricted = authState.hasError || health === 'degraded';
   const manualRefreshDisabled = isPaused || isConnectionRestricted;
 
+  /**
+   * Determine the status class based on per-cluster state:
+   * - If paused: disabled
+   * - If auth error and recovering: retrying
+   * - If auth error: auth_failed
+   * - If health degraded: offline (transport issues)
+   * - If refreshing: refreshing
+   * - Otherwise: active
+   */
   const getStatusClass = () => {
     if (isPaused) return 'status-disabled';
-    if (connectionStatus.state === 'offline') return 'status-offline';
-    if (connectionStatus.state === 'auth_failed') return 'status-auth';
-    if (connectionStatus.state === 'rebuilding') return 'status-rebuilding';
-    if (connectionStatus.state === 'retrying') return 'status-retrying';
+    // Use per-cluster auth state.
+    if (authState.hasError && authState.isRecovering) return 'status-retrying';
+    if (authState.hasError) return 'status-auth';
+    // Use per-cluster health.
+    if (health === 'degraded') return 'status-offline';
     if (isRefreshing) return 'status-refreshing';
     return 'status-active';
   };
 
-  const formatRetryHint = () => {
-    if (!connectionStatus.nextRetryMs) {
-      return undefined;
+  /**
+   * Generate a human-readable status label for the tooltip.
+   */
+  const getStatusLabel = () => {
+    if (authState.hasError && authState.isRecovering) {
+      return 'Retrying authentication';
     }
-    const seconds = Math.max(1, Math.round(connectionStatus.nextRetryMs / 1000));
-    return `Retrying in ${seconds}s`;
+    if (authState.hasError) {
+      return 'Authentication failed';
+    }
+    if (health === 'degraded') {
+      return 'Connection offline';
+    }
+    if (isRefreshing) {
+      return 'Refreshing';
+    }
+    return 'Connected';
   };
 
   const getTooltipText = () => {
@@ -73,9 +107,8 @@ const RefreshStatusIndicator: React.FC = () => {
       return 'Auto-refresh paused';
     }
     const pieces = [
-      connectionStatus.label,
-      connectionStatus.message !== connectionStatus.label ? connectionStatus.message : undefined,
-      connectionStatus.state === 'retrying' ? formatRetryHint() : undefined,
+      getStatusLabel(),
+      authState.hasError && authState.reason ? authState.reason : undefined,
       manualRefreshDisabled ? 'Manual refresh unavailable' : 'Click to refresh now (⌘R)',
     ];
     return pieces.filter(Boolean).join(' • ');

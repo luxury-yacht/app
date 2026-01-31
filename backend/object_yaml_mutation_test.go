@@ -93,10 +93,9 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 	})
 	app := NewApp()
 	app.Ctx = context.Background()
-	app.client = client
-	app.dynamicClient = dynamicClient
-	app.apiextensionsClient = apiextensionsfake.NewClientset()
+	apiExtClient := apiextensionsfake.NewClientset()
 	clusterID := "config:ctx"
+	// Per-cluster clients are stored in clusterClients, not in global fields.
 	app.clusterClients = map[string]*clusterClients{
 		clusterID: {
 			meta:                ClusterMeta{ID: clusterID, Name: "ctx"},
@@ -104,7 +103,7 @@ func setupYAMLTestApp(t *testing.T) (*App, *dynamicfake.FakeDynamicClient, strin
 			kubeconfigContext:   "ctx",
 			client:              client,
 			dynamicClient:       dynamicClient,
-			apiextensionsClient: app.apiextensionsClient,
+			apiextensionsClient: apiExtClient,
 		},
 	}
 

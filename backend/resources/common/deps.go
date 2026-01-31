@@ -37,6 +37,11 @@ type Dependencies struct {
 	EnsureAPIExtensions EnsureAPIExtensionsFunc
 	SelectedKubeconfig  string
 	SelectedContext     string
+	// ClusterID uniquely identifies the cluster these dependencies belong to.
+	// Used for multi-cluster isolation in resources like drain jobs.
+	ClusterID string
+	// ClusterName is the human-readable name for the cluster.
+	ClusterName string
 }
 
 // CloneWithContext returns a shallow copy using the supplied context.

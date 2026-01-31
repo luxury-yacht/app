@@ -68,10 +68,14 @@ func FetchResourceWithSelection[T any](
 		defer cancel()
 	}
 
-	result, err := executeWithRetry(ctx, a, resourceKind, identifier, fetchFunc)
+	result, err := executeWithRetry(ctx, a, selectionKey, resourceKind, identifier, fetchFunc)
 	if err != nil {
 		a.logger.Error(fmt.Sprintf("Failed to fetch %s %s: %v", resourceKind, identifier, err), "ResourceLoader")
+		// Include clusterId in error payload so frontend can identify which cluster
+		// the error belongs to. selectionKey is the clusterID when set by callers
+		// like FetchNamespacedResource and FetchClusterResource.
 		a.emitEvent("backend-error", map[string]any{
+			"clusterId":    selectionKey,
 			"resourceKind": resourceKind,
 			"identifier":   identifier,
 			"message":      err.Error(),
@@ -90,7 +94,7 @@ func FetchResourceWithSelection[T any](
 // and namespace. No caching is performed.
 func FetchResourceList[T any](
 	a *App,
-	_ string,
+	clusterID string,
 	resourceKind string,
 	namespace string,
 	fetchFunc func() (T, error),
@@ -108,10 +112,13 @@ func FetchResourceList[T any](
 		defer cancel()
 	}
 
-	result, err := executeWithRetry(ctx, a, resourceKind, scope, fetchFunc)
+	result, err := executeWithRetry(ctx, a, clusterID, resourceKind, scope, fetchFunc)
 	if err != nil {
 		a.logger.Error(fmt.Sprintf("Failed to list %s in %s: %v", resourceKind, scope, err), "ResourceLoader")
+		// Include clusterId in error payload so frontend can identify which cluster
+		// the error belongs to.
 		a.emitEvent("backend-error", map[string]any{
+			"clusterId":    clusterID,
 			"resourceKind": resourceKind,
 			"scope":        scope,
 			"message":      err.Error(),
@@ -160,24 +167,6 @@ func FetchClusterResource[T any](
 	return FetchResourceWithSelection(a, selectionKey, cacheKey, resourceKind, name, fetchFunc)
 }
 
-// EnsureClientInitialized checks if the Kubernetes client is initialized
-func (a *App) ensureClientInitialized(resourceKind string) error {
-	if a.client == nil {
-		a.logger.Error(fmt.Sprintf("Kubernetes client not initialized for %s fetch", resourceKind), "ResourceLoader")
-		return fmt.Errorf("kubernetes client not initialized")
-	}
-	return nil
-}
-
-// EnsureAPIExtensionsClientInitialized checks if the API extensions client is initialized
-func (a *App) ensureAPIExtensionsClientInitialized(resourceKind string) error {
-	if a.apiextensionsClient == nil {
-		a.logger.Error(fmt.Sprintf("API extensions client not initialized for %s fetch", resourceKind), "ResourceLoader")
-		return fmt.Errorf("apiextensions client not initialized")
-	}
-	return nil
-}
-
 // ensureDependenciesInitialized checks the cluster-scoped dependencies before fetching.
 func ensureDependenciesInitialized(a *App, deps common.Dependencies, resourceKind string) error {
 	if deps.KubernetesClient == nil {
@@ -189,7 +178,7 @@ func ensureDependenciesInitialized(a *App, deps common.Dependencies, resourceKin
 	return nil
 }
 
-func executeWithRetry[T any](ctx context.Context, a *App, resourceKind, target string, fetchFunc func() (T, error)) (T, error) {
+func executeWithRetry[T any](ctx context.Context, a *App, clusterID, resourceKind, target string, fetchFunc func() (T, error)) (T, error) {
 	var zero T
 	if ctx == nil {
 		ctx = context.Background()
@@ -209,8 +198,10 @@ func executeWithRetry[T any](ctx context.Context, a *App, resourceKind, target s
 		result, err := fetchFunc()
 		if err == nil {
 			if a != nil {
-				a.recordTransportSuccess()
-				a.updateConnectionStatus(ConnectionStateHealthy, "", 0)
+				// Record per-cluster transport success if clusterID is provided
+				if clusterID != "" {
+					a.recordClusterTransportSuccess(clusterID)
+				}
 				if attempt > 0 && a.telemetryRecorder != nil {
 					a.telemetryRecorder.RecordRetrySuccess()
 				}
@@ -233,7 +224,6 @@ func executeWithRetry[T any](ctx context.Context, a *App, resourceKind, target s
 				if a.telemetryRecorder != nil {
 					a.telemetryRecorder.RecordRetryAttempt(err)
 				}
-				a.updateConnectionStatus(ConnectionStateRetrying, fmt.Sprintf("Retrying %s %s: %s", resourceKind, target, reason), backoff)
 			}
 			if a == nil {
 				fetchRetrySleep(backoff)
@@ -250,12 +240,16 @@ func executeWithRetry[T any](ctx context.Context, a *App, resourceKind, target s
 				if a.telemetryRecorder != nil {
 					a.telemetryRecorder.RecordRetryExhausted(err)
 				}
-				a.recordTransportFailure(reason, err)
-				a.updateConnectionStatus(ConnectionStateOffline, fmt.Sprintf("Failed %s %s: %v", resourceKind, target, err), 0)
+				// Record per-cluster transport failure if clusterID is provided
+				if clusterID != "" {
+					a.recordClusterTransportFailure(clusterID, reason, err)
+				}
 			}
 		} else if a != nil {
-			a.recordTransportSuccess()
-			a.updateConnectionStatus(ConnectionStateHealthy, "", 0)
+			// Record per-cluster transport success if clusterID is provided
+			if clusterID != "" {
+				a.recordClusterTransportSuccess(clusterID)
+			}
 		}
 
 		return zero, err

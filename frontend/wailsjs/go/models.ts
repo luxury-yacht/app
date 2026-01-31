@@ -438,27 +438,6 @@ export namespace capabilities {
 
 }
 
-export namespace clientset {
-	
-	export class Clientset {
-	    LegacyPrefix: string;
-	    UseLegacyDiscovery: boolean;
-	    NoPeerDiscovery: boolean;
-	
-	    static createFrom(source: any = {}) {
-	        return new Clientset(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.LegacyPrefix = source["LegacyPrefix"];
-	        this.UseLegacyDiscovery = source["UseLegacyDiscovery"];
-	        this.NoPeerDiscovery = source["NoPeerDiscovery"];
-	    }
-	}
-
-}
-
 export namespace rest {
 	
 	export class ImpersonationConfig {

@@ -75,8 +75,9 @@ function AppContent() {
   // Handle backend errors from Wails runtime
   useBackendErrorHandler();
 
-  // Handle authentication state changes from backend
-  useAuthErrorHandler();
+  // Handle authentication state changes from backend.
+  // Pass selectedClusterId for per-cluster auth state tracking.
+  useAuthErrorHandler(selectedClusterId);
 
   // Handle connection status events from Wails runtime
   useConnectionStatusListener();

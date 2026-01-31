@@ -443,7 +443,7 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 	selectionChanged := len(previousSelections) != len(normalizedStrings)
 
 	// If counts match, compare each element. We compare in order because the order of
-	// selections matters (the first selection is the "primary" cluster).
+	// selections matters (order determines UI tab ordering and default active tab).
 	if !selectionChanged {
 		for i, selection := range previousSelections {
 			if selection != normalizedStrings[i] {
@@ -542,11 +542,6 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 func (a *App) clearKubeconfigSelection() error {
 	a.logger.Info("Clearing kubeconfig selection", "KubeconfigManager")
 	a.selectedKubeconfigs = nil
-	a.client = nil
-	a.apiextensionsClient = nil
-	a.dynamicClient = nil
-	a.restConfig = nil
-	a.metricsClient = nil
 	a.clusterClientsMu.Lock()
 	a.clusterClients = make(map[string]*clusterClients)
 	a.clusterClientsMu.Unlock()

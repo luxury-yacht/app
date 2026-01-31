@@ -37,12 +37,12 @@ func TestShellEventWriterEmits(t *testing.T) {
 		}
 	}
 
-	writer := &shellEventWriter{app: app, sessionID: "s1", stream: "stdout"}
+	writer := &shellEventWriter{app: app, sessionID: "s1", clusterID: "cluster1", stream: "stdout"}
 	n, err := writer.Write([]byte("hello"))
 	if err != nil || n != len("hello") {
 		t.Fatalf("write failed: %v", err)
 	}
-	if len(events) != 1 || events[0].Data != "hello" || events[0].Stream != "stdout" {
+	if len(events) != 1 || events[0].Data != "hello" || events[0].Stream != "stdout" || events[0].ClusterID != "cluster1" {
 		t.Fatalf("unexpected events %+v", events)
 	}
 }
@@ -56,6 +56,7 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 	sizeQueue := newTerminalSizeQueue()
 	sess := &shellSession{
 		id:        "sess",
+		clusterID: "cluster1",
 		stdin:     stdinW,
 		stdinR:    stdinR,
 		sizeQueue: sizeQueue,
@@ -101,7 +102,7 @@ func TestShellSessionLifecycleHelpers(t *testing.T) {
 	if app.getShellSession("sess") != nil {
 		t.Fatalf("expected session to be removed")
 	}
-	if len(events) != 1 || events[0].Status != "closed" {
+	if len(events) != 1 || events[0].Status != "closed" || events[0].ClusterID != "cluster1" {
 		t.Fatalf("unexpected status events %+v", events)
 	}
 }
@@ -142,17 +143,17 @@ func TestEmitShellEventsGuards(t *testing.T) {
 	}
 
 	// guard cases
-	app.emitShellOutput("", "stdout", "data")
-	app.emitShellOutput("id", "stdout", "")
-	app.emitShellStatus("", "open", "")
-	app.emitShellStatus("id", "", "")
+	app.emitShellOutput("", "cluster1", "stdout", "data")
+	app.emitShellOutput("id", "cluster1", "stdout", "")
+	app.emitShellStatus("", "cluster1", "open", "")
+	app.emitShellStatus("id", "cluster1", "", "")
 	if calls != 0 {
 		t.Fatalf("expected no events for guarded inputs, got %d", calls)
 	}
 
 	// happy paths
-	app.emitShellOutput("id", "stdout", "line")
-	app.emitShellStatus("id", "open", "reason")
+	app.emitShellOutput("id", "cluster1", "stdout", "line")
+	app.emitShellStatus("id", "cluster1", "open", "reason")
 	if calls != 2 {
 		t.Fatalf("expected 2 events emitted, got %d", calls)
 	}
@@ -174,15 +175,16 @@ func TestStartShellSessionValidation(t *testing.T) {
 		t.Fatal("expected error when client is nil")
 	}
 
-	app.client = fake.NewClientset()
-	app.restConfig = &rest.Config{}
+	// Per-cluster clients are stored in clusterClients, not in global fields.
+	fakeClient := fake.NewClientset()
+	restConfig := &rest.Config{}
 	app.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
-			client:            app.client,
-			restConfig:        app.restConfig,
+			client:            fakeClient,
+			restConfig:        restConfig,
 		},
 	}
 
@@ -197,20 +199,22 @@ func TestStartShellSessionValidation(t *testing.T) {
 func TestStartShellSessionPodValidation(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
-	app.restConfig = &rest.Config{}
+
+	// Per-cluster clients are stored in clusterClients, not in global fields.
+	restConfig := &rest.Config{}
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "default", Name: "pod-1"},
 		Spec:       corev1.PodSpec{}, // no containers
 	}
-	app.client = fake.NewClientset(pod)
+	fakeClient := fake.NewClientset(pod)
 	app.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
-			client:            app.client,
-			restConfig:        app.restConfig,
+			client:            fakeClient,
+			restConfig:        restConfig,
 		},
 	}
 
@@ -220,14 +224,14 @@ func TestStartShellSessionPodValidation(t *testing.T) {
 	}
 
 	pod.Spec.Containers = []corev1.Container{{Name: "main"}}
-	app.client = fake.NewClientset(pod)
+	fakeClient = fake.NewClientset(pod)
 	app.clusterClients = map[string]*clusterClients{
 		shellClusterID: {
 			meta:              ClusterMeta{ID: shellClusterID, Name: "ctx"},
 			kubeconfigPath:    "/path",
 			kubeconfigContext: "ctx",
-			client:            app.client,
-			restConfig:        app.restConfig,
+			client:            fakeClient,
+			restConfig:        restConfig,
 		},
 	}
 

@@ -74,9 +74,6 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 			"reason":      reason,
 		})
 	}
-
-	// Update aggregate connection status based on all clusters
-	a.updateAggregateConnectionStatus()
 }
 
 // teardownClusterSubsystem stops the refresh subsystem for a specific cluster
@@ -204,47 +201,6 @@ func (a *App) rebuildClusterSubsystem(clusterID string) {
 
 	if a.logger != nil {
 		a.logger.Info(fmt.Sprintf("Successfully rebuilt subsystem for cluster %s", clusterID), "Auth")
-	}
-}
-
-// updateAggregateConnectionStatus updates the global connection status based on
-// the auth state of all clusters. The status reflects the "worst" state across
-// all clusters.
-func (a *App) updateAggregateConnectionStatus() {
-	if a == nil {
-		return
-	}
-
-	a.clusterClientsMu.Lock()
-	defer a.clusterClientsMu.Unlock()
-
-	// Check all clusters and find the worst state
-	hasInvalid := false
-	hasRecovering := false
-	allValid := true
-
-	for _, clients := range a.clusterClients {
-		if clients == nil || clients.authManager == nil {
-			continue
-		}
-		state, _ := clients.authManager.State()
-		switch state {
-		case authstate.StateInvalid:
-			hasInvalid = true
-			allValid = false
-		case authstate.StateRecovering:
-			hasRecovering = true
-			allValid = false
-		}
-	}
-
-	// Update global status based on aggregate state
-	if hasInvalid {
-		a.updateConnectionStatus(ConnectionStateAuthFailed, "One or more clusters have authentication failures", 0)
-	} else if hasRecovering {
-		a.updateConnectionStatus(ConnectionStateRetrying, "Recovering authentication for one or more clusters", 0)
-	} else if allValid {
-		a.updateConnectionStatus(ConnectionStateHealthy, "", 0)
 	}
 }
 

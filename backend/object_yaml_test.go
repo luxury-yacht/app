@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	fakediscovery "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 )
@@ -24,25 +23,23 @@ func resetGVRCache() {
 
 const testClusterID = "config:ctx"
 
-func registerTestCluster(app *App, clusterID string) {
-	app.clusterClients = map[string]*clusterClients{
-		clusterID: {
-			meta:                ClusterMeta{ID: clusterID, Name: "ctx"},
-			kubeconfigPath:      "/path",
-			kubeconfigContext:   "ctx",
-			client:              app.client,
-			dynamicClient:       app.dynamicClient,
-			apiextensionsClient: app.apiextensionsClient,
-		},
-	}
+// registerTestClusterWithClients sets up cluster clients with the provided clients.
+// All Kubernetes clients are now per-cluster - there are no global client fields.
+func registerTestClusterWithClients(app *App, clusterID string, cc *clusterClients) {
+	app.clusterClients = map[string]*clusterClients{clusterID: cc}
 }
 
 func TestGetObjectYAMLAggregatesEndpointSlices(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
-	app.client = kubernetesfake.NewClientset()
-	registerTestCluster(app, testClusterID)
+	fakeClient := kubernetesfake.NewClientset()
+	registerTestClusterWithClients(app, testClusterID, &clusterClients{
+		meta:              ClusterMeta{ID: testClusterID, Name: "ctx"},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+		client:            fakeClient,
+	})
 
 	port := int32(80)
 	slice := &discoveryv1.EndpointSlice{
@@ -59,7 +56,7 @@ func TestGetObjectYAMLAggregatesEndpointSlices(t *testing.T) {
 			Port: &port,
 		}},
 	}
-	_, err := app.client.DiscoveryV1().EndpointSlices("demo").Create(context.Background(), slice, metav1.CreateOptions{})
+	_, err := fakeClient.DiscoveryV1().EndpointSlices("demo").Create(context.Background(), slice, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to seed endpoint slice: %v", err)
 	}
@@ -77,20 +74,7 @@ func TestGetObjectYAMLNamespacedResource(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
-	app.client = kubernetesfake.NewClientset()
 
-	discovery := app.client.Discovery().(*fakediscovery.FakeDiscovery)
-	discovery.Resources = []*metav1.APIResourceList{
-		{
-			GroupVersion: "v1",
-			APIResources: []metav1.APIResource{{
-				Name:         "pods",
-				SingularName: "pod",
-				Namespaced:   true,
-				Kind:         "Pod",
-			}},
-		},
-	}
 	// Scope the GVR cache to the test cluster selection.
 	cacheKey := gvrCacheKey(testClusterID, "Pod")
 	gvrCacheMutex.Lock()
@@ -111,8 +95,15 @@ func TestGetObjectYAMLNamespacedResource(t *testing.T) {
 			Namespace: "demo",
 		},
 	}
-	app.dynamicClient = dynamicfake.NewSimpleDynamicClient(scheme, pod)
-	registerTestCluster(app, testClusterID)
+	fakeClient := kubernetesfake.NewClientset()
+	dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme, pod)
+	registerTestClusterWithClients(app, testClusterID, &clusterClients{
+		meta:              ClusterMeta{ID: testClusterID, Name: "ctx"},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+		client:            fakeClient,
+		dynamicClient:     dynamicClient,
+	})
 
 	yamlStr, err := app.GetObjectYAML(testClusterID, "Pod", "demo", "demo-pod")
 	if err != nil {
@@ -127,7 +118,12 @@ func TestGetObjectYAMLUsesCacheWhenAvailable(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.responseCache = newResponseCache(time.Minute, 10)
-	registerTestCluster(app, testClusterID)
+	registerTestClusterWithClients(app, testClusterID, &clusterClients{
+		meta:              ClusterMeta{ID: testClusterID, Name: "ctx"},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+		client:            kubernetesfake.NewClientset(),
+	})
 
 	cacheKey := objectYAMLCacheKey("Pod", "default", "cached-pod")
 	app.responseCacheStore(testClusterID, cacheKey, "cached-yaml")
@@ -170,20 +166,7 @@ func TestGetObjectYAMLClusterScopedResource(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
-	app.client = kubernetesfake.NewClientset()
 
-	discovery := app.client.Discovery().(*fakediscovery.FakeDiscovery)
-	discovery.Resources = []*metav1.APIResourceList{
-		{
-			GroupVersion: "v1",
-			APIResources: []metav1.APIResource{{
-				Name:         "nodes",
-				SingularName: "node",
-				Namespaced:   false,
-				Kind:         "Node",
-			}},
-		},
-	}
 	// Scope the GVR cache to the test cluster selection.
 	cacheKey := gvrCacheKey(testClusterID, "node")
 	gvrCacheMutex.Lock()
@@ -203,8 +186,15 @@ func TestGetObjectYAMLClusterScopedResource(t *testing.T) {
 			Name: "node-1",
 		},
 	}
-	app.dynamicClient = dynamicfake.NewSimpleDynamicClient(scheme, node)
-	registerTestCluster(app, testClusterID)
+	fakeClient := kubernetesfake.NewClientset()
+	dynamicClient := dynamicfake.NewSimpleDynamicClient(scheme, node)
+	registerTestClusterWithClients(app, testClusterID, &clusterClients{
+		meta:              ClusterMeta{ID: testClusterID, Name: "ctx"},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+		client:            fakeClient,
+		dynamicClient:     dynamicClient,
+	})
 
 	yamlStr, err := app.GetObjectYAML(testClusterID, "node", "", "node-1")
 	if err != nil {
@@ -219,21 +209,24 @@ func TestGetObjectYAMLRequiresDynamicClient(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
-	app.client = kubernetesfake.NewClientset()
-	registerTestCluster(app, testClusterID)
+	fakeClient := kubernetesfake.NewClientset()
+	// Register cluster WITHOUT dynamicClient to test the error path.
+	registerTestClusterWithClients(app, testClusterID, &clusterClients{
+		meta:              ClusterMeta{ID: testClusterID, Name: "ctx"},
+		kubeconfigPath:    "/path",
+		kubeconfigContext: "ctx",
+		client:            fakeClient,
+		// dynamicClient is intentionally nil
+	})
 
-	discovery := app.client.Discovery().(*fakediscovery.FakeDiscovery)
-	discovery.Resources = []*metav1.APIResourceList{
-		{
-			GroupVersion: "v1",
-			APIResources: []metav1.APIResource{{
-				Name:         "pods",
-				SingularName: "pod",
-				Namespaced:   true,
-				Kind:         "Pod",
-			}},
-		},
+	// Pre-seed the GVR cache so the test hits the dynamic client check.
+	gvrCacheMutex.Lock()
+	gvrCache[gvrCacheKey(testClusterID, "pod")] = gvrCacheEntry{
+		gvr:        schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"},
+		namespaced: true,
+		cachedAt:   time.Now(),
 	}
+	gvrCacheMutex.Unlock()
 
 	_, err := app.GetObjectYAML(testClusterID, "pod", "demo", "missing")
 	if err == nil || !strings.Contains(err.Error(), "dynamic client not initialized") {
@@ -245,7 +238,6 @@ func TestGetGVRFallsBackToCRD(t *testing.T) {
 	resetGVRCache()
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()
-	app.client = kubernetesfake.NewClientset()
 
 	crd := &apiextensionsv1.CustomResourceDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: "widgets.example.com"},
@@ -263,8 +255,15 @@ func TestGetGVRFallsBackToCRD(t *testing.T) {
 			}},
 		},
 	}
-	app.apiextensionsClient = apiextensionsfake.NewClientset(crd)
-	registerTestCluster(app, testClusterID)
+	fakeClient := kubernetesfake.NewClientset()
+	apiExtClient := apiextensionsfake.NewClientset(crd)
+	registerTestClusterWithClients(app, testClusterID, &clusterClients{
+		meta:                ClusterMeta{ID: testClusterID, Name: "ctx"},
+		kubeconfigPath:      "/path",
+		kubeconfigContext:   "ctx",
+		client:              fakeClient,
+		apiextensionsClient: apiExtClient,
+	})
 
 	gvr, namespaced, err := app.getGVR(testClusterID, "Widget")
 	if err != nil {
@@ -275,12 +274,7 @@ func TestGetGVRFallsBackToCRD(t *testing.T) {
 	}
 }
 
-func TestListEndpointSlicesRequiresClient(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.Ctx = context.Background()
-
-	list, err := app.listEndpointSlicesForService("demo", "svc")
-	if err == nil || list != nil {
-		t.Fatalf("expected nil endpoint slices and error for missing client, got %+v %v", list, err)
-	}
-}
+// TestListEndpointSlicesRequiresClient was testing the deprecated listEndpointSlicesForService.
+// The method was removed as part of deleting global client fields.
+// The production code now uses listEndpointSlicesForServiceWithDependencies which
+// receives the client via explicit dependencies.

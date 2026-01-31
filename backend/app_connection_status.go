@@ -1,9 +1,5 @@
 package backend
 
-import (
-	"time"
-)
-
 // ConnectionState enumerates backend connectivity states for diagnostics/UI.
 type ConnectionState string
 
@@ -49,48 +45,9 @@ var connectionStateDefinitions = map[ConnectionState]connectionStateMeta{
 	},
 }
 
-func (a *App) updateConnectionStatus(state ConnectionState, message string, nextRetry time.Duration) {
-	if a == nil {
-		return
-	}
-	meta, ok := connectionStateDefinitions[state]
-	if !ok {
-		meta = connectionStateDefinitions[ConnectionStateHealthy]
-		state = ConnectionStateHealthy
-	}
-	if message == "" {
-		message = meta.DefaultMessage
-	}
-
-	nextRetryMs := nextRetry.Milliseconds()
-	now := time.Now().UnixMilli()
-
-	a.connectionStatusMu.Lock()
-	if a.connectionStatus == state &&
-		a.connectionStatusMessage == message &&
-		a.connectionStatusNextRetry == nextRetryMs {
-		a.connectionStatusMu.Unlock()
-		return
-	}
-	a.connectionStatus = state
-	a.connectionStatusMessage = message
-	a.connectionStatusNextRetry = nextRetryMs
-	a.connectionStatusUpdatedAt = now
-	a.connectionStatusMu.Unlock()
-
-	if a.telemetryRecorder != nil {
-		a.telemetryRecorder.RecordConnectionState(string(state), meta.Label, message, nextRetryMs, now)
-	}
-
-	payload := map[string]any{
-		"state":       string(state),
-		"label":       meta.Label,
-		"description": meta.Description,
-		"message":     message,
-		"updatedAt":   now,
-	}
-	if nextRetryMs > 0 {
-		payload["nextRetryMs"] = nextRetryMs
-	}
-	a.emitEvent("connection-status", payload)
-}
+// NOTE: updateConnectionStatus() has been removed as part of the multi-cluster isolation refactor.
+// Connection status is now tracked and emitted per-cluster via:
+// - cluster:health:healthy / cluster:health:degraded events (from runHeartbeatIteration)
+// - cluster:auth:failed / cluster:auth:recovering / cluster:auth:recovered events (from handleClusterAuthStateChange)
+// The ConnectionState type and connectionStateDefinitions are kept for backwards compatibility
+// and may still be used by telemetry or other components that need state labels.

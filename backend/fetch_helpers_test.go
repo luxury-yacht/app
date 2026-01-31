@@ -11,9 +11,6 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	kubernetesfake "k8s.io/client-go/kubernetes/fake"
-
-	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 	"github.com/stretchr/testify/require"
@@ -38,6 +35,7 @@ func TestFetchResourceErrorEmits(t *testing.T) {
 	require.Empty(t, value)
 	require.Error(t, err)
 	require.NotNil(t, emitted)
+	require.Equal(t, "", emitted["clusterId"])
 	require.Equal(t, "Widget", emitted["resourceKind"])
 	require.Equal(t, "default/foo", emitted["identifier"])
 }
@@ -108,12 +106,13 @@ func TestFetchResourceListErrorEmits(t *testing.T) {
 		}
 	}
 
-	_, err := FetchResourceList(app, "cache", "Widget", "default", func() ([]string, error) {
+	_, err := FetchResourceList(app, "test-cluster", "Widget", "default", func() ([]string, error) {
 		return nil, errors.New("boom")
 	})
 
 	require.Error(t, err)
 	require.NotNil(t, emitted)
+	require.Equal(t, "test-cluster", emitted["clusterId"])
 	require.Equal(t, "Widget", emitted["resourceKind"])
 	require.Contains(t, emitted["scope"], "namespace default")
 }
@@ -178,41 +177,15 @@ func TestFetchResourceExhaustsRetriesAndEmits(t *testing.T) {
 	require.Equal(t, uint64(fetchMaxAttempts-1), summary.Connection.RetryAttempts)
 	require.Equal(t, uint64(0), summary.Connection.RetrySuccesses)
 	require.Equal(t, uint64(1), summary.Connection.RetryExhausted)
+	require.Equal(t, "", emitted["clusterId"])
 	require.Equal(t, "Widget", emitted["resourceKind"])
 	require.Equal(t, "default/foo", emitted["identifier"])
 }
 
-func TestEnsureAPIExtensionsClientInitializedRequiresClient(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.logger = NewLogger(10)
-
-	err := app.ensureAPIExtensionsClientInitialized("CRD")
-	require.Error(t, err)
-
-	entries := app.logger.GetEntries()
-	require.NotEmpty(t, entries)
-	require.Contains(t, entries[len(entries)-1].Message, "API extensions client not initialized")
-}
-
-func TestEnsureAPIExtensionsClientInitializedPassesWhenSet(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.apiextensionsClient = &apiextensionsclientset.Clientset{}
-
-	err := app.ensureAPIExtensionsClientInitialized("CRD")
-	require.NoError(t, err)
-}
-
-func TestEnsureClientInitialized(t *testing.T) {
-	app := newTestAppWithDefaults(t)
-	app.logger = NewLogger(5)
-
-	err := app.ensureClientInitialized("Pod")
-	require.Error(t, err)
-	require.Contains(t, app.logger.GetEntries()[0].Message, "not initialized")
-
-	app.client = kubernetesfake.NewClientset()
-	require.NoError(t, app.ensureClientInitialized("Pod"))
-}
+// Tests for ensureClientInitialized and ensureAPIExtensionsClientInitialized have been removed.
+// These helper functions were deleted as part of removing global client fields.
+// Client initialization checks are now done via ensureDependenciesInitialized which
+// takes explicit Dependencies and does not rely on App-level global fields.
 
 func TestIsRetryableFetchErrorVariants(t *testing.T) {
 	tests := []struct {

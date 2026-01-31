@@ -5,20 +5,14 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/versioning"
 	"github.com/luxury-yacht/app/backend/refresh"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
-	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
-	"k8s.io/client-go/dynamic"
 	informers "k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 )
 
 var defaultLoopbackListener = func() (net.Listener, error) {
@@ -28,11 +22,6 @@ var defaultLoopbackListener = func() (net.Listener, error) {
 // App provides the backend façade exposed to Wails.
 type App struct {
 	Ctx                  context.Context
-	client               kubernetes.Interface
-	apiextensionsClient  apiextensionsclientset.Interface
-	dynamicClient        dynamic.Interface
-	metricsClient        *metricsclient.Clientset
-	restConfig          *rest.Config
 	selectedKubeconfigs []string
 	availableKubeconfigs []KubeconfigInfo
 	windowSettings       *WindowSettings
@@ -75,30 +64,21 @@ type App struct {
 	updateCheckMu   sync.RWMutex
 	updateInfo      *UpdateInfo
 
-	authRecoveryMu        sync.Mutex
-	authRecoveryScheduled bool
+	// Per-cluster auth recovery scheduling.
+	// Tracks auth recovery scheduling per-cluster, allowing isolated
+	// recovery scheduling without affecting other clusters.
+	clusterAuthRecoveryMu        sync.Mutex
+	clusterAuthRecoveryScheduled map[string]bool
 
-	transportMu                sync.Mutex
-	transportFailureCount      int
-	transportWindowStart       time.Time
-	transportRebuildInProgress bool
-	lastTransportRebuild       time.Time
-
-	connectionStatusMu        sync.Mutex
-	connectionStatus          ConnectionState
-	connectionStatusMessage   string
-	connectionStatusNextRetry int64
-	connectionStatusUpdatedAt int64
-
-	// authManager is deprecated. Auth state tracking is now per-cluster.
-	// See clusterClients.authManager for per-cluster auth state management.
-	// This field is kept for backwards compatibility but is no longer used.
-	authManager *authstate.Manager
+	// Per-cluster transport failure tracking.
+	// Tracks transport failures per-cluster, allowing isolated
+	// recovery without affecting other clusters.
+	transportStatesMu sync.RWMutex
+	transportStates   map[string]*transportFailureState
 
 	listenLoopback func() (net.Listener, error)
 
 	eventEmitter          func(context.Context, string, ...interface{})
-	startAuthRecovery     func(string)
 	kubeClientInitializer func() error
 }
 
@@ -117,17 +97,12 @@ func NewApp() *App {
 		shellSessions:            make(map[string]*shellSession),
 		eventEmitter:             func(context.Context, string, ...interface{}) {},
 	}
-	app.startAuthRecovery = func(reason string) {
-		go app.runAuthRecovery(reason)
-	}
 	app.kubeClientInitializer = func() error {
 		return app.initKubernetesClient()
 	}
 	app.listenLoopback = defaultLoopbackListener
 	app.setupEnvironment()
 	app.initAuthManager()
-	app.connectionStatus = ConnectionStateHealthy
-	app.connectionStatusMessage = connectionStateDefinitions[ConnectionStateHealthy].DefaultMessage
 	return app
 }
 
@@ -158,8 +133,9 @@ func (a *App) initAuthManager() {
 // This is kept for backwards compatibility with any code that still references it.
 func (a *App) handleAuthStateChange(_ authstate.State, _ string) {
 	// Per-cluster auth state changes are handled by handleClusterAuthStateChange.
-	// This function is kept for compatibility but delegates to aggregate status update.
-	a.updateAggregateConnectionStatus()
+	// This function is kept for compatibility but is now a no-op.
+	// Global connection status tracking has been removed in favor of per-cluster
+	// events (cluster:health:*, cluster:auth:*).
 }
 
 // RetryAuth triggers a manual authentication recovery attempt for ALL clusters.

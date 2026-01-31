@@ -130,3 +130,51 @@ func TestSnapshotUnknownNodeEmpty(t *testing.T) {
 		t.Fatalf("expected no drains for missing node, got %d", len(snap.Drains))
 	}
 }
+
+// TestDrainStoreClusterIsolation verifies that drain jobs from different clusters
+// are properly isolated, even when node names overlap across clusters.
+func TestDrainStoreClusterIsolation(t *testing.T) {
+	store := NewStore(5)
+
+	// Start a drain job for cluster A on worker-1
+	jobA := store.StartDrain("worker-1", restypes.DrainNodeOptions{})
+	jobA.ClusterID = "cluster-a"
+	jobA.ClusterName = "Cluster A"
+	// Update the job in the store with the cluster info
+	store.SetJobCluster(jobA.ID, "cluster-a", "Cluster A")
+
+	// Start a drain job for cluster B on the SAME node name (worker-1)
+	jobB := store.StartDrain("worker-1", restypes.DrainNodeOptions{})
+	jobB.ClusterID = "cluster-b"
+	jobB.ClusterName = "Cluster B"
+	store.SetJobCluster(jobB.ID, "cluster-b", "Cluster B")
+
+	// GetJobsForCluster should return only jobs for the matching cluster
+	jobsA := store.GetJobsForCluster("cluster-a")
+	jobsB := store.GetJobsForCluster("cluster-b")
+
+	if len(jobsA) != 1 {
+		t.Fatalf("expected 1 job for cluster-a, got %d", len(jobsA))
+	}
+	if len(jobsB) != 1 {
+		t.Fatalf("expected 1 job for cluster-b, got %d", len(jobsB))
+	}
+	if jobsA[0].ClusterID != "cluster-a" {
+		t.Fatalf("expected cluster-a job, got cluster ID %q", jobsA[0].ClusterID)
+	}
+	if jobsB[0].ClusterID != "cluster-b" {
+		t.Fatalf("expected cluster-b job, got cluster ID %q", jobsB[0].ClusterID)
+	}
+
+	// Verify that querying a non-existent cluster returns empty
+	jobsC := store.GetJobsForCluster("cluster-c")
+	if len(jobsC) != 0 {
+		t.Fatalf("expected 0 jobs for cluster-c, got %d", len(jobsC))
+	}
+
+	// Verify Snapshot still sees all jobs for the node
+	snap, _ := store.Snapshot("worker-1")
+	if len(snap.Drains) != 2 {
+		t.Fatalf("expected 2 total drains for worker-1 node, got %d", len(snap.Drains))
+	}
+}

@@ -34,6 +34,7 @@ var (
 
 type shellSession struct {
 	id        string
+	clusterID string
 	namespace string
 	podName   string
 	container string
@@ -122,6 +123,7 @@ func (q *terminalSizeQueue) Close() {
 type shellEventWriter struct {
 	app       *App
 	sessionID string
+	clusterID string
 	stream    string
 	session   *shellSession
 }
@@ -133,7 +135,7 @@ func (w *shellEventWriter) Write(p []byte) (int, error) {
 	if w.session != nil {
 		w.session.touchActivity()
 	}
-	w.app.emitShellOutput(w.sessionID, w.stream, string(p))
+	w.app.emitShellOutput(w.sessionID, w.clusterID, w.stream, string(p))
 	return len(p), nil
 }
 
@@ -160,7 +162,7 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 	defer cancel()
 
 	podIdentifier := fmt.Sprintf("%s/%s", req.Namespace, req.PodName)
-	pod, err := executeWithRetry(ctx, a, "pod-shell", podIdentifier, func() (*corev1.Pod, error) {
+	pod, err := executeWithRetry(ctx, a, clusterID, "pod-shell", podIdentifier, func() (*corev1.Pod, error) {
 		return deps.KubernetesClient.CoreV1().Pods(req.Namespace).Get(ctx, req.PodName, metav1.GetOptions{})
 	})
 	if err != nil {
@@ -225,6 +227,7 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 	now := time.Now()
 	sess := &shellSession{
 		id:           sessionID,
+		clusterID:    clusterID,
 		namespace:    req.Namespace,
 		podName:      req.PodName,
 		container:    container,
@@ -251,20 +254,20 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 
 		streamErr := executor.StreamWithContext(sessionCtx, remotecommand.StreamOptions{
 			Stdin:             stdinReader,
-			Stdout:            &shellEventWriter{app: a, sessionID: sessionID, stream: "stdout", session: sess},
-			Stderr:            &shellEventWriter{app: a, sessionID: sessionID, stream: "stderr", session: sess},
+			Stdout:            &shellEventWriter{app: a, sessionID: sessionID, clusterID: clusterID, stream: "stdout", session: sess},
+			Stderr:            &shellEventWriter{app: a, sessionID: sessionID, clusterID: clusterID, stream: "stderr", session: sess},
 			Tty:               true,
 			TerminalSizeQueue: sizeQueue,
 		})
 
 		if streamErr != nil {
-			a.emitShellStatus(sessionID, "error", streamErr.Error())
+			a.emitShellStatus(sessionID, clusterID, "error", streamErr.Error())
 		} else {
-			a.emitShellStatus(sessionID, "closed", "")
+			a.emitShellStatus(sessionID, clusterID, "closed", "")
 		}
 	}()
 
-	a.emitShellStatus(sessionID, "open", "")
+	a.emitShellStatus(sessionID, clusterID, "open", "")
 
 	containers := make([]string, 0, len(pod.Spec.Containers))
 	for _, c := range pod.Spec.Containers {
@@ -317,7 +320,7 @@ func (a *App) CloseShellSession(sessionID string) error {
 		return fmt.Errorf("shell session %q not found", sessionID)
 	}
 	sess.Close()
-	a.emitShellStatus(sessionID, "closed", "terminated")
+	a.emitShellStatus(sessionID, sess.clusterID, "closed", "terminated")
 	return nil
 }
 
@@ -337,23 +340,25 @@ func (a *App) removeShellSession(sessionID string) *shellSession {
 	return sess
 }
 
-func (a *App) emitShellOutput(sessionID, stream, data string) {
+func (a *App) emitShellOutput(sessionID, clusterID, stream, data string) {
 	if sessionID == "" || data == "" {
 		return
 	}
 	a.emitEvent(shellOutputEventName, ShellOutputEvent{
 		SessionID: sessionID,
+		ClusterID: clusterID,
 		Stream:    stream,
 		Data:      data,
 	})
 }
 
-func (a *App) emitShellStatus(sessionID, status, reason string) {
+func (a *App) emitShellStatus(sessionID, clusterID, status, reason string) {
 	if sessionID == "" || status == "" {
 		return
 	}
 	a.emitEvent(shellStatusEventName, ShellStatusEvent{
 		SessionID: sessionID,
+		ClusterID: clusterID,
 		Status:    status,
 		Reason:    reason,
 	})
@@ -403,5 +408,5 @@ func (a *App) terminateShellWithReason(sessionID, status, reason string) {
 		return
 	}
 	sess.Close()
-	a.emitShellStatus(sessionID, status, reason)
+	a.emitShellStatus(sessionID, sess.clusterID, status, reason)
 }

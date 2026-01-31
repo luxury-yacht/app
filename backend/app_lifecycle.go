@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
 	"github.com/luxury-yacht/app/backend/refresh/system"
@@ -33,11 +32,6 @@ var (
 func (a *App) Startup(ctx context.Context) {
 	a.Ctx = ctx
 	a.eventEmitter = runtimeEventsEmit
-	if ms := a.connectionStatusNextRetry; ms > 0 {
-		a.updateConnectionStatus(a.connectionStatus, a.connectionStatusMessage, time.Duration(ms)*time.Millisecond)
-	} else {
-		a.updateConnectionStatus(a.connectionStatus, a.connectionStatusMessage, 0)
-	}
 	a.logger.Info("Application startup initiated", "App")
 
 	errorcapture.Init()
@@ -46,9 +40,12 @@ func (a *App) Startup(ctx context.Context) {
 		// Stderr errors don't have cluster context, so we only emit to frontend
 		// for UI display. The per-cluster auth managers handle state based on
 		// 401 responses, which DO have cluster context.
+		// clusterId is empty here because stderr errors are not associated with
+		// a specific cluster.
 		a.emitEvent("backend-error", map[string]any{
-			"message": strings.TrimSpace(message),
-			"source":  "stderr",
+			"clusterId": "",
+			"message":   strings.TrimSpace(message),
+			"source":    "stderr",
 		})
 	})
 	errorcapture.SetLogSink(func(level string, message string) {
@@ -140,8 +137,7 @@ func (a *App) Startup(ctx context.Context) {
 		a.logger.Warn("No kubeconfig selections found - please select a cluster", "App")
 	}
 
-	// Start the heartbeat loop to monitor application health.
-	a.startHeartbeatLoop()
+	// Per-cluster heartbeat is now handled via runHeartbeatIteration in the refresh subsystem.
 	// Run update checks in the background so the UI can surface them on startup.
 	a.startUpdateCheck()
 }
