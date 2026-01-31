@@ -44,19 +44,19 @@ Date: 2026-01-31
 
 ## Remediation Plan
 
-### Issue 1: Process-wide cluster meta fallback
+### Issue 1: Process-wide cluster meta fallback ✅ FIXED
 **Priority:** Medium | **Effort:** Low | **Risk:** Low
 
 **Problem:** `ClusterMetaFromContext()` silently falls back to empty/stale global state when context is missing.
 
-**Plan:**
-1. Remove the global fallback in `ClusterMetaFromContext()` - return empty `ClusterMeta{}` instead of `CurrentClusterMeta()`
-2. Delete `SetClusterMeta()` and `CurrentClusterMeta()` since they're unused and encourage incorrect patterns
-3. Audit callers of `ClusterMetaFromContext()` to ensure they pass proper context with `WithClusterMeta()`
-4. Add a warning log when `ClusterMetaFromContext()` receives nil context or context without meta
+**Fix applied:**
+1. Removed global state (`clusterMetaMu`, `currentMetaState`) and fallback
+2. Deleted `SetClusterMeta()` and `CurrentClusterMeta()` (unused package-level functions)
+3. `ClusterMetaFromContext()` now returns empty `ClusterMeta{}` when context is nil or missing meta
+4. Added warning logs for nil context and missing cluster meta cases
 
-**Files:**
-- `backend/refresh/snapshot/cluster_meta.go` - remove global state and fallback
+**Files changed:**
+- `backend/refresh/snapshot/cluster_meta.go` - removed global state, updated function
 
 ---
 
@@ -124,20 +124,19 @@ Date: 2026-01-31
 
 ---
 
-### Issue 5: GridTable keying falls back to clusterName
+### Issue 5: GridTable keying falls back to clusterName ✅ FIXED
 **Priority:** Medium | **Effort:** Low | **Risk:** Low
 
 **Problem:** Missing `clusterId` causes fallback to `clusterName`, which can collide.
 
-**Plan:**
-1. Remove the `clusterName` fallback from `defaultGetClusterId()` - return `null` if `clusterId` is missing
-2. Add development-mode warning when `clusterId` is missing to catch payload issues early
-3. Audit snapshot builders to ensure all payloads include `clusterId`
+**Fix applied:**
+1. Removed `clusterName` fallback from `defaultGetClusterId()` - now returns `null` if `clusterId` is missing
+2. Added development-mode warning when rows have `clusterName` but missing `clusterId`
+3. Added test coverage for `buildClusterScopedKey` behavior
 
-**Alternative:** Keep fallback but log a warning in development mode to identify missing clusterId cases.
-
-**Files:**
-- `frontend/src/shared/components/tables/GridTable.utils.ts:59-74` - defaultGetClusterId()
+**Files changed:**
+- `frontend/src/shared/components/tables/GridTable.utils.ts` - removed fallback, added dev warning
+- `frontend/src/shared/components/tables/GridTable.utils.test.tsx` - added tests
 
 ---
 
@@ -165,8 +164,8 @@ Date: 2026-01-31
 ## Implementation Order
 
 1. ~~**Issue 4** (High priority, Low effort) - Unblocks legitimate multi-cluster configs~~ ✅ DONE
-2. **Issue 1** (Medium priority, Low effort) - Removes footgun, low risk
-3. **Issue 5** (Medium priority, Low effort) - Improves debugging, prevents collisions
+2. ~~**Issue 1** (Medium priority, Low effort) - Removes footgun, low risk~~ ✅ DONE
+3. ~~**Issue 5** (Medium priority, Low effort) - Improves debugging, prevents collisions~~ ✅ DONE
 4. **Issue 6** (Documentation only) - No code changes needed
 5. **Issue 2** (Low priority) - Consider Option A (accept with docs)
 6. **Issue 3** (Low priority) - Consider accepting current behavior

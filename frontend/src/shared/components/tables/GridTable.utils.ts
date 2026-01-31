@@ -60,17 +60,17 @@ const defaultGetClusterId = (row: any): string | null => {
   if (!row || typeof row !== 'object') {
     return null;
   }
-  const value =
-    typeof row.clusterId === 'string'
-      ? row.clusterId
-      : row.item && typeof row.item.clusterId === 'string'
-        ? row.item.clusterId
-        : typeof row.clusterName === 'string'
-          ? row.clusterName
-          : row.item && typeof row.item.clusterName === 'string'
-            ? row.item.clusterName
-            : null;
-  return value ?? null;
+  if (typeof row.clusterId === 'string') {
+    return row.clusterId;
+  }
+  if (row.item && typeof row.item.clusterId === 'string') {
+    return row.item.clusterId;
+  }
+  // Warn in development when clusterId is missing - this may indicate a payload issue.
+  if (import.meta.env.DEV && (row.clusterName || row.item?.clusterName)) {
+    console.warn('GridTable: row has clusterName but missing clusterId', row);
+  }
+  return null;
 };
 
 // Prefix row keys with cluster identity to keep multi-cluster rows stable.

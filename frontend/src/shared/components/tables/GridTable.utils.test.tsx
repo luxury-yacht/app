@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildClusterScopedKey,
   DEFAULT_FONT_SIZE,
   defaultGetKind,
   defaultGetNamespace,
@@ -69,5 +70,19 @@ describe('GridTable utils', () => {
     expect(parseWidthInputToNumber('auto')).toBeNull();
     const invalid = '10vh' as unknown as ColumnWidthInput;
     expect(parseWidthInputToNumber(invalid)).toBeNull();
+  });
+
+  it('builds cluster-scoped keys using clusterId only', () => {
+    // With clusterId present, key is prefixed.
+    expect(buildClusterScopedKey({ clusterId: 'alpha:dev' }, 'pod-1')).toBe('alpha:dev|pod-1');
+    expect(buildClusterScopedKey({ item: { clusterId: 'beta:prod' } }, 'svc-1')).toBe(
+      'beta:prod|svc-1'
+    );
+
+    // Without clusterId, key is NOT prefixed (clusterName fallback removed).
+    expect(buildClusterScopedKey({ clusterName: 'dev' }, 'pod-1')).toBe('pod-1');
+    expect(buildClusterScopedKey({ item: { clusterName: 'prod' } }, 'svc-1')).toBe('svc-1');
+    expect(buildClusterScopedKey({}, 'deploy-1')).toBe('deploy-1');
+    expect(buildClusterScopedKey(null, 'job-1')).toBe('job-1');
   });
 });
