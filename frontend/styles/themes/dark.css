@@ -2,22 +2,22 @@
   /* ==========================================================================
      Dark Theme
      ==========================================================================
-     Warm charcoal backgrounds with gold accents for a refined, modern feel.
+     Neutral gray backgrounds with gold accents.
      ========================================================================== */
 
-  /* Core colors - Warm charcoal foundation with gold accent */
-  --color-bg: var(--color-navy-900);
-  --color-bg-secondary: var(--color-navy-800);
-  --color-bg-tertiary: var(--color-navy-700);
-  --color-text: var(--color-slate-100);
-  --color-text-secondary: var(--color-slate-400);
-  --color-text-tertiary: var(--color-navy-500);
-  --color-border: var(--color-navy-700);
+  /* Core colors - Neutral gray foundation with gold accent */
+  --color-bg: var(--color-gray-900);
+  --color-bg-secondary: var(--color-gray-800);
+  --color-bg-tertiary: var(--color-gray-700);
+  --color-text: var(--color-gray-100);
+  --color-text-secondary: var(--color-gray-400);
+  --color-text-tertiary: var(--color-gray-500);
+  --color-border: var(--color-gray-700);
   --color-accent: var(--color-gold-500);
   --color-accent-hover: var(--color-gold-400);
   --color-accent-bg: rgba(245, 158, 11, 0.15);
-  --color-primary: var(--color-slate-200);
-  --color-primary-hover: var(--color-slate-100);
+  --color-primary: var(--color-gray-200);
+  --color-primary-hover: var(--color-gray-100);
 
   /* Semantic colors */
   --color-success: var(--color-semantic-success-light);
@@ -29,12 +29,12 @@
 
   /* UI element colors */
   --color-resize-handle: var(--color-gold-600);
-  --color-table-header-bg: var(--color-navy-800);
-  --color-table-border: var(--color-navy-700);
-  --color-sidebar-active: var(--color-navy-700);
-  --color-sidebar-active-end: var(--color-navy-800);
+  --color-table-header-bg: var(--color-gray-800);
+  --color-table-border: var(--color-gray-700);
+  --color-sidebar-active: var(--color-gray-700);
+  --color-sidebar-active-end: var(--color-gray-800);
   --color-object-panel-link: var(--color-semantic-info-light);
-  --color-text-inverse: var(--color-navy-900);
+  --color-text-inverse: var(--color-gray-900);
   --color-success-bg: rgba(34, 197, 94, 0.15);
   --color-warning-bg: rgba(245, 158, 11, 0.18);
   --color-info-bg: rgba(14, 165, 233, 0.18);
@@ -45,19 +45,19 @@
   --color-header-accent-border: rgba(245, 158, 11, 0.2);
 
   /* Grid table resize handle */
-  --grid-resize-handle-color: var(--color-navy-500);
+  --grid-resize-handle-color: var(--color-gray-500);
   --grid-resize-handle-opacity: 0.5;
 
   /* Button colors - Gold primary, refined secondary */
-  --button-generic-bg: var(--color-navy-700);
-  --button-generic-hover: var(--color-navy-600);
-  --button-generic-text: var(--color-slate-100);
+  --button-generic-bg: var(--color-gray-700);
+  --button-generic-hover: var(--color-gray-600);
+  --button-generic-text: var(--color-gray-100);
   --button-save-bg: var(--color-semantic-info-dark);
   --button-save-hover: var(--color-semantic-info);
   --button-save-text: #ffffff;
-  --button-cancel-bg: var(--color-navy-600);
-  --button-cancel-hover: var(--color-navy-500);
-  --button-cancel-text: var(--color-slate-200);
+  --button-cancel-bg: var(--color-gray-600);
+  --button-cancel-hover: var(--color-gray-500);
+  --button-cancel-text: var(--color-gray-200);
   --button-edit-bg: var(--color-semantic-info);
   --button-edit-hover: var(--color-semantic-info-light);
   --button-edit-text: #ffffff;
@@ -66,12 +66,12 @@
   --button-danger-text: #ffffff;
   --button-action-bg: var(--color-gold-500);
   --button-action-hover: var(--color-gold-400);
-  --button-action-text: var(--color-navy-900);
+  --button-action-text: var(--color-gray-900);
   --button-warning-bg: var(--color-badge-orange);
   --button-warning-hover: #fb923c;
   --button-warning-text: #ffffff;
-  --button-disabled-bg: var(--color-navy-700);
-  --button-disabled-text: var(--color-navy-500);
+  --button-disabled-bg: var(--color-gray-700);
+  --button-disabled-text: var(--color-gray-500);
   --button-disabled-border: rgba(255, 255, 255, 0.08);
 
   /* Badge colors - Vibrant, more saturated */
@@ -80,7 +80,7 @@
   --badge-green-bg: var(--color-badge-green-bg-dark);
   --badge-green-text: var(--color-badge-green);
   --badge-grey-bg: var(--color-badge-slate-bg-dark);
-  --badge-grey-text: var(--color-slate-400);
+  --badge-grey-text: var(--color-gray-400);
   --badge-lime-bg: var(--color-badge-lime-bg-dark);
   --badge-lime-text: var(--color-badge-lime);
   --badge-orange-bg: var(--color-badge-orange-bg-dark);
@@ -106,12 +106,12 @@
   --status-warning-text: var(--color-gold-400);
 
   /* Code editor colors */
-  --code-surface: var(--color-navy-800);
-  --code-background: var(--color-navy-900);
-  --code-border: var(--color-navy-700);
-  --code-text-primary: var(--color-slate-200);
-  --code-text-muted: var(--color-slate-400);
-  --code-gutter-text: var(--color-navy-500);
+  --code-surface: var(--color-gray-800);
+  --code-background: var(--color-gray-900);
+  --code-border: var(--color-gray-700);
+  --code-text-primary: var(--color-gray-200);
+  --code-text-muted: var(--color-gray-400);
+  --code-gutter-text: var(--color-gray-500);
   --code-caret: var(--color-gold-500);
   --code-selection-bg: rgba(245, 158, 11, 0.2);
   --code-selection-match-bg: rgba(245, 158, 11, 0.25);
@@ -128,31 +128,31 @@
   --code-token-number: #fcd34d;
   --code-token-boolean: #fbbf24;
   --code-token-nullish: #c4b5fd;
-  --code-token-comment: var(--color-navy-500);
-  --code-token-punctuation: var(--color-slate-400);
+  --code-token-comment: var(--color-gray-500);
+  --code-token-punctuation: var(--color-gray-400);
   --code-token-property: #7dd3fc;
   --code-token-tag: #86efac;
-  --code-token-operator: var(--color-slate-200);
+  --code-token-operator: var(--color-gray-200);
   --code-token-invalid: rgba(239, 68, 68, 0.6);
 
   /* Scrollbar colors */
-  --scrollbar-track-bg: var(--color-navy-900);
-  --scrollbar-thumb-bg: var(--color-navy-600);
-  --scrollbar-thumb-hover-bg: var(--color-navy-500);
-  --scrollbar-corner-bg: var(--color-navy-900);
+  --scrollbar-track-bg: var(--color-gray-900);
+  --scrollbar-thumb-bg: var(--color-gray-600);
+  --scrollbar-thumb-hover-bg: var(--color-gray-500);
+  --scrollbar-corner-bg: var(--color-gray-900);
 
   /* Shadows - Deeper for dark theme */
   --shadow-interactive-soft: 0 2px 8px rgba(0, 0, 0, 0.4);
 
   /* Toast/notification surface */
-  --toast-card-bg: var(--color-navy-800);
+  --toast-card-bg: var(--color-gray-800);
   --toast-card-border: rgba(255, 255, 255, 0.06);
   --toast-card-shadow: 0 14px 28px rgba(0, 0, 0, 0.5);
   --toast-card-header-text: #ffffff;
   --toast-card-header-bg: var(--color-semantic-error-dark);
-  --toast-card-details-bg: var(--color-navy-800);
-  --toast-text-primary: var(--color-slate-100);
-  --toast-text-secondary: var(--color-slate-400);
+  --toast-card-details-bg: var(--color-gray-800);
+  --toast-text-primary: var(--color-gray-100);
+  --toast-text-secondary: var(--color-gray-400);
   --toast-dismiss-text: #ffffff;
   --toast-dismiss-bg: var(--color-semantic-error-dark);
   --toast-dismiss-hover-bg: var(--color-semantic-error);
@@ -166,18 +166,18 @@
   --toast-auto-dismiss-long: 10000ms;
 
   /* Log viewer */
-  --log-surface-bg: var(--color-navy-900);
-  --log-surface-maximized-bg: var(--color-navy-950);
-  --log-text-primary: var(--color-slate-200);
-  --log-metadata-text: var(--color-navy-500);
-  --log-controls-bg: var(--color-navy-800);
-  --log-controls-border: var(--color-navy-700);
+  --log-surface-bg: var(--color-gray-900);
+  --log-surface-maximized-bg: var(--color-gray-950);
+  --log-text-primary: var(--color-gray-200);
+  --log-metadata-text: var(--color-gray-500);
+  --log-controls-bg: var(--color-gray-800);
+  --log-controls-border: var(--color-gray-700);
   --log-controls-shadow: none;
-  --log-controls-maximized-bg: var(--color-navy-800);
+  --log-controls-maximized-bg: var(--color-gray-800);
   --log-controls-maximized-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --log-placeholder-bg: var(--color-navy-800);
-  --log-placeholder-border: var(--color-navy-700);
-  --log-placeholder-text: var(--color-slate-400);
+  --log-placeholder-bg: var(--color-gray-800);
+  --log-placeholder-border: var(--color-gray-700);
+  --log-placeholder-text: var(--color-gray-400);
   --log-maximize-hover-bg: rgba(255, 255, 255, 0.08);
   --log-scroll-track: rgba(0, 0, 0, 0.1);
   --log-scroll-thumb: rgba(255, 255, 255, 0.15);
@@ -186,12 +186,12 @@
   --log-table-header-border: rgba(255, 255, 255, 0.08);
   --log-table-row-border: rgba(255, 255, 255, 0.04);
   --log-table-row-hover-bg: rgba(255, 255, 255, 0.02);
-  --log-table-cell-text: var(--color-slate-200);
+  --log-table-cell-text: var(--color-gray-200);
   --log-cell-hover-bg: rgba(255, 255, 255, 0.03);
   --log-cell-active-bg: rgba(255, 255, 255, 0.06);
   --log-cell-copied-bg: rgba(34, 197, 94, 0.2);
-  --log-tooltip-bg: var(--color-navy-800);
-  --log-tooltip-text: var(--color-slate-200);
+  --log-tooltip-bg: var(--color-gray-800);
+  --log-tooltip-text: var(--color-gray-200);
   --log-tooltip-border: rgba(255, 255, 255, 0.15);
   --log-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   --log-fallback-retry-hover-bg: rgba(245, 158, 11, 0.2);
@@ -209,48 +209,48 @@
   --log-pod-color-10: #a8a29e;
   --log-pod-color-11: #94a3b8;
   --log-pod-color-12: #fb7185;
-  --log-pod-color-fallback: var(--color-slate-400);
+  --log-pod-color-fallback: var(--color-gray-400);
 
   /* Dropdown */
   --dropdown-trigger-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   --dropdown-trigger-focus-shadow: 0 0 0 3px rgba(245, 158, 11, 0.25);
-  --dropdown-menu-bg: var(--color-navy-800);
-  --dropdown-menu-border: var(--color-navy-700);
+  --dropdown-menu-bg: var(--color-gray-800);
+  --dropdown-menu-border: var(--color-gray-700);
   --dropdown-menu-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 
   /* Actions menu */
-  --actions-menu-button-text: var(--color-slate-400);
-  --actions-menu-button-hover-bg: var(--color-navy-700);
-  --actions-menu-button-hover-border: var(--color-navy-600);
-  --actions-menu-dropdown-bg: var(--color-navy-800);
-  --actions-menu-dropdown-border: var(--color-navy-700);
+  --actions-menu-button-text: var(--color-gray-400);
+  --actions-menu-button-hover-bg: var(--color-gray-700);
+  --actions-menu-button-hover-border: var(--color-gray-600);
+  --actions-menu-dropdown-bg: var(--color-gray-800);
+  --actions-menu-dropdown-border: var(--color-gray-700);
   --actions-menu-dropdown-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --actions-menu-item-hover-bg: var(--color-navy-700);
+  --actions-menu-item-hover-bg: var(--color-gray-700);
   --actions-menu-item-danger-hover-bg: rgba(239, 68, 68, 0.15);
 
   /* Context menu */
   --context-menu-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 
   /* Segmented button */
-  --segmented-bg: var(--color-navy-700);
-  --segmented-option-text: var(--color-slate-200);
-  --segmented-option-divider: var(--color-navy-600);
+  --segmented-bg: var(--color-gray-700);
+  --segmented-option-text: var(--color-gray-200);
+  --segmented-option-divider: var(--color-gray-600);
   --segmented-option-divider-opacity: 1;
-  --segmented-option-hover: var(--color-navy-600);
+  --segmented-option-hover: var(--color-gray-600);
   --segmented-option-active-bg: var(--color-gold-600);
   --segmented-option-active-hover: var(--color-gold-500);
-  --segmented-option-active-text: var(--color-navy-900);
+  --segmented-option-active-text: var(--color-gray-900);
 
   /* Shortcut help modal */
   --shortcut-item-bg: rgba(255, 255, 255, 0.02);
   --shortcut-item-border: rgba(255, 255, 255, 0.06);
-  --shortcut-key-bg: var(--color-navy-700);
-  --shortcut-key-border: var(--color-navy-600);
+  --shortcut-key-bg: var(--color-gray-700);
+  --shortcut-key-border: var(--color-gray-600);
   --shortcut-key-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.05);
-  --shortcut-key-text: var(--color-slate-200);
+  --shortcut-key-text: var(--color-gray-200);
 
   /* Refresh indicators */
-  --refresh-status-disabled: var(--color-navy-500);
+  --refresh-status-disabled: var(--color-gray-500);
   --refresh-status-active: var(--color-semantic-success-light);
   --refresh-status-active-shadow: rgba(74, 222, 128, 0.5);
   --refresh-status-refreshing-shadow: rgba(74, 222, 128, 0.7);
@@ -270,15 +270,15 @@
   --modal-container-shadow:
     0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05),
     0 0 80px -20px rgba(245, 158, 11, 0.15);
-  --modal-content-bg: var(--color-navy-900);
-  --modal-footer-bg: var(--color-navy-800);
-  --modal-scroll-thumb: var(--color-navy-600);
-  --modal-scroll-thumb-hover: var(--color-navy-500);
+  --modal-content-bg: var(--color-gray-900);
+  --modal-footer-bg: var(--color-gray-800);
+  --modal-scroll-thumb: var(--color-gray-600);
+  --modal-scroll-thumb-hover: var(--color-gray-500);
 
   /* Tooltips */
-  --tooltip-bg: var(--color-navy-800);
-  --tooltip-text: var(--color-slate-100);
-  --tooltip-border: var(--color-navy-700);
+  --tooltip-bg: var(--color-gray-800);
+  --tooltip-text: var(--color-gray-100);
+  --tooltip-border: var(--color-gray-700);
   --tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 
   /* Editor content shared tokens */
@@ -294,7 +294,7 @@
   --yaml-validation-border: rgba(239, 68, 68, 0.35);
   --yaml-notice-bg: rgba(245, 158, 11, 0.1);
   --yaml-notice-border: rgba(245, 158, 11, 0.25);
-  --yaml-notice-text: var(--color-slate-300);
+  --yaml-notice-text: var(--color-gray-300);
   --yaml-drift-bg: rgba(0, 0, 0, 0.25);
 
   /* Utilization indicators */
@@ -315,8 +315,8 @@
   );
   --utilization-indicator-request: linear-gradient(
     90deg,
-    var(--color-slate-400) 0%,
-    var(--color-slate-500) 100%
+    var(--color-gray-400) 0%,
+    var(--color-gray-500) 100%
   );
   --utilization-indicator-limit: repeating-linear-gradient(
     45deg,
@@ -378,15 +378,15 @@
   );
   --resourcebar-usage-unbounded: linear-gradient(
     90deg,
-    var(--color-slate-500) 0%,
-    var(--color-slate-600) 100%
+    var(--color-gray-500) 0%,
+    var(--color-gray-600) 100%
   );
   --resourcebar-usage-shadow-normal: 0 0 8px rgba(34, 197, 94, 0.3);
   --resourcebar-usage-shadow-warning: 0 0 8px rgba(245, 158, 11, 0.3);
   --resourcebar-usage-shadow-critical: 0 0 8px rgba(239, 68, 68, 0.3);
   --resourcebar-usage-shadow-unbounded: 0 0 8px rgba(100, 116, 139, 0.3);
-  --resourcebar-tooltip-bg: var(--color-navy-800);
-  --resourcebar-tooltip-border: var(--color-navy-700);
+  --resourcebar-tooltip-bg: var(--color-gray-800);
+  --resourcebar-tooltip-border: var(--color-gray-700);
   --resourcebar-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
   --resourcebar-warning-text: var(--color-gold-400);
 

@@ -141,12 +141,12 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 /* === NAUTICAL LUXURY PALETTE === */
 
 /* Primary: Deep Navy */
---color-navy-950: #0a0f1a;
---color-navy-900: #0f172a;
---color-navy-800: #1e293b;
---color-navy-700: #334155;
---color-navy-600: #475569;
---color-navy-500: #64748b;
+--color-gray-950: #0a0f1a;
+--color-gray-900: #0f172a;
+--color-gray-800: #1e293b;
+--color-gray-700: #334155;
+--color-gray-600: #475569;
+--color-gray-500: #64748b;
 
 /* Accent: Gold/Amber */
 --color-gold-500: #f59e0b;
@@ -166,22 +166,22 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 --color-info: #0ea5e9;
 
 /* Neutrals */
---color-slate-50: #f8fafc;
---color-slate-100: #f1f5f9;
---color-slate-200: #e2e8f0;
---color-slate-300: #cbd5e1;
---color-slate-400: #94a3b8;
+--color-gray-50: #f8fafc;
+--color-gray-100: #f1f5f9;
+--color-gray-200: #e2e8f0;
+--color-gray-300: #cbd5e1;
+--color-gray-400: #94a3b8;
 ```
 
 **Dark Theme (Primary):**
 
 ```css
 :root {
-  --color-bg: var(--color-navy-900);
-  --color-bg-secondary: var(--color-navy-800);
-  --color-bg-tertiary: var(--color-navy-700);
-  --color-text: var(--color-slate-100);
-  --color-text-secondary: var(--color-slate-400);
+  --color-bg: var(--color-gray-900);
+  --color-bg-secondary: var(--color-gray-800);
+  --color-bg-tertiary: var(--color-gray-700);
+  --color-text: var(--color-gray-100);
+  --color-text-secondary: var(--color-gray-400);
   --color-accent: var(--color-gold-500);
   --color-accent-hover: var(--color-gold-400);
 }
@@ -191,11 +191,11 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 
 ```css
 [data-theme='light'] {
-  --color-bg: var(--color-slate-50);
+  --color-bg: var(--color-gray-50);
   --color-bg-secondary: #ffffff;
-  --color-bg-tertiary: var(--color-slate-100);
-  --color-text: var(--color-navy-900);
-  --color-text-secondary: var(--color-navy-600);
+  --color-bg-tertiary: var(--color-gray-100);
+  --color-text: var(--color-gray-900);
+  --color-text-secondary: var(--color-gray-600);
   --color-accent: var(--color-teal-600);
   --color-accent-hover: var(--color-teal-500);
 }
@@ -366,7 +366,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 
 .button.primary {
   background: linear-gradient(135deg, var(--color-gold-500) 0%, var(--color-gold-600) 100%);
-  color: var(--color-navy-900);
+  color: var(--color-gray-900);
   box-shadow:
     0 2px 4px rgba(0, 0, 0, 0.1),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
@@ -605,7 +605,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 
 ```css
 .app-header {
-  background: linear-gradient(90deg, var(--color-navy-900) 0%, var(--color-navy-800) 100%);
+  background: linear-gradient(90deg, var(--color-gray-900) 0%, var(--color-gray-800) 100%);
   border-bottom: 1px solid rgba(245, 158, 11, 0.2); /* Gold accent line */
 }
 
@@ -712,14 +712,14 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--color-navy-600);
+  background: var(--color-gray-600);
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--color-navy-500);
+  background: var(--color-gray-500);
 }
 ```
 
@@ -792,6 +792,7 @@ Match the premium feel with proper shadows and animations.
 - [x] Add theme tooltip variables (dark/light) ✅
 
 **Remaining (manual testing):**
+
 - [ ] Final accessibility review (manual testing recommended)
 - [ ] Cross-browser testing (manual testing recommended)
 
@@ -836,12 +837,12 @@ Match the premium feel with proper shadows and animations.
 
 ```css
 /* Navy (Primary Background) */
---color-navy-950: #0a0f1a;
---color-navy-900: #0f172a;
---color-navy-800: #1e293b;
---color-navy-700: #334155;
---color-navy-600: #475569;
---color-navy-500: #64748b;
+--color-gray-950: #0a0f1a;
+--color-gray-900: #0f172a;
+--color-gray-800: #1e293b;
+--color-gray-700: #334155;
+--color-gray-600: #475569;
+--color-gray-500: #64748b;
 
 /* Gold (Primary Accent) */
 --color-gold-600: #d97706;
@@ -855,11 +856,11 @@ Match the premium feel with proper shadows and animations.
 --color-teal-400: #2dd4bf;
 
 /* Slate (Neutrals) */
---color-slate-50: #f8fafc;
---color-slate-100: #f1f5f9;
---color-slate-200: #e2e8f0;
---color-slate-300: #cbd5e1;
---color-slate-400: #94a3b8;
+--color-gray-50: #f8fafc;
+--color-gray-100: #f1f5f9;
+--color-gray-200: #e2e8f0;
+--color-gray-300: #cbd5e1;
+--color-gray-400: #94a3b8;
 
 /* Semantic */
 --color-success: #22c55e;
