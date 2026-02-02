@@ -268,30 +268,18 @@
 /* Sidebar Resizer styles */
 
 .sidebar-resizer {
-  width: 10px;
-  margin-left: -5px;
-  background: transparent;
+  width: 4px;
+  background-color: var(--color-bg-secondary);
   cursor:
     url("../../assets/cursors/ew-resize.svg") 12 12,
     col-resize;
   position: relative;
+  transition: background var(--transition-fast);
   flex-shrink: 0;
 }
 
-.sidebar-resizer::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 4px;
-  transform: translateX(-50%);
-  background: transparent;
-  transition: background var(--transition-fast);
-}
-
-.sidebar-resizer:hover::after {
-  background: var(--color-resize-handle);
+.sidebar-resizer:hover {
+  background-color: var(--color-resize-handle);
 }
 
 /* Body cursor override during sidebar resize */
