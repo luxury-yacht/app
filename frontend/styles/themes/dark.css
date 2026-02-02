@@ -75,31 +75,31 @@
   --button-disabled-text: var(--color-gray-500);
   --button-disabled-border: rgba(255, 255, 255, 0.08);
 
-  /* Badge colors - Vibrant, more saturated */
+  /* Badge colors - Bright text for dark backgrounds */
   --badge-blue-bg: var(--color-badge-blue-bg-dark);
-  --badge-blue-text: var(--color-badge-blue);
+  --badge-blue-text: #93c5fd;
   --badge-green-bg: var(--color-badge-green-bg-dark);
-  --badge-green-text: var(--color-badge-green);
+  --badge-green-text: #86efac;
   --badge-grey-bg: var(--color-badge-slate-bg-dark);
-  --badge-grey-text: var(--color-gray-400);
+  --badge-grey-text: var(--color-gray-200);
   --badge-lime-bg: var(--color-badge-lime-bg-dark);
-  --badge-lime-text: var(--color-badge-lime);
+  --badge-lime-text: #d9f99d;
   --badge-orange-bg: var(--color-badge-orange-bg-dark);
-  --badge-orange-text: var(--color-badge-orange);
+  --badge-orange-text: #fdba74;
   --badge-pink-bg: var(--color-badge-pink-bg-dark);
-  --badge-pink-text: var(--color-badge-pink);
+  --badge-pink-text: #f9a8d4;
   --badge-purple-bg: var(--color-badge-purple-bg-dark);
-  --badge-purple-text: var(--color-badge-purple);
+  --badge-purple-text: #d8b4fe;
   --badge-teal-bg: var(--color-badge-teal-bg-dark);
-  --badge-teal-text: var(--color-badge-teal);
+  --badge-teal-text: #5eead4;
   --badge-warning-bg: var(--color-badge-amber-bg-dark);
-  --badge-warning-text: var(--color-badge-amber);
+  --badge-warning-text: #fde047;
   --badge-green-soft-bg: var(--color-badge-green-bg-dark);
-  --badge-green-soft-text: var(--color-badge-green);
+  --badge-green-soft-text: #86efac;
 
   /* Status colors */
   --status-available-bg: var(--color-badge-green-bg-dark);
-  --status-available-text: var(--color-badge-green);
+  --status-available-text: #86efac;
   --status-failed-bg: rgba(239, 68, 68, 0.2);
   --status-failed-text: var(--color-semantic-error-light);
   --status-released-bg: var(--color-badge-orange-bg-dark);

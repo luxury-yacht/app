@@ -15,11 +15,10 @@
   font-weight: var(--font-weight-badge);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  /* Subtle border for definition */
-  border: 1px solid transparent;
-  /* Default/fallback colors */
+  /* Default/fallback colors (used for unknown kinds like custom resources) */
   background-color: var(--badge-grey-bg);
   color: var(--badge-grey-text);
+  border: 1px solid rgba(100, 116, 139, 0.3);
 }
 
 /* Clickable badge interactions */
@@ -27,17 +26,17 @@
   cursor: pointer;
   transition:
     transform var(--duration-fast, 150ms) var(--ease-out, ease),
-    box-shadow var(--duration-fast, 150ms) var(--ease-out, ease),
-    background-color var(--duration-fast, 150ms) var(--ease-out, ease);
+    box-shadow var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
 .kind-badge.clickable:hover {
-  transform: scale(1.05);
+  /* transform: translateY(-1px); */
   box-shadow: var(--shadow-interactive-soft);
+  filter: brightness(1.25);
 }
 
 .kind-badge.clickable:active {
-  transform: scale(0.98);
+  transform: translateY(0);
 }
 
 /* ==========================================================================
@@ -105,7 +104,7 @@
 .kind-badge.pod {
   background-color: var(--badge-purple-bg);
   color: var(--badge-purple-text);
-  border-color: rgba(168, 85, 247, 0.2);
+  border-color: rgba(168, 85, 247, 0.35);
 }
 
 /* Teal badges - Namespaces, IngressClass */
