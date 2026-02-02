@@ -24,8 +24,9 @@
 }
 
 .find-controls .find-input:focus {
+  outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-bg, rgba(var(--color-accent-rgb), 0.15));
+  box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
 .find-controls .find-nav {

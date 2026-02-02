@@ -16,8 +16,8 @@
   --color-accent: var(--color-gold-500);
   --color-accent-hover: var(--color-gold-400);
   --color-accent-bg: rgba(245, 158, 11, 0.15);
-  --color-primary: var(--color-gold-500);
-  --color-primary-hover: var(--color-gold-400);
+  --color-primary: var(--color-teal-400);
+  --color-primary-hover: var(--color-teal-300);
 
   /* Semantic colors */
   --color-success: var(--color-semantic-success-light);

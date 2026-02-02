@@ -52,12 +52,6 @@
 .command-palette-header {
   padding: 0;
   border-bottom: 1px solid var(--color-border);
-  /* Subtle gradient for depth */
-  background: linear-gradient(
-    180deg,
-    var(--color-bg-secondary) 0%,
-    var(--color-bg) 100%
-  );
 }
 
 .command-palette-input {
@@ -153,12 +147,7 @@
 }
 
 .command-palette-item.selected {
-  /* Gradient from accent color fading to transparent */
-  background: linear-gradient(
-    90deg,
-    rgba(var(--color-accent-rgb, 245, 158, 11), 0.12) 0%,
-    transparent 100%
-  );
+  background-color: var(--color-bg-secondary);
   border-left-color: var(--color-accent);
   position: relative;
 }
@@ -224,12 +213,7 @@
   gap: 1rem;
   padding: 0.5rem 1rem;
   border-top: 1px solid var(--color-border);
-  /* Subtle gradient matching header */
-  background: linear-gradient(
-    180deg,
-    var(--color-bg) 0%,
-    var(--color-bg-secondary) 100%
-  );
+  background-color: var(--color-bg-secondary);
   font-size: 0.75rem;
   color: var(--color-text-secondary);
 }

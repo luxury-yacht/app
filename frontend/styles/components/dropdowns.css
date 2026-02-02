@@ -320,7 +320,7 @@
 .search-input:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px var(--color-accent-bg, rgba(var(--color-accent-rgb), 0.15));
+  box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
 /* No options message */
@@ -366,14 +366,6 @@
 
 .loading .dropdown-trigger {
   cursor: wait;
-}
-
-.error .dropdown-trigger {
-  border-color: var(--color-error);
-}
-
-.error .dropdown-trigger:focus {
-  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.15);
 }
 
 /* ============================================

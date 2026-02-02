@@ -3,15 +3,8 @@
   align-items: center;
   justify-content: space-between;
   height: 38px;
-  /* Subtle gradient for depth */
-  background: linear-gradient(
-    90deg,
-    var(--color-bg-secondary) 0%,
-    var(--color-bg) 50%,
-    var(--color-bg-secondary) 100%
-  );
-  /* Subtle accent line at bottom */
-  border-bottom: 1px solid var(--color-header-accent-border, var(--border-color));
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--border-color);
   --wails-draggable: true;
   user-select: none;
   padding: 0 12px;

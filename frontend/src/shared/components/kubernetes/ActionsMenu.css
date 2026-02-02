@@ -130,7 +130,8 @@
 }
 
 .scale-input-group:focus-within {
-  border-color: var(--color-primary);
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
 .scale-spinner-btn {

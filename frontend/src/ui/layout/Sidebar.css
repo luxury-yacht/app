@@ -157,12 +157,7 @@
 }
 
 .sidebar-item.active {
-  /* Gradient from accent for premium feel */
-  background: linear-gradient(
-    90deg,
-    var(--color-sidebar-active) 0%,
-    var(--color-sidebar-active-end, var(--color-sidebar-active)) 100%
-  );
+  background-color: var(--color-sidebar-active);
   color: #fff;
   border-left-color: var(--color-accent);
 }

@@ -37,8 +37,8 @@
 
 .filter-group input:focus {
   outline: none;
-  border-color: var(--color-accent, #3b82f6);
-  box-shadow: 0 0 0 1px var(--color-accent, #3b82f6);
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
 .browse-actions {

@@ -148,13 +148,8 @@
   position: relative;
   top: 0;
   z-index: var(--z-index-grid-header);
-  /* Subtle gradient for depth */
-  background: linear-gradient(
-    180deg,
-    var(--grid-bg-header) 0%,
-    var(--color-bg-tertiary) 100%
-  );
-  border-bottom: 2px solid var(--grid-border-color);
+  background-color: var(--grid-bg-header);
+  border-bottom: 1px solid var(--grid-border-color);
   width: 100%;
   text-transform: uppercase;
 }
@@ -166,8 +161,7 @@
   right: -9999px;
   bottom: 0;
   width: 10000px;
-  /* Match the gradient end color for seamless extension */
-  background-color: var(--color-bg-tertiary);
+  background-color: var(--grid-bg-header);
   pointer-events: none;
 }
 
@@ -178,8 +172,7 @@
   padding: var(--grid-spacing-cell-y) var(--grid-spacing-cell-x);
   text-align: left;
   color: var(--grid-text-secondary);
-  /* Transparent background to show parent gradient */
-  background-color: transparent;
+  background-color: var(--grid-bg-header);
   position: relative;
   white-space: nowrap;
   overflow: hidden;
@@ -698,6 +691,8 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-filter-group input:focus,
 .gridtable-filter-group select:focus {
   outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
 .gridtable-filter-group[data-gridtable-filter-role="columns"] {

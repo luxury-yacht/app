@@ -105,7 +105,9 @@
 }
 
 .pod-logs-text-filter:focus {
-  border-color: var(--color-primary);
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
 .pod-logs-text-filter::placeholder {
