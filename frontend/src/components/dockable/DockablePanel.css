@@ -159,35 +159,58 @@
 .dockable-panel__resize-handle {
   position: absolute;
   background: transparent;
-  transition: background var(--transition-fast);
   z-index: 10;
 }
 
 .dockable-panel__resize-handle--left {
-  left: -2px;
+  left: -5px;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 10px;
   cursor:
     url("../../assets/cursors/ew-resize.svg") 12 12,
     col-resize;
 }
 
-.dockable-panel__resize-handle--left:hover {
+.dockable-panel__resize-handle--left::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%);
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.dockable-panel__resize-handle--left:hover::after {
   background: var(--color-resize-handle);
 }
 
 .dockable-panel__resize-handle--top {
   left: 0;
   right: 0;
-  top: -2px;
-  height: 4px;
+  top: -5px;
+  height: 10px;
   cursor:
     url("../../assets/cursors/ns-resize.svg") 12 12,
     row-resize;
 }
 
-.dockable-panel__resize-handle--top:hover {
+.dockable-panel__resize-handle--top::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 4px;
+  transform: translateY(-50%);
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+.dockable-panel__resize-handle--top:hover::after {
   background: var(--color-resize-handle);
 }
 
