@@ -148,7 +148,13 @@
   position: relative;
   top: 0;
   z-index: var(--z-index-grid-header);
-  background-color: var(--grid-bg-header);
+  /* Subtle gradient for depth */
+  background: linear-gradient(
+    180deg,
+    var(--grid-bg-header) 0%,
+    var(--color-bg-tertiary) 100%
+  );
+  border-bottom: 2px solid var(--grid-border-color);
   width: 100%;
   text-transform: uppercase;
 }
@@ -160,28 +166,30 @@
   right: -9999px;
   bottom: 0;
   width: 10000px;
-  background-color: var(--grid-bg-header);
+  /* Match the gradient end color for seamless extension */
+  background-color: var(--color-bg-tertiary);
   pointer-events: none;
 }
 
 .grid-cell-header {
   font-size: var(--grid-font-size-header);
   font-weight: var(--font-weight-bold);
-  /* text-transform: uppercase; */
+  letter-spacing: 0.04em;
   padding: var(--grid-spacing-cell-y) var(--grid-spacing-cell-x);
   text-align: left;
   color: var(--grid-text-secondary);
-  background-color: var(--grid-bg-header);
+  /* Transparent background to show parent gradient */
+  background-color: transparent;
   position: relative;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   user-select: none;
   display: flex;
-  align-items: center; /* Vertically center header content */
-  min-width: 0; /* Important for ellipsis to work */
+  align-items: center;
+  min-width: 0;
   flex-shrink: 0;
-  box-sizing: border-box; /* Include padding in width */
+  box-sizing: border-box;
 }
 
 .header-content {

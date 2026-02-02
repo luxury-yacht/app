@@ -49,8 +49,11 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  /* Use display font for section headers */
+  font-family: var(--font-family-display, var(--font-family-base));
   font-size: var(--font-size-normal);
   font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
   margin-top: 0;
   margin-bottom: 0.5rem;
   color: var(--color-text-tertiary);
@@ -154,7 +157,12 @@
 }
 
 .sidebar-item.active {
-  background-color: var(--color-sidebar-active);
+  /* Gradient from accent for premium feel */
+  background: linear-gradient(
+    90deg,
+    var(--color-sidebar-active) 0%,
+    var(--color-sidebar-active-end, var(--color-sidebar-active)) 100%
+  );
   color: #fff;
   border-left-color: var(--color-accent);
 }

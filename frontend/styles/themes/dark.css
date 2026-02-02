@@ -32,11 +32,17 @@
   --color-table-header-bg: var(--color-navy-800);
   --color-table-border: var(--color-navy-700);
   --color-sidebar-active: var(--color-navy-700);
+  --color-sidebar-active-end: var(--color-navy-800);
   --color-object-panel-link: var(--color-teal-400);
   --color-text-inverse: var(--color-navy-900);
   --color-success-bg: rgba(34, 197, 94, 0.15);
   --color-warning-bg: rgba(245, 158, 11, 0.18);
   --color-info-bg: rgba(14, 165, 233, 0.18);
+
+  /* Accent RGB values for rgba() usage */
+  --color-accent-rgb: 245, 158, 11;
+  --color-accent-glow: rgba(245, 158, 11, 0.12);
+  --color-header-accent-border: rgba(245, 158, 11, 0.2);
 
   /* Grid table resize handle */
   --grid-resize-handle-color: var(--color-navy-500);
