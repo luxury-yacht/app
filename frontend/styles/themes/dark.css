@@ -2,10 +2,10 @@
   /* ==========================================================================
      Dark Theme
      ==========================================================================
-     Cool slate backgrounds with gold accents for a refined, modern feel.
+     Warm charcoal backgrounds with gold accents for a refined, modern feel.
      ========================================================================== */
 
-  /* Core colors - Cool slate foundation with gold accent */
+  /* Core colors - Warm charcoal foundation with gold accent */
   --color-bg: var(--color-navy-900);
   --color-bg-secondary: var(--color-navy-800);
   --color-bg-tertiary: var(--color-navy-700);

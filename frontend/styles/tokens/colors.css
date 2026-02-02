@@ -1,20 +1,20 @@
 /* ==========================================================================
    Luxury Yacht Color Palette
    ==========================================================================
-   A refined palette featuring cool slate backgrounds and gold accents.
+   A refined palette featuring warm charcoal backgrounds and gold accents.
    Designed for a premium, modern feel.
    ========================================================================== */
 
 :root {
-  /* === PRIMARY: Cool Slate (Background Scale) === */
-  /* Neutral grays with subtle cool undertone - not navy */
-  --color-navy-950: #09090b;
-  --color-navy-900: #0f0f12;
-  --color-navy-800: #18181c;
-  --color-navy-700: #27272e;
-  --color-navy-600: #3f3f48;
-  --color-navy-500: #52525e;
-  --color-navy-400: #71717e;
+  /* === PRIMARY: Warm Charcoal (Background Scale) === */
+  /* Neutral grays with subtle warm undertone */
+  --color-navy-950: #0a0908;
+  --color-navy-900: #121110;
+  --color-navy-800: #1c1a18;
+  --color-navy-700: #2a2725;
+  --color-navy-600: #3d3935;
+  --color-navy-500: #524d48;
+  --color-navy-400: #6b645d;
 
   /* === ACCENT: Gold/Amber (Primary Accent) === */
   --color-gold-700: #b45309;
