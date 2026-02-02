@@ -30,6 +30,7 @@
   border-left: 2px solid var(--color-border, #333);
   border-right: none;
   max-height: calc(100vh - var(--dockable-panel-top-offset));
+  overflow: visible;
 }
 
 .dockable-panel--bottom {
@@ -38,6 +39,7 @@
   bottom: 0;
   border-top: 2px solid var(--color-border, #333);
   border-bottom: none;
+  overflow: visible;
 }
 
 .dockable-panel--floating {
@@ -157,36 +159,46 @@
 .dockable-panel__resize-handle {
   position: absolute;
   background: transparent;
-  transition: background-color var(--transition-fast);
-  /* z-index: 10; */
-}
-
-.dockable-panel__resize-handle:hover {
-  background-color: var(--color-accent);
-}
-
-.dockable-panel__resize-handle:active {
-  background-color: var(--color-accent-hover);
+  transition: background var(--transition-fast);
+  z-index: 10;
 }
 
 .dockable-panel__resize-handle--left {
-  left: -2px;
+  left: -5px;
   top: 0;
   bottom: 0;
-  width: 4px;
+  width: 10px;
   cursor:
     url("../../assets/cursors/ew-resize.svg") 12 12,
     col-resize;
 }
 
+.dockable-panel__resize-handle--left:hover {
+  background: linear-gradient(
+    to right,
+    transparent 0%,
+    var(--color-accent) 50%,
+    transparent 100%
+  );
+}
+
 .dockable-panel__resize-handle--top {
   left: 0;
   right: 0;
-  top: -2px;
-  height: 4px;
+  top: -5px;
+  height: 10px;
   cursor:
     url("../../assets/cursors/ns-resize.svg") 12 12,
     row-resize;
+}
+
+.dockable-panel__resize-handle--top:hover {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--color-accent) 50%,
+    transparent 100%
+  );
 }
 
 /* Invisible resize zones for floating panels */
