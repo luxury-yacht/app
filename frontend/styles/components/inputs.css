@@ -23,6 +23,11 @@
   color: var(--color-text-tertiary);
 }
 
+.find-controls .find-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-bg, rgba(var(--color-accent-rgb), 0.15));
+}
+
 .find-controls .find-nav {
   display: flex;
   align-items: center;

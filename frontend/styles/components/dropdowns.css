@@ -58,6 +58,11 @@
   box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
+.dropdown-trigger:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .open .dropdown-trigger {
   border-color: var(--color-accent);
   box-shadow: var(--dropdown-trigger-focus-shadow);
@@ -156,7 +161,11 @@
   color: var(--color-text);
   user-select: none;
   white-space: nowrap;
-  transition: background-color 0.15s ease;
+  /* Left border for accent on highlight/focus */
+  border-left: 3px solid transparent;
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    border-color var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
 .dropdown-option:hover:not(.disabled) {
@@ -169,6 +178,8 @@
 
 .dropdown-option.highlighted:not(.disabled) {
   background-color: var(--color-bg-tertiary, rgba(255, 255, 255, 0.05));
+  /* Left accent border for keyboard navigation */
+  border-left-color: var(--color-accent);
 }
 
 .dropdown-option.selected {
@@ -309,6 +320,7 @@
 .search-input:focus {
   outline: none;
   border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-bg, rgba(var(--color-accent-rgb), 0.15));
 }
 
 /* No options message */
