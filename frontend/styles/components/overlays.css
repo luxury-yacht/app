@@ -11,7 +11,7 @@
   min-width: 1.2rem;
   padding: 0.1rem 0.25rem;
   font-size: 0.8rem;
-  font-family: var(--font-family-base);
+  font-family: var(--font-family-mono);
   border: var(--border-width) solid var(--color-border);
   border-radius: var(--border-radius-round);
   display: inline-flex;

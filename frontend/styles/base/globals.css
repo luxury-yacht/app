@@ -58,37 +58,27 @@ kbd {
     inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
-/* ==========================================================================
-   Scrollbar Styling
-   ========================================================================== */
-
 ::-webkit-scrollbar {
-  width: var(--scrollbar-width, 8px);
-  height: var(--scrollbar-height, 8px);
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-height);
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--scrollbar-track-bg, transparent);
-  border-radius: 4px;
+  background: var(--scrollbar-track-bg);
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb-bg);
-  border-radius: 4px;
-  /* Padding effect via transparent border */
-  border: 2px solid transparent;
-  background-clip: padding-box;
-  transition: background-color 0.15s ease;
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover-bg);
-  border: 2px solid transparent;
-  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-corner {
-  background: var(--scrollbar-corner-bg, transparent);
+  background: var(--scrollbar-corner-bg);
 }
 
 /* Firefox scrollbar styling */
