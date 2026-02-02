@@ -280,6 +280,12 @@
   --modal-scroll-thumb: var(--color-navy-600);
   --modal-scroll-thumb-hover: var(--color-navy-500);
 
+  /* Tooltips */
+  --tooltip-bg: var(--color-navy-800);
+  --tooltip-text: var(--color-slate-100);
+  --tooltip-border: var(--color-navy-700);
+  --tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+
   /* Editor content shared tokens */
   --editor-scroll-track: rgba(0, 0, 0, 0.1);
   --editor-scroll-thumb: rgba(255, 255, 255, 0.15);
