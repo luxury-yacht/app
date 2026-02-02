@@ -364,10 +364,6 @@
   border-color: var(--color-border);
 }
 
-.loading .dropdown-trigger {
-  cursor: wait;
-}
-
 /* ============================================
    9. ANIMATIONS
    ============================================ */

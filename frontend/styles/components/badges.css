@@ -135,8 +135,8 @@
 }
 
 .kind-badge.warning {
-  background-color: var(--status-released-bg);
-  color: var(--status-released-text);
+  background-color: var(--status-warning-bg);
+  color: var(--status-warning-text);
   border-color: rgba(249, 115, 22, 0.2);
 }
 
@@ -158,37 +158,10 @@
   color: var(--status-warning-text);
 }
 
-.status-badge.notready {
-  color: var(--status-notready-text);
-}
-
-.status-badge.status-available {
-  background-color: var(--status-available-bg);
-  color: var(--status-available-text);
-  border-color: rgba(34, 197, 94, 0.25);
-}
-
-.status-badge.status-bound {
-  background-color: var(--status-bound-bg);
-  color: var(--status-bound-text);
-  border-color: rgba(59, 130, 246, 0.25);
-}
-
-.status-badge.status-released {
-  background-color: var(--status-released-bg);
-  color: var(--status-released-text);
-  border-color: rgba(249, 115, 22, 0.25);
-}
-
 .status-badge.status-failed {
   background-color: var(--status-failed-bg);
   color: var(--status-failed-text);
   border-color: rgba(239, 68, 68, 0.25);
-}
-
-.status-badge.restarted {
-  color: var(--status-restarted-text);
-  font-weight: 600;
 }
 
 /* ==========================================================================

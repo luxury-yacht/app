@@ -99,14 +99,10 @@
   /* Status colors */
   --status-available-bg: var(--color-badge-green-bg-dark);
   --status-available-text: var(--color-badge-green);
-  --status-bound-bg: var(--color-badge-blue-bg-dark);
-  --status-bound-text: var(--color-badge-blue);
   --status-failed-bg: rgba(239, 68, 68, 0.2);
   --status-failed-text: var(--color-semantic-error-light);
-  --status-notready-text: var(--color-semantic-error-light);
   --status-released-bg: var(--color-badge-orange-bg-dark);
   --status-released-text: var(--color-badge-orange);
-  --status-restarted-text: var(--color-semantic-error-light);
   --status-warning-text: var(--color-gold-400);
 
   /* Code editor colors */
@@ -272,8 +268,7 @@
   /* Modal overlays - Gold glow accent */
   --modal-overlay-bg: rgba(10, 15, 26, 0.85);
   --modal-container-shadow:
-    0 25px 50px -12px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 25px 50px -12px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05),
     0 0 80px -20px rgba(245, 158, 11, 0.15);
   --modal-content-bg: var(--color-navy-900);
   --modal-footer-bg: var(--color-navy-800);
@@ -318,7 +313,11 @@
     rgba(245, 158, 11, 0.4) 4px,
     rgba(245, 158, 11, 0.4) 8px
   );
-  --utilization-indicator-request: linear-gradient(90deg, var(--color-slate-400) 0%, var(--color-slate-500) 100%);
+  --utilization-indicator-request: linear-gradient(
+    90deg,
+    var(--color-slate-400) 0%,
+    var(--color-slate-500) 100%
+  );
   --utilization-indicator-limit: repeating-linear-gradient(
     45deg,
     var(--color-gold-400),
@@ -362,10 +361,26 @@
   --resourcebar-status-shadow: 0 0 4px rgba(251, 191, 36, 0.5);
   --resourcebar-status-stale-shadow: 0 0 4px rgba(251, 191, 36, 0.5);
   --resourcebar-status-error-shadow: 0 0 4px rgba(248, 113, 113, 0.5);
-  --resourcebar-usage-normal: linear-gradient(90deg, var(--color-semantic-success) 0%, var(--color-semantic-success-dark) 100%);
-  --resourcebar-usage-warning: linear-gradient(90deg, var(--color-gold-500) 0%, var(--color-gold-600) 100%);
-  --resourcebar-usage-critical: linear-gradient(90deg, var(--color-semantic-error) 0%, var(--color-semantic-error-dark) 100%);
-  --resourcebar-usage-unbounded: linear-gradient(90deg, var(--color-slate-500) 0%, var(--color-slate-600) 100%);
+  --resourcebar-usage-normal: linear-gradient(
+    90deg,
+    var(--color-semantic-success) 0%,
+    var(--color-semantic-success-dark) 100%
+  );
+  --resourcebar-usage-warning: linear-gradient(
+    90deg,
+    var(--color-gold-500) 0%,
+    var(--color-gold-600) 100%
+  );
+  --resourcebar-usage-critical: linear-gradient(
+    90deg,
+    var(--color-semantic-error) 0%,
+    var(--color-semantic-error-dark) 100%
+  );
+  --resourcebar-usage-unbounded: linear-gradient(
+    90deg,
+    var(--color-slate-500) 0%,
+    var(--color-slate-600) 100%
+  );
   --resourcebar-usage-shadow-normal: 0 0 8px rgba(34, 197, 94, 0.3);
   --resourcebar-usage-shadow-warning: 0 0 8px rgba(245, 158, 11, 0.3);
   --resourcebar-usage-shadow-critical: 0 0 8px rgba(239, 68, 68, 0.3);
