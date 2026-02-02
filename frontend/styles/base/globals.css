@@ -42,6 +42,13 @@ pre {
   font-size: var(--font-size-mono);
 }
 
+.keycap {
+  margin-left: auto;
+  padding-left: 1rem;
+  display: flex;
+  gap: 0.25rem;
+}
+
 kbd {
   display: inline-block;
   padding: 0.15rem 0.4rem;

@@ -118,23 +118,6 @@
   color: var(--color-text-tertiary);
 }
 
-.empty-state-hint kbd {
-  display: inline-block;
-  padding: 0.15rem 0.4rem;
-  margin: 0 0.15rem;
-  font-family: var(--font-family-mono, monospace);
-  font-size: 0.7rem;
-  font-weight: 500;
-  line-height: 1;
-  color: var(--color-text);
-  background-color: var(--color-bg-tertiary);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.05),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
-}
-
 /* ==========================================================================
    Empty State Variants
    ========================================================================== */
