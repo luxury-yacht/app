@@ -268,8 +268,7 @@
 /* Sidebar Resizer styles */
 
 .sidebar-resizer {
-  width: 10px;
-  margin-left: -5px;
+  width: 4px;
   background-color: var(--color-bg-secondary);
   cursor:
     url("../../assets/cursors/ew-resize.svg") 12 12,
@@ -281,12 +280,7 @@
 }
 
 .sidebar-resizer:hover {
-  background: linear-gradient(
-    to right,
-    transparent 0%,
-    var(--color-accent) 50%,
-    transparent 100%
-  );
+  background-color: var(--color-resize-handle);
 }
 
 /* Body cursor override during sidebar resize */

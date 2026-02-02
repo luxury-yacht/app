@@ -20,25 +20,6 @@
   animation: slideInFromRight 0.3s ease-out;
 }
 
-.object-panel-resizer {
-  position: absolute;
-  left: -2px;
-  top: 0;
-  height: 100%;
-  width: 4px;
-  cursor: ew-resize;
-  transition: background-color var(--transition-fast);
-  z-index: var(--z-index-base);
-}
-
-.object-panel-resizer:hover {
-  background-color: var(--color-accent);
-}
-
-.object-panel-resizer:active {
-  background-color: var(--color-accent-hover);
-}
-
 .object-panel-header {
   display: flex;
   align-items: center;
