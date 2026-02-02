@@ -1,11 +1,11 @@
 [data-theme="dark"] {
   /* ==========================================================================
-     Dark Theme: Nautical Luxury
+     Dark Theme
      ==========================================================================
-     Deep navy backgrounds with gold accents for a premium, distinctive feel.
+     Cool slate backgrounds with gold accents for a refined, modern feel.
      ========================================================================== */
 
-  /* Core colors - Navy foundation with gold accent */
+  /* Core colors - Cool slate foundation with gold accent */
   --color-bg: var(--color-navy-900);
   --color-bg-secondary: var(--color-navy-800);
   --color-bg-tertiary: var(--color-navy-700);
@@ -16,8 +16,8 @@
   --color-accent: var(--color-gold-500);
   --color-accent-hover: var(--color-gold-400);
   --color-accent-bg: rgba(245, 158, 11, 0.15);
-  --color-primary: var(--color-teal-400);
-  --color-primary-hover: var(--color-teal-300);
+  --color-primary: var(--color-slate-200);
+  --color-primary-hover: var(--color-slate-100);
 
   /* Semantic colors */
   --color-success: var(--color-semantic-success-light);
@@ -33,7 +33,7 @@
   --color-table-border: var(--color-navy-700);
   --color-sidebar-active: var(--color-navy-700);
   --color-sidebar-active-end: var(--color-navy-800);
-  --color-object-panel-link: var(--color-teal-400);
+  --color-object-panel-link: var(--color-semantic-info-light);
   --color-text-inverse: var(--color-navy-900);
   --color-success-bg: rgba(34, 197, 94, 0.15);
   --color-warning-bg: rgba(245, 158, 11, 0.18);
@@ -52,8 +52,8 @@
   --button-generic-bg: var(--color-navy-700);
   --button-generic-hover: var(--color-navy-600);
   --button-generic-text: var(--color-slate-100);
-  --button-save-bg: var(--color-teal-600);
-  --button-save-hover: var(--color-teal-500);
+  --button-save-bg: var(--color-semantic-info-dark);
+  --button-save-hover: var(--color-semantic-info);
   --button-save-text: #ffffff;
   --button-cancel-bg: var(--color-navy-600);
   --button-cancel-hover: var(--color-navy-500);

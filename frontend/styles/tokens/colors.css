@@ -1,19 +1,20 @@
 /* ==========================================================================
    Luxury Yacht Color Palette
    ==========================================================================
-   A nautical luxury palette featuring deep navy backgrounds, gold accents,
-   and ocean teal secondary colors. Designed for a premium, distinctive feel.
+   A refined palette featuring cool slate backgrounds and gold accents.
+   Designed for a premium, modern feel.
    ========================================================================== */
 
 :root {
-  /* === PRIMARY: Navy (Background Scale) === */
-  --color-navy-950: #0a0f1a;
-  --color-navy-900: #0f172a;
-  --color-navy-800: #1e293b;
-  --color-navy-700: #334155;
-  --color-navy-600: #475569;
-  --color-navy-500: #64748b;
-  --color-navy-400: #94a3b8;
+  /* === PRIMARY: Cool Slate (Background Scale) === */
+  /* Neutral grays with subtle cool undertone - not navy */
+  --color-navy-950: #09090b;
+  --color-navy-900: #0f0f12;
+  --color-navy-800: #18181c;
+  --color-navy-700: #27272e;
+  --color-navy-600: #3f3f48;
+  --color-navy-500: #52525e;
+  --color-navy-400: #71717e;
 
   /* === ACCENT: Gold/Amber (Primary Accent) === */
   --color-gold-700: #b45309;
@@ -23,7 +24,7 @@
   --color-gold-300: #fcd34d;
   --color-gold-200: #fde68a;
 
-  /* === SECONDARY: Ocean Teal === */
+  /* === TEAL (Badge color only) === */
   --color-teal-700: #0f766e;
   --color-teal-600: #0d9488;
   --color-teal-500: #14b8a6;
