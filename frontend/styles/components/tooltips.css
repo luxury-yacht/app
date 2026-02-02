@@ -1,0 +1,228 @@
+/* ==========================================================================
+   Tooltip Component Styles
+   ==========================================================================
+   Premium tooltip styling with subtle animations and arrow indicators.
+   ========================================================================== */
+
+/* ==========================================================================
+   Base Tooltip
+   ========================================================================== */
+
+.tooltip {
+  position: absolute;
+  z-index: var(--z-index-tooltip, 2000);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--tooltip-text, var(--color-text));
+  background-color: var(--tooltip-bg, var(--color-bg-secondary));
+  border: 1px solid var(--tooltip-border, var(--color-border));
+  border-radius: 6px;
+  box-shadow: var(--tooltip-shadow, 0 4px 12px rgba(0, 0, 0, 0.15));
+  /* Prevent text selection */
+  user-select: none;
+  pointer-events: none;
+  /* Entry animation */
+  animation: tooltipIn 0.15s var(--ease-out, ease-out);
+  /* Max width for long content */
+  max-width: 280px;
+  word-wrap: break-word;
+}
+
+@keyframes tooltipIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==========================================================================
+   Tooltip Variants
+   ========================================================================== */
+
+/* Dark tooltip (for light backgrounds) */
+.tooltip.dark {
+  --tooltip-bg: var(--color-navy-800, #1e293b);
+  --tooltip-text: var(--color-slate-100, #f1f5f9);
+  --tooltip-border: var(--color-navy-700, #334155);
+  --tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Light tooltip (for dark backgrounds) */
+.tooltip.light {
+  --tooltip-bg: #ffffff;
+  --tooltip-text: var(--color-slate-800, #1e293b);
+  --tooltip-border: var(--color-slate-200, #e2e8f0);
+  --tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Accent tooltip for important information */
+.tooltip.accent {
+  border-left: 3px solid var(--color-accent);
+}
+
+/* Error/warning tooltip */
+.tooltip.error {
+  --tooltip-bg: rgba(239, 68, 68, 0.1);
+  --tooltip-border: rgba(239, 68, 68, 0.3);
+  color: var(--color-error, #ef4444);
+}
+
+.tooltip.warning {
+  --tooltip-bg: rgba(245, 158, 11, 0.1);
+  --tooltip-border: rgba(245, 158, 11, 0.3);
+  color: var(--color-warning, #f59e0b);
+}
+
+/* ==========================================================================
+   Tooltip Arrows
+   ========================================================================== */
+
+.tooltip[data-placement^="top"]::after,
+.tooltip[data-placement^="bottom"]::after,
+.tooltip[data-placement^="left"]::after,
+.tooltip[data-placement^="right"]::after {
+  content: "";
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--tooltip-bg, var(--color-bg-secondary));
+  border: 1px solid var(--tooltip-border, var(--color-border));
+  transform: rotate(45deg);
+}
+
+/* Top placement - arrow at bottom */
+.tooltip[data-placement^="top"]::after {
+  bottom: -5px;
+  left: 50%;
+  margin-left: -4px;
+  border-top: none;
+  border-left: none;
+}
+
+/* Bottom placement - arrow at top */
+.tooltip[data-placement^="bottom"]::after {
+  top: -5px;
+  left: 50%;
+  margin-left: -4px;
+  border-bottom: none;
+  border-right: none;
+}
+
+/* Left placement - arrow at right */
+.tooltip[data-placement^="left"]::after {
+  right: -5px;
+  top: 50%;
+  margin-top: -4px;
+  border-left: none;
+  border-bottom: none;
+}
+
+/* Right placement - arrow at left */
+.tooltip[data-placement^="right"]::after {
+  left: -5px;
+  top: 50%;
+  margin-top: -4px;
+  border-right: none;
+  border-top: none;
+}
+
+/* ==========================================================================
+   Tooltip Content Elements
+   ========================================================================== */
+
+.tooltip-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  color: var(--color-text);
+}
+
+.tooltip-description {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+.tooltip-shortcut {
+  display: inline-block;
+  margin-top: 0.5rem;
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--color-border);
+  font-family: var(--font-family-mono, monospace);
+  font-size: 0.65rem;
+  color: var(--color-text-tertiary);
+}
+
+.tooltip-shortcut kbd {
+  display: inline-block;
+  padding: 0.1rem 0.3rem;
+  margin: 0 0.1rem;
+  font-size: 0.6rem;
+  font-weight: 500;
+  background-color: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+}
+
+/* ==========================================================================
+   Tooltip Trigger States
+   ========================================================================== */
+
+/* For elements that should show a tooltip */
+[data-tooltip] {
+  position: relative;
+}
+
+/* Simple CSS-only tooltip using data attribute (optional) */
+[data-tooltip]::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  padding: 0.4rem 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--tooltip-text, var(--color-text));
+  background-color: var(--tooltip-bg, var(--color-bg-secondary));
+  border: 1px solid var(--tooltip-border, var(--color-border));
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.15s ease,
+    visibility 0.15s ease;
+  pointer-events: none;
+  z-index: var(--z-index-tooltip, 2000);
+}
+
+[data-tooltip]:hover::before,
+[data-tooltip]:focus::before {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Disable CSS tooltip if JS tooltip is active */
+[data-tooltip].tooltip-active::before {
+  display: none;
+}
+
+/* ==========================================================================
+   Reduced Motion Support
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .tooltip {
+    animation: none;
+  }
+
+  [data-tooltip]::before {
+    transition: none;
+  }
+}
