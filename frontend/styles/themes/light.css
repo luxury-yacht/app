@@ -31,9 +31,10 @@
   --color-resize-handle: var(--color-gray-400);
   --color-table-header-bg: var(--color-gray-50);
   --color-table-border: var(--color-gray-200);
-  --color-sidebar-active: var(--color-gray-600);
-  --color-sidebar-active-end: var(--color-gray-500);
-  --color-object-panel-link: var(--color-teal-700);
+  --color-sidebar-active: var(--color-gray-200);
+  --color-sidebar-active-end: var(--color-gray-100);
+  --color-sidebar-active-text: var(--color-text);
+  --color-object-panel-link: var(--color-text);
   --color-text-inverse: #ffffff;
   --color-success-bg: rgba(34, 197, 94, 0.1);
   --color-warning-bg: rgba(245, 158, 11, 0.1);

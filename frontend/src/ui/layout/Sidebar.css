@@ -158,7 +158,7 @@
 
 .sidebar-item.active {
   background-color: var(--color-sidebar-active);
-  color: #fff;
+  color: var(--color-sidebar-active-text);
   border-left-color: var(--color-accent);
 }
 
@@ -204,7 +204,7 @@
 
 /* Combined active and dimmed state */
 .sidebar-item.active.dimmed {
-  color: #fff;
+  color: var(--color-sidebar-active-text);
   background-color: var(--color-sidebar-active);
 }
 
