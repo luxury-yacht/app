@@ -10,6 +10,7 @@ import { flushSync } from 'react-dom';
 import './modals.css';
 import './ObjectDiffModal.css';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
+import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
 import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
 import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
@@ -1254,7 +1255,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
             onClick={onClose}
             aria-label="Close object diff"
           >
-            ×
+            <CloseIcon />
           </button>
         </div>
         <div className="modal-content object-diff-modal-content">

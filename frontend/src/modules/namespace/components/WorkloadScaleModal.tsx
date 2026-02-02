@@ -41,9 +41,6 @@ const WorkloadScaleModal = ({
           <h2>
             Scale {scaleState.workload.kind} {scaleState.workload.name}
           </h2>
-          <button className="modal-close" onClick={onCancel} disabled={scaleLoading}>
-            ×
-          </button>
         </div>
         <div className="scale-modal-body">
           <label htmlFor="namespace-scale-replicas">Replicas</label>

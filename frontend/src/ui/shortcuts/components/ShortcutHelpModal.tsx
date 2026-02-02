@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useKeyboardContext } from '../context';
+import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import './ShortcutHelpModal.css';
 
 interface ShortcutHelpModalProps {
@@ -83,7 +84,7 @@ export function ShortcutHelpModal({ isOpen, onClose }: ShortcutHelpModalProps) {
             onClick={onClose}
             aria-label="Close"
           >
-            ×
+            <CloseIcon />
           </button>
         </div>
 

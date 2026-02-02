@@ -179,9 +179,6 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
             <div className="modal-container scale-modal" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
                 <h2>Scale {objectKind || kind}</h2>
-                <button className="modal-close" onClick={handleScaleCancel}>
-                  ×
-                </button>
               </div>
               <div className="scale-modal-body">
                 <label htmlFor="scale-replicas">Number of replicas:</label>

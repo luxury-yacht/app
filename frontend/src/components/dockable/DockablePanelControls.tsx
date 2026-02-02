@@ -20,6 +20,7 @@ import {
   FloatPanelIcon,
   MaximizePanelIcon,
   RestorePanelIcon,
+  CloseIcon,
 } from '@shared/components/icons/MenuIcons';
 
 interface DockablePanelControlsProps {
@@ -125,9 +126,7 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
         title="Close panel"
         aria-label="Close panel"
       >
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-          <path d="M2 2L14 14M2 14L14 2" stroke="currentColor" strokeWidth="2" />
-        </svg>
+        <CloseIcon />
       </button>
     </div>
   );

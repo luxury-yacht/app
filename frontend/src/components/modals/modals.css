@@ -79,8 +79,7 @@
 .modal-close {
   background: transparent;
   border: none;
-  font-size: 1.5rem;
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary, #999);
   cursor: pointer;
   padding: 0;
   width: 32px;
@@ -88,14 +87,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  transition: all 150ms ease;
-  line-height: 1;
+  border-radius: 4px;
+  transition: all 0.2s;
 }
 
 .modal-close:hover {
-  background: var(--color-bg-hover);
-  color: var(--color-text);
+  background: rgb(239 68 68 / 10%);
+  color: rgb(239 68 68);
+}
+
+.modal-close svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* ==========================================================================
