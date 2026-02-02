@@ -240,6 +240,7 @@ const GridTable = memo(function GridTable<T>({
     focusedRowIndex,
     focusedRowKey,
     setFocusedRowIndex,
+    isWrapperFocused,
     shortcutsActive,
     lastNavigationMethodRef,
     handleWrapperFocus,
@@ -255,7 +256,6 @@ const GridTable = memo(function GridTable<T>({
     isShortcutOptOutTarget,
     wrapperRef,
     updateHoverForElement,
-    contextMenuActiveRef,
     getRowClassName,
     shouldIgnoreRowClick,
   });
@@ -283,12 +283,14 @@ const GridTable = memo(function GridTable<T>({
 
   const handleRowMouseEnterWithReset = useCallback(
     (element: HTMLDivElement) => {
-      if (!shortcutsActive && !contextMenuActiveRef.current) {
+      // Only reset keyboard focus when transitioning to mouse while table is focused.
+      // When unfocused, preserve the selection.
+      if (isWrapperFocused && !shortcutsActive && !contextMenuActiveRef.current) {
         setFocusedRowIndex(null);
       }
       handleRowMouseEnter(element);
     },
-    [contextMenuActiveRef, handleRowMouseEnter, shortcutsActive, setFocusedRowIndex]
+    [contextMenuActiveRef, handleRowMouseEnter, isWrapperFocused, shortcutsActive, setFocusedRowIndex]
   );
 
   const handleRowMouseLeaveWithReset = useCallback(

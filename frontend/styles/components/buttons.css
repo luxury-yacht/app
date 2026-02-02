@@ -6,7 +6,7 @@
 
 /* Base button styles */
 .button {
-  padding: 0.4rem 0.875rem;
+  padding: 0.3rem var(--spacing-md);
   font-size: var(--font-size-button);
   font-weight: var(--font-weight-button);
   border-radius: 6px;
@@ -17,8 +17,7 @@
   /* Smooth multi-property transition */
   transition:
     background-color var(--duration-fast, 150ms) var(--ease-out, ease),
-    transform var(--duration-fast, 150ms) var(--ease-out, ease),
-    box-shadow var(--duration-fast, 150ms) var(--ease-out, ease);
+    transform var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
 /* Hover lift effect for all enabled buttons */
@@ -38,7 +37,6 @@
 
 .button.generic:hover:not(:disabled) {
   background-color: var(--button-generic-hover);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 /* Save button - primary action */
@@ -49,7 +47,6 @@
 
 .button.save:hover:not(:disabled) {
   background-color: var(--button-save-hover);
-  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.25);
 }
 
 /* Cancel button */
@@ -60,7 +57,6 @@
 
 .button.cancel:hover:not(:disabled) {
   background-color: var(--button-cancel-hover);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* Edit button */
@@ -71,7 +67,6 @@
 
 .button.edit:hover:not(:disabled) {
   background-color: var(--button-edit-hover);
-  box-shadow: 0 4px 12px rgba(14, 165, 233, 0.25);
 }
 
 /* Danger button */
@@ -82,7 +77,6 @@
 
 .button.danger:hover:not(:disabled) {
   background-color: var(--button-danger-hover);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
 }
 
 /* Action button - gold accent */
@@ -93,7 +87,6 @@
 
 .button.action:hover:not(:disabled) {
   background-color: var(--button-action-hover);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
 }
 
 /* Warning button */
@@ -104,7 +97,6 @@
 
 .button.warning:hover:not(:disabled) {
   background-color: var(--button-warning-hover);
-  box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
 }
 
 /* Disabled state */

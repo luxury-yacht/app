@@ -19,7 +19,6 @@ type FocusNavigationOptions<T> = {
   isShortcutOptOutTarget: (target: EventTarget | null) => boolean;
   wrapperRef: RefObject<HTMLDivElement | null>;
   updateHoverForElement: (element: HTMLDivElement | null) => void;
-  contextMenuActiveRef: RefObject<boolean>;
   getRowClassName?: (item: T, index: number) => string | null | undefined;
   shouldIgnoreRowClick: (event: React.MouseEvent) => boolean;
 };
@@ -51,7 +50,6 @@ export function useGridTableFocusNavigation<T>({
   isShortcutOptOutTarget,
   wrapperRef,
   updateHoverForElement,
-  contextMenuActiveRef,
   getRowClassName,
   shouldIgnoreRowClick,
 }: FocusNavigationOptions<T>): FocusNavigationResult<T> {
@@ -111,13 +109,10 @@ export function useGridTableFocusNavigation<T>({
     (_event: React.FocusEvent<HTMLDivElement>) => {
       setIsWrapperFocused(false);
       setIsShortcutsSuppressed(false);
-      if (contextMenuActiveRef.current) {
-        return;
-      }
-      setFocusedRowIndex(null);
-      updateHoverForElement(null);
+      // Keep the focused row visible even when the table loses focus.
+      // Keyboard shortcuts are disabled via shortcutsActive when unfocused.
     },
-    [contextMenuActiveRef, updateHoverForElement]
+    []
   );
 
   const handleRowActivation = useCallback(
