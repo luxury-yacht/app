@@ -174,7 +174,9 @@
   top: 0;
   bottom: 0;
   width: 4px;
-  cursor: url('../../assets/cursors/ew-resize.svg') 12 12, col-resize;
+  cursor:
+    url("../../assets/cursors/ew-resize.svg") 12 12,
+    col-resize;
 }
 
 .dockable-panel__resize-handle--top {
@@ -182,7 +184,9 @@
   right: 0;
   top: -2px;
   height: 4px;
-  cursor: url('../../assets/cursors/ns-resize.svg') 12 12, row-resize;
+  cursor:
+    url("../../assets/cursors/ns-resize.svg") 12 12,
+    row-resize;
 }
 
 /* Invisible resize zones for floating panels */
@@ -193,13 +197,14 @@
   /* transition: background-color var(--transition-fast); */
 }
 
-
 .dockable-panel__resize-zone--top {
   top: 0;
   left: var(--dockable-panel-floating-resize-zone);
   right: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
-  cursor: url('../../assets/cursors/ns-resize.svg') 12 12, row-resize;
+  cursor:
+    url("../../assets/cursors/ns-resize.svg") 12 12,
+    row-resize;
 }
 
 .dockable-panel__resize-zone--bottom {
@@ -207,7 +212,9 @@
   left: var(--dockable-panel-floating-resize-zone);
   right: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
-  cursor: url('../../assets/cursors/ns-resize.svg') 12 12, row-resize;
+  cursor:
+    url("../../assets/cursors/ns-resize.svg") 12 12,
+    row-resize;
 }
 
 .dockable-panel__resize-zone--left {
@@ -215,7 +222,9 @@
   top: var(--dockable-panel-floating-resize-zone);
   bottom: var(--dockable-panel-floating-resize-zone);
   width: var(--dockable-panel-floating-resize-zone);
-  cursor: url('../../assets/cursors/ew-resize.svg') 12 12, col-resize;
+  cursor:
+    url("../../assets/cursors/ew-resize.svg") 12 12,
+    col-resize;
 }
 
 .dockable-panel__resize-zone--right {
@@ -223,7 +232,9 @@
   top: var(--dockable-panel-floating-resize-zone);
   bottom: var(--dockable-panel-floating-resize-zone);
   width: var(--dockable-panel-floating-resize-zone);
-  cursor: url('../../assets/cursors/ew-resize.svg') 12 12, col-resize;
+  cursor:
+    url("../../assets/cursors/ew-resize.svg") 12 12,
+    col-resize;
 }
 
 .dockable-panel__resize-zone--top-left {
@@ -231,7 +242,9 @@
   left: 0;
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
-  cursor: url('../../assets/cursors/nwse-resize.svg') 12 12, nwse-resize;
+  cursor:
+    url("../../assets/cursors/nwse-resize.svg") 12 12,
+    nwse-resize;
 }
 
 .dockable-panel__resize-zone--top-right {
@@ -239,7 +252,9 @@
   right: 0;
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
-  cursor: url('../../assets/cursors/nesw-resize.svg') 12 12, nesw-resize;
+  cursor:
+    url("../../assets/cursors/nesw-resize.svg") 12 12,
+    nesw-resize;
 }
 
 .dockable-panel__resize-zone--bottom-left {
@@ -247,7 +262,9 @@
   left: 0;
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
-  cursor: url('../../assets/cursors/nesw-resize.svg') 12 12, nesw-resize;
+  cursor:
+    url("../../assets/cursors/nesw-resize.svg") 12 12,
+    nesw-resize;
 }
 
 .dockable-panel__resize-zone--bottom-right {
@@ -255,7 +272,9 @@
   right: 0;
   width: var(--dockable-panel-floating-resize-zone);
   height: var(--dockable-panel-floating-resize-zone);
-  cursor: url('../../assets/cursors/nwse-resize.svg') 12 12, nwse-resize;
+  cursor:
+    url("../../assets/cursors/nwse-resize.svg") 12 12,
+    nwse-resize;
 }
 
 /* Animations */
@@ -341,28 +360,36 @@ body.dockable-panel-resizing-n,
 body.dockable-panel-resizing-n *,
 body.dockable-panel-resizing-s,
 body.dockable-panel-resizing-s * {
-  cursor: url('../../assets/cursors/ns-resize.svg') 12 12, row-resize !important;
+  cursor:
+    url("../../assets/cursors/ns-resize.svg") 12 12,
+    row-resize !important;
 }
 
 body.dockable-panel-resizing-e,
 body.dockable-panel-resizing-e *,
 body.dockable-panel-resizing-w,
 body.dockable-panel-resizing-w * {
-  cursor: url('../../assets/cursors/ew-resize.svg') 12 12, col-resize !important;
+  cursor:
+    url("../../assets/cursors/ew-resize.svg") 12 12,
+    col-resize !important;
 }
 
 body.dockable-panel-resizing-nw,
 body.dockable-panel-resizing-nw *,
 body.dockable-panel-resizing-se,
 body.dockable-panel-resizing-se * {
-  cursor: url('../../assets/cursors/nwse-resize.svg') 12 12, nwse-resize !important;
+  cursor:
+    url("../../assets/cursors/nwse-resize.svg") 12 12,
+    nwse-resize !important;
 }
 
 body.dockable-panel-resizing-ne,
 body.dockable-panel-resizing-ne *,
 body.dockable-panel-resizing-sw,
 body.dockable-panel-resizing-sw * {
-  cursor: url('../../assets/cursors/nesw-resize.svg') 12 12, nesw-resize !important;
+  cursor:
+    url("../../assets/cursors/nesw-resize.svg") 12 12,
+    nesw-resize !important;
 }
 
 /* Dark mode adjustments */
