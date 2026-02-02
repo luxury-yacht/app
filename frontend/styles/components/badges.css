@@ -1,4 +1,12 @@
-/* Table badge foundations */
+/* ==========================================================================
+   Badge Component Styles
+   ==========================================================================
+   Kind badges, status badges, and scope badges with refined styling.
+   ========================================================================== */
+
+/* ==========================================================================
+   Kind Badges (Resource Type Indicators)
+   ========================================================================== */
 .kind-badge {
   display: inline-block;
   padding: 0.25rem 0.5rem;
@@ -6,17 +14,25 @@
   font-size: var(--font-size-badge);
   font-weight: var(--font-weight-badge);
   text-transform: uppercase;
-  letter-spacing: 0.025em;
+  letter-spacing: 0.04em;
+  /* Subtle border for definition */
+  border: 1px solid transparent;
+  /* Default/fallback colors */
+  background-color: var(--badge-grey-bg);
+  color: var(--badge-grey-text);
 }
 
+/* Clickable badge interactions */
 .kind-badge.clickable {
   cursor: pointer;
   transition:
-    transform 0.1s ease,
-    box-shadow 0.1s ease;
+    transform var(--duration-fast, 150ms) var(--ease-out, ease),
+    box-shadow var(--duration-fast, 150ms) var(--ease-out, ease),
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
 .kind-badge.clickable:hover {
+  transform: scale(1.05);
   box-shadow: var(--shadow-interactive-soft);
 }
 
@@ -24,7 +40,115 @@
   transform: scale(0.98);
 }
 
-/* Status badges */
+/* ==========================================================================
+   Kind Badge Color Variants
+   ========================================================================== */
+
+/* Blue badges - Deployments, ConfigMaps, etc. */
+.kind-badge.configmap,
+.kind-badge.deployment,
+.kind-badge.endpointslice,
+.kind-badge.helmrelease,
+.kind-badge.horizontalpodautoscaler,
+.kind-badge.persistentvolumeclaim {
+  background-color: var(--badge-blue-bg);
+  color: var(--badge-blue-text);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+/* Green badges - CronJobs, CRDs */
+.kind-badge.cronjob,
+.kind-badge.customresourcedefinition,
+.kind-badge.validatingwebhookconfiguration {
+  background-color: var(--badge-green-bg);
+  color: var(--badge-green-text);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+/* Orange badges - RBAC, DaemonSets */
+.kind-badge.clusterrole,
+.kind-badge.daemonset,
+.kind-badge.rolebinding,
+.kind-badge.role,
+.kind-badge.resourcequota,
+.kind-badge.mutatingwebhookconfiguration,
+.kind-badge.ingress {
+  background-color: var(--badge-orange-bg);
+  color: var(--badge-orange-text);
+  border-color: rgba(249, 115, 22, 0.2);
+}
+
+/* Lime badges - Nodes */
+.kind-badge.node {
+  background-color: var(--badge-lime-bg);
+  color: var(--badge-lime-text);
+  border-color: rgba(132, 204, 22, 0.2);
+}
+
+/* Pink badges - Secrets, Jobs, Storage */
+.kind-badge.job,
+.kind-badge.persistentvolume,
+.kind-badge.secret,
+.kind-badge.storageclass {
+  background-color: var(--badge-pink-bg);
+  color: var(--badge-pink-text);
+  border-color: rgba(236, 72, 153, 0.2);
+}
+
+/* Purple badges - Pods, ReplicaSets, Events */
+.kind-badge.clusterrolebinding,
+.kind-badge.custom,
+.kind-badge.event,
+.kind-badge.networkpolicy,
+.kind-badge.poddisruptionbudget,
+.kind-badge.replicaset,
+.kind-badge.pod {
+  background-color: var(--badge-purple-bg);
+  color: var(--badge-purple-text);
+  border-color: rgba(168, 85, 247, 0.2);
+}
+
+/* Teal badges - Namespaces, IngressClass */
+.kind-badge.ingressclass,
+.kind-badge.namespace {
+  background-color: var(--badge-teal-bg);
+  color: var(--badge-teal-text);
+  border-color: rgba(20, 184, 166, 0.2);
+}
+
+/* Green (available) badges - Services, StatefulSets */
+.kind-badge.service,
+.kind-badge.serviceaccount,
+.kind-badge.statefulset {
+  background-color: var(--status-available-bg);
+  color: var(--status-available-text);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+/* ==========================================================================
+   Event Type Badges
+   ========================================================================== */
+.kind-badge.normal {
+  background-color: var(--badge-green-soft-bg);
+  color: var(--badge-green-soft-text);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.kind-badge.warning {
+  background-color: var(--status-released-bg);
+  color: var(--status-released-text);
+  border-color: rgba(249, 115, 22, 0.2);
+}
+
+.kind-badge.error {
+  background-color: var(--status-failed-bg);
+  color: var(--status-failed-text);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+/* ==========================================================================
+   Status Badges
+   ========================================================================== */
 .status-badge {
   font-weight: 500;
   text-transform: capitalize;
@@ -41,21 +165,25 @@
 .status-badge.status-available {
   background-color: var(--status-available-bg);
   color: var(--status-available-text);
+  border-color: rgba(34, 197, 94, 0.25);
 }
 
 .status-badge.status-bound {
   background-color: var(--status-bound-bg);
   color: var(--status-bound-text);
+  border-color: rgba(59, 130, 246, 0.25);
 }
 
 .status-badge.status-released {
   background-color: var(--status-released-bg);
   color: var(--status-released-text);
+  border-color: rgba(249, 115, 22, 0.25);
 }
 
 .status-badge.status-failed {
   background-color: var(--status-failed-bg);
   color: var(--status-failed-text);
+  border-color: rgba(239, 68, 68, 0.25);
 }
 
 .status-badge.restarted {
@@ -63,103 +191,9 @@
   font-weight: 600;
 }
 
-/* Kind badges */
-
-/* Generic badge -- used as a fallback */
-.kind-badge {
-  background-color: var(--badge-grey-bg);
-  color: var(--badge-grey-text);
-}
-
-/* Blue badges */
-.kind-badge.configmap,
-.kind-badge.deployment,
-.kind-badge.endpointslice,
-.kind-badge.helmrelease,
-.kind-badge.horizontalpodautoscaler,
-.kind-badge.persistentvolumeclaim {
-  background-color: var(--badge-blue-bg);
-  color: var(--badge-blue-text);
-}
-
-/* Green badges */
-.kind-badge.cronjob,
-.kind-badge.customresourcedefinition,
-.kind-badge.validatingwebhookconfiguration {
-  background-color: var(--badge-green-bg);
-  color: var(--badge-green-text);
-}
-
-/* Orange badges */
-.kind-badge.clusterrole,
-.kind-badge.daemonset,
-.kind-badge.rolebinding,
-.kind-badge.role,
-.kind-badge.resourcequota,
-.kind-badge.mutatingwebhookconfiguration,
-.kind-badge.ingress {
-  background-color: var(--badge-orange-bg);
-  color: var(--badge-orange-text);
-}
-
-/* Lime badges */
-.kind-badge.node {
-  background-color: var(--badge-lime-bg);
-  color: var(--badge-lime-text);
-}
-
-/* Pink badges */
-.kind-badge.job,
-.kind-badge.persistentvolume,
-.kind-badge.secret,
-.kind-badge.storageclass {
-  background-color: var(--badge-pink-bg);
-  color: var(--badge-pink-text);
-}
-
-/* Purple badges */
-.kind-badge.clusterrolebinding,
-.kind-badge.custom,
-.kind-badge.event,
-.kind-badge.networkpolicy,
-.kind-badge.poddisruptionbudget,
-.kind-badge.replicaset,
-.kind-badge.pod {
-  background-color: var(--badge-purple-bg);
-  color: var(--badge-purple-text);
-}
-
-/* Teal badges */
-.kind-badge.ingressclass,
-.kind-badge.namespace {
-  background-color: var(--badge-teal-bg);
-  color: var(--badge-teal-text);
-}
-
-.kind-badge.service,
-.kind-badge.serviceaccount,
-.kind-badge.statefulset {
-  background-color: var(--status-available-bg);
-  color: var(--status-available-text);
-}
-
-/* Event badges */
-.kind-badge.normal {
-  background-color: var(--badge-green-soft-bg);
-  color: var(--badge-green-soft-text);
-}
-
-.kind-badge.warning {
-  background-color: var(--status-released-bg);
-  color: var(--status-released-text);
-}
-
-.kind-badge.error {
-  background-color: var(--status-failed-bg);
-  color: var(--status-failed-text);
-}
-
-/* Scope badges */
+/* ==========================================================================
+   Scope Badges
+   ========================================================================== */
 .scope-badge {
   display: inline-block;
   padding: 0.2rem 0.5rem;
@@ -167,15 +201,26 @@
   font-size: var(--font-size-badge);
   font-weight: var(--font-weight-badge);
   text-transform: uppercase;
-  letter-spacing: 0.025em;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
 }
 
 .scope-badge.namespace {
   background-color: var(--badge-blue-bg);
   color: var(--badge-blue-text);
+  border-color: rgba(59, 130, 246, 0.2);
 }
 
 .scope-badge.cluster {
   background-color: var(--badge-purple-bg);
   color: var(--badge-purple-text);
+  border-color: rgba(168, 85, 247, 0.2);
+}
+
+/* ==========================================================================
+   Badge Focus States
+   ========================================================================== */
+.kind-badge.clickable:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }

@@ -1,5 +1,27 @@
-/* Shared keyframes for animation primitives. */
+/* ==========================================================================
+   Shared Keyframes & Motion Utilities
+   ==========================================================================
+   Animation primitives for consistent motion across the application.
+   ========================================================================== */
 
+/* ==========================================================================
+   Transition Timing Functions
+   ========================================================================== */
+:root {
+  /* Standard easings */
+  --ease-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* Timing durations */
+  --duration-fast: 150ms;
+  --duration-normal: 200ms;
+  --duration-slow: 300ms;
+}
+
+/* ==========================================================================
+   Basic Fade Animations
+   ========================================================================== */
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -18,6 +40,9 @@
   }
 }
 
+/* ==========================================================================
+   Slide Animations
+   ========================================================================== */
 @keyframes slideInFromRight {
   from {
     transform: translateX(100%);
@@ -76,6 +101,76 @@
   }
 }
 
+/* ==========================================================================
+   Staggered List Animations
+   ========================================================================== */
+@keyframes staggerFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes staggerFadeInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Utility class for staggered children */
+.stagger-children > * {
+  animation: staggerFadeIn 0.3s var(--ease-out) backwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 30ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 60ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 90ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 180ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 210ms; }
+.stagger-children > *:nth-child(9) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(10) { animation-delay: 270ms; }
+.stagger-children > *:nth-child(n+11) { animation-delay: 300ms; }
+
+/* ==========================================================================
+   Expand/Collapse Animations
+   ========================================================================== */
+@keyframes expandDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 400px;
+  }
+}
+
+@keyframes collapseUp {
+  from {
+    opacity: 1;
+    max-height: 400px;
+  }
+  to {
+    opacity: 0;
+    max-height: 0;
+  }
+}
+
+/* ==========================================================================
+   Loading & Status Animations
+   ========================================================================== */
 @keyframes spin {
   from {
     transform: rotate(0deg);
@@ -109,5 +204,154 @@
   100% {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+@keyframes smoothPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* ==========================================================================
+   Shimmer Loading Animation
+   ========================================================================== */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Skeleton loading utility class */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-secondary) 0%,
+    var(--color-bg-tertiary) 50%,
+    var(--color-bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+.skeleton-text {
+  height: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+
+.skeleton-text:last-child {
+  width: 60%;
+}
+
+.skeleton-badge {
+  height: 1.5rem;
+  width: 4rem;
+  border-radius: var(--border-radius-round);
+}
+
+.skeleton-row {
+  height: 2.5rem;
+  margin-bottom: 1px;
+}
+
+/* ==========================================================================
+   Interactive Hover Animations
+   ========================================================================== */
+@keyframes subtleLift {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes subtleScale {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.02);
+  }
+}
+
+/* ==========================================================================
+   Attention/Highlight Animations
+   ========================================================================== */
+@keyframes highlightFlash {
+  0% {
+    background-color: transparent;
+  }
+  30% {
+    background-color: var(--color-accent-bg);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+@keyframes borderPulse {
+  0%, 100% {
+    border-color: var(--color-accent);
+  }
+  50% {
+    border-color: transparent;
+  }
+}
+
+/* ==========================================================================
+   Row Enter Animation (for tables)
+   ========================================================================== */
+@keyframes rowEnter {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Enable row animation on table body */
+.gridtable-animate-rows .gridtable-row {
+  animation: rowEnter 0.25s var(--ease-out) backwards;
+}
+
+/* Stagger row animations (first 20 rows) */
+.gridtable-animate-rows .gridtable-row:nth-child(1) { animation-delay: 0ms; }
+.gridtable-animate-rows .gridtable-row:nth-child(2) { animation-delay: 20ms; }
+.gridtable-animate-rows .gridtable-row:nth-child(3) { animation-delay: 40ms; }
+.gridtable-animate-rows .gridtable-row:nth-child(4) { animation-delay: 60ms; }
+.gridtable-animate-rows .gridtable-row:nth-child(5) { animation-delay: 80ms; }
+.gridtable-animate-rows .gridtable-row:nth-child(6) { animation-delay: 100ms; }
+.gridtable-animate-rows .gridtable-row:nth-child(7) { animation-delay: 120ms; }
+.gridtable-animate-rows .gridtable-row:nth-child(8) { animation-delay: 140ms; }
+.gridtable-animate-rows .gridtable-row:nth-child(9) { animation-delay: 160ms; }
+.gridtable-animate-rows .gridtable-row:nth-child(10) { animation-delay: 180ms; }
+.gridtable-animate-rows .gridtable-row:nth-child(n+11) { animation-delay: 200ms; }
+
+/* ==========================================================================
+   Motion Preference: Reduced Motion
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .skeleton {
+    animation: none;
+    background: var(--color-bg-tertiary);
   }
 }

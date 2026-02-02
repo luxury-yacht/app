@@ -271,14 +271,19 @@
   display: flex;
   width: 100%;
   border-bottom: 1px solid var(--grid-border-color);
+  border-left: 3px solid transparent;
   background-color: var(--grid-bg-primary);
   position: relative;
   z-index: 1;
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    border-left-color var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
 .gridtable-row.gridtable-row--focused {
   background-color: var(--color-bg-secondary);
-  box-shadow: inset 0 0 0 1px var(--color-accent, #3b82f6);
+  border-left-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .gridtable-hover-overlay {
@@ -288,6 +293,7 @@
   pointer-events: none;
   background-color: var(--grid-bg-hover);
   border-bottom: 1px solid var(--grid-border-color);
+  border-left: 3px solid var(--color-accent);
   opacity: 0;
   transition: opacity 0.12s ease;
   will-change: transform;
@@ -298,11 +304,12 @@
 }
 
 .gridtable-hover-overlay.is-selected {
-  background-color: var(--grid-bg-selected, rgba(59, 130, 246, 0.15));
+  background-color: var(--grid-bg-selected, rgba(245, 158, 11, 0.1));
+  border-left-color: var(--color-accent);
 }
 
 .gridtable-hover-overlay.is-focused {
-  box-shadow: inset 0 0 0 1px var(--color-accent, #3b82f6);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 body.gridtable-disable-hover .gridtable-hover-overlay {

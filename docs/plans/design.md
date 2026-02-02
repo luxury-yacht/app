@@ -1,7 +1,8 @@
 # Luxury Yacht UI Design Improvement Plan
 
-> **Status**: Planning
+> **Status**: Phase 2 Complete (Motion & Interaction)
 > **Created**: 2026-02-02
+> **Last Updated**: 2026-02-02
 > **Goal**: Transform Luxury Yacht from a generic enterprise tool into a distinctive, premium Kubernetes management experience
 
 ---
@@ -17,6 +18,7 @@ This plan outlines a phased approach to elevate the design while maintaining sta
 ## Current State Assessment
 
 ### What Works Well
+
 - Comprehensive CSS variable system (350+ design tokens)
 - Proper light/dark theme implementation
 - Functional component library (GridTable, modals, badges)
@@ -26,14 +28,14 @@ This plan outlines a phased approach to elevate the design while maintaining sta
 
 ### Critical Issues
 
-| Area | Problem | Impact |
-|------|---------|--------|
-| Typography | System fonts only | No brand identity |
-| Colors | Bootstrap defaults (#007bff, #f8f9fa) | Forgettable, generic |
-| Motion | Basic fades only | No delight, static feel |
-| Brand | Zero nautical/luxury elements | Name doesn't match experience |
-| Depth | Flat design throughout | No visual hierarchy |
-| Empty States | Plain text only | Missed personality opportunity |
+| Area         | Problem                               | Impact                         |
+| ------------ | ------------------------------------- | ------------------------------ |
+| Typography   | System fonts only                     | No brand identity              |
+| Colors       | Bootstrap defaults (#007bff, #f8f9fa) | Forgettable, generic           |
+| Motion       | Basic fades only                      | No delight, static feel        |
+| Brand        | Zero nautical/luxury elements         | Name doesn't match experience  |
+| Depth        | Flat design throughout                | No visual hierarchy            |
+| Empty States | Plain text only                       | Missed personality opportunity |
 
 ---
 
@@ -42,6 +44,7 @@ This plan outlines a phased approach to elevate the design while maintaining sta
 ### Chosen Aesthetic: **Modern Nautical Luxury**
 
 A refined, dark-mode-first design that evokes premium yacht instrumentation:
+
 - **Deep navy** as the foundation
 - **Gold/amber accents** for premium feel
 - **Crisp whites and teals** for data clarity
@@ -49,6 +52,7 @@ A refined, dark-mode-first design that evokes premium yacht instrumentation:
 - **Purposeful motion** that feels smooth and controlled
 
 This direction:
+
 1. Connects to the "Luxury Yacht" brand
 2. Works well for data-dense interfaces (dark backgrounds reduce eye strain)
 3. Differentiates from competitors (Lens, k9s, Rancher)
@@ -61,9 +65,11 @@ This direction:
 ### 1.1 Typography System
 
 **Current:**
+
 ```css
---font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto...
---font-family-mono: "SF Mono", Monaco, "Cascadia Code"...
+--font-family-base:
+  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto... --font-family-mono: 'SF Mono', Monaco,
+  'Cascadia Code'...;
 ```
 
 **Approach: Web Fonts with Graceful Fallbacks**
@@ -71,31 +77,41 @@ This direction:
 Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user is offline or the CDN is unreachable, the system font fallbacks provide a fully functional experience. The `display=swap` parameter ensures text renders immediately with fallbacks, then swaps when the web font loads—no flash of invisible text.
 
 **Font Loading (in index.html or CSS):**
+
 ```html
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+  rel="stylesheet"
+/>
 ```
 
 **Proposed Font Stacks:**
+
 ```css
 /* Display font for headers, branding, titles */
 /* Falls back to system fonts if Google Fonts unavailable */
---font-family-display: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+--font-family-display:
+  'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
 /* Body font - keep system fonts for optimal native rendering */
---font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+--font-family-base:
+  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 
 /* Monospace - JetBrains Mono adds character, with solid fallbacks */
---font-family-mono: "JetBrains Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+--font-family-mono:
+  'JetBrains Mono', 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
 ```
 
 **Rationale:**
+
 - **Display font (Plus Jakarta Sans)**: Only used for headers/titles, so minimal impact if it doesn't load. Geometric, modern, premium feel.
 - **Body font (system)**: Keep system fonts for body text—they render optimally on each OS and are always available.
 - **Mono font (JetBrains Mono)**: Popular developer font with excellent readability for YAML/code. Falls back to platform-native mono fonts.
 
 **Implementation:**
+
 - [ ] Add Google Fonts preconnect and stylesheet link to `index.html`
 - [ ] Update `typography.css` with new font stacks
 - [ ] Apply display font to: app title, modal headers, section headers, empty state titles
@@ -103,6 +119,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 - [ ] Test offline behavior to ensure fallbacks work correctly
 
 **Files to modify:**
+
 - `frontend/index.html` (font imports)
 - `frontend/styles/tokens/typography.css`
 - `frontend/src/ui/layout/AppHeader.css`
@@ -113,9 +130,9 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ### 1.2 Color Palette
 
 **Current (Light):**
+
 ```css
---color-bg: #ffffff
---color-accent: #007bff  /* Bootstrap blue */
+--color-bg: #ffffff --color-accent: #007bff /* Bootstrap blue */;
 ```
 
 **Proposed Brand Palette:**
@@ -157,6 +174,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Dark Theme (Primary):**
+
 ```css
 :root {
   --color-bg: var(--color-navy-900);
@@ -170,8 +188,9 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Light Theme (Secondary):**
+
 ```css
-[data-theme="light"] {
+[data-theme='light'] {
   --color-bg: var(--color-slate-50);
   --color-bg-secondary: #ffffff;
   --color-bg-tertiary: var(--color-slate-100);
@@ -183,6 +202,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Implementation:**
+
 - [ ] Create new `frontend/styles/tokens/colors.css` with full palette
 - [ ] Update `frontend/styles/themes/dark.css` as new default
 - [ ] Update `frontend/styles/themes/light.css` with refined palette
@@ -190,6 +210,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 - [ ] Update button colors for premium feel
 
 **Files to modify:**
+
 - `frontend/styles/tokens/` (new colors.css)
 - `frontend/styles/themes/dark.css`
 - `frontend/styles/themes/light.css`
@@ -205,6 +226,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 **Current animations are basic fades. Add orchestrated motion.**
 
 **New Keyframes:**
+
 ```css
 /* Staggered list reveal */
 @keyframes staggerFadeIn {
@@ -220,24 +242,38 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 
 /* Subtle scale on hover */
 @keyframes subtleLift {
-  from { transform: translateY(0); }
-  to { transform: translateY(-2px); }
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-2px);
+  }
 }
 
 /* Shimmer loading effect */
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 /* Smooth pulse for active states */
 @keyframes smoothPulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 ```
 
 **Implementation:**
+
 - [ ] Add staggered animation to sidebar items on load
 - [ ] Add staggered animation to table rows on data load
 - [ ] Add hover lift effect to badges and buttons
@@ -245,6 +281,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 - [ ] Add smooth transitions to all interactive elements
 
 **Files to modify:**
+
 - `frontend/styles/utilities/motion.css`
 - `frontend/src/ui/layout/Sidebar.css`
 - `frontend/styles/components/gridtables.css`
@@ -256,6 +293,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ### 2.2 Micro-interactions
 
 **Button States:**
+
 ```css
 .button {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -273,6 +311,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Badge Hover:**
+
 ```css
 .kind-badge.clickable:hover {
   transform: scale(1.05);
@@ -281,9 +320,12 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Table Row Hover:**
+
 ```css
 .gridtable-row {
-  transition: background-color 0.15s ease, transform 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .gridtable-row:hover {
@@ -293,6 +335,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Implementation:**
+
 - [ ] Add lift effect to primary buttons
 - [ ] Add scale effect to clickable badges
 - [ ] Add left-accent border on table row hover
@@ -310,7 +353,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 
 ```css
 .button {
-  padding: 0.5rem 1rem;  /* More generous */
+  padding: 0.5rem 1rem; /* More generous */
   font-size: 0.8125rem;
   font-weight: 500;
   border-radius: 6px;
@@ -324,8 +367,9 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 .button.primary {
   background: linear-gradient(135deg, var(--color-gold-500) 0%, var(--color-gold-600) 100%);
   color: var(--color-navy-900);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1),
-              inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .button.primary:hover {
@@ -336,6 +380,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Implementation:**
+
 - [ ] Increase button padding for more presence
 - [ ] Add subtle gradients to primary buttons
 - [ ] Add inset highlight for depth
@@ -382,6 +427,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Implementation:**
+
 - [ ] Add subtle border to badges for definition
 - [ ] Increase color saturation for better differentiation
 - [ ] Add letter-spacing for premium feel
@@ -395,6 +441,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 **Target:** Scannable, refined
 
 **Improvements:**
+
 ```css
 .gridtable-header {
   background: linear-gradient(180deg, var(--color-bg-secondary) 0%, var(--color-bg-tertiary) 100%);
@@ -424,6 +471,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Implementation:**
+
 - [ ] Add gradient to table headers
 - [ ] Add left accent border on hover/select
 - [ ] Improve row spacing slightly
@@ -466,6 +514,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Implementation:**
+
 - [ ] Add subtle gradient to active state
 - [ ] Add left accent indicator
 - [ ] Improve section header styling
@@ -480,6 +529,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 **Target:** Polish further
 
 **Improvements:**
+
 ```css
 .modal-container {
   background: var(--color-bg);
@@ -487,7 +537,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
   box-shadow:
     0 0 0 1px rgba(0, 0, 0, 0.05),
     0 25px 50px -12px rgba(0, 0, 0, 0.5),
-    0 0 100px -20px rgba(245, 158, 11, 0.15);  /* Subtle gold glow */
+    0 0 100px -20px rgba(245, 158, 11, 0.15); /* Subtle gold glow */
 }
 
 .modal-header {
@@ -503,6 +553,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Implementation:**
+
 - [ ] Add subtle accent glow to modal shadow
 - [ ] Apply display font to modal titles
 - [ ] Improve header gradient
@@ -538,6 +589,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Implementation:**
+
 - [ ] Add backdrop blur
 - [ ] Increase input prominence
 - [ ] Improve selected state styling
@@ -554,7 +606,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```css
 .app-header {
   background: linear-gradient(90deg, var(--color-navy-900) 0%, var(--color-navy-800) 100%);
-  border-bottom: 1px solid rgba(245, 158, 11, 0.2);  /* Gold accent line */
+  border-bottom: 1px solid rgba(245, 158, 11, 0.2); /* Gold accent line */
 }
 
 .app-header-title {
@@ -565,6 +617,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Implementation:**
+
 - [ ] Add gradient background
 - [ ] Add subtle gold accent border
 - [ ] Apply display font to title
@@ -578,12 +631,14 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 **Target:** Personality + helpfulness
 
 **Create illustrated empty states for:**
+
 - No clusters connected
 - No resources found
 - No logs available
 - No events
 
 **Implementation:**
+
 - [ ] Design simple line illustrations (nautical theme optional)
 - [ ] Add helpful action buttons
 - [ ] Include keyboard shortcut hints
@@ -611,6 +666,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Implementation:**
+
 - [ ] Create skeleton components for tables
 - [ ] Create skeleton for sidebar
 - [ ] Create skeleton for object panel
@@ -634,6 +690,7 @@ Since Wails uses a WebView, we can load web fonts from Google Fonts. If the user
 ```
 
 **Implementation:**
+
 - [ ] Add consistent focus ring to all interactive elements
 - [ ] Use accent color for focus states
 - [ ] Ensure sufficient contrast
@@ -683,6 +740,7 @@ Match the premium feel with proper shadows and animations.
 ## Implementation Checklist
 
 ### Phase 1: Foundation
+
 - [x] Add Google Fonts preconnect and stylesheet link to index.html (Plus Jakarta Sans, JetBrains Mono) ✅
 - [x] Update typography.css with new font stacks (web fonts + fallbacks) ✅
 - [ ] Test offline behavior to ensure system font fallbacks work
@@ -693,14 +751,21 @@ Match the premium feel with proper shadows and animations.
 - [x] Update button colors (in theme files) ✅
 
 ### Phase 2: Motion
-- [ ] Add new keyframes to motion.css
-- [ ] Add stagger animation to sidebar
-- [ ] Add stagger animation to tables
-- [ ] Add hover effects to buttons
-- [ ] Add hover effects to badges
-- [ ] Add loading skeleton component
+
+- [x] Add new keyframes to motion.css ✅
+- [x] Add stagger animation CSS to sidebar (`.animate-items` class ready) ✅
+- [x] Add stagger animation CSS to tables (`.gridtable-animate-rows` class ready) ✅
+- [x] Add hover effects to buttons (lift + color-specific shadows) ✅
+- [x] Add hover effects to badges (scale on clickable badges) ✅
+- [x] Add loading skeleton component (CSS utility classes) ✅
+- [x] Add left-accent border on table row hover/focus ✅
+- [x] Add left-accent border on sidebar item hover ✅
+- [x] Add `prefers-reduced-motion` support ✅
+
+**Note:** Stagger animations are CSS-ready. To enable them, add the `.animate-items` class to `.cluster-items` or `.gridtable-animate-rows` class to table containers in the React components.
 
 ### Phase 3: Components
+
 - [ ] Refine button styles
 - [ ] Refine badge styles
 - [ ] Refine table styles
@@ -709,12 +774,14 @@ Match the premium feel with proper shadows and animations.
 - [ ] Refine command palette styles
 
 ### Phase 4: Brand & Delight
+
 - [ ] Update app header styling
 - [ ] Create empty state designs
 - [ ] Create loading skeletons
 - [ ] Improve focus states
 
 ### Phase 5: Polish
+
 - [ ] Refine scrollbar styling
 - [ ] Add tooltip styling
 - [ ] Refine context menu styling
@@ -746,13 +813,13 @@ Match the premium feel with proper shadows and animations.
 
 ## Timeline Estimate
 
-| Phase | Scope | Complexity |
-|-------|-------|------------|
-| Phase 1 | Typography & Color | Low |
-| Phase 2 | Motion & Interaction | Medium |
-| Phase 3 | Component Refinement | Medium |
-| Phase 4 | Brand & Delight | Medium |
-| Phase 5 | Polish & Details | Low |
+| Phase   | Scope                | Complexity |
+| ------- | -------------------- | ---------- |
+| Phase 1 | Typography & Color   | Low        |
+| Phase 2 | Motion & Interaction | Medium     |
+| Phase 3 | Component Refinement | Medium     |
+| Phase 4 | Brand & Delight      | Medium     |
+| Phase 5 | Polish & Details     | Low        |
 
 ---
 
@@ -796,15 +863,15 @@ Match the premium feel with proper shadows and animations.
 
 ### Badge Color Mapping
 
-| Resource | Color | Hex |
-|----------|-------|-----|
-| Deployment | Blue | #3b82f6 |
-| Pod | Purple | #a855f7 |
-| Service | Green | #22c55e |
-| ConfigMap | Cyan | #06b6d4 |
-| Secret | Pink | #ec4899 |
-| Node | Lime | #84cc16 |
-| Namespace | Teal | #14b8a6 |
-| Job | Orange | #f97316 |
-| CronJob | Amber | #f59e0b |
-| Event | Slate | #64748b |
+| Resource   | Color  | Hex     |
+| ---------- | ------ | ------- |
+| Deployment | Blue   | #3b82f6 |
+| Pod        | Purple | #a855f7 |
+| Service    | Green  | #22c55e |
+| ConfigMap  | Cyan   | #06b6d4 |
+| Secret     | Pink   | #ec4899 |
+| Node       | Lime   | #84cc16 |
+| Namespace  | Teal   | #14b8a6 |
+| Job        | Orange | #f97316 |
+| CronJob    | Amber  | #f59e0b |
+| Event      | Slate  | #64748b |
