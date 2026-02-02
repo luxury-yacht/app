@@ -20,12 +20,12 @@
   --color-primary-hover: var(--color-gray-100);
 
   /* Semantic colors */
-  --color-success: var(--color-semantic-success-light);
+  --color-success: #4ade80;
   --color-warning: var(--color-gold-400);
-  --color-error: var(--color-semantic-error-light);
+  --color-error: #f87171;
   --color-error-bg: rgba(239, 68, 68, 0.15);
   --color-error-border: rgba(239, 68, 68, 0.3);
-  --color-error-text: var(--color-semantic-error-light);
+  --color-error-text: #f87171;
 
   /* UI element colors */
   --color-resize-handle: var(--color-gold-600);
@@ -53,22 +53,22 @@
   --button-generic-bg: var(--color-gray-700);
   --button-generic-hover: var(--color-gray-600);
   --button-generic-text: var(--color-gray-100);
-  --button-save-bg: var(--color-semantic-info-dark);
-  --button-save-hover: var(--color-semantic-info);
+  --button-save-bg: #0284c7;
+  --button-save-hover: #0ea5e9;
   --button-save-text: #ffffff;
   --button-cancel-bg: var(--color-gray-600);
   --button-cancel-hover: var(--color-gray-500);
   --button-cancel-text: var(--color-gray-200);
-  --button-edit-bg: var(--color-semantic-info);
-  --button-edit-hover: var(--color-semantic-info-light);
+  --button-edit-bg: #0ea5e9;
+  --button-edit-hover: #38bdf8;
   --button-edit-text: #ffffff;
-  --button-danger-bg: var(--color-semantic-error-dark);
-  --button-danger-hover: var(--color-semantic-error);
+  --button-danger-bg: #dc2626;
+  --button-danger-hover: #ef4444;
   --button-danger-text: #ffffff;
   --button-action-bg: var(--color-gold-500);
   --button-action-hover: var(--color-gold-400);
   --button-action-text: var(--color-gray-900);
-  --button-warning-bg: var(--color-badge-orange);
+  --button-warning-bg: #f97316;
   --button-warning-hover: #fb923c;
   --button-warning-text: #ffffff;
   --button-disabled-bg: var(--color-gray-700);
@@ -76,34 +76,34 @@
   --button-disabled-border: rgba(255, 255, 255, 0.08);
 
   /* Badge colors - Bright text for dark backgrounds */
-  --badge-blue-bg: var(--color-badge-blue-bg-dark);
+  --badge-blue-bg: rgba(59, 130, 246, 0.25);
   --badge-blue-text: #93c5fd;
-  --badge-green-bg: var(--color-badge-green-bg-dark);
+  --badge-green-bg: rgba(34, 197, 94, 0.25);
   --badge-green-text: #86efac;
-  --badge-grey-bg: var(--color-badge-slate-bg-dark);
+  --badge-grey-bg: rgba(100, 116, 139, 0.25);
   --badge-grey-text: var(--color-gray-200);
-  --badge-lime-bg: var(--color-badge-lime-bg-dark);
+  --badge-lime-bg: rgba(132, 204, 22, 0.25);
   --badge-lime-text: #d9f99d;
-  --badge-orange-bg: var(--color-badge-orange-bg-dark);
+  --badge-orange-bg: rgba(249, 115, 22, 0.25);
   --badge-orange-text: #fdba74;
-  --badge-pink-bg: var(--color-badge-pink-bg-dark);
+  --badge-pink-bg: rgba(236, 72, 153, 0.25);
   --badge-pink-text: #f9a8d4;
-  --badge-purple-bg: var(--color-badge-purple-bg-dark);
+  --badge-purple-bg: rgba(168, 85, 247, 0.25);
   --badge-purple-text: #d8b4fe;
-  --badge-teal-bg: var(--color-badge-teal-bg-dark);
+  --badge-teal-bg: rgba(20, 184, 166, 0.25);
   --badge-teal-text: #5eead4;
-  --badge-warning-bg: var(--color-badge-amber-bg-dark);
+  --badge-warning-bg: rgba(245, 158, 11, 0.25);
   --badge-warning-text: #fde047;
-  --badge-green-soft-bg: var(--color-badge-green-bg-dark);
+  --badge-green-soft-bg: rgba(34, 197, 94, 0.25);
   --badge-green-soft-text: #86efac;
 
   /* Status colors */
-  --status-available-bg: var(--color-badge-green-bg-dark);
+  --status-available-bg: rgba(34, 197, 94, 0.25);
   --status-available-text: #86efac;
   --status-failed-bg: rgba(239, 68, 68, 0.2);
-  --status-failed-text: var(--color-semantic-error-light);
-  --status-released-bg: var(--color-badge-orange-bg-dark);
-  --status-released-text: var(--color-badge-orange);
+  --status-failed-text: #f87171;
+  --status-released-bg: rgba(249, 115, 22, 0.25);
+  --status-released-text: #f97316;
   --status-warning-text: var(--color-gold-400);
 
   /* Code editor colors */
@@ -150,18 +150,18 @@
   --toast-card-border: rgba(255, 255, 255, 0.06);
   --toast-card-shadow: 0 14px 28px rgba(0, 0, 0, 0.5);
   --toast-card-header-text: #ffffff;
-  --toast-card-header-bg: var(--color-semantic-error-dark);
+  --toast-card-header-bg: #dc2626;
   --toast-card-details-bg: var(--color-gray-800);
   --toast-text-primary: var(--color-gray-100);
   --toast-text-secondary: var(--color-gray-400);
   --toast-dismiss-text: #ffffff;
-  --toast-dismiss-bg: var(--color-semantic-error-dark);
-  --toast-dismiss-hover-bg: var(--color-semantic-error);
+  --toast-dismiss-bg: #dc2626;
+  --toast-dismiss-hover-bg: #ef4444;
   --toast-dismiss-border: rgba(255, 255, 255, 0.08);
   --toast-count-bg: rgba(239, 68, 68, 0.9);
   --toast-count-text: #ffffff;
   --toast-progress-track-bg: rgba(255, 255, 255, 0.06);
-  --toast-progress-fill-bg: var(--color-semantic-error-dark);
+  --toast-progress-fill-bg: #dc2626;
   --toast-progress-height: 3px;
   --toast-auto-dismiss-short: 5000ms;
   --toast-auto-dismiss-long: 10000ms;
@@ -252,12 +252,12 @@
 
   /* Refresh indicators */
   --refresh-status-disabled: var(--color-gray-500);
-  --refresh-status-active: var(--color-semantic-success-light);
+  --refresh-status-active: #4ade80;
   --refresh-status-active-shadow: rgba(74, 222, 128, 0.5);
   --refresh-status-refreshing-shadow: rgba(74, 222, 128, 0.7);
   --refresh-status-retrying: var(--color-gold-400);
   --refresh-status-retrying-shadow: rgba(251, 191, 36, 0.7);
-  --refresh-status-offline: var(--color-semantic-error-light);
+  --refresh-status-offline: #f87171;
   --refresh-status-offline-shadow: rgba(248, 113, 113, 0.8);
   --refresh-status-auth: #f472b6;
   --refresh-status-auth-shadow: rgba(244, 114, 182, 0.8);
@@ -328,10 +328,10 @@
   );
   --utilization-indicator-limit-overcommit: repeating-linear-gradient(
     45deg,
-    var(--color-semantic-error),
-    var(--color-semantic-error) 4px,
-    var(--color-semantic-error-dark) 4px,
-    var(--color-semantic-error-dark) 8px
+    #ef4444,
+    #ef4444 4px,
+    #dc2626 4px,
+    #dc2626 8px
   );
   --utilization-overcommitted-text: var(--color-gold-400);
 
@@ -358,14 +358,14 @@
   --resourcebar-marker-limit-shadow: 0 0 3px rgba(251, 191, 36, 0.5);
   --resourcebar-empty-bg: rgba(255, 255, 255, 0.04);
   --resourcebar-status-stale: var(--color-gold-400);
-  --resourcebar-status-error: var(--color-semantic-error-light);
+  --resourcebar-status-error: #f87171;
   --resourcebar-status-shadow: 0 0 4px rgba(251, 191, 36, 0.5);
   --resourcebar-status-stale-shadow: 0 0 4px rgba(251, 191, 36, 0.5);
   --resourcebar-status-error-shadow: 0 0 4px rgba(248, 113, 113, 0.5);
   --resourcebar-usage-normal: linear-gradient(
     90deg,
-    var(--color-semantic-success) 0%,
-    var(--color-semantic-success-dark) 100%
+    #22c55e 0%,
+    #16a34a 100%
   );
   --resourcebar-usage-warning: linear-gradient(
     90deg,
@@ -374,8 +374,8 @@
   );
   --resourcebar-usage-critical: linear-gradient(
     90deg,
-    var(--color-semantic-error) 0%,
-    var(--color-semantic-error-dark) 100%
+    #ef4444 0%,
+    #dc2626 100%
   );
   --resourcebar-usage-unbounded: linear-gradient(
     90deg,
