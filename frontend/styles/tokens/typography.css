@@ -1,8 +1,14 @@
 :root {
   /* Font families */
-  --font-family-base:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  --font-family-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+  /* Display font for headers, branding, titles - loads from Google Fonts */
+  /* Falls back to system fonts when offline or CDN unavailable */
+  --font-family-display: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Body font - system fonts for optimal native rendering */
+  --font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+
+  /* Monospace - JetBrains Mono for better code/YAML readability */
+  --font-family-mono: "JetBrains Mono", "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
 
   /* Base font sizes */
   --font-size-xs: 0.625rem;
@@ -10,6 +16,7 @@
   --font-size-md: 0.875rem;
   --font-size-normal: 0.8rem;
   --font-size-lg: 1rem;
+  --font-size-xl: 1.125rem;
   --font-size-title: 0.9rem;
   --font-size-button: 0.75rem;
   --font-size-badge: 0.75rem;
@@ -21,9 +28,17 @@
 
   /* Font weights */
   --font-weight-normal: 400;
-  --font-weight-bold: 600;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
   --font-weight-parsed-logs-header: 600;
   --font-weight-parsed-logs: 300;
   --font-weight-button: 500;
   --font-weight-badge: 500;
+
+  /* Letter spacing */
+  --letter-spacing-tight: -0.02em;
+  --letter-spacing-normal: 0;
+  --letter-spacing-wide: 0.03em;
+  --letter-spacing-wider: 0.05em;
 }

@@ -17,6 +17,7 @@
 @import "./overrides/codemirror.css";
 @import "./overrides/legacy-modals.css";
 /* Tokens */
+@import "./tokens/colors.css";
 @import "./tokens/elevation.css";
 @import "./tokens/spacing.css";
 @import "./tokens/typography.css";
