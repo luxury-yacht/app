@@ -156,7 +156,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const {
     isDragging,
     isResizing,
-    cursorStyle,
     handleHeaderMouseDown,
     handlePanelMouseMove,
     handleMouseDownResize,
@@ -322,7 +321,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       style.transform = `translate3d(${roundedX}px, ${roundedY}px, 0)`;
       style.top = 0;
       style.left = 0;
-      style.cursor = cursorStyle;
       style['--dockable-panel-translate-x'] = `${roundedX}px`;
       style['--dockable-panel-translate-y'] = `${roundedY}px`;
     } else if (panelState.position === 'right') {
@@ -338,7 +336,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     panelState.floatingPosition,
     panelState.size,
     panelState.zIndex,
-    cursorStyle,
     isMaximized,
     maximizedRect,
   ]);

@@ -247,6 +247,18 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     };
   }, []);
 
+  // Set cursor on document.body during resize using a class to allow !important override
+  useEffect(() => {
+    if (!isResizing || !resizeDirection) return;
+
+    const className = `dockable-panel-resizing-${resizeDirection}`;
+    document.body.classList.add('dockable-panel-resizing', className);
+
+    return () => {
+      document.body.classList.remove('dockable-panel-resizing', className);
+    };
+  }, [isResizing, resizeDirection]);
+
   // Mouse move handler
   useEffect(() => {
     if (!isDragging && !isResizing) return;

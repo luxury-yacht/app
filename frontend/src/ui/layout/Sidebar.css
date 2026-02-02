@@ -270,7 +270,7 @@
 .sidebar-resizer {
   width: 4px;
   background-color: var(--color-bg-secondary);
-  cursor: col-resize;
+  cursor: url('../../assets/cursors/ew-resize.svg') 12 12, col-resize;
   position: relative;
   /* border-right: 1px solid var(--color-border); */
   transition: background-color var(--transition-fast);
@@ -283,6 +283,13 @@
 
 .sidebar-resizer:active {
   background-color: var(--color-accent-hover);
+}
+
+/* Body cursor override during sidebar resize */
+body.sidebar-resizing,
+body.sidebar-resizing * {
+  cursor: url('../../assets/cursors/ew-resize.svg') 12 12, col-resize !important;
+  user-select: none !important;
 }
 
 .keyboard-focus-overlay {

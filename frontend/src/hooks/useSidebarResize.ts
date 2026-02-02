@@ -52,14 +52,12 @@ export function useSidebarResize({
 
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
+    document.body.classList.add('sidebar-resizing');
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      document.body.classList.remove('sidebar-resizing');
     };
   }, [isResizing, handleMouseMove, handleMouseUp]);
 }
