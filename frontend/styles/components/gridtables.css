@@ -284,7 +284,6 @@
 .gridtable-row.gridtable-row--focused {
   background-color: var(--color-bg-secondary);
   border-left-color: var(--color-accent);
-  box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .gridtable-hover-overlay {
@@ -310,7 +309,7 @@
 }
 
 .gridtable-hover-overlay.is-focused {
-  box-shadow: inset 0 0 0 1px var(--color-accent);
+  /* Left border only - set via border-left in base styles */
 }
 
 body.gridtable-disable-hover .gridtable-hover-overlay {
