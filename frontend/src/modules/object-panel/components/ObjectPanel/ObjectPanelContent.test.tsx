@@ -159,6 +159,8 @@ describe('ObjectPanelContent', () => {
       canRestart: true,
       canScale: true,
       canEditYaml: true,
+      canTrigger: false,
+      canSuspend: false,
     },
     capabilityReasons: {},
     detailScope: 'team-a:deployment:api',

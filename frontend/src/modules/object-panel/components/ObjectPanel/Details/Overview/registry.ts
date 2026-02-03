@@ -39,6 +39,8 @@ interface OverviewComponentConfig {
     edit?: boolean;
     logs?: boolean;
     exec?: boolean;
+    trigger?: boolean;
+    suspend?: boolean;
   };
 }
 
@@ -262,7 +264,7 @@ overviewRegistry.register({
 });
 
 // Export utility function to get capabilities
-export function getResourceCapabilities(kind: string) {
+export function getResourceCapabilities(kind: string): OverviewComponentConfig['capabilities'] {
   const config = overviewRegistry.getComponent(kind);
   // If no config found (likely a custom resource), enable delete by default
   return config?.capabilities || { delete: true };

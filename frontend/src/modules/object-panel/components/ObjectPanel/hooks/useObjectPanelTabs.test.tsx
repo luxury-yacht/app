@@ -44,6 +44,8 @@ describe('useObjectPanelTabs', () => {
     canRestart: true,
     canScale: true,
     canEditYaml: true,
+    canTrigger: false,
+    canSuspend: false,
   };
 
   const objectData: PanelObjectData = {

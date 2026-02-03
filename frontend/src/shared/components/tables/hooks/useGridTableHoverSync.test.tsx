@@ -71,12 +71,17 @@ describe('useGridTableHoverSync', () => {
 
     const row = document.createElement('div');
     row.dataset.rowSelected = 'true';
+    row.tabIndex = 0;
+    wrapper.appendChild(row);
     Object.defineProperty(row, 'getBoundingClientRect', {
       value: () => ({ top: 15, height: 25 }) as DOMRect,
     });
     Object.defineProperty(wrapper, 'getBoundingClientRect', {
       value: () => ({ top: 5 }) as DOMRect,
     });
+
+    // Focus an element within the wrapper so handleRowMouseEnter proceeds
+    row.focus();
 
     act(() => {
       result.current!.handleRowMouseEnter(row);
@@ -110,12 +115,17 @@ describe('useGridTableHoverSync', () => {
 
     const row = document.createElement('div');
     row.dataset.rowSelected = 'true';
+    row.tabIndex = 0;
+    wrapper.appendChild(row);
     Object.defineProperty(row, 'getBoundingClientRect', {
       value: () => ({ top: 15, height: 25 }) as DOMRect,
     });
     Object.defineProperty(wrapper, 'getBoundingClientRect', {
       value: () => ({ top: 5 }) as DOMRect,
     });
+
+    // Focus an element within the wrapper so handleRowMouseLeave proceeds
+    row.focus();
 
     act(() => {
       result.current!.updateHoverForElement(row);

@@ -52,6 +52,8 @@ describe('useObjectPanelCapabilities', () => {
     scale: true,
     edit: true,
     shell: false,
+    trigger: false,
+    suspend: false,
   };
 
   const workloadKindApiNames = {
@@ -162,6 +164,8 @@ describe('useObjectPanelCapabilities', () => {
         scale: false,
         edit: false,
         shell: false,
+        trigger: false,
+        suspend: false,
       },
       workloadKindApiNames,
     });
@@ -175,6 +179,8 @@ describe('useObjectPanelCapabilities', () => {
       canRestart: false,
       canScale: false,
       canEditYaml: false,
+      canTrigger: false,
+      canSuspend: false,
     });
     expect(result.capabilityReasons).toEqual({
       delete: undefined,

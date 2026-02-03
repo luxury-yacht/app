@@ -105,15 +105,12 @@ export function useGridTableFocusNavigation<T>({
     [isShortcutOptOutTarget, tableData.length]
   );
 
-  const handleWrapperBlur = useCallback(
-    (_event: React.FocusEvent<HTMLDivElement>) => {
-      setIsWrapperFocused(false);
-      setIsShortcutsSuppressed(false);
-      // Keep the focused row visible even when the table loses focus.
-      // Keyboard shortcuts are disabled via shortcutsActive when unfocused.
-    },
-    []
-  );
+  const handleWrapperBlur = useCallback((_event: React.FocusEvent<HTMLDivElement>) => {
+    setIsWrapperFocused(false);
+    setIsShortcutsSuppressed(false);
+    // Keep the focused row visible even when the table loses focus.
+    // Keyboard shortcuts are disabled via shortcutsActive when unfocused.
+  }, []);
 
   const handleRowActivation = useCallback(
     (item: T, index: number, source: 'pointer' | 'keyboard') => {

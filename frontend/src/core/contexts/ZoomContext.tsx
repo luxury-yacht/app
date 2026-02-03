@@ -5,7 +5,14 @@
  * Applies CSS zoom to document and listens for zoom events from menu.
  * Persists zoom level to backend settings.
  */
-import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  ReactNode,
+} from 'react';
 import { GetZoomLevel, SetZoomLevel } from '@wailsjs/go/backend/App';
 
 // Zoom constraints

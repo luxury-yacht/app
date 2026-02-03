@@ -322,7 +322,12 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
     const isSuspended = cronJobDetails?.suspend ?? false;
     dispatch({ type: 'SET_ACTION_LOADING', payload: true });
     try {
-      await SuspendCronJob(objectData.clusterId ?? '', objectData.namespace, objectData.name, !isSuspended);
+      await SuspendCronJob(
+        objectData.clusterId ?? '',
+        objectData.namespace,
+        objectData.name,
+        !isSuspended
+      );
       await fetchResourceDetails(true);
     } catch (err) {
       errorHandler.handle(err, {

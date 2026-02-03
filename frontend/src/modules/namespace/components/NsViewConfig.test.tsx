@@ -116,6 +116,7 @@ vi.mock('@/core/capabilities', () => ({
 }));
 
 vi.mock('@shared/components/icons/MenuIcons', () => ({
+  OpenIcon: () => <span>open</span>,
   DeleteIcon: () => <span>delete</span>,
 }));
 

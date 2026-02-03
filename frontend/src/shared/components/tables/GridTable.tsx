@@ -290,7 +290,13 @@ const GridTable = memo(function GridTable<T>({
       }
       handleRowMouseEnter(element);
     },
-    [contextMenuActiveRef, handleRowMouseEnter, isWrapperFocused, shortcutsActive, setFocusedRowIndex]
+    [
+      contextMenuActiveRef,
+      handleRowMouseEnter,
+      isWrapperFocused,
+      shortcutsActive,
+      setFocusedRowIndex,
+    ]
   );
 
   const handleRowMouseLeaveWithReset = useCallback(

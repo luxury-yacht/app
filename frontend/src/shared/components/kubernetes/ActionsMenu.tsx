@@ -106,7 +106,13 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     const showSuspendOption = !!canSuspend;
 
     // Don't render if no actions available at all
-    if (!showRestartOption && !showScaleOption && !showDeleteOption && !showTriggerOption && !showSuspendOption) {
+    if (
+      !showRestartOption &&
+      !showScaleOption &&
+      !showDeleteOption &&
+      !showTriggerOption &&
+      !showSuspendOption
+    ) {
       return null;
     }
 
@@ -219,7 +225,9 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                   }}
                   title={!canRestart ? restartDisabledReason : undefined}
                 >
-                  <span className="context-menu-icon"><RestartIcon /></span>
+                  <span className="context-menu-icon">
+                    <RestartIcon />
+                  </span>
                   <span className="context-menu-label">
                     {actionLoading ? 'Restarting...' : 'Restart'}
                   </span>
@@ -241,7 +249,9 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                   }}
                   title={!canScale ? scaleDisabledReason : undefined}
                 >
-                  <span className="context-menu-icon"><ScaleIcon /></span>
+                  <span className="context-menu-icon">
+                    <ScaleIcon />
+                  </span>
                   <span className="context-menu-label">Scale</span>
                   {!canScale && scaleDisabledReason && (
                     <span className="context-menu-reason">{scaleDisabledReason}</span>
@@ -251,9 +261,10 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
 
               {showDeleteOption && (
                 <>
-                  {(showRestartOption || showScaleOption || showTriggerOption || showSuspendOption) && (
-                    <div className="context-menu-divider" />
-                  )}
+                  {(showRestartOption ||
+                    showScaleOption ||
+                    showTriggerOption ||
+                    showSuspendOption) && <div className="context-menu-divider" />}
                   <div
                     className={`context-menu-item danger ${!canDelete || deleteLoading ? 'disabled' : ''}`}
                     role="menuitem"
@@ -265,7 +276,9 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                     }}
                     title={!canDelete ? deleteDisabledReason : undefined}
                   >
-                    <span className="context-menu-icon"><DeleteIcon /></span>
+                    <span className="context-menu-icon">
+                      <DeleteIcon />
+                    </span>
                     <span className="context-menu-label">
                       {deleteLoading ? 'Deleting...' : 'Delete'}
                     </span>

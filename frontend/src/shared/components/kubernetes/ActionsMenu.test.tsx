@@ -205,9 +205,7 @@ describe('ActionsMenu', () => {
       });
 
       openMenu(container);
-      const triggerItem = container.querySelector<HTMLElement>(
-        '.context-menu-item:first-child'
-      );
+      const triggerItem = container.querySelector<HTMLElement>('.context-menu-item:first-child');
       expect(triggerItem?.classList.contains('disabled')).toBe(true);
     });
 
