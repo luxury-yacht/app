@@ -82,13 +82,18 @@ func (s *Streamer) tail(ctx context.Context, opts Options) ([]Entry, map[string]
 				key := target.key()
 				current := state[key]
 				if current == nil {
-					current = &containerState{}
+					current = &containerState{linesAtTimestamp: make(map[string]struct{})}
 					state[key] = current
 				}
-				if ts.After(current.lastTimestamp) || current.lastTimestamp.IsZero() {
+				if ts.After(current.lastTimestamp) {
+					// New timestamp - reset the set of lines
 					current.lastTimestamp = ts
-					current.lastLine = e.Line
+					current.linesAtTimestamp = map[string]struct{}{e.Line: {}}
+				} else if ts.Equal(current.lastTimestamp) {
+					// Same timestamp - add line to the set
+					current.linesAtTimestamp[e.Line] = struct{}{}
 				}
+				// Lines before lastTimestamp are ignored (already processed)
 			}
 		}
 	}
@@ -406,15 +411,34 @@ func (s *Streamer) followContainer(ctx context.Context, target containerTarget, 
 			if timestamp != "" {
 				ts, err := time.Parse(time.RFC3339Nano, timestamp)
 				if err == nil {
-					if !target.state.lastTimestamp.IsZero() && (ts.Before(target.state.lastTimestamp) || ts.Equal(target.state.lastTimestamp)) {
-						if target.state.lastLine == entry.Line {
+					// Skip lines that we've already seen (deduplication on reconnect)
+					if !target.state.lastTimestamp.IsZero() {
+						if ts.Before(target.state.lastTimestamp) {
+							// Older than what we've seen - skip
 							continue
 						}
+						if ts.Equal(target.state.lastTimestamp) {
+							// Same timestamp - check if we've already seen this line
+							if _, seen := target.state.linesAtTimestamp[entry.Line]; seen {
+								continue
+							}
+						}
 					}
-					target.state.lastTimestamp = ts
+
+					// Update state for deduplication
+					if ts.After(target.state.lastTimestamp) {
+						// New timestamp - reset the set
+						target.state.lastTimestamp = ts
+						target.state.linesAtTimestamp = map[string]struct{}{entry.Line: {}}
+					} else if ts.Equal(target.state.lastTimestamp) {
+						// Same timestamp - add to set
+						if target.state.linesAtTimestamp == nil {
+							target.state.linesAtTimestamp = make(map[string]struct{})
+						}
+						target.state.linesAtTimestamp[entry.Line] = struct{}{}
+					}
 				}
 			}
-			target.state.lastLine = entry.Line
 
 			select {
 			case entriesCh <- entry:

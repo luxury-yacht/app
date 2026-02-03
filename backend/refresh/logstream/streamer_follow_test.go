@@ -298,6 +298,126 @@ func TestFollowContainerStopsAfterInitCompletes(t *testing.T) {
 	}
 }
 
+// TestFollowContainerDeduplicatesMultipleLinesAtSameTimestamp verifies that when multiple
+// different log lines share the same timestamp, they are not duplicated on stream reconnection.
+// This tests a bug where Java applications emit multiple lines at the same millisecond timestamp,
+// and on reconnection (using SinceTime), all lines at that timestamp are returned again.
+func TestFollowContainerDeduplicatesMultipleLinesAtSameTimestamp(t *testing.T) {
+	baseClient := fake.NewClientset()
+	ensureTestPod(t, baseClient, "default", "java-pod", corev1.PodRunning)
+
+	delegateCore := baseClient.CoreV1()
+	origin := time.Unix(0, 0)
+
+	// Simulate Java app emitting multiple lines at the same timestamp
+	sameTime := time.Millisecond
+	// Stream 1: Initial batch with 4 lines at the same timestamp
+	// Stream 2: Reconnection returns all lines from that timestamp (SinceTime is inclusive)
+	streams := []string{
+		buildLogStream(origin, []time.Duration{sameTime, sameTime, sameTime, sameTime}, []string{
+			"WARNING: A Java agent has been loaded",
+			"WARNING: If a serviceability tool is in use",
+			"WARNING: If a serviceability tool is not in use",
+			"WARNING: Dynamic loading will be disallowed",
+		}),
+		// On reconnection, Kubernetes returns all lines from SinceTime (inclusive)
+		buildLogStream(origin, []time.Duration{sameTime, sameTime, sameTime, sameTime, 2 * sameTime}, []string{
+			"WARNING: A Java agent has been loaded",
+			"WARNING: If a serviceability tool is in use",
+			"WARNING: If a serviceability tool is not in use",
+			"WARNING: Dynamic loading will be disallowed",
+			"INFO: New line after reconnect",
+		}),
+	}
+
+	podsOverride := newLogPods(delegateCore.Pods("default"), "default", streams)
+	coreOverride := &logCore{
+		CoreV1Interface: delegateCore,
+		overrides: map[string]*logPods{
+			"default": podsOverride,
+		},
+	}
+
+	client := &stubClient{
+		Clientset: baseClient,
+		core:      coreOverride,
+	}
+
+	streamer := NewStreamer(client, noopLogger{}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	target := containerTarget{
+		namespace: "default",
+		pod:       "java-pod",
+		container: "app",
+		state:     &containerState{},
+	}
+
+	entriesCh := make(chan Entry, 20)
+	errCh := make(chan error, 1)
+	dropCh := make(chan int, 10)
+	done := make(chan struct{})
+
+	go func() {
+		streamer.followContainer(ctx, target, entriesCh, errCh, dropCh)
+		close(done)
+	}()
+
+	// Expect exactly 5 unique lines: 4 from initial batch + 1 new line after reconnect
+	// NOT 9 lines (4 original + 4 duplicates + 1 new)
+	var entries []Entry
+	timeout := time.After(4 * time.Second)
+	for len(entries) < 5 {
+		select {
+		case entry := <-entriesCh:
+			entries = append(entries, entry)
+		case err := <-errCh:
+			t.Fatalf("unexpected error from followContainer: %v", err)
+		case drop := <-dropCh:
+			t.Fatalf("unexpected backlog drop reported: %d", drop)
+		case <-timeout:
+			t.Fatalf("timed out waiting for log entries (got %d)", len(entries))
+		}
+	}
+
+	// Give a small window for any extra (duplicate) entries to arrive
+	extraTimeout := time.After(100 * time.Millisecond)
+extraLoop:
+	for {
+		select {
+		case entry := <-entriesCh:
+			entries = append(entries, entry)
+		case <-extraTimeout:
+			break extraLoop
+		}
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("followContainer did not exit after context cancellation")
+	}
+
+	// Extract just the line content for comparison
+	lines := make([]string, len(entries))
+	for i, e := range entries {
+		lines[i] = e.Line
+	}
+
+	expected := []string{
+		"WARNING: A Java agent has been loaded",
+		"WARNING: If a serviceability tool is in use",
+		"WARNING: If a serviceability tool is not in use",
+		"WARNING: Dynamic loading will be disallowed",
+		"INFO: New line after reconnect",
+	}
+	require.Equal(t, expected, lines, "deduplication should skip all lines at same timestamp that were already seen")
+}
+
 func TestFollowContainerStopsWhenPodTerminated(t *testing.T) {
 	baseClient := fake.NewClientset()
 	ensureTestPod(t, baseClient, "default", "done-pod", corev1.PodSucceeded)
