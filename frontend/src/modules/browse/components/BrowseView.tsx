@@ -23,6 +23,7 @@ import GridTable, {
   type GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { OpenIcon } from '@shared/components/icons/MenuIcons';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import * as cf from '@shared/components/tables/columnFactories';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -356,7 +357,7 @@ const BrowseView: React.FC = () => {
     (row: TableRow): ContextMenuItem[] => [
       {
         label: 'Open',
-        icon: '→',
+        icon: <OpenIcon />,
         onClick: () => handleOpen(row),
       },
     ],

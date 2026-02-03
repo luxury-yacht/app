@@ -5,7 +5,7 @@
  * Ingress Classes, and Admission Control resources.
  */
 
-import { DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -166,7 +166,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
         const items: ContextMenuItem[] = [
           {
             label: 'Open',
-            icon: '→',
+            icon: <OpenIcon />,
             onClick: () => handleResourceClick(resource),
           },
         ];

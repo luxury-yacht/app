@@ -27,7 +27,7 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeletePod } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 
@@ -403,7 +403,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         const items: ContextMenuItem[] = [
           {
             label: 'Open',
-            icon: '→',
+            icon: <OpenIcon />,
             onClick: () => handlePodOpen(pod),
           },
         ];

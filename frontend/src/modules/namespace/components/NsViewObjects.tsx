@@ -12,6 +12,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { OpenIcon } from '@shared/components/icons/MenuIcons';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import * as cf from '@shared/components/tables/columnFactories';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -300,7 +301,7 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
     (row: TableRow): ContextMenuItem[] => [
       {
         label: 'Open',
-        icon: '→',
+        icon: <OpenIcon />,
         onClick: () => handleOpen(row),
       },
     ],

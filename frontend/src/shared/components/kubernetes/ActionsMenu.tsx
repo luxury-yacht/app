@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import { RestartIcon, ScaleIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import '../ContextMenu.css';
 import './ActionsMenu.css';
 
@@ -218,7 +219,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                   }}
                   title={!canRestart ? restartDisabledReason : undefined}
                 >
-                  <span className="context-menu-icon">⟳</span>
+                  <span className="context-menu-icon"><RestartIcon /></span>
                   <span className="context-menu-label">
                     {actionLoading ? 'Restarting...' : 'Restart'}
                   </span>
@@ -240,7 +241,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                   }}
                   title={!canScale ? scaleDisabledReason : undefined}
                 >
-                  <span className="context-menu-icon">⇅</span>
+                  <span className="context-menu-icon"><ScaleIcon /></span>
                   <span className="context-menu-label">Scale</span>
                   {!canScale && scaleDisabledReason && (
                     <span className="context-menu-reason">{scaleDisabledReason}</span>
@@ -264,7 +265,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                     }}
                     title={!canDelete ? deleteDisabledReason : undefined}
                   >
-                    <span className="context-menu-icon">✕</span>
+                    <span className="context-menu-icon"><DeleteIcon /></span>
                     <span className="context-menu-label">
                       {deleteLoading ? 'Deleting...' : 'Delete'}
                     </span>

@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-import { DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -169,7 +169,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
         const items: ContextMenuItem[] = [
           {
             label: 'Open',
-            icon: '→',
+            icon: <OpenIcon />,
             onClick: () => handleResourceClick(crd),
           },
         ];

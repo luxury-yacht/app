@@ -41,6 +41,7 @@ import {
   SuspendCronJob,
 } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
+import { OpenIcon, RestartIcon, ScaleIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 
 interface WorkloadsViewProps {
   namespace: string;
@@ -328,7 +329,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         const items: ContextMenuItem[] = [
           {
             label: 'Open',
-            icon: '→',
+            icon: <OpenIcon />,
             onClick: () => handleWorkloadClick(row),
           },
         ];
@@ -352,27 +353,31 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         if (canRestart(row)) {
           items.push({
             label: 'Restart',
-            icon: '⟳',
+            icon: <RestartIcon />,
             onClick: () => setRestartConfirm({ show: true, workload: row }),
           });
         }
-        if (canDelete(row)) {
-          items.push({
-            label: 'Delete',
-            icon: '✕',
-            danger: true,
-            onClick: () => setDeleteConfirm({ show: true, workload: row }),
-          });
-        }
+
         // Scale is only available for Deployments, StatefulSets, and ReplicaSets
         const scalableKinds = ['Deployment', 'StatefulSet', 'ReplicaSet'];
         if (scalableKinds.includes(normalizeWorkloadKind(row.kind))) {
           items.push({
             label: 'Scale',
-            icon: '⇅',
+            icon: <ScaleIcon />,
             onClick: () => openScaleModal(row),
           });
         }
+
+        if (canDelete(row)) {
+          items.push({ divider: true });
+          items.push({
+            label: 'Delete',
+            icon: <DeleteIcon />,
+            danger: true,
+            onClick: () => setDeleteConfirm({ show: true, workload: row }),
+          });
+        }
+
         return items;
       },
       [canDelete, canRestart, handleSuspendToggle, handleWorkloadClick, openScaleModal]

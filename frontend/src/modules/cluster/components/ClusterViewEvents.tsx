@@ -18,6 +18,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { OpenIcon } from '@shared/components/icons/MenuIcons';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -197,7 +198,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           const kind = parsed.objectType;
           items.push({
             label: `View ${kind}`,
-            icon: '→',
+            icon: <OpenIcon />,
             onClick: () => handleEventClick(event),
           });
         }

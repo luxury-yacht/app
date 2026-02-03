@@ -6,7 +6,7 @@
  */
 
 import './ClusterViewCustom.css';
-import { DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -181,7 +181,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       (resource: ClusterCustomData): ContextMenuItem[] => [
         {
           label: 'Open',
-          icon: '→',
+          icon: <OpenIcon />,
           onClick: () => handleResourceClick(resource),
         },
         { divider: true },

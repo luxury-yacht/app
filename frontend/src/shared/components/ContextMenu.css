@@ -69,7 +69,6 @@
 .context-menu-item.danger:hover:not(.disabled),
 .context-menu-item.danger.is-focused:not(.disabled) {
   background-color: rgba(239, 68, 68, 0.1);
-  border-left-color: var(--color-error, #ef4444);
 }
 
 .context-menu-icon {
