@@ -145,6 +145,8 @@ export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promi
 
 export function GetWorkloads(arg1:string,arg2:string,arg3:string):Promise<backend.VersionedResponse>;
 
+export function GetZoomLevel():Promise<number>;
+
 export function InitializeForTesting(arg1:context.Context,arg2:kubernetes.Interface):Promise<void>;
 
 export function IsDiagnosticsPanelVisible():Promise<boolean>;
@@ -206,6 +208,8 @@ export function SetSidebarVisible(arg1:boolean):Promise<void>;
 export function SetTheme(arg1:string):Promise<void>;
 
 export function SetUseShortResourceNames(arg1:boolean):Promise<void>;
+
+export function SetZoomLevel(arg1:number):Promise<void>;
 
 export function ShowAbout():Promise<void>;
 

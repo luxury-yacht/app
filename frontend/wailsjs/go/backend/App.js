@@ -270,6 +270,10 @@ export function GetWorkloads(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetWorkloads'](arg1, arg2, arg3);
 }
 
+export function GetZoomLevel() {
+  return window['go']['backend']['App']['GetZoomLevel']();
+}
+
 export function InitializeForTesting(arg1, arg2) {
   return window['go']['backend']['App']['InitializeForTesting'](arg1, arg2);
 }
@@ -392,6 +396,10 @@ export function SetTheme(arg1) {
 
 export function SetUseShortResourceNames(arg1) {
   return window['go']['backend']['App']['SetUseShortResourceNames'](arg1);
+}
+
+export function SetZoomLevel(arg1) {
+  return window['go']['backend']['App']['SetZoomLevel'](arg1);
 }
 
 export function ShowAbout() {

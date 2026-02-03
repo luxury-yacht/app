@@ -3,8 +3,10 @@
  *
  * Manages application zoom level (50% - 200%).
  * Applies CSS zoom to document and listens for zoom events from menu.
+ * Persists zoom level to backend settings.
  */
 import React, { createContext, useContext, useState, useCallback, useEffect, ReactNode } from 'react';
+import { GetZoomLevel, SetZoomLevel } from '@wailsjs/go/backend/App';
 
 // Zoom constraints
 const MIN_ZOOM = 50;
@@ -43,27 +45,51 @@ export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
     document.documentElement.style.zoom = `${level}%`;
   }, []);
 
+  // Persist zoom level to backend
+  const persistZoom = useCallback((level: number) => {
+    SetZoomLevel(level).catch((err) => {
+      console.error('Failed to persist zoom level:', err);
+    });
+  }, []);
+
+  // Load initial zoom level from backend
+  useEffect(() => {
+    GetZoomLevel()
+      .then((level) => {
+        const validLevel = level >= MIN_ZOOM && level <= MAX_ZOOM ? level : DEFAULT_ZOOM;
+        setZoomLevel(validLevel);
+        applyZoom(validLevel);
+      })
+      .catch((err) => {
+        console.error('Failed to load zoom level:', err);
+        applyZoom(DEFAULT_ZOOM);
+      });
+  }, [applyZoom]);
+
   // Zoom actions
   const zoomIn = useCallback(() => {
     setZoomLevel((prev) => {
       const next = Math.min(prev + ZOOM_STEP, MAX_ZOOM);
       applyZoom(next);
+      persistZoom(next);
       return next;
     });
-  }, [applyZoom]);
+  }, [applyZoom, persistZoom]);
 
   const zoomOut = useCallback(() => {
     setZoomLevel((prev) => {
       const next = Math.max(prev - ZOOM_STEP, MIN_ZOOM);
       applyZoom(next);
+      persistZoom(next);
       return next;
     });
-  }, [applyZoom]);
+  }, [applyZoom, persistZoom]);
 
   const resetZoom = useCallback(() => {
     setZoomLevel(DEFAULT_ZOOM);
     applyZoom(DEFAULT_ZOOM);
-  }, [applyZoom]);
+    persistZoom(DEFAULT_ZOOM);
+  }, [applyZoom, persistZoom]);
 
   // Listen for zoom events from Wails menu
   useEffect(() => {
