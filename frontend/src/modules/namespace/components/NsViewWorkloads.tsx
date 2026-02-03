@@ -377,7 +377,11 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         }
 
         // Scale is only available for Deployments, StatefulSets, and ReplicaSets
-        if (scalableKinds.includes(normalizedKind) && scaleStatus?.allowed && !scaleStatus.pending) {
+        if (
+          scalableKinds.includes(normalizedKind) &&
+          scaleStatus?.allowed &&
+          !scaleStatus.pending
+        ) {
           items.push({
             label: 'Scale',
             icon: <ScaleIcon />,

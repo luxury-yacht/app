@@ -35,9 +35,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
   const selectableIndexes = useMemo(
     () =>
       items
-        .map((item, index) =>
-          !item.divider && !item.disabled && !item.header ? index : null
-        )
+        .map((item, index) => (!item.divider && !item.disabled && !item.header ? index : null))
         .filter((idx): idx is number => idx !== null),
     [items]
   );

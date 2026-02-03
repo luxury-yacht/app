@@ -321,7 +321,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
 
         return items;
       },
-      [handleResourceClick, openWithObject, permissionMap]
+      [handleResourceClick, permissionMap]
     );
 
     const emptyMessage = useMemo(
