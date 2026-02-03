@@ -89,4 +89,7 @@ describe('JobOverview', () => {
     expect(getValueForLabel(container, 'Last Scheduled')?.textContent).toContain('2024-01-01');
     expect(getValueForLabel(container, 'History')?.textContent).toBe('3 succeeded, 1 failed');
   });
+
+  // Note: CronJob trigger/suspend actions are tested in ActionsMenu.test.tsx
+  // since they now appear in the triple-dot menu rather than inline buttons
 });

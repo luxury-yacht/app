@@ -24,6 +24,8 @@ export const useObjectPanelFeatureSupport = (
         scale: false,
         edit: false,
         shell: false,
+        trigger: false,
+        suspend: false,
       };
     }
 
@@ -40,6 +42,8 @@ export const useObjectPanelFeatureSupport = (
         scale: false,
         edit: true,
         shell: false,
+        trigger: false,
+        suspend: false,
       };
     }
 
@@ -52,6 +56,8 @@ export const useObjectPanelFeatureSupport = (
       scale: Boolean(definition.scale),
       edit: definition.edit === undefined ? true : Boolean(definition.edit),
       shell: Boolean(definition.shell),
+      trigger: Boolean(definition.trigger),
+      suspend: Boolean(definition.suspend),
     };
   }, [objectKind, resourceCapabilities]);
 };

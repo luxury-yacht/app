@@ -219,6 +219,8 @@ export function StartShellSession(arg1:string,arg2:types.ShellSessionRequest):Pr
 
 export function Startup(arg1:context.Context):Promise<void>;
 
+export function SuspendCronJob(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
+
 export function ToggleDiagnosticsPanel():Promise<void>;
 
 export function ToggleLogsPanel():Promise<void>;
@@ -226,6 +228,8 @@ export function ToggleLogsPanel():Promise<void>;
 export function ToggleObjectDiff():Promise<void>;
 
 export function ToggleSidebar():Promise<void>;
+
+export function TriggerCronJob(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function UncordonNode(arg1:string,arg2:string):Promise<void>;
 

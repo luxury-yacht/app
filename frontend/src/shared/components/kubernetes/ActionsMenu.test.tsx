@@ -156,4 +156,109 @@ describe('ActionsMenu', () => {
 
     expect(container.querySelector('.actions-menu-dropdown')).toBeNull();
   });
+
+  describe('CronJob actions', () => {
+    it('shows trigger and suspend actions for CronJob', async () => {
+      const onTrigger = vi.fn();
+      const onSuspendToggle = vi.fn();
+
+      await renderMenu({
+        canTrigger: true,
+        canSuspend: true,
+        isSuspended: false,
+        onTrigger,
+        onSuspendToggle,
+      });
+
+      openMenu(container);
+      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.actions-menu-item'));
+
+      const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
+      const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
+
+      expect(triggerItem).toBeTruthy();
+      expect(suspendItem).toBeTruthy();
+    });
+
+    it('shows Resume instead of Suspend when isSuspended is true', async () => {
+      await renderMenu({
+        canTrigger: true,
+        canSuspend: true,
+        isSuspended: true,
+      });
+
+      openMenu(container);
+      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.actions-menu-item'));
+
+      const resumeItem = items.find((item) => item.textContent?.includes('Resume'));
+      const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
+
+      expect(resumeItem).toBeTruthy();
+      expect(suspendItem).toBeFalsy();
+    });
+
+    it('disables trigger when CronJob is suspended', async () => {
+      await renderMenu({
+        canTrigger: true,
+        canSuspend: true,
+        isSuspended: true,
+      });
+
+      openMenu(container);
+      const triggerItem = container.querySelector<HTMLButtonElement>(
+        '.actions-menu-item:first-child'
+      );
+      expect(triggerItem?.disabled).toBe(true);
+    });
+
+    it('calls onSuspendToggle when suspend is clicked', async () => {
+      const onSuspendToggle = vi.fn();
+
+      await renderMenu({
+        canSuspend: true,
+        isSuspended: false,
+        onSuspendToggle,
+      });
+
+      openMenu(container);
+      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.actions-menu-item'));
+      const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
+
+      act(() => {
+        suspendItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      expect(onSuspendToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows trigger confirmation modal and calls onTrigger when confirmed', async () => {
+      const onTrigger = vi.fn();
+
+      await renderMenu({
+        canTrigger: true,
+        isSuspended: false,
+        onTrigger,
+      });
+
+      openMenu(container);
+      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.actions-menu-item'));
+      const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
+
+      act(() => {
+        triggerItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      // Modal should be visible
+      const modal = container.querySelector('.modal-container');
+      expect(modal).toBeTruthy();
+
+      // Click confirm
+      const confirmBtn = modal?.querySelector<HTMLButtonElement>('.button.primary');
+      act(() => {
+        confirmBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+
+      expect(onTrigger).toHaveBeenCalledTimes(1);
+    });
+  });
 });

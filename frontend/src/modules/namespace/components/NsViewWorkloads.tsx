@@ -33,7 +33,13 @@ import {
   buildWorkloadKey,
   appendWorkloadTokens,
 } from '@modules/namespace/components/NsViewWorkloads.helpers';
-import { RestartWorkload, DeleteResource, ScaleWorkload } from '@wailsjs/go/backend/App';
+import {
+  RestartWorkload,
+  DeleteResource,
+  ScaleWorkload,
+  TriggerCronJob,
+  SuspendCronJob,
+} from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 
 interface WorkloadsViewProps {
@@ -80,6 +86,11 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     }>({ show: false, workload: null, value: 0 });
     const [scaleLoading, setScaleLoading] = useState(false);
     const [scaleError, setScaleError] = useState<string | null>(null);
+
+    const [triggerConfirm, setTriggerConfirm] = useState<{
+      show: boolean;
+      cronjob: WorkloadData | null;
+    }>({ show: false, cronjob: null });
 
     const handleWorkloadClick = useCallback(
       (workload: WorkloadData) => {
@@ -212,6 +223,41 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       }
     }, [canDelete, deleteConfirm.workload]);
 
+    const handleTriggerConfirm = useCallback(async () => {
+      if (!triggerConfirm.cronjob) return;
+      const cronjob = triggerConfirm.cronjob;
+
+      try {
+        await TriggerCronJob(cronjob.clusterId ?? '', cronjob.namespace, cronjob.name);
+      } catch (err) {
+        errorHandler.handle(err, {
+          action: 'trigger',
+          kind: cronjob.kind,
+          name: cronjob.name,
+        });
+      } finally {
+        setTriggerConfirm({ show: false, cronjob: null });
+      }
+    }, [triggerConfirm.cronjob]);
+
+    const handleSuspendToggle = useCallback(async (workload: WorkloadData) => {
+      const isSuspended = workload.status === 'Suspended';
+      try {
+        await SuspendCronJob(
+          workload.clusterId ?? '',
+          workload.namespace,
+          workload.name,
+          !isSuspended
+        );
+      } catch (err) {
+        errorHandler.handle(err, {
+          action: isSuspended ? 'resume' : 'suspend',
+          kind: workload.kind,
+          name: workload.name,
+        });
+      }
+    }, []);
+
     const openScaleModal = useCallback((workload: WorkloadData) => {
       setScaleState({
         show: true,
@@ -286,6 +332,23 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             onClick: () => handleWorkloadClick(row),
           },
         ];
+
+        // CronJob-specific actions
+        if (row.kind === 'CronJob') {
+          const isSuspended = row.status === 'Suspended';
+          items.push({
+            label: 'Trigger Now',
+            icon: '▶',
+            onClick: () => setTriggerConfirm({ show: true, cronjob: row }),
+            disabled: isSuspended,
+          });
+          items.push({
+            label: isSuspended ? 'Resume' : 'Suspend',
+            icon: isSuspended ? '▶' : '⏸',
+            onClick: () => handleSuspendToggle(row),
+          });
+        }
+
         if (canRestart(row)) {
           items.push({
             label: 'Restart',
@@ -300,7 +363,9 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             onClick: () => setDeleteConfirm({ show: true, workload: row }),
           });
         }
-        if (normalizeWorkloadKind(row.kind) !== 'Pod') {
+        // Scale is only available for Deployments, StatefulSets, and ReplicaSets
+        const scalableKinds = ['Deployment', 'StatefulSet', 'ReplicaSet'];
+        if (scalableKinds.includes(normalizeWorkloadKind(row.kind))) {
           items.push({
             label: 'Scale',
             icon: '⇅',
@@ -309,7 +374,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         }
         return items;
       },
-      [canDelete, canRestart, handleWorkloadClick, openScaleModal]
+      [canDelete, canRestart, handleSuspendToggle, handleWorkloadClick, openScaleModal]
     );
 
     const emptyMessage = useMemo(
@@ -395,6 +460,16 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           confirmButtonClass="danger"
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, workload: null })}
+        />
+
+        <ConfirmationModal
+          isOpen={triggerConfirm.show}
+          title="Trigger CronJob"
+          message={`Create a new Job from CronJob "${triggerConfirm.cronjob?.name}" immediately?`}
+          confirmText="Trigger"
+          cancelText="Cancel"
+          onConfirm={handleTriggerConfirm}
+          onCancel={() => setTriggerConfirm({ show: false, cronjob: null })}
         />
 
         <WorkloadScaleModal

@@ -21,6 +21,8 @@ export type ResourceCapability = {
   scale?: boolean;
   edit?: boolean;
   shell?: boolean;
+  trigger?: boolean;
+  suspend?: boolean;
 };
 
 export type FeatureSupport = {
@@ -32,6 +34,8 @@ export type FeatureSupport = {
   scale: boolean;
   edit: boolean;
   shell: boolean;
+  trigger: boolean;
+  suspend: boolean;
 };
 
 export type ComputedCapabilities = {
@@ -43,6 +47,8 @@ export type ComputedCapabilities = {
   canRestart: boolean;
   canScale: boolean;
   canEditYaml: boolean;
+  canTrigger: boolean;
+  canSuspend: boolean;
 };
 
 export type CapabilityIdMap = {

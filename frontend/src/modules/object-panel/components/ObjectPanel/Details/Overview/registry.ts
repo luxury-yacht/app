@@ -122,12 +122,23 @@ overviewRegistry.register({
   },
 });
 
-// Register Job components
+// Register Job component
 overviewRegistry.register({
-  kinds: ['cronjob', 'job'],
+  kinds: ['job'],
   component: JobOverview,
   capabilities: {
     delete: true,
+  },
+});
+
+// Register CronJob component with trigger and suspend capabilities
+overviewRegistry.register({
+  kinds: ['cronjob'],
+  component: JobOverview,
+  capabilities: {
+    delete: true,
+    trigger: true,
+    suspend: true,
   },
 });
 

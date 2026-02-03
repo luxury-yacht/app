@@ -89,9 +89,28 @@ vi.mock('@/hooks/useShortNames', () => ({
   useShortNames: () => false,
 }));
 
+const mockTriggerCronJob = vi.fn().mockResolvedValue('job-123');
+const mockSuspendCronJob = vi.fn().mockResolvedValue(undefined);
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  RestartWorkload: vi.fn(),
+  DeleteResource: vi.fn(),
+  ScaleWorkload: vi.fn(),
+  TriggerCronJob: (...args: any[]) => mockTriggerCronJob(...args),
+  SuspendCronJob: (...args: any[]) => mockSuspendCronJob(...args),
+}));
+
 vi.mock('@/core/capabilities', () => ({
   getPermissionKey: (kind: string, verb: string, ns?: string) => `${kind}:${verb}:${ns || ''}`,
-  useUserPermissions: () => new Map(),
+  useUserPermissions: () => {
+    // Return permissions allowing all actions for testing
+    const map = new Map();
+    map.set('Job:create:default', { allowed: true, pending: false });
+    map.set('CronJob:patch:default', { allowed: true, pending: false });
+    map.set('Deployment:patch:default', { allowed: true, pending: false });
+    map.set('Deployment:delete:default', { allowed: true, pending: false });
+    return map;
+  },
 }));
 
 describe('NsViewWorkloads', () => {
@@ -185,5 +204,185 @@ describe('NsViewWorkloads', () => {
         clusterName: 'alpha',
       })
     );
+  });
+
+  describe('CronJob context menu', () => {
+    const cronjob = {
+      kind: 'CronJob',
+      name: 'backup',
+      namespace: 'default',
+      status: 'Idle',
+      ready: '0',
+      restarts: 0,
+      age: '5m',
+      clusterId: 'test:ctx',
+      clusterName: 'test',
+    };
+
+    it('includes Trigger Now and Suspend items for CronJob', async () => {
+      await act(async () => {
+        root.render(
+          <NsViewWorkloads
+            namespace="default"
+            data={[cronjob as any]}
+            loading={false}
+            loaded={true}
+            metrics={null}
+          />
+        );
+        await Promise.resolve();
+      });
+
+      const props = gridTablePropsRef.current;
+      const menuItems = props.getCustomContextMenuItems(cronjob);
+
+      const triggerItem = menuItems.find((item: any) => item.label === 'Trigger Now');
+      const suspendItem = menuItems.find((item: any) => item.label === 'Suspend');
+
+      expect(triggerItem).toBeDefined();
+      expect(suspendItem).toBeDefined();
+    });
+
+    it('shows Resume instead of Suspend when CronJob is suspended', async () => {
+      const suspendedCronjob = { ...cronjob, status: 'Suspended' };
+
+      await act(async () => {
+        root.render(
+          <NsViewWorkloads
+            namespace="default"
+            data={[suspendedCronjob as any]}
+            loading={false}
+            loaded={true}
+            metrics={null}
+          />
+        );
+        await Promise.resolve();
+      });
+
+      const props = gridTablePropsRef.current;
+      const menuItems = props.getCustomContextMenuItems(suspendedCronjob);
+
+      const resumeItem = menuItems.find((item: any) => item.label === 'Resume');
+      const suspendItem = menuItems.find((item: any) => item.label === 'Suspend');
+
+      expect(resumeItem).toBeDefined();
+      expect(suspendItem).toBeUndefined();
+    });
+
+    it('disables Trigger Now when CronJob is suspended', async () => {
+      const suspendedCronjob = { ...cronjob, status: 'Suspended' };
+
+      await act(async () => {
+        root.render(
+          <NsViewWorkloads
+            namespace="default"
+            data={[suspendedCronjob as any]}
+            loading={false}
+            loaded={true}
+            metrics={null}
+          />
+        );
+        await Promise.resolve();
+      });
+
+      const props = gridTablePropsRef.current;
+      const menuItems = props.getCustomContextMenuItems(suspendedCronjob);
+
+      const triggerItem = menuItems.find((item: any) => item.label === 'Trigger Now');
+      expect(triggerItem?.disabled).toBe(true);
+    });
+
+    it('does not include CronJob actions for Deployments', async () => {
+      const deployment = {
+        kind: 'Deployment',
+        name: 'api',
+        namespace: 'default',
+        status: 'Running',
+        ready: '1/1',
+        restarts: 0,
+        age: '5m',
+        clusterId: 'test:ctx',
+        clusterName: 'test',
+      };
+
+      await act(async () => {
+        root.render(
+          <NsViewWorkloads
+            namespace="default"
+            data={[deployment as any]}
+            loading={false}
+            loaded={true}
+            metrics={null}
+          />
+        );
+        await Promise.resolve();
+      });
+
+      const props = gridTablePropsRef.current;
+      const menuItems = props.getCustomContextMenuItems(deployment);
+
+      const triggerItem = menuItems.find((item: any) => item.label === 'Trigger Now');
+      const suspendItem = menuItems.find((item: any) => item.label === 'Suspend');
+
+      expect(triggerItem).toBeUndefined();
+      expect(suspendItem).toBeUndefined();
+    });
+
+    it('does not include Scale for CronJobs, Jobs, or DaemonSets', async () => {
+      const workloads = [
+        { kind: 'CronJob', name: 'backup', namespace: 'default', status: 'Idle' },
+        { kind: 'Job', name: 'migrate', namespace: 'default', status: 'Running' },
+        { kind: 'DaemonSet', name: 'agent', namespace: 'default', status: 'Running' },
+      ];
+
+      await act(async () => {
+        root.render(
+          <NsViewWorkloads
+            namespace="default"
+            data={workloads as any}
+            loading={false}
+            loaded={true}
+            metrics={null}
+          />
+        );
+        await Promise.resolve();
+      });
+
+      const props = gridTablePropsRef.current;
+
+      for (const workload of workloads) {
+        const menuItems = props.getCustomContextMenuItems(workload);
+        const scaleItem = menuItems.find((item: any) => item.label === 'Scale');
+        expect(scaleItem).toBeUndefined();
+      }
+    });
+
+    it('includes Scale for Deployments and StatefulSets', async () => {
+      const workloads = [
+        { kind: 'Deployment', name: 'api', namespace: 'default', status: 'Running' },
+        { kind: 'StatefulSet', name: 'db', namespace: 'default', status: 'Running' },
+      ];
+
+      await act(async () => {
+        root.render(
+          <NsViewWorkloads
+            namespace="default"
+            data={workloads as any}
+            loading={false}
+            loaded={true}
+            metrics={null}
+          />
+        );
+        await Promise.resolve();
+      });
+
+      const props = gridTablePropsRef.current;
+
+      for (const workload of workloads) {
+        const menuItems = props.getCustomContextMenuItems(workload);
+        const scaleItem = menuItems.find((item: any) => item.label === 'Scale');
+        expect(scaleItem).toBeDefined();
+      }
+    });
   });
 });

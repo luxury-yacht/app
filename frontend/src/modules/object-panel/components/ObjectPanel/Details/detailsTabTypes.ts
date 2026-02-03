@@ -60,6 +60,8 @@ export interface DetailsTabProps {
   canRestart: boolean;
   canScale: boolean;
   canDelete: boolean;
+  canTrigger?: boolean;
+  canSuspend?: boolean;
   restartDisabledReason?: string;
   scaleDisabledReason?: string;
   deleteDisabledReason?: string;
@@ -73,6 +75,8 @@ export interface DetailsTabProps {
   onScaleCancel: () => void;
   onScaleReplicasChange: (value: number) => void;
   onShowScaleInput: () => void;
+  onTriggerClick?: () => void;
+  onSuspendToggle?: () => void;
 }
 
 export interface UtilizationData {

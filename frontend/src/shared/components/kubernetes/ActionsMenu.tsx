@@ -14,6 +14,9 @@ interface ActionsMenuProps {
   canRestart?: boolean;
   canScale?: boolean;
   canDelete?: boolean;
+  canTrigger?: boolean;
+  canSuspend?: boolean;
+  isSuspended?: boolean;
   restartDisabledReason?: string;
   scaleDisabledReason?: string;
   deleteDisabledReason?: string;
@@ -23,6 +26,8 @@ interface ActionsMenuProps {
   onRestart?: () => void;
   onScale?: (replicas: number) => void;
   onDelete?: () => void;
+  onTrigger?: () => void;
+  onSuspendToggle?: () => void;
 }
 
 export const ActionsMenu = React.memo<ActionsMenuProps>(
@@ -32,6 +37,9 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     canRestart,
     canScale,
     canDelete,
+    canTrigger,
+    canSuspend,
+    isSuspended,
     restartDisabledReason,
     scaleDisabledReason,
     deleteDisabledReason,
@@ -41,9 +49,12 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     onRestart,
     onScale,
     onDelete,
+    onTrigger,
+    onSuspendToggle,
   }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [showScaleModal, setShowScaleModal] = useState(false);
+    const [showTriggerConfirm, setShowTriggerConfirm] = useState(false);
     const [scaleValue, setScaleValue] = useState(0);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -64,9 +75,11 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     const showRestartOption = !!canRestart || Boolean(restartDisabledReason);
     const showScaleOption = !!canScale || Boolean(scaleDisabledReason);
     const showDeleteOption = !!canDelete || Boolean(deleteDisabledReason);
+    const showTriggerOption = !!canTrigger;
+    const showSuspendOption = !!canSuspend;
 
     // Don't render if no actions available at all
-    if (!showRestartOption && !showScaleOption && !showDeleteOption) {
+    if (!showRestartOption && !showScaleOption && !showDeleteOption && !showTriggerOption && !showSuspendOption) {
       return null;
     }
 
@@ -102,6 +115,21 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       }
     };
 
+    const handleTriggerClick = () => {
+      setIsOpen(false);
+      setShowTriggerConfirm(true);
+    };
+
+    const handleTriggerConfirm = () => {
+      setShowTriggerConfirm(false);
+      onTrigger?.();
+    };
+
+    const handleSuspendToggle = () => {
+      setIsOpen(false);
+      onSuspendToggle?.();
+    };
+
     const isLoading = actionLoading || deleteLoading;
 
     return (
@@ -119,6 +147,29 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
 
           {isOpen && (
             <div className="actions-menu-dropdown">
+              {showTriggerOption && (
+                <button
+                  className="actions-menu-item"
+                  onClick={handleTriggerClick}
+                  disabled={actionLoading || isSuspended}
+                  title={isSuspended ? 'Cannot trigger suspended CronJob' : undefined}
+                >
+                  <span className="actions-menu-item-label">Trigger Now</span>
+                </button>
+              )}
+
+              {showSuspendOption && (
+                <button
+                  className="actions-menu-item"
+                  onClick={handleSuspendToggle}
+                  disabled={actionLoading}
+                >
+                  <span className="actions-menu-item-label">
+                    {isSuspended ? 'Resume' : 'Suspend'}
+                  </span>
+                </button>
+              )}
+
               {showRestartOption && (
                 <button
                   className="actions-menu-item"
@@ -226,6 +277,36 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                   disabled={actionLoading}
                 >
                   {actionLoading ? 'Scaling...' : 'Scale'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Trigger CronJob Modal */}
+        {showTriggerConfirm && (
+          <div className="modal-overlay" onClick={() => setShowTriggerConfirm(false)}>
+            <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Trigger CronJob</h2>
+              </div>
+              <div className="modal-body">
+                <p>Create a new Job from this CronJob immediately?</p>
+              </div>
+              <div className="modal-footer">
+                <button
+                  className="button cancel"
+                  onClick={() => setShowTriggerConfirm(false)}
+                  disabled={actionLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="button primary"
+                  onClick={handleTriggerConfirm}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Triggering...' : 'Trigger'}
                 </button>
               </div>
             </div>

@@ -418,6 +418,10 @@ export function Startup(arg1) {
   return window['go']['backend']['App']['Startup'](arg1);
 }
 
+export function SuspendCronJob(arg1, arg2, arg3, arg4) {
+  return window['go']['backend']['App']['SuspendCronJob'](arg1, arg2, arg3, arg4);
+}
+
 export function ToggleDiagnosticsPanel() {
   return window['go']['backend']['App']['ToggleDiagnosticsPanel']();
 }
@@ -432,6 +436,10 @@ export function ToggleObjectDiff() {
 
 export function ToggleSidebar() {
   return window['go']['backend']['App']['ToggleSidebar']();
+}
+
+export function TriggerCronJob(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['TriggerCronJob'](arg1, arg2, arg3);
 }
 
 export function UncordonNode(arg1, arg2) {
