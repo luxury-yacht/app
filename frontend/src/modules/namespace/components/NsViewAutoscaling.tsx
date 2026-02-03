@@ -299,30 +299,13 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           onClick: () => handleResourceClick(resource),
         });
 
-        // Add type-specific actions
-        if (resource.kind === 'HorizontalPodAutoscaler') {
-          items.push(
-            { divider: true },
-            {
-              label: 'View Scaling Events',
-              icon: '📊',
-              onClick: () => {
-                // This would show scaling history/events
-                openWithObject({
-                  kind: resource.kind,
-                  name: resource.name,
-                  namespace: resource.namespace,
-                  viewMode: 'events',
-                  clusterId: resource.clusterId ?? undefined,
-                  clusterName: resource.clusterName ?? undefined,
-                });
-              },
-            }
-          );
-        }
-
         const deleteStatus =
           permissionMap.get(getPermissionKey(resource.kind, 'delete', resource.namespace)) ?? null;
+
+        // Show a muted header while permission checks are pending.
+        if (deleteStatus?.pending) {
+          items.unshift({ header: true, label: 'Awaiting permissions...' });
+        }
 
         if (deleteStatus?.allowed && !deleteStatus.pending) {
           if (items.length > 0 && !items[items.length - 1].divider) {

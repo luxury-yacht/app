@@ -177,6 +177,11 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
         const deleteStatus =
           permissionMap.get(getPermissionKey('CustomResourceDefinition', 'delete')) ?? null;
 
+        // Show a muted header while permission checks are pending.
+        if (deleteStatus?.pending) {
+          items.unshift({ header: true, label: 'Awaiting permissions...' });
+        }
+
         if (deleteStatus?.allowed && !deleteStatus.pending) {
           items.push(
             { divider: true },

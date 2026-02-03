@@ -101,7 +101,10 @@ vi.mock('@wailsjs/go/backend/App', () => ({
 }));
 
 vi.mock('@/core/capabilities', () => ({
-  getPermissionKey: (kind: string, verb: string, ns?: string) => `${kind}:${verb}:${ns || ''}`,
+  getPermissionKey: (kind: string, verb: string, ns?: string, subresource?: string) => {
+    const suffix = subresource ? `:${subresource}` : '';
+    return `${kind}:${verb}:${ns || ''}${suffix}`;
+  },
   useUserPermissions: () => {
     // Return permissions allowing all actions for testing
     const map = new Map();
@@ -109,6 +112,9 @@ vi.mock('@/core/capabilities', () => ({
     map.set('CronJob:patch:default', { allowed: true, pending: false });
     map.set('Deployment:patch:default', { allowed: true, pending: false });
     map.set('Deployment:delete:default', { allowed: true, pending: false });
+    map.set('Deployment:update:default:scale', { allowed: true, pending: false });
+    map.set('StatefulSet:update:default:scale', { allowed: true, pending: false });
+    map.set('ReplicaSet:update:default:scale', { allowed: true, pending: false });
     return map;
   },
 }));

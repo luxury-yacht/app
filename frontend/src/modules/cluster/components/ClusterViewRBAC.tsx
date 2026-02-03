@@ -173,6 +173,11 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
 
         const deleteStatus = permissionMap.get(getPermissionKey(resource.kind, 'delete')) ?? null;
 
+        // Show a muted header while permission checks are pending.
+        if (deleteStatus?.pending) {
+          items.unshift({ header: true, label: 'Awaiting permissions...' });
+        }
+
         if (deleteStatus?.allowed && !deleteStatus.pending) {
           items.push(
             { divider: true },

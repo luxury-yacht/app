@@ -400,16 +400,20 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [
-          {
-            label: 'Open',
-            icon: <OpenIcon />,
-            onClick: () => handlePodOpen(pod),
-          },
-        ];
-
         const deleteStatus =
           permissionMap.get(getPermissionKey('Pod', 'delete', pod.namespace)) ?? null;
+        const items: ContextMenuItem[] = [];
+
+        // Show a muted header while permission checks are pending.
+        if (deleteStatus?.pending) {
+          items.push({ header: true, label: 'Awaiting permissions...' });
+        }
+
+        items.push({
+          label: 'Open',
+          icon: <OpenIcon />,
+          onClick: () => handlePodOpen(pod),
+        });
         if (deleteStatus?.allowed && !deleteStatus.pending) {
           items.push({
             label: 'Delete',

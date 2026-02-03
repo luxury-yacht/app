@@ -15,6 +15,7 @@ export interface ContextMenuItem {
   onClick?: () => void;
   icon?: string | React.ReactNode;
   divider?: boolean;
+  header?: boolean;
   disabled?: boolean;
   danger?: boolean;
   tooltip?: string;
@@ -34,7 +35,9 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
   const selectableIndexes = useMemo(
     () =>
       items
-        .map((item, index) => (!item.divider && !item.disabled ? index : null))
+        .map((item, index) =>
+          !item.divider && !item.disabled && !item.header ? index : null
+        )
         .filter((idx): idx is number => idx !== null),
     [items]
   );
@@ -167,6 +170,14 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
       {items.map((item, index) => {
         if (item.divider) {
           return <div key={index} className="context-menu-divider" />;
+        }
+        // Render non-interactive headers (e.g., permission pending state).
+        if (item.header) {
+          return (
+            <div key={index} className="context-menu-header" role="presentation">
+              {item.label}
+            </div>
+          );
         }
 
         const tooltip = item.tooltip ?? item.disabledReason;

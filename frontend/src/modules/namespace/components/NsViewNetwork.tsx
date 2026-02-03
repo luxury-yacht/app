@@ -191,6 +191,11 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
         const deleteStatus =
           permissionMap.get(getPermissionKey(resource.kind, 'delete', resource.namespace)) ?? null;
 
+        // Show a muted header while permission checks are pending.
+        if (deleteStatus?.pending) {
+          items.unshift({ header: true, label: 'Awaiting permissions...' });
+        }
+
         if (deleteStatus?.allowed && !deleteStatus.pending) {
           items.push(
             { divider: true },

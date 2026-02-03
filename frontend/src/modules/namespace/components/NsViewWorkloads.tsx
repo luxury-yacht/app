@@ -326,13 +326,31 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [
-          {
-            label: 'Open',
-            icon: <OpenIcon />,
-            onClick: () => handleWorkloadClick(row),
-          },
-        ];
+        const normalizedKind = normalizeWorkloadKind(row.kind);
+        const restartStatus =
+          permissionMap.get(getPermissionKey(normalizedKind, 'patch', row.namespace)) ?? null;
+        const deleteStatus =
+          permissionMap.get(getPermissionKey(row.kind, 'delete', row.namespace)) ?? null;
+        const scaleStatus =
+          permissionMap.get(getPermissionKey(normalizedKind, 'update', row.namespace, 'scale')) ??
+          null;
+        const scalableKinds = ['Deployment', 'StatefulSet', 'ReplicaSet'];
+        const items: ContextMenuItem[] = [];
+
+        // Show a muted header while permission checks are pending.
+        if (
+          restartStatus?.pending ||
+          deleteStatus?.pending ||
+          (scalableKinds.includes(normalizedKind) && scaleStatus?.pending)
+        ) {
+          items.push({ header: true, label: 'Awaiting permissions...' });
+        }
+
+        items.push({
+          label: 'Open',
+          icon: <OpenIcon />,
+          onClick: () => handleWorkloadClick(row),
+        });
 
         // CronJob-specific actions
         if (row.kind === 'CronJob') {
@@ -359,8 +377,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         }
 
         // Scale is only available for Deployments, StatefulSets, and ReplicaSets
-        const scalableKinds = ['Deployment', 'StatefulSet', 'ReplicaSet'];
-        if (scalableKinds.includes(normalizeWorkloadKind(row.kind))) {
+        if (scalableKinds.includes(normalizedKind) && scaleStatus?.allowed && !scaleStatus.pending) {
           items.push({
             label: 'Scale',
             icon: <ScaleIcon />,
@@ -380,7 +397,14 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
         return items;
       },
-      [canDelete, canRestart, handleSuspendToggle, handleWorkloadClick, openScaleModal]
+      [
+        canDelete,
+        canRestart,
+        handleSuspendToggle,
+        handleWorkloadClick,
+        openScaleModal,
+        permissionMap,
+      ]
     );
 
     const emptyMessage = useMemo(

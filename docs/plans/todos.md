@@ -2,6 +2,12 @@
 
 A list of features I'd like to build, maybe
 
+## Zoom Issues
+
+Context menus being drawn in the wrong location
+Object panel boundaries are wrong
+First time hitting cmd 0 does not work, requires 2 presses
+
 ## Port forwarding
 
 - Deployments, Pods, Services, etc should offer this
