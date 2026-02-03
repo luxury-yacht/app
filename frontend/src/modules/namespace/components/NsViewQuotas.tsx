@@ -203,6 +203,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
             {
               label: 'Delete',
               icon: <DeleteIcon />,
+              danger: true,
               onClick: () => setDeleteConfirm({ show: true, resource }),
             }
           );

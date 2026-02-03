@@ -16,6 +16,7 @@ export interface ContextMenuItem {
   icon?: string | React.ReactNode;
   divider?: boolean;
   disabled?: boolean;
+  danger?: boolean;
   tooltip?: string;
   disabledReason?: string;
 }
@@ -175,8 +176,8 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
           <div
             key={index}
             className={`context-menu-item ${item.disabled ? 'disabled' : ''} ${
-              isFocused ? 'is-focused' : ''
-            }`}
+              item.danger ? 'danger' : ''
+            } ${isFocused ? 'is-focused' : ''}`}
             role="menuitem"
             aria-disabled={item.disabled ? 'true' : 'false'}
             data-context-index={index}

@@ -61,9 +61,9 @@
   cursor: not-allowed;
 }
 
-/* Danger item variant */
+/* Danger item variant - only icon is red, text stays normal */
 .context-menu-item.danger {
-  color: var(--color-error, #ef4444);
+  color: var(--color-text);
 }
 
 .context-menu-item.danger:hover:not(.disabled),
@@ -87,7 +87,9 @@
   color: var(--color-text);
 }
 
-.context-menu-item.danger .context-menu-icon {
+.context-menu-item.danger .context-menu-icon,
+.context-menu-item.danger:hover:not(.disabled) .context-menu-icon,
+.context-menu-item.danger.is-focused:not(.disabled) .context-menu-icon {
   color: var(--color-error, #ef4444);
 }
 

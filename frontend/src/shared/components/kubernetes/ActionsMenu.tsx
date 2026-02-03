@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import '../ContextMenu.css';
 import './ActionsMenu.css';
 
 interface ActionsMenuProps {
@@ -57,6 +58,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     const [showTriggerConfirm, setShowTriggerConfirm] = useState(false);
     const [scaleValue, setScaleValue] = useState(0);
     const menuRef = useRef<HTMLDivElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -69,6 +71,30 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       if (isOpen) {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
+      }
+    }, [isOpen]);
+
+    // Position dropdown to stay within viewport
+    useEffect(() => {
+      if (isOpen && dropdownRef.current && menuRef.current) {
+        const dropdown = dropdownRef.current;
+        const button = menuRef.current.querySelector('.actions-menu-button');
+        if (!button) return;
+
+        const buttonRect = button.getBoundingClientRect();
+        const dropdownRect = dropdown.getBoundingClientRect();
+
+        // Check if dropdown would go off-screen to the right
+        if (buttonRect.right - dropdownRect.width < 10) {
+          dropdown.style.right = 'auto';
+          dropdown.style.left = '0';
+        }
+
+        // Check if dropdown would go off-screen at the bottom
+        if (buttonRect.bottom + dropdownRect.height > window.innerHeight - 10) {
+          dropdown.style.top = 'auto';
+          dropdown.style.bottom = 'calc(100% + 4px)';
+        }
       }
     }, [isOpen]);
 
@@ -146,78 +172,106 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
           </button>
 
           {isOpen && (
-            <div className="actions-menu-dropdown">
+            <div className="context-menu actions-menu-dropdown" ref={dropdownRef}>
               {showTriggerOption && (
-                <button
-                  className="actions-menu-item"
-                  onClick={handleTriggerClick}
-                  disabled={actionLoading || isSuspended}
+                <div
+                  className={`context-menu-item ${actionLoading || isSuspended ? 'disabled' : ''}`}
+                  role="menuitem"
+                  aria-disabled={actionLoading || isSuspended ? 'true' : 'false'}
+                  onClick={() => {
+                    if (!actionLoading && !isSuspended) {
+                      handleTriggerClick();
+                    }
+                  }}
                   title={isSuspended ? 'Cannot trigger suspended CronJob' : undefined}
                 >
-                  <span className="actions-menu-item-label">Trigger Now</span>
-                </button>
+                  <span className="context-menu-icon">▶</span>
+                  <span className="context-menu-label">Trigger Now</span>
+                </div>
               )}
 
               {showSuspendOption && (
-                <button
-                  className="actions-menu-item"
-                  onClick={handleSuspendToggle}
-                  disabled={actionLoading}
+                <div
+                  className={`context-menu-item ${actionLoading ? 'disabled' : ''}`}
+                  role="menuitem"
+                  aria-disabled={actionLoading ? 'true' : 'false'}
+                  onClick={() => {
+                    if (!actionLoading) {
+                      handleSuspendToggle();
+                    }
+                  }}
                 >
-                  <span className="actions-menu-item-label">
-                    {isSuspended ? 'Resume' : 'Suspend'}
-                  </span>
-                </button>
+                  <span className="context-menu-icon">{isSuspended ? '▶' : '⏸'}</span>
+                  <span className="context-menu-label">{isSuspended ? 'Resume' : 'Suspend'}</span>
+                </div>
               )}
 
               {showRestartOption && (
-                <button
-                  className="actions-menu-item"
-                  onClick={handleRestart}
-                  disabled={!canRestart || actionLoading}
+                <div
+                  className={`context-menu-item ${!canRestart || actionLoading ? 'disabled' : ''}`}
+                  role="menuitem"
+                  aria-disabled={!canRestart || actionLoading ? 'true' : 'false'}
+                  onClick={() => {
+                    if (canRestart && !actionLoading) {
+                      handleRestart();
+                    }
+                  }}
                   title={!canRestart ? restartDisabledReason : undefined}
                 >
-                  <span className="actions-menu-item-label">
+                  <span className="context-menu-icon">⟳</span>
+                  <span className="context-menu-label">
                     {actionLoading ? 'Restarting...' : 'Restart'}
                   </span>
                   {!canRestart && restartDisabledReason && (
-                    <span className="actions-menu-reason">{restartDisabledReason}</span>
+                    <span className="context-menu-reason">{restartDisabledReason}</span>
                   )}
-                </button>
+                </div>
               )}
 
               {showScaleOption && (
-                <button
-                  className="actions-menu-item"
-                  onClick={handleScaleClick}
-                  disabled={!canScale || actionLoading}
+                <div
+                  className={`context-menu-item ${!canScale || actionLoading ? 'disabled' : ''}`}
+                  role="menuitem"
+                  aria-disabled={!canScale || actionLoading ? 'true' : 'false'}
+                  onClick={() => {
+                    if (canScale && !actionLoading) {
+                      handleScaleClick();
+                    }
+                  }}
                   title={!canScale ? scaleDisabledReason : undefined}
                 >
-                  <span className="actions-menu-item-label">Scale</span>
+                  <span className="context-menu-icon">⇅</span>
+                  <span className="context-menu-label">Scale</span>
                   {!canScale && scaleDisabledReason && (
-                    <span className="actions-menu-reason">{scaleDisabledReason}</span>
+                    <span className="context-menu-reason">{scaleDisabledReason}</span>
                   )}
-                </button>
+                </div>
               )}
 
               {showDeleteOption && (
                 <>
-                  {(showRestartOption || showScaleOption) && (
-                    <div className="actions-menu-divider" />
+                  {(showRestartOption || showScaleOption || showTriggerOption || showSuspendOption) && (
+                    <div className="context-menu-divider" />
                   )}
-                  <button
-                    className="actions-menu-item danger"
-                    onClick={handleDelete}
-                    disabled={!canDelete || deleteLoading}
+                  <div
+                    className={`context-menu-item danger ${!canDelete || deleteLoading ? 'disabled' : ''}`}
+                    role="menuitem"
+                    aria-disabled={!canDelete || deleteLoading ? 'true' : 'false'}
+                    onClick={() => {
+                      if (canDelete && !deleteLoading) {
+                        handleDelete();
+                      }
+                    }}
                     title={!canDelete ? deleteDisabledReason : undefined}
                   >
-                    <span className="actions-menu-item-label">
+                    <span className="context-menu-icon">✕</span>
+                    <span className="context-menu-label">
                       {deleteLoading ? 'Deleting...' : 'Delete'}
                     </span>
                     {!canDelete && deleteDisabledReason && (
-                      <span className="actions-menu-reason">{deleteDisabledReason}</span>
+                      <span className="context-menu-reason">{deleteDisabledReason}</span>
                     )}
-                  </button>
+                  </div>
                 </>
               )}
             </div>

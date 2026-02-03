@@ -414,6 +414,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           items.push({
             label: 'Delete',
             icon: <DeleteIcon />,
+            danger: true,
             onClick: () => setDeleteConfirm({ show: true, pod }),
           });
         }

@@ -231,6 +231,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           {
             label: 'Delete',
             icon: <DeleteIcon />,
+            danger: true,
             onClick: () => setDeleteConfirm({ show: true, resource }),
           }
         );

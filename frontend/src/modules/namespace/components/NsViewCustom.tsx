@@ -214,6 +214,7 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
           {
             label: 'Delete',
             icon: <DeleteIcon />,
+            danger: true,
             onClick: () => setDeleteConfirm({ show: true, resource }),
           }
         );

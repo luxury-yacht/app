@@ -360,6 +360,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           items.push({
             label: 'Delete',
             icon: '✕',
+            danger: true,
             onClick: () => setDeleteConfirm({ show: true, workload: row }),
           });
         }

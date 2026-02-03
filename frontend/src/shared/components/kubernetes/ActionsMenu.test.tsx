@@ -63,7 +63,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.actions-menu-item'));
+    const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.context-menu-item'));
     expect(items.length).toBeGreaterThanOrEqual(2);
 
     act(() => {
@@ -72,7 +72,7 @@ describe('ActionsMenu', () => {
     expect(onRestart).toHaveBeenCalledTimes(1);
 
     openMenu(container);
-    const deleteItem = container.querySelector<HTMLButtonElement>('.actions-menu-item.danger');
+    const deleteItem = container.querySelector<HTMLButtonElement>('.context-menu-item.danger');
     expect(deleteItem).toBeTruthy();
     act(() => {
       deleteItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -88,7 +88,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const reasons = Array.from(container.querySelectorAll('.actions-menu-reason')).map((el) =>
+    const reasons = Array.from(container.querySelectorAll('.context-menu-reason')).map((el) =>
       el.textContent?.trim()
     );
     expect(reasons).toEqual(['Needs permissions', 'Not scalable', 'Protected']);
@@ -104,7 +104,7 @@ describe('ActionsMenu', () => {
     });
 
     openMenu(container);
-    const scaleItem = container.querySelector<HTMLButtonElement>('.actions-menu-item:not(.danger)');
+    const scaleItem = container.querySelector<HTMLButtonElement>('.context-menu-item:not(.danger)');
     expect(scaleItem).toBeTruthy();
 
     act(() => {
@@ -171,7 +171,7 @@ describe('ActionsMenu', () => {
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.actions-menu-item'));
+      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.context-menu-item'));
 
       const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
       const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
@@ -188,7 +188,7 @@ describe('ActionsMenu', () => {
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.actions-menu-item'));
+      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.context-menu-item'));
 
       const resumeItem = items.find((item) => item.textContent?.includes('Resume'));
       const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
@@ -205,10 +205,10 @@ describe('ActionsMenu', () => {
       });
 
       openMenu(container);
-      const triggerItem = container.querySelector<HTMLButtonElement>(
-        '.actions-menu-item:first-child'
+      const triggerItem = container.querySelector<HTMLElement>(
+        '.context-menu-item:first-child'
       );
-      expect(triggerItem?.disabled).toBe(true);
+      expect(triggerItem?.classList.contains('disabled')).toBe(true);
     });
 
     it('calls onSuspendToggle when suspend is clicked', async () => {
@@ -221,7 +221,7 @@ describe('ActionsMenu', () => {
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.actions-menu-item'));
+      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.context-menu-item'));
       const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
 
       act(() => {
@@ -241,7 +241,7 @@ describe('ActionsMenu', () => {
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.actions-menu-item'));
+      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.context-menu-item'));
       const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
 
       act(() => {

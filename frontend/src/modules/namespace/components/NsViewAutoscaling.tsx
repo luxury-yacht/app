@@ -331,6 +331,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           items.push({
             label: 'Delete',
             icon: <DeleteIcon />,
+            danger: true,
             onClick: () => setDeleteConfirm({ show: true, resource }),
           });
         }
