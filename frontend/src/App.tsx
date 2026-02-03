@@ -26,6 +26,7 @@ import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { ErrorProvider } from '@core/contexts/ErrorContext';
 import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 // App components
 import { AppLayout } from '@ui/layout/AppLayout';
@@ -164,19 +165,21 @@ function App() {
   return (
     <AppErrorBoundary>
       <ErrorProvider>
-        <KeyboardProvider>
-          <ConnectionStatusProvider>
-            <AuthErrorProvider>
-              <div className="app-window-frame">
-                <div className="app">
-                  <KubernetesProvider>
-                    <AppContent />
-                  </KubernetesProvider>
+        <ZoomProvider>
+          <KeyboardProvider>
+            <ConnectionStatusProvider>
+              <AuthErrorProvider>
+                <div className="app-window-frame">
+                  <div className="app">
+                    <KubernetesProvider>
+                      <AppContent />
+                    </KubernetesProvider>
+                  </div>
                 </div>
-              </div>
-            </AuthErrorProvider>
-          </ConnectionStatusProvider>
-        </KeyboardProvider>
+              </AuthErrorProvider>
+            </ConnectionStatusProvider>
+          </KeyboardProvider>
+        </ZoomProvider>
       </ErrorProvider>
     </AppErrorBoundary>
   );
