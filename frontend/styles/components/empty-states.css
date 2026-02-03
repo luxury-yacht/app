@@ -1,0 +1,275 @@
+/* ==========================================================================
+   Empty State Component Styles
+   ==========================================================================
+   Refined, personality-rich empty states with helpful guidance.
+   ========================================================================== */
+
+/* ==========================================================================
+   Base Empty State Container
+   ========================================================================== */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  color: var(--color-text-secondary);
+  min-height: 200px;
+  animation: emptyStateIn 0.4s var(--ease-out, ease-out);
+}
+
+@keyframes emptyStateIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ==========================================================================
+   Empty State Icon
+   ========================================================================== */
+
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 1.25rem;
+  border-radius: 50%;
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-tertiary);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.empty-state-icon svg {
+  width: 28px;
+  height: 28px;
+  opacity: 0.7;
+}
+
+/* Accent variant for primary empty states */
+.empty-state-icon.accent {
+  background-color: var(--color-accent-bg, rgba(var(--color-accent-rgb), 0.15));
+  border-color: rgba(var(--color-accent-rgb, 245, 158, 11), 0.2);
+  color: var(--color-accent);
+}
+
+.empty-state-icon.accent svg {
+  opacity: 0.9;
+}
+
+/* ==========================================================================
+   Empty State Title
+   ========================================================================== */
+
+.empty-state-title {
+  margin: 0 0 0.5rem 0;
+  font-family: var(--font-family-display, var(--font-family-base));
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+/* ==========================================================================
+   Empty State Description
+   ========================================================================== */
+
+.empty-state-description {
+  margin: 0 0 1.5rem 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+  max-width: 320px;
+}
+
+/* ==========================================================================
+   Empty State Actions
+   ========================================================================== */
+
+.empty-state-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.empty-state-actions .button {
+  min-width: 140px;
+}
+
+/* ==========================================================================
+   Empty State Hint (Keyboard Shortcuts)
+   ========================================================================== */
+
+.empty-state-hint {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px dashed var(--color-border);
+  font-size: 0.75rem;
+  color: var(--color-text-tertiary);
+}
+
+/* ==========================================================================
+   Empty State Variants
+   ========================================================================== */
+
+/* Compact variant for smaller containers */
+.empty-state.compact {
+  padding: 2rem 1.5rem;
+  min-height: 150px;
+}
+
+.empty-state.compact .empty-state-icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 1rem;
+}
+
+.empty-state.compact .empty-state-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.empty-state.compact .empty-state-title {
+  font-size: 1rem;
+}
+
+.empty-state.compact .empty-state-description {
+  font-size: 0.8125rem;
+  margin-bottom: 1rem;
+}
+
+/* Inline variant for table rows */
+.empty-state.inline {
+  flex-direction: row;
+  gap: 1rem;
+  padding: 1.5rem;
+  min-height: auto;
+  text-align: left;
+}
+
+.empty-state.inline .empty-state-icon {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.empty-state.inline .empty-state-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.empty-state.inline .empty-state-content {
+  flex: 1;
+}
+
+.empty-state.inline .empty-state-title {
+  font-size: 0.9375rem;
+}
+
+.empty-state.inline .empty-state-description {
+  max-width: none;
+  margin-bottom: 0;
+}
+
+/* ==========================================================================
+   GridTable Empty State Override
+   ========================================================================== */
+
+.gridtable-empty {
+  text-align: center;
+  padding: 3rem 2rem;
+  color: var(--grid-text-secondary);
+  font-size: var(--grid-font-size-data);
+  background-color: var(--grid-bg-primary);
+  border-radius: 4px;
+  margin: 1rem;
+  animation: emptyStateIn 0.4s var(--ease-out, ease-out);
+}
+
+.gridtable-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 1rem auto;
+  border-radius: 50%;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-tertiary);
+  border: 1px solid var(--color-border);
+}
+
+.gridtable-empty-icon svg {
+  width: 24px;
+  height: 24px;
+  opacity: 0.7;
+}
+
+.gridtable-empty-title {
+  margin: 0 0 0.5rem 0;
+  font-family: var(--font-family-display, var(--font-family-base));
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.gridtable-empty-description {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+/* ==========================================================================
+   Object Panel Empty State Override
+   ========================================================================== */
+
+.object-panel-empty-state {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  color: var(--color-text-secondary);
+  gap: var(--spacing-md);
+  text-align: center;
+  animation: emptyStateIn 0.4s var(--ease-out, ease-out);
+}
+
+.object-panel-empty-state h3 {
+  margin: 0;
+  font-family: var(--font-family-display, var(--font-family-base));
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+.object-panel-empty-state p {
+  margin: 0;
+  max-width: 280px;
+  line-height: 1.5;
+}
+
+/* ==========================================================================
+   Reduced Motion Support
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .empty-state,
+  .gridtable-empty,
+  .object-panel-empty-state {
+    animation: none;
+  }
+}

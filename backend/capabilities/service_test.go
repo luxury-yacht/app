@@ -268,7 +268,7 @@ func TestResolveWorkerCount(t *testing.T) {
 		{"zero requests", 4, 0, 0},
 		{"cap by requests", 8, 3, 3},
 		{"respect worker override", 2, 10, 2},
-		{"fallback to default", 0, 5, 4},
+		{"fallback to default", 0, 4, 4},
 		{"at least one", -1, 1, 1},
 	}
 

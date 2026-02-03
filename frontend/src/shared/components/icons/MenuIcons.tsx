@@ -73,7 +73,10 @@ export const ScaleIcon: React.FC<IconProps> = ({
     width={width}
     height={height}
   >
-    <path d="M11 4V11H4V13H11V20H13V13H20V11H13V4H11Z" />
+    {/* Larger outer square (top-right) */}
+    <path d="M21 3H9V5H19V15H21V3Z" />
+    {/* Smaller inner square (bottom-left) */}
+    <path d="M3 9H15V21H3V9ZM5 11V19H13V11H5Z" />
   </svg>
 );
 
@@ -186,6 +189,22 @@ export const SortDescIcon: React.FC<IconProps> = ({
     height={height}
   >
     <path d="M20 4V16H23L19 21L15 16H18V4H20ZM12 18V20H3V18H12ZM14 11V13H3V11H14ZM14 4V6H3V4H14Z" />
+  </svg>
+);
+
+export const OpenIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill={fill}
+    width={width}
+    height={height}
+  >
+    <path d="M16.1716 10.9999L10.8076 5.63589L12.2218 4.22168L20 11.9999L12.2218 19.778L10.8076 18.3638L16.1716 12.9999H4V10.9999H16.1716Z" />
   </svg>
 );
 

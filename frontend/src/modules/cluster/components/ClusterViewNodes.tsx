@@ -19,6 +19,7 @@ import React, { useCallback, useMemo } from 'react';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ClusterNodeRow } from '@modules/cluster/contexts/ClusterResourcesContext';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { OpenIcon } from '@shared/components/icons/MenuIcons';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -253,7 +254,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       (row: ClusterNodeRow, _columnKey: string): ContextMenuItem[] => [
         {
           label: 'Open',
-          icon: '→',
+          icon: <OpenIcon />,
           onClick: () => handleNodeClick(row),
         },
       ],

@@ -24,7 +24,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 
@@ -190,12 +190,17 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
         // Always add Open in Object Panel
         items.push({
           label: 'Open',
-          icon: '→',
+          icon: <OpenIcon />,
           onClick: () => handleResourceClick(resource),
         });
 
         const deleteStatus =
           permissionMap.get(getPermissionKey(resource.kind, 'delete', resource.namespace)) ?? null;
+
+        // Show a muted header while permission checks are pending.
+        if (deleteStatus?.pending) {
+          items.unshift({ header: true, label: 'Awaiting permissions...' });
+        }
 
         if (deleteStatus?.allowed && !deleteStatus.pending) {
           items.push(
@@ -203,6 +208,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
             {
               label: 'Delete',
               icon: <DeleteIcon />,
+              danger: true,
               onClick: () => setDeleteConfirm({ show: true, resource }),
             }
           );

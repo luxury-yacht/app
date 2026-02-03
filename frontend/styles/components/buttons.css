@@ -1,39 +1,105 @@
+/* ==========================================================================
+   Button Component Styles
+   ==========================================================================
+   Refined button styles with hover lift effects and smooth transitions.
+   ========================================================================== */
+
 /* Base button styles */
 .button {
   padding: 0.3rem var(--spacing-md);
   font-size: var(--font-size-button);
   font-weight: var(--font-weight-button);
-  border-radius: var(--border-radius-round);
+  border-radius: 6px;
   border: none;
   cursor: pointer;
-  transition: background-color var(--transition-fast);
   white-space: nowrap;
+  position: relative;
+  /* Smooth multi-property transition */
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    transform var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
+/* Hover lift effect for all enabled buttons */
+.button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Generic button */
 .button.generic {
   background-color: var(--button-generic-bg);
   color: var(--button-generic-text);
 }
-.button.generic:hover {
+
+.button.generic:hover:not(:disabled) {
   background-color: var(--button-generic-hover);
 }
 
+/* Save button - primary action */
 .button.save {
   background-color: var(--button-save-bg);
   color: var(--button-save-text);
 }
-.button.save:hover {
+
+.button.save:hover:not(:disabled) {
   background-color: var(--button-save-hover);
 }
 
+/* Cancel button */
 .button.cancel {
   background-color: var(--button-cancel-bg);
   color: var(--button-cancel-text);
 }
-.button.cancel:hover {
+
+.button.cancel:hover:not(:disabled) {
   background-color: var(--button-cancel-hover);
 }
 
+/* Edit button */
+.button.edit {
+  background-color: var(--button-edit-bg);
+  color: var(--button-edit-text);
+}
+
+.button.edit:hover:not(:disabled) {
+  background-color: var(--button-edit-hover);
+}
+
+/* Danger button */
+.button.danger {
+  background-color: var(--button-danger-bg);
+  color: var(--button-danger-text);
+}
+
+.button.danger:hover:not(:disabled) {
+  background-color: var(--button-danger-hover);
+}
+
+/* Action button - gold accent */
+.button.action {
+  background-color: var(--button-action-bg);
+  color: var(--button-action-text);
+}
+
+.button.action:hover:not(:disabled) {
+  background-color: var(--button-action-hover);
+}
+
+/* Warning button */
+.button.warning {
+  background-color: var(--button-warning-bg);
+  color: var(--button-warning-text);
+}
+
+.button.warning:hover:not(:disabled) {
+  background-color: var(--button-warning-hover);
+}
+
+/* Disabled state */
 .button:disabled,
 .button[disabled] {
   background-color: var(--button-disabled-bg);
@@ -41,6 +107,7 @@
   cursor: not-allowed;
   box-shadow: inset 0 0 0 1px var(--button-disabled-border);
   opacity: 1;
+  transform: none;
 }
 
 .button:disabled:hover,
@@ -48,41 +115,13 @@
 .button:disabled:focus,
 .button[disabled]:focus {
   background-color: var(--button-disabled-bg);
+  transform: none;
+  box-shadow: inset 0 0 0 1px var(--button-disabled-border);
 }
 
-.button.edit {
-  background-color: var(--button-edit-bg);
-  color: var(--button-edit-text);
-}
-.button.edit:hover {
-  background-color: var(--button-edit-hover);
-}
-
-.button.danger {
-  background-color: var(--button-danger-bg);
-  color: var(--button-danger-text);
-}
-.button.danger:hover {
-  background-color: var(--button-danger-hover);
-}
-
-.button.action {
-  background-color: var(--button-action-bg);
-  color: var(--button-action-text);
-}
-.button.action:hover {
-  background-color: var(--button-action-hover);
-}
-
-.button.warning {
-  background-color: var(--button-warning-bg);
-  color: var(--button-warning-text);
-}
-.button.warning:hover {
-  background-color: var(--button-warning-hover);
-}
-
-/* Settings button - used in App.tsx header */
+/* ==========================================================================
+   Settings Button (Header)
+   ========================================================================== */
 .settings-button {
   background: transparent;
   border: none;
@@ -94,15 +133,31 @@
   align-items: center;
   justify-content: center;
   transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    color var(--duration-fast, 150ms) var(--ease-out, ease),
+    transform var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
 .settings-button:hover {
   background-color: var(--color-bg-tertiary);
   color: var(--color-text);
+  transform: translateY(-1px);
 }
 
 .settings-button:active {
   background-color: var(--color-bg-secondary);
+  transform: translateY(0);
+}
+
+/* ==========================================================================
+   Focus States
+   ========================================================================== */
+.button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.settings-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }

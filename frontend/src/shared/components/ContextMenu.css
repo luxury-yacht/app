@@ -1,28 +1,59 @@
+/* ==========================================================================
+   Context Menu Styles
+   ========================================================================== */
+
 .context-menu {
   position: fixed;
   background-color: var(--color-bg);
-  border: 2px solid var(--color-border);
-  border-radius: 4px;
+  /* Subtle top highlight for depth */
+  border: 1px solid var(--color-border);
+  border-top-color: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
   box-shadow: var(--context-menu-shadow);
   padding: 4px 0;
-  min-width: 160px;
+  min-width: 180px;
   z-index: var(--z-index-context-menu);
   font-size: var(--font-size-normal);
   outline: none;
+  /* Entry animation */
+  animation: contextMenuIn 0.15s var(--ease-out, ease-out);
+  /* Prevent text selection */
+  user-select: none;
+}
+
+@keyframes contextMenuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .context-menu-item {
   display: flex;
   align-items: center;
-  padding: 0.3rem 0.7rem;
+  padding: 0.4rem 0.75rem;
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  /* Left accent border */
+  border-left: 3px solid transparent;
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    border-color var(--duration-fast, 150ms) var(--ease-out, ease);
   color: var(--color-text);
 }
 
 .context-menu-item:hover:not(.disabled),
 .context-menu-item.is-focused:not(.disabled) {
   background-color: var(--color-bg-tertiary);
+  border-left-color: var(--color-accent);
+}
+
+.context-menu-item.is-focused:not(.disabled) {
+  /* Extra emphasis for keyboard focus */
+  background-color: var(--color-bg-secondary);
 }
 
 .context-menu-item.disabled {
@@ -30,27 +61,80 @@
   cursor: not-allowed;
 }
 
+/* Danger item variant - only icon is red, text stays normal */
+.context-menu-item.danger {
+  color: var(--color-text);
+}
+
+.context-menu-item.danger:hover:not(.disabled),
+.context-menu-item.danger.is-focused:not(.disabled) {
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
 .context-menu-icon {
-  margin-right: 8px;
+  margin-right: 10px;
   width: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.context-menu-item:hover:not(.disabled) .context-menu-icon,
+.context-menu-item.is-focused:not(.disabled) .context-menu-icon {
+  color: var(--color-text);
+}
+
+.context-menu-item.danger .context-menu-icon,
+.context-menu-item.danger:hover:not(.disabled) .context-menu-icon,
+.context-menu-item.danger.is-focused:not(.disabled) .context-menu-icon {
+  color: var(--color-error, #ef4444);
 }
 
 .context-menu-label {
   flex: 1;
 }
 
+/* Keyboard shortcut hint */
+.context-menu-shortcut {
+  margin-left: 1rem;
+  font-size: 0.7rem;
+  font-family: var(--font-family-mono, monospace);
+  color: var(--color-text-tertiary);
+  opacity: 0.8;
+}
+
 .context-menu-reason {
   display: block;
-  margin-left: 24px;
+  margin-left: 26px;
   font-size: 0.7rem;
-  color: var(--color-text-subtle);
+  color: var(--color-text-tertiary);
 }
 
 .context-menu-divider {
   height: 1px;
   background-color: var(--color-border);
-  margin: 4px 0;
+  margin: 6px 0;
+}
+
+/* Section header in context menu */
+.context-menu-header {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-tertiary);
+  cursor: default;
+}
+
+/* ==========================================================================
+   Reduced Motion Support
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .context-menu {
+    animation: none;
+  }
 }

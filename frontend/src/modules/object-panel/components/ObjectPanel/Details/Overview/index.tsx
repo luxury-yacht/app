@@ -22,12 +22,16 @@ interface GenericOverviewProps {
   canRestart?: boolean;
   canScale?: boolean;
   canDelete?: boolean;
+  canTrigger?: boolean;
+  canSuspend?: boolean;
   restartDisabledReason?: string;
   scaleDisabledReason?: string;
   deleteDisabledReason?: string;
   onRestart?: () => void;
   onScale?: (replicas: number) => void;
   onDelete?: () => void;
+  onTrigger?: () => void;
+  onSuspendToggle?: () => void;
   [key: string]: any; // Allow any additional fields for generic resources
 }
 
@@ -48,6 +52,8 @@ const Overview: React.FC<OverviewProps> = (props) => {
   const canRestart = props.canRestart ?? capabilities?.restart;
   const canScale = props.canScale ?? capabilities?.scale;
   const canDelete = props.canDelete ?? capabilities?.delete;
+  const canTrigger = props.canTrigger ?? capabilities?.trigger;
+  const canSuspend = props.canSuspend ?? capabilities?.suspend;
 
   return (
     <div className="object-panel-section">
@@ -66,6 +72,9 @@ const Overview: React.FC<OverviewProps> = (props) => {
             canRestart={!!canRestart}
             canScale={!!canScale}
             canDelete={!!canDelete}
+            canTrigger={!!canTrigger}
+            canSuspend={!!canSuspend}
+            isSuspended={props.suspend}
             restartDisabledReason={!canRestart ? props.restartDisabledReason : undefined}
             scaleDisabledReason={!canScale ? props.scaleDisabledReason : undefined}
             deleteDisabledReason={!canDelete ? props.deleteDisabledReason : undefined}
@@ -75,6 +84,8 @@ const Overview: React.FC<OverviewProps> = (props) => {
             onRestart={props.onRestart}
             onScale={props.onScale}
             onDelete={props.onDelete}
+            onTrigger={props.onTrigger}
+            onSuspendToggle={props.onSuspendToggle}
           />
         </div>
       </div>

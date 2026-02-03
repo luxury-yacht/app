@@ -9,7 +9,9 @@ import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import ConfirmationModal from '@components/modals/ConfirmationModal';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import { types } from '@wailsjs/go/models';
+import { TriggerCronJob, SuspendCronJob } from '@wailsjs/go/backend/App';
 import { DockablePanel } from '@/components/dockable';
+import { errorHandler } from '@utils/errorHandler';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { evaluateNamespacePermissions } from '@/core/capabilities';
 import './ObjectPanel.css';
@@ -300,6 +302,44 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
     workloadKindApiNames: WORKLOAD_KIND_API_NAMES,
   });
 
+  // CronJob trigger handler
+  const handleTriggerClick = useCallback(async () => {
+    if (!objectData?.name || !objectData?.namespace) return;
+    dispatch({ type: 'SET_ACTION_LOADING', payload: true });
+    try {
+      await TriggerCronJob(objectData.clusterId ?? '', objectData.namespace, objectData.name);
+    } catch (err) {
+      errorHandler.handle(err, { action: 'trigger', kind: 'CronJob', name: objectData.name });
+    } finally {
+      dispatch({ type: 'SET_ACTION_LOADING', payload: false });
+    }
+  }, [objectData, dispatch]);
+
+  // CronJob suspend/resume handler
+  const handleSuspendToggle = useCallback(async () => {
+    if (!objectData?.name || !objectData?.namespace) return;
+    const cronJobDetails = detailPayload as types.CronJobDetails | null;
+    const isSuspended = cronJobDetails?.suspend ?? false;
+    dispatch({ type: 'SET_ACTION_LOADING', payload: true });
+    try {
+      await SuspendCronJob(
+        objectData.clusterId ?? '',
+        objectData.namespace,
+        objectData.name,
+        !isSuspended
+      );
+      await fetchResourceDetails(true);
+    } catch (err) {
+      errorHandler.handle(err, {
+        action: isSuspended ? 'resume' : 'suspend',
+        kind: 'CronJob',
+        name: objectData.name,
+      });
+    } finally {
+      dispatch({ type: 'SET_ACTION_LOADING', payload: false });
+    }
+  }, [objectData, detailPayload, dispatch, fetchResourceDetails]);
+
   // Reset state when panel closes
   useEffect(() => {
     if (!isOpen) {
@@ -453,6 +493,8 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
         canRestart: capabilities.canRestart,
         canScale: capabilities.canScale,
         canDelete: capabilities.canDelete,
+        canTrigger: capabilities.canTrigger,
+        canSuspend: capabilities.canSuspend,
         restartDisabledReason: capabilityReasons.restart,
         scaleDisabledReason: capabilityReasons.scale,
         deleteDisabledReason: capabilityReasons.delete,
@@ -484,6 +526,8 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
           })();
           openScaleInput(currentReplicas);
         },
+        onTriggerClick: handleTriggerClick,
+        onSuspendToggle: handleSuspendToggle,
       }
     : null;
 

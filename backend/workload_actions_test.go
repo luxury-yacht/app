@@ -2,12 +2,14 @@ package backend
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -279,5 +281,200 @@ func TestScaleWorkloadErrors(t *testing.T) {
 		},
 	}
 	err = appNilClient.ScaleWorkload(workloadClusterID, "default", "demo", "Deployment", 1)
+	require.EqualError(t, err, "kubernetes client is not initialized")
+}
+
+func TestTriggerCronJobCreatesJob(t *testing.T) {
+	t.Helper()
+
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "backup",
+			Namespace: "default",
+			UID:       "cronjob-uid-123",
+		},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 * * * *",
+			JobTemplate: batchv1.JobTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{"job": "backup"},
+				},
+				Spec: batchv1.JobSpec{
+					Template: corev1.PodTemplateSpec{
+						Spec: corev1.PodSpec{
+							Containers: []corev1.Container{
+								{Name: "backup", Image: "backup:latest"},
+							},
+							RestartPolicy: corev1.RestartPolicyNever,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	client := cgofake.NewClientset(cronJob)
+	app := &App{
+		logger: NewLogger(100),
+	}
+	app.clusterClients = map[string]*clusterClients{
+		workloadClusterID: {
+			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
+
+	jobName, err := app.TriggerCronJob(workloadClusterID, "default", "backup")
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(jobName, "backup-manual-"), "job name should have manual prefix")
+
+	// Verify the job was created
+	createdJob, err := client.BatchV1().Jobs("default").Get(context.Background(), jobName, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NotNil(t, createdJob)
+
+	// Verify owner reference
+	require.Len(t, createdJob.OwnerReferences, 1)
+	require.Equal(t, "CronJob", createdJob.OwnerReferences[0].Kind)
+	require.Equal(t, "backup", createdJob.OwnerReferences[0].Name)
+
+	// Verify annotation
+	require.Equal(t, "manual", createdJob.Annotations["cronjob.kubernetes.io/instantiate"])
+
+	// Verify job spec came from cronjob template
+	require.Len(t, createdJob.Spec.Template.Spec.Containers, 1)
+	require.Equal(t, "backup", createdJob.Spec.Template.Spec.Containers[0].Name)
+}
+
+func TestTriggerCronJobErrors(t *testing.T) {
+	t.Helper()
+
+	// Test with non-existent cronjob
+	client := cgofake.NewClientset()
+	app := &App{
+		logger: NewLogger(10),
+	}
+	app.clusterClients = map[string]*clusterClients{
+		workloadClusterID: {
+			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
+
+	_, err := app.TriggerCronJob(workloadClusterID, "default", "nonexistent")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to get cronjob")
+
+	// Test with nil client
+	appNilClient := &App{}
+	appNilClient.clusterClients = map[string]*clusterClients{
+		workloadClusterID: {
+			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+		},
+	}
+	_, err = appNilClient.TriggerCronJob(workloadClusterID, "default", "backup")
+	require.EqualError(t, err, "kubernetes client is not initialized")
+}
+
+func TestSuspendCronJobTogglesSuspendField(t *testing.T) {
+	t.Helper()
+
+	tests := []struct {
+		name           string
+		initialSuspend bool
+		setSuspend     bool
+	}{
+		{name: "suspend active cronjob", initialSuspend: false, setSuspend: true},
+		{name: "resume suspended cronjob", initialSuspend: true, setSuspend: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cronJob := &batchv1.CronJob{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "backup",
+					Namespace: "default",
+				},
+				Spec: batchv1.CronJobSpec{
+					Schedule: "0 * * * *",
+					Suspend:  &tc.initialSuspend,
+					JobTemplate: batchv1.JobTemplateSpec{
+						Spec: batchv1.JobSpec{
+							Template: corev1.PodTemplateSpec{
+								Spec: corev1.PodSpec{
+									Containers:    []corev1.Container{{Name: "c", Image: "img"}},
+									RestartPolicy: corev1.RestartPolicyNever,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			client := cgofake.NewClientset(cronJob)
+			app := &App{
+				logger: NewLogger(100),
+			}
+			app.clusterClients = map[string]*clusterClients{
+				workloadClusterID: {
+					meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+					kubeconfigPath:    "/path",
+					kubeconfigContext: "ctx",
+					client:            client,
+				},
+			}
+
+			err := app.SuspendCronJob(workloadClusterID, "default", "backup", tc.setSuspend)
+			require.NoError(t, err)
+
+			// Verify the cronjob was updated
+			updated, err := client.BatchV1().CronJobs("default").Get(context.Background(), "backup", metav1.GetOptions{})
+			require.NoError(t, err)
+			require.NotNil(t, updated.Spec.Suspend)
+			require.Equal(t, tc.setSuspend, *updated.Spec.Suspend)
+		})
+	}
+}
+
+func TestSuspendCronJobErrors(t *testing.T) {
+	t.Helper()
+
+	// Test with non-existent cronjob
+	client := cgofake.NewClientset()
+	app := &App{
+		logger: NewLogger(10),
+	}
+	app.clusterClients = map[string]*clusterClients{
+		workloadClusterID: {
+			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+			client:            client,
+		},
+	}
+
+	err := app.SuspendCronJob(workloadClusterID, "default", "nonexistent", true)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "failed to update cronjob")
+
+	// Test with nil client
+	appNilClient := &App{}
+	appNilClient.clusterClients = map[string]*clusterClients{
+		workloadClusterID: {
+			meta:              ClusterMeta{ID: workloadClusterID, Name: "ctx"},
+			kubeconfigPath:    "/path",
+			kubeconfigContext: "ctx",
+		},
+	}
+	err = appNilClient.SuspendCronJob(workloadClusterID, "default", "backup", true)
 	require.EqualError(t, err, "kubernetes client is not initialized")
 }

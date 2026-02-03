@@ -37,8 +37,8 @@ type Dependencies struct {
 }
 
 const (
-	defaultWorkerCount       = 4
-	defaultRequestsPerSecond = 5.0
+	defaultWorkerCount       = 32
+	defaultRequestsPerSecond = 0 // unlimited
 	defaultSlowThreshold     = 750 * time.Millisecond
 )
 

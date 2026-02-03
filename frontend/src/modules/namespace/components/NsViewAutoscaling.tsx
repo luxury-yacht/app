@@ -24,7 +24,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 
@@ -295,34 +295,17 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
         // Always add Open in Object Panel
         items.push({
           label: 'Open',
-          icon: '→',
+          icon: <OpenIcon />,
           onClick: () => handleResourceClick(resource),
         });
 
-        // Add type-specific actions
-        if (resource.kind === 'HorizontalPodAutoscaler') {
-          items.push(
-            { divider: true },
-            {
-              label: 'View Scaling Events',
-              icon: '📊',
-              onClick: () => {
-                // This would show scaling history/events
-                openWithObject({
-                  kind: resource.kind,
-                  name: resource.name,
-                  namespace: resource.namespace,
-                  viewMode: 'events',
-                  clusterId: resource.clusterId ?? undefined,
-                  clusterName: resource.clusterName ?? undefined,
-                });
-              },
-            }
-          );
-        }
-
         const deleteStatus =
           permissionMap.get(getPermissionKey(resource.kind, 'delete', resource.namespace)) ?? null;
+
+        // Show a muted header while permission checks are pending.
+        if (deleteStatus?.pending) {
+          items.unshift({ header: true, label: 'Awaiting permissions...' });
+        }
 
         if (deleteStatus?.allowed && !deleteStatus.pending) {
           if (items.length > 0 && !items[items.length - 1].divider) {
@@ -331,13 +314,14 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           items.push({
             label: 'Delete',
             icon: <DeleteIcon />,
+            danger: true,
             onClick: () => setDeleteConfirm({ show: true, resource }),
           });
         }
 
         return items;
       },
-      [handleResourceClick, openWithObject, permissionMap]
+      [handleResourceClick, permissionMap]
     );
 
     const emptyMessage = useMemo(

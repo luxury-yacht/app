@@ -146,6 +146,27 @@ func createEditMenu(appMenu *menu.Menu, app *App) {
 func createViewMenu(appMenu *menu.Menu, app *App) {
 	viewMenu := appMenu.AddSubmenu("View")
 
+	// Zoom controls
+	viewMenu.AddText("Zoom In", keys.CmdOrCtrl("+"), func(_ *menu.CallbackData) {
+		go func() {
+			app.emitEvent("zoom-in")
+		}()
+	})
+
+	viewMenu.AddText("Zoom Out", keys.CmdOrCtrl("-"), func(_ *menu.CallbackData) {
+		go func() {
+			app.emitEvent("zoom-out")
+		}()
+	})
+
+	viewMenu.AddText("Reset Zoom", keys.CmdOrCtrl("0"), func(_ *menu.CallbackData) {
+		go func() {
+			app.emitEvent("zoom-reset")
+		}()
+	})
+
+	viewMenu.AddSeparator()
+
 	// Dynamic sidebar menu item text
 	sidebarText := "Hide Sidebar"
 	if !app.IsSidebarVisible() {

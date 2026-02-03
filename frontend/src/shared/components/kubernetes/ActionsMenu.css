@@ -38,66 +38,12 @@
   letter-spacing: 2px;
 }
 
+/* Dropdown positioning - uses context-menu styles for content */
 .actions-menu-dropdown {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  min-width: 80px;
-  background: var(--actions-menu-dropdown-bg);
-  border: 1px solid var(--actions-menu-dropdown-border);
-  border-radius: var(--border-radius);
-  box-shadow: var(--actions-menu-dropdown-shadow);
-  z-index: 1000;
-  overflow: hidden;
-}
-
-.actions-menu-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 8px 16px;
-  background: transparent;
-  border: none;
-  color: var(--color-text);
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.actions-menu-item:hover:not(:disabled) {
-  background: var(--actions-menu-item-hover-bg);
-}
-
-.actions-menu-item:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.actions-menu-item.danger {
-  color: var(--color-error);
-}
-
-.actions-menu-item.danger:hover:not(:disabled) {
-  background: var(--actions-menu-item-danger-hover-bg);
-}
-
-.actions-menu-item-label {
-  flex: 1;
-}
-
-.actions-menu-reason {
-  display: block;
-  margin-top: 4px;
-  font-size: 11px;
-  color: var(--color-text-subtle);
-  text-align: left;
-}
-
-.actions-menu-divider {
-  height: 1px;
-  background: var(--color-border);
-  margin: 4px 0;
+  min-width: 160px;
 }
 
 /* Scale Modal Specific Styles */
@@ -130,7 +76,8 @@
 }
 
 .scale-input-group:focus-within {
-  border-color: var(--color-primary);
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
 .scale-spinner-btn {
@@ -189,5 +136,3 @@
   justify-content: flex-end;
   gap: 0.75rem;
 }
-
-/* Light theme adjustments */

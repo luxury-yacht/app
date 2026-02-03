@@ -52,8 +52,13 @@ type EventPayload struct {
 	ErrorDetails *refresh.PermissionDeniedStatus `json:"errorDetails,omitempty"`
 }
 
-// containerState keeps track of the last line delivered for a stream to avoid duplicates.
+// containerState keeps track of lines delivered at the last timestamp to avoid duplicates.
+// When multiple log lines share the same timestamp (common in Java apps), we track all of them
+// so that on stream reconnection (using SinceTime which is inclusive), we can skip all
+// previously seen lines at that timestamp.
 type containerState struct {
 	lastTimestamp time.Time
-	lastLine      string
+	// linesAtTimestamp tracks all lines seen at lastTimestamp to handle deduplication
+	// when multiple lines share the same timestamp.
+	linesAtTimestamp map[string]struct{}
 }

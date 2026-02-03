@@ -49,8 +49,11 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  /* Use display font for section headers */
+  font-family: var(--font-family-display, var(--font-family-base));
   font-size: var(--font-size-normal);
   font-weight: var(--font-weight-bold);
+  letter-spacing: 0.06em;
   margin-top: 0;
   margin-bottom: 0.5rem;
   color: var(--color-text-tertiary);
@@ -65,23 +68,47 @@
 .sidebar-views {
   max-height: 400px;
   overflow: hidden;
-  animation: expandDown 0.3s ease-out;
+  animation: expandDown 0.3s var(--ease-out, ease-out);
   transform-origin: top;
 }
 
-@keyframes expandDown {
-  from {
-    opacity: 0;
-    max-height: 0;
-  }
-  to {
-    opacity: 1;
-    max-height: 400px;
-  }
-}
+/* Note: expandDown keyframe is defined in motion.css */
 
 .cluster-items {
   margin-top: 0.5rem;
+}
+
+/* Staggered animation for sidebar items on load */
+.cluster-items.animate-items > .sidebar-item {
+  animation: staggerFadeInLeft 0.25s var(--ease-out, ease-out) backwards;
+}
+
+.cluster-items.animate-items > .sidebar-item:nth-child(1) {
+  animation-delay: 0ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(2) {
+  animation-delay: 25ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(3) {
+  animation-delay: 50ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(4) {
+  animation-delay: 75ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(5) {
+  animation-delay: 100ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(6) {
+  animation-delay: 125ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(7) {
+  animation-delay: 150ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(8) {
+  animation-delay: 175ms;
+}
+.cluster-items.animate-items > .sidebar-item:nth-child(n + 9) {
+  animation-delay: 200ms;
 }
 
 .namespace-items {
@@ -114,9 +141,14 @@
   padding: 0.2rem 0.5rem;
   margin-bottom: 0.2rem;
   border-radius: var(--border-radius-round);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-left: 3px solid transparent;
   transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    color var(--duration-fast, 150ms) var(--ease-out, ease),
+    border-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    transform var(--duration-fast, 150ms) var(--ease-out, ease);
   -webkit-app-region: no-drag;
   overflow: hidden;
   cursor: pointer;
@@ -136,6 +168,7 @@
 .sidebar-item:not(.active):hover {
   background-color: var(--color-bg-tertiary);
   color: var(--color-text);
+  border-left-color: var(--color-accent);
 }
 
 .sidebar.keyboard-mode .sidebar-item:not(.active):hover {
@@ -145,7 +178,8 @@
 
 .sidebar-item.active {
   background-color: var(--color-sidebar-active);
-  color: #fff;
+  color: var(--color-sidebar-active-text);
+  border-left-color: var(--color-accent);
 }
 
 .sidebar-item.keyboard-preview {
@@ -190,7 +224,7 @@
 
 /* Combined active and dimmed state */
 .sidebar-item.active.dimmed {
-  color: #fff;
+  color: var(--color-sidebar-active-text);
   background-color: var(--color-sidebar-active);
 }
 

@@ -10,6 +10,7 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useTheme } from '@core/contexts/ThemeContext';
+import { useZoom } from '@core/contexts/ZoomContext';
 import { refreshOrchestrator, useAutoRefresh } from '@/core/refresh';
 import { changeTheme } from '@/utils/themes';
 import { isAllNamespaces } from '@modules/namespace/constants';
@@ -42,6 +43,7 @@ export function useCommandPaletteCommands() {
     setActiveKubeconfig,
   } = useKubeconfig();
   const { theme } = useTheme();
+  const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
   const { toggle: toggleAutoRefresh } = useAutoRefresh();
 
   const openClusterTab = useCallback(
@@ -153,6 +155,35 @@ export function useCommandPaletteCommands() {
         },
         keywords: ['diagnostics', 'status', 'permissions', 'refresh'],
         shortcut: ['⇧', '⌃', 'D'],
+      },
+
+      // Zoom Commands
+      {
+        id: 'zoom-in',
+        label: 'Zoom In',
+        description: `Increase zoom level (currently ${zoomLevel}%)`,
+        category: 'View',
+        action: zoomIn,
+        keywords: ['zoom', 'in', 'bigger', 'larger', 'increase', 'magnify'],
+        shortcut: isMacPlatform() ? ['⌘', '+'] : ['Ctrl', '+'],
+      },
+      {
+        id: 'zoom-out',
+        label: 'Zoom Out',
+        description: `Decrease zoom level (currently ${zoomLevel}%)`,
+        category: 'View',
+        action: zoomOut,
+        keywords: ['zoom', 'out', 'smaller', 'decrease', 'reduce'],
+        shortcut: isMacPlatform() ? ['⌘', '-'] : ['Ctrl', '-'],
+      },
+      {
+        id: 'zoom-reset',
+        label: 'Reset Zoom',
+        description: `Reset zoom to 100% (currently ${zoomLevel}%)`,
+        category: 'View',
+        action: resetZoom,
+        keywords: ['zoom', 'reset', 'default', 'normal', '100'],
+        shortcut: isMacPlatform() ? ['⌘', '0'] : ['Ctrl', '0'],
       },
 
       // Settings Commands
@@ -349,6 +380,10 @@ export function useCommandPaletteCommands() {
       closeTabShortcut,
       toggleAutoRefresh,
       diffObjectsShortcut,
+      zoomIn,
+      zoomOut,
+      resetZoom,
+      zoomLevel,
     ]
   );
 

@@ -30,6 +30,7 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
+import { OpenIcon } from '@shared/components/icons/MenuIcons';
 
 interface PodsTabProps {
   pods: PodSnapshotEntry[];
@@ -281,7 +282,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             getCustomContextMenuItems={(pod) => [
               {
                 label: 'Open',
-                icon: '→',
+                icon: <OpenIcon />,
                 onClick: () =>
                   openWithObject({
                     kind: 'Pod',

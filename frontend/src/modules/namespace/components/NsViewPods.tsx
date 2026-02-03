@@ -27,7 +27,7 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeletePod } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 
@@ -400,20 +400,25 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [
-          {
-            label: 'Open',
-            icon: '→',
-            onClick: () => handlePodOpen(pod),
-          },
-        ];
-
         const deleteStatus =
           permissionMap.get(getPermissionKey('Pod', 'delete', pod.namespace)) ?? null;
+        const items: ContextMenuItem[] = [];
+
+        // Show a muted header while permission checks are pending.
+        if (deleteStatus?.pending) {
+          items.push({ header: true, label: 'Awaiting permissions...' });
+        }
+
+        items.push({
+          label: 'Open',
+          icon: <OpenIcon />,
+          onClick: () => handlePodOpen(pod),
+        });
         if (deleteStatus?.allowed && !deleteStatus.pending) {
           items.push({
             label: 'Delete',
             icon: <DeleteIcon />,
+            danger: true,
             onClick: () => setDeleteConfirm({ show: true, pod }),
           });
         }

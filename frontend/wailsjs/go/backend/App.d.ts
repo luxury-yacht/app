@@ -145,6 +145,8 @@ export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promi
 
 export function GetWorkloads(arg1:string,arg2:string,arg3:string):Promise<backend.VersionedResponse>;
 
+export function GetZoomLevel():Promise<number>;
+
 export function InitializeForTesting(arg1:context.Context,arg2:kubernetes.Interface):Promise<void>;
 
 export function IsDiagnosticsPanelVisible():Promise<boolean>;
@@ -207,6 +209,8 @@ export function SetTheme(arg1:string):Promise<void>;
 
 export function SetUseShortResourceNames(arg1:boolean):Promise<void>;
 
+export function SetZoomLevel(arg1:number):Promise<void>;
+
 export function ShowAbout():Promise<void>;
 
 export function ShowSettings():Promise<void>;
@@ -215,6 +219,8 @@ export function StartShellSession(arg1:string,arg2:types.ShellSessionRequest):Pr
 
 export function Startup(arg1:context.Context):Promise<void>;
 
+export function SuspendCronJob(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
+
 export function ToggleDiagnosticsPanel():Promise<void>;
 
 export function ToggleLogsPanel():Promise<void>;
@@ -222,6 +228,8 @@ export function ToggleLogsPanel():Promise<void>;
 export function ToggleObjectDiff():Promise<void>;
 
 export function ToggleSidebar():Promise<void>;
+
+export function TriggerCronJob(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function UncordonNode(arg1:string,arg2:string):Promise<void>;
 

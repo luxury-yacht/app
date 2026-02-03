@@ -250,8 +250,9 @@ describe('NsViewEvents', () => {
 
     const typeColumn = props.columns.find((column: any) => column.key === 'type');
     expect(typeColumn).toBeTruthy();
-    // Type column renders plain text for consistency with ClusterViewEvents
+    // Type column renders with event-badge styling
     const cell = typeColumn.render(baseEvent({ type: 'Warning' }));
-    expect(cell).toBe('Warning');
+    expect(cell.props.children).toBe('Warning');
+    expect(cell.props.className).toContain('event-badge');
   });
 });

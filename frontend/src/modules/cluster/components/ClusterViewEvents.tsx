@@ -18,6 +18,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { OpenIcon } from '@shared/components/icons/MenuIcons';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -113,7 +114,9 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           getKind: () => 'Event',
           getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
         }),
-        cf.createTextColumn<EventData>('type', 'Type', (event) => event.type || 'Normal'),
+        cf.createTextColumn<EventData>('type', 'Type', (event) => event.type || 'Normal', {
+          getClassName: (event) => `event-badge ${(event.type || 'normal').toLowerCase()}`,
+        }),
         cf.createTextColumn('namespace', 'Namespace', (event) => event.namespace || '-'),
         cf.createTextColumn('source', 'Source', (event) => event.source || '-'),
         cf.createTextColumn<EventData>('objectType', 'Object Type', (event) => {
@@ -197,7 +200,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
           const kind = parsed.objectType;
           items.push({
             label: `View ${kind}`,
-            icon: '→',
+            icon: <OpenIcon />,
             onClick: () => handleEventClick(event),
           });
         }

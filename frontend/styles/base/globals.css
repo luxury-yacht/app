@@ -37,10 +37,32 @@ a:hover {
 }
 
 code,
-pre,
-kbd {
-  font-family: var(--font-family-base);
+pre {
+  font-family: var(--font-family-mono, monospace);
   font-size: var(--font-size-mono);
+}
+
+.keycap {
+  margin-left: auto;
+  padding-left: 1rem;
+  display: flex;
+  gap: 0.25rem;
+}
+
+kbd {
+  display: inline-block;
+  padding: 0.15rem 0.4rem;
+  font-family: var(--font-family-mono, monospace);
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+  color: var(--color-text);
+  background-color: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.1);
 }
 
 ::-webkit-scrollbar {
@@ -64,4 +86,10 @@ kbd {
 
 ::-webkit-scrollbar-corner {
   background: var(--scrollbar-corner-bg);
+}
+
+/* Firefox scrollbar styling */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb-bg) var(--scrollbar-track-bg, transparent);
 }

@@ -68,37 +68,6 @@
   color: var(--shortcut-key-text);
 }
 
-/* Individual key styling */
-.shortcut-key kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.75rem;
-  padding: 0.25rem 0.5rem;
-  background: var(--shortcut-key-bg);
-  border: 1px solid var(--shortcut-key-border);
-  border-radius: 6px;
-  box-shadow: var(--shortcut-key-shadow);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--shortcut-key-text);
-  text-transform: capitalize;
-}
-
-/* SVG arrow icons in kbd elements */
-/* .shortcut-key kbd svg {
-  display: inline-block;
-  vertical-align: middle;
-  opacity: 0.9;
-} */
-
-/* Plus sign between keys */
-/* .shortcut-key .key-separator {
-  color: var(--color-text-tertiary);
-  font-size: 0.75rem;
-  margin: 0 0.125rem;
-} */
-
 /* Shortcut description */
 .shortcut-description {
   color: var(--color-text-secondary);
@@ -124,21 +93,6 @@
   gap: 0.5rem;
 }
 
-.shortcut-help-modal-footer kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.5rem;
-  padding: 0.125rem 0.5rem;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  font-family: "SF Mono", "Monaco", "Cascadia Code", "Roboto Mono", monospace;
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--color-accent);
-}
-
 /* Animations are now in modals.css */
 
 /* Responsive design */
@@ -157,12 +111,3 @@
     margin-bottom: 0.25rem;
   } */
 }
-
-/* Smooth transitions for theme changes */
-/* .shortcut-item, */
-/* .shortcut-key kbd {
-  transition:
-    background-color 200ms ease,
-    border-color 200ms ease,
-    color 200ms ease;
-} */

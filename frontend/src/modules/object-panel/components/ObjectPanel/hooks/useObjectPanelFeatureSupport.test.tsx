@@ -69,6 +69,8 @@ describe('useObjectPanelFeatureSupport', () => {
       scale: false,
       edit: false,
       shell: false,
+      trigger: false,
+      suspend: false,
     });
   });
 
@@ -84,6 +86,8 @@ describe('useObjectPanelFeatureSupport', () => {
       scale: true,
       edit: true,
       shell: false,
+      trigger: false,
+      suspend: false,
     });
   });
 
@@ -99,6 +103,8 @@ describe('useObjectPanelFeatureSupport', () => {
       scale: false,
       edit: true,
       shell: false,
+      trigger: false,
+      suspend: false,
     });
   });
 
@@ -114,6 +120,8 @@ describe('useObjectPanelFeatureSupport', () => {
       scale: false,
       edit: true,
       shell: false,
+      trigger: false,
+      suspend: false,
     });
   });
 });

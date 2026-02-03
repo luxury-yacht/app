@@ -76,6 +76,17 @@ vi.mock('@shared/components/tables/persistence/gridTablePersistenceReset', () =>
   clearAllGridTableState: vi.fn(),
 }));
 
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({
+    zoomLevel: 100,
+    zoomIn: vi.fn(),
+    zoomOut: vi.fn(),
+    resetZoom: vi.fn(),
+    canZoomIn: true,
+    canZoomOut: true,
+  }),
+}));
+
 const renderHook = () => {
   const container = document.createElement('div');
   document.body.appendChild(container);

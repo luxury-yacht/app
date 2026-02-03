@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-import { DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -232,7 +232,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         const items: ContextMenuItem[] = [
           {
             label: 'Open',
-            icon: '→',
+            icon: <OpenIcon />,
             onClick: () => handleResourceClick(pv),
           },
         ];
@@ -240,12 +240,18 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         const deleteStatus =
           permissionMap.get(getPermissionKey('PersistentVolume', 'delete')) ?? null;
 
+        // Show a muted header while permission checks are pending.
+        if (deleteStatus?.pending) {
+          items.unshift({ header: true, label: 'Awaiting permissions...' });
+        }
+
         if (deleteStatus?.allowed && !deleteStatus.pending) {
           items.push(
             { divider: true },
             {
               label: 'Delete',
               icon: <DeleteIcon />,
+              danger: true,
               onClick: () => setDeleteConfirm({ show: true, resource: pv }),
             }
           );

@@ -108,14 +108,25 @@ export function useGridTableHoverSync({
       if (isHoverSuppressed()) {
         return;
       }
+      // If the table doesn't have focus, preserve the current selection highlight
+      // instead of following mouse movement.
+      const wrapper = wrapperRef.current;
+      if (wrapper && !wrapper.contains(document.activeElement)) {
+        return;
+      }
       updateHoverForElement(element);
     },
-    [updateHoverForElement, isHoverSuppressed]
+    [updateHoverForElement, isHoverSuppressed, wrapperRef]
   );
 
   const handleRowMouseLeave = useCallback(
     (element?: HTMLDivElement | null) => {
       if (isHoverSuppressed()) {
+        return;
+      }
+      // If the table doesn't have focus, preserve the current selection highlight.
+      const wrapper = wrapperRef.current;
+      if (wrapper && !wrapper.contains(document.activeElement)) {
         return;
       }
       if (element) {
@@ -133,7 +144,7 @@ export function useGridTableHoverSync({
           : prev
       );
     },
-    [updateHoverForElement, isHoverSuppressed]
+    [updateHoverForElement, isHoverSuppressed, wrapperRef]
   );
 
   const alignHeaderWithBody = useCallback(() => {

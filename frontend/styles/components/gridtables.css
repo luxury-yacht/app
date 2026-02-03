@@ -149,6 +149,7 @@
   top: 0;
   z-index: var(--z-index-grid-header);
   background-color: var(--grid-bg-header);
+  border-bottom: 1px solid var(--grid-border-color);
   width: 100%;
   text-transform: uppercase;
 }
@@ -167,7 +168,7 @@
 .grid-cell-header {
   font-size: var(--grid-font-size-header);
   font-weight: var(--font-weight-bold);
-  /* text-transform: uppercase; */
+  letter-spacing: 0.04em;
   padding: var(--grid-spacing-cell-y) var(--grid-spacing-cell-x);
   text-align: left;
   color: var(--grid-text-secondary);
@@ -178,10 +179,10 @@
   text-overflow: ellipsis;
   user-select: none;
   display: flex;
-  align-items: center; /* Vertically center header content */
-  min-width: 0; /* Important for ellipsis to work */
+  align-items: center;
+  min-width: 0;
   flex-shrink: 0;
-  box-sizing: border-box; /* Include padding in width */
+  box-sizing: border-box;
 }
 
 .header-content {
@@ -271,14 +272,18 @@
   display: flex;
   width: 100%;
   border-bottom: 1px solid var(--grid-border-color);
+  border-left: 3px solid transparent;
   background-color: var(--grid-bg-primary);
   position: relative;
   z-index: 1;
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    border-left-color var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
 .gridtable-row.gridtable-row--focused {
   background-color: var(--color-bg-secondary);
-  box-shadow: inset 0 0 0 1px var(--color-accent, #3b82f6);
+  border-left-color: var(--color-accent);
 }
 
 .gridtable-hover-overlay {
@@ -288,6 +293,7 @@
   pointer-events: none;
   background-color: var(--grid-bg-hover);
   border-bottom: 1px solid var(--grid-border-color);
+  border-left: 3px solid var(--color-accent);
   opacity: 0;
   transition: opacity 0.12s ease;
   will-change: transform;
@@ -298,12 +304,11 @@
 }
 
 .gridtable-hover-overlay.is-selected {
-  background-color: var(--grid-bg-selected, rgba(59, 130, 246, 0.15));
+  background-color: var(--grid-bg-selected, rgba(245, 158, 11, 0.1));
+  border-left-color: var(--color-accent);
 }
 
-.gridtable-hover-overlay.is-focused {
-  box-shadow: inset 0 0 0 1px var(--color-accent, #3b82f6);
-}
+/* .gridtable-hover-overlay.is-focused inherits border-left from base styles */
 
 body.gridtable-disable-hover .gridtable-hover-overlay {
   opacity: 0 !important;
@@ -509,29 +514,6 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
    ============================================ */
 
 /* ============================================
-   Event Badges (from ClusterViewEvents.css)
-   ============================================ */
-
-/* Event severity badges */
-.event-badge {
-  padding: 0.125rem 0.5rem;
-  border-radius: 3px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: capitalize;
-}
-
-.event-badge.normal {
-  background-color: var(--color-success-bg);
-  color: var(--color-success);
-}
-
-.event-badge.warning {
-  background-color: var(--color-warning-bg);
-  color: var(--color-warning);
-}
-
-/* ============================================
    Clickable Elements (from multiple files)
    ============================================ */
 
@@ -683,6 +665,8 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-filter-group input:focus,
 .gridtable-filter-group select:focus {
   outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
 }
 
 .gridtable-filter-group[data-gridtable-filter-role="columns"] {

@@ -16,6 +16,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { OpenIcon } from '@shared/components/icons/MenuIcons';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -281,7 +282,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
         // Always add Open in Object Panel
         items.push({
           label: 'Open',
-          icon: '→',
+          icon: <OpenIcon />,
           onClick: () => handleResourceClick(resource),
         });
 

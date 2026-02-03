@@ -124,10 +124,32 @@ const NAMESPACE_CAPABILITY_SPECS: Partial<
       verbs: ['list', 'patch', 'update', 'delete'],
       feature: 'Namespace workloads',
     },
+    // Scale subresource permissions for scalable workload kinds.
+    {
+      id: 'namespace:deployments:scale',
+      resourceKind: 'Deployment',
+      verbs: ['update'],
+      subresource: 'scale',
+      feature: 'Namespace workloads',
+    },
     {
       id: 'namespace:statefulsets',
       resourceKind: 'StatefulSet',
       verbs: ['list', 'patch', 'update', 'delete'],
+      feature: 'Namespace workloads',
+    },
+    {
+      id: 'namespace:statefulsets:scale',
+      resourceKind: 'StatefulSet',
+      verbs: ['update'],
+      subresource: 'scale',
+      feature: 'Namespace workloads',
+    },
+    {
+      id: 'namespace:replicasets:scale',
+      resourceKind: 'ReplicaSet',
+      verbs: ['update'],
+      subresource: 'scale',
       feature: 'Namespace workloads',
     },
     {
@@ -1091,6 +1113,18 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     const capabilityNamespace = getCapabilityNamespace(currentNamespace);
     if (!capabilityNamespace) {
       return;
+    }
+    // Register capability definitions for all resource types when namespace changes.
+    // This ensures permissions are available for context menus before data is loaded,
+    // since workload data may arrive via streaming before load() is explicitly called.
+    const allSpecs = Object.values(NAMESPACE_CAPABILITY_SPECS).flat();
+    if (allSpecs.length > 0) {
+      const definitions = buildCapabilityDefinitionsForNamespace(capabilityNamespace, allSpecs);
+      registerNamespaceCapabilityDefinitions(capabilityNamespace, definitions, {
+        force: false,
+        ttlMs: DEFAULT_CAPABILITY_TTL_MS,
+        clusterId: namespaceClusterId,
+      });
     }
     // Evaluate namespace permissions against the active cluster context.
     evaluateNamespacePermissions(capabilityNamespace, { clusterId: namespaceClusterId });

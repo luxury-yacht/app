@@ -6,6 +6,8 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
+import { RestartIcon, ScaleIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
+import '../ContextMenu.css';
 import './ActionsMenu.css';
 
 interface ActionsMenuProps {
@@ -14,6 +16,9 @@ interface ActionsMenuProps {
   canRestart?: boolean;
   canScale?: boolean;
   canDelete?: boolean;
+  canTrigger?: boolean;
+  canSuspend?: boolean;
+  isSuspended?: boolean;
   restartDisabledReason?: string;
   scaleDisabledReason?: string;
   deleteDisabledReason?: string;
@@ -23,6 +28,8 @@ interface ActionsMenuProps {
   onRestart?: () => void;
   onScale?: (replicas: number) => void;
   onDelete?: () => void;
+  onTrigger?: () => void;
+  onSuspendToggle?: () => void;
 }
 
 export const ActionsMenu = React.memo<ActionsMenuProps>(
@@ -32,6 +39,9 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     canRestart,
     canScale,
     canDelete,
+    canTrigger,
+    canSuspend,
+    isSuspended,
     restartDisabledReason,
     scaleDisabledReason,
     deleteDisabledReason,
@@ -41,11 +51,15 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     onRestart,
     onScale,
     onDelete,
+    onTrigger,
+    onSuspendToggle,
   }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [showScaleModal, setShowScaleModal] = useState(false);
+    const [showTriggerConfirm, setShowTriggerConfirm] = useState(false);
     const [scaleValue, setScaleValue] = useState(0);
     const menuRef = useRef<HTMLDivElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -61,12 +75,44 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       }
     }, [isOpen]);
 
+    // Position dropdown to stay within viewport
+    useEffect(() => {
+      if (isOpen && dropdownRef.current && menuRef.current) {
+        const dropdown = dropdownRef.current;
+        const button = menuRef.current.querySelector('.actions-menu-button');
+        if (!button) return;
+
+        const buttonRect = button.getBoundingClientRect();
+        const dropdownRect = dropdown.getBoundingClientRect();
+
+        // Check if dropdown would go off-screen to the right
+        if (buttonRect.right - dropdownRect.width < 10) {
+          dropdown.style.right = 'auto';
+          dropdown.style.left = '0';
+        }
+
+        // Check if dropdown would go off-screen at the bottom
+        if (buttonRect.bottom + dropdownRect.height > window.innerHeight - 10) {
+          dropdown.style.top = 'auto';
+          dropdown.style.bottom = 'calc(100% + 4px)';
+        }
+      }
+    }, [isOpen]);
+
     const showRestartOption = !!canRestart || Boolean(restartDisabledReason);
     const showScaleOption = !!canScale || Boolean(scaleDisabledReason);
     const showDeleteOption = !!canDelete || Boolean(deleteDisabledReason);
+    const showTriggerOption = !!canTrigger;
+    const showSuspendOption = !!canSuspend;
 
     // Don't render if no actions available at all
-    if (!showRestartOption && !showScaleOption && !showDeleteOption) {
+    if (
+      !showRestartOption &&
+      !showScaleOption &&
+      !showDeleteOption &&
+      !showTriggerOption &&
+      !showSuspendOption
+    ) {
       return null;
     }
 
@@ -102,6 +148,21 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       }
     };
 
+    const handleTriggerClick = () => {
+      setIsOpen(false);
+      setShowTriggerConfirm(true);
+    };
+
+    const handleTriggerConfirm = () => {
+      setShowTriggerConfirm(false);
+      onTrigger?.();
+    };
+
+    const handleSuspendToggle = () => {
+      setIsOpen(false);
+      onSuspendToggle?.();
+    };
+
     const isLoading = actionLoading || deleteLoading;
 
     return (
@@ -118,55 +179,113 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
           </button>
 
           {isOpen && (
-            <div className="actions-menu-dropdown">
+            <div className="context-menu actions-menu-dropdown" ref={dropdownRef}>
+              {showTriggerOption && (
+                <div
+                  className={`context-menu-item ${actionLoading || isSuspended ? 'disabled' : ''}`}
+                  role="menuitem"
+                  aria-disabled={actionLoading || isSuspended ? 'true' : 'false'}
+                  onClick={() => {
+                    if (!actionLoading && !isSuspended) {
+                      handleTriggerClick();
+                    }
+                  }}
+                  title={isSuspended ? 'Cannot trigger suspended CronJob' : undefined}
+                >
+                  <span className="context-menu-icon">▶</span>
+                  <span className="context-menu-label">Trigger Now</span>
+                </div>
+              )}
+
+              {showSuspendOption && (
+                <div
+                  className={`context-menu-item ${actionLoading ? 'disabled' : ''}`}
+                  role="menuitem"
+                  aria-disabled={actionLoading ? 'true' : 'false'}
+                  onClick={() => {
+                    if (!actionLoading) {
+                      handleSuspendToggle();
+                    }
+                  }}
+                >
+                  <span className="context-menu-icon">{isSuspended ? '▶' : '⏸'}</span>
+                  <span className="context-menu-label">{isSuspended ? 'Resume' : 'Suspend'}</span>
+                </div>
+              )}
+
               {showRestartOption && (
-                <button
-                  className="actions-menu-item"
-                  onClick={handleRestart}
-                  disabled={!canRestart || actionLoading}
+                <div
+                  className={`context-menu-item ${!canRestart || actionLoading ? 'disabled' : ''}`}
+                  role="menuitem"
+                  aria-disabled={!canRestart || actionLoading ? 'true' : 'false'}
+                  onClick={() => {
+                    if (canRestart && !actionLoading) {
+                      handleRestart();
+                    }
+                  }}
                   title={!canRestart ? restartDisabledReason : undefined}
                 >
-                  <span className="actions-menu-item-label">
+                  <span className="context-menu-icon">
+                    <RestartIcon />
+                  </span>
+                  <span className="context-menu-label">
                     {actionLoading ? 'Restarting...' : 'Restart'}
                   </span>
                   {!canRestart && restartDisabledReason && (
-                    <span className="actions-menu-reason">{restartDisabledReason}</span>
+                    <span className="context-menu-reason">{restartDisabledReason}</span>
                   )}
-                </button>
+                </div>
               )}
 
               {showScaleOption && (
-                <button
-                  className="actions-menu-item"
-                  onClick={handleScaleClick}
-                  disabled={!canScale || actionLoading}
+                <div
+                  className={`context-menu-item ${!canScale || actionLoading ? 'disabled' : ''}`}
+                  role="menuitem"
+                  aria-disabled={!canScale || actionLoading ? 'true' : 'false'}
+                  onClick={() => {
+                    if (canScale && !actionLoading) {
+                      handleScaleClick();
+                    }
+                  }}
                   title={!canScale ? scaleDisabledReason : undefined}
                 >
-                  <span className="actions-menu-item-label">Scale</span>
+                  <span className="context-menu-icon">
+                    <ScaleIcon />
+                  </span>
+                  <span className="context-menu-label">Scale</span>
                   {!canScale && scaleDisabledReason && (
-                    <span className="actions-menu-reason">{scaleDisabledReason}</span>
+                    <span className="context-menu-reason">{scaleDisabledReason}</span>
                   )}
-                </button>
+                </div>
               )}
 
               {showDeleteOption && (
                 <>
-                  {(showRestartOption || showScaleOption) && (
-                    <div className="actions-menu-divider" />
-                  )}
-                  <button
-                    className="actions-menu-item danger"
-                    onClick={handleDelete}
-                    disabled={!canDelete || deleteLoading}
+                  {(showRestartOption ||
+                    showScaleOption ||
+                    showTriggerOption ||
+                    showSuspendOption) && <div className="context-menu-divider" />}
+                  <div
+                    className={`context-menu-item danger ${!canDelete || deleteLoading ? 'disabled' : ''}`}
+                    role="menuitem"
+                    aria-disabled={!canDelete || deleteLoading ? 'true' : 'false'}
+                    onClick={() => {
+                      if (canDelete && !deleteLoading) {
+                        handleDelete();
+                      }
+                    }}
                     title={!canDelete ? deleteDisabledReason : undefined}
                   >
-                    <span className="actions-menu-item-label">
+                    <span className="context-menu-icon">
+                      <DeleteIcon />
+                    </span>
+                    <span className="context-menu-label">
                       {deleteLoading ? 'Deleting...' : 'Delete'}
                     </span>
                     {!canDelete && deleteDisabledReason && (
-                      <span className="actions-menu-reason">{deleteDisabledReason}</span>
+                      <span className="context-menu-reason">{deleteDisabledReason}</span>
                     )}
-                  </button>
+                  </div>
                 </>
               )}
             </div>
@@ -226,6 +345,36 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                   disabled={actionLoading}
                 >
                   {actionLoading ? 'Scaling...' : 'Scale'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Trigger CronJob Modal */}
+        {showTriggerConfirm && (
+          <div className="modal-overlay" onClick={() => setShowTriggerConfirm(false)}>
+            <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2>Trigger CronJob</h2>
+              </div>
+              <div className="modal-body">
+                <p>Create a new Job from this CronJob immediately?</p>
+              </div>
+              <div className="modal-footer">
+                <button
+                  className="button cancel"
+                  onClick={() => setShowTriggerConfirm(false)}
+                  disabled={actionLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="button primary"
+                  onClick={handleTriggerConfirm}
+                  disabled={actionLoading}
+                >
+                  {actionLoading ? 'Triggering...' : 'Trigger'}
                 </button>
               </div>
             </div>

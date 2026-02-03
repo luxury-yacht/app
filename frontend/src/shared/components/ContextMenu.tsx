@@ -15,7 +15,9 @@ export interface ContextMenuItem {
   onClick?: () => void;
   icon?: string | React.ReactNode;
   divider?: boolean;
+  header?: boolean;
   disabled?: boolean;
+  danger?: boolean;
   tooltip?: string;
   disabledReason?: string;
 }
@@ -33,7 +35,7 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
   const selectableIndexes = useMemo(
     () =>
       items
-        .map((item, index) => (!item.divider && !item.disabled ? index : null))
+        .map((item, index) => (!item.divider && !item.disabled && !item.header ? index : null))
         .filter((idx): idx is number => idx !== null),
     [items]
   );
@@ -167,6 +169,14 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
         if (item.divider) {
           return <div key={index} className="context-menu-divider" />;
         }
+        // Render non-interactive headers (e.g., permission pending state).
+        if (item.header) {
+          return (
+            <div key={index} className="context-menu-header" role="presentation">
+              {item.label}
+            </div>
+          );
+        }
 
         const tooltip = item.tooltip ?? item.disabledReason;
         const isFocused = index === focusedIndex;
@@ -175,8 +185,8 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
           <div
             key={index}
             className={`context-menu-item ${item.disabled ? 'disabled' : ''} ${
-              isFocused ? 'is-focused' : ''
-            }`}
+              item.danger ? 'danger' : ''
+            } ${isFocused ? 'is-focused' : ''}`}
             role="menuitem"
             aria-disabled={item.disabled ? 'true' : 'false'}
             data-context-index={index}

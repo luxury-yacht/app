@@ -23,6 +23,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
+import { OpenIcon } from '@shared/components/icons/MenuIcons';
 
 export interface EventData {
   kind: string;
@@ -118,7 +119,9 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           getKind: () => 'Event',
           getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
         }),
-        cf.createTextColumn<EventData>('type', 'Type', (event) => event.type || 'Normal'),
+        cf.createTextColumn<EventData>('type', 'Type', (event) => event.type || 'Normal', {
+          getClassName: (event) => `event-badge ${(event.type || 'normal').toLowerCase()}`,
+        }),
       ];
 
       if (showNamespaceColumn) {
@@ -213,7 +216,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           const kind = parsed.objectType;
           items.push({
             label: `View ${kind}`,
-            icon: '→',
+            icon: <OpenIcon />,
             onClick: () => handleEventClick(event),
           });
         }

@@ -26,7 +26,7 @@ export const RESOURCE_CAPABILITIES: Record<string, ResourceCapability> = {
   daemonset: { logs: true, restart: true, delete: true },
   statefulset: { logs: true, restart: true, scale: true, delete: true },
   job: { logs: true, delete: true },
-  cronjob: { logs: true, delete: true },
+  cronjob: { logs: true, delete: true, trigger: true, suspend: true },
   replicaset: { logs: true, delete: true },
 
   // Configuration

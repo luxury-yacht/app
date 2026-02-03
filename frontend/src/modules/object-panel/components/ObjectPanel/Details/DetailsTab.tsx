@@ -78,6 +78,8 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
   canRestart,
   canScale,
   canDelete,
+  canTrigger,
+  canSuspend,
   restartDisabledReason,
   scaleDisabledReason,
   deleteDisabledReason,
@@ -91,6 +93,8 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
   onScaleCancel,
   onScaleReplicasChange,
   onShowScaleInput,
+  onTriggerClick,
+  onSuspendToggle,
 }) => {
   // Use extracted hooks for overview and utilization data
   const hasUtilization = useHasUtilization(objectData);
@@ -296,6 +300,8 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
             deleteLoading={actionLoading}
             canRestart={canRestart}
             canScale={canScale}
+            canTrigger={canTrigger}
+            canSuspend={canSuspend}
             deleteDisabledReason={deleteDisabledReason}
             restartDisabledReason={restartDisabledReason}
             scaleDisabledReason={scaleDisabledReason}
@@ -308,6 +314,8 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
             showScaleInput={showScaleInput}
             actionLoading={actionLoading}
             objectKind={objectData?.kind}
+            onTrigger={onTriggerClick}
+            onSuspendToggle={onSuspendToggle}
           />
         )}
 

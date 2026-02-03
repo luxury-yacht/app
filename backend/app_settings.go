@@ -52,8 +52,9 @@ type settingsKubeconfig struct {
 
 // settingsUI captures user-configurable UI settings.
 type settingsUI struct {
-	Window   WindowSettings `json:"window"`
-	LastView *string        `json:"lastView"`
+	Window    WindowSettings `json:"window"`
+	LastView  *string        `json:"lastView"`
+	ZoomLevel int            `json:"zoomLevel"`
 }
 
 // defaultSettingsFile provides a fully-populated settings file with safe defaults.
@@ -456,4 +457,37 @@ func (a *App) ShowAbout() {
 		}
 	}
 	a.logger.Warn("Cannot show about: application context is nil after retries", "App")
+}
+
+// GetZoomLevel returns the persisted zoom level (50-200), defaulting to 100.
+func (a *App) GetZoomLevel() int {
+	settings, err := a.loadSettingsFile()
+	if err != nil {
+		return 100
+	}
+
+	level := settings.UI.ZoomLevel
+	if level < 50 || level > 200 {
+		return 100
+	}
+	return level
+}
+
+// SetZoomLevel persists the zoom level (clamped to 50-200).
+func (a *App) SetZoomLevel(level int) error {
+	// Clamp to valid range
+	if level < 50 {
+		level = 50
+	}
+	if level > 200 {
+		level = 200
+	}
+
+	settings, err := a.loadSettingsFile()
+	if err != nil {
+		return err
+	}
+
+	settings.UI.ZoomLevel = level
+	return a.saveSettingsFile(settings)
 }

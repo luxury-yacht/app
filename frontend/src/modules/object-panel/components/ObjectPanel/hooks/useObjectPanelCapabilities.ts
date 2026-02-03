@@ -311,6 +311,8 @@ export const useObjectPanelCapabilities = ({
       canRestart: featureSupport.restart && capabilityStates.restart.allowed,
       canScale: featureSupport.scale && capabilityStates.scale.allowed,
       canEditYaml: featureSupport.edit && capabilityStates.editYaml.allowed,
+      canTrigger: featureSupport.trigger,
+      canSuspend: featureSupport.suspend,
     };
   }, [capabilityStates, featureSupport, viewLogsPermission]);
 
