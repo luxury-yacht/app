@@ -308,9 +308,7 @@
   border-left-color: var(--color-accent);
 }
 
-.gridtable-hover-overlay.is-focused {
-  /* Left border only - set via border-left in base styles */
-}
+/* .gridtable-hover-overlay.is-focused inherits border-left from base styles */
 
 body.gridtable-disable-hover .gridtable-hover-overlay {
   opacity: 0 !important;
@@ -514,29 +512,6 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 /* ============================================
    11. Table Utilities & Badges
    ============================================ */
-
-/* ============================================
-   Event Badges (from ClusterViewEvents.css)
-   ============================================ */
-
-/* Event severity badges */
-.event-badge {
-  padding: 0.125rem 0.5rem;
-  border-radius: 3px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  text-transform: capitalize;
-}
-
-.event-badge.normal {
-  background-color: var(--color-success-bg);
-  color: var(--color-success);
-}
-
-.event-badge.warning {
-  background-color: var(--color-warning-bg);
-  color: var(--color-warning);
-}
 
 /* ============================================
    Clickable Elements (from multiple files)

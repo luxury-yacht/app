@@ -105,6 +105,7 @@
   --status-released-bg: rgba(249, 115, 22, 0.25);
   --status-released-text: #f97316;
   --status-warning-text: var(--color-gold-400);
+  --status-warning-bg: rgba(245, 158, 11, 0.25);
 
   /* Code editor colors */
   --code-surface: var(--color-gray-800);
@@ -362,21 +363,13 @@
   --resourcebar-status-shadow: 0 0 4px rgba(251, 191, 36, 0.5);
   --resourcebar-status-stale-shadow: 0 0 4px rgba(251, 191, 36, 0.5);
   --resourcebar-status-error-shadow: 0 0 4px rgba(248, 113, 113, 0.5);
-  --resourcebar-usage-normal: linear-gradient(
-    90deg,
-    #22c55e 0%,
-    #16a34a 100%
-  );
+  --resourcebar-usage-normal: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
   --resourcebar-usage-warning: linear-gradient(
     90deg,
     var(--color-gold-500) 0%,
     var(--color-gold-600) 100%
   );
-  --resourcebar-usage-critical: linear-gradient(
-    90deg,
-    #ef4444 0%,
-    #dc2626 100%
-  );
+  --resourcebar-usage-critical: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
   --resourcebar-usage-unbounded: linear-gradient(
     90deg,
     var(--color-gray-500) 0%,

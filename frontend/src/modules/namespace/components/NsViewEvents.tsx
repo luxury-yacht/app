@@ -119,7 +119,9 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           getKind: () => 'Event',
           getDisplayText: () => getDisplayKind('Event', useShortResourceNames),
         }),
-        cf.createTextColumn<EventData>('type', 'Type', (event) => event.type || 'Normal'),
+        cf.createTextColumn<EventData>('type', 'Type', (event) => event.type || 'Normal', {
+          getClassName: (event) => `event-badge ${(event.type || 'normal').toLowerCase()}`,
+        }),
       ];
 
       if (showNamespaceColumn) {

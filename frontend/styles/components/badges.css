@@ -5,9 +5,10 @@
    ========================================================================== */
 
 /* ==========================================================================
-   Kind Badges (Resource Type Indicators)
+   Base Badge Styles
    ========================================================================== */
-.kind-badge {
+.kind-badge,
+.event-badge {
   display: inline-block;
   padding: 0.25rem 0.5rem;
   border-radius: var(--border-radius-round);
@@ -15,10 +16,39 @@
   font-weight: var(--font-weight-badge);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  border: 1px solid transparent;
+}
+
+/* ==========================================================================
+   Kind Badges (Resource Type Indicators)
+   ========================================================================== */
+.kind-badge {
   /* Default/fallback colors (used for unknown kinds like custom resources) */
   background-color: var(--badge-grey-bg);
   color: var(--badge-grey-text);
-  border: 1px solid rgba(100, 116, 139, 0.3);
+  border-color: rgba(100, 116, 139, 0.3);
+}
+
+/* ==========================================================================
+   Event Badges (Event Severity Indicators)
+   ========================================================================== */
+.event-badge {
+  /* Default/fallback colors */
+  background-color: var(--badge-grey-bg);
+  color: var(--badge-grey-text);
+  border-color: rgba(100, 116, 139, 0.3);
+}
+
+.event-badge.normal {
+  background-color: var(--badge-green-soft-bg);
+  color: var(--badge-green-soft-text);
+  border-color: rgba(34, 197, 94, 0.2);
+}
+
+.event-badge.warning {
+  background-color: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  border-color: rgba(249, 115, 22, 0.2);
 }
 
 /* Clickable badge interactions */
