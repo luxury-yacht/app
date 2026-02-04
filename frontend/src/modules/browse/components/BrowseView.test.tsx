@@ -147,7 +147,7 @@ describe('BrowseView', () => {
       expect(refreshMocks.orchestrator.setDomainEnabled).toHaveBeenCalledWith('catalog', true);
       expect(refreshMocks.orchestrator.setDomainScope).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=200'
+        'cluster-1|limit=200&namespace=cluster'
       );
       expect(refreshMocks.orchestrator.triggerManualRefresh).toHaveBeenCalledWith('catalog', {
         suppressSpinner: true,
@@ -244,7 +244,7 @@ describe('BrowseView', () => {
       });
 
       // Use cluster-scoped items since cluster scope filters to only cluster-scoped objects
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=200';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=200&namespace=cluster';
       refreshMocks.catalogDomain.data = {
         items: [
           {
@@ -281,13 +281,13 @@ describe('BrowseView', () => {
 
       expect(refreshMocks.orchestrator.setDomainScope).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=200&continue=200'
+        'cluster-1|limit=200&namespace=cluster&continue=200'
       );
       expect(refreshMocks.orchestrator.triggerManualRefresh).toHaveBeenCalledWith('catalog', {
         suppressSpinner: true,
       });
 
-      refreshMocks.catalogDomain.scope = 'cluster-1|limit=200&continue=200';
+      refreshMocks.catalogDomain.scope = 'cluster-1|limit=200&namespace=cluster&continue=200';
       refreshMocks.catalogDomain.data = {
         items: [
           {

@@ -13,7 +13,6 @@ import { buildClusterScope } from '@/core/refresh/clusterScope';
 import {
   buildCatalogScope,
   dedupeByUID,
-  filterCatalogItems,
   filterClusterScopedItems,
   filterNamespaceScopedItems,
   normalizeCatalogScope,
@@ -115,14 +114,14 @@ export function useBrowseCatalog({
   const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([]);
 
   // Determine namespaces to query:
-  // - Cluster scope: empty (to get cluster-scoped objects)
+  // - Cluster scope: 'cluster' special value (to get cluster-scoped objects only)
   // - Namespace scope: use pinned namespaces
   // - All-namespaces with filter: use selected filter namespaces
   // - All-namespaces without filter: use all available namespaces (or empty for initial load)
   const namespacesToQuery = useMemo(() => {
-    // Cluster scope: don't send any namespaces to get cluster-scoped objects
+    // Cluster scope: send 'cluster' to get only cluster-scoped objects
     if (clusterScopedOnly) {
-      return [];
+      return ['cluster'];
     }
     // Namespace scope: use the pinned namespace
     if (isNamespaceScoped) {
@@ -275,17 +274,16 @@ export function useBrowseCatalog({
     clusterId,
   ]);
 
-  // Filter items by cluster and by scope
+  // Filter items by scope (cluster-scoped vs namespace-scoped)
+  // Note: Cluster isolation is handled by the backend via the scope prefix (e.g., 'cluster-1|...'),
+  // so we don't need to filter by clusterId here.
   const filteredItems = useMemo(() => {
-    let result = filterCatalogItems(items, clusterId);
     if (clusterScopedOnly) {
-      result = filterClusterScopedItems(result);
-    } else {
-      // For namespace and all-namespaces scopes, filter to namespace-scoped items only
-      result = filterNamespaceScopedItems(result);
+      return filterClusterScopedItems(items);
     }
-    return result;
-  }, [items, clusterId, clusterScopedOnly]);
+    // For namespace and all-namespaces scopes, filter to namespace-scoped items only
+    return filterNamespaceScopedItems(items);
+  }, [items, clusterScopedOnly]);
 
   // Derive filter options from the catalog snapshot
   const filterOptions = useMemo<BrowseFilterOptions>(() => {
