@@ -1,0 +1,103 @@
+/* Shared status indicator dot + popover */
+
+.status-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.status-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+/* State: healthy - solid green */
+.status-indicator-dot[data-status="healthy"] {
+  background-color: var(--status-healthy);
+  box-shadow: 0 0 4px var(--status-healthy-shadow);
+}
+
+/* State: refreshing - green with pulse */
+.status-indicator-dot[data-status="refreshing"] {
+  background-color: var(--status-refreshing);
+  box-shadow: 0 0 6px var(--status-refreshing-shadow);
+  animation: status-pulse 1s infinite;
+}
+
+/* State: degraded - amber with pulse */
+.status-indicator-dot[data-status="degraded"] {
+  background-color: var(--status-degraded);
+  box-shadow: 0 0 4px var(--status-degraded-shadow);
+  animation: status-pulse 1.2s infinite;
+}
+
+/* State: unhealthy - red */
+.status-indicator-dot[data-status="unhealthy"] {
+  background-color: var(--status-unhealthy);
+  box-shadow: 0 0 6px var(--status-unhealthy-shadow);
+}
+
+/* State: inactive - gray, no shadow */
+.status-indicator-dot[data-status="inactive"] {
+  background-color: var(--status-inactive);
+  box-shadow: var(--status-inactive-shadow);
+}
+
+@keyframes status-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* Popover - appears below the dot */
+.status-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  max-width: 260px;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  box-shadow: var(--tooltip-shadow);
+  padding: 10px 12px;
+  z-index: 1000;
+  font-size: 12px;
+}
+
+.status-popover-title {
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 4px;
+}
+
+.status-popover-message {
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.status-popover-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.status-popover-action button {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.status-popover-action button:hover {
+  background: var(--hover-bg);
+  color: var(--color-text);
+}
