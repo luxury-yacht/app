@@ -375,10 +375,19 @@
   pointer-events: none !important;
 }
 
-/* Body cursor overrides during resize - uses !important to override all other cursors */
+/* Body overrides during drag/resize - disable text selection */
+body.dockable-panel-dragging,
+body.dockable-panel-dragging *,
 body.dockable-panel-resizing,
 body.dockable-panel-resizing * {
   user-select: none !important;
+}
+
+/* Prevent hover events on underlying elements during drag/resize.
+   This stops tooltips/popups from triggering when moving panel edges. */
+body.dockable-panel-dragging .app,
+body.dockable-panel-resizing .app {
+  pointer-events: none !important;
 }
 
 body.dockable-panel-resizing-n,

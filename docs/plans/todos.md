@@ -2,9 +2,9 @@
 
 ## Issues
 
-- when using keyboard navigation in tables, context menu selection also affects the table row
+- ✅ when using keyboard navigation in tables, context menu selection also affects the table row
 - context menu launches in the wrong place (even offscreen) when zoomed out
-- zooming out doesn't change the panel restrictions, so borders/windows can be dragged offscreen
+- ✅ zooming out doesn't change the panel restrictions, so borders/windows can be dragged offscreen
 
 ## Feature Ideas
 

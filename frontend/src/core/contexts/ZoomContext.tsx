@@ -21,6 +21,38 @@ const MAX_ZOOM = 200;
 const ZOOM_STEP = 10;
 const DEFAULT_ZOOM = 100;
 
+/**
+ * Viewport dimensions adjusted for CSS zoom.
+ * When CSS zoom is applied, window.innerWidth/Height return unzoomed dimensions,
+ * but mouse coordinates (clientX/Y) and CSS positioning are in zoomed space.
+ * This interface provides dimensions in the zoomed coordinate space.
+ */
+export interface ZoomAwareViewport {
+  /** Viewport width in CSS pixels (zoomed coordinate space) */
+  width: number;
+  /** Viewport height in CSS pixels (zoomed coordinate space) */
+  height: number;
+  /** Current zoom factor (zoomLevel / 100) */
+  zoomFactor: number;
+}
+
+/**
+ * Get viewport dimensions adjusted for CSS zoom level.
+ * Use this when you need to constrain positions/sizes to the visible viewport
+ * and the constraint calculations involve mouse coordinates or CSS positioning.
+ *
+ * @param zoomLevel - The current zoom level (50-200, where 100 is 100%)
+ * @returns Viewport dimensions in CSS pixels
+ */
+export function getZoomAwareViewport(zoomLevel: number): ZoomAwareViewport {
+  const zoomFactor = zoomLevel / 100;
+  return {
+    width: window.innerWidth / zoomFactor,
+    height: window.innerHeight / zoomFactor,
+    zoomFactor,
+  };
+}
+
 interface ZoomContextType {
   zoomLevel: number;
   zoomIn: () => void;
@@ -38,6 +70,15 @@ export const useZoom = () => {
     throw new Error('useZoom must be used within ZoomProvider');
   }
   return context;
+};
+
+/**
+ * Hook that provides zoom-aware viewport dimensions.
+ * Combines useZoom with getZoomAwareViewport for convenient use in components.
+ */
+export const useZoomAwareViewport = (): ZoomAwareViewport => {
+  const { zoomLevel } = useZoom();
+  return getZoomAwareViewport(zoomLevel);
 };
 
 interface ZoomProviderProps {

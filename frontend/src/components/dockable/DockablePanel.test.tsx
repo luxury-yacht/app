@@ -11,6 +11,12 @@ import { act } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import DockablePanel from './DockablePanel';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  GetZoomLevel: vi.fn().mockResolvedValue(100),
+  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
+}));
 
 const renderPanel = async (ui: React.ReactElement) => {
   const container = document.createElement('div');
@@ -18,7 +24,7 @@ const renderPanel = async (ui: React.ReactElement) => {
   const root = ReactDOM.createRoot(container);
 
   await act(async () => {
-    root.render(ui);
+    root.render(<ZoomProvider>{ui}</ZoomProvider>);
     await Promise.resolve();
   });
 

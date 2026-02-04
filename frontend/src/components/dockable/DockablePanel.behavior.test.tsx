@@ -12,6 +12,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import DockablePanel from './DockablePanel';
 import { getAllPanelStates, restorePanelStates, type DockPosition } from './useDockablePanelState';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  GetZoomLevel: vi.fn().mockResolvedValue(100),
+  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
+}));
 
 const removePanelLayers = () => {
   document.querySelectorAll('.dockable-panel-layer').forEach((node) => node.remove());
@@ -23,7 +29,7 @@ const renderPanel = async (element: React.ReactElement) => {
   const root = ReactDOM.createRoot(host);
 
   await act(async () => {
-    root.render(element);
+    root.render(<ZoomProvider>{element}</ZoomProvider>);
     await Promise.resolve();
   });
 
@@ -31,7 +37,7 @@ const renderPanel = async (element: React.ReactElement) => {
     host,
     rerender: async (nextElement: React.ReactElement) => {
       await act(async () => {
-        root.render(nextElement);
+        root.render(<ZoomProvider>{nextElement}</ZoomProvider>);
         await Promise.resolve();
       });
     },
