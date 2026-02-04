@@ -29,18 +29,18 @@ type CatalogConfig struct {
 // CatalogSnapshot captures the browse payload returned to clients.
 type CatalogSnapshot struct {
 	ClusterMeta
-	Items               []objectcatalog.Summary `json:"items"`
-	Continue            string                  `json:"continue,omitempty"`
-	Total               int                     `json:"total"`
-	ResourceCount       int                     `json:"resourceCount"`
-	Kinds               []string                `json:"kinds,omitempty"`
-	Namespaces          []string                `json:"namespaces,omitempty"`
-	NamespaceGroups     []CatalogNamespaceGroup `json:"namespaceGroups,omitempty"`
-	BatchIndex          int                     `json:"batchIndex"`
-	BatchSize           int                     `json:"batchSize"`
-	TotalBatches        int                     `json:"totalBatches"`
-	IsFinal             bool                    `json:"isFinal"`
-	FirstBatchLatencyMs int64                   `json:"firstBatchLatencyMs,omitempty"`
+	Items               []objectcatalog.Summary  `json:"items"`
+	Continue            string                   `json:"continue,omitempty"`
+	Total               int                      `json:"total"`
+	ResourceCount       int                      `json:"resourceCount"`
+	Kinds               []objectcatalog.KindInfo `json:"kinds,omitempty"`
+	Namespaces          []string                 `json:"namespaces,omitempty"`
+	NamespaceGroups     []CatalogNamespaceGroup  `json:"namespaceGroups,omitempty"`
+	BatchIndex          int                      `json:"batchIndex"`
+	BatchSize           int                      `json:"batchSize"`
+	TotalBatches        int                      `json:"totalBatches"`
+	IsFinal             bool                     `json:"isFinal"`
+	FirstBatchLatencyMs int64                    `json:"firstBatchLatencyMs,omitempty"`
 }
 
 // CatalogNamespaceGroup captures per-cluster namespace lists and selection.
@@ -217,7 +217,7 @@ func buildCatalogSnapshot(
 		Continue:      result.ContinueToken,
 		Total:         result.TotalItems,
 		ResourceCount: result.ResourceCount,
-		Kinds:         cloneStrings(result.Kinds),
+		Kinds:         cloneKindInfos(result.Kinds),
 		Namespaces:    cloneStrings(result.Namespaces),
 		BatchIndex:    batchIndex,
 		BatchSize:     len(result.Items),
@@ -318,6 +318,15 @@ func cloneStrings(values []string) []string {
 		return []string{}
 	}
 	cloned := make([]string, len(values))
+	copy(cloned, values)
+	return cloned
+}
+
+func cloneKindInfos(values []objectcatalog.KindInfo) []objectcatalog.KindInfo {
+	if len(values) == 0 {
+		return []objectcatalog.KindInfo{}
+	}
+	cloned := make([]objectcatalog.KindInfo, len(values))
 	copy(cloned, values)
 	return cloned
 }

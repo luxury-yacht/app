@@ -97,7 +97,11 @@ func TestCatalogBuildUsesCatalogOnly(t *testing.T) {
 	if payload.IsFinal {
 		t.Fatalf("expected non-final batch when continue token present")
 	}
-	if !reflect.DeepEqual(payload.Kinds, []string{"Deployment", "Pod"}) {
+	expectedKinds := []objectcatalog.KindInfo{
+		{Kind: "Deployment", Namespaced: true},
+		{Kind: "Pod", Namespaced: true},
+	}
+	if !reflect.DeepEqual(payload.Kinds, expectedKinds) {
 		t.Fatalf("unexpected kinds in payload: %+v", payload.Kinds)
 	}
 	if !reflect.DeepEqual(payload.Namespaces, []string{"default"}) {
@@ -284,20 +288,20 @@ func markCatalogCachesReady(t *testing.T, svc *objectcatalog.Service, summaries 
 	if !kindsField.IsValid() {
 		t.Fatal("catalog service cachedKinds field not found")
 	}
-	kindSet := make(map[string]struct{}, len(summaries))
+	kindMap := make(map[string]bool, len(summaries))
 	for _, summary := range summaries {
 		if summary.Kind != "" {
-			kindSet[summary.Kind] = struct{}{}
+			kindMap[summary.Kind] = summary.Scope == objectcatalog.ScopeNamespace
 		}
 	}
-	kindList := make([]string, 0, len(kindSet))
-	for kind := range kindSet {
-		kindList = append(kindList, kind)
+	kindList := make([]objectcatalog.KindInfo, 0, len(kindMap))
+	for kind, namespaced := range kindMap {
+		kindList = append(kindList, objectcatalog.KindInfo{Kind: kind, Namespaced: namespaced})
 	}
-	sort.Strings(kindList)
+	sort.Slice(kindList, func(i, j int) bool { return kindList[i].Kind < kindList[j].Kind })
 	kindsSlice := reflect.MakeSlice(kindsField.Type(), len(kindList), len(kindList))
-	for idx, kind := range kindList {
-		kindsSlice.Index(idx).Set(reflect.ValueOf(kind))
+	for idx, kindInfo := range kindList {
+		kindsSlice.Index(idx).Set(reflect.ValueOf(kindInfo))
 	}
 	setUnexportedField(kindsField, kindsSlice.Interface())
 

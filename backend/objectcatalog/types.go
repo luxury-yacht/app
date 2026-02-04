@@ -134,14 +134,20 @@ type QueryOptions struct {
 	Continue   string   // token for continuing a paginated query
 }
 
+// KindInfo captures metadata about a resource kind for filtering.
+type KindInfo struct {
+	Kind       string `json:"kind"`       // resource kind name
+	Namespaced bool   `json:"namespaced"` // indicates if the kind is namespace-scoped
+}
+
 // QueryResult summarises the outcome of a catalog query.
 type QueryResult struct {
-	Items         []Summary // items returned by the query
-	ContinueToken string    // token for continuing a paginated query
-	TotalItems    int       // total number of items matching the query
-	ResourceCount int       // total number of resources matching the query
-	Kinds         []string  // resource kinds included in the query
-	Namespaces    []string  // namespaces included in the query
+	Items         []Summary  // items returned by the query
+	ContinueToken string     // token for continuing a paginated query
+	TotalItems    int        // total number of items matching the query
+	ResourceCount int        // total number of resources matching the query
+	Kinds         []KindInfo // resource kinds included in the query
+	Namespaces    []string   // namespaces included in the query
 }
 
 // PartialSyncError reports that a sync completed with partial failures.

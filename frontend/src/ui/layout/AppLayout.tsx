@@ -220,7 +220,12 @@ export const AppLayout: React.FC = () => {
                   namespace.selectedNamespace ? (
                     isAllNamespaces(namespace.selectedNamespace) ? (
                       <RouteErrorBoundary routeName="namespace-all">
-                        <AllNamespacesView activeTab={viewState.activeNamespaceTab} />
+                        <NamespaceResourcesProvider
+                          namespace={namespace.selectedNamespace}
+                          activeView={viewState.activeNamespaceTab}
+                        >
+                          <AllNamespacesView activeTab={viewState.activeNamespaceTab} />
+                        </NamespaceResourcesProvider>
                       </RouteErrorBoundary>
                     ) : (
                       <RouteErrorBoundary routeName="namespace">

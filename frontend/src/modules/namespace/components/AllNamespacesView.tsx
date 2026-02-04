@@ -17,10 +17,10 @@ import NsViewStorage from '@modules/namespace/components/NsViewStorage';
 import NsViewCustom from '@modules/namespace/components/NsViewCustom';
 import NsViewHelm from '@modules/namespace/components/NsViewHelm';
 import NsViewEvents from '@modules/namespace/components/NsViewEvents';
+import BrowseView from '@modules/browse/components/BrowseView';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import {
-  NamespaceResourcesProvider,
   useNamespaceResource,
   useNamespaceResources,
 } from '@modules/namespace/contexts/NsResourcesContext';
@@ -260,123 +260,44 @@ interface AllNamespacesViewProps {
 }
 
 const AllNamespacesView: React.FC<AllNamespacesViewProps> = ({ activeTab }) => {
-  if (activeTab === 'pods') {
-    return (
-      <NamespaceResourcesProvider namespace={ALL_NAMESPACES_SCOPE} activeView="pods">
-        <div className="all-namespaces-view">
-          <AllNamespacesPodsView />
-        </div>
-      </NamespaceResourcesProvider>
-    );
-  }
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'pods':
+        return <AllNamespacesPodsView />;
+      case 'workloads':
+        return <AllNamespacesWorkloadsView />;
+      case 'config':
+        return <AllNamespacesConfigView />;
+      case 'autoscaling':
+        return <AllNamespacesAutoscalingView />;
+      case 'network':
+        return <AllNamespacesNetworkView />;
+      case 'helm':
+        return <AllNamespacesHelmView />;
+      case 'events':
+        return <AllNamespacesEventsView />;
+      case 'quotas':
+        return <AllNamespacesQuotasView />;
+      case 'rbac':
+        return <AllNamespacesRBACView />;
+      case 'storage':
+        return <AllNamespacesStorageView />;
+      case 'custom':
+        return <AllNamespacesCustomView />;
+      case 'browse':
+        return <BrowseView namespace={ALL_NAMESPACES_SCOPE} />;
+      default:
+        return (
+          <div className="namespace-placeholder">
+            <p>
+              The <strong>{activeTab}</strong> view is not yet available for the "All" namespace.
+            </p>
+          </div>
+        );
+    }
+  };
 
-  if (activeTab === 'workloads') {
-    return (
-      <NamespaceResourcesProvider namespace={ALL_NAMESPACES_SCOPE} activeView="workloads">
-        <div className="all-namespaces-view">
-          <AllNamespacesWorkloadsView />
-        </div>
-      </NamespaceResourcesProvider>
-    );
-  }
-
-  if (activeTab === 'config') {
-    return (
-      <NamespaceResourcesProvider namespace={ALL_NAMESPACES_SCOPE} activeView="config">
-        <div className="all-namespaces-view">
-          <AllNamespacesConfigView />
-        </div>
-      </NamespaceResourcesProvider>
-    );
-  }
-
-  if (activeTab === 'autoscaling') {
-    return (
-      <NamespaceResourcesProvider namespace={ALL_NAMESPACES_SCOPE} activeView="autoscaling">
-        <div className="all-namespaces-view">
-          <AllNamespacesAutoscalingView />
-        </div>
-      </NamespaceResourcesProvider>
-    );
-  }
-
-  if (activeTab === 'network') {
-    return (
-      <NamespaceResourcesProvider namespace={ALL_NAMESPACES_SCOPE} activeView="network">
-        <div className="all-namespaces-view">
-          <AllNamespacesNetworkView />
-        </div>
-      </NamespaceResourcesProvider>
-    );
-  }
-
-  if (activeTab === 'helm') {
-    return (
-      <NamespaceResourcesProvider namespace={ALL_NAMESPACES_SCOPE} activeView="helm">
-        <div className="all-namespaces-view">
-          <AllNamespacesHelmView />
-        </div>
-      </NamespaceResourcesProvider>
-    );
-  }
-
-  if (activeTab === 'events') {
-    return (
-      <NamespaceResourcesProvider namespace={ALL_NAMESPACES_SCOPE} activeView="events">
-        <div className="all-namespaces-view">
-          <AllNamespacesEventsView />
-        </div>
-      </NamespaceResourcesProvider>
-    );
-  }
-
-  if (activeTab === 'quotas') {
-    return (
-      <NamespaceResourcesProvider namespace={ALL_NAMESPACES_SCOPE} activeView="quotas">
-        <div className="all-namespaces-view">
-          <AllNamespacesQuotasView />
-        </div>
-      </NamespaceResourcesProvider>
-    );
-  }
-
-  if (activeTab === 'rbac') {
-    return (
-      <NamespaceResourcesProvider namespace={ALL_NAMESPACES_SCOPE} activeView="rbac">
-        <div className="all-namespaces-view">
-          <AllNamespacesRBACView />
-        </div>
-      </NamespaceResourcesProvider>
-    );
-  }
-
-  if (activeTab === 'storage') {
-    return (
-      <NamespaceResourcesProvider namespace={ALL_NAMESPACES_SCOPE} activeView="storage">
-        <div className="all-namespaces-view">
-          <AllNamespacesStorageView />
-        </div>
-      </NamespaceResourcesProvider>
-    );
-  }
-
-  if (activeTab === 'custom') {
-    return (
-      <NamespaceResourcesProvider namespace={ALL_NAMESPACES_SCOPE} activeView="custom">
-        <div className="all-namespaces-view">
-          <AllNamespacesCustomView />
-        </div>
-      </NamespaceResourcesProvider>
-    );
-  }
-
-  return (
-    <div className="namespace-placeholder">
-      <p>
-        The <strong>{activeTab}</strong> view is not yet available for the “All” namespace.
-      </p>
-    </div>
-  );
+  return <div className="all-namespaces-view">{renderContent()}</div>;
 };
 
 export default AllNamespacesView;

@@ -21,7 +21,7 @@ const {
   customViewMock,
   helmViewMock,
   eventsViewMock,
-  objectsViewMock,
+  browseViewMock,
 } = vi.hoisted(() => ({
   podsViewMock: vi.fn(() => <div data-testid="pods-view" />),
   workloadsViewMock: vi.fn(() => <div data-testid="workloads-view" />),
@@ -34,7 +34,7 @@ const {
   customViewMock: vi.fn(() => <div data-testid="custom-view" />),
   helmViewMock: vi.fn(() => <div data-testid="helm-view" />),
   eventsViewMock: vi.fn(() => <div data-testid="events-view" />),
-  objectsViewMock: vi.fn(() => <div data-testid="objects-view" />),
+  browseViewMock: vi.fn(() => <div data-testid="browse-view" />),
 }));
 
 vi.mock('@modules/namespace/components/NsViewPods', () => ({ default: podsViewMock }));
@@ -50,7 +50,7 @@ vi.mock('@modules/namespace/components/NsViewQuotas', () => ({ default: quotasVi
 vi.mock('@modules/namespace/components/NsViewCustom', () => ({ default: customViewMock }));
 vi.mock('@modules/namespace/components/NsViewHelm', () => ({ default: helmViewMock }));
 vi.mock('@modules/namespace/components/NsViewEvents', () => ({ default: eventsViewMock }));
-vi.mock('@modules/namespace/components/NsViewObjects', () => ({ default: objectsViewMock }));
+vi.mock('@modules/browse/components/BrowseView', () => ({ default: browseViewMock }));
 
 import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { NamespaceViewType } from '@/types/navigation/views';
@@ -75,7 +75,7 @@ describe('NamespaceResourcesViews', () => {
     customViewMock.mockClear();
     helmViewMock.mockClear();
     eventsViewMock.mockClear();
-    objectsViewMock.mockClear();
+    browseViewMock.mockClear();
 
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -123,9 +123,9 @@ describe('NamespaceResourcesViews', () => {
 
   const tabCases = [
     {
-      tab: 'objects' as const,
+      tab: 'browse' as const,
       props: {},
-      mock: objectsViewMock,
+      mock: browseViewMock,
       expected: {
         namespace: 'team-a',
       },

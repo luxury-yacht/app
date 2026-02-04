@@ -42,7 +42,7 @@ func TestServiceQueryStreamsWithoutFullCache(t *testing.T) {
 		},
 	}
 
-	kindSet := map[string]struct{}{"Pod": {}}
+	kindSet := map[string]bool{"Pod": true} // true = namespaced
 	namespaceSet := map[string]struct{}{"default": {}, "kube-system": {}}
 	descriptors := []Descriptor{
 		{Group: "", Version: "v1", Resource: "pods", Kind: "Pod", Scope: ScopeNamespace, Namespaced: true},
@@ -149,7 +149,8 @@ func TestQueryFiltersAndPagination(t *testing.T) {
 	if result.ResourceCount != 1 {
 		t.Fatalf("expected resource count 1 for pod filter, got %d", result.ResourceCount)
 	}
-	if !reflect.DeepEqual(result.Kinds, []string{"Deployment", "Pod"}) {
+	expectedKinds := []KindInfo{{Kind: "Deployment", Namespaced: true}, {Kind: "Pod", Namespaced: true}}
+	if !reflect.DeepEqual(result.Kinds, expectedKinds) {
 		t.Fatalf("unexpected kinds: %+v", result.Kinds)
 	}
 	if !reflect.DeepEqual(result.Namespaces, []string{"default", "kube-system"}) {
@@ -222,7 +223,8 @@ func TestQueryNamespaceClusterFiltering(t *testing.T) {
 	if clusterOnly.TotalItems != 1 || clusterOnly.Items[0].Scope != ScopeCluster {
 		t.Fatalf("expected only cluster-scoped items, got %+v", clusterOnly)
 	}
-	if !reflect.DeepEqual(clusterOnly.Kinds, []string{"CustomResourceDefinition"}) {
+	expectedClusterKinds := []KindInfo{{Kind: "CustomResourceDefinition", Namespaced: false}}
+	if !reflect.DeepEqual(clusterOnly.Kinds, expectedClusterKinds) {
 		t.Fatalf("unexpected kinds for cluster query: %+v", clusterOnly.Kinds)
 	}
 	if !reflect.DeepEqual(clusterOnly.Namespaces, []string{"default"}) {
@@ -235,7 +237,8 @@ func TestQueryNamespaceClusterFiltering(t *testing.T) {
 	if defaultNS.TotalItems != 1 || defaultNS.Items[0].Namespace != "default" {
 		t.Fatalf("expected only default namespace items, got %+v", defaultNS)
 	}
-	if !reflect.DeepEqual(defaultNS.Kinds, []string{"Service"}) {
+	expectedNSKinds := []KindInfo{{Kind: "Service", Namespaced: true}}
+	if !reflect.DeepEqual(defaultNS.Kinds, expectedNSKinds) {
 		t.Fatalf("unexpected kinds for namespace query: %+v", defaultNS.Kinds)
 	}
 	if !reflect.DeepEqual(defaultNS.Namespaces, []string{"default"}) {
@@ -288,7 +291,8 @@ func TestQuerySearchFilter(t *testing.T) {
 	if len(result.Items) != 1 || result.Items[0].Name != "catalog-api" {
 		t.Fatalf("unexpected search results: %+v", result.Items)
 	}
-	if !reflect.DeepEqual(result.Kinds, []string{"Pod"}) {
+	expectedSearchKinds := []KindInfo{{Kind: "Pod", Namespaced: true}}
+	if !reflect.DeepEqual(result.Kinds, expectedSearchKinds) {
 		t.Fatalf("unexpected kinds for search: %+v", result.Kinds)
 	}
 	if !reflect.DeepEqual(result.Namespaces, []string{"default"}) {

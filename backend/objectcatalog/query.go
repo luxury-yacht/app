@@ -28,7 +28,7 @@ func (s *Service) Query(opts QueryOptions) QueryResult {
 	s.mu.RLock()
 	chunks := make([]*summaryChunk, len(s.sortedChunks))
 	copy(chunks, s.sortedChunks)
-	cachedKinds := append([]string(nil), s.cachedKinds...)
+	cachedKinds := append([]KindInfo(nil), s.cachedKinds...)
 	cachedNamespaces := append([]string(nil), s.cachedNamespaces...)
 	cachedDescriptors := append([]Descriptor(nil), s.cachedDescriptors...)
 	s.mu.RUnlock()
@@ -46,10 +46,10 @@ func (s *Service) Query(opts QueryOptions) QueryResult {
 	}
 
 	matches := make([]Summary, 0)
-	matchKinds := make(map[string]struct{})
+	matchKinds := make(map[string]bool)
 	matchNamespaces := make(map[string]struct{})
 	// Scope the kinds list to namespace-filtered items when a namespace filter is active.
-	namespaceKinds := make(map[string]struct{})
+	namespaceKinds := make(map[string]bool)
 	totalMatches := 0
 
 	for _, chunk := range chunks {
@@ -59,7 +59,7 @@ func (s *Service) Query(opts QueryOptions) QueryResult {
 		for _, item := range chunk.items {
 			if hasNamespaceFilter && namespaceMatcher(item.Namespace, item.Scope) {
 				if item.Kind != "" {
-					namespaceKinds[item.Kind] = struct{}{}
+					namespaceKinds[item.Kind] = item.Scope == ScopeNamespace
 				}
 			}
 			if !kindMatcher(item.Kind, item.Group, item.Version, item.Resource) {
@@ -75,7 +75,7 @@ func (s *Service) Query(opts QueryOptions) QueryResult {
 			totalMatches++
 			matches = append(matches, item)
 			if item.Kind != "" {
-				matchKinds[item.Kind] = struct{}{}
+				matchKinds[item.Kind] = item.Scope == ScopeNamespace
 			}
 			matchNamespaces[item.Namespace] = struct{}{}
 		}
@@ -105,12 +105,12 @@ func (s *Service) Query(opts QueryOptions) QueryResult {
 	kinds := cachedKinds
 	if hasNamespaceFilter {
 		if len(namespaceKinds) > 0 {
-			kinds = snapshotSortedKeys(namespaceKinds)
+			kinds = snapshotSortedKindInfos(namespaceKinds)
 		} else {
-			kinds = []string{}
+			kinds = []KindInfo{}
 		}
 	} else if len(kinds) == 0 && len(matchKinds) > 0 {
-		kinds = snapshotSortedKeys(matchKinds)
+		kinds = snapshotSortedKindInfos(matchKinds)
 	}
 
 	namespaces := cachedNamespaces
@@ -137,21 +137,21 @@ func (s *Service) queryWithoutCache(
 	items := s.Snapshot()
 	descriptors := s.Descriptors()
 
-	kindSet := make(map[string]struct{})
+	kindSet := make(map[string]bool)
 	namespaceSet := make(map[string]struct{})
 	// Scope the kinds list to namespace-filtered items when a namespace filter is active.
-	namespaceKinds := make(map[string]struct{})
+	namespaceKinds := make(map[string]bool)
 	hasNamespaceFilter := len(opts.Namespaces) > 0
 	for _, item := range items {
 		if item.Kind != "" {
-			kindSet[item.Kind] = struct{}{}
+			kindSet[item.Kind] = item.Scope == ScopeNamespace
 		}
 		if item.Namespace != "" {
 			namespaceSet[item.Namespace] = struct{}{}
 		}
 		if hasNamespaceFilter && namespaceMatcher(item.Namespace, item.Scope) {
 			if item.Kind != "" {
-				namespaceKinds[item.Kind] = struct{}{}
+				namespaceKinds[item.Kind] = item.Scope == ScopeNamespace
 			}
 		}
 	}
@@ -202,11 +202,7 @@ func (s *Service) queryWithoutCache(
 	if hasNamespaceFilter {
 		kindSource = namespaceKinds
 	}
-	kinds := make([]string, 0, len(kindSource))
-	for kind := range kindSource {
-		kinds = append(kinds, kind)
-	}
-	sort.Strings(kinds)
+	kinds := snapshotSortedKindInfos(kindSource)
 
 	namespaces := make([]string, 0, len(namespaceSet))
 	for ns := range namespaceSet {

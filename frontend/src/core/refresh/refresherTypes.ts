@@ -77,7 +77,7 @@ export type StaticRefresherName =
 export type RefresherName = StaticRefresherName | ObjectRefresherName;
 
 export const namespaceViewToRefresher: Record<NamespaceViewType, NamespaceRefresherName | null> = {
-  objects: null,
+  browse: null,
   pods: null,
   workloads: NAMESPACE_REFRESHERS.workloads,
   config: NAMESPACE_REFRESHERS.config,

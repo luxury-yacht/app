@@ -75,11 +75,21 @@ func ExtractDescriptors(resourceLists []*metav1.APIResourceList) []Descriptor {
 		"Event",
 		"ComponentStatus", // Deprecated since Kubernetes v1.19; avoid hitting the legacy endpoint.
 	)
+	// Metrics API resources don't have UIDs (they're computed on-the-fly, not stored in etcd).
+	// Exclude the entire metrics.k8s.io group to avoid pagination issues in the browse view.
+	excludedGroups := sets.NewString(
+		"metrics.k8s.io",
+	)
 	result := make([]Descriptor, 0)
 
 	for _, list := range resourceLists {
 		groupVersion, parseErr := schema.ParseGroupVersion(list.GroupVersion)
 		if parseErr != nil {
+			continue
+		}
+
+		// Skip excluded API groups entirely.
+		if excludedGroups.Has(groupVersion.Group) {
 			continue
 		}
 

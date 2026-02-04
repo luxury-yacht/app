@@ -37,7 +37,7 @@ func TestStreamingAggregatorFinalizePublishesState(t *testing.T) {
 		t.Fatalf("expected aggregator to record timing on first emit")
 	}
 
-	agg.kindSet["Pod"] = struct{}{}
+	agg.kindSet["Pod"] = true // true = namespaced
 	agg.namespaceSet["default"] = struct{}{}
 
 	if agg.firstFlushLatency() < 0 {
@@ -55,7 +55,7 @@ func TestStreamingAggregatorFinalizePublishesState(t *testing.T) {
 	if len(svc.sortedChunks) != 1 || len(svc.sortedChunks[0].items) != 1 {
 		t.Fatalf("expected sortedChunks to be populated, got %#v", svc.sortedChunks)
 	}
-	if len(svc.cachedKinds) != 1 || svc.cachedKinds[0] != "Pod" {
+	if len(svc.cachedKinds) != 1 || svc.cachedKinds[0].Kind != "Pod" {
 		t.Fatalf("expected cachedKinds to include Pod, got %#v", svc.cachedKinds)
 	}
 	if len(svc.cachedNamespaces) != 1 || svc.cachedNamespaces[0] != "default" {

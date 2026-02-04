@@ -2792,7 +2792,12 @@ export class ResourceStreamManager {
       subscription.lastDeliveryEpoch = undefined;
     }
     this.recordResync(subscription, reason);
-    this.markResyncing(subscription);
+    // Skip setting a user-visible "Stream resyncing" error for initial stream
+    // starts — there is no stale data to warn about. The orchestrator already
+    // set status to 'initialising' via setStreamingLoadingState.
+    if (reason !== 'initial') {
+      this.markResyncing(subscription);
+    }
     this.updateHealthForScope(subscription.domain, subscription.reportScope);
     if (subscription.updateTimer !== null) {
       window.clearTimeout(subscription.updateTimer);
