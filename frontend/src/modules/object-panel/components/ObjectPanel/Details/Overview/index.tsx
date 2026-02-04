@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
+import { useObjectPanel } from '@modules/object-panel/ObjectPanelContext';
 import { overviewRegistry, getResourceCapabilities } from './registry';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
 import '../../shared.css';
@@ -40,7 +41,12 @@ type OverviewProps = GenericOverviewProps;
 
 const Overview: React.FC<OverviewProps> = (props) => {
   const { sectionStates, setSectionExpanded } = useDetailsSectionContext();
+  const { objectData } = useObjectPanel();
   const expanded = sectionStates.overview;
+
+  // Get cluster info from objectData (the source of truth for the current object)
+  const clusterId = objectData?.clusterId || '';
+  const clusterName = objectData?.clusterName || '';
 
   // Use the factory pattern to render the appropriate component
   const renderOverviewContent = () => {
@@ -85,8 +91,8 @@ const Overview: React.FC<OverviewProps> = (props) => {
                     kind: props.kind,
                     name: props.name,
                     namespace: props.namespace || '',
-                    clusterId: props.clusterId || '',
-                    clusterName: props.clusterName || '',
+                    clusterId,
+                    clusterName,
                     ports: [],
                   }
                 : undefined

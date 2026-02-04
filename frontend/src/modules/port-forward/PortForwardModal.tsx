@@ -98,7 +98,14 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
         return;
       }
 
-      // Otherwise fetch from backend
+      // Otherwise fetch from backend (if we have a cluster ID)
+      if (!target.clusterId) {
+        // No cluster ID - allow manual entry without fetching
+        setContainerPort(0);
+        setLocalPort(0);
+        return;
+      }
+
       setIsLoadingPorts(true);
       import('@wailsjs/go/backend/App').then(({ GetTargetPorts }) => {
         GetTargetPorts(target.clusterId, target.namespace, target.kind, target.name)
