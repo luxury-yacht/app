@@ -437,3 +437,22 @@ export const CloseIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
     <path d="M2 2L14 14M2 14L14 2" stroke="currentColor" strokeWidth="2" />
   </svg>
 );
+
+export const PortForwardIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill={fill}
+    width={width}
+    height={height}
+  >
+    {/* Right arrow (top) */}
+    <path d="M16.172 7L12.222 3.05L13.636 1.636L20 8L13.636 14.364L12.222 12.95L16.172 9H2V7H16.172Z" />
+    {/* Left arrow (bottom) */}
+    <path d="M7.828 17L11.778 20.95L10.364 22.364L4 16L10.364 9.636L11.778 11.05L7.828 15H22V17H7.828Z" />
+  </svg>
+);

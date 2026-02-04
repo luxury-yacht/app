@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -26,6 +25,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 
 // Define the data structure for Custom Resource Definitions
 interface CRDsData {
@@ -166,35 +166,27 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
     // Get context menu items
     const getContextMenuItems = useCallback(
       (crd: CRDsData): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [
-          {
-            label: 'Open',
-            icon: <OpenIcon />,
-            onClick: () => handleResourceClick(crd),
-          },
-        ];
-
         const deleteStatus =
-          permissionMap.get(getPermissionKey('CustomResourceDefinition', 'delete')) ?? null;
+          permissionMap.get(
+            getPermissionKey('CustomResourceDefinition', 'delete', null, null, crd.clusterId)
+          ) ?? null;
 
-        // Show a muted header while permission checks are pending.
-        if (deleteStatus?.pending) {
-          items.unshift({ header: true, label: 'Awaiting permissions...' });
-        }
-
-        if (deleteStatus?.allowed && !deleteStatus.pending) {
-          items.push(
-            { divider: true },
-            {
-              label: 'Delete',
-              icon: <DeleteIcon />,
-              danger: true,
-              onClick: () => setDeleteConfirm({ show: true, resource: crd }),
-            }
-          );
-        }
-
-        return items;
+        return buildObjectActionItems({
+          object: {
+            kind: 'CustomResourceDefinition',
+            name: crd.name,
+            clusterId: crd.clusterId,
+            clusterName: crd.clusterName,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleResourceClick(crd),
+            onDelete: () => setDeleteConfirm({ show: true, resource: crd }),
+          },
+          permissions: {
+            delete: deleteStatus,
+          },
+        });
       },
       [handleResourceClick, permissionMap]
     );

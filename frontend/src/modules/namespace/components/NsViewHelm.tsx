@@ -16,7 +16,7 @@ import * as cf from '@shared/components/tables/columnFactories';
 import React, { useMemo, useCallback } from 'react';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { OpenIcon } from '@shared/components/icons/MenuIcons';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -277,87 +277,25 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (resource: HelmData): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [];
-
-        // Always add Open in Object Panel
-        items.push({
-          label: 'Open',
-          icon: <OpenIcon />,
-          onClick: () => handleResourceClick(resource),
-        });
-
-        // Add Helm-specific actions
-        items.push(
-          { divider: true },
-          {
-            label: 'View Values',
-            icon: '⚙️',
-            onClick: () => {
-              openWithObject({
-                kind: 'HelmRelease',
-                name: resource.name,
-                namespace: resource.namespace,
-                viewMode: 'values',
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              });
-            },
-          },
-          {
-            label: 'View Chart',
-            icon: '📦',
-            onClick: () => {
-              openWithObject({
-                kind: 'HelmRelease',
-                name: resource.name,
-                namespace: resource.namespace,
-                viewMode: 'chart',
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              });
-            },
-          },
-          {
-            label: 'View History',
-            icon: '📚',
-            onClick: () => {
-              openWithObject({
-                kind: 'HelmRelease',
-                name: resource.name,
-                namespace: resource.namespace,
-                viewMode: 'history',
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              });
-            },
-          }
-        );
-
-        // Add status-specific actions
         const status = resource.status || resource.info?.status;
-        if (status === 'failed') {
-          items.push(
-            { divider: true },
-            {
-              label: 'View Failure Details',
-              icon: '❌',
-              onClick: () => {
-                openWithObject({
-                  kind: 'HelmRelease',
-                  name: resource.name,
-                  namespace: resource.namespace,
-                  viewMode: 'failure',
-                  clusterId: resource.clusterId ?? undefined,
-                  clusterName: resource.clusterName ?? undefined,
-                });
-              },
-            }
-          );
-        }
 
-        return items;
+        return buildObjectActionItems({
+          object: {
+            kind: 'HelmRelease',
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId,
+            clusterName: resource.clusterName,
+            status,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleResourceClick(resource),
+          },
+          permissions: {},
+        });
       },
-      [handleResourceClick, openWithObject]
+      [handleResourceClick]
     );
 
     const emptyMessage = useMemo(

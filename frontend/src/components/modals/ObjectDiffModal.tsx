@@ -1236,16 +1236,25 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     );
   };
 
+  // Handle backdrop click (close only when clicking the overlay, not the modal content)
+  const handleBackdropClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget) {
+        onClose();
+      }
+    },
+    [onClose]
+  );
+
   if (!shouldRender) return null;
 
   return (
     <div
       className={`modal-overlay object-diff-modal-overlay ${isClosing ? 'closing' : ''}`}
-      onClick={onClose}
+      onClick={handleBackdropClick}
     >
       <div
         className={`modal-container object-diff-modal ${isClosing ? 'closing' : ''}`}
-        onClick={(event) => event.stopPropagation()}
         ref={modalRef}
       >
         <div className="modal-header object-diff-modal-header">

@@ -29,9 +29,10 @@ type App struct {
 	versionCache         *versioning.Cache
 	// responseCache stores short-lived detail/YAML/helm GET responses.
 	responseCache           *responseCache
-	sidebarVisible          bool
-	diagnosticsPanelVisible bool
-	logsPanelVisible        bool
+	sidebarVisible            bool
+	diagnosticsPanelVisible   bool
+	logsPanelVisible          bool
+	portForwardsPanelVisible  bool
 
 	refreshManager               *refresh.Manager
 	refreshHTTPServer            *http.Server
@@ -58,6 +59,9 @@ type App struct {
 
 	shellSessions   map[string]*shellSession
 	shellSessionsMu sync.Mutex
+
+	portForwardSessions   map[string]*portForwardSessionInternal
+	portForwardSessionsMu sync.Mutex
 
 	updateCheckOnce sync.Once
 	updateCheckMu   sync.RWMutex
@@ -94,6 +98,7 @@ func NewApp() *App {
 		clusterClients:           make(map[string]*clusterClients),
 		objectCatalogEntries:     make(map[string]*objectCatalogEntry),
 		shellSessions:            make(map[string]*shellSession),
+		portForwardSessions:      make(map[string]*portForwardSessionInternal),
 		eventEmitter:             func(context.Context, string, ...interface{}) {},
 	}
 	app.kubeClientInitializer = func() error {

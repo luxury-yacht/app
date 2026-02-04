@@ -37,6 +37,18 @@ vi.mock('@shared/components/kubernetes/ActionsMenu', () => ({
   ActionsMenu: (props: unknown) => actionsMenuMock(props),
 }));
 
+// Mock useObjectPanel to avoid needing ObjectPanelStateProvider
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({
+    objectData: { clusterId: 'test-cluster', clusterName: 'Test Cluster' },
+    isOpen: true,
+    setOpen: vi.fn(),
+    openWithObject: vi.fn(),
+    close: vi.fn(),
+    navigate: vi.fn(),
+  }),
+}));
+
 describe('Overview component', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -74,7 +86,7 @@ describe('Overview component', () => {
     container.remove();
   });
 
-  it('renders overview content and wires capabilities from registry defaults', async () => {
+  it('renders overview content and passes object data to ActionsMenu', async () => {
     await renderComponent({
       kind: 'Deployment',
       objectKind: 'deployment',
@@ -95,48 +107,46 @@ describe('Overview component', () => {
       throw new Error('ActionsMenu was not called');
     }
     const actionProps = firstCall[0];
+    // ActionsMenu now receives object prop with kind/name/namespace
     expect(actionProps).toMatchObject({
-      kind: 'Deployment',
-      objectKind: 'deployment',
-      canRestart: true,
-      canScale: false,
-      canDelete: true,
+      object: expect.objectContaining({
+        kind: 'Deployment',
+        name: 'demo',
+      }),
       currentReplicas: 5,
     });
-    expect(actionProps?.restartDisabledReason).toBeUndefined();
-    expect(actionProps?.scaleDisabledReason).toBeUndefined();
-    expect(actionProps?.deleteDisabledReason).toBeUndefined();
   });
 
-  it('prefers explicit capability flags and disabled reasons passed via props', async () => {
-    getResourceCapabilitiesMock.mockReturnValue({ restart: true, scale: true, delete: true });
+  it('passes callbacks to ActionsMenu for action handling', async () => {
+    const onRestart = vi.fn();
+    const onScale = vi.fn();
+    const onDelete = vi.fn();
 
     await renderComponent({
       kind: 'StatefulSet',
       objectKind: 'statefulset',
       name: 'stateful-1',
-      canRestart: false,
-      canScale: true,
-      canDelete: false,
-      restartDisabledReason: 'blocked',
-      scaleDisabledReason: 'scaling-disabled',
-      deleteDisabledReason: 'no-permission',
+      onRestart,
+      onScale,
+      onDelete,
     });
 
     expect(actionsMenuMock).toHaveBeenCalledTimes(1);
-    const secondCalls = actionsMenuMock.mock.calls as Array<[Record<string, unknown>]>;
-    const actionMenuArgs = secondCalls[0];
+    const calls = actionsMenuMock.mock.calls as Array<[Record<string, unknown>]>;
+    const actionMenuArgs = calls[0];
     if (!actionMenuArgs) {
       throw new Error('ActionsMenu was not called');
     }
     const actionMenuProps = actionMenuArgs[0];
+    // ActionsMenu receives callbacks and object data
     expect(actionMenuProps).toMatchObject({
-      canRestart: false,
-      canScale: true,
-      canDelete: false,
-      restartDisabledReason: 'blocked',
-      scaleDisabledReason: undefined,
-      deleteDisabledReason: 'no-permission',
+      object: expect.objectContaining({
+        kind: 'StatefulSet',
+        name: 'stateful-1',
+      }),
+      onRestart,
+      onScale,
+      onDelete,
     });
   });
 

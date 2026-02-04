@@ -31,18 +31,25 @@ describe('capability action planner', () => {
     registerMock.mockReset();
   });
 
-  it('always registers the pod delete capability even without owner kinds', () => {
+  it('always registers pod delete and portforward capabilities even without owner kinds', () => {
     ensureNamespaceActionCapabilities({ namespace: 'default' });
 
     expect(registerMock).toHaveBeenCalledTimes(1);
     const [namespaceArg, definitionsArg, optionsArg] = registerMock.mock.calls[0];
     expect(namespaceArg).toBe('default');
     expect(optionsArg).toEqual({ force: false, ttlMs: DEFAULT_CAPABILITY_TTL_MS });
-    expect(definitionsArg).toHaveLength(1);
-    const [definition] = definitionsArg;
-    expect(definition.descriptor.resourceKind).toBe('Pod');
-    expect(definition.descriptor.verb).toBe('delete');
-    expect(definition.descriptor.namespace).toBe('default');
+    expect(definitionsArg).toHaveLength(2);
+
+    const deleteDefinition = definitionsArg.find((d) => d.descriptor.verb === 'delete');
+    expect(deleteDefinition?.descriptor.resourceKind).toBe('Pod');
+    expect(deleteDefinition?.descriptor.namespace).toBe('default');
+
+    const portForwardDefinition = definitionsArg.find(
+      (d) => d.descriptor.subresource === 'portforward'
+    );
+    expect(portForwardDefinition?.descriptor.resourceKind).toBe('Pod');
+    expect(portForwardDefinition?.descriptor.verb).toBe('create');
+    expect(portForwardDefinition?.descriptor.namespace).toBe('default');
   });
 
   it('adds restart requirements for restartable owner kinds and dedupes them', () => {
@@ -56,22 +63,32 @@ describe('capability action planner', () => {
     const kinds = definitionsArg.map((definition) => ({
       kind: definition.descriptor.resourceKind,
       verb: definition.descriptor.verb,
+      subresource: definition.descriptor.subresource,
       id: definition.descriptor.id,
     }));
 
     expect(kinds).toContainEqual({
       kind: 'Pod',
       verb: 'delete',
+      subresource: undefined,
       id: 'namespace:pods:delete:kube-system',
+    });
+    expect(kinds).toContainEqual({
+      kind: 'Pod',
+      verb: 'create',
+      subresource: 'portforward',
+      id: 'namespace:pods:portforward:kube-system',
     });
     expect(kinds).toContainEqual({
       kind: 'Deployment',
       verb: 'patch',
+      subresource: undefined,
       id: 'namespace:workloads:patch:kube-system',
     });
     expect(kinds).toContainEqual({
       kind: 'StatefulSet',
       verb: 'patch',
+      subresource: undefined,
       id: 'namespace:statefulsets:patch:kube-system',
     });
     // No duplicates for deployment despite mixed casing

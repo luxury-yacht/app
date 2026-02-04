@@ -23,8 +23,8 @@ import GridTable, {
   type GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { OpenIcon } from '@shared/components/icons/MenuIcons';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import * as cf from '@shared/components/tables/columnFactories';
 import { useTableSort } from '@/hooks/useTableSort';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
@@ -354,13 +354,21 @@ const BrowseView: React.FC = () => {
   );
 
   const getContextMenuItems = useCallback(
-    (row: TableRow): ContextMenuItem[] => [
-      {
-        label: 'Open',
-        icon: <OpenIcon />,
-        onClick: () => handleOpen(row),
-      },
-    ],
+    (row: TableRow): ContextMenuItem[] =>
+      buildObjectActionItems({
+        object: {
+          kind: row.item.kind,
+          name: row.item.name,
+          namespace: row.item.namespace,
+          clusterId: row.item.clusterId,
+          clusterName: row.item.clusterName,
+        },
+        context: 'gridtable',
+        handlers: {
+          onOpen: () => handleOpen(row),
+        },
+        permissions: {},
+      }),
     [handleOpen]
   );
 

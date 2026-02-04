@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -26,6 +25,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 
 // Define the data structure for Persistent Volumes
 interface StorageData {
@@ -229,35 +229,27 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     // Get context menu items
     const getContextMenuItems = useCallback(
       (pv: StorageData): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [
-          {
-            label: 'Open',
-            icon: <OpenIcon />,
-            onClick: () => handleResourceClick(pv),
-          },
-        ];
-
         const deleteStatus =
-          permissionMap.get(getPermissionKey('PersistentVolume', 'delete')) ?? null;
+          permissionMap.get(
+            getPermissionKey('PersistentVolume', 'delete', null, null, pv.clusterId)
+          ) ?? null;
 
-        // Show a muted header while permission checks are pending.
-        if (deleteStatus?.pending) {
-          items.unshift({ header: true, label: 'Awaiting permissions...' });
-        }
-
-        if (deleteStatus?.allowed && !deleteStatus.pending) {
-          items.push(
-            { divider: true },
-            {
-              label: 'Delete',
-              icon: <DeleteIcon />,
-              danger: true,
-              onClick: () => setDeleteConfirm({ show: true, resource: pv }),
-            }
-          );
-        }
-
-        return items;
+        return buildObjectActionItems({
+          object: {
+            kind: 'PersistentVolume',
+            name: pv.name,
+            clusterId: pv.clusterId,
+            clusterName: pv.clusterName,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleResourceClick(pv),
+            onDelete: () => setDeleteConfirm({ show: true, resource: pv }),
+          },
+          permissions: {
+            delete: deleteStatus,
+          },
+        });
       },
       [handleResourceClick, permissionMap]
     );

@@ -19,6 +19,7 @@ import { clearAllGridTableState } from '@shared/components/tables/persistence/gr
 import { eventBus } from '@/core/events';
 import { isMacPlatform } from '@/utils/platform';
 import { getUseShortResourceNames, setUseShortResourceNames } from '@/core/settings/appPreferences';
+import { usePortForwardsPanel } from '@modules/port-forward';
 
 export interface Command {
   id: string;
@@ -45,6 +46,7 @@ export function useCommandPaletteCommands() {
   const { theme } = useTheme();
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
   const { toggle: toggleAutoRefresh } = useAutoRefresh();
+  const portForwardsPanel = usePortForwardsPanel();
 
   const openClusterTab = useCallback(
     (tab: ClusterViewType) => {
@@ -144,6 +146,17 @@ export function useCommandPaletteCommands() {
         },
         keywords: ['logs', 'application', 'debug'],
         shortcut: ['⇧', '⌃', 'L'],
+      },
+      {
+        id: 'toggle-port-forwards',
+        label: 'Port Forwards Panel',
+        description: 'Toggle port forwards panel',
+        category: 'Application',
+        action: () => {
+          portForwardsPanel.toggle();
+        },
+        keywords: ['port', 'forward', 'tunnel', 'kubectl'],
+        shortcut: isMacPlatform() ? ['⇧', '⌘', 'F'] : ['⇧', 'Ctrl', 'F'],
       },
       {
         id: 'toggle-diagnostics',
@@ -384,6 +397,7 @@ export function useCommandPaletteCommands() {
       zoomOut,
       resetZoom,
       zoomLevel,
+      portForwardsPanel,
     ]
   );
 

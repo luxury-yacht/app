@@ -31,6 +31,7 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 // App components
 import { AppLayout } from '@ui/layout/AppLayout';
 import { useAppLogsPanel } from '@/components/content/AppLogsPanel/AppLogsPanel';
+import { usePortForwardsPanel } from '@modules/port-forward';
 
 // Error Boundary
 import { AppErrorBoundary } from '@/components/errors';
@@ -46,6 +47,7 @@ import { useSidebarResize } from '@/hooks/useSidebarResize';
 function AppContent() {
   const viewState = useViewState();
   const appLogsPanel = useAppLogsPanel();
+  const portForwardsPanel = usePortForwardsPanel();
   const connectionStatus = useConnectionStatus();
   const { selectedClusterId } = useKubeconfig();
 
@@ -84,6 +86,10 @@ function AppContent() {
     appLogsPanel.toggle();
   }, [appLogsPanel]);
 
+  const handleTogglePortForwardsPanel = useCallback(() => {
+    portForwardsPanel.setOpen(!portForwardsPanel.isOpen);
+  }, [portForwardsPanel]);
+
   const handleToggleDiagnostics = useCallback(() => {
     eventBus.emit('view:toggle-diagnostics');
   }, []);
@@ -100,6 +106,7 @@ function AppContent() {
     onToggleAppLogs: handleToggleAppLogsPanel,
     onToggleDiagnostics: handleToggleDiagnostics,
     onToggleObjectDiff: handleToggleObjectDiff,
+    onTogglePortForwards: handleTogglePortForwardsPanel,
   });
 
   // Handle sidebar resize
@@ -148,6 +155,7 @@ function AppContent() {
         onToggleObjectDiff={() => viewState.setIsObjectDiffOpen(!viewState.isObjectDiffOpen)}
         onRefresh={handleManualRefresh}
         onToggleDiagnostics={handleToggleDiagnostics}
+        onTogglePortForwards={handleTogglePortForwardsPanel}
         viewType={viewState.viewType}
         isLogsPanelOpen={appLogsPanel.isOpen}
         isObjectPanelOpen={viewState.showObjectPanel}

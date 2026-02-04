@@ -1,0 +1,202 @@
+/**
+ * frontend/src/modules/port-forward/PortForwardsPanel.css
+ *
+ * Styles for the Port Forwards management panel.
+ */
+
+/* Panel content wrapper */
+.pf-panel-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Sessions container with scrolling */
+.pf-sessions-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Empty state */
+.pf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-tertiary);
+  gap: 8px;
+}
+
+.pf-empty-icon {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+.pf-empty-text {
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* Session card */
+.pf-session-card {
+  background: var(--color-bg-secondary);
+  border-radius: var(--border-radius-sm);
+  padding: 10px 12px;
+  transition: background 0.2s;
+}
+
+.pf-session-card:hover {
+  background: var(--color-bg-tertiary);
+}
+
+/* Session header row (status icon, target, action button) */
+.pf-session-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Status icon */
+.pf-status-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+}
+
+.pf-status-active {
+  color: var(--color-success);
+}
+
+.pf-status-reconnecting {
+  color: var(--color-warning);
+  animation: pf-spin 1s linear infinite;
+}
+
+.pf-status-error {
+  color: var(--color-error);
+}
+
+.pf-status-unknown {
+  color: var(--color-text-tertiary);
+}
+
+/* Spinning animation for reconnecting icon */
+@keyframes pf-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Target port (first line) */
+.pf-target-port {
+  flex: 1;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Local port row (second line) */
+.pf-session-local {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-left: 24px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.pf-port-arrow {
+  color: var(--color-text-tertiary);
+  flex-shrink: 0;
+}
+
+.pf-local-port {
+  color: var(--color-accent);
+}
+
+/* Clickable link style for local port */
+.pf-local-port-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: text-decoration-color 0.15s;
+}
+
+.pf-local-port-link:hover:not(:disabled) {
+  text-decoration-color: var(--color-accent);
+}
+
+.pf-local-port-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  text-decoration: none;
+}
+
+/* Action button (Stop/Remove) - size overrides for compact display */
+.pf-action-button {
+  padding: 0.2rem 0.5rem;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* Session details row (cluster/namespace) */
+.pf-session-details {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding-left: 24px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+
+.pf-detail-cluster,
+.pf-detail-namespace {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pf-detail-separator {
+  color: var(--color-text-tertiary);
+}
+
+/* Status reason message (for errors/reconnecting) */
+.pf-session-reason {
+  margin-top: 6px;
+  padding-left: 24px;
+  font-size: 11px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pf-session-card.pf-session-error .pf-session-reason {
+  color: var(--color-error);
+}
+
+.pf-session-card.pf-session-reconnecting .pf-session-reason {
+  color: var(--color-warning);
+}

@@ -23,7 +23,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { OpenIcon } from '@shared/components/icons/MenuIcons';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 
 export interface EventData {
   kind: string;
@@ -208,20 +208,26 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     // Get context menu items
     const getContextMenuItems = useCallback(
       (event: EventData): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [];
-
-        // Add option to view related object if available
         const parsed = splitEventObject(event.object);
-        if (parsed.isLinkable) {
-          const kind = parsed.objectType;
-          items.push({
-            label: `View ${kind}`,
-            icon: <OpenIcon />,
-            onClick: () => handleEventClick(event),
-          });
+        if (!parsed.isLinkable) {
+          return [];
         }
 
-        return items;
+        return buildObjectActionItems({
+          object: {
+            kind: 'Event',
+            name: event.reason,
+            namespace: event.namespace,
+            clusterId: event.clusterId,
+            clusterName: event.clusterName,
+            involvedObject: event.object,
+          },
+          context: 'gridtable',
+          handlers: {
+            onViewInvolvedObject: () => handleEventClick(event),
+          },
+          permissions: {},
+        });
       },
       [handleEventClick, splitEventObject]
     );

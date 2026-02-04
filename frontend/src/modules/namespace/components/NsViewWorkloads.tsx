@@ -17,7 +17,8 @@ import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import React, { useCallback, useMemo, useState } from 'react';
 import ConfirmationModal from '@components/modals/ConfirmationModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
-import WorkloadScaleModal from '@modules/namespace/components/WorkloadScaleModal';
+import ScaleModal from '@shared/components/modals/ScaleModal';
+import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import GridTable from '@shared/components/tables/GridTable';
@@ -27,7 +28,6 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
 import {
   WorkloadData,
-  normalizeWorkloadKind,
   clampReplicas,
   extractDesiredReplicas,
   buildWorkloadKey,
@@ -41,7 +41,11 @@ import {
   SuspendCronJob,
 } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
-import { OpenIcon, RestartIcon, ScaleIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
+import {
+  buildObjectActionItems,
+  normalizeKind,
+  RESTARTABLE_KINDS,
+} from '@shared/hooks/useObjectActions';
 
 interface WorkloadsViewProps {
   namespace: string;
@@ -92,6 +96,8 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       show: boolean;
       cronjob: WorkloadData | null;
     }>({ show: false, cronjob: null });
+
+    const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
 
     const handleWorkloadClick = useCallback(
       (workload: WorkloadData) => {
@@ -153,9 +159,10 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const canRestart = useCallback(
       (workload: WorkloadData) => {
-        const normalizedKind = normalizeWorkloadKind(workload.kind);
+        const normalized = normalizeKind(workload.kind);
+        if (!RESTARTABLE_KINDS.includes(normalized)) return false;
         const status = permissionMap.get(
-          getPermissionKey(normalizedKind, 'patch', workload.namespace)
+          getPermissionKey(normalized, 'patch', workload.namespace, null, workload.clusterId)
         );
         return Boolean(status?.allowed && !status?.pending);
       },
@@ -165,7 +172,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const canDelete = useCallback(
       (workload: WorkloadData) => {
         const status = permissionMap.get(
-          getPermissionKey(workload.kind, 'delete', workload.namespace)
+          getPermissionKey(workload.kind, 'delete', workload.namespace, null, workload.clusterId)
         );
         return Boolean(status?.allowed && !status?.pending);
       },
@@ -276,14 +283,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       setScaleError(null);
     }, [scaleLoading]);
 
-    const updateScaleValue = useCallback((updater: (current: number) => number) => {
-      setScaleState((prev) => ({
-        ...prev,
-        value: clampReplicas(updater(prev.value)),
-      }));
-    }, []);
-
-    const handleScaleInputChange = useCallback((value: number) => {
+    const handleScaleValueChange = useCallback((value: number) => {
       setScaleState((prev) => ({
         ...prev,
         value: clampReplicas(value),
@@ -326,89 +326,63 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {
-        const normalizedKind = normalizeWorkloadKind(row.kind);
+        const normalized = normalizeKind(row.kind);
+
+        // Get permissions (always include clusterId for cluster-safe lookups)
         const restartStatus =
-          permissionMap.get(getPermissionKey(normalizedKind, 'patch', row.namespace)) ?? null;
-        const deleteStatus =
-          permissionMap.get(getPermissionKey(row.kind, 'delete', row.namespace)) ?? null;
+          permissionMap.get(
+            getPermissionKey(normalized, 'patch', row.namespace, null, row.clusterId)
+          ) ?? null;
         const scaleStatus =
-          permissionMap.get(getPermissionKey(normalizedKind, 'update', row.namespace, 'scale')) ??
-          null;
-        const scalableKinds = ['Deployment', 'StatefulSet', 'ReplicaSet'];
-        const items: ContextMenuItem[] = [];
+          permissionMap.get(
+            getPermissionKey(normalized, 'update', row.namespace, 'scale', row.clusterId)
+          ) ?? null;
+        const deleteStatus =
+          permissionMap.get(
+            getPermissionKey(row.kind, 'delete', row.namespace, null, row.clusterId)
+          ) ?? null;
+        const portForwardStatus =
+          permissionMap.get(
+            getPermissionKey('Pod', 'create', row.namespace, 'portforward', row.clusterId)
+          ) ?? null;
 
-        // Show a muted header while permission checks are pending.
-        if (
-          restartStatus?.pending ||
-          deleteStatus?.pending ||
-          (scalableKinds.includes(normalizedKind) && scaleStatus?.pending)
-        ) {
-          items.push({ header: true, label: 'Awaiting permissions...' });
-        }
-
-        items.push({
-          label: 'Open',
-          icon: <OpenIcon />,
-          onClick: () => handleWorkloadClick(row),
+        return buildObjectActionItems({
+          object: {
+            kind: row.kind,
+            name: row.name,
+            namespace: row.namespace,
+            clusterId: row.clusterId,
+            clusterName: row.clusterName,
+            status: row.status,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleWorkloadClick(row),
+            onRestart: () => setRestartConfirm({ show: true, workload: row }),
+            onScale: () => openScaleModal(row),
+            onDelete: () => setDeleteConfirm({ show: true, workload: row }),
+            onPortForward: () => {
+              setPortForwardTarget({
+                kind: row.kind,
+                name: row.name,
+                namespace: row.namespace,
+                clusterId: row.clusterId ?? '',
+                clusterName: row.clusterName ?? '',
+                ports: [],
+              });
+            },
+            onTrigger: () => setTriggerConfirm({ show: true, cronjob: row }),
+            onSuspendToggle: () => handleSuspendToggle(row),
+          },
+          permissions: {
+            restart: restartStatus,
+            scale: scaleStatus,
+            delete: deleteStatus,
+            portForward: portForwardStatus,
+          },
         });
-
-        // CronJob-specific actions
-        if (row.kind === 'CronJob') {
-          const isSuspended = row.status === 'Suspended';
-          items.push({
-            label: 'Trigger Now',
-            icon: '▶',
-            onClick: () => setTriggerConfirm({ show: true, cronjob: row }),
-            disabled: isSuspended,
-          });
-          items.push({
-            label: isSuspended ? 'Resume' : 'Suspend',
-            icon: isSuspended ? '▶' : '⏸',
-            onClick: () => handleSuspendToggle(row),
-          });
-        }
-
-        if (canRestart(row)) {
-          items.push({
-            label: 'Restart',
-            icon: <RestartIcon />,
-            onClick: () => setRestartConfirm({ show: true, workload: row }),
-          });
-        }
-
-        // Scale is only available for Deployments, StatefulSets, and ReplicaSets
-        if (
-          scalableKinds.includes(normalizedKind) &&
-          scaleStatus?.allowed &&
-          !scaleStatus.pending
-        ) {
-          items.push({
-            label: 'Scale',
-            icon: <ScaleIcon />,
-            onClick: () => openScaleModal(row),
-          });
-        }
-
-        if (canDelete(row)) {
-          items.push({ divider: true });
-          items.push({
-            label: 'Delete',
-            icon: <DeleteIcon />,
-            danger: true,
-            onClick: () => setDeleteConfirm({ show: true, workload: row }),
-          });
-        }
-
-        return items;
       },
-      [
-        canDelete,
-        canRestart,
-        handleSuspendToggle,
-        handleWorkloadClick,
-        openScaleModal,
-        permissionMap,
-      ]
+      [handleSuspendToggle, handleWorkloadClick, openScaleModal, permissionMap]
     );
 
     const emptyMessage = useMemo(
@@ -506,15 +480,19 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           onCancel={() => setTriggerConfirm({ show: false, cronjob: null })}
         />
 
-        <WorkloadScaleModal
-          scaleState={scaleState}
-          scaleLoading={scaleLoading}
-          scaleError={scaleError}
+        <ScaleModal
+          isOpen={scaleState.show}
+          kind={scaleState.workload?.kind ?? ''}
+          name={scaleState.workload?.name}
+          value={scaleState.value}
+          loading={scaleLoading}
+          error={scaleError}
           onCancel={handleScaleCancel}
           onApply={handleScaleApply}
-          onInputChange={handleScaleInputChange}
-          onIncrement={(delta) => updateScaleValue((value) => value + delta)}
+          onValueChange={handleScaleValueChange}
         />
+
+        <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
       </>
     );
   }

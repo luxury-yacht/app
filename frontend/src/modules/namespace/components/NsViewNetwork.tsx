@@ -24,9 +24,10 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
+import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 
 // Data interface for network resources
 export interface NetworkData {
@@ -62,6 +63,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       show: boolean;
       resource: NetworkData | null;
     }>({ show: false, resource: null });
+    const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
 
     const handleResourceClick = useCallback(
       (resource: NetworkData) => {
@@ -179,36 +181,43 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (resource: NetworkData): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [];
-
-        // Always add Open in Object Panel
-        items.push({
-          label: 'Open',
-          icon: <OpenIcon />,
-          onClick: () => handleResourceClick(resource),
-        });
-
         const deleteStatus =
-          permissionMap.get(getPermissionKey(resource.kind, 'delete', resource.namespace)) ?? null;
+          permissionMap.get(
+            getPermissionKey(resource.kind, 'delete', resource.namespace, null, resource.clusterId)
+          ) ?? null;
+        const portForwardStatus =
+          permissionMap.get(
+            getPermissionKey('Pod', 'create', resource.namespace, 'portforward', resource.clusterId)
+          ) ?? null;
 
-        // Show a muted header while permission checks are pending.
-        if (deleteStatus?.pending) {
-          items.unshift({ header: true, label: 'Awaiting permissions...' });
-        }
-
-        if (deleteStatus?.allowed && !deleteStatus.pending) {
-          items.push(
-            { divider: true },
-            {
-              label: 'Delete',
-              icon: <DeleteIcon />,
-              danger: true,
-              onClick: () => setDeleteConfirm({ show: true, resource }),
-            }
-          );
-        }
-
-        return items;
+        return buildObjectActionItems({
+          object: {
+            kind: resource.kind,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId,
+            clusterName: resource.clusterName,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleResourceClick(resource),
+            onPortForward: () => {
+              setPortForwardTarget({
+                kind: resource.kind,
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? '',
+                clusterName: resource.clusterName ?? '',
+                ports: [],
+              });
+            },
+            onDelete: () => setDeleteConfirm({ show: true, resource }),
+          },
+          permissions: {
+            delete: deleteStatus,
+            portForward: portForwardStatus,
+          },
+        });
       },
       [handleResourceClick, permissionMap]
     );
@@ -268,6 +277,8 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
         />
+
+        <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
       </>
     );
   }

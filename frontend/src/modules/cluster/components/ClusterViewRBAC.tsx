@@ -5,7 +5,6 @@
  * Handles rendering and interactions for the cluster feature.
  */
 
-import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -26,6 +25,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 
 // Define the data structure for RBAC resources
 interface RBACData {
@@ -163,34 +163,27 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     // Get context menu items
     const getContextMenuItems = useCallback(
       (resource: RBACData): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [
-          {
-            label: 'Open',
-            icon: <OpenIcon />,
-            onClick: () => handleResourceClick(resource),
+        const deleteStatus =
+          permissionMap.get(
+            getPermissionKey(resource.kind, 'delete', null, null, resource.clusterId)
+          ) ?? null;
+
+        return buildObjectActionItems({
+          object: {
+            kind: resource.kind,
+            name: resource.name,
+            clusterId: resource.clusterId,
+            clusterName: resource.clusterName,
           },
-        ];
-
-        const deleteStatus = permissionMap.get(getPermissionKey(resource.kind, 'delete')) ?? null;
-
-        // Show a muted header while permission checks are pending.
-        if (deleteStatus?.pending) {
-          items.unshift({ header: true, label: 'Awaiting permissions...' });
-        }
-
-        if (deleteStatus?.allowed && !deleteStatus.pending) {
-          items.push(
-            { divider: true },
-            {
-              label: 'Delete',
-              icon: <DeleteIcon />,
-              danger: true,
-              onClick: () => setDeleteConfirm({ show: true, resource }),
-            }
-          );
-        }
-
-        return items;
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleResourceClick(resource),
+            onDelete: () => setDeleteConfirm({ show: true, resource }),
+          },
+          permissions: {
+            delete: deleteStatus,
+          },
+        });
       },
       [handleResourceClick, permissionMap]
     );

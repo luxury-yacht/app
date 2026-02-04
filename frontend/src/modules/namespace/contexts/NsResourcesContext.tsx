@@ -183,6 +183,13 @@ const NAMESPACE_CAPABILITY_SPECS: Partial<
       subresource: 'log',
       feature: 'Namespace workloads',
     },
+    {
+      id: 'namespace:pods:portforward',
+      resourceKind: 'Pod',
+      verbs: ['create'],
+      subresource: 'portforward',
+      feature: 'Namespace workloads',
+    },
   ],
   config: [
     {
@@ -197,14 +204,14 @@ const NAMESPACE_CAPABILITY_SPECS: Partial<
       verbs: ['list', 'update', 'delete'],
       feature: 'Namespace config',
     },
+  ],
+  network: [
     {
       id: 'namespace:services',
       resourceKind: 'Service',
       verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace config',
+      feature: 'Namespace network',
     },
-  ],
-  network: [
     {
       id: 'namespace:ingresses',
       resourceKind: 'Ingress',
@@ -215,6 +222,20 @@ const NAMESPACE_CAPABILITY_SPECS: Partial<
       id: 'namespace:networkpolicies',
       resourceKind: 'NetworkPolicy',
       verbs: ['list', 'update', 'delete'],
+      feature: 'Namespace network',
+    },
+    {
+      id: 'namespace:endpointslices',
+      resourceKind: 'EndpointSlice',
+      verbs: ['list', 'delete'],
+      feature: 'Namespace network',
+    },
+    {
+      // Port forward for Services (requires Pod portforward permission)
+      id: 'namespace:pods:portforward',
+      resourceKind: 'Pod',
+      verbs: ['create'],
+      subresource: 'portforward',
       feature: 'Namespace network',
     },
   ],
@@ -228,6 +249,12 @@ const NAMESPACE_CAPABILITY_SPECS: Partial<
     {
       id: 'namespace:rolebinding',
       resourceKind: 'RoleBinding',
+      verbs: ['list', 'update', 'delete'],
+      feature: 'Namespace RBAC',
+    },
+    {
+      id: 'namespace:serviceaccounts',
+      resourceKind: 'ServiceAccount',
       verbs: ['list', 'update', 'delete'],
       feature: 'Namespace RBAC',
     },
@@ -291,6 +318,13 @@ const PODS_CAPABILITY_SPECS: NamespaceCapabilitySpec[] = [
     resourceKind: 'Pod',
     verbs: ['get'],
     subresource: 'log',
+    feature: 'Namespace workloads',
+  },
+  {
+    id: 'namespace:pods:portforward',
+    resourceKind: 'Pod',
+    verbs: ['create'],
+    subresource: 'portforward',
     feature: 'Namespace workloads',
   },
 ];
