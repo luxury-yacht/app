@@ -308,9 +308,6 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
         }
 
         if (deleteStatus?.allowed && !deleteStatus.pending) {
-          if (items.length > 0 && !items[items.length - 1].divider) {
-            items.push({ divider: true });
-          }
           items.push({
             label: 'Delete',
             icon: <DeleteIcon />,

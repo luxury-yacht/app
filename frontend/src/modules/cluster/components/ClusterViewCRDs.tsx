@@ -183,15 +183,12 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
         }
 
         if (deleteStatus?.allowed && !deleteStatus.pending) {
-          items.push(
-            { divider: true },
-            {
-              label: 'Delete',
-              icon: <DeleteIcon />,
-              danger: true,
-              onClick: () => setDeleteConfirm({ show: true, resource: crd }),
-            }
-          );
+          items.push({
+            label: 'Delete',
+            icon: <DeleteIcon />,
+            danger: true,
+            onClick: () => setDeleteConfirm({ show: true, resource: crd }),
+          });
         }
 
         return items;

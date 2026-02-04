@@ -184,7 +184,6 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           icon: <OpenIcon />,
           onClick: () => handleResourceClick(resource),
         },
-        { divider: true },
         {
           label: 'Delete',
           icon: <DeleteIcon />,

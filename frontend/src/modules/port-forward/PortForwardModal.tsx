@@ -70,6 +70,13 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
   const [isLoadingPorts, setIsLoadingPorts] = useState(false);
   // Error message to display
   const [error, setError] = useState<string | null>(null);
+  // Fetched ports stored in local state (not mutating the target prop)
+  const [fetchedPorts, setFetchedPorts] = useState<ContainerPort[]>([]);
+
+  // Create a stable key to track when the target actually changes
+  const targetKey = target
+    ? `${target.clusterId}:${target.namespace}:${target.kind}:${target.name}`
+    : '';
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -87,57 +94,60 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
 
   // Reset form state when target changes, fetch ports if not provided
   useEffect(() => {
-    if (target) {
-      setError(null);
+    if (!target) return;
 
-      // If ports provided, use them directly
-      if (target.ports.length > 0) {
-        const initialContainerPort = target.ports[0].port;
-        setContainerPort(initialContainerPort);
-        setLocalPort(initialContainerPort > 0 ? getDefaultLocalPort(initialContainerPort) : 0);
-        return;
-      }
+    setError(null);
+    setFetchedPorts([]);
 
-      // Otherwise fetch from backend (if we have a cluster ID)
-      if (!target.clusterId) {
-        // No cluster ID - allow manual entry without fetching
-        setContainerPort(0);
-        setLocalPort(0);
-        return;
-      }
+    // If ports provided in target, use them directly
+    if (target.ports.length > 0) {
+      const initialContainerPort = target.ports[0].port;
+      setContainerPort(initialContainerPort);
+      setLocalPort(initialContainerPort > 0 ? getDefaultLocalPort(initialContainerPort) : 0);
+      return;
+    }
 
-      setIsLoadingPorts(true);
-      import('@wailsjs/go/backend/App').then(({ GetTargetPorts }) => {
-        GetTargetPorts(target.clusterId, target.namespace, target.kind, target.name)
-          .then((ports) => {
-            if (ports && ports.length > 0) {
-              // Mutate target.ports so the UI re-renders with options
-              target.ports = ports.map((p) => ({
-                port: p.port,
-                name: p.name,
-                protocol: p.protocol,
-              }));
-              const firstPort = ports[0].port;
-              setContainerPort(firstPort);
-              setLocalPort(getDefaultLocalPort(firstPort));
-            } else {
-              // No ports found - allow manual entry
-              setContainerPort(0);
-              setLocalPort(0);
-            }
-          })
-          .catch((err) => {
-            console.warn('Failed to fetch target ports:', err);
-            // Allow manual entry if fetch fails
+    // Otherwise fetch from backend (if we have a cluster ID)
+    if (!target.clusterId) {
+      // No cluster ID - allow manual entry without fetching
+      setContainerPort(0);
+      setLocalPort(0);
+      return;
+    }
+
+    setIsLoadingPorts(true);
+    import('@wailsjs/go/backend/App').then(({ GetTargetPorts }) => {
+      GetTargetPorts(target.clusterId, target.namespace, target.kind, target.name)
+        .then((ports) => {
+          if (ports && ports.length > 0) {
+            // Store fetched ports in local state
+            const mappedPorts = ports.map((p) => ({
+              port: p.port,
+              name: p.name,
+              protocol: p.protocol,
+            }));
+            setFetchedPorts(mappedPorts);
+            const firstPort = ports[0].port;
+            setContainerPort(firstPort);
+            setLocalPort(getDefaultLocalPort(firstPort));
+          } else {
+            // No ports found - allow manual entry
             setContainerPort(0);
             setLocalPort(0);
-          })
-          .finally(() => {
-            setIsLoadingPorts(false);
-          });
-      });
-    }
-  }, [target]);
+          }
+        })
+        .catch((err) => {
+          console.warn('Failed to fetch target ports:', err);
+          // Allow manual entry if fetch fails
+          setContainerPort(0);
+          setLocalPort(0);
+        })
+        .finally(() => {
+          setIsLoadingPorts(false);
+        });
+    });
+    // Use targetKey for stable dependency instead of target object reference
+  }, [targetKey, target?.clusterId, target?.namespace, target?.kind, target?.name, target?.ports.length]);
 
   // Update local port when container port changes
   const handleContainerPortChange = useCallback((port: number) => {
@@ -202,13 +212,14 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     }
   }, [target, containerPort, localPort, onStarted, onClose]);
 
-
   // Don't render if no target
   if (!target) {
     return null;
   }
 
-  const hasPredefinedPorts = target.ports.length > 0;
+  // Use fetched ports if available, otherwise use ports from target
+  const availablePorts = fetchedPorts.length > 0 ? fetchedPorts : target.ports;
+  const hasPredefinedPorts = availablePorts.length > 0;
 
   return (
     <div className="modal-overlay">
@@ -266,7 +277,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
             ) : hasPredefinedPorts ? (
               // Radio buttons for predefined ports
               <div className="port-forward-port-options">
-                {target.ports.map((portInfo) => (
+                {availablePorts.map((portInfo) => (
                   <label
                     key={portInfo.port}
                     className={`port-forward-port-option ${

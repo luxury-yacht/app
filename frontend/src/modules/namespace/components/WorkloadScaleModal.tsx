@@ -38,13 +38,13 @@ const WorkloadScaleModal = ({
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal-container scale-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>
-            Scale {scaleState.workload.kind} {scaleState.workload.name}
-          </h2>
+          <h2>Scale {scaleState.workload.kind}</h2>
         </div>
         <div className="scale-modal-body">
-          <label htmlFor="namespace-scale-replicas">Replicas</label>
-          <div className="scale-input-group">
+          <div className="scale-modal-workload-name">{scaleState.workload.name}</div>
+          <div className="scale-modal-controls">
+            <label htmlFor="namespace-scale-replicas">Replicas</label>
+            <div className="scale-input-group">
             <button
               className="scale-spinner-btn"
               type="button"
@@ -75,6 +75,7 @@ const WorkloadScaleModal = ({
             >
               +
             </button>
+            </div>
           </div>
         </div>
         {scaleError && <div className="scale-modal-error">{scaleError}</div>}

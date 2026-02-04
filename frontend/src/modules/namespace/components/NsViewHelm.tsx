@@ -288,7 +288,6 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
 
         // Add Helm-specific actions
         items.push(
-          { divider: true },
           {
             label: 'View Values',
             icon: '⚙️',

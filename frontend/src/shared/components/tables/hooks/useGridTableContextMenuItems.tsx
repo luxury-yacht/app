@@ -39,6 +39,17 @@ export function useGridTableContextMenuItems<T>({
       if (source === 'cell' && getCustomContextMenuItems && item) {
         const customItems = getCustomContextMenuItems(item, columnKey);
         if (customItems.length > 0) {
+          // Insert a divider after "Open" to separate navigation from actions
+          const openIndex = customItems.findIndex(
+            (ci) => 'label' in ci && ci.label === 'Open'
+          );
+          if (openIndex !== -1 && customItems.length > openIndex + 1) {
+            // Check if there's already a divider after Open
+            const nextItem = customItems[openIndex + 1];
+            if (!('divider' in nextItem && nextItem.divider)) {
+              customItems.splice(openIndex + 1, 0, { divider: true });
+            }
+          }
           items.push(...customItems);
         }
       }

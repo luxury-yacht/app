@@ -5,9 +5,9 @@
  * Re-exports public APIs for the object panel feature.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
-import { useObjectPanel } from '@modules/object-panel/ObjectPanelContext';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { overviewRegistry, getResourceCapabilities } from './registry';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
 import '../../shared.css';
@@ -65,6 +65,22 @@ const Overview: React.FC<OverviewProps> = (props) => {
   const portForwardableKinds = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Service'];
   const canPortForward = portForwardableKinds.includes(props.kind);
 
+  // Memoize portForwardTarget to prevent re-fetching ports on every render
+  const portForwardTarget = useMemo(
+    () =>
+      canPortForward
+        ? {
+            kind: props.kind,
+            name: props.name,
+            namespace: props.namespace || '',
+            clusterId,
+            clusterName,
+            ports: [],
+          }
+        : undefined,
+    [canPortForward, props.kind, props.name, props.namespace, clusterId, clusterName]
+  );
+
   return (
     <div className="object-panel-section">
       <div className="object-panel-section-header">
@@ -85,18 +101,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
             canTrigger={!!canTrigger}
             canSuspend={!!canSuspend}
             canPortForward={canPortForward}
-            portForwardTarget={
-              canPortForward
-                ? {
-                    kind: props.kind,
-                    name: props.name,
-                    namespace: props.namespace || '',
-                    clusterId,
-                    clusterName,
-                    ports: [],
-                  }
-                : undefined
-            }
+            portForwardTarget={portForwardTarget}
             isSuspended={props.suspend}
             restartDisabledReason={!canRestart ? props.restartDisabledReason : undefined}
             scaleDisabledReason={!canScale ? props.scaleDisabledReason : undefined}

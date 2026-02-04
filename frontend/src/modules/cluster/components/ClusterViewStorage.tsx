@@ -246,15 +246,12 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         }
 
         if (deleteStatus?.allowed && !deleteStatus.pending) {
-          items.push(
-            { divider: true },
-            {
-              label: 'Delete',
-              icon: <DeleteIcon />,
-              danger: true,
-              onClick: () => setDeleteConfirm({ show: true, resource: pv }),
-            }
-          );
+          items.push({
+            label: 'Delete',
+            icon: <DeleteIcon />,
+            danger: true,
+            onClick: () => setDeleteConfirm({ show: true, resource: pv }),
+          });
         }
 
         return items;

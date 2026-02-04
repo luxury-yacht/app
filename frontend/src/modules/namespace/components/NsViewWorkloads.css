@@ -11,6 +11,19 @@
 .scale-modal-body {
   padding: 1.5rem;
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scale-modal-workload-name {
+  font-size: var(--font-size-normal);
+  font-weight: 500;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.scale-modal-controls {
+  display: flex;
   align-items: center;
   gap: 12px;
 }

@@ -200,15 +200,12 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
         });
 
         // Add Delete option
-        items.push(
-          { divider: true },
-          {
-            label: 'Delete',
-            icon: <DeleteIcon />,
-            danger: true,
-            onClick: () => setDeleteConfirm({ show: true, resource }),
-          }
-        );
+        items.push({
+          label: 'Delete',
+          icon: <DeleteIcon />,
+          danger: true,
+          onClick: () => setDeleteConfirm({ show: true, resource }),
+        });
 
         return items;
       },

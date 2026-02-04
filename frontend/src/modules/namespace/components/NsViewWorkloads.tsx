@@ -418,7 +418,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         }
 
         if (canDelete(row)) {
-          items.push({ divider: true });
           items.push({
             label: 'Delete',
             icon: <DeleteIcon />,
