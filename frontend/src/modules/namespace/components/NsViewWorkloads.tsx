@@ -17,7 +17,7 @@ import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import React, { useCallback, useMemo, useState } from 'react';
 import ConfirmationModal from '@components/modals/ConfirmationModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
-import WorkloadScaleModal from '@modules/namespace/components/WorkloadScaleModal';
+import ScaleModal from '@shared/components/modals/ScaleModal';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
@@ -285,14 +285,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       setScaleError(null);
     }, [scaleLoading]);
 
-    const updateScaleValue = useCallback((updater: (current: number) => number) => {
-      setScaleState((prev) => ({
-        ...prev,
-        value: clampReplicas(updater(prev.value)),
-      }));
-    }, []);
-
-    const handleScaleInputChange = useCallback((value: number) => {
+    const handleScaleValueChange = useCallback((value: number) => {
       setScaleState((prev) => ({
         ...prev,
         value: clampReplicas(value),
@@ -361,25 +354,6 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           onClick: () => handleWorkloadClick(row),
         });
 
-        // Port forward for pods and workloads
-        const portForwardableKinds = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet'];
-        if (portForwardableKinds.includes(normalizedKind)) {
-          items.push({
-            label: 'Port Forward...',
-            icon: <PortForwardIcon />,
-            onClick: () => {
-              setPortForwardTarget({
-                kind: row.kind,
-                name: row.name,
-                namespace: row.namespace,
-                clusterId: row.clusterId ?? '',
-                clusterName: row.clusterName ?? '',
-                ports: [], // Will be fetched by modal
-              });
-            },
-          });
-        }
-
         // CronJob-specific actions
         if (row.kind === 'CronJob') {
           const isSuspended = row.status === 'Suspended';
@@ -414,6 +388,25 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             label: 'Scale',
             icon: <ScaleIcon />,
             onClick: () => openScaleModal(row),
+          });
+        }
+
+        // Port forward for pods and workloads
+        const portForwardableKinds = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet'];
+        if (portForwardableKinds.includes(normalizedKind)) {
+          items.push({
+            label: 'Port Forward...',
+            icon: <PortForwardIcon />,
+            onClick: () => {
+              setPortForwardTarget({
+                kind: row.kind,
+                name: row.name,
+                namespace: row.namespace,
+                clusterId: row.clusterId ?? '',
+                clusterName: row.clusterName ?? '',
+                ports: [], // Will be fetched by modal
+              });
+            },
           });
         }
 
@@ -534,14 +527,16 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           onCancel={() => setTriggerConfirm({ show: false, cronjob: null })}
         />
 
-        <WorkloadScaleModal
-          scaleState={scaleState}
-          scaleLoading={scaleLoading}
-          scaleError={scaleError}
+        <ScaleModal
+          isOpen={scaleState.show}
+          kind={scaleState.workload?.kind ?? ''}
+          name={scaleState.workload?.name}
+          value={scaleState.value}
+          loading={scaleLoading}
+          error={scaleError}
           onCancel={handleScaleCancel}
           onApply={handleScaleApply}
-          onInputChange={handleScaleInputChange}
-          onIncrement={(delta) => updateScaleValue((value) => value + delta)}
+          onValueChange={handleScaleValueChange}
         />
 
         <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />

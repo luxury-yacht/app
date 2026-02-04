@@ -94,6 +94,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
         <div className="object-panel-section-actions">
           <ActionsMenu
             kind={props.kind}
+            name={props.name}
             objectKind={props.objectKind}
             canRestart={!!canRestart}
             canScale={!!canScale}

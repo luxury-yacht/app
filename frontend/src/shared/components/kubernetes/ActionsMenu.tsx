@@ -13,11 +13,13 @@ import {
   PortForwardIcon,
 } from '@shared/components/icons/MenuIcons';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
+import ScaleModal from '@shared/components/modals/ScaleModal';
 import '../ContextMenu.css';
 import './ActionsMenu.css';
 
 interface ActionsMenuProps {
   kind?: string;
+  name?: string;
   objectKind?: string;
   canRestart?: boolean;
   canScale?: boolean;
@@ -44,6 +46,7 @@ interface ActionsMenuProps {
 export const ActionsMenu = React.memo<ActionsMenuProps>(
   ({
     kind,
+    name,
     objectKind: objectKind,
     canRestart,
     canScale,
@@ -236,24 +239,6 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                 </div>
               )}
 
-              {showPortForwardOption && (
-                <div
-                  className={`context-menu-item ${actionLoading ? 'disabled' : ''}`}
-                  role="menuitem"
-                  aria-disabled={actionLoading ? 'true' : 'false'}
-                  onClick={() => {
-                    if (!actionLoading) {
-                      handlePortForward();
-                    }
-                  }}
-                >
-                  <span className="context-menu-icon">
-                    <PortForwardIcon />
-                  </span>
-                  <span className="context-menu-label">Port Forward...</span>
-                </div>
-              )}
-
               {showRestartOption && (
                 <div
                   className={`context-menu-item ${!canRestart || actionLoading ? 'disabled' : ''}`}
@@ -300,10 +285,29 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                 </div>
               )}
 
+              {showPortForwardOption && (
+                <div
+                  className={`context-menu-item ${actionLoading ? 'disabled' : ''}`}
+                  role="menuitem"
+                  aria-disabled={actionLoading ? 'true' : 'false'}
+                  onClick={() => {
+                    if (!actionLoading) {
+                      handlePortForward();
+                    }
+                  }}
+                >
+                  <span className="context-menu-icon">
+                    <PortForwardIcon />
+                  </span>
+                  <span className="context-menu-label">Port Forward...</span>
+                </div>
+              )}
+
               {showDeleteOption && (
                 <>
                   {(showRestartOption ||
                     showScaleOption ||
+                    showPortForwardOption ||
                     showTriggerOption ||
                     showSuspendOption) && <div className="context-menu-divider" />}
                   <div
@@ -334,63 +338,16 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
         </div>
 
         {/* Scale Modal */}
-        {showScaleModal && (
-          <div className="modal-overlay" onClick={handleScaleCancel}>
-            <div className="modal-container scale-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-header">
-                <h2>Scale {objectKind || kind}</h2>
-              </div>
-              <div className="scale-modal-body">
-                <label htmlFor="scale-replicas">Number of replicas:</label>
-                <div className="scale-input-group">
-                  <button
-                    className="scale-spinner-btn"
-                    onClick={() => setScaleValue(Math.max(0, scaleValue - 1))}
-                    disabled={scaleValue === 0}
-                    type="button"
-                  >
-                    −
-                  </button>
-                  <input
-                    id="scale-replicas"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={scaleValue}
-                    onChange={(e) => setScaleValue(parseInt(e.target.value) || 0)}
-                    className="scale-input"
-                    placeholder="0"
-                    autoFocus
-                  />
-                  <button
-                    className="scale-spinner-btn"
-                    onClick={() => setScaleValue(Math.min(100, scaleValue + 1))}
-                    disabled={scaleValue >= 100}
-                    type="button"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-              <div className="scale-modal-footer">
-                <button
-                  className="button cancel"
-                  onClick={handleScaleCancel}
-                  disabled={actionLoading}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="button warning"
-                  onClick={handleScaleApply}
-                  disabled={actionLoading}
-                >
-                  {actionLoading ? 'Scaling...' : 'Scale'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <ScaleModal
+          isOpen={showScaleModal}
+          kind={objectKind || kind || ''}
+          name={name}
+          value={scaleValue}
+          loading={actionLoading}
+          onCancel={handleScaleCancel}
+          onApply={handleScaleApply}
+          onValueChange={setScaleValue}
+        />
 
         {/* Trigger CronJob Modal */}
         {showTriggerConfirm && (
