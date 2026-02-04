@@ -18,6 +18,7 @@ import {
   normalizeCatalogScope,
   parseContinueToken,
   rebuildIndexByUID,
+  splitClusterScope,
   upsertByUID,
 } from '@modules/browse/utils/browseUtils';
 
@@ -172,7 +173,10 @@ export function useBrowseCatalog({
     requestModeRef.current = 'reset';
     setIsRequestingMore(false);
     setContinueToken(null);
-    // Keep current items until the new snapshot arrives to avoid focus loss in filters
+    // Clear items immediately to prevent stale data from previous scope showing
+    itemsRef.current = [];
+    indexByUidRef.current = new Map();
+    setItems([]);
 
     refreshOrchestrator.setDomainScope('catalog', normalizedScope);
     lastAppliedScopeRef.current = normalizedScope;
@@ -191,6 +195,25 @@ export function useBrowseCatalog({
     if (domain.status !== 'ready') {
       return;
     }
+    // Check if the incoming data matches the namespace we're expecting.
+    // Extract namespace from domain.scope and compare against pinnedNamespaces.
+    const incomingScopeParams = new URLSearchParams(
+      splitClusterScope(domain.scope).scope.replace(/^\?/, '')
+    );
+    const incomingNamespaces = incomingScopeParams.getAll('namespace').sort();
+    const expectedNamespaces = pinnedNamespaces.slice().sort();
+
+    // If we have pinned namespaces, verify the incoming data is for those namespaces
+    if (pinnedNamespaces.length > 0) {
+      const namespacesMatch =
+        incomingNamespaces.length === expectedNamespaces.length &&
+        incomingNamespaces.every((ns, i) => ns === expectedNamespaces[i]);
+      if (!namespacesMatch) {
+        // Data is from a different namespace, ignore it
+        return;
+      }
+    }
+
     const normalizedIncoming =
       normalizeCatalogScope(domain.scope, pageLimit, pinnedNamespaces, clusterId) ?? domain.scope;
     if (normalizedIncoming !== lastAppliedScopeRef.current) {
