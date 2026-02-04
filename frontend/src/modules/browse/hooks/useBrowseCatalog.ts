@@ -132,7 +132,13 @@ export function useBrowseCatalog({
     }
     // No filter selected in all-namespaces mode - use all available namespaces
     return availableNamespaces;
-  }, [clusterScopedOnly, isNamespaceScoped, pinnedNamespaces, filters.namespaces, availableNamespaces]);
+  }, [
+    clusterScopedOnly,
+    isNamespaceScoped,
+    pinnedNamespaces,
+    filters.namespaces,
+    availableNamespaces,
+  ]);
 
   // Build the base scope string from filters and namespaces
   const baseScope = useMemo(
@@ -305,7 +311,10 @@ export function useBrowseCatalog({
     if (snapshotNamespaces.length > 0 && !isNamespaceScoped) {
       // Only update if the list has actually changed to avoid infinite loops
       setAvailableNamespaces((prev) => {
-        if (prev.length === snapshotNamespaces.length && prev.every((ns, i) => ns === snapshotNamespaces[i])) {
+        if (
+          prev.length === snapshotNamespaces.length &&
+          prev.every((ns, i) => ns === snapshotNamespaces[i])
+        ) {
           return prev;
         }
         return snapshotNamespaces;

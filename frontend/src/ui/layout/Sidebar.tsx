@@ -503,40 +503,40 @@ function Sidebar() {
                               {isExpanded && (
                                 <div className="sidebar-views">
                                   {namespaceViews.map((view) => {
-                                      const label = view.label;
-                                      return (
-                                        <div
-                                          key={view.id}
-                                          className={buildSidebarItemClassName(
-                                            ['sidebar-item', 'indented'],
-                                            {
-                                              kind: 'namespace-view',
-                                              namespace: namespaceKey,
-                                              view: view.id,
-                                            }
-                                          )}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (!keyboardActivationRef.current) {
-                                              clearKeyboardPreview();
-                                            }
-                                            handleNamespaceViewSelect(
-                                              scope,
-                                              view.id,
-                                              group.clusterId || undefined
-                                            );
-                                          }}
-                                          data-sidebar-focusable="true"
-                                          data-sidebar-target-kind="namespace-view"
-                                          data-sidebar-target-namespace={namespaceKey}
-                                          data-sidebar-target-view={view.id}
-                                          tabIndex={-1}
-                                        >
-                                          <CategoryIcon width={14} height={14} />
-                                          <span>{label}</span>
-                                        </div>
-                                      );
-                                    })}
+                                    const label = view.label;
+                                    return (
+                                      <div
+                                        key={view.id}
+                                        className={buildSidebarItemClassName(
+                                          ['sidebar-item', 'indented'],
+                                          {
+                                            kind: 'namespace-view',
+                                            namespace: namespaceKey,
+                                            view: view.id,
+                                          }
+                                        )}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (!keyboardActivationRef.current) {
+                                            clearKeyboardPreview();
+                                          }
+                                          handleNamespaceViewSelect(
+                                            scope,
+                                            view.id,
+                                            group.clusterId || undefined
+                                          );
+                                        }}
+                                        data-sidebar-focusable="true"
+                                        data-sidebar-target-kind="namespace-view"
+                                        data-sidebar-target-namespace={namespaceKey}
+                                        data-sidebar-target-view={view.id}
+                                        tabIndex={-1}
+                                      >
+                                        <CategoryIcon width={14} height={14} />
+                                        <span>{label}</span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>

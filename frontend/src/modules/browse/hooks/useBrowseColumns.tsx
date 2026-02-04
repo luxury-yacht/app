@@ -38,7 +38,10 @@ export type BrowseTableRow = {
  * @param items - The catalog items to convert
  * @param useShortResourceNames - Whether to use short resource names for kind display
  */
-export const toTableRows = (items: CatalogItem[], useShortResourceNames: boolean): BrowseTableRow[] => {
+export const toTableRows = (
+  items: CatalogItem[],
+  useShortResourceNames: boolean
+): BrowseTableRow[] => {
   return items.map((item) => {
     const created = item.creationTimestamp ? new Date(item.creationTimestamp) : undefined;
     const age = created ? formatAge(created) : '—';
@@ -111,13 +114,19 @@ export function useBrowseColumns({
     // Add namespace column for cluster-scoped and all-namespaces views
     if (showNamespaceColumn) {
       baseColumns.push(
-        cf.createTextColumn<BrowseTableRow>('namespace', 'Namespace', (row) => row.namespaceDisplay, {
-          sortable: true,
-          onClick: (row) => onNamespaceClick?.(row.item.namespace ?? null, row.item.clusterId ?? null),
-          isInteractive: (row) => Boolean(row.item.namespace),
-          getTitle: (row) =>
-            row.item.namespace ? `View ${row.item.namespace} workloads` : undefined,
-        })
+        cf.createTextColumn<BrowseTableRow>(
+          'namespace',
+          'Namespace',
+          (row) => row.namespaceDisplay,
+          {
+            sortable: true,
+            onClick: (row) =>
+              onNamespaceClick?.(row.item.namespace ?? null, row.item.clusterId ?? null),
+            isInteractive: (row) => Boolean(row.item.namespace),
+            getTitle: (row) =>
+              row.item.namespace ? `View ${row.item.namespace} workloads` : undefined,
+          }
+        )
       );
     }
 

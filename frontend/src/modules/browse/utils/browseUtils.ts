@@ -150,7 +150,10 @@ export const upsertByUID = (
  * Filters catalog items to keep only those matching the specified clusterId.
  * If clusterId is null/undefined, keeps items without a clusterId.
  */
-export const filterCatalogItems = (items: CatalogItem[], clusterId?: string | null): CatalogItem[] => {
+export const filterCatalogItems = (
+  items: CatalogItem[],
+  clusterId?: string | null
+): CatalogItem[] => {
   if (!clusterId) {
     return items.filter((item) => !item.clusterId);
   }

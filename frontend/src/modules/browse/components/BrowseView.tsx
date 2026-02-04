@@ -19,9 +19,7 @@
 
 import React, { useCallback, useMemo } from 'react';
 import './BrowseView.css';
-import GridTable, {
-  GRIDTABLE_VIRTUALIZATION_DEFAULT,
-} from '@shared/components/tables/GridTable';
+import GridTable, { GRIDTABLE_VIRTUALIZATION_DEFAULT } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
@@ -36,7 +34,11 @@ import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNa
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { isAllNamespaces } from '@modules/namespace/constants';
 import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
-import { useBrowseColumns, toTableRows, type BrowseTableRow } from '@modules/browse/hooks/useBrowseColumns';
+import {
+  useBrowseColumns,
+  toTableRows,
+  type BrowseTableRow,
+} from '@modules/browse/hooks/useBrowseColumns';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
 
 const VIRTUALIZATION_THRESHOLD = 80;
@@ -252,15 +254,10 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   );
 
   // Apply sorting
-  const { sortedData, sortConfig, handleSort } = useTableSort<BrowseTableRow>(
-    rows,
-    'kind',
-    'asc',
-    {
-      controlledSort: persistence.sortConfig,
-      onChange: persistence.setSortConfig,
-    }
-  );
+  const { sortedData, sortConfig, handleSort } = useTableSort<BrowseTableRow>(rows, 'kind', 'asc', {
+    controlledSort: persistence.sortConfig,
+    onChange: persistence.setSortConfig,
+  });
 
   // Build grid filters configuration
   const gridFilters = useMemo(
@@ -316,10 +313,15 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   }, [isRequestingMore]);
 
   // Resolve class names and messages
-  const containerClassName = className ?? (isNamespaceScoped ? 'namespace-browse-view' : 'browse-view');
-  const resolvedTableClassName = tableClassName ?? (isNamespaceScoped ? 'gridtable-namespace-browse' : 'gridtable-browse');
-  const resolvedEmptyMessage = emptyMessage ?? (isNamespaceScoped ? 'No resources found in this namespace.' : 'No catalog objects found.');
-  const resolvedLoadingMessage = loadingMessage ?? (isNamespaceScoped ? 'Loading resources...' : 'Loading browse catalog...');
+  const containerClassName =
+    className ?? (isNamespaceScoped ? 'namespace-browse-view' : 'browse-view');
+  const resolvedTableClassName =
+    tableClassName ?? (isNamespaceScoped ? 'gridtable-namespace-browse' : 'gridtable-browse');
+  const resolvedEmptyMessage =
+    emptyMessage ??
+    (isNamespaceScoped ? 'No resources found in this namespace.' : 'No catalog objects found.');
+  const resolvedLoadingMessage =
+    loadingMessage ?? (isNamespaceScoped ? 'Loading resources...' : 'Loading browse catalog...');
 
   return (
     <div className={containerClassName}>
