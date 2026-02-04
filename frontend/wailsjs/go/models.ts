@@ -286,6 +286,22 @@ export namespace backend {
 	}
 	
 	
+	export class ContainerPortInfo {
+	    port: number;
+	    name?: string;
+	    protocol?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ContainerPortInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.port = source["port"];
+	        this.name = source["name"];
+	        this.protocol = source["protocol"];
+	    }
+	}
 	export class LogEntry {
 	    // Go type: time
 	    timestamp: any;
@@ -356,6 +372,79 @@ export namespace backend {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.resourceVersion = source["resourceVersion"];
 	    }
+	}
+	export class PortForwardRequest {
+	    namespace: string;
+	    targetKind: string;
+	    targetName: string;
+	    containerPort: number;
+	    localPort: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PortForwardRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.namespace = source["namespace"];
+	        this.targetKind = source["targetKind"];
+	        this.targetName = source["targetName"];
+	        this.containerPort = source["containerPort"];
+	        this.localPort = source["localPort"];
+	    }
+	}
+	export class PortForwardSession {
+	    id: string;
+	    clusterId: string;
+	    clusterName: string;
+	    namespace: string;
+	    podName: string;
+	    containerPort: number;
+	    localPort: number;
+	    targetKind: string;
+	    targetName: string;
+	    status: string;
+	    statusReason?: string;
+	    // Go type: time
+	    startedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new PortForwardSession(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.clusterId = source["clusterId"];
+	        this.clusterName = source["clusterName"];
+	        this.namespace = source["namespace"];
+	        this.podName = source["podName"];
+	        this.containerPort = source["containerPort"];
+	        this.localPort = source["localPort"];
+	        this.targetKind = source["targetKind"];
+	        this.targetName = source["targetName"];
+	        this.status = source["status"];
+	        this.statusReason = source["statusReason"];
+	        this.startedAt = this.convertValues(source["startedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	
 	export class VersionedResponse {

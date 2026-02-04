@@ -6,7 +6,8 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { RestartIcon, ScaleIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { RestartIcon, ScaleIcon, DeleteIcon, PortForwardIcon } from '@shared/components/icons/MenuIcons';
+import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import '../ContextMenu.css';
 import './ActionsMenu.css';
 
@@ -18,6 +19,8 @@ interface ActionsMenuProps {
   canDelete?: boolean;
   canTrigger?: boolean;
   canSuspend?: boolean;
+  canPortForward?: boolean;
+  portForwardTarget?: PortForwardTarget | null;
   isSuspended?: boolean;
   restartDisabledReason?: string;
   scaleDisabledReason?: string;
@@ -30,6 +33,7 @@ interface ActionsMenuProps {
   onDelete?: () => void;
   onTrigger?: () => void;
   onSuspendToggle?: () => void;
+  onPortForward?: () => void;
 }
 
 export const ActionsMenu = React.memo<ActionsMenuProps>(
@@ -41,6 +45,8 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     canDelete,
     canTrigger,
     canSuspend,
+    canPortForward,
+    portForwardTarget,
     isSuspended,
     restartDisabledReason,
     scaleDisabledReason,
@@ -53,10 +59,12 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     onDelete,
     onTrigger,
     onSuspendToggle,
+    onPortForward,
   }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [showScaleModal, setShowScaleModal] = useState(false);
     const [showTriggerConfirm, setShowTriggerConfirm] = useState(false);
+    const [showPortForwardModal, setShowPortForwardModal] = useState(false);
     const [scaleValue, setScaleValue] = useState(0);
     const menuRef = useRef<HTMLDivElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -104,6 +112,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     const showDeleteOption = !!canDelete || Boolean(deleteDisabledReason);
     const showTriggerOption = !!canTrigger;
     const showSuspendOption = !!canSuspend;
+    const showPortForwardOption = !!canPortForward;
 
     // Don't render if no actions available at all
     if (
@@ -111,7 +120,8 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       !showScaleOption &&
       !showDeleteOption &&
       !showTriggerOption &&
-      !showSuspendOption
+      !showSuspendOption &&
+      !showPortForwardOption
     ) {
       return null;
     }
@@ -163,6 +173,14 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       onSuspendToggle?.();
     };
 
+    const handlePortForward = () => {
+      setIsOpen(false);
+      if (canPortForward) {
+        setShowPortForwardModal(true);
+        onPortForward?.();
+      }
+    };
+
     const isLoading = actionLoading || deleteLoading;
 
     return (
@@ -210,6 +228,24 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
                 >
                   <span className="context-menu-icon">{isSuspended ? '▶' : '⏸'}</span>
                   <span className="context-menu-label">{isSuspended ? 'Resume' : 'Suspend'}</span>
+                </div>
+              )}
+
+              {showPortForwardOption && (
+                <div
+                  className={`context-menu-item ${actionLoading ? 'disabled' : ''}`}
+                  role="menuitem"
+                  aria-disabled={actionLoading ? 'true' : 'false'}
+                  onClick={() => {
+                    if (!actionLoading) {
+                      handlePortForward();
+                    }
+                  }}
+                >
+                  <span className="context-menu-icon">
+                    <PortForwardIcon />
+                  </span>
+                  <span className="context-menu-label">Port Forward...</span>
                 </div>
               )}
 
@@ -379,6 +415,14 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
               </div>
             </div>
           </div>
+        )}
+
+        {/* Port Forward Modal */}
+        {showPortForwardModal && portForwardTarget && (
+          <PortForwardModal
+            target={portForwardTarget}
+            onClose={() => setShowPortForwardModal(false)}
+          />
         )}
       </>
     );

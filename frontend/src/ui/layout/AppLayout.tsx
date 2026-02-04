@@ -62,6 +62,10 @@ const ObjectPanel = withLazyBoundary(
   () => import('@modules/object-panel/components/ObjectPanel/ObjectPanel'),
   'Loading object panel...'
 );
+const PortForwardsPanel = withLazyBoundary(
+  () => import('@modules/port-forward').then((m) => ({ default: m.PortForwardsPanel })),
+  'Loading port forwards panel...'
+);
 
 const DevTestErrorBoundaryLazy = React.lazy(() => import('@components/errors/TestErrorBoundary'));
 
@@ -269,6 +273,10 @@ export const AppLayout: React.FC = () => {
 
         <PanelErrorBoundary onClose={() => {}} panelName="app-logs">
           <AppLogsPanel />
+        </PanelErrorBoundary>
+
+        <PanelErrorBoundary onClose={() => {}} panelName="port-forwards">
+          <PortForwardsPanel />
         </PanelErrorBoundary>
 
         <PanelErrorBoundary onClose={() => setShowDiagnostics(false)} panelName="diagnostics">

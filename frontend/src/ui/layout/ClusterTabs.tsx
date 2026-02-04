@@ -11,6 +11,8 @@ import {
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
+import { GetClusterPortForwardCount, StopClusterPortForwards } from '@wailsjs/go/backend/App';
+import ConfirmationModal from '@components/modals/ConfirmationModal';
 import './ClusterTabs.css';
 
 const ordersMatch = (left: string[], right: string[]) =>
@@ -46,6 +48,13 @@ const ClusterTabs: React.FC = () => {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const tabsRef = useRef<HTMLDivElement | null>(null);
+  // State for cluster close confirmation modal when port forwards are active.
+  const [closeConfirm, setCloseConfirm] = useState<{
+    show: boolean;
+    clusterId: string | null;
+    clusterLabel: string;
+    forwardCount: number;
+  }>({ show: false, clusterId: null, clusterLabel: '', forwardCount: 0 });
 
   useEffect(() => {
     let active = true;
@@ -122,13 +131,58 @@ const ClusterTabs: React.FC = () => {
     [setActiveKubeconfig]
   );
 
+  // Handles closing a cluster tab. Checks for active port forwards first and
+  // prompts for confirmation if any are found.
   const handleCloseTab = useCallback(
-    (selection: string) => {
+    async (selection: string) => {
+      // Find the tab label for the cluster being closed.
+      const tab = tabs.find((t) => t.selection === selection);
+      const label = tab?.label ?? selection;
+
+      // Check if there are active port forwards for this cluster.
+      try {
+        const count = await GetClusterPortForwardCount(selection);
+        if (count > 0) {
+          // Show confirmation modal with the count.
+          setCloseConfirm({
+            show: true,
+            clusterId: selection,
+            clusterLabel: label,
+            forwardCount: count,
+          });
+          return;
+        }
+      } catch (err) {
+        console.warn('Failed to check cluster port forward count:', err);
+      }
+
+      // No active port forwards, proceed directly with closing.
       const nextSelections = selectedKubeconfigs.filter((config) => config !== selection);
       void setSelectedKubeconfigs(nextSelections);
     },
-    [selectedKubeconfigs, setSelectedKubeconfigs]
+    [selectedKubeconfigs, setSelectedKubeconfigs, tabs]
   );
+
+  // Handles confirmed close when user accepts stopping port forwards.
+  const handleConfirmClose = useCallback(async () => {
+    if (!closeConfirm.clusterId) return;
+
+    // Stop all port forwards for this cluster.
+    try {
+      await StopClusterPortForwards(closeConfirm.clusterId);
+    } catch (err) {
+      console.warn('Failed to stop cluster port forwards:', err);
+    }
+
+    // Close the tab.
+    const nextSelections = selectedKubeconfigs.filter(
+      (config) => config !== closeConfirm.clusterId
+    );
+    void setSelectedKubeconfigs(nextSelections);
+
+    // Reset confirmation state.
+    setCloseConfirm({ show: false, clusterId: null, clusterLabel: '', forwardCount: 0 });
+  }, [closeConfirm.clusterId, selectedKubeconfigs, setSelectedKubeconfigs]);
 
   const handleDrop = useCallback(
     (targetId: string) => {
@@ -186,67 +240,79 @@ const ClusterTabs: React.FC = () => {
   }
 
   return (
-    <div ref={tabsRef} className="cluster-tabs" role="tablist" aria-label="Cluster tabs">
-      {orderedTabs.map((tab) => {
-        const isActive = tab.id === activeTabId;
-        const isDragging = tab.id === draggingId;
-        const isDropTarget = tab.id === dropTargetId && tab.id !== draggingId;
-        return (
-          <div
-            key={tab.id}
-            className={`cluster-tab${isActive ? ' cluster-tab--active' : ''}${isDragging ? ' cluster-tab--dragging' : ''}${isDropTarget ? ' cluster-tab--drop-target' : ''}`}
-            onDragOver={(event) => {
-              if (!draggingId) {
-                return;
-              }
-              event.preventDefault();
-              setDropTargetId(tab.id);
-            }}
-            onDragLeave={() => {
-              setDropTargetId((current) => (current === tab.id ? null : current));
-            }}
-            onDrop={(event) => {
-              event.preventDefault();
-              handleDrop(tab.id);
-            }}
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              className="cluster-tab__button"
-              onClick={() => handleTabClick(tab.selection)}
-              draggable
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = 'move';
-                event.dataTransfer.setData('text/plain', tab.id);
-                setDraggingId(tab.id);
+    <>
+      <div ref={tabsRef} className="cluster-tabs" role="tablist" aria-label="Cluster tabs">
+        {orderedTabs.map((tab) => {
+          const isActive = tab.id === activeTabId;
+          const isDragging = tab.id === draggingId;
+          const isDropTarget = tab.id === dropTargetId && tab.id !== draggingId;
+          return (
+            <div
+              key={tab.id}
+              className={`cluster-tab${isActive ? ' cluster-tab--active' : ''}${isDragging ? ' cluster-tab--dragging' : ''}${isDropTarget ? ' cluster-tab--drop-target' : ''}`}
+              onDragOver={(event) => {
+                if (!draggingId) {
+                  return;
+                }
+                event.preventDefault();
+                setDropTargetId(tab.id);
               }}
-              onDragEnd={() => {
-                setDraggingId(null);
-                setDropTargetId(null);
+              onDragLeave={() => {
+                setDropTargetId((current) => (current === tab.id ? null : current));
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                handleDrop(tab.id);
               }}
             >
-              <span className="cluster-tab__label" title={tab.label}>
-                {tab.label}
-              </span>
-            </button>
-            <button
-              type="button"
-              className="cluster-tab__close"
-              onClick={(event) => {
-                event.stopPropagation();
-                handleCloseTab(tab.selection);
-              }}
-              aria-label={`Close ${tab.label}`}
-              title={`Close ${tab.label}`}
-            >
-              x
-            </button>
-          </div>
-        );
-      })}
-    </div>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                className="cluster-tab__button"
+                onClick={() => handleTabClick(tab.selection)}
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.effectAllowed = 'move';
+                  event.dataTransfer.setData('text/plain', tab.id);
+                  setDraggingId(tab.id);
+                }}
+                onDragEnd={() => {
+                  setDraggingId(null);
+                  setDropTargetId(null);
+                }}
+              >
+                <span className="cluster-tab__label" title={tab.label}>
+                  {tab.label}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="cluster-tab__close"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleCloseTab(tab.selection);
+                }}
+                aria-label={`Close ${tab.label}`}
+                title={`Close ${tab.label}`}
+              >
+                x
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <ConfirmationModal
+        isOpen={closeConfirm.show}
+        title="Active Port Forwards"
+        message={`Cluster "${closeConfirm.clusterLabel}" has ${closeConfirm.forwardCount} active port forward${closeConfirm.forwardCount > 1 ? 's' : ''}. Stop ${closeConfirm.forwardCount > 1 ? 'them' : 'it'} and close?`}
+        confirmText="Stop & Close"
+        cancelText="Cancel"
+        confirmButtonClass="danger"
+        onConfirm={handleConfirmClose}
+        onCancel={() => setCloseConfirm({ show: false, clusterId: null, clusterLabel: '', forwardCount: 0 })}
+      />
+    </>
   );
 };
 

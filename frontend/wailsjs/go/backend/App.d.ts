@@ -55,6 +55,8 @@ export function GetCatalogDiagnostics():Promise<backend.CatalogDiagnostics>;
 
 export function GetClusterAuthState(arg1:string):Promise<string|string>;
 
+export function GetClusterPortForwardCount(arg1:string):Promise<number>;
+
 export function GetClusterRole(arg1:string,arg2:string):Promise<types.ClusterRoleDetails>;
 
 export function GetClusterRoleBinding(arg1:string,arg2:string):Promise<types.ClusterRoleBindingDetails>;
@@ -139,6 +141,8 @@ export function GetStatefulSet(arg1:string,arg2:string,arg3:string):Promise<type
 
 export function GetStorageClass(arg1:string,arg2:string):Promise<types.StorageClassDetails>;
 
+export function GetTargetPorts(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<backend.ContainerPortInfo>>;
+
 export function GetThemeInfo():Promise<types.ThemeInfo>;
 
 export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.ValidatingWebhookConfigurationDetails>;
@@ -154,6 +158,8 @@ export function IsDiagnosticsPanelVisible():Promise<boolean>;
 export function IsLogsPanelVisible():Promise<boolean>;
 
 export function IsSidebarVisible():Promise<boolean>;
+
+export function ListPortForwards():Promise<Array<backend.PortForwardSession>>;
 
 export function LoadWindowSettings():Promise<types.WindowSettings>;
 
@@ -215,9 +221,15 @@ export function ShowAbout():Promise<void>;
 
 export function ShowSettings():Promise<void>;
 
+export function StartPortForward(arg1:string,arg2:backend.PortForwardRequest):Promise<string>;
+
 export function StartShellSession(arg1:string,arg2:types.ShellSessionRequest):Promise<types.ShellSession>;
 
 export function Startup(arg1:context.Context):Promise<void>;
+
+export function StopClusterPortForwards(arg1:string):Promise<void>;
+
+export function StopPortForward(arg1:string):Promise<void>;
 
 export function SuspendCronJob(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 
@@ -236,3 +248,5 @@ export function UncordonNode(arg1:string,arg2:string):Promise<void>;
 export function UpdateMenu():Promise<void>;
 
 export function ValidateObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
+
+export function ValidatePortForwardURL(arg1:string):Promise<boolean|string>;

@@ -11,7 +11,7 @@
 - docked panels maybe should not obscure the content?
   - this is probably going to require some significant UI calculations for all the things
 
-- Port forwarding
+- ✅ Port forwarding
   - Deployments, Pods, Services, etc should offer this
   - Support multiple port forwards at the same time
   - We will need somewhere to track and manage the port forwards

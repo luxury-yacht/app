@@ -90,6 +90,10 @@ export function GetClusterAuthState(arg1) {
   return window['go']['backend']['App']['GetClusterAuthState'](arg1);
 }
 
+export function GetClusterPortForwardCount(arg1) {
+  return window['go']['backend']['App']['GetClusterPortForwardCount'](arg1);
+}
+
 export function GetClusterRole(arg1, arg2) {
   return window['go']['backend']['App']['GetClusterRole'](arg1, arg2);
 }
@@ -258,6 +262,10 @@ export function GetStorageClass(arg1, arg2) {
   return window['go']['backend']['App']['GetStorageClass'](arg1, arg2);
 }
 
+export function GetTargetPorts(arg1, arg2, arg3, arg4) {
+  return window['go']['backend']['App']['GetTargetPorts'](arg1, arg2, arg3, arg4);
+}
+
 export function GetThemeInfo() {
   return window['go']['backend']['App']['GetThemeInfo']();
 }
@@ -288,6 +296,10 @@ export function IsLogsPanelVisible() {
 
 export function IsSidebarVisible() {
   return window['go']['backend']['App']['IsSidebarVisible']();
+}
+
+export function ListPortForwards() {
+  return window['go']['backend']['App']['ListPortForwards']();
 }
 
 export function LoadWindowSettings() {
@@ -410,12 +422,24 @@ export function ShowSettings() {
   return window['go']['backend']['App']['ShowSettings']();
 }
 
+export function StartPortForward(arg1, arg2) {
+  return window['go']['backend']['App']['StartPortForward'](arg1, arg2);
+}
+
 export function StartShellSession(arg1, arg2) {
   return window['go']['backend']['App']['StartShellSession'](arg1, arg2);
 }
 
 export function Startup(arg1) {
   return window['go']['backend']['App']['Startup'](arg1);
+}
+
+export function StopClusterPortForwards(arg1) {
+  return window['go']['backend']['App']['StopClusterPortForwards'](arg1);
+}
+
+export function StopPortForward(arg1) {
+  return window['go']['backend']['App']['StopPortForward'](arg1);
 }
 
 export function SuspendCronJob(arg1, arg2, arg3, arg4) {
@@ -452,4 +476,8 @@ export function UpdateMenu() {
 
 export function ValidateObjectYaml(arg1, arg2) {
   return window['go']['backend']['App']['ValidateObjectYaml'](arg1, arg2);
+}
+
+export function ValidatePortForwardURL(arg1) {
+  return window['go']['backend']['App']['ValidatePortForwardURL'](arg1);
 }

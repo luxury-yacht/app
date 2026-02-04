@@ -55,6 +55,10 @@ const Overview: React.FC<OverviewProps> = (props) => {
   const canTrigger = props.canTrigger ?? capabilities?.trigger;
   const canSuspend = props.canSuspend ?? capabilities?.suspend;
 
+  // Determine if port forwarding is available for this resource type
+  const portForwardableKinds = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Service'];
+  const canPortForward = portForwardableKinds.includes(props.kind);
+
   return (
     <div className="object-panel-section">
       <div className="object-panel-section-header">
@@ -74,6 +78,15 @@ const Overview: React.FC<OverviewProps> = (props) => {
             canDelete={!!canDelete}
             canTrigger={!!canTrigger}
             canSuspend={!!canSuspend}
+            canPortForward={canPortForward}
+            portForwardTarget={canPortForward ? {
+              kind: props.kind,
+              name: props.name,
+              namespace: props.namespace || '',
+              clusterId: props.clusterId || '',
+              clusterName: props.clusterName || '',
+              ports: [],
+            } : undefined}
             isSuspended={props.suspend}
             restartDisabledReason={!canRestart ? props.restartDisabledReason : undefined}
             scaleDisabledReason={!canScale ? props.scaleDisabledReason : undefined}
@@ -86,6 +99,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
             onDelete={props.onDelete}
             onTrigger={props.onTrigger}
             onSuspendToggle={props.onSuspendToggle}
+            onPortForward={() => {}}
           />
         </div>
       </div>

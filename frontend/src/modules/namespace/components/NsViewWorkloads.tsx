@@ -18,6 +18,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import ConfirmationModal from '@components/modals/ConfirmationModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import WorkloadScaleModal from '@modules/namespace/components/WorkloadScaleModal';
+import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import GridTable from '@shared/components/tables/GridTable';
@@ -41,7 +42,7 @@ import {
   SuspendCronJob,
 } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
-import { OpenIcon, RestartIcon, ScaleIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { OpenIcon, RestartIcon, ScaleIcon, DeleteIcon, PortForwardIcon } from '@shared/components/icons/MenuIcons';
 
 interface WorkloadsViewProps {
   namespace: string;
@@ -92,6 +93,8 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       show: boolean;
       cronjob: WorkloadData | null;
     }>({ show: false, cronjob: null });
+
+    const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
 
     const handleWorkloadClick = useCallback(
       (workload: WorkloadData) => {
@@ -352,6 +355,25 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           onClick: () => handleWorkloadClick(row),
         });
 
+        // Port forward for pods and workloads
+        const portForwardableKinds = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet'];
+        if (portForwardableKinds.includes(normalizedKind)) {
+          items.push({
+            label: 'Port Forward...',
+            icon: <PortForwardIcon />,
+            onClick: () => {
+              setPortForwardTarget({
+                kind: row.kind,
+                name: row.name,
+                namespace: row.namespace,
+                clusterId: row.clusterId ?? '',
+                clusterName: row.clusterName ?? '',
+                ports: [], // Will be fetched by modal
+              });
+            },
+          });
+        }
+
         // CronJob-specific actions
         if (row.kind === 'CronJob') {
           const isSuspended = row.status === 'Suspended';
@@ -408,6 +430,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         handleWorkloadClick,
         openScaleModal,
         permissionMap,
+        setPortForwardTarget,
       ]
     );
 
@@ -514,6 +537,11 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           onApply={handleScaleApply}
           onInputChange={handleScaleInputChange}
           onIncrement={(delta) => updateScaleValue((value) => value + delta)}
+        />
+
+        <PortForwardModal
+          target={portForwardTarget}
+          onClose={() => setPortForwardTarget(null)}
         />
       </>
     );

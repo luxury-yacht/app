@@ -24,9 +24,10 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { OpenIcon, DeleteIcon, PortForwardIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
+import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 
 // Data interface for network resources
 export interface NetworkData {
@@ -62,6 +63,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       show: boolean;
       resource: NetworkData | null;
     }>({ show: false, resource: null });
+    const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
 
     const handleResourceClick = useCallback(
       (resource: NetworkData) => {
@@ -188,6 +190,24 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           onClick: () => handleResourceClick(resource),
         });
 
+        // Port forward for Services
+        if (resource.kind === 'Service') {
+          items.push({
+            label: 'Port Forward...',
+            icon: <PortForwardIcon />,
+            onClick: () => {
+              setPortForwardTarget({
+                kind: 'Service',
+                name: resource.name,
+                namespace: resource.namespace,
+                clusterId: resource.clusterId ?? '',
+                clusterName: resource.clusterName ?? '',
+                ports: [], // Will be fetched by modal
+              });
+            },
+          });
+        }
+
         const deleteStatus =
           permissionMap.get(getPermissionKey(resource.kind, 'delete', resource.namespace)) ?? null;
 
@@ -267,6 +287,11 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           confirmButtonClass="danger"
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
+        />
+
+        <PortForwardModal
+          target={portForwardTarget}
+          onClose={() => setPortForwardTarget(null)}
         />
       </>
     );

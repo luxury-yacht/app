@@ -27,9 +27,10 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
+import { OpenIcon, DeleteIcon, PortForwardIcon } from '@shared/components/icons/MenuIcons';
 import { DeletePod } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
+import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 
 interface PodsViewProps {
   namespace: string;
@@ -106,6 +107,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       show: boolean;
       pod: PodSnapshotEntry | null;
     }>({ show: false, pod: null });
+    const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
 
     // Include cluster metadata so object details stay scoped to the active tab.
     const handlePodOpen = useCallback(
@@ -414,6 +416,23 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           icon: <OpenIcon />,
           onClick: () => handlePodOpen(pod),
         });
+
+        // Port forward
+        items.push({
+          label: 'Port Forward...',
+          icon: <PortForwardIcon />,
+          onClick: () => {
+            setPortForwardTarget({
+              kind: 'Pod',
+              name: pod.name,
+              namespace: pod.namespace,
+              clusterId: pod.clusterId ?? '',
+              clusterName: pod.clusterName ?? '',
+              ports: [], // Will be fetched by modal
+            });
+          },
+        });
+
         if (deleteStatus?.allowed && !deleteStatus.pending) {
           items.push({
             label: 'Delete',
@@ -486,6 +505,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           confirmButtonClass="danger"
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, pod: null })}
+        />
+
+        <PortForwardModal
+          target={portForwardTarget}
+          onClose={() => setPortForwardTarget(null)}
         />
       </>
     );
