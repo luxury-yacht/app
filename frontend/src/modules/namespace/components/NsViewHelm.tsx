@@ -291,51 +291,11 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           context: 'gridtable',
           handlers: {
             onOpen: () => handleResourceClick(resource),
-            onViewValues: () => {
-              openWithObject({
-                kind: 'HelmRelease',
-                name: resource.name,
-                namespace: resource.namespace,
-                viewMode: 'values',
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              });
-            },
-            onViewChart: () => {
-              openWithObject({
-                kind: 'HelmRelease',
-                name: resource.name,
-                namespace: resource.namespace,
-                viewMode: 'chart',
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              });
-            },
-            onViewHistory: () => {
-              openWithObject({
-                kind: 'HelmRelease',
-                name: resource.name,
-                namespace: resource.namespace,
-                viewMode: 'history',
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              });
-            },
-            onViewFailure: () => {
-              openWithObject({
-                kind: 'HelmRelease',
-                name: resource.name,
-                namespace: resource.namespace,
-                viewMode: 'failure',
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              });
-            },
           },
           permissions: {},
         });
       },
-      [handleResourceClick, openWithObject]
+      [handleResourceClick]
     );
 
     const emptyMessage = useMemo(

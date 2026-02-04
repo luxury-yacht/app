@@ -217,6 +217,12 @@ const NAMESPACE_CAPABILITY_SPECS: Partial<
       verbs: ['list', 'update', 'delete'],
       feature: 'Namespace network',
     },
+    {
+      id: 'namespace:endpointslices',
+      resourceKind: 'EndpointSlice',
+      verbs: ['list', 'delete'],
+      feature: 'Namespace network',
+    },
   ],
   rbac: [
     {

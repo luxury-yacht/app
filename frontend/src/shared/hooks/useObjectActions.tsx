@@ -50,8 +50,6 @@ export interface ObjectActionData {
   ready?: string;
   // For Event-specific actions - the involved object reference (e.g., "Pod/my-pod")
   involvedObject?: string;
-  // For HelmRelease-specific actions
-  helmRevision?: number;
 }
 
 // Action handlers
@@ -66,11 +64,6 @@ export interface ObjectActionHandlers {
   onSuspendToggle?: () => void;
   // Event actions - view the involved object
   onViewInvolvedObject?: () => void;
-  // HelmRelease actions
-  onViewValues?: () => void;
-  onViewChart?: () => void;
-  onViewHistory?: () => void;
-  onViewFailure?: () => void;
 }
 
 // Permission status type (matches what useUserPermissions returns)
@@ -147,43 +140,6 @@ export function buildObjectActionItems({
         label: `View ${involvedKind}`,
         icon: <OpenIcon />,
         onClick: handlers.onViewInvolvedObject,
-      });
-    }
-  }
-
-  // HelmRelease-specific actions
-  if (object.kind === 'HelmRelease') {
-    if (handlers.onViewValues) {
-      menuItems.push({
-        label: 'View Values',
-        icon: '⚙️',
-        onClick: handlers.onViewValues,
-      });
-    }
-
-    if (handlers.onViewChart) {
-      menuItems.push({
-        label: 'View Chart',
-        icon: '📦',
-        onClick: handlers.onViewChart,
-      });
-    }
-
-    if (handlers.onViewHistory) {
-      menuItems.push({
-        label: 'View History',
-        icon: '📚',
-        onClick: handlers.onViewHistory,
-      });
-    }
-
-    // View Failure Details - only for failed releases
-    if (handlers.onViewFailure && object.status === 'failed') {
-      menuItems.push({ divider: true });
-      menuItems.push({
-        label: 'View Failure Details',
-        icon: '❌',
-        onClick: handlers.onViewFailure,
       });
     }
   }
