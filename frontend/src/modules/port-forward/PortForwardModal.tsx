@@ -71,6 +71,20 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
   // Error message to display
   const [error, setError] = useState<string | null>(null);
 
+  // Handle Escape key to close modal
+  useEffect(() => {
+    if (!target) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isLoading) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [target, isLoading, onClose]);
+
   // Reset form state when target changes, fetch ports if not provided
   useEffect(() => {
     if (target) {
@@ -181,17 +195,6 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     }
   }, [target, containerPort, localPort, onStarted, onClose]);
 
-  // Handle overlay click (close modal)
-  const handleOverlayClick = useCallback(() => {
-    if (!isLoading) {
-      onClose();
-    }
-  }, [isLoading, onClose]);
-
-  // Prevent click propagation from modal content
-  const handleContentClick = useCallback((event: React.MouseEvent) => {
-    event.stopPropagation();
-  }, []);
 
   // Don't render if no target
   if (!target) {
@@ -201,8 +204,8 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
   const hasPredefinedPorts = target.ports.length > 0;
 
   return (
-    <div className="modal-overlay" onClick={handleOverlayClick}>
-      <div className="modal-container port-forward-modal" onClick={handleContentClick}>
+    <div className="modal-overlay">
+      <div className="modal-container port-forward-modal">
         {/* Header */}
         <div className="modal-header">
           <h2>Port Forward</h2>

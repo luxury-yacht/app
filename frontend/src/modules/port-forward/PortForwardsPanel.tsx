@@ -116,6 +116,20 @@ function PortForwardsPanel() {
     }
   }, []);
 
+  // Handle Escape key to close panel
+  useEffect(() => {
+    if (!panelState.isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        panelState.setOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [panelState.isOpen, panelState]);
+
   // Load sessions when panel opens
   useEffect(() => {
     if (!panelState.isOpen) {

@@ -10,8 +10,11 @@
    ========================================================================== */
 
 .port-forward-modal {
-  width: 400px;
-  max-width: 450px;
+  width: 90vw;
+  max-width: 500px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ==========================================================================
@@ -23,6 +26,9 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ==========================================================================
@@ -34,6 +40,7 @@
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
   padding: 0.75rem 1rem;
+  flex-shrink: 0;
 }
 
 .port-forward-resource-info-row {
@@ -65,6 +72,15 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Allow the container port field to grow and shrink */
+.port-forward-field:has(.port-forward-port-options) {
+  flex: 1;
+  flex-shrink: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .port-forward-field label {
@@ -81,6 +97,9 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .port-forward-port-option {
@@ -176,6 +195,7 @@
   border: none;
   color: var(--color-text);
   font-size: var(--font-size-normal);
+  appearance: textfield;
   -moz-appearance: textfield;
 }
 
