@@ -42,6 +42,7 @@ interface WailsRuntimeEventHandlers {
   onToggleAppLogs: () => void;
   onToggleDiagnostics: () => void;
   onToggleObjectDiff: () => void;
+  onTogglePortForwards: () => void;
 }
 
 /**
@@ -55,6 +56,7 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
     onToggleAppLogs,
     onToggleDiagnostics,
     onToggleObjectDiff,
+    onTogglePortForwards,
   } = handlers;
 
   useEffect(() => {
@@ -70,6 +72,7 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
       ['toggle-app-logs', onToggleAppLogs],
       ['toggle-diagnostics', onToggleDiagnostics],
       ['toggle-object-diff', onToggleObjectDiff],
+      ['toggle-port-forwards', onTogglePortForwards],
     ];
 
     eventHandlers.forEach(([event, handler]) => runtime.EventsOn?.(event, handler));
@@ -84,6 +87,7 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
     onToggleAppLogs,
     onToggleDiagnostics,
     onToggleObjectDiff,
+    onTogglePortForwards,
   ]);
 }
 

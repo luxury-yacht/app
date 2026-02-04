@@ -203,7 +203,7 @@ func createViewMenu(appMenu *menu.Menu, app *App) {
 		}()
 	})
 
-	// Dynamic Dianostics panel menu item text
+	// Dynamic Diagnostics panel menu item text
 	diagnosticsText := "Show Diagnostics Panel"
 	if app.IsDiagnosticsPanelVisible() {
 		diagnosticsText = "Hide Diagnostics Panel"
@@ -213,6 +213,20 @@ func createViewMenu(appMenu *menu.Menu, app *App) {
 		go func() {
 			if err := app.ToggleDiagnosticsPanel(); err != nil {
 				println("Failed to toggle diagnostics panel:", err.Error())
+			}
+		}()
+	})
+
+	// Dynamic Port Forwards panel menu item text
+	portForwardsText := "Show Port Forwards Panel"
+	if app.IsPortForwardsPanelVisible() {
+		portForwardsText = "Hide Port Forwards Panel"
+	}
+
+	viewMenu.AddText(portForwardsText, keys.Combo("f", keys.ShiftKey, keys.CmdOrCtrlKey), func(_ *menu.CallbackData) {
+		go func() {
+			if err := app.TogglePortForwardsPanel(); err != nil {
+				println("Failed to toggle port forwards panel:", err.Error())
 			}
 		}()
 	})

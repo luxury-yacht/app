@@ -106,6 +106,7 @@ function AppContent() {
     onToggleAppLogs: handleToggleAppLogsPanel,
     onToggleDiagnostics: handleToggleDiagnostics,
     onToggleObjectDiff: handleToggleObjectDiff,
+    onTogglePortForwards: handleTogglePortForwardsPanel,
   });
 
   // Handle sidebar resize

@@ -294,6 +294,10 @@ export function IsLogsPanelVisible() {
   return window['go']['backend']['App']['IsLogsPanelVisible']();
 }
 
+export function IsPortForwardsPanelVisible() {
+  return window['go']['backend']['App']['IsPortForwardsPanelVisible']();
+}
+
 export function IsSidebarVisible() {
   return window['go']['backend']['App']['IsSidebarVisible']();
 }
@@ -390,6 +394,10 @@ export function SetMetricsClient(arg1) {
   return window['go']['backend']['App']['SetMetricsClient'](arg1);
 }
 
+export function SetPortForwardsPanelVisible(arg1) {
+  return window['go']['backend']['App']['SetPortForwardsPanelVisible'](arg1);
+}
+
 export function SetRestConfig(arg1) {
   return window['go']['backend']['App']['SetRestConfig'](arg1);
 }
@@ -456,6 +464,10 @@ export function ToggleLogsPanel() {
 
 export function ToggleObjectDiff() {
   return window['go']['backend']['App']['ToggleObjectDiff']();
+}
+
+export function TogglePortForwardsPanel() {
+  return window['go']['backend']['App']['TogglePortForwardsPanel']();
 }
 
 export function ToggleSidebar() {

@@ -88,3 +88,26 @@ func (a *App) SetLogsPanelVisible(visible bool) {
 		a.UpdateMenu()
 	}
 }
+
+func (a *App) TogglePortForwardsPanel() error {
+	if a.Ctx == nil {
+		return fmt.Errorf("application context not available")
+	}
+
+	a.portForwardsPanelVisible = !a.portForwardsPanelVisible
+	a.logger.Info("Port forwards panel toggled", "App")
+	a.emitEvent("toggle-port-forwards")
+	a.UpdateMenu()
+	return nil
+}
+
+func (a *App) IsPortForwardsPanelVisible() bool {
+	return a.portForwardsPanelVisible
+}
+
+func (a *App) SetPortForwardsPanelVisible(visible bool) {
+	if a.portForwardsPanelVisible != visible {
+		a.portForwardsPanelVisible = visible
+		a.UpdateMenu()
+	}
+}

@@ -29,9 +29,10 @@ type App struct {
 	versionCache         *versioning.Cache
 	// responseCache stores short-lived detail/YAML/helm GET responses.
 	responseCache           *responseCache
-	sidebarVisible          bool
-	diagnosticsPanelVisible bool
-	logsPanelVisible        bool
+	sidebarVisible            bool
+	diagnosticsPanelVisible   bool
+	logsPanelVisible          bool
+	portForwardsPanelVisible  bool
 
 	refreshManager               *refresh.Manager
 	refreshHTTPServer            *http.Server

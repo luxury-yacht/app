@@ -157,6 +157,8 @@ export function IsDiagnosticsPanelVisible():Promise<boolean>;
 
 export function IsLogsPanelVisible():Promise<boolean>;
 
+export function IsPortForwardsPanelVisible():Promise<boolean>;
+
 export function IsSidebarVisible():Promise<boolean>;
 
 export function ListPortForwards():Promise<Array<backend.PortForwardSession>>;
@@ -205,6 +207,8 @@ export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 
 export function SetMetricsClient(arg1:versioned.Clientset):Promise<void>;
 
+export function SetPortForwardsPanelVisible(arg1:boolean):Promise<void>;
+
 export function SetRestConfig(arg1:rest.Config):Promise<void>;
 
 export function SetSelectedKubeconfigs(arg1:Array<string>):Promise<void>;
@@ -238,6 +242,8 @@ export function ToggleDiagnosticsPanel():Promise<void>;
 export function ToggleLogsPanel():Promise<void>;
 
 export function ToggleObjectDiff():Promise<void>;
+
+export function TogglePortForwardsPanel():Promise<void>;
 
 export function ToggleSidebar():Promise<void>;
 
