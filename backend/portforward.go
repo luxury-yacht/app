@@ -76,8 +76,9 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 			Status:        "connecting",
 			StartedAt:     time.Now(),
 		},
-		stopChan: make(chan struct{}),
-		cancel:   sessionCancel,
+		stopChan:  make(chan struct{}),
+		readyChan: make(chan error, 1),
+		cancel:    sessionCancel,
 	}
 
 	// Register session before starting.
@@ -90,6 +91,23 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 
 	// Start the forwarder in a goroutine.
 	go a.runPortForwarder(sessionCtx, session, deps)
+
+	// Wait for initial connection to succeed or fail.
+	select {
+	case err := <-session.readyChan:
+		if err != nil {
+			// Initial connection failed - remove session and return error.
+			a.removePortForwardSession(sessionID)
+			a.emitPortForwardList()
+			return "", fmt.Errorf("failed to start port forward: %w", err)
+		}
+	case <-time.After(30 * time.Second):
+		// Timeout waiting for connection.
+		a.removePortForwardSession(sessionID)
+		session.close()
+		a.emitPortForwardList()
+		return "", fmt.Errorf("timeout waiting for port forward to connect")
+	}
 
 	return sessionID, nil
 }
@@ -184,6 +202,8 @@ func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionI
 		a.emitPortForwardList()
 	}()
 
+	isFirstAttempt := true
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -194,6 +214,20 @@ func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionI
 		}
 
 		err := a.executePortForward(ctx, session)
+
+		// Signal readyChan on first attempt (success or failure).
+		if isFirstAttempt {
+			isFirstAttempt = false
+			if err != nil {
+				// First attempt failed - signal the error.
+				select {
+				case session.readyChan <- err:
+				default:
+				}
+			}
+			// Success is signaled inside executePortForward after "active" status.
+		}
+
 		if err == nil {
 			// Clean exit (stop channel closed).
 			return
@@ -325,6 +359,12 @@ func (a *App) executePortForward(ctx context.Context, session *portForwardSessio
 		session.mu.Unlock()
 		a.emitPortForwardStatus(session)
 		a.emitPortForwardList()
+
+		// Signal success on readyChan (non-blocking).
+		select {
+		case session.readyChan <- nil:
+		default:
+		}
 	}
 
 	// Wait for completion.

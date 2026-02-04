@@ -25,6 +25,7 @@ interface GlobalShortcutsProps {
   onToggleObjectDiff?: () => void;
   onRefresh?: () => void;
   onToggleDiagnostics?: () => void;
+  onTogglePortForwards?: () => void;
   viewType?: string;
   isLogsPanelOpen?: boolean;
   isObjectPanelOpen?: boolean;
@@ -38,6 +39,7 @@ export function GlobalShortcuts({
   onToggleObjectDiff,
   onRefresh,
   onToggleDiagnostics,
+  onTogglePortForwards,
   viewType,
   isLogsPanelOpen,
   isObjectPanelOpen,
@@ -125,6 +127,10 @@ export function GlobalShortcuts({
   const handleToggleDiagnostics = useCallback(() => {
     onToggleDiagnostics?.();
   }, [onToggleDiagnostics]);
+
+  const handleTogglePortForwards = useCallback(() => {
+    onTogglePortForwards?.();
+  }, [onTogglePortForwards]);
 
   const handleRefresh = useCallback(
     (e?: KeyboardEvent) => {
@@ -304,6 +310,16 @@ export function GlobalShortcuts({
     description: 'Toggle diagnostics panel',
     category: 'Global',
     enabled: !!onToggleDiagnostics,
+    view: 'global',
+  });
+
+  useShortcut({
+    key: 'f',
+    modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
+    handler: handleTogglePortForwards,
+    description: 'Toggle port forwards panel',
+    category: 'Global',
+    enabled: !!onTogglePortForwards,
     view: 'global',
   });
 

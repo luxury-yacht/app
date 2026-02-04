@@ -21,15 +21,6 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   GetTargetPorts: (...args: unknown[]) => getTargetPortsMock(...args),
 }));
 
-// Mock the error handler
-const errorHandlerMock = vi.hoisted(() => ({
-  handle: vi.fn().mockReturnValue({ userMessage: 'Test error' }),
-}));
-
-vi.mock('@utils/errorHandler', () => ({
-  errorHandler: errorHandlerMock,
-}));
-
 describe('PortForwardModal', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -297,11 +288,9 @@ describe('PortForwardModal', () => {
       await Promise.resolve();
     });
 
-    expect(errorHandlerMock.handle).toHaveBeenCalled();
-
     const errorMessage = document.querySelector('.port-forward-error');
     expect(errorMessage).toBeTruthy();
-    expect(errorMessage?.textContent).toBe('Test error');
+    expect(errorMessage?.textContent).toBe('Port already in use');
   });
 
   it('shows loading state while starting', async () => {

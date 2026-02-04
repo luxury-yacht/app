@@ -156,6 +156,7 @@ export function useCommandPaletteCommands() {
           portForwardsPanel.toggle();
         },
         keywords: ['port', 'forward', 'tunnel', 'kubectl'],
+        shortcut: isMacPlatform() ? ['⇧', '⌘', 'F'] : ['⇧', 'Ctrl', 'F'],
       },
       {
         id: 'toggle-diagnostics',

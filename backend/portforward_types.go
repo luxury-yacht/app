@@ -36,6 +36,7 @@ type PortForwardSession struct {
 type portForwardSessionInternal struct {
 	PortForwardSession
 	stopChan         chan struct{}
+	readyChan        chan error // Signals when initial connection succeeds (nil) or fails (error)
 	cancel           context.CancelFunc
 	reconnectAttempt int
 	mu               sync.Mutex

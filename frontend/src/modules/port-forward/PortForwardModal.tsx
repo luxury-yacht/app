@@ -7,7 +7,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { StartPortForward } from '@wailsjs/go/backend/App';
-import { errorHandler } from '@utils/errorHandler';
 import './PortForwardModal.css';
 
 /**
@@ -184,13 +183,9 @@ const PortForwardModal = ({
       onStarted?.(sessionId);
       onClose();
     } catch (err) {
-      const errorDetails = errorHandler.handle(err, {
-        operation: 'StartPortForward',
-        target: `${target.kind}/${target.name}`,
-        namespace: target.namespace,
-        clusterId: target.clusterId,
-      });
-      setError(errorDetails.userMessage || 'Failed to start port forward');
+      // Extract error message without showing a toast - the modal displays the error
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || 'Failed to start port forward');
     } finally {
       setIsLoading(false);
     }

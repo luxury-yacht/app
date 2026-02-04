@@ -252,21 +252,22 @@ function PortForwardsPanel() {
             >
               <div className="pf-session-header">
                 {renderStatusIcon(session.status)}
-                <div className="pf-session-ports">
-                  <span className="pf-target-port">
-                    {session.targetName}:{session.containerPort}
-                  </span>
-                  <span className="pf-port-arrow">→</span>
-                  <button
-                    className="pf-local-port pf-local-port-link"
-                    onClick={() => BrowserOpenURL(`http://localhost:${session.localPort}`)}
-                    title="Open in browser"
-                    disabled={session.status !== 'active'}
-                  >
-                    localhost:{session.localPort}
-                  </button>
-                </div>
+                <span className="pf-target-port">
+                  {session.targetName}:{session.containerPort}
+                </span>
                 {renderActionButton(session)}
+              </div>
+
+              <div className="pf-session-local">
+                <span className="pf-port-arrow">→</span>
+                <button
+                  className="pf-local-port pf-local-port-link"
+                  onClick={() => BrowserOpenURL(`http://localhost:${session.localPort}`)}
+                  title="Open in browser"
+                  disabled={session.status !== 'active'}
+                >
+                  localhost:{session.localPort}
+                </button>
               </div>
 
               <div className="pf-session-details">

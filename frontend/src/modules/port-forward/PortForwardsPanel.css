@@ -48,28 +48,14 @@
   background: var(--color-bg-secondary);
   border-radius: var(--border-radius-sm);
   padding: 10px 12px;
-  border-left: 3px solid var(--color-border);
-  transition: border-color 0.2s, background 0.2s;
-}
-
-/* Status-based border colors */
-.pf-session-card.pf-session-active {
-  border-left-color: var(--color-success);
-}
-
-.pf-session-card.pf-session-reconnecting {
-  border-left-color: var(--color-warning);
-}
-
-.pf-session-card.pf-session-error {
-  border-left-color: var(--color-error);
+  transition: background 0.2s;
 }
 
 .pf-session-card:hover {
   background: var(--color-bg-tertiary);
 }
 
-/* Session header row (status icon, ports, action button) */
+/* Session header row (status icon, target, action button) */
 .pf-session-header {
   display: flex;
   align-items: center;
@@ -111,20 +97,27 @@
   }
 }
 
-/* Port mapping display */
-.pf-session-ports {
+/* Target port (first line) */
+.pf-target-port {
   flex: 1;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Local port row (second line) */
+.pf-session-local {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-width: 0;
+  margin-top: 4px;
+  padding-left: 24px;
   font-family: var(--font-mono);
   font-size: 12px;
-}
-
-.pf-target-port {
-  color: var(--color-text);
-  min-width: 0;
 }
 
 .pf-port-arrow {
@@ -180,6 +173,9 @@
 .pf-detail-cluster,
 .pf-detail-namespace {
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pf-detail-separator {
@@ -192,6 +188,9 @@
   padding-left: 24px;
   font-size: 11px;
   color: var(--color-text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pf-session-card.pf-session-error .pf-session-reason {
