@@ -146,15 +146,8 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
           setIsLoadingPorts(false);
         });
     });
-    // Use targetKey for stable dependency instead of target object reference
-  }, [
-    targetKey,
-    target?.clusterId,
-    target?.namespace,
-    target?.kind,
-    target?.name,
-    target?.ports.length,
-  ]);
+    // targetKey provides stable identity tracking; target included for linter compliance
+  }, [target, targetKey]);
 
   // Update local port when container port changes
   const handleContainerPortChange = useCallback((port: number) => {
@@ -219,6 +212,16 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     }
   }, [target, containerPort, localPort, onStarted, onClose]);
 
+  // Handle backdrop click (close only when clicking the overlay, not the modal content)
+  const handleBackdropClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget && !isLoading) {
+        onClose();
+      }
+    },
+    [isLoading, onClose]
+  );
+
   // Don't render if no target
   if (!target) {
     return null;
@@ -229,7 +232,7 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
   const hasPredefinedPorts = availablePorts.length > 0;
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" onClick={handleBackdropClick}>
       <div className="modal-container port-forward-modal">
         {/* Header */}
         <div className="modal-header">

@@ -25,6 +25,16 @@ vi.mock('@/core/capabilities', () => ({
     `${kind}:${verb}:${namespace || ''}:${subresource || ''}`,
 }));
 
+// Mock keyboard shortcuts for ConfirmationModal
+vi.mock('@ui/shortcuts', () => ({
+  useShortcut: vi.fn(),
+  useKeyboardContext: () => ({
+    pushContext: vi.fn(),
+    popContext: vi.fn(),
+  }),
+  useKeyboardNavigationScope: vi.fn(),
+}));
+
 const openMenu = (container: HTMLElement) => {
   const trigger = container.querySelector<HTMLButtonElement>('.actions-menu-button');
   expect(trigger).toBeTruthy();
@@ -264,8 +274,8 @@ describe('ActionsMenu', () => {
         triggerItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
 
-      // Modal should be visible
-      const modal = container.querySelector('.modal-container');
+      // Modal is portaled to document.body, not the container
+      const modal = document.querySelector('.modal-container');
       expect(modal).toBeTruthy();
 
       // Click confirm

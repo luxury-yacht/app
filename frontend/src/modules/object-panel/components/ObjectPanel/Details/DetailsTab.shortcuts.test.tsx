@@ -20,6 +20,18 @@ vi.mock('@ui/shortcuts', () => ({
   useSearchShortcutTarget: () => undefined,
 }));
 
+// Mock useObjectPanel to avoid needing ObjectPanelStateProvider
+vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
+  useObjectPanel: () => ({
+    objectData: { clusterId: 'test-cluster', clusterName: 'Test Cluster' },
+    isOpen: true,
+    setOpen: vi.fn(),
+    openWithObject: vi.fn(),
+    close: vi.fn(),
+    navigate: vi.fn(),
+  }),
+}));
+
 const baseProps = (): DetailsTabProps => ({
   objectData: {},
   isActive: true,
