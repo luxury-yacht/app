@@ -107,16 +107,43 @@ export function useBrowseCatalog({
   const pageLimit = DEFAULT_LIMIT;
   const isNamespaceScoped = pinnedNamespaces.length > 0;
 
-  // Build the base scope string from filters and pinned namespaces
+  // Track available namespaces from the catalog snapshot.
+  // Used to query all namespaces when no filter is selected in all-namespaces mode.
+  const [availableNamespaces, setAvailableNamespaces] = useState<string[]>([]);
+
+  // Determine namespaces to query:
+  // - Cluster scope: empty (to get cluster-scoped objects)
+  // - Namespace scope: use pinned namespaces
+  // - All-namespaces with filter: use selected filter namespaces
+  // - All-namespaces without filter: use all available namespaces (or empty for initial load)
+  const namespacesToQuery = useMemo(() => {
+    // Cluster scope: don't send any namespaces to get cluster-scoped objects
+    if (clusterScopedOnly) {
+      return [];
+    }
+    // Namespace scope: use the pinned namespace
+    if (isNamespaceScoped) {
+      return pinnedNamespaces;
+    }
+    // All-namespaces scope: use selected filter or all available namespaces
+    const selectedNamespaces = filters.namespaces ?? [];
+    if (selectedNamespaces.length > 0) {
+      return selectedNamespaces;
+    }
+    // No filter selected in all-namespaces mode - use all available namespaces
+    return availableNamespaces;
+  }, [clusterScopedOnly, isNamespaceScoped, pinnedNamespaces, filters.namespaces, availableNamespaces]);
+
+  // Build the base scope string from filters and namespaces
   const baseScope = useMemo(
     () =>
       buildCatalogScope({
         limit: pageLimit,
         search: filters.search ?? '',
         kinds: filters.kinds ?? [],
-        namespaces: isNamespaceScoped ? pinnedNamespaces : (filters.namespaces ?? []),
+        namespaces: namespacesToQuery,
       }),
-    [pageLimit, filters.search, filters.kinds, filters.namespaces, pinnedNamespaces, isNamespaceScoped]
+    [pageLimit, filters.search, filters.kinds, namespacesToQuery]
   );
 
   // Enable catalog domain on mount, disable on unmount
@@ -217,7 +244,7 @@ export function useBrowseCatalog({
       limit: pageLimit,
       search: filters.search ?? '',
       kinds: filters.kinds ?? [],
-      namespaces: isNamespaceScoped ? pinnedNamespaces : (filters.namespaces ?? []),
+      namespaces: namespacesToQuery,
       continueToken,
     });
 
@@ -233,9 +260,8 @@ export function useBrowseCatalog({
     pageLimit,
     filters.search,
     filters.kinds,
-    filters.namespaces,
+    namespacesToQuery,
     pinnedNamespaces,
-    isNamespaceScoped,
     clusterId,
   ]);
 
@@ -271,6 +297,21 @@ export function useBrowseCatalog({
       isNamespaceScoped,
     };
   }, [domain.data, isNamespaceScoped, clusterScopedOnly]);
+
+  // Update available namespaces when the snapshot includes them.
+  // This enables querying all namespaces when no filter is selected in all-namespaces mode.
+  useEffect(() => {
+    const snapshotNamespaces = filterOptions.namespaces;
+    if (snapshotNamespaces.length > 0 && !isNamespaceScoped) {
+      // Only update if the list has actually changed to avoid infinite loops
+      setAvailableNamespaces((prev) => {
+        if (prev.length === snapshotNamespaces.length && prev.every((ns, i) => ns === snapshotNamespaces[i])) {
+          return prev;
+        }
+        return snapshotNamespaces;
+      });
+    }
+  }, [filterOptions.namespaces, isNamespaceScoped]);
 
   // Compute loading state
   const loading =

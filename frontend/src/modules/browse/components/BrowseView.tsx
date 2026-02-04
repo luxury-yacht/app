@@ -274,7 +274,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         namespaces: filterOptions.namespaces,
         showKindDropdown: true,
         showNamespaceDropdown: showNamespaceColumn,
-        includeClusterScopedSyntheticNamespace: showNamespaceColumn,
+        includeClusterScopedSyntheticNamespace: false,
         customActions: (
           // Keep pagination actions out of the scrollable body. The in-body pagination button
           // can interact with virtual scroll/focus management and trigger React update-depth
