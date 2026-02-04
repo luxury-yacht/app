@@ -201,21 +201,23 @@ export function useBrowseCatalog({
     const mode = requestModeRef.current;
     requestModeRef.current = null;
 
-    if (mode === 'append') {
+    if (mode === 'reset') {
+      // Explicit reset (query changed): replace all items with the new snapshot
+      const { items: nextItems, indexByUid } = dedupeByUID(payload.items ?? []);
+      itemsRef.current = nextItems;
+      indexByUidRef.current = indexByUid.size ? indexByUid : rebuildIndexByUID(nextItems);
+      setItems(nextItems);
+    } else {
+      // Append mode or refresh (mode === 'append' or null): merge items to preserve pagination
       const { nextItems, changed } = upsertByUID(
         itemsRef.current,
         indexByUidRef.current,
         payload.items ?? []
       );
-      if (changed) {
+      if (changed || itemsRef.current.length === 0) {
         itemsRef.current = nextItems;
         setItems(nextItems);
       }
-    } else {
-      const { items: nextItems, indexByUid } = dedupeByUID(payload.items ?? []);
-      itemsRef.current = nextItems;
-      indexByUidRef.current = indexByUid.size ? indexByUid : rebuildIndexByUID(nextItems);
-      setItems(nextItems);
     }
 
     setContinueToken(parseContinueToken(payload.continue));
