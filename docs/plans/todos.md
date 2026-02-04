@@ -1,64 +1,67 @@
 # TODO
 
-A list of features I'd like to build, maybe
+## Issues
 
-## Port forwarding
+- when using keyboard navigation in tables, context menu selection also affects the table row
+- context menu launches in the wrong place (even offscreen) when zoomed out
+- zooming out doesn't change the panel restrictions, so borders/windows can be dragged offscreen
 
-- Deployments, Pods, Services, etc should offer this
-- Can we run multiple port forwards at the same time?
-- Where do we track them?
+## Feature Ideas
 
-## Transfer files to/from pods
+- docked panels maybe should not obscure the content?
+  - this is probably going to require some significant UI calculations for all the things
 
-- Select container
-- can we show a file dialog for the remote filesystem?
+- Port forwarding
+  - Deployments, Pods, Services, etc should offer this
+  - Support multiple port forwards at the same time
+  - We will need somewhere to track and manage the port forwards
 
-## Resource creation
+- Transfer files to/from pods
+  - Select container
+  - can we show a file dialog for the remote filesystem?
 
-- starter templates for common resource types
-- reuse the existing code editor
+- Resource creation
+  - starter templates for common resource types
+  - reuse the existing code editor
 
-## More deployment options
+- More deployment options
+  - Workload scope:
+    - pause (scale to zero)
+    - resume (scale to previous)
+      - can we get the previous count from the last replicaset?
+    - rollback
+      - choose a replicaset or just roll back to the most recent?
 
-Workload scope:
+  - Container scope:
+    - set image
+      - show a list of containers and their images, allow override
+    - update resource requests/limits
 
-- pause (scale to zero)
-- resume (scale to previous)
-  - can we get the previous count from the last replicaset?
-- rollback
-  - choose a replicaset or just roll back to the most recent?
+- Metrics over time
+  - Graphs instead of only point-in-time numbers
+  - No persistence, just show metrics for the current view, drop them when the view changes
 
-Container scope:
+- Helm install/upgrade/delete
+  - track deployments, offer rollbacks?
 
-- set image
-  - show a list of containers and their images, allow override
-- update resource requests/limits
+- Multi-select/batch operations
+  - Allow batch operations, but could be dangerous
 
-## Metrics over time
+- Favorites/bookmarks
+  - Bookmark specific views
 
-- Graphs instead of only point-in-time numbers
-- No persistence, just show metrics for the current view, drop them when the view changes
+- Customize Cluster Overview
+  - from a predefined set of widgets
 
-## Helm install/upgrade/delete
+- Ephemeral debug containers
+  - kubectl debug
 
-- track deployments, offer rollbacks?
+- ArgoCD integration to show drift
+  - Would need permission to query the argo API
 
-## Multi-select/batch operations
+## Wails v3 (when ready)
 
-- Allow batch operations, but could be dangerous
+- Multiple windows
+  - Object Panel, logs, diagnostics in its own window
 
-## Favorites/bookmarks
-
-- Bookmark specific views
-
-## Customize Cluster Overview
-
-- from a predefined set of widgets
-
-## Ephemeral debug containers
-
-- kubectl debug
-
-## ArgoCD integration to show drift
-
-- Would need permission to query the argo API
+- Automatic app updates

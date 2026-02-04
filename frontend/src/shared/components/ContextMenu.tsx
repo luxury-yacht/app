@@ -150,16 +150,19 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
         }
         if (e.key === 'ArrowDown') {
           e.preventDefault();
+          e.stopPropagation();
           moveFocus(1);
           return;
         }
         if (e.key === 'ArrowUp') {
           e.preventDefault();
+          e.stopPropagation();
           moveFocus(-1);
           return;
         }
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
+          e.stopPropagation();
           activateFocusedItem();
         }
       }}

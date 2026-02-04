@@ -169,4 +169,35 @@ describe('ContextMenu', () => {
     expect(openHandler).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('stops propagation on navigation keys to prevent parent handlers from firing', async () => {
+    // This test verifies that ArrowDown, ArrowUp, Enter, and Space events
+    // call stopPropagation() to prevent bubbling to parent elements
+    // (which would affect table row selection when the context menu is open)
+    const onClose = vi.fn();
+    const itemHandler = vi.fn();
+
+    const { menu } = await renderMenu({
+      onClose,
+      items: [
+        { label: 'Action 1', onClick: itemHandler },
+        { label: 'Action 2', onClick: itemHandler },
+      ],
+    });
+
+    // Test each navigation key - all should have stopPropagation called
+    const keysToTest = ['ArrowDown', 'ArrowUp', 'Enter', ' '];
+
+    for (const key of keysToTest) {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+      const stopPropagationSpy = vi.spyOn(event, 'stopPropagation');
+
+      await act(async () => {
+        menu.dispatchEvent(event);
+        await Promise.resolve();
+      });
+
+      expect(stopPropagationSpy).toHaveBeenCalled();
+    }
+  });
 });
