@@ -90,7 +90,7 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 	a.emitPortForwardStatus(session)
 
 	// Start the forwarder in a goroutine.
-	go a.runPortForwarder(sessionCtx, session, deps)
+	go a.runPortForwarder(sessionCtx, session)
 
 	// Wait for initial connection to succeed or fail.
 	select {
@@ -196,7 +196,7 @@ func (a *App) GetClusterPortForwardCount(clusterID string) int {
 }
 
 // runPortForwarder manages the port forwarding connection and handles reconnection.
-func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionInternal, deps interface{}) {
+func (a *App) runPortForwarder(ctx context.Context, session *portForwardSessionInternal) {
 	defer func() {
 		a.removePortForwardSession(session.ID)
 		a.emitPortForwardList()

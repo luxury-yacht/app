@@ -317,9 +317,7 @@ describe('PortForwardsPanel', () => {
     expect(document.querySelector('.pf-empty')).toBeTruthy();
 
     // Find the list event handler
-    const listHandler = eventsOnMock.mock.calls.find(
-      (call) => call[0] === 'portforward:list'
-    )?.[1];
+    const listHandler = eventsOnMock.mock.calls.find((call) => call[0] === 'portforward:list')?.[1];
 
     expect(listHandler).toBeTruthy();
 
@@ -381,10 +379,9 @@ describe('PortForwardsPanel', () => {
     await renderPanel();
     await flushPromises();
 
-    expect(errorHandlerMock.handle).toHaveBeenCalledWith(
-      expect.any(Error),
-      { action: 'loadPortForwards' }
-    );
+    expect(errorHandlerMock.handle).toHaveBeenCalledWith(expect.any(Error), {
+      action: 'loadPortForwards',
+    });
   });
 
   it('renders status icons correctly', async () => {
@@ -426,9 +423,7 @@ describe('PortForwardsPanel', () => {
     await flushPromises();
 
     // Find the list event handler
-    const listHandler = eventsOnMock.mock.calls.find(
-      (call) => call[0] === 'portforward:list'
-    )?.[1];
+    const listHandler = eventsOnMock.mock.calls.find((call) => call[0] === 'portforward:list')?.[1];
 
     // Simulate receiving first session (0 -> 1)
     await act(async () => {

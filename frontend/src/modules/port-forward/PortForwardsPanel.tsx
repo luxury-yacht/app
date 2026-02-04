@@ -246,10 +246,7 @@ function PortForwardsPanel() {
           </div>
         ) : (
           sortedSessions.map((session) => (
-            <div
-              key={session.id}
-              className={`pf-session-card pf-session-${session.status}`}
-            >
+            <div key={session.id} className={`pf-session-card pf-session-${session.status}`}>
               <div className="pf-session-header">
                 {renderStatusIcon(session.status)}
                 <span className="pf-target-port">

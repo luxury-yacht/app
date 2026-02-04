@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -84,30 +85,40 @@ func findReadyPodForWorkload(
 	return "", fmt.Errorf("no ready pod found for %s/%s", kind, name)
 }
 
-// findReadyPodForService finds a ready pod from the service's endpoints.
+// findReadyPodForService finds a ready pod from the service's endpoint slices.
 func findReadyPodForService(
 	ctx context.Context,
 	client kubernetes.Interface,
 	namespace, serviceName string,
 ) (string, error) {
-	endpoints, err := client.CoreV1().Endpoints(namespace).Get(ctx, serviceName, metav1.GetOptions{})
+	// List EndpointSlices for this service using the standard label selector.
+	slices, err := client.DiscoveryV1().EndpointSlices(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: discoveryv1.LabelServiceName + "=" + serviceName,
+	})
 	if err != nil {
-		return "", fmt.Errorf("failed to get endpoints for service: %w", err)
+		return "", fmt.Errorf("failed to get endpoint slices for service: %w", err)
+	}
+	if len(slices.Items) == 0 {
+		return "", fmt.Errorf("no endpoint slices found for service %s", serviceName)
 	}
 
-	// Iterate through endpoint subsets to find a ready pod.
-	for _, subset := range endpoints.Subsets {
-		for _, addr := range subset.Addresses {
-			if addr.TargetRef == nil || addr.TargetRef.Kind != "Pod" {
+	// Iterate through endpoint slices to find a ready pod.
+	for _, slice := range slices.Items {
+		for _, endpoint := range slice.Endpoints {
+			// Check if endpoint is ready.
+			if endpoint.Conditions.Ready == nil || !*endpoint.Conditions.Ready {
+				continue
+			}
+			if endpoint.TargetRef == nil || endpoint.TargetRef.Kind != "Pod" {
 				continue
 			}
 			// Verify the pod is ready before returning.
-			pod, err := client.CoreV1().Pods(namespace).Get(ctx, addr.TargetRef.Name, metav1.GetOptions{})
+			pod, err := client.CoreV1().Pods(namespace).Get(ctx, endpoint.TargetRef.Name, metav1.GetOptions{})
 			if err != nil {
 				continue
 			}
 			if isPodReady(pod) {
-				return addr.TargetRef.Name, nil
+				return endpoint.TargetRef.Name, nil
 			}
 		}
 	}

@@ -289,10 +289,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
         />
 
-        <PortForwardModal
-          target={portForwardTarget}
-          onClose={() => setPortForwardTarget(null)}
-        />
+        <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
       </>
     );
   }

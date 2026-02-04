@@ -310,7 +310,9 @@ const ClusterTabs: React.FC = () => {
         cancelText="Cancel"
         confirmButtonClass="danger"
         onConfirm={handleConfirmClose}
-        onCancel={() => setCloseConfirm({ show: false, clusterId: null, clusterLabel: '', forwardCount: 0 })}
+        onCancel={() =>
+          setCloseConfirm({ show: false, clusterId: null, clusterLabel: '', forwardCount: 0 })
+        }
       />
     </>
   );

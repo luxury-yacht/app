@@ -5,13 +5,15 @@ import (
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/ptr"
 )
 
 // TestResolvePodForTarget_Pod verifies that a ready pod resolves to itself.
 func TestResolvePodForTarget_Pod(t *testing.T) {
-	client := fake.NewSimpleClientset(&corev1.Pod{
+	client := fake.NewClientset(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-pod",
 			Namespace: "default",
@@ -35,7 +37,7 @@ func TestResolvePodForTarget_Pod(t *testing.T) {
 
 // TestResolvePodForTarget_Deployment verifies that a deployment resolves to a ready pod with matching prefix.
 func TestResolvePodForTarget_Deployment(t *testing.T) {
-	client := fake.NewSimpleClientset(
+	client := fake.NewClientset(
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "nginx-abc123",
@@ -62,7 +64,7 @@ func TestResolvePodForTarget_Deployment(t *testing.T) {
 
 // TestResolvePodForTarget_StatefulSet verifies that a statefulset resolves to a ready pod with matching prefix.
 func TestResolvePodForTarget_StatefulSet(t *testing.T) {
-	client := fake.NewSimpleClientset(
+	client := fake.NewClientset(
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "mysql-0",
@@ -88,7 +90,7 @@ func TestResolvePodForTarget_StatefulSet(t *testing.T) {
 
 // TestResolvePodForTarget_DaemonSet verifies that a daemonset resolves to a ready pod with matching prefix.
 func TestResolvePodForTarget_DaemonSet(t *testing.T) {
-	client := fake.NewSimpleClientset(
+	client := fake.NewClientset(
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "fluentd-xyz99",
@@ -114,7 +116,7 @@ func TestResolvePodForTarget_DaemonSet(t *testing.T) {
 
 // TestResolvePodForTarget_PodNotReady verifies that a non-ready pod returns an error.
 func TestResolvePodForTarget_PodNotReady(t *testing.T) {
-	client := fake.NewSimpleClientset(&corev1.Pod{
+	client := fake.NewClientset(&corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "my-pod",
 			Namespace: "default",
@@ -132,7 +134,7 @@ func TestResolvePodForTarget_PodNotReady(t *testing.T) {
 
 // TestResolvePodForTarget_PodNotFound verifies that a non-existent pod returns an error.
 func TestResolvePodForTarget_PodNotFound(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 
 	_, err := resolvePodForTarget(context.Background(), client, "default", "Pod", "nonexistent")
 	if err == nil {
@@ -140,24 +142,26 @@ func TestResolvePodForTarget_PodNotFound(t *testing.T) {
 	}
 }
 
-// TestResolvePodForTarget_Service verifies that a service resolves to a ready pod from its endpoints.
+// TestResolvePodForTarget_Service verifies that a service resolves to a ready pod from its endpoint slices.
 func TestResolvePodForTarget_Service(t *testing.T) {
-	client := fake.NewSimpleClientset(
-		&corev1.Endpoints{
+	client := fake.NewClientset(
+		&discoveryv1.EndpointSlice{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "my-service",
+				Name:      "my-service-abc12",
 				Namespace: "default",
+				Labels: map[string]string{
+					discoveryv1.LabelServiceName: "my-service",
+				},
 			},
-			Subsets: []corev1.EndpointSubset{
+			Endpoints: []discoveryv1.Endpoint{
 				{
-					Addresses: []corev1.EndpointAddress{
-						{
-							IP: "10.0.0.1",
-							TargetRef: &corev1.ObjectReference{
-								Kind: "Pod",
-								Name: "backend-pod",
-							},
-						},
+					Addresses: []string{"10.0.0.1"},
+					Conditions: discoveryv1.EndpointConditions{
+						Ready: ptr.To(true),
+					},
+					TargetRef: &corev1.ObjectReference{
+						Kind: "Pod",
+						Name: "backend-pod",
 					},
 				},
 			},
@@ -185,24 +189,26 @@ func TestResolvePodForTarget_Service(t *testing.T) {
 	}
 }
 
-// TestResolvePodForTarget_ServiceNoReadyPods verifies error when service endpoints have no ready pods.
+// TestResolvePodForTarget_ServiceNoReadyPods verifies error when service endpoint slices have no ready pods.
 func TestResolvePodForTarget_ServiceNoReadyPods(t *testing.T) {
-	client := fake.NewSimpleClientset(
-		&corev1.Endpoints{
+	client := fake.NewClientset(
+		&discoveryv1.EndpointSlice{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "my-service",
+				Name:      "my-service-abc12",
 				Namespace: "default",
+				Labels: map[string]string{
+					discoveryv1.LabelServiceName: "my-service",
+				},
 			},
-			Subsets: []corev1.EndpointSubset{
+			Endpoints: []discoveryv1.Endpoint{
 				{
-					Addresses: []corev1.EndpointAddress{
-						{
-							IP: "10.0.0.1",
-							TargetRef: &corev1.ObjectReference{
-								Kind: "Pod",
-								Name: "backend-pod",
-							},
-						},
+					Addresses: []string{"10.0.0.1"},
+					Conditions: discoveryv1.EndpointConditions{
+						Ready: ptr.To(true),
+					},
+					TargetRef: &corev1.ObjectReference{
+						Kind: "Pod",
+						Name: "backend-pod",
 					},
 				},
 			},
@@ -226,7 +232,7 @@ func TestResolvePodForTarget_ServiceNoReadyPods(t *testing.T) {
 
 // TestResolvePodForTarget_ServiceNotFound verifies error when service does not exist.
 func TestResolvePodForTarget_ServiceNotFound(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 
 	_, err := resolvePodForTarget(context.Background(), client, "default", "Service", "nonexistent")
 	if err == nil {
@@ -236,7 +242,7 @@ func TestResolvePodForTarget_ServiceNotFound(t *testing.T) {
 
 // TestResolvePodForTarget_UnsupportedKind verifies that unsupported kinds return an error.
 func TestResolvePodForTarget_UnsupportedKind(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 
 	_, err := resolvePodForTarget(context.Background(), client, "default", "ConfigMap", "my-cm")
 	if err == nil {
@@ -246,7 +252,7 @@ func TestResolvePodForTarget_UnsupportedKind(t *testing.T) {
 
 // TestResolvePodForTarget_WorkloadNoReadyPod verifies error when workload has no ready pods.
 func TestResolvePodForTarget_WorkloadNoReadyPod(t *testing.T) {
-	client := fake.NewSimpleClientset(
+	client := fake.NewClientset(
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "nginx-abc123",
@@ -266,7 +272,7 @@ func TestResolvePodForTarget_WorkloadNoReadyPod(t *testing.T) {
 
 // TestResolvePodForTarget_WorkloadNoPods verifies error when workload has no matching pods.
 func TestResolvePodForTarget_WorkloadNoPods(t *testing.T) {
-	client := fake.NewSimpleClientset()
+	client := fake.NewClientset()
 
 	_, err := resolvePodForTarget(context.Background(), client, "default", "Deployment", "nginx")
 	if err == nil {

@@ -6,7 +6,12 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import { RestartIcon, ScaleIcon, DeleteIcon, PortForwardIcon } from '@shared/components/icons/MenuIcons';
+import {
+  RestartIcon,
+  ScaleIcon,
+  DeleteIcon,
+  PortForwardIcon,
+} from '@shared/components/icons/MenuIcons';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import '../ContextMenu.css';
 import './ActionsMenu.css';

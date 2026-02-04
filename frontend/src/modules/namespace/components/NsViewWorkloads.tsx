@@ -42,7 +42,13 @@ import {
   SuspendCronJob,
 } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
-import { OpenIcon, RestartIcon, ScaleIcon, DeleteIcon, PortForwardIcon } from '@shared/components/icons/MenuIcons';
+import {
+  OpenIcon,
+  RestartIcon,
+  ScaleIcon,
+  DeleteIcon,
+  PortForwardIcon,
+} from '@shared/components/icons/MenuIcons';
 
 interface WorkloadsViewProps {
   namespace: string;
@@ -539,10 +545,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           onIncrement={(delta) => updateScaleValue((value) => value + delta)}
         />
 
-        <PortForwardModal
-          target={portForwardTarget}
-          onClose={() => setPortForwardTarget(null)}
-        />
+        <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
       </>
     );
   }

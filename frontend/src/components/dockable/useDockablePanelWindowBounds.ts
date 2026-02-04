@@ -107,10 +107,7 @@ export function useWindowBoundsConstraint(
 
           // Ensure panel stays within right edge.
           if (rightEdge > viewport.width) {
-            newPosition.x = Math.max(
-              LAYOUT.MIN_EDGE_DISTANCE,
-              viewport.width - newSize.width - 20
-            );
+            newPosition.x = Math.max(LAYOUT.MIN_EDGE_DISTANCE, viewport.width - newSize.width - 20);
             needsUpdate = true;
           }
 

@@ -59,11 +59,7 @@ function getDefaultLocalPort(containerPort: number): number {
  * Supports both predefined container ports (via radio selection) and
  * custom port input when no ports are available.
  */
-const PortForwardModal = ({
-  target,
-  onClose,
-  onStarted,
-}: PortForwardModalProps) => {
+const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps) => {
   // Selected container port (either from predefined list or manual input)
   const [containerPort, setContainerPort] = useState<number>(0);
   // Local port to forward to
@@ -130,28 +126,22 @@ const PortForwardModal = ({
   }, []);
 
   // Handle manual container port input
-  const handleContainerPortInput = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const parsed = parseInt(event.target.value, 10);
-      const port = Number.isNaN(parsed) ? 0 : parsed;
-      setContainerPort(port);
-      if (port > 0) {
-        setLocalPort(getDefaultLocalPort(port));
-      }
-      setError(null);
-    },
-    []
-  );
+  const handleContainerPortInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const parsed = parseInt(event.target.value, 10);
+    const port = Number.isNaN(parsed) ? 0 : parsed;
+    setContainerPort(port);
+    if (port > 0) {
+      setLocalPort(getDefaultLocalPort(port));
+    }
+    setError(null);
+  }, []);
 
   // Handle local port input
-  const handleLocalPortInput = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const parsed = parseInt(event.target.value, 10);
-      setLocalPort(Number.isNaN(parsed) ? 0 : parsed);
-      setError(null);
-    },
-    []
-  );
+  const handleLocalPortInput = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const parsed = parseInt(event.target.value, 10);
+    setLocalPort(Number.isNaN(parsed) ? 0 : parsed);
+    setError(null);
+  }, []);
 
   // Handle form submission
   const handleSubmit = useCallback(async () => {
@@ -199,12 +189,9 @@ const PortForwardModal = ({
   }, [isLoading, onClose]);
 
   // Prevent click propagation from modal content
-  const handleContentClick = useCallback(
-    (event: React.MouseEvent) => {
-      event.stopPropagation();
-    },
-    []
-  );
+  const handleContentClick = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+  }, []);
 
   // Don't render if no target
   if (!target) {
@@ -215,10 +202,7 @@ const PortForwardModal = ({
 
   return (
     <div className="modal-overlay" onClick={handleOverlayClick}>
-      <div
-        className="modal-container port-forward-modal"
-        onClick={handleContentClick}
-      >
+      <div className="modal-container port-forward-modal" onClick={handleContentClick}>
         {/* Header */}
         <div className="modal-header">
           <h2>Port Forward</h2>
@@ -249,15 +233,11 @@ const PortForwardModal = ({
           <div className="port-forward-resource-info">
             <div className="port-forward-resource-info-row">
               <span className="port-forward-resource-info-label">Cluster:</span>
-              <span className="port-forward-resource-info-value">
-                {target.clusterName}
-              </span>
+              <span className="port-forward-resource-info-value">{target.clusterName}</span>
             </div>
             <div className="port-forward-resource-info-row">
               <span className="port-forward-resource-info-label">Namespace:</span>
-              <span className="port-forward-resource-info-value">
-                {target.namespace}
-              </span>
+              <span className="port-forward-resource-info-value">{target.namespace}</span>
             </div>
             <div className="port-forward-resource-info-row">
               <span className="port-forward-resource-info-label">Resource:</span>
@@ -272,9 +252,7 @@ const PortForwardModal = ({
             <label>Container Port</label>
             {isLoadingPorts ? (
               // Loading indicator while fetching ports
-              <div className="port-forward-loading">
-                Loading available ports...
-              </div>
+              <div className="port-forward-loading">Loading available ports...</div>
             ) : hasPredefinedPorts ? (
               // Radio buttons for predefined ports
               <div className="port-forward-port-options">
@@ -294,18 +272,12 @@ const PortForwardModal = ({
                       disabled={isLoading}
                     />
                     <span className="port-forward-port-option-label">
-                      <span className="port-forward-port-number">
-                        {portInfo.port}
-                      </span>
+                      <span className="port-forward-port-number">{portInfo.port}</span>
                       {portInfo.name && (
-                        <span className="port-forward-port-name">
-                          ({portInfo.name})
-                        </span>
+                        <span className="port-forward-port-name">({portInfo.name})</span>
                       )}
                       {portInfo.protocol && (
-                        <span className="port-forward-port-protocol">
-                          {portInfo.protocol}
-                        </span>
+                        <span className="port-forward-port-protocol">{portInfo.protocol}</span>
                       )}
                     </span>
                   </label>
@@ -357,17 +329,15 @@ const PortForwardModal = ({
 
         {/* Footer */}
         <div className="port-forward-footer">
-          <button
-            className="button cancel"
-            onClick={onClose}
-            disabled={isLoading}
-          >
+          <button className="button cancel" onClick={onClose} disabled={isLoading}>
             Cancel
           </button>
           <button
             className="button save"
             onClick={handleSubmit}
-            disabled={isLoading || isLoadingPorts || !isValidPort(containerPort) || !isValidPort(localPort)}
+            disabled={
+              isLoading || isLoadingPorts || !isValidPort(containerPort) || !isValidPort(localPort)
+            }
           >
             {isLoading ? 'Starting...' : 'Start'}
           </button>

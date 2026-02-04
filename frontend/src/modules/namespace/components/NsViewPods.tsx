@@ -507,10 +507,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           onCancel={() => setDeleteConfirm({ show: false, pod: null })}
         />
 
-        <PortForwardModal
-          target={portForwardTarget}
-          onClose={() => setPortForwardTarget(null)}
-        />
+        <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
       </>
     );
   }

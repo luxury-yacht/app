@@ -79,14 +79,18 @@ const Overview: React.FC<OverviewProps> = (props) => {
             canTrigger={!!canTrigger}
             canSuspend={!!canSuspend}
             canPortForward={canPortForward}
-            portForwardTarget={canPortForward ? {
-              kind: props.kind,
-              name: props.name,
-              namespace: props.namespace || '',
-              clusterId: props.clusterId || '',
-              clusterName: props.clusterName || '',
-              ports: [],
-            } : undefined}
+            portForwardTarget={
+              canPortForward
+                ? {
+                    kind: props.kind,
+                    name: props.name,
+                    namespace: props.namespace || '',
+                    clusterId: props.clusterId || '',
+                    clusterName: props.clusterName || '',
+                    ports: [],
+                  }
+                : undefined
+            }
             isSuspended={props.suspend}
             restartDisabledReason={!canRestart ? props.restartDisabledReason : undefined}
             scaleDisabledReason={!canScale ? props.scaleDisabledReason : undefined}

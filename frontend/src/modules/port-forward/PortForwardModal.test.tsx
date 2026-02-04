@@ -358,9 +358,7 @@ describe('PortForwardModal', () => {
   it('fetches ports from backend when not provided', async () => {
     vi.useFakeTimers();
 
-    getTargetPortsMock.mockResolvedValue([
-      { port: 3000, name: 'api', protocol: 'TCP' },
-    ]);
+    getTargetPortsMock.mockResolvedValue([{ port: 3000, name: 'api', protocol: 'TCP' }]);
 
     const targetWithoutPorts: PortForwardTarget = {
       ...mockTarget,
@@ -374,12 +372,7 @@ describe('PortForwardModal', () => {
       await vi.advanceTimersByTimeAsync(100);
     });
 
-    expect(getTargetPortsMock).toHaveBeenCalledWith(
-      'cluster-1',
-      'default',
-      'Deployment',
-      'nginx'
-    );
+    expect(getTargetPortsMock).toHaveBeenCalledWith('cluster-1', 'default', 'Deployment', 'nginx');
 
     vi.useRealTimers();
   });
