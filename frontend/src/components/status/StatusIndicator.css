@@ -56,11 +56,12 @@
 /* Popover - appears below the dot with a connecting notch */
 .status-popover {
   position: absolute;
-  top: calc(100% + 10px);
-  right: -6px;
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
   min-width: 190px;
   max-width: 260px;
-  background: var(--color-bg-secondary);
+  background: var(--color-bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow:
@@ -72,47 +73,29 @@
   animation: status-popover-enter 0.15s ease-out;
 }
 
-/* Notch arrow connecting popover to the dot */
-.status-popover::before {
-  content: '';
+/* Arrow pointing up from the popover toward the dot */
+.status-popover-arrow {
   position: absolute;
-  top: -5px;
-  right: 12px;
-  width: 8px;
-  height: 8px;
-  background: var(--color-bg-secondary);
-  border-top: 1px solid var(--border-color);
-  border-left: 1px solid var(--border-color);
-  transform: rotate(45deg);
+  top: -10px;
+  left: 50%;
+  margin-left: -8px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 10px solid var(--color-bg-tertiary);
 }
 
 @keyframes status-popover-enter {
   from {
     opacity: 0;
-    transform: translateY(-4px);
+    transform: translateX(-50%) translateY(-4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateX(-50%) translateY(0);
   }
 }
-
-/* Status-tinted top accent bar */
-.status-popover::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 12px;
-  right: 12px;
-  height: 2px;
-  border-radius: 0 0 2px 2px;
-}
-
-.status-popover[data-status="healthy"]::after { background: var(--status-healthy); }
-.status-popover[data-status="refreshing"]::after { background: var(--status-refreshing); }
-.status-popover[data-status="degraded"]::after { background: var(--status-degraded); }
-.status-popover[data-status="unhealthy"]::after { background: var(--status-unhealthy); }
-.status-popover[data-status="inactive"]::after { background: var(--status-inactive); }
 
 /* Title row with inline status dot echo */
 .status-popover-title {
@@ -145,15 +128,16 @@
   font-size: 11px;
   font-weight: 500;
   padding: 4px 12px;
-  background: var(--color-accent-bg);
-  border: 1px solid var(--color-accent);
+  background: rgba(96, 165, 250, 0.12);
+  border: 1px solid rgba(96, 165, 250, 0.3);
   border-radius: 4px;
-  color: var(--color-accent);
+  color: #60a5fa;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .status-popover-action button:hover {
-  background: var(--color-accent);
-  color: var(--color-text-inverse);
+  background: rgba(96, 165, 250, 0.22);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #93bbfd;
 }

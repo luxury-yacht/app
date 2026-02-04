@@ -80,6 +80,7 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
       <div className="status-indicator-dot" data-status={status} />
       {isOpen && (
         <div className="status-popover" data-status={status}>
+          <div className="status-popover-arrow" />
           <div className="status-popover-title">{title}</div>
           <div className="status-popover-message">{message}</div>
           {actionLabel && onAction && (
