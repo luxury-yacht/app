@@ -284,9 +284,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
             disabled={!continueToken || isRequestingMore}
             title={!continueToken ? 'All items loaded' : undefined}
           >
-            {isRequestingMore
-              ? 'Loading…'
-              : `Load More (${items.length} of ${totalCount})`}
+            {isRequestingMore ? 'Loading…' : `Load More (${items.length} of ${totalCount})`}
           </button>
         ),
       },

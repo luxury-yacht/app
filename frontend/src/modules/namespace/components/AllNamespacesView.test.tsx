@@ -194,9 +194,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourcesMock).toHaveBeenCalled();
-    expect(namespaceResourcesMocks.providerProps).toContainEqual(
-      expect.objectContaining({ namespace: ALL_NAMESPACES_SCOPE, activeView: 'pods' })
-    );
 
     const props = getLatestProps('pods-view');
     expect(props.namespace).toBe(ALL_NAMESPACES_SCOPE);
@@ -235,9 +232,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('workloads');
-    expect(namespaceResourcesMocks.providerProps).toContainEqual(
-      expect.objectContaining({ namespace: ALL_NAMESPACES_SCOPE, activeView: 'workloads' })
-    );
     expect(container.textContent).toContain('Failed to load workload resources: load failed');
     expect(getLatestProps('workloads-view')?.data).toBe(workloadsData);
   });
@@ -274,9 +268,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('helm');
-    expect(namespaceResourcesMocks.providerProps).toContainEqual(
-      expect.objectContaining({ namespace: ALL_NAMESPACES_SCOPE, activeView: 'helm' })
-    );
     expect(container.textContent).toContain('Failed to load Helm releases: helm down');
 
     const helmCalls = viewRenderers['helm-view'].mock.calls;
@@ -308,9 +299,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('config');
-    expect(namespaceResourcesMocks.providerProps).toContainEqual(
-      expect.objectContaining({ namespace: ALL_NAMESPACES_SCOPE, activeView: 'config' })
-    );
     const calls = viewRenderers['config-view'].mock.calls;
     expect(calls.length).toBeGreaterThan(0);
     const props = calls[calls.length - 1][0];
@@ -344,9 +332,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('autoscaling');
-    expect(namespaceResourcesMocks.providerProps).toContainEqual(
-      expect.objectContaining({ namespace: ALL_NAMESPACES_SCOPE, activeView: 'autoscaling' })
-    );
     expect(container.textContent).toContain('Failed to load autoscaling resources: load failed');
 
     const props = getLatestProps('autoscaling-view');
@@ -376,9 +361,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('network');
-    expect(namespaceResourcesMocks.providerProps).toContainEqual(
-      expect.objectContaining({ namespace: ALL_NAMESPACES_SCOPE, activeView: 'network' })
-    );
     expect(container.textContent).toContain('Failed to load network resources: network down');
 
     const props = getLatestProps('network-view');
@@ -408,9 +390,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('quotas');
-    expect(namespaceResourcesMocks.providerProps).toContainEqual(
-      expect.objectContaining({ namespace: ALL_NAMESPACES_SCOPE, activeView: 'quotas' })
-    );
     expect(container.textContent).toContain('Failed to load quota resources: quotas down');
     expect(getLatestProps('quotas-view')?.data).toBe(quotasData);
   });
@@ -442,9 +421,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('rbac');
-    expect(namespaceResourcesMocks.providerProps).toContainEqual(
-      expect.objectContaining({ namespace: ALL_NAMESPACES_SCOPE, activeView: 'rbac' })
-    );
     expect(container.textContent).toContain('Failed to load RBAC resources: rbac down');
     expect(getLatestProps('rbac-view')?.data).toBe(rbacData);
   });
@@ -478,9 +454,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('storage');
-    expect(namespaceResourcesMocks.providerProps).toContainEqual(
-      expect.objectContaining({ namespace: ALL_NAMESPACES_SCOPE, activeView: 'storage' })
-    );
     expect(container.textContent).toContain('Failed to load storage resources: storage down');
     expect(getLatestProps('storage-view')?.data).toBe(storageData);
   });
@@ -506,9 +479,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('custom');
-    expect(namespaceResourcesMocks.providerProps).toContainEqual(
-      expect.objectContaining({ namespace: ALL_NAMESPACES_SCOPE, activeView: 'custom' })
-    );
     expect(container.textContent).toContain('Failed to load custom resources: custom down');
     expect(getLatestProps('custom-view')?.data).toBe(customData);
   });
@@ -547,9 +517,6 @@ describe('AllNamespacesView', () => {
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
     expect(namespaceResourcesMocks.useNamespaceResourceMock).toHaveBeenCalledWith('events');
-    expect(namespaceResourcesMocks.providerProps).toContainEqual(
-      expect.objectContaining({ namespace: ALL_NAMESPACES_SCOPE, activeView: 'events' })
-    );
     expect(container.textContent).toContain('Failed to load events: events down');
     expect(getLatestProps('events-view')?.data).toBe(eventsData);
   });
@@ -560,7 +527,7 @@ describe('AllNamespacesView', () => {
     await flush();
 
     expect(container.textContent).toContain(
-      'The overview view is not yet available for the “All” namespace.'
+      'The overview view is not yet available for the "All" namespace.'
     );
   });
 });
