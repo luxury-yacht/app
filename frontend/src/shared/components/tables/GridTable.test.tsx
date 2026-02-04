@@ -30,6 +30,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { createTextColumn } from '@shared/components/tables/columnFactories';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -39,6 +40,11 @@ const runtimeMocks = vi.hoisted(() => ({
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOn: runtimeMocks.eventsOn,
   EventsOff: runtimeMocks.eventsOff,
+}));
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  GetZoomLevel: vi.fn().mockResolvedValue(100),
+  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock useKeyboardContext to return no-op functions.
@@ -994,9 +1000,11 @@ function renderGridTable(options: RenderOptions = {}) {
 
   act(() => {
     root.render(
-      <KeyboardProvider>
-        <GridTable<SimpleRow> {...(currentProps as any)} />
-      </KeyboardProvider>
+      <ZoomProvider>
+        <KeyboardProvider>
+          <GridTable<SimpleRow> {...(currentProps as any)} />
+        </KeyboardProvider>
+      </ZoomProvider>
     );
   });
 
@@ -1013,9 +1021,11 @@ function renderGridTable(options: RenderOptions = {}) {
     };
     act(() => {
       root.render(
-        <KeyboardProvider>
-          <GridTable<SimpleRow> {...(currentProps as any)} />
-        </KeyboardProvider>
+        <ZoomProvider>
+          <KeyboardProvider>
+            <GridTable<SimpleRow> {...(currentProps as any)} />
+          </KeyboardProvider>
+        </ZoomProvider>
       );
     });
   };

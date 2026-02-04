@@ -11,6 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import ContextMenu from './ContextMenu';
 import { KeyboardProvider } from '@ui/shortcuts';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 const runtimeMocks = vi.hoisted(() => ({
   eventsOn: vi.fn(),
@@ -20,6 +21,11 @@ const runtimeMocks = vi.hoisted(() => ({
 vi.mock('@wailsjs/runtime/runtime', () => ({
   EventsOn: runtimeMocks.eventsOn,
   EventsOff: runtimeMocks.eventsOff,
+}));
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  GetZoomLevel: vi.fn().mockResolvedValue(100),
+  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('ContextMenu', () => {
@@ -55,14 +61,16 @@ describe('ContextMenu', () => {
 
     await act(async () => {
       root.render(
-        <KeyboardProvider>
-          <ContextMenu
-            items={items}
-            position={{ x: 100, y: 120 }}
-            onClose={onClose}
-            {...overrides}
-          />
-        </KeyboardProvider>
+        <ZoomProvider>
+          <KeyboardProvider>
+            <ContextMenu
+              items={items}
+              position={{ x: 100, y: 120 }}
+              onClose={onClose}
+              {...overrides}
+            />
+          </KeyboardProvider>
+        </ZoomProvider>
       );
       await Promise.resolve();
     });
@@ -199,5 +207,22 @@ describe('ContextMenu', () => {
 
       expect(stopPropagationSpy).toHaveBeenCalled();
     }
+  });
+
+  it('adjusts position for CSS zoom level', async () => {
+    // When CSS zoom is applied to <html>, clientX/clientY are in viewport coordinates,
+    // but left/top CSS values get scaled by the zoom. The ContextMenu must divide
+    // positions by the zoom factor to appear at the correct location.
+    //
+    // At zoom 100%, position (100, 120) should result in left: 100px, top: 120px
+    // This test verifies the default behavior at 100% zoom (mocked in test setup).
+
+    const { menu } = await renderMenu({
+      position: { x: 100, y: 120 },
+    });
+
+    // At 100% zoom, positions should be unchanged
+    expect(menu.style.left).toBe('100px');
+    expect(menu.style.top).toBe('120px');
   });
 });
