@@ -293,6 +293,13 @@ const PODS_CAPABILITY_SPECS: NamespaceCapabilitySpec[] = [
     subresource: 'log',
     feature: 'Namespace workloads',
   },
+  {
+    id: 'namespace:pods:portforward',
+    resourceKind: 'Pod',
+    verbs: ['create'],
+    subresource: 'portforward',
+    feature: 'Namespace workloads',
+  },
 ];
 
 const parseAutoscalingTarget = (

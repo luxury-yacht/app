@@ -163,7 +163,10 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     // Get context menu items
     const getContextMenuItems = useCallback(
       (resource: ConfigData): ContextMenuItem[] => {
-        const deleteStatus = permissionMap.get(getPermissionKey(resource.kind, 'delete')) ?? null;
+        const deleteStatus =
+          permissionMap.get(
+            getPermissionKey(resource.kind, 'delete', null, null, resource.clusterId)
+          ) ?? null;
 
         return buildObjectActionItems({
           object: {

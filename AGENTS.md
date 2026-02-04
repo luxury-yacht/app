@@ -16,6 +16,11 @@ Luxury Yacht uses Go for the backend and React for the frontend.
 
 You must adhere to these at all times. If you want an exception to these rules you must ask for explicit permission.
 
+- EVERY PART OF THE APP MUST BE MULTI-CLUSTER AWARE. This is the most important rule you must not break.
+  - The app can connect to multiple clusters simultaneously. Without proper references that include the clusterId, we could potentially retrieve the wrong data, or worse, issue destructive commands to an object in the wrong cluster.
+  - Everything that you do must be done with this in mind.
+  - If you find code that does not operate this way, fix it immediately.
+
 - Never do more than what is requested by the user.
 - Never change the appearance or behavior of the app unless asked to do so.
 - Only add or upgrade dependencies when explicitly requested and approved; use the latest stable version when you do.

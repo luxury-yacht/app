@@ -93,6 +93,7 @@ export interface BuildObjectActionsOptions {
     restart?: PermissionStatus | null;
     scale?: PermissionStatus | null;
     delete?: PermissionStatus | null;
+    portForward?: PermissionStatus | null;
   };
   actionLoading?: boolean;
 }
@@ -110,10 +111,19 @@ export function buildObjectActionItems({
   const menuItems: ContextMenuItem[] = [];
   const normalizedKind = normalizeKind(object.kind);
 
-  const { restart: restartStatus, scale: scaleStatus, delete: deleteStatus } = permissions;
+  const {
+    restart: restartStatus,
+    scale: scaleStatus,
+    delete: deleteStatus,
+    portForward: portForwardStatus,
+  } = permissions;
 
   // Permission pending header
-  const anyPending = restartStatus?.pending || scaleStatus?.pending || deleteStatus?.pending;
+  const anyPending =
+    restartStatus?.pending ||
+    scaleStatus?.pending ||
+    deleteStatus?.pending ||
+    portForwardStatus?.pending;
 
   if (anyPending) {
     menuItems.push({ header: true, label: 'Awaiting permissions...' });
@@ -232,7 +242,12 @@ export function buildObjectActionItems({
   }
 
   // Port Forward
-  if (PORT_FORWARDABLE_KINDS.includes(normalizedKind) && handlers.onPortForward) {
+  if (
+    PORT_FORWARDABLE_KINDS.includes(normalizedKind) &&
+    portForwardStatus?.allowed &&
+    !portForwardStatus.pending &&
+    handlers.onPortForward
+  ) {
     menuItems.push({
       label: 'Port Forward',
       icon: <PortForwardIcon />,
@@ -288,12 +303,21 @@ export function useObjectActions({
     const namespace = object.namespace || '';
 
     // Get permissions from the map
+    const clusterId = object.clusterId ?? undefined;
     const restartStatus =
-      permissionMap.get(getPermissionKey(normalizedKind, 'patch', namespace)) ?? null;
+      permissionMap.get(getPermissionKey(normalizedKind, 'patch', namespace, null, clusterId)) ??
+      null;
     const scaleStatus =
-      permissionMap.get(getPermissionKey(normalizedKind, 'update', namespace, 'scale')) ?? null;
+      permissionMap.get(
+        getPermissionKey(normalizedKind, 'update', namespace, 'scale', clusterId)
+      ) ?? null;
     const deleteStatus =
-      permissionMap.get(getPermissionKey(object.kind, 'delete', namespace)) ?? null;
+      permissionMap.get(getPermissionKey(object.kind, 'delete', namespace, null, clusterId)) ??
+      null;
+    // Port forward requires create permission on pods/portforward subresource
+    const portForwardStatus =
+      permissionMap.get(getPermissionKey('Pod', 'create', namespace, 'portforward', clusterId)) ??
+      null;
 
     return buildObjectActionItems({
       object,
@@ -303,6 +327,7 @@ export function useObjectActions({
         restart: restartStatus,
         scale: scaleStatus,
         delete: deleteStatus,
+        portForward: portForwardStatus,
       },
       actionLoading,
     });

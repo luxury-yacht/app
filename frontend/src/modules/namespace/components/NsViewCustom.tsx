@@ -202,7 +202,10 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (resource: CustomResourceData): ContextMenuItem[] => {
         const kind = resource.kind || resource.kindAlias || 'CustomResource';
-        const deleteStatus = permissionMap.get(getPermissionKey(kind, 'delete')) ?? null;
+        const deleteStatus =
+          permissionMap.get(
+            getPermissionKey(kind, 'delete', resource.namespace, null, resource.clusterId)
+          ) ?? null;
 
         return buildObjectActionItems({
           object: {

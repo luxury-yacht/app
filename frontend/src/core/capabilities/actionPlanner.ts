@@ -52,6 +52,22 @@ const podDeleteDefinition = (namespace: string): CapabilityDefinition => {
   };
 };
 
+const podPortForwardDefinition = (namespace: string): CapabilityDefinition => {
+  const descriptorId = `namespace:pods:portforward:${namespace}`;
+  return {
+    id: descriptorId,
+    scope: 'namespace',
+    feature: NODES_ACTION_FEATURE,
+    descriptor: {
+      id: descriptorId,
+      resourceKind: 'Pod',
+      verb: 'create',
+      subresource: 'portforward',
+      namespace,
+    },
+  };
+};
+
 const ownerRestartDefinition = (
   namespace: string,
   ownerKind: RestartableOwnerKind
@@ -81,7 +97,10 @@ const ownerRestartDefinition = (
   };
 };
 
-export type CapabilityActionId = 'core.nodes.pod.delete' | 'core.nodes.workload.restart';
+export type CapabilityActionId =
+  | 'core.nodes.pod.delete'
+  | 'core.nodes.pod.portforward'
+  | 'core.nodes.workload.restart';
 
 interface NamespaceActionBuildContext {
   namespace: string;
@@ -105,6 +124,11 @@ registerNamespaceAction({
 });
 
 registerNamespaceAction({
+  id: 'core.nodes.pod.portforward',
+  build: ({ namespace }) => [podPortForwardDefinition(namespace)],
+});
+
+registerNamespaceAction({
   id: 'core.nodes.workload.restart',
   build: ({ namespace, ownerKinds }) => {
     if (ownerKinds.size === 0) {
@@ -124,6 +148,7 @@ registerNamespaceAction({
 
 const DEFAULT_ACTIONS: CapabilityActionId[] = [
   'core.nodes.pod.delete',
+  'core.nodes.pod.portforward',
   'core.nodes.workload.restart',
 ];
 

@@ -182,7 +182,13 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (resource: NetworkData): ContextMenuItem[] => {
         const deleteStatus =
-          permissionMap.get(getPermissionKey(resource.kind, 'delete', resource.namespace)) ?? null;
+          permissionMap.get(
+            getPermissionKey(resource.kind, 'delete', resource.namespace, null, resource.clusterId)
+          ) ?? null;
+        const portForwardStatus =
+          permissionMap.get(
+            getPermissionKey('Pod', 'create', resource.namespace, 'portforward', resource.clusterId)
+          ) ?? null;
 
         return buildObjectActionItems({
           object: {
@@ -209,6 +215,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
           },
           permissions: {
             delete: deleteStatus,
+            portForward: portForwardStatus,
           },
         });
       },

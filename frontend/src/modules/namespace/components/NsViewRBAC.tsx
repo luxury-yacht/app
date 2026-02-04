@@ -192,7 +192,10 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (resource: RBACData): ContextMenuItem[] => {
-        const deleteStatus = permissionMap.get(getPermissionKey(resource.kind, 'delete')) ?? null;
+        const deleteStatus =
+          permissionMap.get(
+            getPermissionKey(resource.kind, 'delete', resource.namespace, null, resource.clusterId)
+          ) ?? null;
 
         return buildObjectActionItems({
           object: {

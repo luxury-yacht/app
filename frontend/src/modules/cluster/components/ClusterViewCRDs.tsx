@@ -167,7 +167,9 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (crd: CRDsData): ContextMenuItem[] => {
         const deleteStatus =
-          permissionMap.get(getPermissionKey('CustomResourceDefinition', 'delete')) ?? null;
+          permissionMap.get(
+            getPermissionKey('CustomResourceDefinition', 'delete', null, null, crd.clusterId)
+          ) ?? null;
 
         return buildObjectActionItems({
           object: {

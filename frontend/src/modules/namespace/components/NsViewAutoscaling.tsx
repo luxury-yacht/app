@@ -291,7 +291,9 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (resource: AutoscalingData): ContextMenuItem[] => {
         const deleteStatus =
-          permissionMap.get(getPermissionKey(resource.kind, 'delete', resource.namespace)) ?? null;
+          permissionMap.get(
+            getPermissionKey(resource.kind, 'delete', resource.namespace, null, resource.clusterId)
+          ) ?? null;
 
         return buildObjectActionItems({
           object: {

@@ -218,7 +218,10 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (resource: StorageData): ContextMenuItem[] => {
-        const deleteStatus = permissionMap.get(getPermissionKey(resource.kind, 'delete')) ?? null;
+        const deleteStatus =
+          permissionMap.get(
+            getPermissionKey(resource.kind, 'delete', resource.namespace, null, resource.clusterId)
+          ) ?? null;
 
         return buildObjectActionItems({
           object: {

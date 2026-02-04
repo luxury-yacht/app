@@ -403,7 +403,13 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {
         const deleteStatus =
-          permissionMap.get(getPermissionKey('Pod', 'delete', pod.namespace)) ?? null;
+          permissionMap.get(
+            getPermissionKey('Pod', 'delete', pod.namespace, null, pod.clusterId)
+          ) ?? null;
+        const portForwardStatus =
+          permissionMap.get(
+            getPermissionKey('Pod', 'create', pod.namespace, 'portforward', pod.clusterId)
+          ) ?? null;
 
         return buildObjectActionItems({
           object: {
@@ -430,6 +436,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           },
           permissions: {
             delete: deleteStatus,
+            portForward: portForwardStatus,
           },
         });
       },

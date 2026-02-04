@@ -186,7 +186,9 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
     const getContextMenuItems = useCallback(
       (resource: QuotaData): ContextMenuItem[] => {
         const deleteStatus =
-          permissionMap.get(getPermissionKey(resource.kind, 'delete', resource.namespace)) ?? null;
+          permissionMap.get(
+            getPermissionKey(resource.kind, 'delete', resource.namespace, null, resource.clusterId)
+          ) ?? null;
 
         return buildObjectActionItems({
           object: {

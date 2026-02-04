@@ -161,7 +161,9 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       (workload: WorkloadData) => {
         const normalized = normalizeKind(workload.kind);
         if (!RESTARTABLE_KINDS.includes(normalized)) return false;
-        const status = permissionMap.get(getPermissionKey(normalized, 'patch', workload.namespace));
+        const status = permissionMap.get(
+          getPermissionKey(normalized, 'patch', workload.namespace, null, workload.clusterId)
+        );
         return Boolean(status?.allowed && !status?.pending);
       },
       [permissionMap]
@@ -170,7 +172,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const canDelete = useCallback(
       (workload: WorkloadData) => {
         const status = permissionMap.get(
-          getPermissionKey(workload.kind, 'delete', workload.namespace)
+          getPermissionKey(workload.kind, 'delete', workload.namespace, null, workload.clusterId)
         );
         return Boolean(status?.allowed && !status?.pending);
       },
@@ -326,13 +328,23 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       (row: WorkloadData): ContextMenuItem[] => {
         const normalized = normalizeKind(row.kind);
 
-        // Get permissions
+        // Get permissions (always include clusterId for cluster-safe lookups)
         const restartStatus =
-          permissionMap.get(getPermissionKey(normalized, 'patch', row.namespace)) ?? null;
+          permissionMap.get(
+            getPermissionKey(normalized, 'patch', row.namespace, null, row.clusterId)
+          ) ?? null;
         const scaleStatus =
-          permissionMap.get(getPermissionKey(normalized, 'update', row.namespace, 'scale')) ?? null;
+          permissionMap.get(
+            getPermissionKey(normalized, 'update', row.namespace, 'scale', row.clusterId)
+          ) ?? null;
         const deleteStatus =
-          permissionMap.get(getPermissionKey(row.kind, 'delete', row.namespace)) ?? null;
+          permissionMap.get(
+            getPermissionKey(row.kind, 'delete', row.namespace, null, row.clusterId)
+          ) ?? null;
+        const portForwardStatus =
+          permissionMap.get(
+            getPermissionKey('Pod', 'create', row.namespace, 'portforward', row.clusterId)
+          ) ?? null;
 
         return buildObjectActionItems({
           object: {
@@ -366,6 +378,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             restart: restartStatus,
             scale: scaleStatus,
             delete: deleteStatus,
+            portForward: portForwardStatus,
           },
         });
       },
