@@ -14,7 +14,6 @@ import {
   ALL_NAMESPACES_DISPLAY_NAME,
   ALL_NAMESPACES_RESOURCE_VERSION,
   ALL_NAMESPACES_SCOPE,
-  isAllNamespaces,
 } from '@modules/namespace/constants';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import {
@@ -35,6 +34,7 @@ import { useSidebarKeyboardControls, SidebarCursorTarget } from './SidebarKeys';
 
 // Static cluster view list to avoid re-creating the array each render.
 const RESOURCE_VIEWS: Array<{ id: ClusterViewType; label: string }> = [
+  { id: 'browse', label: 'Browse' },
   { id: 'nodes', label: 'Nodes' },
   { id: 'config', label: 'Config' },
   { id: 'crds', label: 'CRDs' },
@@ -389,25 +389,6 @@ function Sidebar() {
                   <span>Overview</span>
                 </div>
                 <div
-                  className={buildSidebarItemClassName(['sidebar-item'], {
-                    kind: 'cluster-view',
-                    view: 'browse',
-                  })}
-                  onClick={() => {
-                    if (!keyboardActivationRef.current) {
-                      clearKeyboardPreview();
-                    }
-                    handleClusterViewSelect('browse');
-                  }}
-                  data-sidebar-focusable="true"
-                  data-sidebar-target-kind="cluster-view"
-                  data-sidebar-target-view="browse"
-                  tabIndex={-1}
-                >
-                  <CategoryIcon width={14} height={14} />
-                  <span>Browse</span>
-                </div>
-                <div
                   className={buildSidebarItemClassName(['sidebar-item', 'header', 'clickable'], {
                     kind: 'cluster-toggle',
                     id: 'resources',
@@ -521,11 +502,7 @@ function Sidebar() {
                               </div>
                               {isExpanded && (
                                 <div className="sidebar-views">
-                                  {namespaceViews
-                                    .filter(
-                                      (view) => !(isAllNamespaces(scope) && view.id === 'browse')
-                                    )
-                                    .map((view) => {
+                                  {namespaceViews.map((view) => {
                                       const label = view.label;
                                       return (
                                         <div

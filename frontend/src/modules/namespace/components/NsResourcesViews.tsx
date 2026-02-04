@@ -17,7 +17,7 @@ import NsViewCustom from '@modules/namespace/components/NsViewCustom';
 import NsViewEvents from '@modules/namespace/components/NsViewEvents';
 import NsViewHelm from '@modules/namespace/components/NsViewHelm';
 import NsViewNetwork from '@modules/namespace/components/NsViewNetwork';
-import NsViewBrowse from '@modules/namespace/components/NsViewBrowse';
+import BrowseView from '@modules/browse/components/BrowseView';
 import NsViewPods from '@modules/namespace/components/NsViewPods';
 import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
@@ -187,7 +187,7 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
             resetKeys={[namespace]}
             fallback={(_, reset) => <ViewErrorFallback viewName="Browse" reset={reset} />}
           >
-            <NsViewBrowse namespace={namespace} />
+            <BrowseView namespace={namespace} />
           </ErrorBoundary>
         );
       case 'pods':

@@ -266,6 +266,11 @@ export interface ClusterEventsSnapshotPayload extends ClusterMeta {
 
 export type CatalogItemScope = 'Cluster' | 'Namespace';
 
+export interface KindInfo {
+  kind: string;
+  namespaced: boolean;
+}
+
 export interface CatalogItem extends ClusterMeta {
   kind: string;
   group: string;
@@ -298,7 +303,7 @@ export interface CatalogSnapshotPayload extends ClusterMeta {
   continue?: string;
   total: number;
   resourceCount: number;
-  kinds?: string[];
+  kinds?: KindInfo[];
   namespaces?: string[];
   namespaceGroups?: CatalogNamespaceGroup[];
   parity?: CatalogParity | null;

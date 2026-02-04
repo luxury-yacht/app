@@ -50,7 +50,7 @@ vi.mock('@modules/namespace/components/NsViewQuotas', () => ({ default: quotasVi
 vi.mock('@modules/namespace/components/NsViewCustom', () => ({ default: customViewMock }));
 vi.mock('@modules/namespace/components/NsViewHelm', () => ({ default: helmViewMock }));
 vi.mock('@modules/namespace/components/NsViewEvents', () => ({ default: eventsViewMock }));
-vi.mock('@modules/namespace/components/NsViewBrowse', () => ({ default: browseViewMock }));
+vi.mock('@modules/browse/components/BrowseView', () => ({ default: browseViewMock }));
 
 import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { NamespaceViewType } from '@/types/navigation/views';

@@ -536,13 +536,15 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     if (!leftNamespace) {
       return [];
     }
-    return buildKindOptions(leftNamespacePayload?.kinds ?? [], useShortNamesSetting);
+    const kindNames = (leftNamespacePayload?.kinds ?? []).map((k) => k.kind);
+    return buildKindOptions(kindNames, useShortNamesSetting);
   }, [leftNamespace, leftNamespacePayload?.kinds, useShortNamesSetting]);
   const rightKindOptions = useMemo(() => {
     if (!rightNamespace) {
       return [];
     }
-    return buildKindOptions(rightNamespacePayload?.kinds ?? [], useShortNamesSetting);
+    const kindNames = (rightNamespacePayload?.kinds ?? []).map((k) => k.kind);
+    return buildKindOptions(kindNames, useShortNamesSetting);
   }, [rightNamespace, rightNamespacePayload?.kinds, useShortNamesSetting]);
   const leftObjectOptions = useMemo(() => {
     if (!leftObjectEnabled) {

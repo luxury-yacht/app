@@ -20,7 +20,7 @@ type streamingAggregator struct {
 	service      *Service            // service is the catalog service associated with this aggregator.
 	mu           sync.Mutex          // mu protects access to the aggregator's state.
 	chunks       []*summaryChunk     // chunks holds the summary chunks collected by the aggregator.
-	kindSet      map[string]struct{} // kindSet tracks the kinds present in the aggregator.
+	kindSet      map[string]bool     // kindSet tracks the kinds present in the aggregator (value = namespaced).
 	namespaceSet map[string]struct{} // namespaceSet tracks the namespaces present in the aggregator.
 	start        time.Time           // start is the time when the aggregator was created.
 	firstFlush   time.Time           // firstFlush is the time when the first flush occurred.
@@ -30,7 +30,7 @@ func newStreamingAggregator(s *Service) *streamingAggregator {
 	return &streamingAggregator{
 		service:      s,                         // service is the catalog service associated with this aggregator.
 		chunks:       make([]*summaryChunk, 0),  // chunks holds the summary chunks collected by the aggregator.
-		kindSet:      make(map[string]struct{}), // kindSet tracks the kinds present in the aggregator.
+		kindSet:      make(map[string]bool),     // kindSet tracks the kinds present in the aggregator (value = namespaced).
 		namespaceSet: make(map[string]struct{}), // namespaceSet tracks the namespaces present in the aggregator.
 		start:        s.now(),                   // start is the time when the aggregator was created.
 	}
@@ -51,14 +51,15 @@ func (a *streamingAggregator) emit(_ int, items []Summary) {
 	a.chunks = append(a.chunks, chunk)
 	for _, summary := range chunkCopy {
 		if summary.Kind != "" {
-			a.kindSet[summary.Kind] = struct{}{}
+			// Track whether the kind is namespaced (Scope == ScopeNamespace)
+			a.kindSet[summary.Kind] = summary.Scope == ScopeNamespace
 		}
 		if summary.Namespace != "" {
 			a.namespaceSet[summary.Namespace] = struct{}{}
 		}
 	}
 	chunksSnapshot := a.cloneChunksLocked()
-	kindSnapshot := cloneSet(a.kindSet)
+	kindSnapshot := cloneKindSet(a.kindSet)
 	namespaceSnapshot := cloneSet(a.namespaceSet)
 	if a.firstFlush.IsZero() {
 		a.firstFlush = a.service.now()
@@ -107,7 +108,7 @@ func (a *streamingAggregator) finalize(descriptors []Descriptor, ready bool) {
 	}
 	a.mu.Lock()
 	chunks := a.cloneChunksLocked()
-	kindSnapshot := cloneSet(a.kindSet)
+	kindSnapshot := cloneKindSet(a.kindSet)
 	namespaceSnapshot := cloneSet(a.namespaceSet)
 	a.mu.Unlock()
 	a.service.publishStreamingState(chunks, kindSnapshot, namespaceSnapshot, descriptors, ready)
@@ -210,7 +211,7 @@ func (s *Service) CachesReady() bool {
 // publishStreamingState updates the streaming state in the service.
 func (s *Service) publishStreamingState(
 	chunks []*summaryChunk,
-	kindSet map[string]struct{},
+	kindSet map[string]bool,
 	namespaceSet map[string]struct{},
 	descriptors []Descriptor,
 	ready bool,
@@ -218,7 +219,7 @@ func (s *Service) publishStreamingState(
 	chunkSnapshot := make([]*summaryChunk, len(chunks))
 	copy(chunkSnapshot, chunks)
 
-	kindSnapshot := snapshotSortedKeys(kindSet)
+	kindSnapshot := snapshotSortedKindInfos(kindSet)
 	namespaceSnapshot := snapshotSortedKeys(namespaceSet)
 
 	s.mu.Lock()

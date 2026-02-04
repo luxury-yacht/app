@@ -1,7 +1,8 @@
 /**
  * frontend/src/modules/browse/components/BrowseView.tsx
  *
- * Stable, snapshot-driven Browse view for the object catalog.
+ * Browse component that supports cluster-scoped, namespace-scoped,
+ * and All Namespaces browse views.
  *
  * Key design choice:
  * - Do NOT rely on the catalog SSE stream to drive renders. The catalog stream can emit
@@ -16,304 +17,86 @@
  * This keeps Browse stable without modifying the shared GridTable component.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import './BrowseView.css';
 import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
-  type GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import * as cf from '@shared/components/tables/columnFactories';
 import { useTableSort } from '@/hooks/useTableSort';
-import { formatAge, formatFullDate } from '@/utils/ageFormatter';
-import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
-import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
-import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
-import { buildClusterScope } from '@/core/refresh/clusterScope';
-import { getDisplayKind } from '@/utils/kindAliasMap';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
+import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { isAllNamespaces } from '@modules/namespace/constants';
+import { useBrowseCatalog } from '@modules/browse/hooks/useBrowseCatalog';
+import { useBrowseColumns, toTableRows, type BrowseTableRow } from '@modules/browse/hooks/useBrowseColumns';
+import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
 
-const DEFAULT_LIMIT = 200;
 const VIRTUALIZATION_THRESHOLD = 80;
 
-type TableRow = {
-  uid: string;
-  kind: string;
-  kindDisplay: string;
-  namespace: string;
-  namespaceDisplay: string;
-  name: string;
-  scope: string;
-  resource: string;
-  group: string;
-  version: string;
-  age: string;
-  ageTimestamp: number;
-  item: CatalogItem;
+/**
+ * Derives the browse scope from the namespace prop.
+ */
+const deriveBrowseScope = (namespace: string | null | undefined): BrowseScope => {
+  if (namespace === undefined || namespace === null) {
+    return 'cluster';
+  }
+  if (isAllNamespaces(namespace)) {
+    return 'all-namespaces';
+  }
+  return 'namespace';
 };
 
-type PageRequestMode = 'reset' | 'append' | null;
-
-const parseContinueToken = (value: unknown): string | null =>
-  typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
-
-// Split a cluster-prefixed scope so we can normalize the query while preserving the cluster id.
-const splitClusterScope = (value: string): { prefix: string; scope: string } => {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return { prefix: '', scope: '' };
-  }
-  const delimiterIndex = trimmed.indexOf('|');
-  if (delimiterIndex <= 0) {
-    return { prefix: '', scope: trimmed };
-  }
-  return {
-    prefix: trimmed.slice(0, delimiterIndex).trim(),
-    scope: trimmed.slice(delimiterIndex + 1).trim(),
-  };
-};
-
-// Keep catalog data aligned to the active cluster tab.
-const filterCatalogItems = (items: CatalogItem[], clusterId?: string | null): CatalogItem[] => {
-  if (!clusterId) {
-    return items.filter((item) => !item.clusterId);
-  }
-  return items.filter((item) => item.clusterId === clusterId);
-};
-
-type UpsertResult = {
-  nextItems: CatalogItem[];
-  changed: boolean;
-};
-
-const rebuildIndexByUID = (items: CatalogItem[]): Map<string, number> => {
-  const next = new Map<string, number>();
-  items.forEach((item, index) => {
-    if (item.uid) {
-      next.set(item.uid, index);
-    }
-  });
-  return next;
-};
-
-const dedupeByUID = (
-  incoming: CatalogItem[]
-): { items: CatalogItem[]; indexByUid: Map<string, number> } => {
-  if (incoming.length === 0) {
-    return { items: [], indexByUid: new Map() };
-  }
-
-  const indexByUid = new Map<string, number>();
-  const items: CatalogItem[] = [];
-
-  for (const item of incoming) {
-    const uid = item.uid;
-    if (!uid) {
-      items.push(item);
-      continue;
-    }
-
-    const existingIndex = indexByUid.get(uid);
-    if (existingIndex == null) {
-      indexByUid.set(uid, items.length);
-      items.push(item);
-      continue;
-    }
-
-    // Replace in place to keep a stable ordering while ensuring unique keys.
-    items[existingIndex] = item;
-  }
-
-  return { items, indexByUid };
-};
-
-const upsertByUID = (
-  current: CatalogItem[],
-  indexByUid: Map<string, number>,
-  incoming: CatalogItem[]
-): UpsertResult => {
-  if (incoming.length === 0) {
-    return { nextItems: current, changed: false };
-  }
-
-  let changed = false;
-  let nextItems = current;
-
-  const ensureWritable = () => {
-    if (changed) {
-      return;
-    }
-    changed = true;
-    nextItems = current.slice();
-  };
-
-  for (const item of incoming) {
-    const uid = item.uid;
-    if (!uid) {
-      continue;
-    }
-
-    const index = indexByUid.get(uid);
-    if (index == null) {
-      ensureWritable();
-      indexByUid.set(uid, nextItems.length);
-      nextItems.push(item);
-      continue;
-    }
-
-    const existing = nextItems[index];
-    if (existing?.resourceVersion === item.resourceVersion) {
-      continue;
-    }
-
-    ensureWritable();
-    nextItems[index] = item;
-  }
-
-  return { nextItems, changed };
-};
-
-const buildCatalogScope = (params: {
-  limit: number;
-  search: string;
-  kinds: string[];
-  namespaces: string[];
-  continueToken?: string | null;
-}): string => {
-  const query = new URLSearchParams();
-  query.set('limit', String(params.limit));
-
-  const search = params.search.trim();
-  if (search.length > 0) {
-    query.set('search', search);
-  }
-
-  // Sort multi-value params to keep the scope string stable across renders/hydration.
-  // This avoids accidental refresh loops caused by reordered equivalent arrays.
-  params.kinds
-    .map((kind) => kind.trim())
-    .filter(Boolean)
-    .sort()
-    .forEach((kind) => query.append('kind', kind));
-
-  params.namespaces
-    .map((namespace) => namespace.trim())
-    .filter(Boolean)
-    .sort()
-    .forEach((namespace) => {
-      // GridTable uses '' as the synthetic "cluster-scoped" namespace option.
-      // The backend catalog already understands cluster scope when namespace is omitted.
-      query.append('namespace', namespace);
-    });
-
-  const continueToken = params.continueToken?.trim();
-  if (continueToken) {
-    query.set('continue', continueToken);
-  }
-
-  return query.toString();
-};
-
-const normalizeCatalogScope = (
-  raw: string | null | undefined,
-  fallbackLimit: number,
-  clusterId?: string | null
-): string | null => {
-  // The refresh subsystem may surface `snapshot.scope` (as reported by the backend) rather than
-  // the exact scope string we requested. Normalize both sides so Browse doesn't ignore valid
-  // snapshots due to parameter ordering differences.
-  if (!raw) {
-    return null;
-  }
-  const cleaned = raw.trim().replace(/^\?/, '');
-  const { prefix, scope } = splitClusterScope(cleaned);
-  const trimmed = scope.trim().replace(/^\?/, '');
-  if (!trimmed) {
-    return null;
-  }
-
-  try {
-    const params = new URLSearchParams(trimmed);
-    const limitRaw = params.get('limit');
-    const limit =
-      limitRaw && Number.isFinite(Number(limitRaw)) && Number(limitRaw) > 0
-        ? Number(limitRaw)
-        : fallbackLimit;
-    const search = params.get('search') ?? '';
-    const continueToken = params.get('continue');
-    const kinds = params.getAll('kind');
-    const namespaces = params.getAll('namespace');
-
-    const normalized = buildCatalogScope({
-      limit,
-      search,
-      kinds,
-      namespaces,
-      continueToken,
-    });
-    if (prefix) {
-      return `${prefix}|${normalized}`;
-    }
-    return buildClusterScope(clusterId ?? undefined, normalized);
-  } catch {
-    if (prefix) {
-      return `${prefix}|${trimmed}`;
-    }
-    return buildClusterScope(clusterId ?? undefined, trimmed);
-  }
-};
-
-const toTableRows = (items: CatalogItem[], useShortResourceNames: boolean): TableRow[] => {
-  return items.map((item) => {
-    const created = item.creationTimestamp ? new Date(item.creationTimestamp) : undefined;
-    const age = created ? formatAge(created) : '—';
-    const kindLabel = getDisplayKind(item.kind, useShortResourceNames);
-    const namespaceDisplay = item.namespace ?? '—';
-    return {
-      uid: item.uid,
-      kind: kindLabel.toLowerCase(),
-      kindDisplay: kindLabel,
-      namespace: namespaceDisplay.toLowerCase(),
-      namespaceDisplay,
-      name: item.name,
-      scope: item.scope,
-      resource: item.resource,
-      group: item.group,
-      version: item.version,
-      age,
-      ageTimestamp: created ? created.getTime() : 0,
-      item,
-    };
-  });
-};
-
-const BrowseView: React.FC = () => {
-  const domain = useRefreshDomain('catalog');
-  useCatalogDiagnostics(domain, 'Browse');
+/**
+ * BrowseView component that handles all browse view scopes.
+ *
+ * Usage:
+ * - Cluster scope: <BrowseView /> or <BrowseView namespace={undefined} />
+ * - Namespace scope: <BrowseView namespace="my-namespace" />
+ * - All Namespaces: <BrowseView namespace={ALL_NAMESPACES_SCOPE} />
+ */
+const BrowseView: React.FC<BrowseViewProps> = ({
+  namespace,
+  viewId,
+  className,
+  tableClassName,
+  emptyMessage,
+  loadingMessage,
+}) => {
   const { selectedClusterId } = useKubeconfig();
   const useShortResourceNames = useShortNames();
   const { openWithObject } = useObjectPanel();
   const namespaceContext = useNamespace();
   const viewState = useViewState();
 
-  const [items, setItems] = useState<CatalogItem[]>([]);
-  const [continueToken, setContinueToken] = useState<string | null>(null);
-  const [isRequestingMore, setIsRequestingMore] = useState(false);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const requestModeRef = useRef<PageRequestMode>(null);
-  const lastAppliedScopeRef = useRef<string>('');
-  const itemsRef = useRef<CatalogItem[]>([]);
-  const indexByUidRef = useRef<Map<string, number>>(new Map());
+  // Derive the scope from the namespace prop
+  const scope = deriveBrowseScope(namespace);
+  const isNamespaceScoped = scope === 'namespace';
+  const isClusterScoped = scope === 'cluster';
+  // Show namespace column only for all-namespaces scope (not for cluster or single namespace)
+  const showNamespaceColumn = scope === 'all-namespaces';
+  // For cluster scope, only show cluster-scoped objects (not namespace-scoped)
+  const clusterScopedOnly = isClusterScoped;
 
-  // Keep configuration props stable so GridTable hooks (virtualization/measurement) don't
-  // retrigger effects unnecessarily during refresh-driven re-renders.
+  // Build pinned namespaces array: empty for cluster/all-namespaces, single item for namespace scope
+  const pinnedNamespaces = useMemo(() => {
+    if (isNamespaceScoped && namespace) {
+      return [namespace.trim()];
+    }
+    return [];
+  }, [isNamespaceScoped, namespace]);
+
+  // Determine view ID for persistence
+  const resolvedViewId = viewId ?? (isNamespaceScoped ? 'namespace-browse' : 'browse');
+
+  // Virtualization options - kept stable to avoid retrigger effects
   const virtualizationOptions = useMemo(
     () => ({
       ...GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -324,6 +107,7 @@ const BrowseView: React.FC = () => {
     []
   );
 
+  // Handler to open a namespace in the namespace view
   const handleOpenNamespace = useCallback(
     (namespaceName?: string | null, clusterId?: string | null) => {
       if (!namespaceName || namespaceName.trim().length === 0) {
@@ -336,8 +120,9 @@ const BrowseView: React.FC = () => {
     [namespaceContext, viewState]
   );
 
+  // Handler to open an object in the object panel
   const handleOpen = useCallback(
-    (row: TableRow) => {
+    (row: BrowseTableRow) => {
       openWithObject({
         kind: row.item.kind,
         name: row.item.name,
@@ -353,8 +138,9 @@ const BrowseView: React.FC = () => {
     [openWithObject]
   );
 
+  // Context menu items builder
   const getContextMenuItems = useCallback(
-    (row: TableRow): ContextMenuItem[] =>
+    (row: BrowseTableRow): ContextMenuItem[] =>
       buildObjectActionItems({
         object: {
           kind: row.item.kind,
@@ -372,252 +158,123 @@ const BrowseView: React.FC = () => {
     [handleOpen]
   );
 
-  const columns = useMemo<GridColumnDefinition<TableRow>[]>(() => {
-    const ageColumn = cf.createAgeColumn<TableRow>('age', 'Age', (row) => row.age);
-    ageColumn.render = (row) =>
-      row.ageTimestamp ? (
-        <span title={formatFullDate(new Date(row.ageTimestamp))}>{row.age}</span>
-      ) : (
-        '—'
-      );
+  // Get columns based on scope
+  const columns = useBrowseColumns({
+    showNamespaceColumn,
+    onRowClick: handleOpen,
+    onNamespaceClick: showNamespaceColumn ? handleOpenNamespace : undefined,
+  });
 
-    const baseColumns: GridColumnDefinition<TableRow>[] = [
-      cf.createKindColumn<TableRow>({
-        key: 'kind',
-        getKind: (row) => row.item.kind,
-        getDisplayText: (row) => row.kindDisplay,
-        sortValue: (row) => row.kind,
-        onClick: handleOpen,
-      }),
-      cf.createTextColumn<TableRow>('name', 'Name', (row) => row.name, {
-        sortable: true,
-        onClick: (row) => handleOpen(row),
-        getClassName: () => 'object-panel-link',
-      }),
-      cf.createTextColumn<TableRow>('namespace', 'Namespace', (row) => row.namespaceDisplay, {
-        sortable: true,
-        onClick: (row) => handleOpenNamespace(row.item.namespace ?? null, row.item.clusterId),
-        isInteractive: (row) => Boolean(row.item.namespace),
-        getTitle: (row) =>
-          row.item.namespace ? `View ${row.item.namespace} workloads` : undefined,
-      }),
-      ageColumn,
-    ];
-
-    const sizing: cf.ColumnSizingMap = {
-      // Fixed widths: avoids measurement loops and keeps Browse stable during heavy loads.
-      // Users can still resize if column resizing is enabled.
-      kind: { width: 160, autoWidth: false },
-      name: { width: 320, autoWidth: false },
-      namespace: { width: 220, autoWidth: false },
-      age: { width: 120, autoWidth: false },
-    };
-    cf.applyColumnSizing(baseColumns, sizing);
-
-    return baseColumns;
-  }, [handleOpen, handleOpenNamespace]);
-
+  // Key extractor for the table
   const keyExtractor = useCallback(
-    (row: TableRow, index: number) =>
-      row.uid ||
-      `catalog:${row.item.namespace ?? 'cluster'}:${row.item.kind}:${row.item.name}:${index}`,
+    (row: BrowseTableRow, index: number) =>
+      buildClusterScopedKey(
+        row,
+        row.uid ||
+          `catalog:${row.item.namespace ?? 'cluster'}:${row.item.kind}:${row.item.name}:${index}`
+      ),
     []
   );
 
-  const filteredItems = useMemo(
-    () => filterCatalogItems(items, selectedClusterId),
-    [items, selectedClusterId]
-  );
-
-  const rows = useMemo(
-    () => toTableRows(filteredItems, useShortResourceNames),
-    [filteredItems, useShortResourceNames]
-  );
-
-  // Hold the initial snapshot flag so filter-driven refreshes don't unmount the table.
-  useEffect(() => {
-    if (hasLoadedOnce || !domain.data) {
-      return;
-    }
-    setHasLoadedOnce(true);
-  }, [domain.data, hasLoadedOnce]);
-
-  const filterOptions = useMemo(() => {
-    const payload = domain.data as CatalogSnapshotPayload | null;
-    return {
-      kinds: (payload?.kinds ?? []).slice().sort(),
-      namespaces: (payload?.namespaces ?? []).slice().sort(),
-      isNamespaceScoped: false,
-    };
-  }, [domain.data]);
-
-  const {
-    sortConfig: persistedSort,
-    setSortConfig: setPersistedSort,
-    columnWidths,
-    setColumnWidths,
-    columnVisibility,
-    setColumnVisibility,
-    filters: persistedFilters,
-    setFilters: setPersistedFilters,
-    resetState: resetPersistedState,
-  } = useGridTablePersistence<TableRow>({
-    viewId: 'browse',
+  // Use cluster-scoped persistence for cluster and all-namespaces, namespace-scoped for namespace
+  const clusterPersistence = useGridTablePersistence<BrowseTableRow>({
+    viewId: resolvedViewId,
     clusterIdentity: selectedClusterId,
     namespace: null,
     isNamespaceScoped: false,
     columns,
-    data: rows,
+    data: [], // We'll populate this after we have catalog data
     keyExtractor,
-    filterOptions,
+    filterOptions: { kinds: [], namespaces: [], isNamespaceScoped: false },
+    enabled: !isNamespaceScoped,
   });
 
-  const pageLimit = DEFAULT_LIMIT;
+  const namespacePersistence = useNamespaceGridTablePersistence<BrowseTableRow>({
+    viewId: resolvedViewId,
+    namespace: namespace ?? '',
+    defaultSort: { key: 'kind', direction: 'asc' },
+    columns,
+    data: [], // We'll populate this after we have catalog data
+    keyExtractor,
+    filterOptions: { kinds: [], namespaces: [], isNamespaceScoped: true },
+  });
 
-  const baseScope = useMemo(
-    () =>
-      buildCatalogScope({
-        limit: pageLimit,
-        search: persistedFilters.search ?? '',
-        kinds: persistedFilters.kinds ?? [],
-        namespaces: persistedFilters.namespaces ?? [],
-      }),
-    [pageLimit, persistedFilters.search, persistedFilters.kinds, persistedFilters.namespaces]
-  );
-
-  useEffect(() => {
-    // The refresh orchestrator only fetches snapshots for enabled domains.
-    // Enable catalog while Browse is mounted, and disable it on unmount to avoid
-    // background work when Browse is not in use.
-    refreshOrchestrator.setDomainEnabled('catalog', true);
-    return () => {
-      refreshOrchestrator.setDomainEnabled('catalog', false);
-    };
-  }, []);
-
-  // Apply query scope and refresh page 0 when the query changes.
-  useEffect(() => {
-    const normalizedScope =
-      normalizeCatalogScope(baseScope, pageLimit, selectedClusterId) ??
-      buildClusterScope(selectedClusterId, baseScope);
-
-    // Reset pagination state on query change.
-    requestModeRef.current = 'reset';
-    setIsRequestingMore(false);
-    setContinueToken(null);
-    // Keep current items until the new snapshot arrives to avoid focus loss in filters.
-
-    refreshOrchestrator.setDomainScope('catalog', normalizedScope);
-    lastAppliedScopeRef.current = normalizedScope;
-    void refreshOrchestrator.triggerManualRefresh('catalog', { suppressSpinner: true });
-  }, [baseScope, pageLimit, selectedClusterId]);
-
-  // Apply incoming snapshots to local pagination state.
-  useEffect(() => {
-    if (!domain.data || !domain.scope) {
-      return;
-    }
-    // The refresh store updates `domain.scope` when a fetch begins, but intentionally keeps
-    // `domain.data` until a new snapshot lands. Only apply snapshots once the domain is
-    // `ready` so we don't mistakenly treat stale data as belonging to the new scope (which
-    // can cause scope thrash, broken pagination, and virtual-scroll update loops).
-    if (domain.status !== 'ready') {
-      return;
-    }
-    const normalizedIncoming =
-      normalizeCatalogScope(domain.scope, pageLimit, selectedClusterId) ?? domain.scope;
-    if (normalizedIncoming !== lastAppliedScopeRef.current) {
-      return;
-    }
-
-    const payload = domain.data as CatalogSnapshotPayload;
-    const mode = requestModeRef.current;
-    requestModeRef.current = null;
-
-    if (mode === 'append') {
-      const { nextItems, changed } = upsertByUID(
-        itemsRef.current,
-        indexByUidRef.current,
-        payload.items ?? []
-      );
-      if (changed) {
-        itemsRef.current = nextItems;
-        setItems(nextItems);
+  // Select the appropriate persistence based on scope
+  const persistence = isNamespaceScoped
+    ? {
+        sortConfig: namespacePersistence.sortConfig,
+        setSortConfig: namespacePersistence.onSortChange,
+        columnWidths: namespacePersistence.columnWidths,
+        setColumnWidths: namespacePersistence.setColumnWidths,
+        columnVisibility: namespacePersistence.columnVisibility,
+        setColumnVisibility: namespacePersistence.setColumnVisibility,
+        filters: namespacePersistence.filters,
+        setFilters: namespacePersistence.setFilters,
+        resetState: namespacePersistence.resetState,
       }
-    } else {
-      const { items: nextItems, indexByUid } = dedupeByUID(payload.items ?? []);
-      itemsRef.current = nextItems;
-      indexByUidRef.current = indexByUid.size ? indexByUid : rebuildIndexByUID(nextItems);
-      setItems(nextItems);
-    }
+    : {
+        sortConfig: clusterPersistence.sortConfig,
+        setSortConfig: clusterPersistence.setSortConfig,
+        columnWidths: clusterPersistence.columnWidths,
+        setColumnWidths: clusterPersistence.setColumnWidths,
+        columnVisibility: clusterPersistence.columnVisibility,
+        setColumnVisibility: clusterPersistence.setColumnVisibility,
+        filters: clusterPersistence.filters,
+        setFilters: clusterPersistence.setFilters,
+        resetState: clusterPersistence.resetState,
+      };
 
-    setContinueToken(parseContinueToken(payload.continue));
-    setIsRequestingMore(false);
-
-    // After a load-more request, restore the base scope so subsequent manual refreshes
-    // refresh the first page for the current query rather than a paginated continuation.
-    if (mode === 'append') {
-      const normalizedBaseScope =
-        normalizeCatalogScope(baseScope, pageLimit, selectedClusterId) ??
-        buildClusterScope(selectedClusterId, baseScope);
-      refreshOrchestrator.setDomainScope('catalog', normalizedBaseScope);
-      lastAppliedScopeRef.current = normalizedBaseScope;
-    }
-  }, [domain.data, domain.scope, domain.status, baseScope, pageLimit, selectedClusterId]);
-
-  const handleLoadMore = useCallback(() => {
-    if (!continueToken || isRequestingMore) {
-      return;
-    }
-    requestModeRef.current = 'append';
-    setIsRequestingMore(true);
-
-    const pageScope = buildCatalogScope({
-      limit: pageLimit,
-      search: persistedFilters.search ?? '',
-      kinds: persistedFilters.kinds ?? [],
-      namespaces: persistedFilters.namespaces ?? [],
-      continueToken,
-    });
-
-    const normalizedScope =
-      normalizeCatalogScope(pageScope, pageLimit, selectedClusterId) ??
-      buildClusterScope(selectedClusterId, pageScope);
-    refreshOrchestrator.setDomainScope('catalog', normalizedScope);
-    lastAppliedScopeRef.current = normalizedScope;
-    void refreshOrchestrator.triggerManualRefresh('catalog', { suppressSpinner: true });
-  }, [
+  // Get catalog data
+  const {
+    items,
+    loading,
+    hasLoadedOnce,
     continueToken,
     isRequestingMore,
-    pageLimit,
-    persistedFilters.search,
-    persistedFilters.kinds,
-    persistedFilters.namespaces,
-    selectedClusterId,
-  ]);
-
-  const { sortedData, sortConfig, handleSort } = useTableSort<TableRow>(rows, 'kind', 'asc', {
-    controlledSort: persistedSort,
-    onChange: setPersistedSort,
+    handleLoadMore,
+    filterOptions,
+  } = useBrowseCatalog({
+    clusterId: selectedClusterId,
+    pinnedNamespaces,
+    clusterScopedOnly,
+    filters: {
+      search: persistence.filters.search ?? '',
+      kinds: persistence.filters.kinds ?? [],
+      namespaces: persistence.filters.namespaces ?? [],
+    },
+    diagnosticLabel: scope === 'namespace' ? 'Namespace Browse' : 'Browse',
   });
 
-  const loading =
-    domain.status === 'loading' ||
-    domain.status === 'initialising' ||
-    (items.length === 0 && !domain.data);
+  // Convert items to table rows
+  const rows = useMemo(
+    () => toTableRows(items, useShortResourceNames),
+    [items, useShortResourceNames]
+  );
 
+  // Apply sorting
+  const { sortedData, sortConfig, handleSort } = useTableSort<BrowseTableRow>(
+    rows,
+    'kind',
+    'asc',
+    {
+      controlledSort: persistence.sortConfig,
+      onChange: persistence.setSortConfig,
+    }
+  );
+
+  // Build grid filters configuration
   const gridFilters = useMemo(
     () => ({
       enabled: true,
-      value: persistedFilters,
-      onChange: setPersistedFilters,
-      onReset: resetPersistedState,
+      value: persistence.filters,
+      onChange: persistence.setFilters,
+      onReset: persistence.resetState,
       options: {
         kinds: filterOptions.kinds,
         namespaces: filterOptions.namespaces,
         showKindDropdown: true,
-        showNamespaceDropdown: true,
-        includeClusterScopedSyntheticNamespace: true,
+        showNamespaceDropdown: showNamespaceColumn,
+        includeClusterScopedSyntheticNamespace: showNamespaceColumn,
         customActions: (
           // Keep pagination actions out of the scrollable body. The in-body pagination button
           // can interact with virtual scroll/focus management and trigger React update-depth
@@ -635,17 +292,19 @@ const BrowseView: React.FC = () => {
       },
     }),
     [
-      persistedFilters,
-      resetPersistedState,
-      setPersistedFilters,
+      persistence.filters,
+      persistence.setFilters,
+      persistence.resetState,
       filterOptions.kinds,
       filterOptions.namespaces,
+      showNamespaceColumn,
       handleLoadMore,
       continueToken,
       isRequestingMore,
     ]
   );
 
+  // Loading overlay for pagination
   const loadingOverlay = useMemo(() => {
     if (!isRequestingMore) {
       return undefined;
@@ -656,35 +315,41 @@ const BrowseView: React.FC = () => {
     };
   }, [isRequestingMore]);
 
+  // Resolve class names and messages
+  const containerClassName = className ?? (isNamespaceScoped ? 'namespace-browse-view' : 'browse-view');
+  const resolvedTableClassName = tableClassName ?? (isNamespaceScoped ? 'gridtable-namespace-browse' : 'gridtable-browse');
+  const resolvedEmptyMessage = emptyMessage ?? (isNamespaceScoped ? 'No resources found in this namespace.' : 'No catalog objects found.');
+  const resolvedLoadingMessage = loadingMessage ?? (isNamespaceScoped ? 'Loading resources...' : 'Loading browse catalog...');
+
   return (
-    <div className="browse-view">
+    <div className={containerClassName}>
       <ResourceLoadingBoundary
         loading={loading}
         dataLength={sortedData.length}
         hasLoaded={hasLoadedOnce}
-        spinnerMessage="Loading browse catalog..."
+        spinnerMessage={resolvedLoadingMessage}
         allowPartial
         suppressEmptyWarning
       >
-        <GridTable<TableRow>
+        <GridTable<BrowseTableRow>
           data={sortedData}
           columns={columns}
           keyExtractor={keyExtractor}
           onRowClick={handleOpen}
           onSort={handleSort}
           sortConfig={sortConfig}
-          tableClassName="gridtable-browse"
+          tableClassName={resolvedTableClassName}
           useShortNames={useShortResourceNames}
           enableContextMenu
           getCustomContextMenuItems={getContextMenuItems}
           filters={gridFilters}
           virtualization={virtualizationOptions}
           allowHorizontalOverflow={true}
-          emptyMessage="No catalog objects found."
-          columnWidths={columnWidths}
-          onColumnWidthsChange={setColumnWidths}
-          columnVisibility={columnVisibility}
-          onColumnVisibilityChange={setColumnVisibility}
+          emptyMessage={resolvedEmptyMessage}
+          columnWidths={persistence.columnWidths}
+          onColumnWidthsChange={persistence.setColumnWidths}
+          columnVisibility={persistence.columnVisibility}
+          onColumnVisibilityChange={persistence.setColumnVisibility}
           loadingOverlay={loadingOverlay}
         />
       </ResourceLoadingBoundary>

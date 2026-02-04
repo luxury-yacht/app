@@ -17,6 +17,7 @@ import NsViewStorage from '@modules/namespace/components/NsViewStorage';
 import NsViewCustom from '@modules/namespace/components/NsViewCustom';
 import NsViewHelm from '@modules/namespace/components/NsViewHelm';
 import NsViewEvents from '@modules/namespace/components/NsViewEvents';
+import BrowseView from '@modules/browse/components/BrowseView';
 import type { NamespaceViewType } from '@/types/navigation/views';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import {
@@ -367,6 +368,14 @@ const AllNamespacesView: React.FC<AllNamespacesViewProps> = ({ activeTab }) => {
           <AllNamespacesCustomView />
         </div>
       </NamespaceResourcesProvider>
+    );
+  }
+
+  if (activeTab === 'browse') {
+    return (
+      <div className="all-namespaces-view">
+        <BrowseView namespace={ALL_NAMESPACES_SCOPE} />
+      </div>
     );
   }
 

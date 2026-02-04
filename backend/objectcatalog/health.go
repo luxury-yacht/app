@@ -88,7 +88,7 @@ func (s *Service) logDebug(msg string) {
 }
 
 func (s *Service) rebuildCacheFromItems(items map[string]Summary, descriptors []Descriptor) {
-	kindSet := make(map[string]struct{})
+	kindSet := make(map[string]bool)
 	namespaceSet := make(map[string]struct{})
 	chunks := make([]*summaryChunk, 0, 1)
 
@@ -97,7 +97,8 @@ func (s *Service) rebuildCacheFromItems(items map[string]Summary, descriptors []
 		for _, summary := range items {
 			summaries = append(summaries, summary)
 			if summary.Kind != "" {
-				kindSet[summary.Kind] = struct{}{}
+				// Track whether the kind is namespaced (Scope == ScopeNamespace)
+				kindSet[summary.Kind] = summary.Scope == ScopeNamespace
 			}
 			if summary.Namespace != "" {
 				namespaceSet[summary.Namespace] = struct{}{}

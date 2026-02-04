@@ -74,7 +74,7 @@ type Service struct {
 	resources map[string]resourceDescriptor
 	// cached views to accelerate queries without per-request sorting/filter rebuilds
 	sortedChunks          []*summaryChunk
-	cachedKinds           []string
+	cachedKinds           []KindInfo
 	cachedNamespaces      []string
 	cachedDescriptors     []Descriptor
 	cachesReady           bool

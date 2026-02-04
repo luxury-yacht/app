@@ -27,6 +27,18 @@ func cloneSet(src map[string]struct{}) map[string]struct{} {
 	return copySet
 }
 
+// cloneKindSet creates a shallow copy of a kind-to-namespaced map.
+func cloneKindSet(src map[string]bool) map[string]bool {
+	if len(src) == 0 {
+		return nil
+	}
+	copySet := make(map[string]bool, len(src))
+	for key, namespaced := range src {
+		copySet[key] = namespaced
+	}
+	return copySet
+}
+
 // toMetaObjects converts a slice of typed objects to a slice of metav1.Object.
 func toMetaObjects[T metav1.Object](items []T) []metav1.Object {
 	result := make([]metav1.Object, len(items))
@@ -174,6 +186,21 @@ func snapshotSortedKeys(set map[string]struct{}) []string {
 		result = append(result, value)
 	}
 	sort.Strings(result)
+	return result
+}
+
+// snapshotSortedKindInfos returns a sorted slice of KindInfo from a kind-to-namespaced map.
+func snapshotSortedKindInfos(set map[string]bool) []KindInfo {
+	if len(set) == 0 {
+		return nil
+	}
+	result := make([]KindInfo, 0, len(set))
+	for kind, namespaced := range set {
+		result = append(result, KindInfo{Kind: kind, Namespaced: namespaced})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Kind < result[j].Kind
+	})
 	return result
 }
 
