@@ -1,0 +1,117 @@
+/**
+ * frontend/src/shared/components/modals/ScaleModal.css
+ *
+ * Styles for the shared ScaleModal component.
+ */
+
+@import "@components/modals/modals.css";
+
+.scale-modal {
+  min-width: 320px;
+  max-width: 320px;
+}
+
+.scale-modal-body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scale-modal-workload-name {
+  font-size: var(--font-size-large, 1.1rem);
+  font-weight: 500;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.scale-modal-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scale-modal-body label {
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.scale-input-group {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+.scale-input-group:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
+}
+
+.scale-spinner-btn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.scale-spinner-btn:hover:not(:disabled) {
+  background: var(--color-bg-tertiary);
+  color: var(--color-text);
+}
+
+.scale-spinner-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.scale-modal-body .scale-input {
+  width: 70px;
+  padding: 6px 4px;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--color-border);
+  border-right: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 14px;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.scale-modal-body .scale-input::-webkit-inner-spin-button,
+.scale-modal-body .scale-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.scale-modal-body .scale-input:focus {
+  outline: none;
+  background: var(--color-bg-tertiary);
+}
+
+.scale-modal-error {
+  color: var(--color-error);
+  font-size: var(--font-size-small);
+  padding: 0 1.5rem;
+}
+
+.scale-modal-footer {
+  padding: var(--spacing-lg) 1.5rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
