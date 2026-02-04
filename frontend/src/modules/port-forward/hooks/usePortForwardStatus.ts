@@ -7,7 +7,6 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { EventsOn } from '@wailsjs/runtime/runtime';
 import { ListPortForwards } from '@wailsjs/go/backend/App';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import type { StatusState } from '@/components/status/StatusIndicator';
@@ -57,12 +56,22 @@ export function usePortForwardStatus(): PortForwardStatusResult {
   }, []);
 
   // Subscribe to Wails events for session updates.
+  // Use window.runtime directly with a guard, since the Wails runtime
+  // may not be ready when this hook mounts with AppHeader.
   useEffect(() => {
-    const handleList = (list: PortForwardSession[]) => {
+    const runtime = window.runtime;
+    if (!runtime?.EventsOn) {
+      return;
+    }
+
+    const handleList = (...args: unknown[]) => {
+      const list = args[0] as PortForwardSession[] | undefined;
       setSessions(list || []);
     };
 
-    const handleStatus = (event: PortForwardStatusEvent) => {
+    const handleStatus = (...args: unknown[]) => {
+      const event = args[0] as PortForwardStatusEvent | undefined;
+      if (!event?.sessionId) return;
       setSessions((prev) =>
         prev.map((s) =>
           s.id === event.sessionId ? { ...s, status: event.status } : s
@@ -70,14 +79,12 @@ export function usePortForwardStatus(): PortForwardStatusResult {
       );
     };
 
-    // EventsOn returns a cancel function — use it instead of EventsOff
-    // to avoid removing listeners registered by other components.
-    const cancelList = EventsOn('portforward:list', handleList);
-    const cancelStatus = EventsOn('portforward:status', handleStatus);
+    const cancelList = runtime.EventsOn('portforward:list', handleList) as unknown as (() => void) | undefined;
+    const cancelStatus = runtime.EventsOn('portforward:status', handleStatus) as unknown as (() => void) | undefined;
 
     return () => {
-      cancelList();
-      cancelStatus();
+      cancelList?.();
+      cancelStatus?.();
     };
   }, []);
 

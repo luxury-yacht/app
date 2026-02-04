@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ListPortForwards, StopPortForward } from '@wailsjs/go/backend/App';
-import { EventsOn, EventsOff, BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import { EventsOn, BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { DockablePanel, useDockablePanelState } from '@/components/dockable';
 import { errorHandler } from '@utils/errorHandler';
 import './PortForwardsPanel.css';
@@ -170,13 +170,14 @@ function PortForwardsPanel() {
       );
     };
 
-    // Register event listeners
-    EventsOn('portforward:list', handleListUpdate);
-    EventsOn('portforward:status', handleStatusUpdate);
+    // Use cancel functions instead of EventsOff to avoid removing
+    // listeners registered by other components (e.g., usePortForwardStatus).
+    const cancelList = EventsOn('portforward:list', handleListUpdate);
+    const cancelStatus = EventsOn('portforward:status', handleStatusUpdate);
 
     return () => {
-      EventsOff('portforward:list');
-      EventsOff('portforward:status');
+      cancelList();
+      cancelStatus();
     };
   }, []);
 
