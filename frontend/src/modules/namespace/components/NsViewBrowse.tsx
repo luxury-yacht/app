@@ -1,5 +1,5 @@
 /**
- * frontend/src/modules/namespace/components/NsViewObjects.tsx
+ * frontend/src/modules/namespace/components/NsViewBrowse.tsx
  *
  * Namespace-scoped catalog view that mirrors the Browse grid while pinning a single namespace.
  * Uses manual, snapshot-driven refreshes to keep the table stable during catalog updates.
@@ -250,13 +250,13 @@ const toTableRows = (items: CatalogItem[], useShortResourceNames: boolean): Tabl
     };
   });
 
-interface NsViewObjectsProps {
+interface NsViewBrowseProps {
   namespace: string;
 }
 
-const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
+const NsViewBrowse: React.FC<NsViewBrowseProps> = ({ namespace }) => {
   const domain = useRefreshDomain('catalog');
-  useCatalogDiagnostics(domain, 'Namespace Objects');
+  useCatalogDiagnostics(domain, 'Namespace Browse');
   const useShortResourceNames = useShortNames();
   const { openWithObject } = useObjectPanel();
   const { selectedClusterId } = useKubeconfig();
@@ -393,7 +393,7 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
     setFilters: setPersistedFilters,
     resetState: resetPersistedState,
   } = useNamespaceGridTablePersistence<TableRow>({
-    viewId: 'namespace-objects',
+    viewId: 'namespace-browse',
     namespace,
     defaultSort: { key: 'kind', direction: 'asc' },
     columns,
@@ -580,12 +580,12 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
   }, [isRequestingMore]);
 
   return (
-    <div className="namespace-objects-view">
+    <div className="namespace-browse-view">
       <ResourceLoadingBoundary
         loading={loading}
         dataLength={sortedData.length}
         hasLoaded={hasLoadedOnce}
-        spinnerMessage="Loading objects..."
+        spinnerMessage="Loading resources..."
         allowPartial
         suppressEmptyWarning
       >
@@ -596,14 +596,14 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
           onRowClick={handleOpen}
           onSort={handleSort}
           sortConfig={sortConfig}
-          tableClassName="gridtable-namespace-objects"
+          tableClassName="gridtable-namespace-browse"
           useShortNames={useShortResourceNames}
           enableContextMenu
           getCustomContextMenuItems={getContextMenuItems}
           filters={gridFilters}
           virtualization={virtualizationOptions}
           allowHorizontalOverflow={true}
-          emptyMessage="No objects found in this namespace."
+          emptyMessage="No resources found in this namespace."
           columnWidths={columnWidths}
           onColumnWidthsChange={setColumnWidths}
           columnVisibility={columnVisibility}
@@ -615,4 +615,4 @@ const NsViewObjects: React.FC<NsViewObjectsProps> = ({ namespace }) => {
   );
 };
 
-export default NsViewObjects;
+export default NsViewBrowse;

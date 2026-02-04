@@ -186,8 +186,8 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       setViewType('namespace');
       setSidebarSelection({ type: 'namespace', value: namespace });
 
-      // Default to objects if coming from a non-namespace view
-      const tabToUse = viewType === 'namespace' ? activeNamespaceView : 'objects';
+      // Default to browse if coming from a non-namespace view
+      const tabToUse = viewType === 'namespace' ? activeNamespaceView : 'browse';
       setActiveNamespaceView(tabToUse);
     },
     [setViewType, viewType, activeNamespaceView, setActiveNamespaceView, setSidebarSelection]

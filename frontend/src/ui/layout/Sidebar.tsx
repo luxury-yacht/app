@@ -46,7 +46,7 @@ const RESOURCE_VIEWS: Array<{ id: ClusterViewType; label: string }> = [
 
 // Static namespace view list to avoid re-creating the array each render.
 const NAMESPACE_VIEWS: Array<{ id: NamespaceViewType; label: string }> = [
-  { id: 'objects', label: 'All Objects' },
+  { id: 'browse', label: 'Browse' },
   { id: 'workloads', label: 'Workloads' },
   { id: 'pods', label: 'Pods' },
   { id: 'autoscaling', label: 'Autoscaling' },
@@ -523,11 +523,10 @@ function Sidebar() {
                                 <div className="sidebar-views">
                                   {namespaceViews
                                     .filter(
-                                      (view) => !(isAllNamespaces(scope) && view.id === 'objects')
+                                      (view) => !(isAllNamespaces(scope) && view.id === 'browse')
                                     )
                                     .map((view) => {
-                                      const label =
-                                        view.id === 'objects' ? `All Objects` : view.label;
+                                      const label = view.label;
                                       return (
                                         <div
                                           key={view.id}

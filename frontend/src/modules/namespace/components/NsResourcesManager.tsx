@@ -14,10 +14,10 @@ import type { PodsResourceDataReturn } from '@modules/namespace/contexts/NsResou
 import NamespaceResourcesViews from '@modules/namespace/components/NsResourcesViews';
 import { NamespaceViewType } from '@/types/navigation/views';
 
-// The objects tab is catalog-driven, not a namespace resource loader.
+// The browse tab is catalog-driven, not a namespace resource loader.
 const isLoadableNamespaceTab = (
   tab: NamespaceViewType
-): tab is Exclude<NamespaceViewType, 'objects'> => tab !== 'objects';
+): tab is Exclude<NamespaceViewType, 'browse'> => tab !== 'browse';
 
 interface NamespaceResourcesManagerProps {
   namespace: string;

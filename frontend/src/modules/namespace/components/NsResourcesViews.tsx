@@ -17,7 +17,7 @@ import NsViewCustom from '@modules/namespace/components/NsViewCustom';
 import NsViewEvents from '@modules/namespace/components/NsViewEvents';
 import NsViewHelm from '@modules/namespace/components/NsViewHelm';
 import NsViewNetwork from '@modules/namespace/components/NsViewNetwork';
-import NsViewObjects from '@modules/namespace/components/NsViewObjects';
+import NsViewBrowse from '@modules/namespace/components/NsViewBrowse';
 import NsViewPods from '@modules/namespace/components/NsViewPods';
 import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
@@ -180,14 +180,14 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
 }) => {
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'objects':
+      case 'browse':
         return (
           <ErrorBoundary
-            scope="namespace-objects"
+            scope="namespace-browse"
             resetKeys={[namespace]}
-            fallback={(_, reset) => <ViewErrorFallback viewName="All Objects" reset={reset} />}
+            fallback={(_, reset) => <ViewErrorFallback viewName="Browse" reset={reset} />}
           >
-            <NsViewObjects namespace={namespace} />
+            <NsViewBrowse namespace={namespace} />
           </ErrorBoundary>
         );
       case 'pods':

@@ -9,7 +9,7 @@
  * Tab types for namespace-scoped resources
  */
 export type NamespaceViewType =
-  | 'objects'
+  | 'browse'
   | 'workloads'
   | 'pods'
   | 'config'

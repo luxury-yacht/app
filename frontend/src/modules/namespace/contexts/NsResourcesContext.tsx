@@ -1010,8 +1010,8 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
         // Small delay to ensure reset completes before loading
         setTimeout(() => {
           switch (activeResourceType) {
-            case 'objects':
-              // Catalog-backed objects view manages its own refresh cadence.
+            case 'browse':
+              // Catalog-backed browse view manages its own refresh cadence.
               break;
             case 'pods':
               pods.load(true);
@@ -1085,7 +1085,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
       return;
     }
 
-    if (activeKey === 'objects') {
+    if (activeKey === 'browse') {
       return;
     }
 

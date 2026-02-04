@@ -1,10 +1,24 @@
 # TODO
 
-## Issues
+Add multiple status indicators
 
-- ✅ when using keyboard navigation in tables, context menu selection also affects the table row
-- context menu launches in the wrong place (even offscreen) when zoomed out
-- ✅ zooming out doesn't change the panel restrictions, so borders/windows can be dragged offscreen
+- Connectivity
+  - Already exists, always visible
+  - Clicking is supposed to refresh but I don't think it actually does
+  - Determine what the colors and statuses currently are
+- Metrics
+  - Aready exists, conditionally visible
+  - Make it always visible
+  - Determine what the colors and statuses currently are
+- Port Forwards
+  - Need to create, always visible
+  - Gray for no port forwards
+  - Green for all port forwards healthy
+  - Orange if at least one port forward is unhealthy
+  - Red if all port forwards are unhealthy
+  - Make sure this aligns with port forward status colors
+
+## Issues
 
 ## Feature Ideas
 
