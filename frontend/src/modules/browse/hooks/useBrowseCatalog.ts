@@ -78,6 +78,8 @@ export interface UseBrowseCatalogResult {
   handleLoadMore: () => void;
   /** Filter options derived from the catalog snapshot */
   filterOptions: BrowseFilterOptions;
+  /** Total count of items matching the current query (before pagination) */
+  totalCount: number;
 }
 
 /**
@@ -98,6 +100,7 @@ export function useBrowseCatalog({
   const [continueToken, setContinueToken] = useState<string | null>(null);
   const [isRequestingMore, setIsRequestingMore] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
 
   const requestModeRef = useRef<PageRequestMode>(null);
   const lastAppliedScopeRef = useRef<string>('');
@@ -217,6 +220,7 @@ export function useBrowseCatalog({
     }
 
     setContinueToken(parseContinueToken(payload.continue));
+    setTotalCount(payload.total ?? 0);
     setIsRequestingMore(false);
 
     // After a load-more request, restore the base scope so subsequent manual refreshes
@@ -336,5 +340,6 @@ export function useBrowseCatalog({
     isRequestingMore,
     handleLoadMore,
     filterOptions,
+    totalCount,
   };
 }

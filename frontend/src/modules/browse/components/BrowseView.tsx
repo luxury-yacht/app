@@ -235,6 +235,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     isRequestingMore,
     handleLoadMore,
     filterOptions,
+    totalCount,
   } = useBrowseCatalog({
     clusterId: selectedClusterId,
     pinnedNamespaces,
@@ -281,9 +282,11 @@ const BrowseView: React.FC<BrowseViewProps> = ({
             className="button generic"
             onClick={handleLoadMore}
             disabled={!continueToken || isRequestingMore}
-            title={!continueToken ? 'No additional pages' : undefined}
+            title={!continueToken ? 'All items loaded' : undefined}
           >
-            {isRequestingMore ? 'Loading…' : 'Load More'}
+            {isRequestingMore
+              ? 'Loading…'
+              : `Load More (${items.length} of ${totalCount})`}
           </button>
         ),
       },
@@ -298,6 +301,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       handleLoadMore,
       continueToken,
       isRequestingMore,
+      items.length,
+      totalCount,
     ]
   );
 
