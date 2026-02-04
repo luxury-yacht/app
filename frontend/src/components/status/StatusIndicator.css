@@ -18,7 +18,6 @@
 /* State: healthy - solid green */
 .status-indicator-dot[data-status="healthy"] {
   background-color: var(--status-healthy);
-  box-shadow: 0 0 4px var(--status-healthy-shadow);
 }
 
 /* State: refreshing - green with pulse */
@@ -28,23 +27,19 @@
   animation: status-pulse 1s infinite;
 }
 
-/* State: degraded - amber with pulse */
+/* State: degraded - amber */
 .status-indicator-dot[data-status="degraded"] {
   background-color: var(--status-degraded);
-  box-shadow: 0 0 4px var(--status-degraded-shadow);
-  animation: status-pulse 1.2s infinite;
 }
 
 /* State: unhealthy - red */
 .status-indicator-dot[data-status="unhealthy"] {
   background-color: var(--status-unhealthy);
-  box-shadow: 0 0 6px var(--status-unhealthy-shadow);
 }
 
-/* State: inactive - gray, no shadow */
+/* State: inactive - gray */
 .status-indicator-dot[data-status="inactive"] {
   background-color: var(--status-inactive);
-  box-shadow: var(--status-inactive-shadow);
 }
 
 @keyframes status-pulse {
