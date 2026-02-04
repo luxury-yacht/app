@@ -197,14 +197,14 @@ const NAMESPACE_CAPABILITY_SPECS: Partial<
       verbs: ['list', 'update', 'delete'],
       feature: 'Namespace config',
     },
+  ],
+  network: [
     {
       id: 'namespace:services',
       resourceKind: 'Service',
       verbs: ['list', 'update', 'delete'],
-      feature: 'Namespace config',
+      feature: 'Namespace network',
     },
-  ],
-  network: [
     {
       id: 'namespace:ingresses',
       resourceKind: 'Ingress',
@@ -234,6 +234,12 @@ const NAMESPACE_CAPABILITY_SPECS: Partial<
     {
       id: 'namespace:rolebinding',
       resourceKind: 'RoleBinding',
+      verbs: ['list', 'update', 'delete'],
+      feature: 'Namespace RBAC',
+    },
+    {
+      id: 'namespace:serviceaccounts',
+      resourceKind: 'ServiceAccount',
       verbs: ['list', 'update', 'delete'],
       feature: 'Namespace RBAC',
     },
