@@ -183,6 +183,13 @@ const NAMESPACE_CAPABILITY_SPECS: Partial<
       subresource: 'log',
       feature: 'Namespace workloads',
     },
+    {
+      id: 'namespace:pods:portforward',
+      resourceKind: 'Pod',
+      verbs: ['create'],
+      subresource: 'portforward',
+      feature: 'Namespace workloads',
+    },
   ],
   config: [
     {
@@ -221,6 +228,14 @@ const NAMESPACE_CAPABILITY_SPECS: Partial<
       id: 'namespace:endpointslices',
       resourceKind: 'EndpointSlice',
       verbs: ['list', 'delete'],
+      feature: 'Namespace network',
+    },
+    {
+      // Port forward for Services (requires Pod portforward permission)
+      id: 'namespace:pods:portforward',
+      resourceKind: 'Pod',
+      verbs: ['create'],
+      subresource: 'portforward',
       feature: 'Namespace network',
     },
   ],
