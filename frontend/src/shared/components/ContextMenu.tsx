@@ -5,9 +5,10 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
+import { useZoom } from '@core/contexts/ZoomContext';
 import './ContextMenu.css';
 
 export interface ContextMenuItem {
@@ -31,6 +32,8 @@ interface ContextMenuProps {
 const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const { pushContext, popContext } = useKeyboardContext();
+  const { zoomLevel } = useZoom();
+  const [isPositioned, setIsPositioned] = useState(false);
   const contextPushedRef = useRef(false);
   const selectableIndexes = useMemo(
     () =>
@@ -111,20 +114,43 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
     };
   }, [onClose]);
 
-  // Adjust position to prevent menu from going off-screen and focus the menu
-  useEffect(() => {
+  // Adjust position for CSS zoom and prevent menu from going off-screen.
+  // Uses useLayoutEffect to position before browser paint.
+  // All constraint calculations happen in visual/viewport coordinates (what the user sees),
+  // then convert to CSS coordinates at the end (dividing by zoom factor).
+  useLayoutEffect(() => {
     if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect();
-      const adjustedX = Math.min(position.x, window.innerWidth - rect.width - 10);
-      const adjustedY = Math.min(position.y, window.innerHeight - rect.height - 10);
+      const zoomFactor = zoomLevel / 100;
 
-      menuRef.current.style.left = `${Math.max(10, adjustedX)}px`;
-      menuRef.current.style.top = `${Math.max(10, adjustedY)}px`;
+      // position.x/y are from clientX/clientY - already in visual coordinates
+      // window.innerWidth/Height are the visual viewport size
+      // For menu dimensions, use offsetWidth/Height which give CSS dimensions,
+      // then multiply by zoom to get visual dimensions
+      const menuVisualWidth = menuRef.current.offsetWidth * zoomFactor;
+      const menuVisualHeight = menuRef.current.offsetHeight * zoomFactor;
+
+      // Constrain in visual coordinates to keep menu fully on screen
+      const padding = 10;
+      const maxVisualX = window.innerWidth - menuVisualWidth - padding;
+      const maxVisualY = window.innerHeight - menuVisualHeight - padding;
+
+      const constrainedVisualX = Math.max(padding, Math.min(position.x, maxVisualX));
+      const constrainedVisualY = Math.max(padding, Math.min(position.y, maxVisualY));
+
+      // Convert to CSS coordinates (CSS values are scaled by zoom)
+      const cssX = constrainedVisualX / zoomFactor;
+      const cssY = constrainedVisualY / zoomFactor;
+
+      menuRef.current.style.left = `${cssX}px`;
+      menuRef.current.style.top = `${cssY}px`;
+
+      // Show the menu now that it's positioned
+      setIsPositioned(true);
 
       // Focus the menu to ensure keyboard events work
       menuRef.current.focus();
     }
-  }, [position]);
+  }, [position, zoomLevel]);
 
   const portalTarget = typeof document !== 'undefined' ? document.body : null;
 
@@ -132,13 +158,20 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
     return null;
   }
 
+  // Initial position is just for layout calculation; actual position is set by useEffect
+  const zoomFactor = zoomLevel / 100;
+  const initialX = position.x / zoomFactor;
+  const initialY = position.y / zoomFactor;
+
   return createPortal(
     <div
       ref={menuRef}
       className="context-menu"
       style={{
-        left: position.x,
-        top: position.y,
+        left: initialX,
+        top: initialY,
+        // Hide until useEffect has constrained the position
+        visibility: isPositioned ? 'visible' : 'hidden',
       }}
       role="menu"
       onKeyDown={(e) => {
@@ -150,16 +183,19 @@ const ContextMenu: React.FC<ContextMenuProps> = ({ items, position, onClose }) =
         }
         if (e.key === 'ArrowDown') {
           e.preventDefault();
+          e.stopPropagation();
           moveFocus(1);
           return;
         }
         if (e.key === 'ArrowUp') {
           e.preventDefault();
+          e.stopPropagation();
           moveFocus(-1);
           return;
         }
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
+          e.stopPropagation();
           activateFocusedItem();
         }
       }}

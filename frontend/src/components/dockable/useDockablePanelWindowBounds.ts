@@ -8,6 +8,7 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import type { DockPosition } from './useDockablePanelState';
 import { LAYOUT, getDockablePanelTopOffset } from './dockablePanelLayout';
+import { useZoom, getZoomAwareViewport } from '@core/contexts/ZoomContext';
 
 interface DockablePanelState {
   position: DockPosition;
@@ -36,6 +37,12 @@ export function useWindowBoundsConstraint(
 ) {
   const { minWidth, minHeight, isResizing, isMaximized, panelRef } = options;
   const panelStateRef = useRef(panelState);
+  const { zoomLevel } = useZoom();
+  // Store zoom level in a ref so the resize handler can access the latest value.
+  const zoomLevelRef = useRef(zoomLevel);
+  useEffect(() => {
+    zoomLevelRef.current = zoomLevel;
+  }, [zoomLevel]);
 
   // We use a ref to hold the latest panel state so the resize handler
   // can access it without needing to resubscribe on every state change.
@@ -73,10 +80,14 @@ export function useWindowBoundsConstraint(
         let newSize = { ...currentSize };
         let newPosition = { ...currentPosition };
 
+        // Get zoom-aware viewport dimensions for constraint calculations.
+        // Panel size/position are in CSS coordinates, so we use the zoom-adjusted viewport.
+        const viewport = getZoomAwareViewport(zoomLevelRef.current);
+
         // If the panel is floating, constrain its size and position within window bounds.
         if (currentPanelState.position === 'floating') {
-          const maxWidth = window.innerWidth - LAYOUT.WINDOW_MARGIN;
-          const maxHeight = window.innerHeight - LAYOUT.WINDOW_MARGIN;
+          const maxWidth = viewport.width - LAYOUT.WINDOW_MARGIN;
+          const maxHeight = viewport.height - LAYOUT.WINDOW_MARGIN;
 
           // Constrain width.
           if (currentSize.width > maxWidth) {
@@ -95,19 +106,19 @@ export function useWindowBoundsConstraint(
           const bottomEdge = currentPosition.y + newSize.height;
 
           // Ensure panel stays within right edge.
-          if (rightEdge > window.innerWidth) {
+          if (rightEdge > viewport.width) {
             newPosition.x = Math.max(
               LAYOUT.MIN_EDGE_DISTANCE,
-              window.innerWidth - newSize.width - 20
+              viewport.width - newSize.width - 20
             );
             needsUpdate = true;
           }
 
           // Ensure panel stays within bottom edge.
-          if (bottomEdge > window.innerHeight) {
+          if (bottomEdge > viewport.height) {
             newPosition.y = Math.max(
               LAYOUT.MIN_EDGE_DISTANCE,
-              window.innerHeight - newSize.height - 20
+              viewport.height - newSize.height - 20
             );
             needsUpdate = true;
           }
@@ -128,7 +139,7 @@ export function useWindowBoundsConstraint(
             needsUpdate = true;
           }
         } else if (currentPanelState.position === 'right') {
-          const maxWidth = window.innerWidth - LAYOUT.SIDEBAR_WIDTH;
+          const maxWidth = viewport.width - LAYOUT.SIDEBAR_WIDTH;
           if (currentSize.width > maxWidth) {
             newSize.width = Math.max(minWidth, maxWidth);
             needsUpdate = true;
@@ -139,7 +150,7 @@ export function useWindowBoundsConstraint(
             LAYOUT.BOTTOM_RESERVED_HEIGHT,
             getDockablePanelTopOffset(panelRef?.current)
           );
-          const maxHeight = window.innerHeight - reservedTop;
+          const maxHeight = viewport.height - reservedTop;
           if (currentSize.height > maxHeight) {
             newSize.height = maxHeight;
             needsUpdate = true;
@@ -171,5 +182,5 @@ export function useWindowBoundsConstraint(
       }
       window.removeEventListener('resize', handleWindowResize);
     };
-  }, [minWidth, minHeight, isResizing, isMaximized, panelState.isOpen, panelRef]);
+  }, [minWidth, minHeight, isResizing, isMaximized, panelState.isOpen, panelRef, zoomLevel]);
 }

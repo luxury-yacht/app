@@ -11,6 +11,12 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
+import { ZoomProvider } from '@core/contexts/ZoomContext';
+
+vi.mock('@wailsjs/go/backend/App', () => ({
+  GetZoomLevel: vi.fn().mockResolvedValue(100),
+  SetZoomLevel: vi.fn().mockResolvedValue(undefined),
+}));
 
 interface PanelStateOptions {
   position: 'floating' | 'right' | 'bottom';
@@ -44,7 +50,11 @@ const renderHarness = async (panelState: any, options: any) => {
   const root = ReactDOM.createRoot(host);
 
   await act(async () => {
-    root.render(<Harness panelState={panelState} options={options} />);
+    root.render(
+      <ZoomProvider>
+        <Harness panelState={panelState} options={options} />
+      </ZoomProvider>
+    );
     await Promise.resolve();
   });
 
