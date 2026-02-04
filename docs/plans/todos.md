@@ -1,23 +1,5 @@
 # TODO
 
-Add multiple status indicators
-
-- Connectivity
-  - Already exists, always visible
-  - Clicking is supposed to refresh but I don't think it actually does
-  - Determine what the colors and statuses currently are
-- Metrics
-  - Aready exists, conditionally visible
-  - Make it always visible
-  - Determine what the colors and statuses currently are
-- Port Forwards
-  - Need to create, always visible
-  - Gray for no port forwards
-  - Green for all port forwards healthy
-  - Orange if at least one port forward is unhealthy
-  - Red if all port forwards are unhealthy
-  - Make sure this aligns with port forward status colors
-
 ## Issues
 
 ## Feature Ideas
