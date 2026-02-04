@@ -1,11 +1,11 @@
 /**
  * frontend/src/shared/hooks/useObjectActions.tsx
  *
- * Shared hook for building context menu / actions menu items for Kubernetes objects.
+ * Shared hook and utility for building context menu / actions menu items for Kubernetes objects.
  * Used by both GridTable context menus and Object Panel actions menus.
  */
 
-import React, { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import {
@@ -34,7 +34,7 @@ const WORKLOAD_KIND_MAP: Record<string, string> = {
   cronjob: 'CronJob',
 };
 
-function normalizeKind(kind: string): string {
+export function normalizeKind(kind: string): string {
   return WORKLOAD_KIND_MAP[kind] || kind;
 }
 
@@ -48,6 +48,10 @@ export interface ObjectActionData {
   // For workload-specific actions
   status?: string;
   ready?: string;
+  // For Event-specific actions - the involved object reference (e.g., "Pod/my-pod")
+  involvedObject?: string;
+  // For HelmRelease-specific actions
+  helmRevision?: number;
 }
 
 // Action handlers
@@ -57,8 +61,204 @@ export interface ObjectActionHandlers {
   onScale?: () => void;
   onDelete?: () => void;
   onPortForward?: () => void;
+  // CronJob actions
   onTrigger?: () => void;
   onSuspendToggle?: () => void;
+  // Event actions - view the involved object
+  onViewInvolvedObject?: () => void;
+  // HelmRelease actions
+  onViewValues?: () => void;
+  onViewChart?: () => void;
+  onViewHistory?: () => void;
+  onViewFailure?: () => void;
+}
+
+// Permission status type (matches what useUserPermissions returns)
+export interface PermissionStatus {
+  allowed: boolean;
+  pending: boolean;
+}
+
+// Kinds that support each action
+export const RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
+export const SCALABLE_KINDS = ['Deployment', 'StatefulSet', 'ReplicaSet'];
+export const PORT_FORWARDABLE_KINDS = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Service'];
+
+// Options for building action items
+export interface BuildObjectActionsOptions {
+  object: ObjectActionData;
+  context: 'gridtable' | 'object-panel';
+  handlers: ObjectActionHandlers;
+  permissions: {
+    restart?: PermissionStatus | null;
+    scale?: PermissionStatus | null;
+    delete?: PermissionStatus | null;
+  };
+  actionLoading?: boolean;
+}
+
+/**
+ * Build menu items for an object. Can be used directly or via the useObjectActions hook.
+ */
+export function buildObjectActionItems({
+  object,
+  context,
+  handlers,
+  permissions,
+  actionLoading = false,
+}: BuildObjectActionsOptions): ContextMenuItem[] {
+  const menuItems: ContextMenuItem[] = [];
+  const normalizedKind = normalizeKind(object.kind);
+
+  const { restart: restartStatus, scale: scaleStatus, delete: deleteStatus } = permissions;
+
+  // Permission pending header
+  const anyPending = restartStatus?.pending || scaleStatus?.pending || deleteStatus?.pending;
+
+  if (anyPending) {
+    menuItems.push({ header: true, label: 'Awaiting permissions...' });
+  }
+
+  // Open - only for gridtable context
+  if (context === 'gridtable' && handlers.onOpen) {
+    menuItems.push({
+      label: 'Open',
+      icon: <OpenIcon />,
+      onClick: handlers.onOpen,
+    });
+  }
+
+  // Event-specific actions - view the involved object
+  if (object.kind === 'Event' && object.involvedObject && handlers.onViewInvolvedObject) {
+    // Parse the involved object reference (e.g., "Pod/my-pod" -> "Pod")
+    const [involvedKind] = object.involvedObject.split('/');
+    if (involvedKind && involvedKind !== '-') {
+      menuItems.push({
+        label: `View ${involvedKind}`,
+        icon: <OpenIcon />,
+        onClick: handlers.onViewInvolvedObject,
+      });
+    }
+  }
+
+  // HelmRelease-specific actions
+  if (object.kind === 'HelmRelease') {
+    if (handlers.onViewValues) {
+      menuItems.push({
+        label: 'View Values',
+        icon: '⚙️',
+        onClick: handlers.onViewValues,
+      });
+    }
+
+    if (handlers.onViewChart) {
+      menuItems.push({
+        label: 'View Chart',
+        icon: '📦',
+        onClick: handlers.onViewChart,
+      });
+    }
+
+    if (handlers.onViewHistory) {
+      menuItems.push({
+        label: 'View History',
+        icon: '📚',
+        onClick: handlers.onViewHistory,
+      });
+    }
+
+    // View Failure Details - only for failed releases
+    if (handlers.onViewFailure && object.status === 'failed') {
+      menuItems.push({ divider: true });
+      menuItems.push({
+        label: 'View Failure Details',
+        icon: '❌',
+        onClick: handlers.onViewFailure,
+      });
+    }
+  }
+
+  // CronJob-specific actions
+  if (normalizedKind === 'CronJob') {
+    const isSuspended = object.status === 'Suspended';
+
+    if (handlers.onTrigger) {
+      menuItems.push({
+        label: 'Trigger Now',
+        icon: '▶',
+        onClick: handlers.onTrigger,
+        disabled: isSuspended || actionLoading,
+      });
+    }
+
+    if (handlers.onSuspendToggle) {
+      menuItems.push({
+        label: isSuspended ? 'Resume' : 'Suspend',
+        icon: isSuspended ? '▶' : '⏸',
+        onClick: handlers.onSuspendToggle,
+        disabled: actionLoading,
+      });
+    }
+  }
+
+  // Restart
+  if (
+    RESTARTABLE_KINDS.includes(normalizedKind) &&
+    restartStatus?.allowed &&
+    !restartStatus.pending &&
+    handlers.onRestart
+  ) {
+    menuItems.push({
+      label: 'Restart',
+      icon: <RestartIcon />,
+      onClick: handlers.onRestart,
+      disabled: actionLoading,
+    });
+  }
+
+  // Scale
+  if (
+    SCALABLE_KINDS.includes(normalizedKind) &&
+    scaleStatus?.allowed &&
+    !scaleStatus.pending &&
+    handlers.onScale
+  ) {
+    menuItems.push({
+      label: 'Scale',
+      icon: <ScaleIcon />,
+      onClick: handlers.onScale,
+      disabled: actionLoading,
+    });
+  }
+
+  // Port Forward
+  if (PORT_FORWARDABLE_KINDS.includes(normalizedKind) && handlers.onPortForward) {
+    menuItems.push({
+      label: 'Port Forward',
+      icon: <PortForwardIcon />,
+      onClick: handlers.onPortForward,
+      disabled: actionLoading,
+    });
+  }
+
+  // Delete (with divider if there are other items)
+  if (deleteStatus?.allowed && !deleteStatus.pending && handlers.onDelete) {
+    // Add divider before Delete if there are other action items
+    const hasOtherActions = menuItems.some((item) => !('header' in item) && !('divider' in item));
+    if (hasOtherActions) {
+      menuItems.push({ divider: true });
+    }
+
+    menuItems.push({
+      label: 'Delete',
+      icon: <DeleteIcon />,
+      danger: true,
+      onClick: handlers.onDelete,
+      disabled: actionLoading,
+    });
+  }
+
+  return menuItems;
 }
 
 // Hook options
@@ -66,34 +266,13 @@ export interface UseObjectActionsOptions {
   object: ObjectActionData | null;
   context: 'gridtable' | 'object-panel';
   handlers: ObjectActionHandlers;
-  // Loading states
   actionLoading?: boolean;
 }
 
-// Kinds that support each action
-const RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
-const SCALABLE_KINDS = ['Deployment', 'StatefulSet', 'ReplicaSet'];
-const PORT_FORWARDABLE_KINDS = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Service'];
-const DELETABLE_KINDS = [
-  'Pod',
-  'Deployment',
-  'StatefulSet',
-  'DaemonSet',
-  'ReplicaSet',
-  'Job',
-  'CronJob',
-  'ConfigMap',
-  'Secret',
-  'Service',
-  'Ingress',
-  'NetworkPolicy',
-  'PersistentVolumeClaim',
-  'ServiceAccount',
-  'Role',
-  'RoleBinding',
-  'HelmRelease',
-];
-
+/**
+ * Hook for building object action menu items. Uses useUserPermissions internally.
+ * For use in React components. For callbacks, use buildObjectActionItems directly.
+ */
 export function useObjectActions({
   object,
   context,
@@ -105,119 +284,28 @@ export function useObjectActions({
   const items = useMemo(() => {
     if (!object) return [];
 
-    const menuItems: ContextMenuItem[] = [];
     const normalizedKind = normalizeKind(object.kind);
     const namespace = object.namespace || '';
 
-    // Check permissions
-    const restartStatus = permissionMap.get(
-      getPermissionKey(normalizedKind, 'patch', namespace)
-    );
-    const scaleStatus = permissionMap.get(
-      getPermissionKey(normalizedKind, 'update', namespace, 'scale')
-    );
-    const deleteStatus = permissionMap.get(
-      getPermissionKey(object.kind, 'delete', namespace)
-    );
+    // Get permissions from the map
+    const restartStatus =
+      permissionMap.get(getPermissionKey(normalizedKind, 'patch', namespace)) ?? null;
+    const scaleStatus =
+      permissionMap.get(getPermissionKey(normalizedKind, 'update', namespace, 'scale')) ?? null;
+    const deleteStatus =
+      permissionMap.get(getPermissionKey(object.kind, 'delete', namespace)) ?? null;
 
-    // Permission pending header
-    const anyPending =
-      restartStatus?.pending ||
-      scaleStatus?.pending ||
-      deleteStatus?.pending;
-
-    if (anyPending) {
-      menuItems.push({ header: true, label: 'Awaiting permissions...' });
-    }
-
-    // Open - only for gridtable context
-    if (context === 'gridtable' && handlers.onOpen) {
-      menuItems.push({
-        label: 'Open',
-        icon: <OpenIcon />,
-        onClick: handlers.onOpen,
-      });
-    }
-
-    // CronJob-specific actions
-    if (normalizedKind === 'CronJob') {
-      const isSuspended = object.status === 'Suspended';
-
-      if (handlers.onTrigger) {
-        menuItems.push({
-          label: 'Trigger Now',
-          icon: '▶',
-          onClick: handlers.onTrigger,
-          disabled: isSuspended || actionLoading,
-        });
-      }
-
-      if (handlers.onSuspendToggle) {
-        menuItems.push({
-          label: isSuspended ? 'Resume' : 'Suspend',
-          icon: isSuspended ? '▶' : '⏸',
-          onClick: handlers.onSuspendToggle,
-          disabled: actionLoading,
-        });
-      }
-    }
-
-    // Restart
-    if (
-      RESTARTABLE_KINDS.includes(normalizedKind) &&
-      restartStatus?.allowed &&
-      !restartStatus.pending &&
-      handlers.onRestart
-    ) {
-      menuItems.push({
-        label: 'Restart',
-        icon: <RestartIcon />,
-        onClick: handlers.onRestart,
-        disabled: actionLoading,
-      });
-    }
-
-    // Scale
-    if (
-      SCALABLE_KINDS.includes(normalizedKind) &&
-      scaleStatus?.allowed &&
-      !scaleStatus.pending &&
-      handlers.onScale
-    ) {
-      menuItems.push({
-        label: 'Scale',
-        icon: <ScaleIcon />,
-        onClick: handlers.onScale,
-        disabled: actionLoading,
-      });
-    }
-
-    // Port Forward
-    if (PORT_FORWARDABLE_KINDS.includes(normalizedKind) && handlers.onPortForward) {
-      menuItems.push({
-        label: 'Port Forward...',
-        icon: <PortForwardIcon />,
-        onClick: handlers.onPortForward,
-        disabled: actionLoading,
-      });
-    }
-
-    // Delete
-    if (
-      deleteStatus?.allowed &&
-      !deleteStatus.pending &&
-      handlers.onDelete
-    ) {
-      menuItems.push({
-        label: 'Delete',
-        icon: <DeleteIcon />,
-        danger: true,
-        onClick: handlers.onDelete,
-        disabled: actionLoading,
-      });
-    }
-
-    return menuItems;
+    return buildObjectActionItems({
+      object,
+      context,
+      handlers,
+      permissions: {
+        restart: restartStatus,
+        scale: scaleStatus,
+        delete: deleteStatus,
+      },
+      actionLoading,
+    });
   }, [object, context, handlers, actionLoading, permissionMap]);
 
   return items;

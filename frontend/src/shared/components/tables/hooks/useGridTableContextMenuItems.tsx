@@ -40,9 +40,7 @@ export function useGridTableContextMenuItems<T>({
         const customItems = getCustomContextMenuItems(item, columnKey);
         if (customItems.length > 0) {
           // Insert a divider after "Open" to separate navigation from actions
-          const openIndex = customItems.findIndex(
-            (ci) => 'label' in ci && ci.label === 'Open'
-          );
+          const openIndex = customItems.findIndex((ci) => 'label' in ci && ci.label === 'Open');
           if (openIndex !== -1 && customItems.length > openIndex + 1) {
             // Check if there's already a divider after Open
             const nextItem = customItems[openIndex + 1];

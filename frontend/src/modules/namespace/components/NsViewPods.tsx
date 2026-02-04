@@ -27,10 +27,10 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { getPodsUnhealthyStorageKey } from '@modules/namespace/components/podsFilterSignals';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { OpenIcon, DeleteIcon, PortForwardIcon } from '@shared/components/icons/MenuIcons';
 import { DeletePod } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 
 interface PodsViewProps {
   namespace: string;
@@ -404,45 +404,34 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       (pod: PodSnapshotEntry): ContextMenuItem[] => {
         const deleteStatus =
           permissionMap.get(getPermissionKey('Pod', 'delete', pod.namespace)) ?? null;
-        const items: ContextMenuItem[] = [];
 
-        // Show a muted header while permission checks are pending.
-        if (deleteStatus?.pending) {
-          items.push({ header: true, label: 'Awaiting permissions...' });
-        }
-
-        items.push({
-          label: 'Open',
-          icon: <OpenIcon />,
-          onClick: () => handlePodOpen(pod),
-        });
-
-        // Port forward
-        items.push({
-          label: 'Port Forward...',
-          icon: <PortForwardIcon />,
-          onClick: () => {
-            setPortForwardTarget({
-              kind: 'Pod',
-              name: pod.name,
-              namespace: pod.namespace,
-              clusterId: pod.clusterId ?? '',
-              clusterName: pod.clusterName ?? '',
-              ports: [], // Will be fetched by modal
-            });
+        return buildObjectActionItems({
+          object: {
+            kind: 'Pod',
+            name: pod.name,
+            namespace: pod.namespace,
+            clusterId: pod.clusterId,
+            clusterName: pod.clusterName,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handlePodOpen(pod),
+            onPortForward: () => {
+              setPortForwardTarget({
+                kind: 'Pod',
+                name: pod.name,
+                namespace: pod.namespace,
+                clusterId: pod.clusterId ?? '',
+                clusterName: pod.clusterName ?? '',
+                ports: [],
+              });
+            },
+            onDelete: () => setDeleteConfirm({ show: true, pod }),
+          },
+          permissions: {
+            delete: deleteStatus,
           },
         });
-
-        if (deleteStatus?.allowed && !deleteStatus.pending) {
-          items.push({
-            label: 'Delete',
-            icon: <DeleteIcon />,
-            danger: true,
-            onClick: () => setDeleteConfirm({ show: true, pod }),
-          });
-        }
-
-        return items;
       },
       [handlePodOpen, permissionMap]
     );

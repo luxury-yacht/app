@@ -23,9 +23,10 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
+import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 
 // Data interface for storage resources (PVCs, VolumeAttachments, etc.)
 export interface StorageData {
@@ -57,6 +58,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
   ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const useShortResourceNames = useShortNames();
+    const permissionMap = useUserPermissions();
 
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
@@ -216,26 +218,27 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (resource: StorageData): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [];
+        const deleteStatus = permissionMap.get(getPermissionKey(resource.kind, 'delete')) ?? null;
 
-        // Always add Open in Object Panel
-        items.push({
-          label: 'Open',
-          icon: <OpenIcon />,
-          onClick: () => handleResourceClick(resource),
+        return buildObjectActionItems({
+          object: {
+            kind: resource.kind,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId,
+            clusterName: resource.clusterName,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleResourceClick(resource),
+            onDelete: () => setDeleteConfirm({ show: true, resource }),
+          },
+          permissions: {
+            delete: deleteStatus,
+          },
         });
-
-        // Add Delete option
-        items.push({
-          label: 'Delete',
-          icon: <DeleteIcon />,
-          danger: true,
-          onClick: () => setDeleteConfirm({ show: true, resource }),
-        });
-
-        return items;
       },
-      [handleResourceClick]
+      [handleResourceClick, permissionMap]
     );
 
     const emptyMessage = useMemo(

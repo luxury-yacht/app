@@ -39,6 +39,7 @@ type PortForwardSession struct {
 ### Pod Selection
 
 Follows kubectl behavior - no user selection needed:
+
 - **Pod**: Forward to that specific pod
 - **Deployment/StatefulSet/DaemonSet**: Pick first ready pod from workload's selector
 - **Service**: Pick first ready endpoint pod
@@ -67,6 +68,7 @@ func (a *App) ListPortForwards() []PortForwardSession
 ```
 
 **Internal behavior:**
+
 - Resolves target to a pod (for Services/Workloads, finds first ready pod)
 - Creates `portforward.PortForwarder` using cluster's REST config
 - Spawns goroutine to run forwarder and monitor for errors
@@ -74,6 +76,7 @@ func (a *App) ListPortForwards() []PortForwardSession
 - Session map protected by mutex, keyed by session ID
 
 **Events emitted:**
+
 - `portforward:status` - `{sessionID, status, localPort, podName, error}`
 - `portforward:list` - Full list refresh on start/stop/reconnect
 
@@ -84,16 +87,19 @@ func (a *App) ListPortForwards() []PortForwardSession
 Uses existing `Modal` component and form styles.
 
 **Trigger points:**
+
 - Context menu on workloads/pods/services tables
 - Object Panel button when viewing applicable resource
 
 **Contents:**
+
 - Resource name and cluster (read-only)
 - Container port selection (radio buttons from pod spec)
 - Local port input (defaults to container port)
 - If no ports in spec, show free-form input
 
 **Validation:**
+
 - Local port not already in use by another forward
 - Port number in valid range
 
@@ -102,12 +108,14 @@ Uses existing `Modal` component and form styles.
 Dockable panel using existing `DockablePanel` component.
 
 **Display:**
+
 - Lists all active forwards across all clusters
 - Shows: resource, ports, cluster/namespace, status
 - Status indicators: active, reconnecting, error
 - Actions: Stop (active/reconnecting), Remove (errored)
 
 **Behavior:**
+
 - Accessed via View menu (like App Logs)
 - Auto-opens when first forward starts
 - Subscribes to `portforward:status` and `portforward:list` events
@@ -116,18 +124,22 @@ Dockable panel using existing `DockablePanel` component.
 ### Integration Points
 
 **Context menus:**
-- Add "Port Forward..." to workload tables (NsViewWorkloads)
-- Add "Port Forward..." to services table
-- Add "Port Forward..." to pods table
+
+- Add "Port Forward" to workload tables (NsViewWorkloads)
+- Add "Port Forward" to services table
+- Add "Port Forward" to pods table
 - Disabled if resource has no ports defined
 
 **Object Panel:**
+
 - Add "Port Forward" button when viewing pod/workload/service
 
 **View menu:**
+
 - Add "Port Forwards" item to open/focus panel
 
 **Cluster tab close:**
+
 - Check for active forwards before closing
 - Show confirmation: "Stop & Close" / "Cancel"
 - Call `StopClusterPortForwards(clusterID)` on confirm
@@ -137,6 +149,7 @@ Dockable panel using existing `DockablePanel` component.
 ### Reconnection Logic
 
 When port forwarder detects connection dropped:
+
 1. Check if original target still exists
 2. If target gone: status "error", no retry
 3. If target exists: status "reconnecting", find new ready pod
@@ -145,14 +158,14 @@ When port forwarder detects connection dropped:
 
 ### Error Scenarios
 
-| Scenario | Status | Behavior |
-|----------|--------|----------|
-| Local port in use | error | Fail immediately |
-| Pod not ready | error | Fail with message |
-| Pod dies, workload exists | reconnecting | Auto-reconnect to new pod |
-| Pod dies, direct pod forward | error | No reconnect |
-| Cluster disconnected | error | Mark all cluster's forwards as error |
-| Network timeout | reconnecting | Retry with backoff |
+| Scenario                     | Status       | Behavior                             |
+| ---------------------------- | ------------ | ------------------------------------ |
+| Local port in use            | error        | Fail immediately                     |
+| Pod not ready                | error        | Fail with message                    |
+| Pod dies, workload exists    | reconnecting | Auto-reconnect to new pod            |
+| Pod dies, direct pod forward | error        | No reconnect                         |
+| Cluster disconnected         | error        | Mark all cluster's forwards as error |
+| Network timeout              | reconnecting | Retry with backoff                   |
 
 ### Frontend Error Display
 
@@ -186,10 +199,12 @@ When port forwarder detects connection dropped:
 ## Files to Create/Modify
 
 ### Backend
+
 - `backend/portforward.go` (new)
 - `backend/portforward_test.go` (new)
 
 ### Frontend
+
 - `src/modules/port-forward/PortForwardModal.tsx` (new)
 - `src/modules/port-forward/PortForwardModal.test.tsx` (new)
 - `src/modules/port-forward/PortForwardsPanel.tsx` (new)

@@ -147,7 +147,14 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
         });
     });
     // Use targetKey for stable dependency instead of target object reference
-  }, [targetKey, target?.clusterId, target?.namespace, target?.kind, target?.name, target?.ports.length]);
+  }, [
+    targetKey,
+    target?.clusterId,
+    target?.namespace,
+    target?.kind,
+    target?.name,
+    target?.ports.length,
+  ]);
 
   // Update local port when container port changes
   const handleContainerPortChange = useCallback((port: number) => {

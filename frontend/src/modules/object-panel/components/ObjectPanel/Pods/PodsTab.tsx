@@ -30,7 +30,7 @@ import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import '../shared.css';
-import { OpenIcon } from '@shared/components/icons/MenuIcons';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 
 interface PodsTabProps {
   pods: PodSnapshotEntry[];
@@ -279,19 +279,27 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
               })
             }
             enableContextMenu
-            getCustomContextMenuItems={(pod) => [
-              {
-                label: 'Open',
-                icon: <OpenIcon />,
-                onClick: () =>
-                  openWithObject({
-                    kind: 'Pod',
-                    name: pod.name,
-                    namespace: pod.namespace,
-                    ...getPodClusterMeta(pod),
-                  }),
-              },
-            ]}
+            getCustomContextMenuItems={(pod) =>
+              buildObjectActionItems({
+                object: {
+                  kind: 'Pod',
+                  name: pod.name,
+                  namespace: pod.namespace,
+                  ...getPodClusterMeta(pod),
+                },
+                context: 'gridtable',
+                handlers: {
+                  onOpen: () =>
+                    openWithObject({
+                      kind: 'Pod',
+                      name: pod.name,
+                      namespace: pod.namespace,
+                      ...getPodClusterMeta(pod),
+                    }),
+                },
+                permissions: {},
+              })
+            }
             tableClassName="gridtable-pods gridtable-pods--namespaced"
             filters={{
               enabled: true,

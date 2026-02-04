@@ -13,6 +13,7 @@
 ## Task 1: Backend Types and Session Structure
 
 **Files:**
+
 - Create: `backend/portforward_types.go`
 
 **Step 1: Create the port forward types file**
@@ -113,6 +114,7 @@ git commit -m "feat(portforward): add type definitions for port forwarding sessi
 ## Task 2: Add Port Forward Session Map to App
 
 **Files:**
+
 - Modify: `backend/app.go`
 
 **Step 1: Add session map and mutex to App struct**
@@ -149,6 +151,7 @@ git commit -m "feat(portforward): add session storage to App struct"
 ## Task 3: Backend Pod Resolution Logic
 
 **Files:**
+
 - Create: `backend/portforward_resolve.go`
 - Create: `backend/portforward_resolve_test.go`
 
@@ -353,6 +356,7 @@ git commit -m "feat(portforward): add pod resolution logic for workloads and ser
 ## Task 4: Backend Core Port Forward Logic
 
 **Files:**
+
 - Create: `backend/portforward.go`
 - Create: `backend/portforward_test.go`
 
@@ -758,6 +762,7 @@ git commit -m "feat(portforward): implement core port forwarding logic with reco
 ## Task 5: Frontend Types and Wails Bindings
 
 **Files:**
+
 - Regenerate: `frontend/wailsjs/go/backend/App.d.ts` (auto-generated)
 
 **Step 1: Generate Wails bindings**
@@ -782,6 +787,7 @@ git commit -m "feat(portforward): regenerate Wails bindings"
 ## Task 6: Frontend Port Forward Modal
 
 **Files:**
+
 - Create: `frontend/src/modules/port-forward/PortForwardModal.tsx`
 - Create: `frontend/src/modules/port-forward/PortForwardModal.css`
 - Create: `frontend/src/modules/port-forward/index.ts`
@@ -1122,6 +1128,7 @@ git commit -m "feat(portforward): add port forward modal component"
 ## Task 7: Frontend Port Forwards Panel
 
 **Files:**
+
 - Create: `frontend/src/modules/port-forward/PortForwardsPanel.tsx`
 - Create: `frontend/src/modules/port-forward/PortForwardsPanel.css`
 - Modify: `frontend/src/modules/port-forward/index.ts`
@@ -1481,6 +1488,7 @@ git commit -m "feat(portforward): add port forwards management panel"
 ## Task 8: Context Menu Integration
 
 **Files:**
+
 - Modify: `frontend/src/modules/namespace/components/NsViewWorkloads.tsx`
 
 **Step 1: Add port forward imports and state**
@@ -1506,7 +1514,7 @@ In the `getContextMenuItems` callback, after the "Open" item and before the Cron
 const portForwardableKinds = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet'];
 if (portForwardableKinds.includes(normalizedKind)) {
   items.push({
-    label: 'Port Forward...',
+    label: 'Port Forward',
     icon: '⇄',
     onClick: () => {
       // For now, we'll need to fetch ports from the pod spec
@@ -1529,10 +1537,7 @@ if (portForwardableKinds.includes(normalizedKind)) {
 At the end of the component's return statement, before the closing `</>`, add:
 
 ```tsx
-<PortForwardModal
-  target={portForwardTarget}
-  onClose={() => setPortForwardTarget(null)}
-/>
+<PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
 ```
 
 **Step 4: Run type check**
@@ -1557,6 +1562,7 @@ git commit -m "feat(portforward): add port forward context menu item to workload
 ## Task 9: Fetch Container Ports for Modal
 
 **Files:**
+
 - Create: `backend/portforward_ports.go`
 - Modify: `frontend/src/modules/port-forward/PortForwardModal.tsx`
 
@@ -1685,6 +1691,7 @@ git commit -m "feat(portforward): fetch container ports dynamically in modal"
 ## Task 10: Add Panel to App Layout
 
 **Files:**
+
 - Modify: `frontend/src/App.tsx` or `frontend/src/ui/layout/AppLayout.tsx`
 
 **Step 1: Import and add the panel**
@@ -1722,6 +1729,7 @@ git commit -m "feat(portforward): integrate panel into app layout"
 ## Task 11: Cluster Close Confirmation
 
 **Files:**
+
 - Modify cluster tab close handler (location TBD based on codebase exploration)
 
 **Step 1: Find cluster close handler**
@@ -1765,6 +1773,7 @@ git commit -m "feat(portforward): add confirmation when closing cluster with act
 ## Task 12: Add Tests
 
 **Files:**
+
 - Create: `frontend/src/modules/port-forward/PortForwardModal.test.tsx`
 - Create: `frontend/src/modules/port-forward/PortForwardsPanel.test.tsx`
 
@@ -1793,9 +1802,7 @@ describe('PortForwardModal', () => {
   };
 
   it('renders nothing when target is null', () => {
-    const { container } = render(
-      <PortForwardModal target={null} onClose={() => {}} />
-    );
+    const { container } = render(<PortForwardModal target={null} onClose={() => {}} />);
     expect(container.firstChild).toBeNull();
   });
 
@@ -1843,7 +1850,9 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
 
 vi.mock('@/components/dockable', () => ({
   DockablePanel: ({ children, title }: any) => (
-    <div data-testid="dockable-panel" data-title={title}>{children}</div>
+    <div data-testid="dockable-panel" data-title={title}>
+      {children}
+    </div>
   ),
   useDockablePanelState: () => ({
     isOpen: true,

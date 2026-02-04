@@ -5,7 +5,6 @@
  * Ingress Classes, and Admission Control resources.
  */
 
-import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getDisplayKind } from '@/utils/kindAliasMap';
@@ -26,6 +25,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 
 // Define the data structure for configuration resources
 interface ConfigData {
@@ -163,31 +163,24 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     // Get context menu items
     const getContextMenuItems = useCallback(
       (resource: ConfigData): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [
-          {
-            label: 'Open',
-            icon: <OpenIcon />,
-            onClick: () => handleResourceClick(resource),
-          },
-        ];
-
         const deleteStatus = permissionMap.get(getPermissionKey(resource.kind, 'delete')) ?? null;
 
-        // Show a muted header while permission checks are pending.
-        if (deleteStatus?.pending) {
-          items.unshift({ header: true, label: 'Awaiting permissions...' });
-        }
-
-        if (deleteStatus?.allowed && !deleteStatus.pending) {
-          items.push({
-            label: 'Delete',
-            icon: <DeleteIcon />,
-            danger: true,
-            onClick: () => setDeleteConfirm({ show: true, resource }),
-          });
-        }
-
-        return items;
+        return buildObjectActionItems({
+          object: {
+            kind: resource.kind,
+            name: resource.name,
+            clusterId: resource.clusterId,
+            clusterName: resource.clusterName,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleResourceClick(resource),
+            onDelete: () => setDeleteConfirm({ show: true, resource }),
+          },
+          permissions: {
+            delete: deleteStatus,
+          },
+        });
       },
       [handleResourceClick, permissionMap]
     );

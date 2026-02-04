@@ -93,6 +93,16 @@ vi.mock('@shared/components/icons/MenuIcons', () => ({
   DeleteIcon: () => <span>delete</span>,
 }));
 
+vi.mock('@/core/capabilities', () => ({
+  useUserPermissions: () =>
+    new Map([
+      ['Role:delete', { allowed: true, pending: false }],
+      ['RoleBinding:delete', { allowed: true, pending: false }],
+      ['ServiceAccount:delete', { allowed: true, pending: false }],
+    ]),
+  getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
+}));
+
 describe('NsViewRBAC', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;

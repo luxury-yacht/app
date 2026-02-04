@@ -24,10 +24,10 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
-import { OpenIcon, DeleteIcon, PortForwardIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 
 // Data interface for network resources
 export interface NetworkData {
@@ -181,51 +181,36 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (resource: NetworkData): ContextMenuItem[] => {
-        const items: ContextMenuItem[] = [];
+        const deleteStatus =
+          permissionMap.get(getPermissionKey(resource.kind, 'delete', resource.namespace)) ?? null;
 
-        // Always add Open in Object Panel
-        items.push({
-          label: 'Open',
-          icon: <OpenIcon />,
-          onClick: () => handleResourceClick(resource),
-        });
-
-        // Port forward for Services
-        if (resource.kind === 'Service') {
-          items.push({
-            label: 'Port Forward...',
-            icon: <PortForwardIcon />,
-            onClick: () => {
+        return buildObjectActionItems({
+          object: {
+            kind: resource.kind,
+            name: resource.name,
+            namespace: resource.namespace,
+            clusterId: resource.clusterId,
+            clusterName: resource.clusterName,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleResourceClick(resource),
+            onPortForward: () => {
               setPortForwardTarget({
-                kind: 'Service',
+                kind: resource.kind,
                 name: resource.name,
                 namespace: resource.namespace,
                 clusterId: resource.clusterId ?? '',
                 clusterName: resource.clusterName ?? '',
-                ports: [], // Will be fetched by modal
+                ports: [],
               });
             },
-          });
-        }
-
-        const deleteStatus =
-          permissionMap.get(getPermissionKey(resource.kind, 'delete', resource.namespace)) ?? null;
-
-        // Show a muted header while permission checks are pending.
-        if (deleteStatus?.pending) {
-          items.unshift({ header: true, label: 'Awaiting permissions...' });
-        }
-
-        if (deleteStatus?.allowed && !deleteStatus.pending) {
-          items.push({
-            label: 'Delete',
-            icon: <DeleteIcon />,
-            danger: true,
-            onClick: () => setDeleteConfirm({ show: true, resource }),
-          });
-        }
-
-        return items;
+            onDelete: () => setDeleteConfirm({ show: true, resource }),
+          },
+          permissions: {
+            delete: deleteStatus,
+          },
+        });
       },
       [handleResourceClick, permissionMap]
     );

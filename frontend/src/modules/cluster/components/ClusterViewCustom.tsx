@@ -6,9 +6,10 @@
  */
 
 import './ClusterViewCustom.css';
-import { OpenIcon, DeleteIcon } from '@shared/components/icons/MenuIcons';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
+import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
@@ -57,6 +58,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
+    const permissionMap = useUserPermissions();
 
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
@@ -178,20 +180,27 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
 
     // Get context menu items
     const getContextMenuItems = useCallback(
-      (resource: ClusterCustomData): ContextMenuItem[] => [
-        {
-          label: 'Open',
-          icon: <OpenIcon />,
-          onClick: () => handleResourceClick(resource),
-        },
-        {
-          label: 'Delete',
-          icon: <DeleteIcon />,
-          danger: true,
-          onClick: () => setDeleteConfirm({ show: true, resource }),
-        },
-      ],
-      [handleResourceClick]
+      (resource: ClusterCustomData): ContextMenuItem[] => {
+        const deleteStatus = permissionMap.get(getPermissionKey(resource.kind, 'delete')) ?? null;
+
+        return buildObjectActionItems({
+          object: {
+            kind: resource.kind,
+            name: resource.name,
+            clusterId: resource.clusterId,
+            clusterName: resource.clusterName,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleResourceClick(resource),
+            onDelete: () => setDeleteConfirm({ show: true, resource }),
+          },
+          permissions: {
+            delete: deleteStatus,
+          },
+        });
+      },
+      [handleResourceClick, permissionMap]
     );
 
     // Resolve empty state message

@@ -117,6 +117,15 @@ vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
 }));
 
+vi.mock('@/core/capabilities', () => ({
+  useUserPermissions: () =>
+    new Map([
+      ['PersistentVolumeClaim:delete', { allowed: true, pending: false }],
+      ['VolumeAttachment:delete', { allowed: true, pending: false }],
+    ]),
+  getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
+}));
+
 describe('NsViewStorage', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;

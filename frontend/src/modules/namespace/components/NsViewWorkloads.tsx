@@ -28,7 +28,6 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import useWorkloadTableColumns from '@modules/namespace/components/useWorkloadTableColumns';
 import {
   WorkloadData,
-  normalizeWorkloadKind,
   clampReplicas,
   extractDesiredReplicas,
   buildWorkloadKey,
@@ -43,12 +42,10 @@ import {
 } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import {
-  OpenIcon,
-  RestartIcon,
-  ScaleIcon,
-  DeleteIcon,
-  PortForwardIcon,
-} from '@shared/components/icons/MenuIcons';
+  buildObjectActionItems,
+  normalizeKind,
+  RESTARTABLE_KINDS,
+} from '@shared/hooks/useObjectActions';
 
 interface WorkloadsViewProps {
   namespace: string;
@@ -162,10 +159,9 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const canRestart = useCallback(
       (workload: WorkloadData) => {
-        const normalizedKind = normalizeWorkloadKind(workload.kind);
-        const status = permissionMap.get(
-          getPermissionKey(normalizedKind, 'patch', workload.namespace)
-        );
+        const normalized = normalizeKind(workload.kind);
+        if (!RESTARTABLE_KINDS.includes(normalized)) return false;
+        const status = permissionMap.get(getPermissionKey(normalized, 'patch', workload.namespace));
         return Boolean(status?.allowed && !status?.pending);
       },
       [permissionMap]
@@ -328,108 +324,52 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const getContextMenuItems = useCallback(
       (row: WorkloadData): ContextMenuItem[] => {
-        const normalizedKind = normalizeWorkloadKind(row.kind);
+        const normalized = normalizeKind(row.kind);
+
+        // Get permissions
         const restartStatus =
-          permissionMap.get(getPermissionKey(normalizedKind, 'patch', row.namespace)) ?? null;
+          permissionMap.get(getPermissionKey(normalized, 'patch', row.namespace)) ?? null;
+        const scaleStatus =
+          permissionMap.get(getPermissionKey(normalized, 'update', row.namespace, 'scale')) ?? null;
         const deleteStatus =
           permissionMap.get(getPermissionKey(row.kind, 'delete', row.namespace)) ?? null;
-        const scaleStatus =
-          permissionMap.get(getPermissionKey(normalizedKind, 'update', row.namespace, 'scale')) ??
-          null;
-        const scalableKinds = ['Deployment', 'StatefulSet', 'ReplicaSet'];
-        const items: ContextMenuItem[] = [];
 
-        // Show a muted header while permission checks are pending.
-        if (
-          restartStatus?.pending ||
-          deleteStatus?.pending ||
-          (scalableKinds.includes(normalizedKind) && scaleStatus?.pending)
-        ) {
-          items.push({ header: true, label: 'Awaiting permissions...' });
-        }
-
-        items.push({
-          label: 'Open',
-          icon: <OpenIcon />,
-          onClick: () => handleWorkloadClick(row),
-        });
-
-        // CronJob-specific actions
-        if (row.kind === 'CronJob') {
-          const isSuspended = row.status === 'Suspended';
-          items.push({
-            label: 'Trigger Now',
-            icon: '▶',
-            onClick: () => setTriggerConfirm({ show: true, cronjob: row }),
-            disabled: isSuspended,
-          });
-          items.push({
-            label: isSuspended ? 'Resume' : 'Suspend',
-            icon: isSuspended ? '▶' : '⏸',
-            onClick: () => handleSuspendToggle(row),
-          });
-        }
-
-        if (canRestart(row)) {
-          items.push({
-            label: 'Restart',
-            icon: <RestartIcon />,
-            onClick: () => setRestartConfirm({ show: true, workload: row }),
-          });
-        }
-
-        // Scale is only available for Deployments, StatefulSets, and ReplicaSets
-        if (
-          scalableKinds.includes(normalizedKind) &&
-          scaleStatus?.allowed &&
-          !scaleStatus.pending
-        ) {
-          items.push({
-            label: 'Scale',
-            icon: <ScaleIcon />,
-            onClick: () => openScaleModal(row),
-          });
-        }
-
-        // Port forward for pods and workloads
-        const portForwardableKinds = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet'];
-        if (portForwardableKinds.includes(normalizedKind)) {
-          items.push({
-            label: 'Port Forward...',
-            icon: <PortForwardIcon />,
-            onClick: () => {
+        return buildObjectActionItems({
+          object: {
+            kind: row.kind,
+            name: row.name,
+            namespace: row.namespace,
+            clusterId: row.clusterId,
+            clusterName: row.clusterName,
+            status: row.status,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleWorkloadClick(row),
+            onRestart: () => setRestartConfirm({ show: true, workload: row }),
+            onScale: () => openScaleModal(row),
+            onDelete: () => setDeleteConfirm({ show: true, workload: row }),
+            onPortForward: () => {
               setPortForwardTarget({
                 kind: row.kind,
                 name: row.name,
                 namespace: row.namespace,
                 clusterId: row.clusterId ?? '',
                 clusterName: row.clusterName ?? '',
-                ports: [], // Will be fetched by modal
+                ports: [],
               });
             },
-          });
-        }
-
-        if (canDelete(row)) {
-          items.push({
-            label: 'Delete',
-            icon: <DeleteIcon />,
-            danger: true,
-            onClick: () => setDeleteConfirm({ show: true, workload: row }),
-          });
-        }
-
-        return items;
+            onTrigger: () => setTriggerConfirm({ show: true, cronjob: row }),
+            onSuspendToggle: () => handleSuspendToggle(row),
+          },
+          permissions: {
+            restart: restartStatus,
+            scale: scaleStatus,
+            delete: deleteStatus,
+          },
+        });
       },
-      [
-        canDelete,
-        canRestart,
-        handleSuspendToggle,
-        handleWorkloadClick,
-        openScaleModal,
-        permissionMap,
-        setPortForwardTarget,
-      ]
+      [handleSuspendToggle, handleWorkloadClick, openScaleModal, permissionMap]
     );
 
     const emptyMessage = useMemo(

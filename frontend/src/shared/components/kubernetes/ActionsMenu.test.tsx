@@ -11,6 +11,19 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ActionsMenu } from './ActionsMenu';
+import type { ObjectActionData } from '@shared/hooks/useObjectActions';
+
+// Mock the capabilities hook to control permissions in tests
+vi.mock('@/core/capabilities', () => ({
+  useUserPermissions: () => {
+    // Return a map that grants all permissions by default
+    const map = new Map();
+    map.get = () => ({ allowed: true, pending: false });
+    return map;
+  },
+  getPermissionKey: (kind: string, verb: string, namespace?: string, subresource?: string) =>
+    `${kind}:${verb}:${namespace || ''}:${subresource || ''}`,
+}));
 
 const openMenu = (container: HTMLElement) => {
   const trigger = container.querySelector<HTMLButtonElement>('.actions-menu-button');
@@ -19,6 +32,14 @@ const openMenu = (container: HTMLElement) => {
     trigger?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   });
 };
+
+const makeObject = (kind: string, overrides?: Partial<ObjectActionData>): ObjectActionData => ({
+  kind,
+  name: 'test-resource',
+  namespace: 'default',
+  clusterId: 'cluster-1',
+  ...overrides,
+});
 
 describe('ActionsMenu', () => {
   let container: HTMLDivElement;
@@ -44,35 +65,36 @@ describe('ActionsMenu', () => {
     container.remove();
   });
 
-  it('does not render when no actions are available', async () => {
-    await renderMenu({});
+  it('does not render when object is null', async () => {
+    await renderMenu({ object: null });
     expect(container.innerHTML).toBe('');
   });
 
-  it('shows restart and delete actions and invokes handlers', async () => {
+  it('shows restart and delete actions for Deployment and invokes handlers', async () => {
     const onRestart = vi.fn();
     const onDelete = vi.fn();
 
     await renderMenu({
-      canRestart: true,
-      canDelete: true,
+      object: makeObject('Deployment'),
       onRestart,
       onDelete,
-      actionLoading: false,
-      deleteLoading: false,
     });
 
     openMenu(container);
-    const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.context-menu-item'));
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
     expect(items.length).toBeGreaterThanOrEqual(2);
 
+    // Find and click restart
+    const restartItem = items.find((item) => item.textContent?.includes('Restart'));
+    expect(restartItem).toBeTruthy();
     act(() => {
-      items[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      restartItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onRestart).toHaveBeenCalledTimes(1);
 
+    // Reopen menu and click delete
     openMenu(container);
-    const deleteItem = container.querySelector<HTMLButtonElement>('.context-menu-item.danger');
+    const deleteItem = container.querySelector<HTMLElement>('.context-menu-item.danger');
     expect(deleteItem).toBeTruthy();
     act(() => {
       deleteItem?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -80,31 +102,18 @@ describe('ActionsMenu', () => {
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
-  it('displays disabled reasons when actions are unavailable', async () => {
-    await renderMenu({
-      restartDisabledReason: 'Needs permissions',
-      scaleDisabledReason: 'Not scalable',
-      deleteDisabledReason: 'Protected',
-    });
-
-    openMenu(container);
-    const reasons = Array.from(container.querySelectorAll('.context-menu-reason')).map((el) =>
-      el.textContent?.trim()
-    );
-    expect(reasons).toEqual(['Needs permissions', 'Not scalable', 'Protected']);
-  });
-
   it('opens the scale modal, updates replicas, and applies the change', async () => {
     const onScale = vi.fn();
 
     await renderMenu({
-      canScale: true,
+      object: makeObject('Deployment'),
       currentReplicas: 3,
       onScale,
     });
 
     openMenu(container);
-    const scaleItem = container.querySelector<HTMLButtonElement>('.context-menu-item:not(.danger)');
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const scaleItem = items.find((item) => item.textContent?.includes('Scale'));
     expect(scaleItem).toBeTruthy();
 
     act(() => {
@@ -145,7 +154,10 @@ describe('ActionsMenu', () => {
   });
 
   it('closes the menu when clicking outside', async () => {
-    await renderMenu({ canDelete: true });
+    await renderMenu({
+      object: makeObject('Deployment'),
+      onDelete: vi.fn(),
+    });
 
     openMenu(container);
     expect(container.querySelector('.actions-menu-dropdown')).toBeTruthy();
@@ -157,21 +169,30 @@ describe('ActionsMenu', () => {
     expect(container.querySelector('.actions-menu-dropdown')).toBeNull();
   });
 
+  it('shows port forward action for Pod', async () => {
+    await renderMenu({
+      object: makeObject('Pod'),
+    });
+
+    openMenu(container);
+    const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+    const portForwardItem = items.find((item) => item.textContent?.includes('Port Forward'));
+    expect(portForwardItem).toBeTruthy();
+  });
+
   describe('CronJob actions', () => {
     it('shows trigger and suspend actions for CronJob', async () => {
       const onTrigger = vi.fn();
       const onSuspendToggle = vi.fn();
 
       await renderMenu({
-        canTrigger: true,
-        canSuspend: true,
-        isSuspended: false,
+        object: makeObject('CronJob'),
         onTrigger,
         onSuspendToggle,
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.context-menu-item'));
+      const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
 
       const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
       const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
@@ -180,15 +201,14 @@ describe('ActionsMenu', () => {
       expect(suspendItem).toBeTruthy();
     });
 
-    it('shows Resume instead of Suspend when isSuspended is true', async () => {
+    it('shows Resume instead of Suspend when status is Suspended', async () => {
       await renderMenu({
-        canTrigger: true,
-        canSuspend: true,
-        isSuspended: true,
+        object: makeObject('CronJob', { status: 'Suspended' }),
+        onSuspendToggle: vi.fn(),
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.context-menu-item'));
+      const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
 
       const resumeItem = items.find((item) => item.textContent?.includes('Resume'));
       const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
@@ -199,13 +219,13 @@ describe('ActionsMenu', () => {
 
     it('disables trigger when CronJob is suspended', async () => {
       await renderMenu({
-        canTrigger: true,
-        canSuspend: true,
-        isSuspended: true,
+        object: makeObject('CronJob', { status: 'Suspended' }),
+        onTrigger: vi.fn(),
       });
 
       openMenu(container);
-      const triggerItem = container.querySelector<HTMLElement>('.context-menu-item:first-child');
+      const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
+      const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
       expect(triggerItem?.classList.contains('disabled')).toBe(true);
     });
 
@@ -213,13 +233,12 @@ describe('ActionsMenu', () => {
       const onSuspendToggle = vi.fn();
 
       await renderMenu({
-        canSuspend: true,
-        isSuspended: false,
+        object: makeObject('CronJob'),
         onSuspendToggle,
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.context-menu-item'));
+      const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
       const suspendItem = items.find((item) => item.textContent?.includes('Suspend'));
 
       act(() => {
@@ -233,13 +252,12 @@ describe('ActionsMenu', () => {
       const onTrigger = vi.fn();
 
       await renderMenu({
-        canTrigger: true,
-        isSuspended: false,
+        object: makeObject('CronJob'),
         onTrigger,
       });
 
       openMenu(container);
-      const items = Array.from(container.querySelectorAll<HTMLButtonElement>('.context-menu-item'));
+      const items = Array.from(container.querySelectorAll<HTMLElement>('.context-menu-item'));
       const triggerItem = items.find((item) => item.textContent?.includes('Trigger Now'));
 
       act(() => {
@@ -251,7 +269,7 @@ describe('ActionsMenu', () => {
       expect(modal).toBeTruthy();
 
       // Click confirm
-      const confirmBtn = modal?.querySelector<HTMLButtonElement>('.button.primary');
+      const confirmBtn = modal?.querySelector<HTMLButtonElement>('.button:not(.cancel)');
       act(() => {
         confirmBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });

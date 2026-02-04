@@ -19,7 +19,6 @@ import React, { useCallback, useMemo } from 'react';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ClusterNodeRow } from '@modules/cluster/contexts/ClusterResourcesContext';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
-import { OpenIcon } from '@shared/components/icons/MenuIcons';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -29,6 +28,7 @@ import {
   calculateCpuOvercommitted,
   calculateMemoryOvercommitted,
 } from '@/utils/resourceCalculations';
+import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 
 // Define props for NodesViewGrid component
 interface NodesViewProps {
@@ -251,13 +251,21 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
 
     // Get context menu items
     const getRowContextMenuItems = useCallback(
-      (row: ClusterNodeRow, _columnKey: string): ContextMenuItem[] => [
-        {
-          label: 'Open',
-          icon: <OpenIcon />,
-          onClick: () => handleNodeClick(row),
-        },
-      ],
+      (row: ClusterNodeRow, _columnKey: string): ContextMenuItem[] => {
+        return buildObjectActionItems({
+          object: {
+            kind: 'Node',
+            name: row.name,
+            clusterId: row.clusterId,
+            clusterName: row.clusterName,
+          },
+          context: 'gridtable',
+          handlers: {
+            onOpen: () => handleNodeClick(row),
+          },
+          permissions: {},
+        });
+      },
       [handleNodeClick]
     );
 

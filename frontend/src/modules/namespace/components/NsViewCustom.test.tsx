@@ -81,6 +81,15 @@ vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
 }));
 
+vi.mock('@/core/capabilities', () => ({
+  useUserPermissions: () =>
+    new Map([
+      ['CronJob:delete', { allowed: true, pending: false }],
+      ['CustomResource:delete', { allowed: true, pending: false }],
+    ]),
+  getPermissionKey: (kind: string, action: string) => `${kind}:${action}`,
+}));
+
 const baseResource: CustomResourceData = {
   kind: 'CronJob',
   name: 'nightly-cleanup',
