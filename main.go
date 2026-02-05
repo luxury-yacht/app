@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"embed"
+	"os"
 	goruntime "runtime"
 
 	"github.com/luxury-yacht/app/backend"
@@ -51,9 +52,20 @@ func main() {
 	// Create application with options
 	startHidden := true
 	frameless := false
+	maxWidth := 0
+	maxHeight := 0
 	if goruntime.GOOS == "linux" {
 		// Some Linux window managers ignore Show when StartHidden is true.
 		startHidden = false
+		// Wails v2.11.0 on Wayland incorrectly constrains the window when
+		// MaxWidth/MaxHeight are 0 (the default), because the compositor
+		// includes decoration sizes in the reported dimensions. Setting
+		// explicit large values works around the issue until the upstream
+		// fix (PR #4047) ships in a tagged release.
+		if os.Getenv("XDG_SESSION_TYPE") == "wayland" {
+			maxWidth = 15360
+			maxHeight = 8640
+		}
 	}
 
 	err := wails.Run(&options.App{
@@ -62,6 +74,8 @@ func main() {
 		Width:     1200,
 		MinHeight: 600,
 		MinWidth:  1100,
+		MaxHeight: maxHeight,
+		MaxWidth:  maxWidth,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
