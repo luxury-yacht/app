@@ -63,6 +63,25 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       ],
       [includeMetadata],
     );
+
+    // Custom search text accessor that optionally includes labels and annotations.
+    const getSearchText = useCallback(
+      (row: ClusterNodeRow): string[] => {
+        const values: string[] = [row.name, row.kind].filter(Boolean);
+        if (includeMetadata) {
+          const addEntries = (map?: Record<string, string>) => {
+            if (!map) return;
+            for (const [k, v] of Object.entries(map)) {
+              values.push(k, v, `${k}: ${v}`);
+            }
+          };
+          addEntries(row.labels);
+          addEntries(row.annotations);
+        }
+        return values;
+      },
+      [includeMetadata],
+    );
     const useShortResourceNames = useShortNames();
     const nodesDomain = useRefreshDomain('nodes');
     const metricsInfo = useMemo(() => {
@@ -311,6 +330,9 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
               value: persistedFilters,
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
+              accessors: {
+                getSearchText,
+              },
               options: {
                 searchActions,
               },
