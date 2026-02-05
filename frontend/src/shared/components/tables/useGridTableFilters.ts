@@ -5,7 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type {
   GridTableFilterAccessors,
@@ -76,7 +76,7 @@ export interface UseGridTableFiltersResult<T> {
   activeFilters: GridTableFilterState;
   filterSignature: string;
   resolvedFilterOptions: InternalFilterOptions;
-  handleFilterSearchChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  handleFilterSearchChange: (value: string) => void;
   handleFilterKindsChange: (values: string[]) => void;
   handleFilterNamespacesChange: (values: string[]) => void;
   handleFilterReset: () => void;
@@ -317,8 +317,8 @@ export function useGridTableFilters<T>({
   );
 
   const handleFilterSearchChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      updateFilters({ search: event.target.value });
+    (value: string) => {
+      updateFilters({ search: value });
     },
     [updateFilters]
   );

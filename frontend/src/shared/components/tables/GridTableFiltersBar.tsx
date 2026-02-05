@@ -8,6 +8,7 @@
 import React, { useRef } from 'react';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import SearchInput from '@shared/components/inputs/SearchInput';
 import type {
   GridTableFilterState,
   InternalFilterOptions,
@@ -23,7 +24,7 @@ interface GridTableFiltersBarProps {
   searchInputId: string;
   onKindsChange: (value: string | string[]) => void;
   onNamespacesChange: (value: string | string[]) => void;
-  onSearchChange: React.ChangeEventHandler<HTMLInputElement>;
+  onSearchChange: (value: string) => void;
   onReset: () => void;
   renderOption: (option: DropdownOption, isSelected: boolean) => React.ReactNode;
   renderKindsValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
@@ -139,20 +140,14 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         )}
         <div className="gridtable-filter-subcluster">
           <div className="gridtable-filter-group" data-gridtable-filter-role="search-wrapper">
-            <input
-              ref={searchInputRef}
+            <SearchInput
+              inputRef={searchInputRef}
               id={searchInputId}
               name="gridtable-filter-search"
-              type="search"
-              autoComplete="off"
-              autoCapitalize="off"
-              autoCorrect="off"
-              spellCheck={false}
               placeholder={resolvedFilterOptions.searchPlaceholder ?? 'Search'}
               value={activeFilters.search}
               onChange={onSearchChange}
               onKeyDown={handleSearchKeyDown}
-              data-gridtable-filter-role="search"
             />
           </div>
           <div className="gridtable-filter-actions">

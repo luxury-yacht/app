@@ -157,7 +157,7 @@ describe('useGridTableFilters', () => {
     };
 
     await act(async () => {
-      result?.handleFilterSearchChange({ target: { value: '' } } as any);
+      result?.handleFilterSearchChange('');
     });
     await flush();
 
@@ -201,7 +201,7 @@ describe('useGridTableFilters', () => {
     expect(result?.tableData.map((row) => row.id)).toEqual(['4']);
 
     await act(async () => {
-      result?.handleFilterSearchChange({ target: { value: 'gateway' } } as any);
+      result?.handleFilterSearchChange('gateway');
       await Promise.resolve();
     });
 

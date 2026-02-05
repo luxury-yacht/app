@@ -1,0 +1,84 @@
+/* SearchInput – reusable search/filter input with optional action toggles */
+
+.search-input-wrapper {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background: var(--color-bg);
+  overflow: hidden;
+}
+
+.search-input-wrapper.focused {
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
+}
+
+.search-input-wrapper.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Inner input – unstyled, the wrapper provides the visual chrome */
+.search-input-field {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.search-input-field::placeholder {
+  color: var(--color-text-tertiary);
+}
+
+.search-input-field:disabled {
+  cursor: not-allowed;
+}
+
+/* Action buttons container */
+.search-input-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: var(--spacing-xs);
+}
+
+/* Individual action toggle button */
+.search-input-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-secondary);
+  opacity: 0.5;
+  cursor: pointer;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.search-input-action:hover {
+  opacity: 0.8;
+  background: var(--color-bg-tertiary);
+}
+
+.search-input-action.active {
+  opacity: 1;
+  color: var(--color-accent);
+}
+
+.search-input-action.active:hover {
+  opacity: 1;
+}
+
+.search-input-action:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
