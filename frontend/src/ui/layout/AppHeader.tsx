@@ -7,7 +7,9 @@
 
 import React from 'react';
 import KubeconfigSelector from '@shared/components/KubeconfigSelector';
-import RefreshStatusIndicator from '@components/refresh/RefreshStatusIndicator';
+import ConnectivityStatus from '@components/status/ConnectivityStatus';
+import MetricsStatus from '@components/status/MetricsStatus';
+import PortForwardStatus from '@components/status/PortForwardStatus';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { WindowToggleMaximise } from '@wailsjs/runtime/runtime';
 import { SettingsIcon } from '@shared/components/icons/MenuIcons';
@@ -67,7 +69,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
       </div>
 
       <div className="app-header-controls" onDoubleClick={(e) => e.stopPropagation()}>
-        <RefreshStatusIndicator />
+        <div className="status-indicators">
+          <ConnectivityStatus />
+          <MetricsStatus />
+          <PortForwardStatus />
+        </div>
         <KubeconfigSelector />
         <button
           className="settings-button"

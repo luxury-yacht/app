@@ -2,9 +2,8 @@
  * backend/app_heartbeat_test.go
  *
  * Tests for the application's per-cluster heartbeat functionality.
- * The old global heartbeat (runHeartbeat, startHeartbeatLoop) has been removed
- * as part of the multi-cluster isolation refactor. All heartbeat functionality
- * is now per-cluster via runHeartbeatIteration and checkClusterHealth.
+ * startHeartbeatLoop drives periodic calls to runHeartbeatIteration,
+ * which checks each cluster independently via checkClusterHealth.
  */
 
 package backend
@@ -17,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"k8s.io/client-go/discovery"
@@ -225,7 +225,7 @@ func TestPerClusterHeartbeatSkipsInvalidAuth(t *testing.T) {
 	}
 }
 
-// TestPerClusterHeartbeatReportsToAuthManager tests that failures are reported
+// TestPerClusterHeartbeatReportsToAuthManager tests that auth failures (401) are reported
 // to the cluster's auth manager, not global state.
 func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
 	app := NewApp()
@@ -237,17 +237,21 @@ func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
 	// Track emitted events (required by the heartbeat implementation)
 	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
 
-	// Create an unhealthy cluster with a failing client
-	unhealthyDisco := &heartbeatDiscovery{
+	// Create a cluster that returns 401 Unauthorized
+	authFailDisco := &heartbeatDiscovery{
 		FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &cgotesting.Fake{}},
 		restClient: &restfake.RESTClient{
 			NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
 			Client: restfake.CreateHTTPClient(func(*http.Request) (*http.Response, error) {
-				return nil, errors.New("connection refused")
+				return &http.Response{
+					StatusCode: 401,
+					Body:       io.NopCloser(strings.NewReader(`{"kind":"Status","apiVersion":"v1","status":"Failure","message":"Unauthorized","reason":"Unauthorized","code":401}`)),
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+				}, nil
 			}),
 		},
 	}
-	unhealthyClient := &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: unhealthyDisco}
+	authFailClient := &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: authFailDisco}
 
 	// Create an auth manager in valid state with MaxAttempts=0 so it transitions to invalid
 	authMgr := authstate.New(authstate.Config{MaxAttempts: 0})
@@ -260,9 +264,9 @@ func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
 	// Set up cluster clients
 	app.clusterClientsMu.Lock()
 	app.clusterClients = map[string]*clusterClients{
-		"cluster-failing": {
-			meta:        ClusterMeta{ID: "cluster-failing", Name: "Failing Cluster"},
-			client:      unhealthyClient,
+		"cluster-auth-fail": {
+			meta:        ClusterMeta{ID: "cluster-auth-fail", Name: "Auth Failing Cluster"},
+			client:      authFailClient,
 			authManager: authMgr,
 		},
 	}
@@ -271,9 +275,9 @@ func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
 	// Run the heartbeat iteration
 	app.runHeartbeatIteration()
 
-	// Auth manager should have been notified of failure
+	// Auth manager should have been notified of the auth failure
 	if authMgr.IsValid() {
-		t.Error("auth manager should have been marked invalid after heartbeat failure")
+		t.Error("auth manager should have been marked invalid after auth failure")
 	}
 
 	state, reason := authMgr.State()
@@ -282,6 +286,53 @@ func TestPerClusterHeartbeatReportsToAuthManager(t *testing.T) {
 	}
 	if reason == "" {
 		t.Error("expected failure reason to be set")
+	}
+}
+
+// TestPerClusterHeartbeatConnectivityDoesNotAffectAuth tests that connectivity
+// failures (connection refused, timeout) do NOT report to the auth manager.
+func TestPerClusterHeartbeatConnectivityDoesNotAffectAuth(t *testing.T) {
+	app := NewApp()
+	app.logger = NewLogger(10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app.Ctx = ctx
+
+	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
+
+	// Create a cluster with a connectivity failure (connection refused)
+	connFailDisco := &heartbeatDiscovery{
+		FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &cgotesting.Fake{}},
+		restClient: &restfake.RESTClient{
+			NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+			Client: restfake.CreateHTTPClient(func(*http.Request) (*http.Response, error) {
+				return nil, errors.New("connection refused")
+			}),
+		},
+	}
+	connFailClient := &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: connFailDisco}
+
+	// Create an auth manager in valid state
+	authMgr := authstate.New(authstate.Config{MaxAttempts: 0})
+	if !authMgr.IsValid() {
+		t.Fatal("auth manager should start as valid")
+	}
+
+	app.clusterClientsMu.Lock()
+	app.clusterClients = map[string]*clusterClients{
+		"cluster-conn-fail": {
+			meta:        ClusterMeta{ID: "cluster-conn-fail", Name: "Connectivity Failing Cluster"},
+			client:      connFailClient,
+			authManager: authMgr,
+		},
+	}
+	app.clusterClientsMu.Unlock()
+
+	app.runHeartbeatIteration()
+
+	// Auth manager should still be valid — connectivity failures don't affect auth state
+	if !authMgr.IsValid() {
+		t.Error("auth manager should remain valid after connectivity failure")
 	}
 }
 
@@ -356,7 +407,7 @@ func TestCheckClusterHealth(t *testing.T) {
 	defer cancel()
 	app.Ctx = ctx
 
-	t.Run("healthy cluster returns true", func(t *testing.T) {
+	t.Run("healthy cluster returns healthOK", func(t *testing.T) {
 		healthyDisco := &heartbeatDiscovery{
 			FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &cgotesting.Fake{}},
 			restClient: &restfake.RESTClient{
@@ -377,12 +428,12 @@ func TestCheckClusterHealth(t *testing.T) {
 			client: healthyClient,
 		}
 
-		if !app.checkClusterHealth(cc) {
-			t.Error("expected checkClusterHealth to return true for healthy cluster")
+		if got := app.checkClusterHealth(cc); got != healthOK {
+			t.Errorf("expected healthOK, got %v", got)
 		}
 	})
 
-	t.Run("unhealthy cluster returns false", func(t *testing.T) {
+	t.Run("connection refused returns healthConnectivityFailure", func(t *testing.T) {
 		unhealthyDisco := &heartbeatDiscovery{
 			FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &cgotesting.Fake{}},
 			restClient: &restfake.RESTClient{
@@ -399,19 +450,228 @@ func TestCheckClusterHealth(t *testing.T) {
 			client: unhealthyClient,
 		}
 
-		if app.checkClusterHealth(cc) {
-			t.Error("expected checkClusterHealth to return false for unhealthy cluster")
+		if got := app.checkClusterHealth(cc); got != healthConnectivityFailure {
+			t.Errorf("expected healthConnectivityFailure, got %v", got)
 		}
 	})
 
-	t.Run("nil client returns false", func(t *testing.T) {
+	t.Run("401 returns healthAuthFailure", func(t *testing.T) {
+		authDisco := &heartbeatDiscovery{
+			FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &cgotesting.Fake{}},
+			restClient: &restfake.RESTClient{
+				NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+				Client: restfake.CreateHTTPClient(func(*http.Request) (*http.Response, error) {
+					return &http.Response{
+						StatusCode: 401,
+						Body:       io.NopCloser(strings.NewReader(`{"kind":"Status","apiVersion":"v1","status":"Failure","message":"Unauthorized","reason":"Unauthorized","code":401}`)),
+						Header:     http.Header{"Content-Type": []string{"application/json"}},
+					}, nil
+				}),
+			},
+		}
+		authClient := &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: authDisco}
+
+		cc := &clusterClients{
+			meta:   ClusterMeta{ID: "auth-fail", Name: "Auth Fail"},
+			client: authClient,
+		}
+
+		if got := app.checkClusterHealth(cc); got != healthAuthFailure {
+			t.Errorf("expected healthAuthFailure, got %v", got)
+		}
+	})
+
+	t.Run("exec credential failure returns healthAuthFailure", func(t *testing.T) {
+		execDisco := &heartbeatDiscovery{
+			FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &cgotesting.Fake{}},
+			restClient: &restfake.RESTClient{
+				NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+				Client: restfake.CreateHTTPClient(func(*http.Request) (*http.Response, error) {
+					return nil, errors.New(`getting credentials: exec: executable aws failed with exit code 255`)
+				}),
+			},
+		}
+		execClient := &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: execDisco}
+
+		cc := &clusterClients{
+			meta:   ClusterMeta{ID: "exec-fail", Name: "Exec Fail"},
+			client: execClient,
+		}
+
+		if got := app.checkClusterHealth(cc); got != healthAuthFailure {
+			t.Errorf("expected healthAuthFailure for exec credential failure, got %v", got)
+		}
+	})
+
+	t.Run("nil client returns healthConnectivityFailure", func(t *testing.T) {
 		cc := &clusterClients{
 			meta:   ClusterMeta{ID: "nil-client", Name: "Nil Client"},
 			client: nil,
 		}
 
-		if app.checkClusterHealth(cc) {
-			t.Error("expected checkClusterHealth to return false for nil client")
+		if got := app.checkClusterHealth(cc); got != healthConnectivityFailure {
+			t.Errorf("expected healthConnectivityFailure, got %v", got)
 		}
 	})
+}
+
+// TestIsExecCredentialError verifies pattern matching for exec credential plugin failures.
+func TestIsExecCredentialError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"aws exec failure", errors.New(`getting credentials: exec: executable aws failed with exit code 255`), true},
+		{"gcloud exec failure", errors.New(`getting credentials: exec: executable gcloud failed with exit code 1`), true},
+		{"exec plugin error", errors.New(`exec plugin: some error occurred`), true},
+		{"connection refused", errors.New("connection refused"), false},
+		{"timeout", errors.New("context deadline exceeded"), false},
+		{"nil error", nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isExecCredentialError(tt.err); got != tt.want {
+				t.Errorf("isExecCredentialError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestCheckClusterHealthUsesReadyz verifies that checkClusterHealth calls /readyz (not /healthz).
+func TestCheckClusterHealthUsesReadyz(t *testing.T) {
+	app := NewApp()
+	app.logger = NewLogger(10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	app.Ctx = ctx
+
+	var requestedPath string
+	disco := &heartbeatDiscovery{
+		FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &cgotesting.Fake{}},
+		restClient: &restfake.RESTClient{
+			NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+			Client: restfake.CreateHTTPClient(func(req *http.Request) (*http.Response, error) {
+				requestedPath = req.URL.Path
+				return &http.Response{
+					StatusCode: 200,
+					Body:       io.NopCloser(strings.NewReader("ok")),
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+				}, nil
+			}),
+		},
+	}
+	client := &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: disco}
+
+	cc := &clusterClients{
+		meta:   ClusterMeta{ID: "test", Name: "Test"},
+		client: client,
+	}
+
+	app.checkClusterHealth(cc)
+
+	if requestedPath != "/readyz" {
+		t.Errorf("expected request to /readyz, got %q", requestedPath)
+	}
+}
+
+// TestStartHeartbeatLoopStopsOnContextCancel verifies the loop exits when the context is cancelled.
+func TestStartHeartbeatLoopStopsOnContextCancel(t *testing.T) {
+	app := NewApp()
+	app.logger = NewLogger(10)
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	defer bgCancel()
+	app.Ctx = bgCtx
+
+	// No-op event emitter
+	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {}
+
+	// Empty cluster clients — runHeartbeatIteration will be a no-op.
+	app.clusterClients = map[string]*clusterClients{}
+
+	loopCtx, loopCancel := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() {
+		app.startHeartbeatLoop(loopCtx)
+		close(done)
+	}()
+
+	// Cancel the context; the loop should return promptly.
+	loopCancel()
+
+	select {
+	case <-done:
+		// success
+	case <-time.After(2 * time.Second):
+		t.Fatal("startHeartbeatLoop did not exit after context cancellation")
+	}
+}
+
+// TestStartHeartbeatLoopRunsImmediately verifies that the loop fires an iteration
+// right away without waiting for the first ticker tick.
+func TestStartHeartbeatLoopRunsImmediately(t *testing.T) {
+	app := NewApp()
+	app.logger = NewLogger(10)
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+	defer bgCancel()
+	app.Ctx = bgCtx
+
+	// Track how many times runHeartbeatIteration executes by counting emitted events.
+	var iterationCount int
+	var mu sync.Mutex
+	app.eventEmitter = func(_ context.Context, _ string, _ ...interface{}) {
+		mu.Lock()
+		iterationCount++
+		mu.Unlock()
+	}
+
+	// Set up one healthy cluster so each iteration emits exactly one event.
+	healthyDisco := &heartbeatDiscovery{
+		FakeDiscovery: &fakediscovery.FakeDiscovery{Fake: &cgotesting.Fake{}},
+		restClient: &restfake.RESTClient{
+			NegotiatedSerializer: scheme.Codecs.WithoutConversion(),
+			Client: restfake.CreateHTTPClient(func(*http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: 200,
+					Body:       io.NopCloser(strings.NewReader("ok")),
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+				}, nil
+			}),
+		},
+	}
+	healthyClient := &heartbeatClientSet{Clientset: cgofake.NewClientset(), disco: healthyDisco}
+
+	app.clusterClientsMu.Lock()
+	app.clusterClients = map[string]*clusterClients{
+		"test-cluster": {
+			meta:   ClusterMeta{ID: "test-cluster", Name: "Test Cluster"},
+			client: healthyClient,
+		},
+	}
+	app.clusterClientsMu.Unlock()
+
+	loopCtx, loopCancel := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() {
+		app.startHeartbeatLoop(loopCtx)
+		close(done)
+	}()
+
+	// Give a brief moment for the immediate iteration to fire.
+	time.Sleep(200 * time.Millisecond)
+
+	mu.Lock()
+	count := iterationCount
+	mu.Unlock()
+
+	// Cancel so the loop exits.
+	loopCancel()
+	<-done
+
+	if count < 1 {
+		t.Fatalf("expected at least 1 immediate iteration, got %d", count)
+	}
 }

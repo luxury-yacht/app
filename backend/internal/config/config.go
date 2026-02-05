@@ -80,6 +80,9 @@ const (
 	// StreamHeartbeatTimeout is the max idle time before we flag the stream as stale.
 	StreamHeartbeatTimeout = 45 * time.Second
 
+	// ClusterHealthHeartbeatInterval is how often we check each cluster's health via /readyz.
+	ClusterHealthHeartbeatInterval = 5 * time.Second
+
 	// LogStreamBatchWindow controls the bundling window for log stream events before flushing.
 	LogStreamBatchWindow = 250 * time.Millisecond
 

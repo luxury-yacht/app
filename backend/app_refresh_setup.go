@@ -33,6 +33,11 @@ func (a *App) setupRefreshSubsystem() error {
 	a.refreshCtx = ctx
 	a.refreshCancel = cancel
 
+	// Start the per-cluster health heartbeat loop. It operates directly on
+	// a.clusterClients, so it must run even if all subsystems fail auth.
+	// Teardown is automatic via a.refreshCancel().
+	go a.startHeartbeatLoop(a.refreshCtx)
+
 	selections, err := a.selectedKubeconfigSelections()
 	if err != nil {
 		return err

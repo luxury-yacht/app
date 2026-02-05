@@ -1,0 +1,138 @@
+/* Shared status indicator dot + popover */
+
+.status-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.status-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+/* State: healthy - solid green */
+.status-indicator-dot[data-status="healthy"] {
+  background-color: var(--status-healthy);
+}
+
+/* State: refreshing - green with pulse */
+.status-indicator-dot[data-status="refreshing"] {
+  background-color: var(--status-refreshing);
+  box-shadow: 0 0 6px var(--status-refreshing-shadow);
+  animation: status-pulse 1s infinite;
+}
+
+/* State: degraded - amber */
+.status-indicator-dot[data-status="degraded"] {
+  background-color: var(--status-degraded);
+}
+
+/* State: unhealthy - red */
+.status-indicator-dot[data-status="unhealthy"] {
+  background-color: var(--status-unhealthy);
+}
+
+/* State: inactive - gray */
+.status-indicator-dot[data-status="inactive"] {
+  background-color: var(--status-inactive);
+}
+
+@keyframes status-pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* Popover - appears below the dot with a connecting notch */
+.status-popover {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 190px;
+  max-width: 260px;
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.25),
+    0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 12px 14px;
+  z-index: 1000;
+  font-size: 12px;
+  animation: status-popover-enter 0.15s ease-out;
+}
+
+/* Arrow pointing up from the popover toward the dot */
+.status-popover-arrow {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  margin-left: -8px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 10px solid var(--color-bg-tertiary);
+}
+
+@keyframes status-popover-enter {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Title row with inline status dot echo */
+.status-popover-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  margin-bottom: 6px;
+}
+
+.status-popover-message {
+  color: var(--color-text);
+  line-height: 1.5;
+  font-size: 12px;
+}
+
+.status-popover-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.status-popover-action button {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 12px;
+  background: rgba(96, 165, 250, 0.12);
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  border-radius: 4px;
+  color: #60a5fa;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.status-popover-action button:hover {
+  background: rgba(96, 165, 250, 0.22);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #93bbfd;
+}

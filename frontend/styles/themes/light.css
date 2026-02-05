@@ -250,21 +250,17 @@
   --shortcut-key-shadow: 0 2px 0 0 rgba(0, 0, 0, 0.06), inset 0 1px 1px rgba(255, 255, 255, 0.5);
   --shortcut-key-text: var(--color-gray-700);
 
-  /* Refresh indicators */
-  --refresh-status-disabled: var(--color-gray-400);
-  --refresh-status-active: #22c55e;
-  --refresh-status-active-shadow: rgba(34, 197, 94, 0.5);
-  --refresh-status-refreshing-shadow: rgba(34, 197, 94, 0.7);
-  --refresh-status-retrying: #f59e0b;
-  --refresh-status-retrying-shadow: rgba(245, 158, 11, 0.6);
-  --refresh-status-offline: #ef4444;
-  --refresh-status-offline-shadow: rgba(239, 68, 68, 0.6);
-  --refresh-status-auth: #db2777;
-  --refresh-status-auth-shadow: rgba(219, 39, 119, 0.6);
-  --refresh-status-rebuilding: #2563eb;
-  --refresh-status-rebuilding-shadow: rgba(37, 99, 235, 0.6);
-  --refresh-metrics-dot: #f59e0b;
-  --refresh-metrics-dot-shadow: rgba(245, 158, 11, 0.6);
+  /* Status indicator states */
+  --status-healthy: #22c55e;
+  --status-healthy-shadow: rgba(34, 197, 94, 0.5);
+  --status-refreshing: #22c55e;
+  --status-refreshing-shadow: rgba(34, 197, 94, 0.7);
+  --status-degraded: #f59e0b;
+  --status-degraded-shadow: rgba(245, 158, 11, 0.6);
+  --status-unhealthy: #ef4444;
+  --status-unhealthy-shadow: rgba(239, 68, 68, 0.6);
+  --status-inactive: var(--color-gray-400);
+  --status-inactive-shadow: none;
 
   /* Modal overlays */
   --modal-overlay-bg: rgba(15, 23, 42, 0.4);

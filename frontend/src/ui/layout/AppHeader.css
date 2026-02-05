@@ -72,6 +72,12 @@
   --wails-draggable: none;
 }
 
+.status-indicators {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .app-header .settings-button {
   background: none;
   border: 1px solid var(--border-color);

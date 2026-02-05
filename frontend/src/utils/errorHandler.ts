@@ -307,7 +307,9 @@ class ErrorHandler {
     const isAuthOverlayError =
       errorString.includes('no active clusters available') ||
       errorString.includes('Error loading SSO Token') ||
-      errorString.includes('auth failed:');
+      errorString.includes('auth failed:') ||
+      errorString.includes('getting credentials: exec:') ||
+      (errorString.includes('executable') && errorString.includes('failed with exit code'));
 
     const suppressNotification = category === ErrorCategory.PERMISSION || isAuthOverlayError;
 
