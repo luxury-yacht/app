@@ -112,4 +112,18 @@ describe('ErrorHandler', () => {
     handler.handle('Unknown failure');
     expect(console.groupCollapsed).not.toHaveBeenCalled();
   });
+
+  it('suppresses notification for exec credential failures handled by AuthFailureOverlay', () => {
+    const listener = vi.fn();
+    handler.subscribe(listener);
+
+    handler.handle(
+      new Error(
+        'getting credentials: exec: executable aws failed with exit code 255'
+      )
+    );
+
+    expect(handler.getHistory()).toHaveLength(0);
+    expect(listener).not.toHaveBeenCalled();
+  });
 });
