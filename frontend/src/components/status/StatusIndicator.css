@@ -5,12 +5,12 @@
   display: inline-flex;
   align-items: center;
   cursor: pointer;
-  padding: 4px;
+  padding: 3px;
 }
 
 .status-indicator-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   transition: all 0.3s ease;
 }
@@ -43,9 +43,15 @@
 }
 
 @keyframes status-pulse {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.2); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* Popover - appears below the dot with a connecting notch */

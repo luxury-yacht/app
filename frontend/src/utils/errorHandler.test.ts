@@ -118,9 +118,7 @@ describe('ErrorHandler', () => {
     handler.subscribe(listener);
 
     handler.handle(
-      new Error(
-        'getting credentials: exec: executable aws failed with exit code 255'
-      )
+      new Error('getting credentials: exec: executable aws failed with exit code 255')
     );
 
     expect(handler.getHistory()).toHaveLength(0);

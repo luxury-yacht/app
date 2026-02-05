@@ -18,8 +18,17 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   StopPortForward: (...args: unknown[]) => stopPortForwardMock(...args),
 }));
 
-// Mock the Wails runtime events
-const eventsOnMock = vi.hoisted(() => vi.fn());
+// Mock the Wails runtime events.
+// EventsOn must return a cancel function — the component calls it on unmount.
+const eventsOnCancels = vi.hoisted(() => new Map<string, ReturnType<typeof vi.fn>>());
+const eventsOnMock = vi.hoisted(() =>
+  vi.fn((...args: unknown[]) => {
+    const name = args[0] as string;
+    const cancel = vi.fn();
+    eventsOnCancels.set(name, cancel);
+    return cancel;
+  })
+);
 const eventsOffMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@wailsjs/runtime/runtime', () => ({
@@ -105,6 +114,7 @@ describe('PortForwardsPanel', () => {
     root = ReactDOM.createRoot(container);
 
     vi.clearAllMocks();
+    eventsOnCancels.clear();
     listPortForwardsMock.mockResolvedValue([]);
     stopPortForwardMock.mockResolvedValue(undefined);
     panelStateMock.isOpen = true;
@@ -300,13 +310,17 @@ describe('PortForwardsPanel', () => {
   it('unregisters event listeners on unmount', async () => {
     await renderPanel();
 
+    const cancelList = eventsOnCancels.get('portforward:list');
+    const cancelStatus = eventsOnCancels.get('portforward:status');
+
     await act(async () => {
       root.unmount();
       await Promise.resolve();
     });
 
-    expect(eventsOffMock).toHaveBeenCalledWith('portforward:list');
-    expect(eventsOffMock).toHaveBeenCalledWith('portforward:status');
+    // Component calls the cancel functions returned by EventsOn, not EventsOff.
+    expect(cancelList).toHaveBeenCalled();
+    expect(cancelStatus).toHaveBeenCalled();
   });
 
   it('updates sessions when list event received', async () => {
@@ -317,13 +331,15 @@ describe('PortForwardsPanel', () => {
     expect(document.querySelector('.pf-empty')).toBeTruthy();
 
     // Find the list event handler
-    const listHandler = eventsOnMock.mock.calls.find((call) => call[0] === 'portforward:list')?.[1];
+    const listHandler = eventsOnMock.mock.calls.find(
+      (call) => call[0] === 'portforward:list'
+    )?.[1] as ((...args: unknown[]) => void) | undefined;
 
     expect(listHandler).toBeTruthy();
 
     // Simulate receiving new sessions
     await act(async () => {
-      listHandler(mockSessions);
+      listHandler!(mockSessions);
       await Promise.resolve();
     });
 
@@ -344,13 +360,13 @@ describe('PortForwardsPanel', () => {
     // Find the status event handler
     const statusHandler = eventsOnMock.mock.calls.find(
       (call) => call[0] === 'portforward:status'
-    )?.[1];
+    )?.[1] as ((...args: unknown[]) => void) | undefined;
 
     expect(statusHandler).toBeTruthy();
 
     // Simulate status change to reconnecting
     await act(async () => {
-      statusHandler({
+      statusHandler!({
         sessionId: 'session-1',
         status: 'reconnecting',
         statusReason: 'Pod restarted',
@@ -423,11 +439,13 @@ describe('PortForwardsPanel', () => {
     await flushPromises();
 
     // Find the list event handler
-    const listHandler = eventsOnMock.mock.calls.find((call) => call[0] === 'portforward:list')?.[1];
+    const listHandler = eventsOnMock.mock.calls.find(
+      (call) => call[0] === 'portforward:list'
+    )?.[1] as ((...args: unknown[]) => void) | undefined;
 
     // Simulate receiving first session (0 -> 1)
     await act(async () => {
-      listHandler([mockSessions[0]]);
+      listHandler!([mockSessions[0]]);
       await Promise.resolve();
     });
 

@@ -73,14 +73,16 @@ export function usePortForwardStatus(): PortForwardStatusResult {
       const event = args[0] as PortForwardStatusEvent | undefined;
       if (!event?.sessionId) return;
       setSessions((prev) =>
-        prev.map((s) =>
-          s.id === event.sessionId ? { ...s, status: event.status } : s
-        )
+        prev.map((s) => (s.id === event.sessionId ? { ...s, status: event.status } : s))
       );
     };
 
-    const cancelList = runtime.EventsOn('portforward:list', handleList) as unknown as (() => void) | undefined;
-    const cancelStatus = runtime.EventsOn('portforward:status', handleStatus) as unknown as (() => void) | undefined;
+    const cancelList = runtime.EventsOn('portforward:list', handleList) as unknown as
+      | (() => void)
+      | undefined;
+    const cancelStatus = runtime.EventsOn('portforward:status', handleStatus) as unknown as
+      | (() => void)
+      | undefined;
 
     return () => {
       cancelList?.();

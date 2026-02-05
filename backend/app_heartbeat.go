@@ -108,12 +108,22 @@ func (a *App) checkClusterHealth(cc *clusterClients) healthStatus {
 		return healthConnectivityFailure
 	}
 
+	// Guard the Discovery→RESTClient chain; either can be nil during client init.
+	disco := cc.client.Discovery()
+	if disco == nil {
+		return healthConnectivityFailure
+	}
+	restClient := disco.RESTClient()
+	if restClient == nil {
+		return healthConnectivityFailure
+	}
+
 	// Create a context with timeout for the health check
 	ctx, cancel := context.WithTimeout(a.CtxOrBackground(), heartbeatTimeout)
 	defer cancel()
 
 	// Call /readyz endpoint to check cluster health
-	_, err := cc.client.Discovery().RESTClient().Get().AbsPath("/readyz").DoRaw(ctx)
+	_, err := restClient.Get().AbsPath("/readyz").DoRaw(ctx)
 	if err == nil {
 		return healthOK
 	}
