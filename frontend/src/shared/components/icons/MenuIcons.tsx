@@ -438,6 +438,23 @@ export const CloseIcon: React.FC<IconProps> = ({ width = 16, height = 16 }) => (
   </svg>
 );
 
+// "Aa" icon for case-sensitive search toggle.
+export const CaseSensitiveIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill={fill}
+    width={width}
+    height={height}
+  >
+    <path d="M5.5 3L10.5 18H8.3L7.1 14H3.9L2.7 18H0.5L5.5 3ZM5.5 6.6L4.4 12H6.6L5.5 6.6ZM19.5 9C21.433 9 23 10.567 23 12.5V18H21V17C20.22 17.61 19.24 18 18.17 18C16.08 18 14.5 16.5 14.5 14.5C14.5 12.5 16.08 11 18.17 11C19.24 11 20.22 11.39 21 12V12.5C21 11.672 20.328 11 19.5 11H17V9H19.5ZM18.33 13C17.23 13 16.5 13.67 16.5 14.5C16.5 15.33 17.23 16 18.33 16C19.43 16 20.17 15.33 20.17 14.5C20.17 13.67 19.43 13 18.33 13Z" />
+  </svg>
+);
+
 // Tag icon representing metadata (labels, annotations).
 export const MetadataIcon: React.FC<IconProps> = ({
   width = 16,

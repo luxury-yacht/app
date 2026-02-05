@@ -15,7 +15,7 @@ import { useRefreshDomain } from '@/core/refresh';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ClusterNodeRow } from '@modules/cluster/contexts/ClusterResourcesContext';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
@@ -29,8 +29,8 @@ import {
   calculateMemoryOvercommitted,
 } from '@/utils/resourceCalculations';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { MetadataIcon } from '@shared/components/icons/MenuIcons';
-import type { SearchInputAction } from '@shared/components/inputs/SearchInput';
+import { useCaseSensitiveSearch } from '@shared/components/tables/hooks/useCaseSensitiveSearch';
+import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
 
 // Define props for NodesViewGrid component
 interface NodesViewProps {
@@ -48,39 +48,20 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { selectedClusterId } = useKubeconfig();
-    const [includeMetadata, setIncludeMetadata] = useState(false);
-
-    // Search action toggles for the filter bar search input.
-    const searchActions = useMemo<SearchInputAction[]>(
-      () => [
-        {
-          id: 'include-metadata',
-          icon: <MetadataIcon width={14} height={14} />,
-          active: includeMetadata,
-          onToggle: () => setIncludeMetadata((prev) => !prev),
-          tooltip: 'Include metadata',
-        },
-      ],
-      [includeMetadata],
-    );
-
-    // Custom search text accessor that optionally includes labels and annotations.
-    const getSearchText = useCallback(
-      (row: ClusterNodeRow): string[] => {
-        const values: string[] = [row.name, row.kind].filter(Boolean);
-        if (includeMetadata) {
-          const addEntries = (map?: Record<string, string>) => {
-            if (!map) return;
-            for (const [k, v] of Object.entries(map)) {
-              values.push(k, v, `${k}: ${v}`);
-            }
-          };
-          addEntries(row.labels);
-          addEntries(row.annotations);
-        }
-        return values;
-      },
-      [includeMetadata],
+    // Metadata-aware search: when toggled on, includes labels and annotations.
+    const { searchActions: metadataActions, getSearchText } = useMetadataSearch<ClusterNodeRow>({
+      getDefaultValues: useCallback((row: ClusterNodeRow) => [row.name, row.kind], []),
+      getMetadataMaps: useCallback(
+        (row: ClusterNodeRow) => [row.labels, row.annotations],
+        [],
+      ),
+    });
+    // Case-sensitive search toggle.
+    const { caseSensitive, searchActions: caseActions } = useCaseSensitiveSearch();
+    // Merge search actions from both hooks.
+    const searchActions = useMemo(
+      () => [...metadataActions, ...caseActions],
+      [metadataActions, caseActions],
     );
     const useShortResourceNames = useShortNames();
     const nodesDomain = useRefreshDomain('nodes');
@@ -335,6 +316,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
               },
               options: {
                 searchActions,
+                caseSensitive,
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

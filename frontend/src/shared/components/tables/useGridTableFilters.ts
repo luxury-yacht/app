@@ -246,7 +246,10 @@ export function useGridTableFilters<T>({
       return data;
     }
 
-    const searchNeedle = activeFilters.search.trim().toLowerCase();
+    const caseSensitive = Boolean(filters?.options?.caseSensitive);
+    const searchNeedle = caseSensitive
+      ? activeFilters.search.trim()
+      : activeFilters.search.trim().toLowerCase();
     const shouldFilterSearch = searchNeedle.length > 0;
     const kindSet = new Set(activeFilters.kinds.map((value) => value.toLowerCase()));
     const namespaceSet = new Set(activeFilters.namespaces.map((value) => value.toLowerCase()));
@@ -289,7 +292,10 @@ export function useGridTableFilters<T>({
 
       return searchValues.some(
         (candidate) =>
-          typeof candidate === 'string' && candidate.toLowerCase().includes(searchNeedle)
+          typeof candidate === 'string' &&
+          (caseSensitive
+            ? candidate.includes(searchNeedle)
+            : candidate.toLowerCase().includes(searchNeedle))
       );
     });
   }, [
@@ -300,6 +306,7 @@ export function useGridTableFilters<T>({
     defaultGetKind,
     defaultGetNamespace,
     defaultGetSearchText,
+    filters?.options?.caseSensitive,
   ]);
 
   const updateFilters = useCallback(

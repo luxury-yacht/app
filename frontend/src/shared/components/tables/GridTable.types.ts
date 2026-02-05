@@ -82,6 +82,8 @@ export interface GridTableFilterOptions {
   includeClusterScopedSyntheticNamespace?: boolean;
   customActions?: React.ReactNode;
   searchActions?: SearchInputAction[];
+  /** When true, the search filter performs a case-sensitive comparison. */
+  caseSensitive?: boolean;
 }
 
 export interface GridTableFilterConfig<T> {
