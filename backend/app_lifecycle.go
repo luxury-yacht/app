@@ -137,7 +137,7 @@ func (a *App) Startup(ctx context.Context) {
 		a.logger.Warn("No kubeconfig selections found - please select a cluster", "App")
 	}
 
-	// Per-cluster heartbeat is now handled via runHeartbeatIteration in the refresh subsystem.
+	// Per-cluster heartbeat runs via startHeartbeatLoop, launched by setupRefreshSubsystem.
 	// Run update checks in the background so the UI can surface them on startup.
 	a.startUpdateCheck()
 }
