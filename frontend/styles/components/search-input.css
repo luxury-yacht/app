@@ -19,23 +19,33 @@
   cursor: not-allowed;
 }
 
-/* Inner input – unstyled, the wrapper provides the visual chrome */
-.search-input-field {
+/* Inner input – unstyled, the wrapper provides the visual chrome.
+   Uses nested selector to override .gridtable-filter-group input styles. */
+.search-input-wrapper .search-input-field {
   flex: 1;
   min-width: 0;
   padding: 0.3rem 0.5rem;
   border: none;
+  border-radius: 0;
   background: transparent;
   color: var(--color-text);
   font-size: 0.8rem;
   outline: none;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
-.search-input-field::placeholder {
+.search-input-wrapper .search-input-field::placeholder {
   color: var(--color-text-tertiary);
 }
 
-.search-input-field:disabled {
+.search-input-wrapper .search-input-field:focus {
+  outline: none;
+  border: none;
+  box-shadow: none;
+}
+
+.search-input-wrapper .search-input-field:disabled {
   cursor: not-allowed;
 }
 

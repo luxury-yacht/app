@@ -148,6 +148,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               value={activeFilters.search}
               onChange={onSearchChange}
               onKeyDown={handleSearchKeyDown}
+              actions={resolvedFilterOptions.searchActions}
             />
           </div>
           <div className="gridtable-filter-actions">

@@ -15,7 +15,7 @@ import { useRefreshDomain } from '@/core/refresh';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ClusterNodeRow } from '@modules/cluster/contexts/ClusterResourcesContext';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
@@ -29,6 +29,8 @@ import {
   calculateMemoryOvercommitted,
 } from '@/utils/resourceCalculations';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { MetadataIcon } from '@shared/components/icons/MenuIcons';
+import type { SearchInputAction } from '@shared/components/inputs/SearchInput';
 
 // Define props for NodesViewGrid component
 interface NodesViewProps {
@@ -46,6 +48,21 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { selectedClusterId } = useKubeconfig();
+    const [includeMetadata, setIncludeMetadata] = useState(false);
+
+    // Search action toggles for the filter bar search input.
+    const searchActions = useMemo<SearchInputAction[]>(
+      () => [
+        {
+          id: 'include-metadata',
+          icon: <MetadataIcon width={14} height={14} />,
+          active: includeMetadata,
+          onToggle: () => setIncludeMetadata((prev) => !prev),
+          tooltip: 'Include metadata',
+        },
+      ],
+      [includeMetadata],
+    );
     const useShortResourceNames = useShortNames();
     const nodesDomain = useRefreshDomain('nodes');
     const metricsInfo = useMemo(() => {
@@ -294,7 +311,9 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
               value: persistedFilters,
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
-              options: {},
+              options: {
+                searchActions,
+              },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
             columnWidths={columnWidths}
