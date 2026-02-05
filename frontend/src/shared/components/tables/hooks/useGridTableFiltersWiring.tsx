@@ -18,6 +18,8 @@ import {
   defaultGetSearchText,
 } from '@shared/components/tables/GridTable.utils';
 import type { GridTableFilterConfig } from '@shared/components/tables/GridTable.types';
+import type { SearchInputAction } from '@shared/components/inputs/SearchInput';
+import { CaseSensitiveIcon } from '@shared/components/icons/MenuIcons';
 
 // Bundles all filter-bar wiring for GridTable: resolves filter state, builds
 // dropdown IDs and renderers, manages focus refs, and returns a ready-to-render
@@ -62,11 +64,13 @@ export function useGridTableFiltersWiring<T>({
     tableData,
     activeFilters,
     filterSignature,
-    resolvedFilterOptions,
+    resolvedFilterOptions: rawFilterOptions,
     handleFilterSearchChange,
     handleFilterKindsChange,
     handleFilterNamespacesChange,
     handleFilterReset,
+    caseSensitive,
+    toggleCaseSensitive,
   } = useGridTableFilters({
     data,
     filters,
@@ -74,6 +78,26 @@ export function useGridTableFiltersWiring<T>({
     defaultGetNamespace,
     defaultGetSearchText,
   });
+
+  // Build the built-in case-sensitive search action and prepend it to any
+  // consumer-provided search actions so it appears in every filter bar.
+  const caseSensitiveAction = useMemo<SearchInputAction>(
+    () => ({
+      id: 'case-sensitive',
+      icon: <CaseSensitiveIcon width={14} height={14} />,
+      active: caseSensitive,
+      onToggle: toggleCaseSensitive,
+      tooltip: 'Match case',
+    }),
+    [caseSensitive, toggleCaseSensitive],
+  );
+  const resolvedFilterOptions = useMemo(
+    () => ({
+      ...rawFilterOptions,
+      searchActions: [caseSensitiveAction, ...(rawFilterOptions.searchActions ?? [])],
+    }),
+    [rawFilterOptions, caseSensitiveAction],
+  );
 
   useEffect(() => {
     if (!filteringEnabled) {

@@ -29,7 +29,6 @@ import {
   calculateMemoryOvercommitted,
 } from '@/utils/resourceCalculations';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
-import { useCaseSensitiveSearch } from '@shared/components/tables/hooks/useCaseSensitiveSearch';
 import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
 
 // Define props for NodesViewGrid component
@@ -49,20 +48,13 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { selectedClusterId } = useKubeconfig();
     // Metadata-aware search: when toggled on, includes labels and annotations.
-    const { searchActions: metadataActions, getSearchText } = useMetadataSearch<ClusterNodeRow>({
+    const { searchActions, getSearchText } = useMetadataSearch<ClusterNodeRow>({
       getDefaultValues: useCallback((row: ClusterNodeRow) => [row.name, row.kind], []),
       getMetadataMaps: useCallback(
         (row: ClusterNodeRow) => [row.labels, row.annotations],
         [],
       ),
     });
-    // Case-sensitive search toggle.
-    const { caseSensitive, searchActions: caseActions } = useCaseSensitiveSearch();
-    // Merge search actions from both hooks.
-    const searchActions = useMemo(
-      () => [...caseActions, ...metadataActions],
-      [metadataActions, caseActions],
-    );
     const useShortResourceNames = useShortNames();
     const nodesDomain = useRefreshDomain('nodes');
     const metricsInfo = useMemo(() => {
@@ -316,7 +308,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
               },
               options: {
                 searchActions,
-                caseSensitive,
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

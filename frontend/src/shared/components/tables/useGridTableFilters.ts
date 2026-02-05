@@ -80,6 +80,10 @@ export interface UseGridTableFiltersResult<T> {
   handleFilterKindsChange: (values: string[]) => void;
   handleFilterNamespacesChange: (values: string[]) => void;
   handleFilterReset: () => void;
+  /** Whether the built-in case-sensitive search toggle is active. */
+  caseSensitive: boolean;
+  /** Toggle the built-in case-sensitive search state. */
+  toggleCaseSensitive: () => void;
 }
 
 export function useGridTableFilters<T>({
@@ -124,6 +128,10 @@ export function useGridTableFilters<T>({
     },
     [filters, isControlled]
   );
+
+  // Built-in case-sensitive search toggle, managed internally.
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const toggleCaseSensitive = useCallback(() => setCaseSensitive((prev) => !prev), []);
 
   const filterAccessors = useMemo<GridTableFilterAccessors<T>>(() => {
     const getKind = filters?.accessors?.getKind ?? ((row: T) => defaultGetKind(row) ?? null);
@@ -246,7 +254,6 @@ export function useGridTableFilters<T>({
       return data;
     }
 
-    const caseSensitive = Boolean(filters?.options?.caseSensitive);
     const searchNeedle = caseSensitive
       ? activeFilters.search.trim()
       : activeFilters.search.trim().toLowerCase();
@@ -306,7 +313,7 @@ export function useGridTableFilters<T>({
     defaultGetKind,
     defaultGetNamespace,
     defaultGetSearchText,
-    filters?.options?.caseSensitive,
+    caseSensitive,
   ]);
 
   const updateFilters = useCallback(
@@ -365,5 +372,7 @@ export function useGridTableFilters<T>({
     handleFilterKindsChange,
     handleFilterNamespacesChange,
     handleFilterReset,
+    caseSensitive,
+    toggleCaseSensitive,
   };
 }

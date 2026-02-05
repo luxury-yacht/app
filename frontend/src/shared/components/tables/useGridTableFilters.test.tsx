@@ -215,6 +215,41 @@ describe('useGridTableFilters', () => {
     expect(result?.activeFilters).toEqual(controlledValue);
   });
 
+  it('toggleCaseSensitive makes search case-sensitive', async () => {
+    const filters: GridTableFilterConfig<Row> = {
+      enabled: true,
+      initial: { search: 'Frontend' },
+    };
+
+    const { getResult } = await renderHook(filters);
+
+    // Default: case-insensitive — "Frontend" matches "frontend".
+    let result = getResult();
+    expect(result?.caseSensitive).toBe(false);
+    expect(result?.tableData.map((r) => r.id)).toEqual(['1', '2']);
+
+    // Toggle on case-sensitive search.
+    await act(async () => {
+      result?.toggleCaseSensitive();
+      await Promise.resolve();
+    });
+
+    result = getResult();
+    expect(result?.caseSensitive).toBe(true);
+    // "Frontend" (capital F) should NOT match "frontend" (lowercase f).
+    expect(result?.tableData.map((r) => r.id)).toEqual([]);
+
+    // Toggle back off.
+    await act(async () => {
+      result?.toggleCaseSensitive();
+      await Promise.resolve();
+    });
+
+    result = getResult();
+    expect(result?.caseSensitive).toBe(false);
+    expect(result?.tableData.map((r) => r.id)).toEqual(['1', '2']);
+  });
+
   it('builds filter option lists from data when options are not provided', async () => {
     const { getResult } = await renderHook({
       enabled: true,
