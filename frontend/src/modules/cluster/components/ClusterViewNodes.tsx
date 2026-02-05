@@ -60,7 +60,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     const { caseSensitive, searchActions: caseActions } = useCaseSensitiveSearch();
     // Merge search actions from both hooks.
     const searchActions = useMemo(
-      () => [...metadataActions, ...caseActions],
+      () => [...caseActions, ...metadataActions],
       [metadataActions, caseActions],
     );
     const useShortResourceNames = useShortNames();
