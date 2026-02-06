@@ -8,12 +8,14 @@ import (
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	informers "k8s.io/client-go/informers"
 	appslisters "k8s.io/client-go/listers/apps/v1"
+	autoscalinglisters "k8s.io/client-go/listers/autoscaling/v1"
 	batchlisters "k8s.io/client-go/listers/batch/v1"
 	corelisters "k8s.io/client-go/listers/core/v1"
 
@@ -37,6 +39,7 @@ type NamespaceWorkloadsBuilder struct {
 	daemonLister     appslisters.DaemonSetLister
 	jobLister        batchlisters.JobLister
 	cronJobLister    batchlisters.CronJobLister
+	hpaLister        autoscalinglisters.HorizontalPodAutoscalerLister
 	metrics          metrics.Provider
 	logger           logstream.Logger
 }
@@ -63,6 +66,8 @@ type WorkloadSummary struct {
 	MemUsage   string `json:"memUsage,omitempty"`
 	MemRequest string `json:"memRequest,omitempty"`
 	MemLimit   string `json:"memLimit,omitempty"`
+	// HPAManaged indicates whether a HorizontalPodAutoscaler targets this workload.
+	HPAManaged bool `json:"hpaManaged,omitempty"`
 }
 
 func parseNamespaceScope(scope string) (string, error) {
@@ -96,6 +101,7 @@ func RegisterNamespaceWorkloadsDomain(
 		daemonLister:     factory.Apps().V1().DaemonSets().Lister(),
 		jobLister:        factory.Batch().V1().Jobs().Lister(),
 		cronJobLister:    factory.Batch().V1().CronJobs().Lister(),
+		hpaLister:        factory.Autoscaling().V1().HorizontalPodAutoscalers().Lister(),
 		metrics:          provider,
 		logger:           logger,
 	}
@@ -155,7 +161,10 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 		return nil, fmt.Errorf("namespace workloads: failed to list cronjobs: %w", err)
 	}
 
-	return b.buildSnapshot(meta, scopeLabel, pods, deployments, statefulSets, daemonSets, jobs, cronJobs)
+	// List HPAs to mark workloads that are managed by an autoscaler.
+	hpas, _ := b.listHPAs(namespace)
+
+	return b.buildSnapshot(meta, scopeLabel, pods, deployments, statefulSets, daemonSets, jobs, cronJobs, hpas)
 }
 func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	meta ClusterMeta,
@@ -166,11 +175,15 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 	daemonSets []*appsv1.DaemonSet,
 	jobs []*batchv1.Job,
 	cronJobs []*batchv1.CronJob,
+	hpas []*autoscalingv1.HorizontalPodAutoscaler,
 ) (*refresh.Snapshot, error) {
 	podUsage := map[string]metrics.PodUsage{}
 	if b.metrics != nil {
 		podUsage = b.metrics.LatestPodUsage()
 	}
+
+	// Build a set of HPA-managed workloads keyed by "Kind/Namespace/Name".
+	hpaTargets := buildHPATargetSet(hpas)
 
 	podsByOwner := make(map[string][]*corev1.Pod)
 	for _, pod := range pods {
@@ -189,6 +202,11 @@ func (b *NamespaceWorkloadsBuilder) buildSnapshot(
 
 	appendSummary := func(summary WorkloadSummary, obj metav1.Object) {
 		summary.ClusterMeta = meta
+		// Mark as HPA-managed if a HorizontalPodAutoscaler targets this workload.
+		hpaKey := fmt.Sprintf("%s/%s/%s", summary.Kind, summary.Namespace, summary.Name)
+		if _, ok := hpaTargets[hpaKey]; ok {
+			summary.HPAManaged = true
+		}
 		items = append(items, summary)
 		if obj == nil {
 			return
@@ -634,6 +652,32 @@ func (b *NamespaceWorkloadsBuilder) listCronJobs(namespace string) ([]*batchv1.C
 		return b.cronJobLister.List(labels.Everything())
 	}
 	return b.cronJobLister.CronJobs(namespace).List(labels.Everything())
+}
+
+// listHPAs lists HorizontalPodAutoscalers in the given namespace (or all if empty).
+func (b *NamespaceWorkloadsBuilder) listHPAs(namespace string) ([]*autoscalingv1.HorizontalPodAutoscaler, error) {
+	if b.hpaLister == nil {
+		return nil, nil
+	}
+	if namespace == "" {
+		return b.hpaLister.List(labels.Everything())
+	}
+	return b.hpaLister.HorizontalPodAutoscalers(namespace).List(labels.Everything())
+}
+
+// buildHPATargetSet returns a set of keys ("Kind/Namespace/Name") for workloads
+// that are targeted by a HorizontalPodAutoscaler.
+func buildHPATargetSet(hpas []*autoscalingv1.HorizontalPodAutoscaler) map[string]struct{} {
+	targets := make(map[string]struct{}, len(hpas))
+	for _, hpa := range hpas {
+		if hpa == nil {
+			continue
+		}
+		ref := hpa.Spec.ScaleTargetRef
+		key := fmt.Sprintf("%s/%s/%s", ref.Kind, hpa.Namespace, ref.Name)
+		targets[key] = struct{}{}
+	}
+	return targets
 }
 func podStatus(pod *corev1.Pod) string {
 	if pod == nil {

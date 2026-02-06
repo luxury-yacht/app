@@ -48,6 +48,8 @@ export interface ObjectActionData {
   // For workload-specific actions
   status?: string;
   ready?: string;
+  // Whether a HorizontalPodAutoscaler targets this workload (disables manual scaling)
+  hpaManaged?: boolean;
   // For Event-specific actions - the involved object reference (e.g., "Pod/my-pod")
   involvedObject?: string;
 }
@@ -182,19 +184,26 @@ export function buildObjectActionItems({
     });
   }
 
-  // Scale
+  // Scale – disabled with explanation when managed by an HPA
   if (
     SCALABLE_KINDS.includes(normalizedKind) &&
     scaleStatus?.allowed &&
-    !scaleStatus.pending &&
-    handlers.onScale
+    !scaleStatus.pending
   ) {
-    menuItems.push({
-      label: 'Scale',
-      icon: <ScaleIcon />,
-      onClick: handlers.onScale,
-      disabled: actionLoading,
-    });
+    if (object.hpaManaged) {
+      menuItems.push({
+        label: 'Scale (HPA managed)',
+        icon: <ScaleIcon />,
+        disabled: true,
+      });
+    } else if (handlers.onScale) {
+      menuItems.push({
+        label: 'Scale',
+        icon: <ScaleIcon />,
+        onClick: handlers.onScale,
+        disabled: actionLoading,
+      });
+    }
   }
 
   // Port Forward

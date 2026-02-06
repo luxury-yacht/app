@@ -161,6 +161,8 @@ export function IsPortForwardsPanelVisible():Promise<boolean>;
 
 export function IsSidebarVisible():Promise<boolean>;
 
+export function IsWorkloadHPAManaged(arg1:string,arg2:string,arg3:string,arg4:string):Promise<boolean>;
+
 export function ListPortForwards():Promise<Array<backend.PortForwardSession>>;
 
 export function LoadWindowSettings():Promise<types.WindowSettings>;

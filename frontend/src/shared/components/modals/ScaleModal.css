@@ -13,32 +13,33 @@
 
 .scale-modal-body {
   padding: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
-.scale-modal-workload-name {
-  font-size: var(--font-size-large, 1.1rem);
-  font-weight: 500;
+/* Two-column grid: labels on the left, values on the right */
+.scale-modal-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.scale-modal-label {
+  font-size: var(--font-size-normal);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.scale-modal-value {
+  font-size: var(--font-size-normal);
   color: var(--color-text);
+  font-weight: 600;
   word-break: break-word;
 }
 
-.scale-modal-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.scale-modal-body label {
-  font-size: var(--font-size-normal);
-  color: var(--color-text);
-  white-space: nowrap;
-}
-
 .scale-input-group {
-  display: flex;
+  display: inline-flex;
+  width: fit-content;
   align-items: center;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
@@ -47,17 +48,17 @@
 }
 
 .scale-input-group:focus-within {
-  border-color: var(--color-accent);
-  box-shadow: var(--dropdown-trigger-focus-shadow);
+  border-color: var(--color-text-secondary);
 }
 
 .scale-spinner-btn {
   background: transparent;
   border: none;
   color: var(--color-text-secondary);
-  font-size: 18px;
-  width: 32px;
-  height: 32px;
+  font-size: 16px;
+  font-weight: 700;
+  width: 24px;
+  height: 24px;
   padding: 0;
   cursor: pointer;
   display: flex;
@@ -77,14 +78,14 @@
 }
 
 .scale-modal-body .scale-input {
-  width: 70px;
+  width: 40px;
   padding: 6px 4px;
   background: transparent;
   border: none;
   border-left: 1px solid var(--color-border);
   border-right: 1px solid var(--color-border);
   color: var(--color-text);
-  font-size: 14px;
+  font-size: 12px;
   text-align: center;
   -moz-appearance: textfield;
   appearance: textfield;
@@ -114,4 +115,11 @@
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
+}
+
+/* Visible focus ring for keyboard navigation inside the modal.
+   Use box-shadow instead of outline so the global :focus:not(:focus-visible)
+   reset in focus.css doesn't hide it when focus is set programmatically. */
+.scale-modal-footer .button:focus {
+  box-shadow: 0 0 0 2px var(--color-text-secondary);
 }

@@ -354,6 +354,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             clusterId: row.clusterId,
             clusterName: row.clusterName,
             status: row.status,
+            hpaManaged: Boolean(row.hpaManaged),
           },
           context: 'gridtable',
           handlers: {
@@ -484,6 +485,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           isOpen={scaleState.show}
           kind={scaleState.workload?.kind ?? ''}
           name={scaleState.workload?.name}
+          namespace={scaleState.workload?.namespace}
           value={scaleState.value}
           loading={scaleLoading}
           error={scaleError}

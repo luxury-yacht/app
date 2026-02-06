@@ -17,6 +17,8 @@ interface ActionsMenuProps {
   object: ObjectActionData | null;
   currentReplicas?: number;
   actionLoading?: boolean;
+  // Whether a HorizontalPodAutoscaler manages this workload (disables Scale)
+  hpaManaged?: boolean;
   onRestart?: () => void;
   onScale?: (replicas: number) => void;
   onDelete?: () => void;
@@ -29,6 +31,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     object,
     currentReplicas = 1,
     actionLoading = false,
+    hpaManaged = false,
     onRestart,
     onScale,
     onDelete,
@@ -85,9 +88,15 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       [onRestart, onScale, onDelete, onTrigger, onSuspendToggle, currentReplicas]
     );
 
+    // Merge hpaManaged flag into the object data for the actions hook.
+    const actionObject = useMemo(
+      () => (object ? { ...object, hpaManaged: hpaManaged || object.hpaManaged } : null),
+      [object, hpaManaged]
+    );
+
     // Get menu items from shared hook
     const menuItems = useObjectActions({
-      object,
+      object: actionObject,
       context: 'object-panel',
       handlers,
       actionLoading,
@@ -220,6 +229,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
           isOpen={showScaleModal}
           kind={object?.kind || ''}
           name={object?.name}
+          namespace={object?.namespace}
           value={scaleValue}
           loading={actionLoading}
           onCancel={() => setShowScaleModal(false)}
