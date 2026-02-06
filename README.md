@@ -19,8 +19,7 @@ Uses a standard DMG. Open the DMG and drag to `Applications`.
 Can also be installed via [Homebrew](https://brew.sh).
 
 ```sh
-brew tap luxury-yacht/tap
-brew install --cask luxury-yacht
+brew install luxury-yacht
 ```
 
 ### Linux

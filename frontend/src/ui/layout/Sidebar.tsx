@@ -26,6 +26,7 @@ import {
   NamespaceOpenIcon,
 } from '@shared/components/icons/MenuIcons';
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
+import { isMacPlatform } from '@/utils/platform';
 import type { CatalogNamespaceGroup } from '@/core/refresh/types';
 import { useRefreshDomain } from '@/core/refresh';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -357,7 +358,7 @@ function Sidebar() {
         <button
           className="sidebar-toggle"
           onClick={viewState.toggleSidebar}
-          title={isCollapsed ? 'Show Sidebar (B)' : 'Hide Sidebar (B)'}
+          title={isCollapsed ? `Show Sidebar (${isMacPlatform() ? '⌘B' : 'Ctrl+B'})` : `Hide Sidebar (${isMacPlatform() ? '⌘B' : 'Ctrl+B'})`}
           aria-label={isCollapsed ? 'Show Sidebar' : 'Hide Sidebar'}
         >
           {isCollapsed ? (

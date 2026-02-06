@@ -173,7 +173,7 @@ func createViewMenu(appMenu *menu.Menu, app *App) {
 		sidebarText = "Show Sidebar"
 	}
 
-	viewMenu.AddText(sidebarText, keys.Key("b"), func(_ *menu.CallbackData) {
+	viewMenu.AddText(sidebarText, keys.CmdOrCtrl("b"), func(_ *menu.CallbackData) {
 		go func() {
 			if err := app.ToggleSidebar(); err != nil {
 				println("Failed to toggle sidebar:", err.Error())
