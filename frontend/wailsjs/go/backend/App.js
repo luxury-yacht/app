@@ -302,10 +302,6 @@ export function IsSidebarVisible() {
   return window['go']['backend']['App']['IsSidebarVisible']();
 }
 
-export function IsWorkloadHPAManaged(arg1, arg2, arg3, arg4) {
-  return window['go']['backend']['App']['IsWorkloadHPAManaged'](arg1, arg2, arg3, arg4);
-}
-
 export function ListPortForwards() {
   return window['go']['backend']['App']['ListPortForwards']();
 }
