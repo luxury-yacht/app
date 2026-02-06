@@ -40,7 +40,7 @@ export interface UseMetadataSearchResult<T> {
  * ```
  */
 export function useMetadataSearch<T>(
-  options: UseMetadataSearchOptions<T>,
+  options: UseMetadataSearchOptions<T>
 ): UseMetadataSearchResult<T> {
   const { getDefaultValues, getMetadataMaps } = options;
   const [includeMetadata, setIncludeMetadata] = useState(false);
@@ -55,7 +55,7 @@ export function useMetadataSearch<T>(
         tooltip: 'Include metadata',
       },
     ],
-    [includeMetadata],
+    [includeMetadata]
   );
 
   const getSearchText = useCallback(
@@ -71,7 +71,7 @@ export function useMetadataSearch<T>(
       }
       return values;
     },
-    [includeMetadata, getDefaultValues, getMetadataMaps],
+    [includeMetadata, getDefaultValues, getMetadataMaps]
   );
 
   return { includeMetadata, searchActions, getSearchText };

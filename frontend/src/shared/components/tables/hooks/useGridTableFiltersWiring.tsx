@@ -89,14 +89,14 @@ export function useGridTableFiltersWiring<T>({
       onToggle: toggleCaseSensitive,
       tooltip: 'Match case',
     }),
-    [caseSensitive, toggleCaseSensitive],
+    [caseSensitive, toggleCaseSensitive]
   );
   const resolvedFilterOptions = useMemo(
     () => ({
       ...rawFilterOptions,
       searchActions: [caseSensitiveAction, ...(rawFilterOptions.searchActions ?? [])],
     }),
-    [rawFilterOptions, caseSensitiveAction],
+    [rawFilterOptions, caseSensitiveAction]
   );
 
   useEffect(() => {

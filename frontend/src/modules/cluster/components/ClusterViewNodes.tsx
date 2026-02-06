@@ -50,10 +50,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     // Metadata-aware search: when toggled on, includes labels and annotations.
     const { searchActions, getSearchText } = useMetadataSearch<ClusterNodeRow>({
       getDefaultValues: useCallback((row: ClusterNodeRow) => [row.name, row.kind], []),
-      getMetadataMaps: useCallback(
-        (row: ClusterNodeRow) => [row.labels, row.annotations],
-        [],
-      ),
+      getMetadataMaps: useCallback((row: ClusterNodeRow) => [row.labels, row.annotations], []),
     });
     const useShortResourceNames = useShortNames();
     const nodesDomain = useRefreshDomain('nodes');

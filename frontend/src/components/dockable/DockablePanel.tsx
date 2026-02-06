@@ -263,7 +263,10 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     if (!panelState.isOpen || isMaximized) return;
 
     if (panelState.position === 'right') {
-      document.documentElement.style.setProperty('--dock-right-offset', `${panelState.size.width}px`);
+      document.documentElement.style.setProperty(
+        '--dock-right-offset',
+        `${panelState.size.width}px`
+      );
       return () => {
         document.documentElement.style.setProperty('--dock-right-offset', '0px');
       };

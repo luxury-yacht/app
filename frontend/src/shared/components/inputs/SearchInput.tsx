@@ -66,7 +66,7 @@ const SearchInput: React.FC<SearchInputProps> = ({
     (e: React.ChangeEvent<HTMLInputElement>) => {
       onChange(e.target.value);
     },
-    [onChange],
+    [onChange]
   );
 
   const handleFocus = useCallback(() => setFocused(true), []);

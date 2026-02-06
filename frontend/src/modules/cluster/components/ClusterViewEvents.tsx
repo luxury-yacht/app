@@ -77,22 +77,19 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     }, []);
 
     // Include all visible columns in search: type, source, reason, object, message.
-    const getSearchText = useCallback(
-      (event: EventData): string[] => {
-        const values = [
-          event.kind,
-          event.name,
-          event.namespace,
-          event.type,
-          event.source,
-          event.reason,
-          event.object,
-          event.message,
-        ];
-        return values.filter(Boolean);
-      },
-      [],
-    );
+    const getSearchText = useCallback((event: EventData): string[] => {
+      const values = [
+        event.kind,
+        event.name,
+        event.namespace,
+        event.type,
+        event.source,
+        event.reason,
+        event.object,
+        event.message,
+      ];
+      return values.filter(Boolean);
+    }, []);
 
     const handleEventClick = useCallback(
       (event: EventData) => {

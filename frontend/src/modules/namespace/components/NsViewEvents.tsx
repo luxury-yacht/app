@@ -86,7 +86,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
           event.object,
           event.message,
         ].filter((v): v is string => Boolean(v)),
-      [],
+      []
     );
 
     const handleEventClick = useCallback(
