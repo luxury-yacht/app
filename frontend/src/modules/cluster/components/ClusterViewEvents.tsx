@@ -76,6 +76,21 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       };
     }, []);
 
+    // Include all visible columns in search: type, source, reason, object, message.
+    const getSearchText = useCallback((event: EventData): string[] => {
+      const values = [
+        event.kind,
+        event.name,
+        event.namespace,
+        event.type,
+        event.source,
+        event.reason,
+        event.object,
+        event.message,
+      ];
+      return values.filter(Boolean);
+    }, []);
+
     const handleEventClick = useCallback(
       (event: EventData) => {
         // Events don't have a direct object panel view, but we could open the related object.
@@ -247,6 +262,9 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
             value: persistedFilters,
             onChange: setPersistedFilters,
             onReset: resetPersistedState,
+            accessors: {
+              getSearchText,
+            },
           }}
           virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
           columnWidths={columnWidths}

@@ -5,7 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type {
   GridTableFilterAccessors,
@@ -76,10 +76,14 @@ export interface UseGridTableFiltersResult<T> {
   activeFilters: GridTableFilterState;
   filterSignature: string;
   resolvedFilterOptions: InternalFilterOptions;
-  handleFilterSearchChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  handleFilterSearchChange: (value: string) => void;
   handleFilterKindsChange: (values: string[]) => void;
   handleFilterNamespacesChange: (values: string[]) => void;
   handleFilterReset: () => void;
+  /** Whether the built-in case-sensitive search toggle is active. */
+  caseSensitive: boolean;
+  /** Toggle the built-in case-sensitive search state. */
+  toggleCaseSensitive: () => void;
 }
 
 export function useGridTableFilters<T>({
@@ -125,6 +129,10 @@ export function useGridTableFilters<T>({
     [filters, isControlled]
   );
 
+  // Built-in case-sensitive search toggle, managed internally.
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const toggleCaseSensitive = useCallback(() => setCaseSensitive((prev) => !prev), []);
+
   const filterAccessors = useMemo<GridTableFilterAccessors<T>>(() => {
     const getKind = filters?.accessors?.getKind ?? ((row: T) => defaultGetKind(row) ?? null);
     const getNamespace =
@@ -142,12 +150,14 @@ export function useGridTableFilters<T>({
   const resolvedFilterOptions = useMemo<InternalFilterOptions>(() => {
     const searchPlaceholder = filters?.options?.searchPlaceholder;
     const customActions = filters?.options?.customActions;
+    const searchActions = filters?.options?.searchActions;
     if (!filteringEnabled) {
       return {
         searchPlaceholder,
         kinds: [],
         namespaces: [],
         customActions,
+        searchActions,
       };
     }
 
@@ -228,6 +238,7 @@ export function useGridTableFilters<T>({
       kinds,
       namespaces: namespaceOptions,
       customActions,
+      searchActions,
     };
   }, [
     filteringEnabled,
@@ -243,7 +254,9 @@ export function useGridTableFilters<T>({
       return data;
     }
 
-    const searchNeedle = activeFilters.search.trim().toLowerCase();
+    const searchNeedle = caseSensitive
+      ? activeFilters.search.trim()
+      : activeFilters.search.trim().toLowerCase();
     const shouldFilterSearch = searchNeedle.length > 0;
     const kindSet = new Set(activeFilters.kinds.map((value) => value.toLowerCase()));
     const namespaceSet = new Set(activeFilters.namespaces.map((value) => value.toLowerCase()));
@@ -286,7 +299,10 @@ export function useGridTableFilters<T>({
 
       return searchValues.some(
         (candidate) =>
-          typeof candidate === 'string' && candidate.toLowerCase().includes(searchNeedle)
+          typeof candidate === 'string' &&
+          (caseSensitive
+            ? candidate.includes(searchNeedle)
+            : candidate.toLowerCase().includes(searchNeedle))
       );
     });
   }, [
@@ -297,6 +313,7 @@ export function useGridTableFilters<T>({
     defaultGetKind,
     defaultGetNamespace,
     defaultGetSearchText,
+    caseSensitive,
   ]);
 
   const updateFilters = useCallback(
@@ -317,8 +334,8 @@ export function useGridTableFilters<T>({
   );
 
   const handleFilterSearchChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      updateFilters({ search: event.target.value });
+    (value: string) => {
+      updateFilters({ search: value });
     },
     [updateFilters]
   );
@@ -355,5 +372,7 @@ export function useGridTableFilters<T>({
     handleFilterKindsChange,
     handleFilterNamespacesChange,
     handleFilterReset,
+    caseSensitive,
+    toggleCaseSensitive,
   };
 }

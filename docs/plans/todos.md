@@ -4,9 +4,6 @@
 
 ## Feature Ideas
 
-- docked panels maybe should not obscure the content?
-  - this is probably going to require some significant UI calculations for all the things
-
 - Transfer files to/from pods
   - Select container
   - can we show a file dialog for the remote filesystem?

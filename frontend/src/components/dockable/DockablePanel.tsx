@@ -5,7 +5,7 @@
  * Handles dragging, resizing, docking, maximizing, and window bounds constraints.
  */
 
-import React, { useEffect, useRef, useCallback, memo, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useCallback, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   closeDockedPanels,
@@ -257,6 +257,37 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       onPositionChange(panelState.position);
     }
   }, [panelState.position, onPositionChange]);
+
+  // Set CSS variables so .app-main can shrink the content area for docked panels
+  useLayoutEffect(() => {
+    if (!panelState.isOpen || isMaximized) return;
+
+    if (panelState.position === 'right') {
+      document.documentElement.style.setProperty(
+        '--dock-right-offset',
+        `${panelState.size.width}px`
+      );
+      return () => {
+        document.documentElement.style.setProperty('--dock-right-offset', '0px');
+      };
+    }
+
+    if (panelState.position === 'bottom') {
+      document.documentElement.style.setProperty(
+        '--dock-bottom-offset',
+        `${panelState.size.height}px`
+      );
+      return () => {
+        document.documentElement.style.setProperty('--dock-bottom-offset', '0px');
+      };
+    }
+  }, [
+    panelState.isOpen,
+    panelState.position,
+    panelState.size.width,
+    panelState.size.height,
+    isMaximized,
+  ]);
 
   // Handle close
   const handleClose = useCallback(() => {

@@ -44,6 +44,17 @@
   overflow: hidden;
   min-height: 0; /* Important for flex children */
   position: relative;
+  /* Shrink content area when docked panels are open */
+  padding-right: var(--dock-right-offset, 0px);
+  padding-bottom: var(--dock-bottom-offset, 0px);
+  transition:
+    padding-right 0.3s ease-out,
+    padding-bottom 0.3s ease-out;
+}
+
+/* Disable content transition during panel resize for instant feedback */
+body.dockable-panel-resizing .app-main {
+  transition: none;
 }
 
 .loading {

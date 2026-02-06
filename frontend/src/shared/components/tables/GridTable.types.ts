@@ -8,6 +8,7 @@
 import type React from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import type { SearchInputAction } from '@shared/components/inputs/SearchInput';
 
 export type ColumnWidthUnit = 'px' | 'em' | 'rem' | '%';
 export type ColumnWidthInput =
@@ -80,6 +81,7 @@ export interface GridTableFilterOptions {
   showNamespaceDropdown?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
   customActions?: React.ReactNode;
+  searchActions?: SearchInputAction[];
 }
 
 export interface GridTableFilterConfig<T> {
@@ -139,4 +141,5 @@ export interface InternalFilterOptions {
   namespaces: DropdownOption[];
   searchPlaceholder?: string;
   customActions?: React.ReactNode;
+  searchActions?: SearchInputAction[];
 }

@@ -74,6 +74,21 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       };
     }, []);
 
+    // Include all visible columns in search: type, source, reason, object, message.
+    const getSearchText = useCallback(
+      (event: EventData): string[] =>
+        [
+          event.kind,
+          event.namespace,
+          event.type,
+          event.source,
+          event.reason,
+          event.object,
+          event.message,
+        ].filter((v): v is string => Boolean(v)),
+      []
+    );
+
     const handleEventClick = useCallback(
       (event: EventData) => {
         // Events don't have a direct object panel view, but we could open the related object
@@ -262,6 +277,9 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             value: persistedFilters,
             onChange: setPersistedFilters,
             onReset: resetPersistedState,
+            accessors: {
+              getSearchText,
+            },
             options: {
               showNamespaceDropdown: showNamespaceFilter,
             },

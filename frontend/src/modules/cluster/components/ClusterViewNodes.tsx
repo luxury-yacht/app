@@ -29,6 +29,7 @@ import {
   calculateMemoryOvercommitted,
 } from '@/utils/resourceCalculations';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
 
 // Define props for NodesViewGrid component
 interface NodesViewProps {
@@ -46,6 +47,11 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
     const { selectedClusterId } = useKubeconfig();
+    // Metadata-aware search: when toggled on, includes labels and annotations.
+    const { searchActions, getSearchText } = useMetadataSearch<ClusterNodeRow>({
+      getDefaultValues: useCallback((row: ClusterNodeRow) => [row.name, row.kind], []),
+      getMetadataMaps: useCallback((row: ClusterNodeRow) => [row.labels, row.annotations], []),
+    });
     const useShortResourceNames = useShortNames();
     const nodesDomain = useRefreshDomain('nodes');
     const metricsInfo = useMemo(() => {
@@ -294,7 +300,12 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
               value: persistedFilters,
               onChange: setPersistedFilters,
               onReset: resetPersistedState,
-              options: {},
+              accessors: {
+                getSearchText,
+              },
+              options: {
+                searchActions,
+              },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
             columnWidths={columnWidths}

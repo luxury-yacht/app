@@ -86,8 +86,8 @@ describe('DockablePanelProvider', () => {
       rightOffset: 400,
       bottomOffset: 0,
     });
-    expect(document.documentElement.style.getPropertyValue('--dock-right-offset')).toBe('400px');
-    expect(document.documentElement.style.getPropertyValue('--dock-bottom-offset')).toBe('0px');
+    // CSS variables (--dock-right-offset, --dock-bottom-offset) are set by
+    // individual DockablePanel instances, not the provider.
 
     await act(async () => {
       contextRef.current!.registerPanel('panel-bottom', 'bottom');
@@ -98,7 +98,6 @@ describe('DockablePanelProvider', () => {
       rightOffset: 400,
       bottomOffset: 300,
     });
-    expect(document.documentElement.style.getPropertyValue('--dock-bottom-offset')).toBe('300px');
 
     await act(async () => {
       contextRef.current!.unregisterPanel('panel-right');
