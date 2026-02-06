@@ -13,13 +13,8 @@
   - reuse the existing code editor
 
 - More deployment options
-  - Workload scope:
-    - pause (scale to zero)
-    - resume (scale to previous)
-      - can we get the previous count from the last replicaset?
-    - rollback
-      - choose a replicaset or just roll back to the most recent?
-
+  - rollback
+    - choose a replicaset or just roll back to the most recent?
   - Container scope:
     - set image
       - show a list of containers and their images, allow override

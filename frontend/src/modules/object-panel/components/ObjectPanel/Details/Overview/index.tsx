@@ -5,12 +5,14 @@
  * Re-exports public APIs for the object panel feature.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { overviewRegistry } from './registry';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
 import type { ObjectActionData } from '@shared/hooks/useObjectActions';
+import { SCALABLE_KINDS, normalizeKind } from '@shared/hooks/useObjectActions';
+import { IsWorkloadHPAManaged } from '@wailsjs/go/backend/App';
 import '../../shared.css';
 
 // Generic props for resources - simplified without external type dependencies
@@ -40,6 +42,27 @@ const Overview: React.FC<OverviewProps> = (props) => {
   // Get cluster info from objectData (the source of truth for the current object)
   const clusterId = objectData?.clusterId || '';
   const clusterName = objectData?.clusterName || '';
+
+  // Check whether a HPA manages this workload (only for scalable kinds).
+  const [hpaManaged, setHpaManaged] = useState(false);
+  const isScalable = SCALABLE_KINDS.includes(normalizeKind(props.kind));
+  useEffect(() => {
+    if (!isScalable || !clusterId || !props.namespace || !props.name) {
+      setHpaManaged(false);
+      return;
+    }
+    let cancelled = false;
+    IsWorkloadHPAManaged(clusterId, props.namespace, props.kind, props.name)
+      .then((managed) => {
+        if (!cancelled) setHpaManaged(managed);
+      })
+      .catch(() => {
+        if (!cancelled) setHpaManaged(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [clusterId, props.namespace, props.kind, props.name, isScalable]);
 
   // Use the factory pattern to render the appropriate component
   const renderOverviewContent = () => {
@@ -74,6 +97,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
             object={actionObject}
             currentReplicas={props.desiredReplicas !== undefined ? props.desiredReplicas : 1}
             actionLoading={props.actionLoading || props.deleteLoading}
+            hpaManaged={hpaManaged}
             onRestart={props.onRestart}
             onScale={props.onScale}
             onDelete={props.onDelete}

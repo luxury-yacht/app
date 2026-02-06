@@ -11,6 +11,7 @@ interface ScaleModalProps {
   isOpen: boolean;
   kind: string;
   name?: string;
+  namespace?: string;
   value: number;
   loading?: boolean;
   error?: string | null;
@@ -23,6 +24,7 @@ const ScaleModal = ({
   isOpen,
   kind,
   name,
+  namespace,
   value,
   loading = false,
   error,
@@ -51,9 +53,22 @@ const ScaleModal = ({
           <h2>Scale {kind}</h2>
         </div>
         <div className="scale-modal-body">
-          {name && <div className="scale-modal-workload-name">{name}</div>}
-          <div className="scale-modal-controls">
-            <label htmlFor="scale-replicas">Replicas</label>
+          <div className="scale-modal-fields">
+            {namespace && (
+              <>
+                <label className="scale-modal-label">Namespace:</label>
+                <span className="scale-modal-value">{namespace}</span>
+              </>
+            )}
+            {name && (
+              <>
+                <label className="scale-modal-label">{kind || 'Workload'}:</label>
+                <span className="scale-modal-value">{name}</span>
+              </>
+            )}
+            <label className="scale-modal-label" htmlFor="scale-replicas">
+              Replicas:
+            </label>
             <div className="scale-input-group">
               <button
                 className="scale-spinner-btn"
@@ -71,7 +86,6 @@ const ScaleModal = ({
                 value={value}
                 onChange={handleInputChange}
                 className="scale-input"
-                autoFocus
                 disabled={loading}
               />
               <button
