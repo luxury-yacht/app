@@ -1,22 +1,24 @@
 cask "luxury-yacht" do
-  name "Luxury Yacht"
-  desc "Luxury Yacht is a desktop app for managing Kubernetes clusters"
+  arch arm: "arm64", intel: "amd64"
 
-  app "Luxury Yacht.app"
   version "${VERSION}"
-
-  arch   arm: "arm64",
-         intel: "amd64"
-  sha256 arm: "${ARM64_SHA256}",
+  sha256 arm:   "${ARM64_SHA256}",
          intel: "${AMD64_SHA256}"
 
-  url "https://github.com/luxury-yacht/app/releases/download/#{version}/luxury-yacht-#{version}-macos-#{arch}.dmg",
-    verified: "github.com/luxury-yacht/app/"
-  homepage "https://github.com/luxury-yacht/app"
+  url "https://github.com/luxury-yacht/app/releases/download/v#{version}/luxury-yacht-v#{version}-macos-#{arch}.dmg",
+      verified: "github.com/luxury-yacht/app/"
+  name "Luxury Yacht"
+  desc "Desktop app for managing Kubernetes clusters"
+  homepage "https://luxury-yacht.app/"
+
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
 
   auto_updates true
 
-  zap trash: [
-    "~/Library/Application Support/luxury-yacht",
-  ]
+  app "Luxury Yacht.app"
+
+  zap trash: "~/Library/Application Support/luxury-yacht"
 end
