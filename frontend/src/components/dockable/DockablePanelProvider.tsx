@@ -161,15 +161,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     };
   }, []);
 
-  useLayoutEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    const target = document.documentElement;
-    const { rightOffset, bottomOffset } = getAdjustedDimensions();
-    target.style.setProperty('--dock-right-offset', `${rightOffset}px`);
-    target.style.setProperty('--dock-bottom-offset', `${bottomOffset}px`);
-  }, [getAdjustedDimensions, dockedPanels]);
+  // CSS variables --dock-right-offset and --dock-bottom-offset are set by
+  // individual DockablePanel instances based on their actual docked size.
+  // The cleanup effect above removes them when the provider unmounts.
 
   return (
     <DockablePanelContext.Provider value={value}>

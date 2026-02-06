@@ -4,11 +4,6 @@
 
 ## Feature Ideas
 
-- Add an "Include Metadata" option for Nodes that will allow you to filter on labels/annotations that aren't visible in the table rows.
-
-- docked panels maybe should not obscure the content?
-  - this is probably going to require some significant UI calculations for all the things
-
 - Transfer files to/from pods
   - Select container
   - can we show a file dialog for the remote filesystem?
