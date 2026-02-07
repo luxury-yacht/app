@@ -13,6 +13,7 @@ import {
   clearTintedPalette,
   savePaletteTintToLocalStorage,
   clearPaletteTintFromLocalStorage,
+  isPaletteActive,
 } from './paletteTint';
 
 describe('paletteTint', () => {
@@ -32,6 +33,21 @@ describe('paletteTint', () => {
     }
     vi.restoreAllMocks();
     localStorage.clear();
+  });
+
+  describe('isPaletteActive', () => {
+    it('returns false when tone=0 and brightness=0', () => {
+      expect(isPaletteActive(0, 0)).toBe(false);
+    });
+
+    it('returns true when tone > 0', () => {
+      expect(isPaletteActive(50, 0)).toBe(true);
+    });
+
+    it('returns true when brightness != 0', () => {
+      expect(isPaletteActive(0, 20)).toBe(true);
+      expect(isPaletteActive(0, -20)).toBe(true);
+    });
   });
 
   describe('generateTintedPalette', () => {
@@ -62,8 +78,8 @@ describe('paletteTint', () => {
       }
     });
 
-    it('uses correct lightness for first and last steps', () => {
-      const palette = generateTintedPalette(0, 100);
+    it('uses correct lightness for first and last steps with brightness=0', () => {
+      const palette = generateTintedPalette(0, 100, 0);
       // gray-950 has lightness 4
       expect(palette[0].token).toBe('--color-gray-950');
       expect(palette[0].value).toContain('4%');
@@ -78,6 +94,40 @@ describe('paletteTint', () => {
       expect(paletteZero[0].value).toMatch(/^hsl\(0,/);
       expect(palette360[0].value).toMatch(/^hsl\(360,/);
     });
+
+    it('shifts lightness up with positive brightness', () => {
+      // brightness=50 → offset = +10 percentage points
+      const palette = generateTintedPalette(0, 0, 50);
+      // gray-950 (L=4) → 4+10=14
+      expect(palette[0].value).toContain('14%');
+      // gray-500 (L=44) → 44+10=54
+      expect(palette[5].value).toContain('54%');
+    });
+
+    it('shifts lightness down with negative brightness', () => {
+      // brightness=-50 → offset = -10 percentage points
+      const palette = generateTintedPalette(0, 0, -50);
+      // gray-900 (L=10) → 10-10=0 → clamped to 1
+      expect(palette[1].value).toContain('1%');
+      // gray-500 (L=44) → 44-10=34
+      expect(palette[5].value).toContain('34%');
+    });
+
+    it('clamps adjusted lightness to 1-99%', () => {
+      // brightness=+50 → gray-50 (L=96) → 96+10=106 → clamped to 99
+      const paletteUp = generateTintedPalette(0, 0, 50);
+      expect(paletteUp[10].value).toContain('99%');
+
+      // brightness=-50 → gray-950 (L=4) → 4-10=-6 → clamped to 1
+      const paletteDown = generateTintedPalette(0, 0, -50);
+      expect(paletteDown[0].value).toContain('1%');
+    });
+
+    it('defaults brightness to 0 when not provided', () => {
+      const withoutBrightness = generateTintedPalette(200, 50);
+      const withZeroBrightness = generateTintedPalette(200, 50, 0);
+      expect(withoutBrightness).toEqual(withZeroBrightness);
+    });
   });
 
   describe('applyTintedPalette', () => {
@@ -89,14 +139,19 @@ describe('paletteTint', () => {
       }
     });
 
-    it('clears style properties when tone is 0', () => {
+    it('sets style properties when only brightness is non-zero', () => {
+      applyTintedPalette(0, 0, 20);
+      expect(setPropertySpy).toHaveBeenCalledTimes(GRAY_STEPS.length);
+    });
+
+    it('clears style properties when tone is 0 and brightness is 0', () => {
       // First apply a palette
       applyTintedPalette(200, 50);
       setPropertySpy.mockClear();
       removePropertySpy.mockClear();
 
-      // Now apply with tone=0 which should clear
-      applyTintedPalette(200, 0);
+      // Now apply with tone=0, brightness=0 which should clear
+      applyTintedPalette(200, 0, 0);
       expect(setPropertySpy).not.toHaveBeenCalled();
       expect(removePropertySpy).toHaveBeenCalledTimes(GRAY_STEPS.length);
     });
@@ -116,17 +171,24 @@ describe('paletteTint', () => {
   });
 
   describe('localStorage helpers', () => {
-    it('saves hue and tone to localStorage', () => {
-      savePaletteTintToLocalStorage(220, 75);
+    it('saves hue, tone, and brightness to localStorage', () => {
+      savePaletteTintToLocalStorage(220, 75, -30);
       expect(localStorage.getItem('app-palette-hue')).toBe('220');
       expect(localStorage.getItem('app-palette-tone')).toBe('75');
+      expect(localStorage.getItem('app-palette-brightness')).toBe('-30');
     });
 
-    it('clears hue and tone from localStorage', () => {
-      savePaletteTintToLocalStorage(220, 75);
+    it('clears hue, tone, and brightness from localStorage', () => {
+      savePaletteTintToLocalStorage(220, 75, 10);
       clearPaletteTintFromLocalStorage();
       expect(localStorage.getItem('app-palette-hue')).toBeNull();
       expect(localStorage.getItem('app-palette-tone')).toBeNull();
+      expect(localStorage.getItem('app-palette-brightness')).toBeNull();
+    });
+
+    it('defaults brightness to 0 when not provided', () => {
+      savePaletteTintToLocalStorage(220, 75);
+      expect(localStorage.getItem('app-palette-brightness')).toBe('0');
     });
   });
 });

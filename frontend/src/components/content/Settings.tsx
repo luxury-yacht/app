@@ -28,6 +28,7 @@ import {
   clearTintedPalette,
   savePaletteTintToLocalStorage,
   clearPaletteTintFromLocalStorage,
+  isPaletteActive,
 } from '@utils/paletteTint';
 import {
   getGridTablePersistenceMode,
@@ -58,9 +59,10 @@ function Settings({ onClose }: SettingsProps) {
   const [kubeconfigPathsSelecting, setKubeconfigPathsSelecting] = useState(false);
   // Keep the default kubeconfig search path pinned in the list.
   const defaultKubeconfigPath = '~/.kube';
-  // Palette tint state for hue/tone sliders
+  // Palette tint state for hue/tone/brightness sliders
   const [paletteHue, setPaletteHue] = useState(0);
   const [paletteTone, setPaletteTone] = useState(0);
+  const [paletteBrightness, setPaletteBrightness] = useState(0);
   // Debounce timer ref for palette tint persistence
   const palettePersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Controls the confirmation modal for clearing all persisted app state.
@@ -97,6 +99,7 @@ function Settings({ onClose }: SettingsProps) {
       setUseShortResourceNames(preferences.useShortResourceNames);
       setPaletteHue(preferences.paletteHue);
       setPaletteTone(preferences.paletteTone);
+      setPaletteBrightness(preferences.paletteBrightness);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
     }
@@ -147,33 +150,43 @@ function Settings({ onClose }: SettingsProps) {
   };
 
   // Debounced persistence for palette tint — avoids hammering the backend during fast drags.
-  const debouncePalettePersist = useCallback((hue: number, tone: number) => {
-    if (palettePersistTimer.current) {
-      clearTimeout(palettePersistTimer.current);
-    }
-    palettePersistTimer.current = setTimeout(() => {
-      persistPaletteTint(hue, tone);
-      savePaletteTintToLocalStorage(hue, tone);
-    }, 300);
-  }, []);
+  const debouncePalettePersist = useCallback(
+    (hue: number, tone: number, brightness: number) => {
+      if (palettePersistTimer.current) {
+        clearTimeout(palettePersistTimer.current);
+      }
+      palettePersistTimer.current = setTimeout(() => {
+        persistPaletteTint(hue, tone, brightness);
+        savePaletteTintToLocalStorage(hue, tone, brightness);
+      }, 300);
+    },
+    []
+  );
 
   const handlePaletteHueChange = (value: number) => {
     setPaletteHue(value);
-    applyTintedPalette(value, paletteTone);
-    debouncePalettePersist(value, paletteTone);
+    applyTintedPalette(value, paletteTone, paletteBrightness);
+    debouncePalettePersist(value, paletteTone, paletteBrightness);
   };
 
   const handlePaletteToneChange = (value: number) => {
     setPaletteTone(value);
-    applyTintedPalette(paletteHue, value);
-    debouncePalettePersist(paletteHue, value);
+    applyTintedPalette(paletteHue, value, paletteBrightness);
+    debouncePalettePersist(paletteHue, value, paletteBrightness);
+  };
+
+  const handlePaletteBrightnessChange = (value: number) => {
+    setPaletteBrightness(value);
+    applyTintedPalette(paletteHue, paletteTone, value);
+    debouncePalettePersist(paletteHue, paletteTone, value);
   };
 
   const handlePaletteReset = () => {
     setPaletteHue(0);
     setPaletteTone(0);
+    setPaletteBrightness(0);
     clearTintedPalette();
-    persistPaletteTint(0, 0);
+    persistPaletteTint(0, 0, 0);
     clearPaletteTintFromLocalStorage();
   };
 
@@ -358,11 +371,24 @@ function Settings({ onClose }: SettingsProps) {
             />
             <span className="palette-slider-value">{paletteTone}%</span>
           </div>
+          <div className="palette-slider-row">
+            <label htmlFor="palette-brightness">Brightness</label>
+            <input
+              type="range"
+              id="palette-brightness"
+              className="palette-slider palette-slider-brightness"
+              min={-50}
+              max={50}
+              value={paletteBrightness}
+              onChange={(e) => handlePaletteBrightnessChange(Number(e.target.value))}
+            />
+            <span className="palette-slider-value">{paletteBrightness > 0 ? '+' : ''}{paletteBrightness}</span>
+          </div>
           <button
             type="button"
             className="button generic"
             onClick={handlePaletteReset}
-            disabled={paletteHue === 0 && paletteTone === 0}
+            disabled={!isPaletteActive(paletteTone, paletteBrightness) && paletteHue === 0}
           >
             Reset Palette
           </button>

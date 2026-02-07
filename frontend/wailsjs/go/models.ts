@@ -667,6 +667,7 @@ export namespace types {
 	    gridTablePersistenceMode: string;
 	    paletteHue: number;
 	    paletteTone: number;
+	    paletteBrightness: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -683,6 +684,7 @@ export namespace types {
 	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
 	        this.paletteHue = source["paletteHue"];
 	        this.paletteTone = source["paletteTone"];
+	        this.paletteBrightness = source["paletteBrightness"];
 	    }
 	}
 	export class CRDCondition {

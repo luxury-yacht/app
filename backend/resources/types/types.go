@@ -38,6 +38,7 @@ type AppSettings struct {
 	GridTablePersistenceMode         string   `json:"gridTablePersistenceMode"`         // "shared" or "namespaced"
 	PaletteHue                       int      `json:"paletteHue"`                       // Hue for gray palette tint (0-360)
 	PaletteTone                      int      `json:"paletteTone"`                      // Tone intensity for gray palette tint (0-100)
+	PaletteBrightness                int      `json:"paletteBrightness"`                // Brightness offset for gray palette (-50 to +50)
 }
 
 // ThemeInfo represents theme information to send to frontend

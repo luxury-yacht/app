@@ -10,6 +10,7 @@ import {
   getBackgroundRefreshEnabled,
   getGridTablePersistenceMode,
   getMetricsRefreshIntervalMs,
+  getPaletteBrightness,
   getPaletteHue,
   getPaletteTone,
   getThemePreference,
@@ -68,6 +69,7 @@ describe('appPreferences', () => {
       gridTablePersistenceMode: 'namespaced',
       paletteHue: 220,
       paletteTone: 50,
+      paletteBrightness: -15,
     });
 
     await hydrateAppPreferences({ force: true });
@@ -80,9 +82,10 @@ describe('appPreferences', () => {
     expect(getGridTablePersistenceMode()).toBe('namespaced');
     expect(getPaletteHue()).toBe(220);
     expect(getPaletteTone()).toBe(50);
+    expect(getPaletteBrightness()).toBe(-15);
   });
 
-  it('defaults palette hue and tone to 0 when not present', async () => {
+  it('defaults palette hue, tone, and brightness to 0 when not present', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       theme: 'system',
     });
@@ -91,6 +94,7 @@ describe('appPreferences', () => {
 
     expect(getPaletteHue()).toBe(0);
     expect(getPaletteTone()).toBe(0);
+    expect(getPaletteBrightness()).toBe(0);
   });
 
   it('persists preference updates and updates the cache', async () => {
@@ -132,14 +136,16 @@ describe('appPreferences', () => {
       theme: 'system',
       paletteHue: 0,
       paletteTone: 0,
+      paletteBrightness: 0,
     });
 
     await hydrateAppPreferences({ force: true });
 
-    setPaletteTint(180, 75);
+    setPaletteTint(180, 75, -25);
 
     expect(getPaletteHue()).toBe(180);
     expect(getPaletteTone()).toBe(75);
-    expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith(180, 75);
+    expect(getPaletteBrightness()).toBe(-25);
+    expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith(180, 75, -25);
   });
 });

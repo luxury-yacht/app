@@ -36,15 +36,19 @@
         })();
 
         // Apply palette tint from localStorage to prevent FOUC.
-        // IMPORTANT: The lightness values and MAX_SATURATION constant are
-        // duplicated from frontend/src/utils/paletteTint.ts. Keep both in sync.
+        // IMPORTANT: The lightness values, MAX_SATURATION, and MAX_BRIGHTNESS_OFFSET
+        // constants are duplicated from frontend/src/utils/paletteTint.ts. Keep both in sync.
         (function() {
-            var tone = parseInt(localStorage.getItem('app-palette-tone'), 10);
-            if (!tone || tone <= 0) return;
+            var tone = parseInt(localStorage.getItem('app-palette-tone'), 10) || 0;
+            var brightness = parseInt(localStorage.getItem('app-palette-brightness'), 10) || 0;
+            // Only apply when palette customization is active.
+            if (tone <= 0 && brightness === 0) return;
 
             var hue = parseInt(localStorage.getItem('app-palette-hue'), 10) || 0;
             var maxSat = 20;
+            var maxBrightnessOffset = 10;
             var saturation = (tone / 100) * maxSat;
+            var lightnessOffset = (brightness / 50) * maxBrightnessOffset;
 
             // Lightness values matching the neutral hex grays in colors.css
             var steps = [
@@ -63,9 +67,10 @@
 
             var root = document.documentElement;
             for (var i = 0; i < steps.length; i++) {
+                var adjusted = Math.min(99, Math.max(1, steps[i][1] + lightnessOffset));
                 root.style.setProperty(
                     steps[i][0],
-                    'hsl(' + hue + ', ' + saturation + '%, ' + steps[i][1] + '%)'
+                    'hsl(' + hue + ', ' + saturation + '%, ' + adjusted + '%)'
                 );
             }
         })();

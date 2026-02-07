@@ -136,7 +136,7 @@
 }
 
 .palette-slider-row label {
-  min-width: 3rem;
+  min-width: 5.5rem;
   font-size: var(--font-size-normal);
   color: var(--color-text);
 }
@@ -168,6 +168,11 @@
 /* Tone slider background is set dynamically via inline style */
 .palette-slider-tone {
   background: linear-gradient(to right, hsl(0, 0%, 50%), hsl(0, 20%, 50%));
+}
+
+/* Brightness slider: dark-to-light gradient */
+.palette-slider-brightness {
+  background: linear-gradient(to right, hsl(0, 0%, 20%), hsl(0, 0%, 50%), hsl(0, 0%, 80%));
 }
 
 /* Custom thumb styling */

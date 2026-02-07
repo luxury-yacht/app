@@ -398,8 +398,8 @@ export function SetMetricsClient(arg1) {
   return window['go']['backend']['App']['SetMetricsClient'](arg1);
 }
 
-export function SetPaletteTint(arg1, arg2) {
-  return window['go']['backend']['App']['SetPaletteTint'](arg1, arg2);
+export function SetPaletteTint(arg1, arg2, arg3) {
+  return window['go']['backend']['App']['SetPaletteTint'](arg1, arg2, arg3);
 }
 
 export function SetPortForwardsPanelVisible(arg1) {

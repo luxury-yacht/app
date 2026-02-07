@@ -36,6 +36,7 @@ type settingsPreferences struct {
 	GridTablePersistenceMode string           `json:"gridTablePersistenceMode"`
 	PaletteHue               int              `json:"paletteHue"`
 	PaletteTone              int              `json:"paletteTone"`
+	PaletteBrightness        int              `json:"paletteBrightness"`
 }
 
 // settingsRefresh captures user-configurable refresh settings.
@@ -265,6 +266,7 @@ func (a *App) loadAppSettings() error {
 		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
 		PaletteHue:                       settings.Preferences.PaletteHue,
 		PaletteTone:                      settings.Preferences.PaletteTone,
+		PaletteBrightness:                settings.Preferences.PaletteBrightness,
 	}
 	return nil
 }
@@ -290,6 +292,7 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
 	settings.Preferences.PaletteHue = a.appSettings.PaletteHue
 	settings.Preferences.PaletteTone = a.appSettings.PaletteTone
+	settings.Preferences.PaletteBrightness = a.appSettings.PaletteBrightness
 
 	settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
 
@@ -498,9 +501,9 @@ func (a *App) SetZoomLevel(level int) error {
 	return a.saveSettingsFile(settings)
 }
 
-// SetPaletteTint persists the palette hue (0-360) and tone (0-100) preferences.
+// SetPaletteTint persists the palette hue (0-360), tone (0-100), and brightness (-50 to +50) preferences.
 // Values are clamped to their valid ranges.
-func (a *App) SetPaletteTint(hue, tone int) error {
+func (a *App) SetPaletteTint(hue, tone, brightness int) error {
 	// Clamp hue to 0-360
 	if hue < 0 {
 		hue = 0
@@ -515,6 +518,13 @@ func (a *App) SetPaletteTint(hue, tone int) error {
 	if tone > 100 {
 		tone = 100
 	}
+	// Clamp brightness to -50 to +50
+	if brightness < -50 {
+		brightness = -50
+	}
+	if brightness > 50 {
+		brightness = 50
+	}
 
 	if a.appSettings == nil {
 		if err := a.loadAppSettings(); err != nil {
@@ -522,8 +532,9 @@ func (a *App) SetPaletteTint(hue, tone int) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Palette tint changed to hue=%d tone=%d", hue, tone), "Settings")
+	a.logger.Info(fmt.Sprintf("Palette tint changed to hue=%d tone=%d brightness=%d", hue, tone, brightness), "Settings")
 	a.appSettings.PaletteHue = hue
 	a.appSettings.PaletteTone = tone
+	a.appSettings.PaletteBrightness = brightness
 	return a.saveAppSettings()
 }
