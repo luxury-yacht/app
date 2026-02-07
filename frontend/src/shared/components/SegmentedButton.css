@@ -51,9 +51,11 @@
   font-weight: 600;
 }
 
-/* Hide dividers adjacent to the active button */
+/* Hide dividers adjacent to the active or hovered button */
 .segmented-button__option--active:not(:last-child)::after,
-.segmented-button__option:has(+ .segmented-button__option--active)::after {
+.segmented-button__option:has(+ .segmented-button__option--active)::after,
+.segmented-button__option:hover:not(:last-child)::after,
+.segmented-button__option:has(+ .segmented-button__option:hover)::after {
   opacity: 0;
 }
 
