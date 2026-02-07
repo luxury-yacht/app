@@ -605,7 +605,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-filter-bar {
   background-color: var(--color-bg-secondary);
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.75rem;
   padding: 8px 0 6px 0;
   align-items: center;
@@ -615,7 +615,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-filter-cluster {
   display: flex;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
 }
 
@@ -633,7 +633,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-filter-subcluster {
   display: flex;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
 }
 
