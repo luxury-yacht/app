@@ -220,7 +220,7 @@
 .stat-value {
   font-size: 1.5rem;
   font-weight: 600;
-  color: var(--color-primary);
+  color: var(--color-text);
   margin-bottom: 0.5rem;
 }
 

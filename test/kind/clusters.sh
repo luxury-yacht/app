@@ -49,7 +49,7 @@ start_clusters() {
     echo "Creating cluster '${cluster}' from ${config}..."
     kind create cluster \
       --name "${cluster}" \
-      --config "${SCRIPT_DIR}/${config}" \
+      --config "${SCRIPT_DIR}/clusters/${config}" \
       --kubeconfig "${kubeconfig}"
 
     # Rename the context from kind-<name> to a friendly name
