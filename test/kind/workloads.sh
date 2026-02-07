@@ -49,14 +49,14 @@ add_helm_repos() {
 
 create_namespaces() {
   local env="$1"
-  for ns in podinfo redis postgres batch monitoring; do
+  for ns in podinfo redis postgres batch monitoring stress-test; do
     kctl "$env" create namespace "$ns" --dry-run=client -o yaml | kctl "$env" apply -f -
   done
 }
 
 delete_namespaces() {
   local env="$1"
-  for ns in podinfo redis postgres batch monitoring; do
+  for ns in podinfo redis postgres batch monitoring stress-test; do
     kctl "$env" delete namespace "$ns" --ignore-not-found
   done
 }
@@ -67,7 +67,12 @@ install_podinfo() {
   local env="$1"
   echo "  Installing podinfo..."
   hhelm "$env" upgrade --install podinfo podinfo/podinfo \
-    --namespace podinfo --set replicaCount=2
+    --namespace podinfo \
+    --set replicaCount=2 \
+    --set resources.requests.cpu=100m \
+    --set resources.requests.memory=256Mi \
+    --set resources.limits.cpu=500m \
+    --set resources.limits.memory=512Mi
 }
 
 uninstall_podinfo() {
@@ -79,7 +84,13 @@ install_redis() {
   local env="$1"
   echo "  Installing redis..."
   hhelm "$env" upgrade --install redis bitnami/redis \
-    --namespace redis --set architecture=standalone --set auth.enabled=true
+    --namespace redis \
+    --set architecture=standalone \
+    --set auth.enabled=true \
+    --set master.resources.requests.cpu=250m \
+    --set master.resources.requests.memory=1Gi \
+    --set master.resources.limits.cpu=1000m \
+    --set master.resources.limits.memory=2Gi
 }
 
 uninstall_redis() {
@@ -91,7 +102,12 @@ install_postgresql() {
   local env="$1"
   echo "  Installing postgresql..."
   hhelm "$env" upgrade --install postgresql bitnami/postgresql \
-    --namespace postgres --set auth.postgresPassword=testpassword
+    --namespace postgres \
+    --set auth.postgresPassword=testpassword \
+    --set primary.resources.requests.cpu=2000m \
+    --set primary.resources.requests.memory=2Gi \
+    --set primary.resources.limits.cpu=4000m \
+    --set primary.resources.limits.memory=4Gi
 }
 
 uninstall_postgresql() {
@@ -307,6 +323,45 @@ uninstall_networkpolicy() {
   kctl "$env" delete networkpolicy deny-all-ingress allow-podinfo -n podinfo --ignore-not-found
 }
 
+install_stress() {
+  local env="$1"
+  echo "  Installing stress-ng..."
+  kctl "$env" apply -f - <<'EOF'
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stress-ng
+  namespace: stress-test
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: stress-ng
+  template:
+    metadata:
+      labels:
+        app: stress-ng
+    spec:
+      containers:
+      - name: stress-ng
+        image: alexeiled/stress-ng:latest
+        # 2 CPU workers + 1 memory worker allocating 128MB, runs indefinitely
+        args: ["--cpu", "0.5", "--vm", "1", "--vm-bytes", "1G", "--timeout", "0"]
+        resources:
+          requests:
+            cpu: "2"
+            memory: 2Gi
+          limits:
+            cpu: "4"
+            memory: 4Gi
+EOF
+}
+
+uninstall_stress() {
+  local env="$1"
+  kctl "$env" delete deployment stress-ng -n stress-test --ignore-not-found
+}
+
 # --- Per-environment install/uninstall ---
 
 # dev: podinfo, cronjob, daemonset
@@ -317,6 +372,7 @@ install_dev() {
   install_podinfo dev
   install_cronjob dev
   install_daemonset dev
+  install_stress dev
   echo "Dev workloads installed."
 }
 
@@ -325,6 +381,7 @@ uninstall_dev() {
   uninstall_podinfo dev
   uninstall_cronjob dev
   uninstall_daemonset dev
+  uninstall_stress dev
   delete_namespaces dev
   echo "Dev workloads uninstalled."
 }
@@ -338,6 +395,7 @@ install_stg() {
   install_redis stg
   install_job stg
   install_rbac stg
+  install_stress stg
   echo "Stg workloads installed."
 }
 
@@ -347,6 +405,7 @@ uninstall_stg() {
   uninstall_redis stg
   uninstall_job stg
   uninstall_rbac stg
+  uninstall_stress stg
   delete_namespaces stg
   echo "Stg workloads uninstalled."
 }
@@ -361,6 +420,7 @@ install_prod() {
   install_postgresql prod
   install_hpa prod
   install_networkpolicy prod
+  install_stress prod
   echo "Prod workloads installed."
 }
 
@@ -371,6 +431,7 @@ uninstall_prod() {
   uninstall_podinfo prod
   uninstall_redis prod
   uninstall_postgresql prod
+  uninstall_stress prod
   delete_namespaces prod
   echo "Prod workloads uninstalled."
 }
