@@ -20,7 +20,11 @@ import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { hydrateAppPreferences } from '@/core/settings/appPreferences';
-import { applyTintedPalette, savePaletteTintToLocalStorage, isPaletteActive } from '@utils/paletteTint';
+import {
+  applyTintedPalette,
+  savePaletteTintToLocalStorage,
+  isPaletteActive,
+} from '@utils/paletteTint';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
@@ -66,7 +70,11 @@ function AppContent() {
         // Apply palette tint if the user has configured one.
         if (active && isPaletteActive(prefs.paletteTone, prefs.paletteBrightness)) {
           applyTintedPalette(prefs.paletteHue, prefs.paletteTone, prefs.paletteBrightness);
-          savePaletteTintToLocalStorage(prefs.paletteHue, prefs.paletteTone, prefs.paletteBrightness);
+          savePaletteTintToLocalStorage(
+            prefs.paletteHue,
+            prefs.paletteTone,
+            prefs.paletteBrightness
+          );
         }
       } finally {
         if (active) {

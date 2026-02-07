@@ -150,18 +150,15 @@ function Settings({ onClose }: SettingsProps) {
   };
 
   // Debounced persistence for palette tint — avoids hammering the backend during fast drags.
-  const debouncePalettePersist = useCallback(
-    (hue: number, tone: number, brightness: number) => {
-      if (palettePersistTimer.current) {
-        clearTimeout(palettePersistTimer.current);
-      }
-      palettePersistTimer.current = setTimeout(() => {
-        persistPaletteTint(hue, tone, brightness);
-        savePaletteTintToLocalStorage(hue, tone, brightness);
-      }, 300);
-    },
-    []
-  );
+  const debouncePalettePersist = useCallback((hue: number, tone: number, brightness: number) => {
+    if (palettePersistTimer.current) {
+      clearTimeout(palettePersistTimer.current);
+    }
+    palettePersistTimer.current = setTimeout(() => {
+      persistPaletteTint(hue, tone, brightness);
+      savePaletteTintToLocalStorage(hue, tone, brightness);
+    }, 300);
+  }, []);
 
   const handlePaletteHueChange = (value: number) => {
     setPaletteHue(value);
@@ -382,7 +379,10 @@ function Settings({ onClose }: SettingsProps) {
               value={paletteBrightness}
               onChange={(e) => handlePaletteBrightnessChange(Number(e.target.value))}
             />
-            <span className="palette-slider-value">{paletteBrightness > 0 ? '+' : ''}{paletteBrightness}</span>
+            <span className="palette-slider-value">
+              {paletteBrightness > 0 ? '+' : ''}
+              {paletteBrightness}
+            </span>
           </div>
           <button
             type="button"
