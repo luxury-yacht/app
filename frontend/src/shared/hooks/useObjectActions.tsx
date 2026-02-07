@@ -185,11 +185,7 @@ export function buildObjectActionItems({
   }
 
   // Scale – disabled with explanation when managed by an HPA
-  if (
-    SCALABLE_KINDS.includes(normalizedKind) &&
-    scaleStatus?.allowed &&
-    !scaleStatus.pending
-  ) {
+  if (SCALABLE_KINDS.includes(normalizedKind) && scaleStatus?.allowed && !scaleStatus.pending) {
     if (object.hpaManaged) {
       menuItems.push({
         label: 'Scale (HPA managed)',
