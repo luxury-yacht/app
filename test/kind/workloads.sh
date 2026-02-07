@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs/uninstalls sample workloads for testing Luxury Yacht.
-# Usage: ./workloads.sh install|uninstall dev|stg|prod
+# Usage: ./workloads.sh install|uninstall dev|stg|prod|all
 
 set -euo pipefail
 
@@ -386,7 +386,8 @@ case "${ACTION}" in
       dev)  install_dev ;;
       stg)  install_stg ;;
       prod) install_prod ;;
-      *)    echo "Usage: $0 install {dev|stg|prod}" >&2; exit 1 ;;
+      all)  install_dev; install_stg; install_prod ;;
+      *)    echo "Usage: $0 install {dev|stg|prod|all}" >&2; exit 1 ;;
     esac
     ;;
   uninstall)
@@ -394,11 +395,12 @@ case "${ACTION}" in
       dev)  uninstall_dev ;;
       stg)  uninstall_stg ;;
       prod) uninstall_prod ;;
-      *)    echo "Usage: $0 uninstall {dev|stg|prod}" >&2; exit 1 ;;
+      all)  uninstall_dev; uninstall_stg; uninstall_prod ;;
+      *)    echo "Usage: $0 uninstall {dev|stg|prod|all}" >&2; exit 1 ;;
     esac
     ;;
   *)
-    echo "Usage: $0 {install|uninstall} {dev|stg|prod}" >&2
+    echo "Usage: $0 {install|uninstall} {dev|stg|prod|all}" >&2
     exit 1
     ;;
 esac
