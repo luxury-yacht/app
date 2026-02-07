@@ -209,7 +209,7 @@ export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 
 export function SetMetricsClient(arg1:versioned.Clientset):Promise<void>;
 
-export function SetPaletteTint(arg1:number,arg2:number,arg3:number):Promise<void>;
+export function SetPaletteTint(arg1:string,arg2:number,arg3:number,arg4:number):Promise<void>;
 
 export function SetPortForwardsPanelVisible(arg1:boolean):Promise<void>;
 

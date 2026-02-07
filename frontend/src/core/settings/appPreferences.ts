@@ -17,9 +17,12 @@ interface AppPreferences {
   refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
   gridTablePersistenceMode: GridTablePersistenceMode;
-  paletteHue: number;
-  paletteTone: number;
-  paletteBrightness: number;
+  paletteHueLight: number;
+  paletteToneLight: number;
+  paletteBrightnessLight: number;
+  paletteHueDark: number;
+  paletteToneDark: number;
+  paletteBrightnessDark: number;
 }
 
 interface AppSettingsPayload {
@@ -29,9 +32,17 @@ interface AppSettingsPayload {
   refreshBackgroundClustersEnabled?: boolean;
   metricsRefreshIntervalMs?: number;
   gridTablePersistenceMode?: string;
+  // Migration: old single-value fields.
   paletteHue?: number;
   paletteTone?: number;
   paletteBrightness?: number;
+  // Per-theme palette fields.
+  paletteHueLight?: number;
+  paletteToneLight?: number;
+  paletteBrightnessLight?: number;
+  paletteHueDark?: number;
+  paletteToneDark?: number;
+  paletteBrightnessDark?: number;
 }
 
 const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
@@ -43,9 +54,12 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
   gridTablePersistenceMode: 'shared',
-  paletteHue: 0,
-  paletteTone: 0,
-  paletteBrightness: 0,
+  paletteHueLight: 0,
+  paletteToneLight: 0,
+  paletteBrightnessLight: 0,
+  paletteHueDark: 0,
+  paletteToneDark: 0,
+  paletteBrightnessDark: 0,
 };
 
 let preferenceCache: AppPreferences = { ...DEFAULT_PREFERENCES };
@@ -91,15 +105,29 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   if (previous.gridTablePersistenceMode !== next.gridTablePersistenceMode) {
     eventBus.emit('gridtable:persistence-mode', next.gridTablePersistenceMode);
   }
+  // Emit per-theme palette changes separately for light and dark.
   if (
-    previous.paletteHue !== next.paletteHue ||
-    previous.paletteTone !== next.paletteTone ||
-    previous.paletteBrightness !== next.paletteBrightness
+    previous.paletteHueLight !== next.paletteHueLight ||
+    previous.paletteToneLight !== next.paletteToneLight ||
+    previous.paletteBrightnessLight !== next.paletteBrightnessLight
   ) {
     eventBus.emit('settings:palette-tint', {
-      hue: next.paletteHue,
-      tone: next.paletteTone,
-      brightness: next.paletteBrightness,
+      theme: 'light',
+      hue: next.paletteHueLight,
+      tone: next.paletteToneLight,
+      brightness: next.paletteBrightnessLight,
+    });
+  }
+  if (
+    previous.paletteHueDark !== next.paletteHueDark ||
+    previous.paletteToneDark !== next.paletteToneDark ||
+    previous.paletteBrightnessDark !== next.paletteBrightnessDark
+  ) {
+    eventBus.emit('settings:palette-tint', {
+      theme: 'dark',
+      hue: next.paletteHueDark,
+      tone: next.paletteToneDark,
+      brightness: next.paletteBrightnessDark,
     });
   }
 };
@@ -165,9 +193,14 @@ export const hydrateAppPreferences = async (options?: {
       DEFAULT_PREFERENCES.refreshBackgroundClustersEnabled,
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
     gridTablePersistenceMode: normalizeGridTableMode(backendSettings?.gridTablePersistenceMode),
-    paletteHue: backendSettings?.paletteHue ?? DEFAULT_PREFERENCES.paletteHue,
-    paletteTone: backendSettings?.paletteTone ?? DEFAULT_PREFERENCES.paletteTone,
-    paletteBrightness: backendSettings?.paletteBrightness ?? DEFAULT_PREFERENCES.paletteBrightness,
+    paletteHueLight: backendSettings?.paletteHueLight ?? DEFAULT_PREFERENCES.paletteHueLight,
+    paletteToneLight: backendSettings?.paletteToneLight ?? DEFAULT_PREFERENCES.paletteToneLight,
+    paletteBrightnessLight:
+      backendSettings?.paletteBrightnessLight ?? DEFAULT_PREFERENCES.paletteBrightnessLight,
+    paletteHueDark: backendSettings?.paletteHueDark ?? DEFAULT_PREFERENCES.paletteHueDark,
+    paletteToneDark: backendSettings?.paletteToneDark ?? DEFAULT_PREFERENCES.paletteToneDark,
+    paletteBrightnessDark:
+      backendSettings?.paletteBrightnessDark ?? DEFAULT_PREFERENCES.paletteBrightnessDark,
   };
 
   hydrated = true;
@@ -200,16 +233,22 @@ export const getGridTablePersistenceMode = (): GridTablePersistenceMode => {
   return preferenceCache.gridTablePersistenceMode;
 };
 
-export const getPaletteHue = (): number => {
-  return preferenceCache.paletteHue;
-};
-
-export const getPaletteTone = (): number => {
-  return preferenceCache.paletteTone;
-};
-
-export const getPaletteBrightness = (): number => {
-  return preferenceCache.paletteBrightness;
+// Returns palette tint values for the specified theme.
+export const getPaletteTint = (
+  theme: 'light' | 'dark'
+): { hue: number; tone: number; brightness: number } => {
+  if (theme === 'light') {
+    return {
+      hue: preferenceCache.paletteHueLight,
+      tone: preferenceCache.paletteToneLight,
+      brightness: preferenceCache.paletteBrightnessLight,
+    };
+  }
+  return {
+    hue: preferenceCache.paletteHueDark,
+    tone: preferenceCache.paletteToneDark,
+    brightness: preferenceCache.paletteBrightnessDark,
+  };
 };
 
 export const setThemePreference = async (theme: ThemePreference): Promise<void> => {
@@ -250,10 +289,27 @@ export const setGridTablePersistenceMode = (mode: GridTablePersistenceMode): voi
   });
 };
 
-// Persist palette tint to backend via fire-and-forget.
-export const setPaletteTint = (hue: number, tone: number, brightness: number = 0): void => {
+// Persist palette tint for a specific theme to backend via fire-and-forget.
+export const setPaletteTint = (
+  theme: 'light' | 'dark',
+  hue: number,
+  tone: number,
+  brightness: number = 0
+): void => {
   hydrated = true;
-  updatePreferenceCache({ paletteHue: hue, paletteTone: tone, paletteBrightness: brightness });
+  if (theme === 'light') {
+    updatePreferenceCache({
+      paletteHueLight: hue,
+      paletteToneLight: tone,
+      paletteBrightnessLight: brightness,
+    });
+  } else {
+    updatePreferenceCache({
+      paletteHueDark: hue,
+      paletteToneDark: tone,
+      paletteBrightnessDark: brightness,
+    });
+  }
   const runtimeApp = (window as any)?.go?.backend?.App;
   if (!runtimeApp) {
     return;
@@ -262,7 +318,7 @@ export const setPaletteTint = (hue: number, tone: number, brightness: number = 0
   if (typeof setter !== 'function') {
     return;
   }
-  void setter(hue, tone, brightness).catch((error: unknown) => {
+  void setter(theme, hue, tone, brightness).catch((error: unknown) => {
     console.error('Failed to persist palette tint:', error);
   });
 };

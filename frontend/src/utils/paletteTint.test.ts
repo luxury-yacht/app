@@ -171,24 +171,50 @@ describe('paletteTint', () => {
   });
 
   describe('localStorage helpers', () => {
-    it('saves hue, tone, and brightness to localStorage', () => {
-      savePaletteTintToLocalStorage(220, 75, -30);
-      expect(localStorage.getItem('app-palette-hue')).toBe('220');
-      expect(localStorage.getItem('app-palette-tone')).toBe('75');
-      expect(localStorage.getItem('app-palette-brightness')).toBe('-30');
+    it('saves light theme hue, tone, and brightness to localStorage', () => {
+      savePaletteTintToLocalStorage('light', 220, 75, -30);
+      expect(localStorage.getItem('app-palette-hue-light')).toBe('220');
+      expect(localStorage.getItem('app-palette-tone-light')).toBe('75');
+      expect(localStorage.getItem('app-palette-brightness-light')).toBe('-30');
+      // Dark keys should not be set.
+      expect(localStorage.getItem('app-palette-hue-dark')).toBeNull();
     });
 
-    it('clears hue, tone, and brightness from localStorage', () => {
-      savePaletteTintToLocalStorage(220, 75, 10);
+    it('saves dark theme hue, tone, and brightness to localStorage', () => {
+      savePaletteTintToLocalStorage('dark', 100, 40, 15);
+      expect(localStorage.getItem('app-palette-hue-dark')).toBe('100');
+      expect(localStorage.getItem('app-palette-tone-dark')).toBe('40');
+      expect(localStorage.getItem('app-palette-brightness-dark')).toBe('15');
+      // Light keys should not be set.
+      expect(localStorage.getItem('app-palette-hue-light')).toBeNull();
+    });
+
+    it('clears all per-theme and old keys from localStorage', () => {
+      savePaletteTintToLocalStorage('light', 220, 75, 10);
+      savePaletteTintToLocalStorage('dark', 100, 40, 5);
+      // Set old keys to simulate migration scenario.
+      localStorage.setItem('app-palette-hue', '99');
+      localStorage.setItem('app-palette-tone', '88');
+      localStorage.setItem('app-palette-brightness', '77');
+
       clearPaletteTintFromLocalStorage();
+
+      // Per-theme keys removed.
+      expect(localStorage.getItem('app-palette-hue-light')).toBeNull();
+      expect(localStorage.getItem('app-palette-tone-light')).toBeNull();
+      expect(localStorage.getItem('app-palette-brightness-light')).toBeNull();
+      expect(localStorage.getItem('app-palette-hue-dark')).toBeNull();
+      expect(localStorage.getItem('app-palette-tone-dark')).toBeNull();
+      expect(localStorage.getItem('app-palette-brightness-dark')).toBeNull();
+      // Old keys removed.
       expect(localStorage.getItem('app-palette-hue')).toBeNull();
       expect(localStorage.getItem('app-palette-tone')).toBeNull();
       expect(localStorage.getItem('app-palette-brightness')).toBeNull();
     });
 
     it('defaults brightness to 0 when not provided', () => {
-      savePaletteTintToLocalStorage(220, 75);
-      expect(localStorage.getItem('app-palette-brightness')).toBe('0');
+      savePaletteTintToLocalStorage('light', 220, 75);
+      expect(localStorage.getItem('app-palette-brightness-light')).toBe('0');
     });
   });
 });

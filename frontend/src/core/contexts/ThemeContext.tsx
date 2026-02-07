@@ -13,6 +13,7 @@ type Theme = 'light' | 'dark' | 'system';
 
 interface ThemeContextType {
   theme: Theme;
+  resolvedTheme: 'light' | 'dark';
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
@@ -33,7 +34,7 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   const [theme, setTheme] = useState<Theme>(() => getThemePreference());
 
   // Helper to detect system theme
-  const detectSystemTheme = () => {
+  const detectSystemTheme = (): 'light' | 'dark' => {
     if (typeof window !== 'undefined' && window.matchMedia) {
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       return isDark ? 'dark' : 'light';
@@ -41,10 +42,25 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     return 'light';
   };
 
-  // Apply theme to document
-  const applyTheme = (theme: string) => {
-    document.documentElement.setAttribute('data-theme', theme);
-    document.documentElement.className = theme;
+  // Resolve the current effective theme from the document attribute set by the FOUC script.
+  const getInitialResolvedTheme = (): 'light' | 'dark' => {
+    const attr = document.documentElement.getAttribute('data-theme');
+    return attr === 'dark' ? 'dark' : 'light';
+  };
+
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(getInitialResolvedTheme);
+
+  // Apply theme to document and update resolved state.
+  const applyTheme = (next: 'light' | 'dark') => {
+    document.documentElement.setAttribute('data-theme', next);
+    document.documentElement.className = next;
+    setResolvedTheme((prev) => {
+      if (prev !== next) {
+        // Emit after state update via microtask so subscribers see the new value.
+        queueMicrotask(() => eventBus.emit('settings:theme-resolved', next));
+      }
+      return next;
+    });
   };
 
   // Initialize theme
@@ -69,8 +85,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     mediaQuery.addEventListener('change', handleSystemThemeChange);
 
     const unsubscribeTheme = eventBus.on('settings:theme', (nextTheme) => {
-      const resolvedTheme = nextTheme === 'system' ? detectSystemTheme() : nextTheme;
-      applyTheme(resolvedTheme);
+      const resolved = nextTheme === 'system' ? detectSystemTheme() : (nextTheme as 'light' | 'dark');
+      applyTheme(resolved);
       setTheme(nextTheme as Theme);
     });
 
@@ -92,5 +108,5 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     };
   }, []);
 
-  return <ThemeContext.Provider value={{ theme }}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={{ theme, resolvedTheme }}>{children}</ThemeContext.Provider>;
 };

@@ -36,9 +36,12 @@ type AppSettings struct {
 	RefreshBackgroundClustersEnabled bool     `json:"refreshBackgroundClustersEnabled"` // Refresh inactive clusters in the background
 	MetricsRefreshIntervalMs         int      `json:"metricsRefreshIntervalMs"`         // Metrics refresh interval (ms)
 	GridTablePersistenceMode         string   `json:"gridTablePersistenceMode"`         // "shared" or "namespaced"
-	PaletteHue                       int      `json:"paletteHue"`                       // Hue for gray palette tint (0-360)
-	PaletteTone                      int      `json:"paletteTone"`                      // Tone intensity for gray palette tint (0-100)
-	PaletteBrightness                int      `json:"paletteBrightness"`                // Brightness offset for gray palette (-50 to +50)
+	PaletteHueLight                  int      `json:"paletteHueLight"`                  // Hue for gray palette tint in light theme (0-360)
+	PaletteToneLight                 int      `json:"paletteToneLight"`                 // Tone intensity for gray palette tint in light theme (0-100)
+	PaletteBrightnessLight           int      `json:"paletteBrightnessLight"`           // Brightness offset for gray palette in light theme (-50 to +50)
+	PaletteHueDark                   int      `json:"paletteHueDark"`                   // Hue for gray palette tint in dark theme (0-360)
+	PaletteToneDark                  int      `json:"paletteToneDark"`                  // Tone intensity for gray palette tint in dark theme (0-100)
+	PaletteBrightnessDark            int      `json:"paletteBrightnessDark"`            // Brightness offset for gray palette in dark theme (-50 to +50)
 }
 
 // ThemeInfo represents theme information to send to frontend

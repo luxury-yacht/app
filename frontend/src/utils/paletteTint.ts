@@ -35,10 +35,18 @@ export const MAX_SATURATION = 20;
 // brightness * (MAX_BRIGHTNESS_OFFSET / 50) gives the actual offset.
 export const MAX_BRIGHTNESS_OFFSET = 10;
 
-// localStorage keys for FOUC prevention bridge.
-const LS_KEY_HUE = 'app-palette-hue';
-const LS_KEY_TONE = 'app-palette-tone';
-const LS_KEY_BRIGHTNESS = 'app-palette-brightness';
+// Per-theme localStorage keys for FOUC prevention bridge.
+const LS_KEY_HUE_LIGHT = 'app-palette-hue-light';
+const LS_KEY_TONE_LIGHT = 'app-palette-tone-light';
+const LS_KEY_BRIGHTNESS_LIGHT = 'app-palette-brightness-light';
+const LS_KEY_HUE_DARK = 'app-palette-hue-dark';
+const LS_KEY_TONE_DARK = 'app-palette-tone-dark';
+const LS_KEY_BRIGHTNESS_DARK = 'app-palette-brightness-dark';
+
+// Old localStorage keys for migration cleanup.
+const LS_KEY_HUE_OLD = 'app-palette-hue';
+const LS_KEY_TONE_OLD = 'app-palette-tone';
+const LS_KEY_BRIGHTNESS_OLD = 'app-palette-brightness';
 
 /**
  * Returns true when any palette customization is active and overrides
@@ -102,31 +110,47 @@ export function clearTintedPalette(): void {
 }
 
 /**
- * Persists palette hue, tone, and brightness to localStorage for the
- * FOUC-prevention script in index.html.
+ * Persists palette hue, tone, and brightness to per-theme localStorage keys
+ * for the FOUC-prevention script in index.html.
  */
 export function savePaletteTintToLocalStorage(
+  theme: 'light' | 'dark',
   hue: number,
   tone: number,
   brightness: number = 0
 ): void {
   try {
-    localStorage.setItem(LS_KEY_HUE, String(hue));
-    localStorage.setItem(LS_KEY_TONE, String(tone));
-    localStorage.setItem(LS_KEY_BRIGHTNESS, String(brightness));
+    if (theme === 'light') {
+      localStorage.setItem(LS_KEY_HUE_LIGHT, String(hue));
+      localStorage.setItem(LS_KEY_TONE_LIGHT, String(tone));
+      localStorage.setItem(LS_KEY_BRIGHTNESS_LIGHT, String(brightness));
+    } else {
+      localStorage.setItem(LS_KEY_HUE_DARK, String(hue));
+      localStorage.setItem(LS_KEY_TONE_DARK, String(tone));
+      localStorage.setItem(LS_KEY_BRIGHTNESS_DARK, String(brightness));
+    }
   } catch {
     // Silently ignore storage errors (private browsing, quota exceeded, etc.)
   }
 }
 
 /**
- * Removes palette hue, tone, and brightness from localStorage.
+ * Removes all palette hue, tone, and brightness keys from localStorage,
+ * including old single-value keys for migration cleanup.
  */
 export function clearPaletteTintFromLocalStorage(): void {
   try {
-    localStorage.removeItem(LS_KEY_HUE);
-    localStorage.removeItem(LS_KEY_TONE);
-    localStorage.removeItem(LS_KEY_BRIGHTNESS);
+    // Remove per-theme keys.
+    localStorage.removeItem(LS_KEY_HUE_LIGHT);
+    localStorage.removeItem(LS_KEY_TONE_LIGHT);
+    localStorage.removeItem(LS_KEY_BRIGHTNESS_LIGHT);
+    localStorage.removeItem(LS_KEY_HUE_DARK);
+    localStorage.removeItem(LS_KEY_TONE_DARK);
+    localStorage.removeItem(LS_KEY_BRIGHTNESS_DARK);
+    // Remove old single-value keys.
+    localStorage.removeItem(LS_KEY_HUE_OLD);
+    localStorage.removeItem(LS_KEY_TONE_OLD);
+    localStorage.removeItem(LS_KEY_BRIGHTNESS_OLD);
   } catch {
     // Silently ignore storage errors
   }

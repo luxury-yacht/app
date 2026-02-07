@@ -665,9 +665,12 @@ export namespace types {
 	    refreshBackgroundClustersEnabled: boolean;
 	    metricsRefreshIntervalMs: number;
 	    gridTablePersistenceMode: string;
-	    paletteHue: number;
-	    paletteTone: number;
-	    paletteBrightness: number;
+	    paletteHueLight: number;
+	    paletteToneLight: number;
+	    paletteBrightnessLight: number;
+	    paletteHueDark: number;
+	    paletteToneDark: number;
+	    paletteBrightnessDark: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -682,9 +685,12 @@ export namespace types {
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];
 	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
-	        this.paletteHue = source["paletteHue"];
-	        this.paletteTone = source["paletteTone"];
-	        this.paletteBrightness = source["paletteBrightness"];
+	        this.paletteHueLight = source["paletteHueLight"];
+	        this.paletteToneLight = source["paletteToneLight"];
+	        this.paletteBrightnessLight = source["paletteBrightnessLight"];
+	        this.paletteHueDark = source["paletteHueDark"];
+	        this.paletteToneDark = source["paletteToneDark"];
+	        this.paletteBrightnessDark = source["paletteBrightnessDark"];
 	    }
 	}
 	export class CRDCondition {

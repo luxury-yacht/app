@@ -10,9 +10,7 @@ import {
   getBackgroundRefreshEnabled,
   getGridTablePersistenceMode,
   getMetricsRefreshIntervalMs,
-  getPaletteBrightness,
-  getPaletteHue,
-  getPaletteTone,
+  getPaletteTint,
   getThemePreference,
   getUseShortResourceNames,
   hydrateAppPreferences,
@@ -67,9 +65,12 @@ describe('appPreferences', () => {
       refreshBackgroundClustersEnabled: false,
       metricsRefreshIntervalMs: 7000,
       gridTablePersistenceMode: 'namespaced',
-      paletteHue: 220,
-      paletteTone: 50,
-      paletteBrightness: -15,
+      paletteHueLight: 220,
+      paletteToneLight: 50,
+      paletteBrightnessLight: -15,
+      paletteHueDark: 120,
+      paletteToneDark: 40,
+      paletteBrightnessDark: 10,
     });
 
     await hydrateAppPreferences({ force: true });
@@ -80,9 +81,8 @@ describe('appPreferences', () => {
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(7000);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
-    expect(getPaletteHue()).toBe(220);
-    expect(getPaletteTone()).toBe(50);
-    expect(getPaletteBrightness()).toBe(-15);
+    expect(getPaletteTint('light')).toEqual({ hue: 220, tone: 50, brightness: -15 });
+    expect(getPaletteTint('dark')).toEqual({ hue: 120, tone: 40, brightness: 10 });
   });
 
   it('defaults palette hue, tone, and brightness to 0 when not present', async () => {
@@ -92,9 +92,8 @@ describe('appPreferences', () => {
 
     await hydrateAppPreferences({ force: true });
 
-    expect(getPaletteHue()).toBe(0);
-    expect(getPaletteTone()).toBe(0);
-    expect(getPaletteBrightness()).toBe(0);
+    expect(getPaletteTint('light')).toEqual({ hue: 0, tone: 0, brightness: 0 });
+    expect(getPaletteTint('dark')).toEqual({ hue: 0, tone: 0, brightness: 0 });
   });
 
   it('persists preference updates and updates the cache', async () => {
@@ -131,21 +130,41 @@ describe('appPreferences', () => {
     expect(getGridTablePersistenceMode()).toBe('namespaced');
   });
 
-  it('setPaletteTint updates cache and calls backend', async () => {
+  it('setPaletteTint updates cache and calls backend for the specified theme', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       theme: 'system',
-      paletteHue: 0,
-      paletteTone: 0,
-      paletteBrightness: 0,
+      paletteHueLight: 0,
+      paletteToneLight: 0,
+      paletteBrightnessLight: 0,
+      paletteHueDark: 0,
+      paletteToneDark: 0,
+      paletteBrightnessDark: 0,
     });
 
     await hydrateAppPreferences({ force: true });
 
-    setPaletteTint(180, 75, -25);
+    setPaletteTint('light', 180, 75, -25);
 
-    expect(getPaletteHue()).toBe(180);
-    expect(getPaletteTone()).toBe(75);
-    expect(getPaletteBrightness()).toBe(-25);
-    expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith(180, 75, -25);
+    expect(getPaletteTint('light')).toEqual({ hue: 180, tone: 75, brightness: -25 });
+    // Dark theme should remain at defaults.
+    expect(getPaletteTint('dark')).toEqual({ hue: 0, tone: 0, brightness: 0 });
+    expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith(
+      'light',
+      180,
+      75,
+      -25
+    );
+
+    setPaletteTint('dark', 300, 60, 20);
+
+    expect(getPaletteTint('dark')).toEqual({ hue: 300, tone: 60, brightness: 20 });
+    // Light theme should be unchanged.
+    expect(getPaletteTint('light')).toEqual({ hue: 180, tone: 75, brightness: -25 });
+    expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith(
+      'dark',
+      300,
+      60,
+      20
+    );
   });
 });

@@ -19,7 +19,7 @@ import { eventBus } from '@/core/events';
 import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { hydrateAppPreferences } from '@/core/settings/appPreferences';
+import { hydrateAppPreferences, getPaletteTint } from '@/core/settings/appPreferences';
 import {
   applyTintedPalette,
   savePaletteTintToLocalStorage,
@@ -64,17 +64,24 @@ function AppContent() {
   // Hydrate persisted preferences before applying refresh settings and palette tint.
   useEffect(() => {
     let active = true;
+
+    // Resolve the current active theme from the document attribute.
+    const resolveTheme = (): 'light' | 'dark' => {
+      const attr = document.documentElement.getAttribute('data-theme');
+      return attr === 'dark' ? 'dark' : 'light';
+    };
+
     const initializePreferences = async () => {
       try {
-        const prefs = await hydrateAppPreferences();
-        // Apply palette tint if the user has configured one.
-        if (active && isPaletteActive(prefs.paletteTone, prefs.paletteBrightness)) {
-          applyTintedPalette(prefs.paletteHue, prefs.paletteTone, prefs.paletteBrightness);
-          savePaletteTintToLocalStorage(
-            prefs.paletteHue,
-            prefs.paletteTone,
-            prefs.paletteBrightness
-          );
+        await hydrateAppPreferences();
+        if (!active) return;
+
+        // Apply palette tint for the current resolved theme.
+        const currentTheme = resolveTheme();
+        const tint = getPaletteTint(currentTheme);
+        if (isPaletteActive(tint.tone, tint.brightness)) {
+          applyTintedPalette(tint.hue, tint.tone, tint.brightness);
+          savePaletteTintToLocalStorage(currentTheme, tint.hue, tint.tone, tint.brightness);
         }
       } finally {
         if (active) {
@@ -84,8 +91,23 @@ function AppContent() {
       }
     };
     void initializePreferences();
+
+    // When the resolved theme changes, apply the palette for the new theme.
+    const unsubThemeResolved = eventBus.on('settings:theme-resolved', (newTheme) => {
+      if (!active) return;
+      const tint = getPaletteTint(newTheme);
+      if (isPaletteActive(tint.tone, tint.brightness)) {
+        applyTintedPalette(tint.hue, tint.tone, tint.brightness);
+      } else {
+        // Clear palette if the new theme has no tint.
+        applyTintedPalette(0, 0, 0);
+      }
+      savePaletteTintToLocalStorage(newTheme, tint.hue, tint.tone, tint.brightness);
+    });
+
     return () => {
       active = false;
+      unsubThemeResolved();
     };
   }, []);
 

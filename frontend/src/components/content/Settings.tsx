@@ -22,7 +22,9 @@ import {
   hydrateAppPreferences,
   setUseShortResourceNames as persistUseShortResourceNames,
   setPaletteTint as persistPaletteTint,
+  getPaletteTint,
 } from '@/core/settings/appPreferences';
+import { useTheme } from '@/core/contexts/ThemeContext';
 import {
   applyTintedPalette,
   clearTintedPalette,
@@ -47,6 +49,7 @@ function Settings({ onClose }: SettingsProps) {
   const { enabled: refreshEnabled, setAutoRefresh } = useAutoRefresh();
   const { enabled: backgroundRefreshEnabled, setBackgroundRefresh } = useBackgroundRefresh();
   const { loadKubeconfigs } = useKubeconfig();
+  const { resolvedTheme } = useTheme();
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
@@ -84,6 +87,14 @@ function Settings({ onClose }: SettingsProps) {
     return themeCleanup;
   }, []);
 
+  // Reload slider values when the resolved theme changes.
+  useEffect(() => {
+    const tint = getPaletteTint(resolvedTheme);
+    setPaletteHue(tint.hue);
+    setPaletteTone(tint.tone);
+    setPaletteBrightness(tint.brightness);
+  }, [resolvedTheme]);
+
   const loadThemeInfo = async () => {
     try {
       const info = await GetThemeInfo();
@@ -97,9 +108,11 @@ function Settings({ onClose }: SettingsProps) {
     try {
       const preferences = await hydrateAppPreferences();
       setUseShortResourceNames(preferences.useShortResourceNames);
-      setPaletteHue(preferences.paletteHue);
-      setPaletteTone(preferences.paletteTone);
-      setPaletteBrightness(preferences.paletteBrightness);
+      // Load palette tint for the current resolved theme.
+      const tint = getPaletteTint(resolvedTheme);
+      setPaletteHue(tint.hue);
+      setPaletteTone(tint.tone);
+      setPaletteBrightness(tint.brightness);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
     }
@@ -150,15 +163,18 @@ function Settings({ onClose }: SettingsProps) {
   };
 
   // Debounced persistence for palette tint — avoids hammering the backend during fast drags.
-  const debouncePalettePersist = useCallback((hue: number, tone: number, brightness: number) => {
-    if (palettePersistTimer.current) {
-      clearTimeout(palettePersistTimer.current);
-    }
-    palettePersistTimer.current = setTimeout(() => {
-      persistPaletteTint(hue, tone, brightness);
-      savePaletteTintToLocalStorage(hue, tone, brightness);
-    }, 300);
-  }, []);
+  const debouncePalettePersist = useCallback(
+    (hue: number, tone: number, brightness: number) => {
+      if (palettePersistTimer.current) {
+        clearTimeout(palettePersistTimer.current);
+      }
+      palettePersistTimer.current = setTimeout(() => {
+        persistPaletteTint(resolvedTheme, hue, tone, brightness);
+        savePaletteTintToLocalStorage(resolvedTheme, hue, tone, brightness);
+      }, 300);
+    },
+    [resolvedTheme]
+  );
 
   const handlePaletteHueChange = (value: number) => {
     setPaletteHue(value);
@@ -178,13 +194,14 @@ function Settings({ onClose }: SettingsProps) {
     debouncePalettePersist(paletteHue, paletteTone, value);
   };
 
+  // Reset palette for the current resolved theme only.
   const handlePaletteReset = () => {
     setPaletteHue(0);
     setPaletteTone(0);
     setPaletteBrightness(0);
     clearTintedPalette();
-    persistPaletteTint(0, 0, 0);
-    clearPaletteTintFromLocalStorage();
+    persistPaletteTint(resolvedTheme, 0, 0, 0);
+    savePaletteTintToLocalStorage(resolvedTheme, 0, 0, 0);
   };
 
   const handleAddKubeconfigPath = async () => {

@@ -2,33 +2,30 @@
 
 Luxury Yacht is a desktop app for managing Kubernetes clusters, available for Linux, macOS, and Windows.
 
-![Luxury Yacht](docs/images/objectpanel-float.png)
-
-New to Luxury Yacht? Read the [primer](docs/primer.md)!
+**New to Luxury Yacht?** Check out the [Features](https://luxury-yacht.app/features) page to see what it can do!
 
 ## Installation
 
-Go to the [Releases](https://github.com/luxury-yacht/app/releases) page to download the latest version.
+### Direct Downloads
 
-Packages are available for `amd64 (x86_64)` and `arm64 (aarch64)`. Be sure to download the correct package for your architecture.
+Visit [Downloads](https://luxury-yacht.app/#downloads) on the web site, or go to the [Releases](https://github.com/luxury-yacht/app/releases) page if you know exactly what you need.
 
-### macOS
+### Package Managers
 
-Uses a standard DMG. Open the DMG and drag to `Applications`.
+Package manager support is currently limited, but more will be added.
 
-Can also be installed via [Homebrew](https://brew.sh).
+#### Homebrew (macOS only)
 
 ```sh
 brew install luxury-yacht
 ```
 
-### Linux
+If you previously used the custom tap, you can remove it, as Luxury Yacht is now in the public Casks repo.
 
-Install via `.deb` or `.rpm` package.
-
-### Windows
-
-Uses a standard installer. Note that these are unsigned, so will require extra confirmation steps to run. Given the cost of a code-signing certificate, these will likely remain unsigned.
+```sh
+untap luxury-yacht/tap
+brew update
+```
 
 ### Building from Source
 

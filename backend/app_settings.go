@@ -34,9 +34,19 @@ type settingsPreferences struct {
 	UseShortResourceNames    bool             `json:"useShortResourceNames"`
 	Refresh                  *settingsRefresh `json:"refresh"`
 	GridTablePersistenceMode string           `json:"gridTablePersistenceMode"`
-	PaletteHue               int              `json:"paletteHue"`
-	PaletteTone              int              `json:"paletteTone"`
-	PaletteBrightness        int              `json:"paletteBrightness"`
+
+	// Migration: old single-value palette fields, read-only, omitted when zero.
+	PaletteHue        int `json:"paletteHue,omitempty"`
+	PaletteTone       int `json:"paletteTone,omitempty"`
+	PaletteBrightness int `json:"paletteBrightness,omitempty"`
+
+	// Per-theme palette fields.
+	PaletteHueLight        int `json:"paletteHueLight"`
+	PaletteToneLight       int `json:"paletteToneLight"`
+	PaletteBrightnessLight int `json:"paletteBrightnessLight"`
+	PaletteHueDark         int `json:"paletteHueDark"`
+	PaletteToneDark        int `json:"paletteToneDark"`
+	PaletteBrightnessDark  int `json:"paletteBrightnessDark"`
 }
 
 // settingsRefresh captures user-configurable refresh settings.
@@ -99,6 +109,23 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	if settings.Kubeconfig.SearchPaths == nil {
 		settings.Kubeconfig.SearchPaths = defaultKubeconfigSearchPaths()
 	}
+
+	// Migrate old single-value palette fields to per-theme fields.
+	prefs := &settings.Preferences
+	if (prefs.PaletteHue != 0 || prefs.PaletteTone != 0 || prefs.PaletteBrightness != 0) &&
+		prefs.PaletteHueLight == 0 && prefs.PaletteToneLight == 0 && prefs.PaletteBrightnessLight == 0 &&
+		prefs.PaletteHueDark == 0 && prefs.PaletteToneDark == 0 && prefs.PaletteBrightnessDark == 0 {
+		prefs.PaletteHueLight = prefs.PaletteHue
+		prefs.PaletteToneLight = prefs.PaletteTone
+		prefs.PaletteBrightnessLight = prefs.PaletteBrightness
+		prefs.PaletteHueDark = prefs.PaletteHue
+		prefs.PaletteToneDark = prefs.PaletteTone
+		prefs.PaletteBrightnessDark = prefs.PaletteBrightness
+		prefs.PaletteHue = 0
+		prefs.PaletteTone = 0
+		prefs.PaletteBrightness = 0
+	}
+
 	return settings
 }
 
@@ -264,9 +291,12 @@ func (a *App) loadAppSettings() error {
 		RefreshBackgroundClustersEnabled: settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:         settings.Preferences.Refresh.MetricsIntervalMs,
 		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
-		PaletteHue:                       settings.Preferences.PaletteHue,
-		PaletteTone:                      settings.Preferences.PaletteTone,
-		PaletteBrightness:                settings.Preferences.PaletteBrightness,
+		PaletteHueLight:                  settings.Preferences.PaletteHueLight,
+		PaletteToneLight:                 settings.Preferences.PaletteToneLight,
+		PaletteBrightnessLight:           settings.Preferences.PaletteBrightnessLight,
+		PaletteHueDark:                   settings.Preferences.PaletteHueDark,
+		PaletteToneDark:                  settings.Preferences.PaletteToneDark,
+		PaletteBrightnessDark:            settings.Preferences.PaletteBrightnessDark,
 	}
 	return nil
 }
@@ -290,9 +320,13 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
 	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
-	settings.Preferences.PaletteHue = a.appSettings.PaletteHue
-	settings.Preferences.PaletteTone = a.appSettings.PaletteTone
-	settings.Preferences.PaletteBrightness = a.appSettings.PaletteBrightness
+	// Write per-theme palette fields; leave old fields zeroed so omitempty drops them.
+	settings.Preferences.PaletteHueLight = a.appSettings.PaletteHueLight
+	settings.Preferences.PaletteToneLight = a.appSettings.PaletteToneLight
+	settings.Preferences.PaletteBrightnessLight = a.appSettings.PaletteBrightnessLight
+	settings.Preferences.PaletteHueDark = a.appSettings.PaletteHueDark
+	settings.Preferences.PaletteToneDark = a.appSettings.PaletteToneDark
+	settings.Preferences.PaletteBrightnessDark = a.appSettings.PaletteBrightnessDark
 
 	settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
 
@@ -501,9 +535,13 @@ func (a *App) SetZoomLevel(level int) error {
 	return a.saveSettingsFile(settings)
 }
 
-// SetPaletteTint persists the palette hue (0-360), tone (0-100), and brightness (-50 to +50) preferences.
-// Values are clamped to their valid ranges.
-func (a *App) SetPaletteTint(hue, tone, brightness int) error {
+// SetPaletteTint persists the palette hue (0-360), tone (0-100), and brightness (-50 to +50) preferences
+// for the specified theme ("light" or "dark"). Values are clamped to their valid ranges.
+func (a *App) SetPaletteTint(theme string, hue, tone, brightness int) error {
+	if theme != "light" && theme != "dark" {
+		return fmt.Errorf("invalid palette theme: %s", theme)
+	}
+
 	// Clamp hue to 0-360
 	if hue < 0 {
 		hue = 0
@@ -532,9 +570,17 @@ func (a *App) SetPaletteTint(hue, tone, brightness int) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Palette tint changed to hue=%d tone=%d brightness=%d", hue, tone, brightness), "Settings")
-	a.appSettings.PaletteHue = hue
-	a.appSettings.PaletteTone = tone
-	a.appSettings.PaletteBrightness = brightness
+	a.logger.Info(fmt.Sprintf("Palette tint (%s) changed to hue=%d tone=%d brightness=%d", theme, hue, tone, brightness), "Settings")
+
+	if theme == "light" {
+		a.appSettings.PaletteHueLight = hue
+		a.appSettings.PaletteToneLight = tone
+		a.appSettings.PaletteBrightnessLight = brightness
+	} else {
+		a.appSettings.PaletteHueDark = hue
+		a.appSettings.PaletteToneDark = tone
+		a.appSettings.PaletteBrightnessDark = brightness
+	}
+
 	return a.saveAppSettings()
 }

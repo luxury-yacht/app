@@ -12,7 +12,9 @@
         }
     </style>
     <script>
-        // Set theme immediately to prevent FOUC
+        // Set theme and apply palette tint immediately to prevent FOUC.
+        // IMPORTANT: The lightness values, MAX_SATURATION, and MAX_BRIGHTNESS_OFFSET
+        // constants are duplicated from frontend/src/utils/paletteTint.ts. Keep both in sync.
         (function() {
             var preference = localStorage.getItem('app-theme-preference');
 
@@ -33,18 +35,36 @@
 
             document.documentElement.setAttribute('data-theme', theme);
             document.documentElement.className = theme;
-        })();
 
-        // Apply palette tint from localStorage to prevent FOUC.
-        // IMPORTANT: The lightness values, MAX_SATURATION, and MAX_BRIGHTNESS_OFFSET
-        // constants are duplicated from frontend/src/utils/paletteTint.ts. Keep both in sync.
-        (function() {
-            var tone = parseInt(localStorage.getItem('app-palette-tone'), 10) || 0;
-            var brightness = parseInt(localStorage.getItem('app-palette-brightness'), 10) || 0;
+            // Migrate old single-value palette keys to per-theme keys.
+            var oldTone = localStorage.getItem('app-palette-tone');
+            if (oldTone !== null) {
+                var oldHue = localStorage.getItem('app-palette-hue') || '0';
+                var oldBrightness = localStorage.getItem('app-palette-brightness') || '0';
+                // Copy old values to both light and dark keys if not already set.
+                if (localStorage.getItem('app-palette-tone-light') === null) {
+                    localStorage.setItem('app-palette-hue-light', oldHue);
+                    localStorage.setItem('app-palette-tone-light', oldTone);
+                    localStorage.setItem('app-palette-brightness-light', oldBrightness);
+                }
+                if (localStorage.getItem('app-palette-tone-dark') === null) {
+                    localStorage.setItem('app-palette-hue-dark', oldHue);
+                    localStorage.setItem('app-palette-tone-dark', oldTone);
+                    localStorage.setItem('app-palette-brightness-dark', oldBrightness);
+                }
+                // Remove old keys.
+                localStorage.removeItem('app-palette-hue');
+                localStorage.removeItem('app-palette-tone');
+                localStorage.removeItem('app-palette-brightness');
+            }
+
+            // Read per-theme palette values for the resolved theme.
+            var tone = parseInt(localStorage.getItem('app-palette-tone-' + theme), 10) || 0;
+            var brightness = parseInt(localStorage.getItem('app-palette-brightness-' + theme), 10) || 0;
             // Only apply when palette customization is active.
             if (tone <= 0 && brightness === 0) return;
 
-            var hue = parseInt(localStorage.getItem('app-palette-hue'), 10) || 0;
+            var hue = parseInt(localStorage.getItem('app-palette-hue-' + theme), 10) || 0;
             var maxSat = 20;
             var maxBrightnessOffset = 10;
             var saturation = (tone / 100) * maxSat;
