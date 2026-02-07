@@ -44,6 +44,7 @@ import {
   type GridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
 import ConfirmationModal from '@components/modals/ConfirmationModal';
+import SegmentedButton from '@shared/components/SegmentedButton';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 interface SettingsProps {
@@ -375,52 +376,18 @@ function Settings({ onClose }: SettingsProps) {
       )}
       <div className="settings-section">
         <h3>Appearance</h3>
-        <div className="theme-selector">
-          <div className="theme-option">
-            <input
-              type="radio"
-              id="theme-light"
-              name="theme"
-              value="light"
-              checked={themeInfo?.userTheme === 'light'}
-              onChange={(e) => handleThemeChange(e.target.value)}
-            />
-            <label htmlFor="theme-light" className="theme-label">
-              <span className="theme-icon">☀️</span>
-              <span className="theme-name">Light</span>
-            </label>
-          </div>
-          <div className="theme-option">
-            <input
-              type="radio"
-              id="theme-dark"
-              name="theme"
-              value="dark"
-              checked={themeInfo?.userTheme === 'dark'}
-              onChange={(e) => handleThemeChange(e.target.value)}
-            />
-            <label htmlFor="theme-dark" className="theme-label">
-              <span className="theme-icon">🌙</span>
-              <span className="theme-name">Dark</span>
-            </label>
-          </div>
-          <div className="theme-option">
-            <input
-              type="radio"
-              id="theme-system"
-              name="theme"
-              value="system"
-              checked={themeInfo?.userTheme === 'system' || !themeInfo?.userTheme}
-              onChange={(e) => handleThemeChange(e.target.value)}
-            />
-            <label htmlFor="theme-system" className="theme-label">
-              <span className="theme-icon">💻</span>
-              <span className="theme-name">System</span>
-            </label>
-          </div>
-        </div>
-
         <div className="palette-tint-controls">
+          {/* Theme selector — spans columns 2-4 */}
+          <label>Theme</label>
+          <SegmentedButton
+            options={[
+              { value: 'system', label: 'System' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+            value={themeInfo?.userTheme || 'system'}
+            onChange={handleThemeChange}
+          />
           <label htmlFor="palette-hue">Hue</label>
           <input
             type="range"

@@ -58,67 +58,6 @@
   margin: 0;
 }
 
-/* Theme Selector Radio Buttons */
-.theme-selector {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.theme-option {
-  position: relative;
-  flex: 1 1 140px;
-  max-width: 100px;
-}
-
-.theme-option input[type="radio"] {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.theme-label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-sm) 1rem;
-  border: 2px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  background-color: var(--color-bg);
-  min-width: 0;
-  width: 100%;
-}
-
-.theme-label:hover {
-  border-color: var(--color-accent);
-  background-color: var(--color-bg-tertiary);
-}
-
-.theme-option input[type="radio"]:checked + .theme-label {
-  border-color: var(--color-accent);
-  background-color: var(--color-accent-bg);
-  box-shadow: 0 0 0 3px rgba(77, 171, 247, 0.15);
-  transform: scale(1.02);
-}
-
-.theme-option input[type="radio"]:disabled + .theme-label {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.theme-icon {
-  font-size: 1rem;
-}
-
-.theme-name {
-  font-size: var(--font-size-normal);
-  font-weight: 500;
-  color: var(--color-text);
-}
 
 /* Palette Tint Controls — 4-column grid: label | control | value | reset */
 .palette-tint-controls {
@@ -128,6 +67,12 @@
   align-items: center;
   margin-top: var(--spacing-sm);
   padding-left: 1rem;
+}
+
+/* Theme selector spans remaining columns so the row is complete */
+.palette-tint-controls > .segmented-button {
+  grid-column: 2 / -1;
+  justify-self: start;
 }
 
 .palette-tint-controls > label {

@@ -1,20 +1,21 @@
 .segmented-button {
   display: inline-flex;
   background-color: var(--segmented-bg);
-  border-radius: var(--border-radius-round);
+  border-radius: 6px;
   padding: 0;
   position: relative;
   overflow: hidden;
 }
 
 .segmented-button__option {
-  /* Inherit button styles but modify for segmented appearance */
   padding: 0.3rem var(--spacing-md);
   font-size: var(--font-size-button);
   font-weight: var(--font-weight-button);
   border: none;
   cursor: pointer;
-  transition: background-color var(--transition-fast);
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    transform var(--duration-fast, 150ms) var(--ease-out, ease);
   white-space: nowrap;
   background-color: transparent;
   color: var(--segmented-option-text);
@@ -34,8 +35,14 @@
   opacity: var(--segmented-option-divider-opacity);
 }
 
+/* Hover lift effect — matches .button */
 .segmented-button__option:hover:not(.segmented-button__option--active) {
   background-color: var(--segmented-option-hover);
+  transform: translateY(-1px);
+}
+
+.segmented-button__option:active:not(.segmented-button__option--active) {
+  transform: translateY(0);
 }
 
 .segmented-button__option--active {
@@ -54,7 +61,13 @@
   background-color: var(--segmented-option-active-hover);
 }
 
-/* Size variations - keeping minimal for now */
+/* Focus — matches .button */
+.segmented-button__option:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Size variations */
 .segmented-button--small .segmented-button__option {
   padding: 0.2rem 0.5rem;
   font-size: 0.7rem;
