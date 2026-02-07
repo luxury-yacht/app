@@ -120,6 +120,87 @@
   color: var(--color-text);
 }
 
+/* Palette Tint Controls */
+.palette-tint-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+  padding-left: 1rem;
+}
+
+.palette-slider-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.palette-slider-row label {
+  min-width: 3rem;
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+}
+
+.palette-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+/* Hue slider has a fixed rainbow gradient */
+.palette-slider-hue {
+  background: linear-gradient(
+    to right,
+    hsl(0, 100%, 50%),
+    hsl(60, 100%, 50%),
+    hsl(120, 100%, 50%),
+    hsl(180, 100%, 50%),
+    hsl(240, 100%, 50%),
+    hsl(300, 100%, 50%),
+    hsl(360, 100%, 50%)
+  );
+}
+
+/* Tone slider background is set dynamically via inline style */
+.palette-slider-tone {
+  background: linear-gradient(to right, hsl(0, 0%, 50%), hsl(0, 20%, 50%));
+}
+
+/* Custom thumb styling */
+.palette-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-text);
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.palette-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--color-text);
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.palette-slider-value {
+  min-width: 3rem;
+  text-align: right;
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono);
+}
+
 .setting-description {
   margin-left: 1rem;
   font-size: var(--font-size-small);

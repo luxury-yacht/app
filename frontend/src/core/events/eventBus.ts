@@ -74,6 +74,7 @@ export interface AppEvents {
   'settings:short-names': boolean;
   'settings:theme': string;
   'settings:metrics-interval': number;
+  'settings:palette-tint': { hue: number; tone: number };
 
   // Feature events
   'pods:show-unhealthy': { clusterId: string; scope: string };

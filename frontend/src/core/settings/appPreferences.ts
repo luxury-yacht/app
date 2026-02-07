@@ -17,6 +17,8 @@ interface AppPreferences {
   refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
   gridTablePersistenceMode: GridTablePersistenceMode;
+  paletteHue: number;
+  paletteTone: number;
 }
 
 interface AppSettingsPayload {
@@ -26,6 +28,8 @@ interface AppSettingsPayload {
   refreshBackgroundClustersEnabled?: boolean;
   metricsRefreshIntervalMs?: number;
   gridTablePersistenceMode?: string;
+  paletteHue?: number;
+  paletteTone?: number;
 }
 
 const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
@@ -37,6 +41,8 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
   gridTablePersistenceMode: 'shared',
+  paletteHue: 0,
+  paletteTone: 0,
 };
 
 let preferenceCache: AppPreferences = { ...DEFAULT_PREFERENCES };
@@ -81,6 +87,9 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   }
   if (previous.gridTablePersistenceMode !== next.gridTablePersistenceMode) {
     eventBus.emit('gridtable:persistence-mode', next.gridTablePersistenceMode);
+  }
+  if (previous.paletteHue !== next.paletteHue || previous.paletteTone !== next.paletteTone) {
+    eventBus.emit('settings:palette-tint', { hue: next.paletteHue, tone: next.paletteTone });
   }
 };
 
@@ -145,6 +154,8 @@ export const hydrateAppPreferences = async (options?: {
       DEFAULT_PREFERENCES.refreshBackgroundClustersEnabled,
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
     gridTablePersistenceMode: normalizeGridTableMode(backendSettings?.gridTablePersistenceMode),
+    paletteHue: backendSettings?.paletteHue ?? DEFAULT_PREFERENCES.paletteHue,
+    paletteTone: backendSettings?.paletteTone ?? DEFAULT_PREFERENCES.paletteTone,
   };
 
   hydrated = true;
@@ -175,6 +186,14 @@ export const getMetricsRefreshIntervalMs = (): number => {
 
 export const getGridTablePersistenceMode = (): GridTablePersistenceMode => {
   return preferenceCache.gridTablePersistenceMode;
+};
+
+export const getPaletteHue = (): number => {
+  return preferenceCache.paletteHue;
+};
+
+export const getPaletteTone = (): number => {
+  return preferenceCache.paletteTone;
 };
 
 export const setThemePreference = async (theme: ThemePreference): Promise<void> => {
@@ -212,6 +231,23 @@ export const setGridTablePersistenceMode = (mode: GridTablePersistenceMode): voi
   updatePreferenceCache({ gridTablePersistenceMode: normalized });
   void persistGridTableMode(normalized).catch((error) => {
     console.error('Failed to persist grid table persistence mode:', error);
+  });
+};
+
+// Persist palette tint to backend via fire-and-forget.
+export const setPaletteTint = (hue: number, tone: number): void => {
+  hydrated = true;
+  updatePreferenceCache({ paletteHue: hue, paletteTone: tone });
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  const setter = runtimeApp?.SetPaletteTint;
+  if (typeof setter !== 'function') {
+    return;
+  }
+  void setter(hue, tone).catch((error: unknown) => {
+    console.error('Failed to persist palette tint:', error);
   });
 };
 

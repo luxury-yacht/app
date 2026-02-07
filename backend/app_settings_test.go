@@ -89,6 +89,8 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		RefreshBackgroundClustersEnabled: false,
 		MetricsRefreshIntervalMs:         7000,
 		GridTablePersistenceMode:         "namespaced",
+		PaletteHue:                       200,
+		PaletteTone:                      60,
 	}
 
 	require.NoError(t, app.saveAppSettings())
@@ -102,6 +104,8 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
 	require.Equal(t, 7000, app.appSettings.MetricsRefreshIntervalMs)
 	require.Equal(t, "namespaced", app.appSettings.GridTablePersistenceMode)
+	require.Equal(t, 200, app.appSettings.PaletteHue)
+	require.Equal(t, 60, app.appSettings.PaletteTone)
 }
 
 func TestAppSetThemePersistsAndLogs(t *testing.T) {
@@ -287,4 +291,52 @@ func TestSaveSettingsFileOverwritesExistingData(t *testing.T) {
 	loaded, err := app.loadSettingsFile()
 	require.NoError(t, err)
 	require.Equal(t, "light", loaded.Preferences.Theme)
+}
+
+func TestAppSetPaletteTintPersistsAndClamps(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	// Normal values persist correctly.
+	require.NoError(t, app.SetPaletteTint(220, 50))
+	require.Equal(t, 220, app.appSettings.PaletteHue)
+	require.Equal(t, 50, app.appSettings.PaletteTone)
+
+	// Round-trips through save/load.
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, 220, app.appSettings.PaletteHue)
+	require.Equal(t, 50, app.appSettings.PaletteTone)
+
+	// Logs the change.
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	last := entries[len(entries)-1]
+	require.Equal(t, "INFO", last.Level)
+	require.Contains(t, last.Message, "Palette tint changed to hue=220 tone=50")
+}
+
+func TestAppSetPaletteTintClampsOutOfRange(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	// Values above max are clamped.
+	require.NoError(t, app.SetPaletteTint(400, 150))
+	require.Equal(t, 360, app.appSettings.PaletteHue)
+	require.Equal(t, 100, app.appSettings.PaletteTone)
+
+	// Values below min are clamped.
+	require.NoError(t, app.SetPaletteTint(-10, -5))
+	require.Equal(t, 0, app.appSettings.PaletteHue)
+	require.Equal(t, 0, app.appSettings.PaletteTone)
+}
+
+func TestAppSetPaletteTintDefaultsToZero(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	settings, err := app.GetAppSettings()
+	require.NoError(t, err)
+	require.Equal(t, 0, settings.PaletteHue)
+	require.Equal(t, 0, settings.PaletteTone)
 }

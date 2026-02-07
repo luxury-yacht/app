@@ -20,6 +20,7 @@ import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { hydrateAppPreferences } from '@/core/settings/appPreferences';
+import { applyTintedPalette, savePaletteTintToLocalStorage } from '@utils/paletteTint';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
@@ -56,12 +57,17 @@ function AppContent() {
     initializeUserPermissionsBootstrap(selectedClusterId);
   }, [selectedClusterId]);
 
-  // Hydrate persisted preferences before applying refresh settings.
+  // Hydrate persisted preferences before applying refresh settings and palette tint.
   useEffect(() => {
     let active = true;
     const initializePreferences = async () => {
       try {
-        await hydrateAppPreferences();
+        const prefs = await hydrateAppPreferences();
+        // Apply palette tint if the user has configured one.
+        if (active && prefs.paletteTone > 0) {
+          applyTintedPalette(prefs.paletteHue, prefs.paletteTone);
+          savePaletteTintToLocalStorage(prefs.paletteHue, prefs.paletteTone);
+        }
       } finally {
         if (active) {
           initializeMetricsRefreshInterval();

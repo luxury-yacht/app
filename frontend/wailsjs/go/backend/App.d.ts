@@ -209,6 +209,8 @@ export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 
 export function SetMetricsClient(arg1:versioned.Clientset):Promise<void>;
 
+export function SetPaletteTint(arg1:number,arg2:number):Promise<void>;
+
 export function SetPortForwardsPanelVisible(arg1:boolean):Promise<void>;
 
 export function SetRestConfig(arg1:rest.Config):Promise<void>;

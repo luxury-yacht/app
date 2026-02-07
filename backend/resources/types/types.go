@@ -36,6 +36,8 @@ type AppSettings struct {
 	RefreshBackgroundClustersEnabled bool     `json:"refreshBackgroundClustersEnabled"` // Refresh inactive clusters in the background
 	MetricsRefreshIntervalMs         int      `json:"metricsRefreshIntervalMs"`         // Metrics refresh interval (ms)
 	GridTablePersistenceMode         string   `json:"gridTablePersistenceMode"`         // "shared" or "namespaced"
+	PaletteHue                       int      `json:"paletteHue"`                       // Hue for gray palette tint (0-360)
+	PaletteTone                      int      `json:"paletteTone"`                      // Tone intensity for gray palette tint (0-100)
 }
 
 // ThemeInfo represents theme information to send to frontend

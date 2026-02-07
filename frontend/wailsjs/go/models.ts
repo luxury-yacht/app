@@ -665,6 +665,8 @@ export namespace types {
 	    refreshBackgroundClustersEnabled: boolean;
 	    metricsRefreshIntervalMs: number;
 	    gridTablePersistenceMode: string;
+	    paletteHue: number;
+	    paletteTone: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -679,6 +681,8 @@ export namespace types {
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];
 	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
+	        this.paletteHue = source["paletteHue"];
+	        this.paletteTone = source["paletteTone"];
 	    }
 	}
 	export class CRDCondition {

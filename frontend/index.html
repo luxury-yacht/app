@@ -34,6 +34,41 @@
             document.documentElement.setAttribute('data-theme', theme);
             document.documentElement.className = theme;
         })();
+
+        // Apply palette tint from localStorage to prevent FOUC.
+        // IMPORTANT: The lightness values and MAX_SATURATION constant are
+        // duplicated from frontend/src/utils/paletteTint.ts. Keep both in sync.
+        (function() {
+            var tone = parseInt(localStorage.getItem('app-palette-tone'), 10);
+            if (!tone || tone <= 0) return;
+
+            var hue = parseInt(localStorage.getItem('app-palette-hue'), 10) || 0;
+            var maxSat = 20;
+            var saturation = (tone / 100) * maxSat;
+
+            // Lightness values matching the neutral hex grays in colors.css
+            var steps = [
+                ['--color-gray-950', 4],
+                ['--color-gray-900', 10],
+                ['--color-gray-800', 18],
+                ['--color-gray-700', 25],
+                ['--color-gray-600', 32],
+                ['--color-gray-500', 44],
+                ['--color-gray-400', 54],
+                ['--color-gray-300', 69],
+                ['--color-gray-200', 82],
+                ['--color-gray-100', 88],
+                ['--color-gray-50', 96]
+            ];
+
+            var root = document.documentElement;
+            for (var i = 0; i < steps.length; i++) {
+                root.style.setProperty(
+                    steps[i][0],
+                    'hsl(' + hue + ', ' + saturation + '%, ' + steps[i][1] + '%)'
+                );
+            }
+        })();
     </script>
 </head>
 

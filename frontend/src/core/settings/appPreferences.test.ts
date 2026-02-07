@@ -10,6 +10,8 @@ import {
   getBackgroundRefreshEnabled,
   getGridTablePersistenceMode,
   getMetricsRefreshIntervalMs,
+  getPaletteHue,
+  getPaletteTone,
   getThemePreference,
   getUseShortResourceNames,
   hydrateAppPreferences,
@@ -17,6 +19,7 @@ import {
   setAutoRefreshEnabled,
   setBackgroundRefreshEnabled,
   setGridTablePersistenceMode,
+  setPaletteTint,
   setThemePreference,
   setUseShortResourceNames,
 } from './appPreferences';
@@ -45,6 +48,7 @@ describe('appPreferences', () => {
           SetAutoRefreshEnabled: vi.fn().mockResolvedValue(undefined),
           SetBackgroundRefreshEnabled: vi.fn().mockResolvedValue(undefined),
           SetGridTablePersistenceMode: vi.fn().mockResolvedValue(undefined),
+          SetPaletteTint: vi.fn().mockResolvedValue(undefined),
         },
       },
     };
@@ -62,6 +66,8 @@ describe('appPreferences', () => {
       refreshBackgroundClustersEnabled: false,
       metricsRefreshIntervalMs: 7000,
       gridTablePersistenceMode: 'namespaced',
+      paletteHue: 220,
+      paletteTone: 50,
     });
 
     await hydrateAppPreferences({ force: true });
@@ -72,6 +78,19 @@ describe('appPreferences', () => {
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(7000);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
+    expect(getPaletteHue()).toBe(220);
+    expect(getPaletteTone()).toBe(50);
+  });
+
+  it('defaults palette hue and tone to 0 when not present', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+    });
+
+    await hydrateAppPreferences({ force: true });
+
+    expect(getPaletteHue()).toBe(0);
+    expect(getPaletteTone()).toBe(0);
   });
 
   it('persists preference updates and updates the cache', async () => {
@@ -106,5 +125,21 @@ describe('appPreferences', () => {
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(6000);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
+  });
+
+  it('setPaletteTint updates cache and calls backend', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+      paletteHue: 0,
+      paletteTone: 0,
+    });
+
+    await hydrateAppPreferences({ force: true });
+
+    setPaletteTint(180, 75);
+
+    expect(getPaletteHue()).toBe(180);
+    expect(getPaletteTone()).toBe(75);
+    expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith(180, 75);
   });
 });

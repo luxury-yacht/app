@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   GetKubeconfigSearchPaths,
   GetThemeInfo,
@@ -21,7 +21,14 @@ import { clearAllGridTableState } from '@shared/components/tables/persistence/gr
 import {
   hydrateAppPreferences,
   setUseShortResourceNames as persistUseShortResourceNames,
+  setPaletteTint as persistPaletteTint,
 } from '@/core/settings/appPreferences';
+import {
+  applyTintedPalette,
+  clearTintedPalette,
+  savePaletteTintToLocalStorage,
+  clearPaletteTintFromLocalStorage,
+} from '@utils/paletteTint';
 import {
   getGridTablePersistenceMode,
   setGridTablePersistenceMode,
@@ -51,6 +58,11 @@ function Settings({ onClose }: SettingsProps) {
   const [kubeconfigPathsSelecting, setKubeconfigPathsSelecting] = useState(false);
   // Keep the default kubeconfig search path pinned in the list.
   const defaultKubeconfigPath = '~/.kube';
+  // Palette tint state for hue/tone sliders
+  const [paletteHue, setPaletteHue] = useState(0);
+  const [paletteTone, setPaletteTone] = useState(0);
+  // Debounce timer ref for palette tint persistence
+  const palettePersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Controls the confirmation modal for clearing all persisted app state.
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   // Controls the confirmation modal for resetting view persistence.
@@ -83,6 +95,8 @@ function Settings({ onClose }: SettingsProps) {
     try {
       const preferences = await hydrateAppPreferences();
       setUseShortResourceNames(preferences.useShortResourceNames);
+      setPaletteHue(preferences.paletteHue);
+      setPaletteTone(preferences.paletteTone);
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
     }
@@ -130,6 +144,37 @@ function Settings({ onClose }: SettingsProps) {
     const mode: GridTablePersistenceMode = checked ? 'namespaced' : 'shared';
     setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
+  };
+
+  // Debounced persistence for palette tint — avoids hammering the backend during fast drags.
+  const debouncePalettePersist = useCallback((hue: number, tone: number) => {
+    if (palettePersistTimer.current) {
+      clearTimeout(palettePersistTimer.current);
+    }
+    palettePersistTimer.current = setTimeout(() => {
+      persistPaletteTint(hue, tone);
+      savePaletteTintToLocalStorage(hue, tone);
+    }, 300);
+  }, []);
+
+  const handlePaletteHueChange = (value: number) => {
+    setPaletteHue(value);
+    applyTintedPalette(value, paletteTone);
+    debouncePalettePersist(value, paletteTone);
+  };
+
+  const handlePaletteToneChange = (value: number) => {
+    setPaletteTone(value);
+    applyTintedPalette(paletteHue, value);
+    debouncePalettePersist(paletteHue, value);
+  };
+
+  const handlePaletteReset = () => {
+    setPaletteHue(0);
+    setPaletteTone(0);
+    clearTintedPalette();
+    persistPaletteTint(0, 0);
+    clearPaletteTintFromLocalStorage();
   };
 
   const handleAddKubeconfigPath = async () => {
@@ -188,6 +233,9 @@ function Settings({ onClose }: SettingsProps) {
   const handleClearAllState = async () => {
     setIsClearStateConfirmOpen(false);
     try {
+      // Clear palette tint before reload so UI reverts immediately.
+      clearTintedPalette();
+
       const clearAppState = (window as any)?.go?.backend?.App?.ClearAppState;
       if (typeof clearAppState !== 'function') {
         throw new Error('ClearAppState is not available');
@@ -277,6 +325,47 @@ function Settings({ onClose }: SettingsProps) {
               <span className="theme-name">System</span>
             </label>
           </div>
+        </div>
+
+        <div className="palette-tint-controls">
+          <div className="palette-slider-row">
+            <label htmlFor="palette-hue">Hue</label>
+            <input
+              type="range"
+              id="palette-hue"
+              className="palette-slider palette-slider-hue"
+              min={0}
+              max={360}
+              value={paletteHue}
+              onChange={(e) => handlePaletteHueChange(Number(e.target.value))}
+            />
+            <span className="palette-slider-value">{paletteHue}°</span>
+          </div>
+          <div className="palette-slider-row">
+            <label htmlFor="palette-tone">Tone</label>
+            <input
+              type="range"
+              id="palette-tone"
+              className="palette-slider palette-slider-tone"
+              min={0}
+              max={100}
+              value={paletteTone}
+              onChange={(e) => handlePaletteToneChange(Number(e.target.value))}
+              style={{
+                // Dynamic gradient from neutral gray to tinted at the current hue
+                background: `linear-gradient(to right, hsl(0, 0%, 50%), hsl(${paletteHue}, 20%, 50%))`,
+              }}
+            />
+            <span className="palette-slider-value">{paletteTone}%</span>
+          </div>
+          <button
+            type="button"
+            className="button generic"
+            onClick={handlePaletteReset}
+            disabled={paletteHue === 0 && paletteTone === 0}
+          >
+            Reset Palette
+          </button>
         </div>
       </div>
 
