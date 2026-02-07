@@ -40,11 +40,6 @@
   --color-warning-bg: rgba(245, 158, 11, 0.18);
   --color-info-bg: rgba(14, 165, 233, 0.18);
 
-  /* Accent RGB values for rgba() usage */
-  --color-accent-rgb: 245, 158, 11;
-  --color-accent-glow: rgba(245, 158, 11, 0.12);
-  --color-header-accent-border: rgba(245, 158, 11, 0.2);
-
   /* Grid table resize handle */
   --grid-resize-handle-color: var(--color-base-500);
   --grid-resize-handle-opacity: 0.5;

@@ -40,11 +40,6 @@
   --color-warning-bg: rgba(245, 158, 11, 0.1);
   --color-info-bg: rgba(14, 165, 233, 0.1);
 
-  /* Accent RGB values for rgba() usage */
-  --color-accent-rgb: 13, 148, 136;
-  --color-accent-glow: rgba(13, 148, 136, 0.08);
-  --color-header-accent-border: rgba(13, 148, 136, 0.15);
-
   /* Button colors */
   --button-generic-bg: var(--color-base-200);
   --button-generic-hover: var(--color-base-300);
