@@ -69,7 +69,12 @@
   padding-left: 1rem;
 }
 
-/* Theme selector spans remaining columns so the row is complete */
+/* Theme selector row — extra spacing before the palette sliders */
+.palette-tint-controls > label:has(+ .segmented-button),
+.palette-tint-controls > .segmented-button {
+  margin-bottom: var(--spacing-md);
+}
+
 .palette-tint-controls > .segmented-button {
   grid-column: 2 / -1;
   justify-self: start;
@@ -139,19 +144,42 @@
 }
 
 .palette-slider-value {
-  min-width: 3rem;
+  width: 4rem;
   text-align: right;
   font-size: var(--font-size-small);
   color: var(--color-text-secondary);
   font-family: var(--font-family-mono);
 }
 
-/* Accent color swatch in the grid */
-.palette-accent-swatch {
-  width: 32px;
-  height: 24px;
+/* Clickable hex value */
+.palette-hex-clickable {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.palette-hex-clickable:hover {
+  color: var(--color-text);
+}
+
+/* Inline hex input */
+.palette-hex-input {
+  width: 4rem;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-sm);
+  background: var(--color-bg);
+  padding: 0 0.25rem;
+  outline: none;
+}
+
+.palette-hex-input:focus {
+  border-color: var(--color-accent);
+}
+
+/* Accent color swatch in the grid */
+.palette-accent-swatch {
+  width: 28px;
+  height: 28px;
+  border: none;
   cursor: pointer;
   padding: 0;
   background: none;

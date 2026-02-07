@@ -78,6 +78,10 @@ function Settings({ onClose }: SettingsProps) {
   // Accent color state and debounce timer
   const [accentColor, setAccentColorState] = useState('');
   const accentPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Inline hex editing state for accent color
+  const [isEditingAccentHex, setIsEditingAccentHex] = useState(false);
+  const [accentHexDraft, setAccentHexDraft] = useState('');
+  const accentHexInputRef = useRef<HTMLInputElement>(null);
   // Controls the confirmation modal for clearing all persisted app state.
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   // Controls the confirmation modal for resetting view persistence.
@@ -254,6 +258,34 @@ function Settings({ onClose }: SettingsProps) {
     applyAccentBg('', resolvedTheme);
     persistAccentColor(resolvedTheme, '');
     saveAccentColorToLocalStorage(resolvedTheme, '');
+  };
+
+  // Inline hex editing handlers for accent color.
+  const validHexRe = /^#[0-9a-fA-F]{6}$/;
+  const defaultAccent = resolvedTheme === 'light' ? '#0d9488' : '#f59e0b';
+
+  const handleAccentHexClick = () => {
+    setAccentHexDraft(accentColor || defaultAccent);
+    setIsEditingAccentHex(true);
+    // Focus the input after it renders.
+    requestAnimationFrame(() => accentHexInputRef.current?.select());
+  };
+
+  const handleAccentHexCommit = () => {
+    let trimmed = accentHexDraft.trim().toLowerCase();
+    if (!trimmed.startsWith('#')) trimmed = '#' + trimmed;
+    // Expand shorthand #rgb → #rrggbb
+    if (/^#[0-9a-f]{3}$/.test(trimmed)) {
+      trimmed = '#' + trimmed[1] + trimmed[1] + trimmed[2] + trimmed[2] + trimmed[3] + trimmed[3];
+    }
+    if (validHexRe.test(trimmed)) {
+      handleAccentColorChange(trimmed);
+    }
+    setIsEditingAccentHex(false);
+  };
+
+  const handleAccentHexCancel = () => {
+    setIsEditingAccentHex(false);
   };
 
   // Reset all appearance customizations for the current resolved theme.
@@ -464,7 +496,30 @@ function Settings({ onClose }: SettingsProps) {
             value={accentColor || (resolvedTheme === 'light' ? '#0d9488' : '#f59e0b')}
             onChange={(e) => handleAccentColorChange(e.target.value)}
           />
-          <span className="palette-slider-value">{accentColor || 'Default'}</span>
+          {isEditingAccentHex ? (
+            <input
+              ref={accentHexInputRef}
+              className="palette-slider-value palette-hex-input"
+              value={accentHexDraft}
+              onChange={(e) => setAccentHexDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); handleAccentHexCommit(); }
+                else if (e.key === 'Escape') { e.preventDefault(); handleAccentHexCancel(); }
+                else e.stopPropagation();
+              }}
+              onBlur={handleAccentHexCancel}
+              maxLength={7}
+              spellCheck={false}
+            />
+          ) : (
+            <span
+              className="palette-slider-value palette-hex-clickable"
+              onClick={handleAccentHexClick}
+              title="Click to edit hex value"
+            >
+              {accentColor || defaultAccent}
+            </span>
+          )}
           <button
             type="button"
             className="palette-row-reset"
