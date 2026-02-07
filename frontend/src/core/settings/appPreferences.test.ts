@@ -6,6 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  getAccentColor,
   getAutoRefreshEnabled,
   getBackgroundRefreshEnabled,
   getGridTablePersistenceMode,
@@ -15,6 +16,7 @@ import {
   getUseShortResourceNames,
   hydrateAppPreferences,
   resetAppPreferencesCacheForTesting,
+  setAccentColor,
   setAutoRefreshEnabled,
   setBackgroundRefreshEnabled,
   setGridTablePersistenceMode,
@@ -48,6 +50,7 @@ describe('appPreferences', () => {
           SetBackgroundRefreshEnabled: vi.fn().mockResolvedValue(undefined),
           SetGridTablePersistenceMode: vi.fn().mockResolvedValue(undefined),
           SetPaletteTint: vi.fn().mockResolvedValue(undefined),
+          SetAccentColor: vi.fn().mockResolvedValue(undefined),
         },
       },
     };
@@ -71,6 +74,8 @@ describe('appPreferences', () => {
       paletteHueDark: 120,
       paletteToneDark: 40,
       paletteBrightnessDark: 10,
+      accentColorLight: '#0d9488',
+      accentColorDark: '#f59e0b',
     });
 
     await hydrateAppPreferences({ force: true });
@@ -83,6 +88,8 @@ describe('appPreferences', () => {
     expect(getGridTablePersistenceMode()).toBe('namespaced');
     expect(getPaletteTint('light')).toEqual({ hue: 220, tone: 50, brightness: -15 });
     expect(getPaletteTint('dark')).toEqual({ hue: 120, tone: 40, brightness: 10 });
+    expect(getAccentColor('light')).toBe('#0d9488');
+    expect(getAccentColor('dark')).toBe('#f59e0b');
   });
 
   it('defaults palette hue, tone, and brightness to 0 when not present', async () => {
@@ -94,6 +101,8 @@ describe('appPreferences', () => {
 
     expect(getPaletteTint('light')).toEqual({ hue: 0, tone: 0, brightness: 0 });
     expect(getPaletteTint('dark')).toEqual({ hue: 0, tone: 0, brightness: 0 });
+    expect(getAccentColor('light')).toBe('');
+    expect(getAccentColor('dark')).toBe('');
   });
 
   it('persists preference updates and updates the cache', async () => {
@@ -161,5 +170,43 @@ describe('appPreferences', () => {
     // Light theme should be unchanged.
     expect(getPaletteTint('light')).toEqual({ hue: 180, tone: 75, brightness: -25 });
     expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith('dark', 300, 60, 20);
+  });
+
+  it('setAccentColor updates cache and calls backend for the specified theme', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+      accentColorLight: '',
+      accentColorDark: '',
+    });
+
+    await hydrateAppPreferences({ force: true });
+
+    setAccentColor('light', '#0d9488');
+
+    expect(getAccentColor('light')).toBe('#0d9488');
+    // Dark theme should remain at default.
+    expect(getAccentColor('dark')).toBe('');
+    expect((window as any).go.backend.App.SetAccentColor).toHaveBeenCalledWith('light', '#0d9488');
+
+    setAccentColor('dark', '#f59e0b');
+
+    expect(getAccentColor('dark')).toBe('#f59e0b');
+    // Light theme should be unchanged.
+    expect(getAccentColor('light')).toBe('#0d9488');
+    expect((window as any).go.backend.App.SetAccentColor).toHaveBeenCalledWith('dark', '#f59e0b');
+  });
+
+  it('setAccentColor resets to empty string', async () => {
+    appMocks.GetAppSettings.mockResolvedValue({
+      theme: 'system',
+      accentColorLight: '#0d9488',
+      accentColorDark: '#f59e0b',
+    });
+
+    await hydrateAppPreferences({ force: true });
+
+    setAccentColor('light', '');
+    expect(getAccentColor('light')).toBe('');
+    expect(getAccentColor('dark')).toBe('#f59e0b');
   });
 });

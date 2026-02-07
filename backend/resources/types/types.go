@@ -42,6 +42,8 @@ type AppSettings struct {
 	PaletteHueDark                   int      `json:"paletteHueDark"`                   // Hue for gray palette tint in dark theme (0-360)
 	PaletteToneDark                  int      `json:"paletteToneDark"`                  // Tone intensity for gray palette tint in dark theme (0-100)
 	PaletteBrightnessDark            int      `json:"paletteBrightnessDark"`            // Brightness offset for gray palette in dark theme (-50 to +50)
+	AccentColorLight                 string   `json:"accentColorLight"`                 // Custom accent hex for light theme (empty = default)
+	AccentColorDark                  string   `json:"accentColorDark"`                  // Custom accent hex for dark theme (empty = default)
 }
 
 // ThemeInfo represents theme information to send to frontend

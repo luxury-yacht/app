@@ -95,6 +95,8 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		PaletteHueDark:                   120,
 		PaletteToneDark:                  40,
 		PaletteBrightnessDark:            10,
+		AccentColorLight:                 "#0d9488",
+		AccentColorDark:                  "#f59e0b",
 	}
 
 	require.NoError(t, app.saveAppSettings())
@@ -114,6 +116,8 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.Equal(t, 120, app.appSettings.PaletteHueDark)
 	require.Equal(t, 40, app.appSettings.PaletteToneDark)
 	require.Equal(t, 10, app.appSettings.PaletteBrightnessDark)
+	require.Equal(t, "#0d9488", app.appSettings.AccentColorLight)
+	require.Equal(t, "#f59e0b", app.appSettings.AccentColorDark)
 }
 
 func TestAppSetThemePersistsAndLogs(t *testing.T) {
@@ -401,4 +405,57 @@ func TestAppPaletteTintMigration(t *testing.T) {
 	require.Equal(t, 180, app.appSettings.PaletteHueDark)
 	require.Equal(t, 65, app.appSettings.PaletteToneDark)
 	require.Equal(t, -10, app.appSettings.PaletteBrightnessDark)
+}
+
+func TestAppSetAccentColorPersists(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	// Set light accent color.
+	require.NoError(t, app.SetAccentColor("light", "#ff5733"))
+	require.Equal(t, "#ff5733", app.appSettings.AccentColorLight)
+	// Dark theme remains untouched.
+	require.Equal(t, "", app.appSettings.AccentColorDark)
+
+	// Round-trips through save/load.
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, "#ff5733", app.appSettings.AccentColorLight)
+	require.Equal(t, "", app.appSettings.AccentColorDark)
+
+	// Logs the change.
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	last := entries[len(entries)-1]
+	require.Equal(t, "INFO", last.Level)
+	require.Contains(t, last.Message, "Accent color (light) changed to: #ff5733")
+}
+
+func TestAppSetAccentColorValidation(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	// Invalid theme returns error.
+	err := app.SetAccentColor("blue", "#ff5733")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid accent color theme")
+
+	// Invalid hex format returns error.
+	err = app.SetAccentColor("light", "ff5733")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid accent color format")
+
+	// Short hex returns error.
+	err = app.SetAccentColor("light", "#fff")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid accent color format")
+
+	// Non-hex characters return error.
+	err = app.SetAccentColor("dark", "#zzzzzz")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid accent color format")
+
+	// Empty string is accepted (reset).
+	require.NoError(t, app.SetAccentColor("dark", ""))
+	require.Equal(t, "", app.appSettings.AccentColorDark)
 }

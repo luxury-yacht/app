@@ -206,6 +206,35 @@
   font-family: var(--font-family-mono);
 }
 
+/* Accent Color Picker */
+.accent-color-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.accent-color-row label {
+  min-width: 5.5rem;
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+}
+
+.accent-color-row input[type="color"] {
+  width: 32px;
+  height: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  padding: 0;
+  background: none;
+}
+
+.accent-color-value {
+  font-size: var(--font-size-small);
+  color: var(--color-text-secondary);
+  font-family: var(--font-family-mono);
+}
+
 .setting-description {
   margin-left: 1rem;
   font-size: var(--font-size-small);

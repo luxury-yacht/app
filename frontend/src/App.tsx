@@ -19,12 +19,17 @@ import { eventBus } from '@/core/events';
 import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { hydrateAppPreferences, getPaletteTint } from '@/core/settings/appPreferences';
+import { hydrateAppPreferences, getPaletteTint, getAccentColor } from '@/core/settings/appPreferences';
 import {
   applyTintedPalette,
   savePaletteTintToLocalStorage,
   isPaletteActive,
 } from '@utils/paletteTint';
+import {
+  applyAccentColor,
+  applyAccentBg,
+  saveAccentColorToLocalStorage,
+} from '@utils/accentColor';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
@@ -83,6 +88,19 @@ function AppContent() {
           applyTintedPalette(tint.hue, tint.tone, tint.brightness);
           savePaletteTintToLocalStorage(currentTheme, tint.hue, tint.tone, tint.brightness);
         }
+
+        // Apply accent color overrides for both palettes and accent-bg for the current theme.
+        const lightAccent = getAccentColor('light');
+        const darkAccent = getAccentColor('dark');
+        if (lightAccent || darkAccent) {
+          applyAccentColor(lightAccent, darkAccent);
+          applyAccentBg(
+            currentTheme === 'light' ? lightAccent : darkAccent,
+            currentTheme
+          );
+        }
+        saveAccentColorToLocalStorage('light', lightAccent);
+        saveAccentColorToLocalStorage('dark', darkAccent);
       } finally {
         if (active) {
           initializeMetricsRefreshInterval();
@@ -103,6 +121,11 @@ function AppContent() {
         applyTintedPalette(0, 0, 0);
       }
       savePaletteTintToLocalStorage(newTheme, tint.hue, tint.tone, tint.brightness);
+
+      // Re-apply accent-bg for the new theme.
+      const accent = getAccentColor(newTheme);
+      applyAccentBg(accent, newTheme);
+      saveAccentColorToLocalStorage(newTheme, accent);
     });
 
     return () => {

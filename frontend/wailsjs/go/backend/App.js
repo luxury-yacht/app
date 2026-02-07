@@ -354,6 +354,10 @@ export function SendShellInput(arg1, arg2) {
   return window['go']['backend']['App']['SendShellInput'](arg1, arg2);
 }
 
+export function SetAccentColor(arg1, arg2) {
+  return window['go']['backend']['App']['SetAccentColor'](arg1, arg2);
+}
+
 export function SetApiExtensionsClient(arg1) {
   return window['go']['backend']['App']['SetApiExtensionsClient'](arg1);
 }

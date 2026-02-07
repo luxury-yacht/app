@@ -23,6 +23,8 @@ interface AppPreferences {
   paletteHueDark: number;
   paletteToneDark: number;
   paletteBrightnessDark: number;
+  accentColorLight: string;
+  accentColorDark: string;
 }
 
 interface AppSettingsPayload {
@@ -43,6 +45,8 @@ interface AppSettingsPayload {
   paletteHueDark?: number;
   paletteToneDark?: number;
   paletteBrightnessDark?: number;
+  accentColorLight?: string;
+  accentColorDark?: string;
 }
 
 const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
@@ -60,6 +64,8 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   paletteHueDark: 0,
   paletteToneDark: 0,
   paletteBrightnessDark: 0,
+  accentColorLight: '',
+  accentColorDark: '',
 };
 
 let preferenceCache: AppPreferences = { ...DEFAULT_PREFERENCES };
@@ -129,6 +135,12 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
       tone: next.paletteToneDark,
       brightness: next.paletteBrightnessDark,
     });
+  }
+  if (previous.accentColorLight !== next.accentColorLight) {
+    eventBus.emit('settings:accent-color', { theme: 'light', color: next.accentColorLight });
+  }
+  if (previous.accentColorDark !== next.accentColorDark) {
+    eventBus.emit('settings:accent-color', { theme: 'dark', color: next.accentColorDark });
   }
 };
 
@@ -201,6 +213,8 @@ export const hydrateAppPreferences = async (options?: {
     paletteToneDark: backendSettings?.paletteToneDark ?? DEFAULT_PREFERENCES.paletteToneDark,
     paletteBrightnessDark:
       backendSettings?.paletteBrightnessDark ?? DEFAULT_PREFERENCES.paletteBrightnessDark,
+    accentColorLight: backendSettings?.accentColorLight ?? DEFAULT_PREFERENCES.accentColorLight,
+    accentColorDark: backendSettings?.accentColorDark ?? DEFAULT_PREFERENCES.accentColorDark,
   };
 
   hydrated = true;
@@ -249,6 +263,32 @@ export const getPaletteTint = (
     tone: preferenceCache.paletteToneDark,
     brightness: preferenceCache.paletteBrightnessDark,
   };
+};
+
+// Returns the custom accent color hex for the specified theme (empty = default).
+export const getAccentColor = (theme: 'light' | 'dark'): string => {
+  return theme === 'light' ? preferenceCache.accentColorLight : preferenceCache.accentColorDark;
+};
+
+// Persist accent color for a specific theme to backend via fire-and-forget.
+export const setAccentColor = (theme: 'light' | 'dark', color: string): void => {
+  hydrated = true;
+  if (theme === 'light') {
+    updatePreferenceCache({ accentColorLight: color });
+  } else {
+    updatePreferenceCache({ accentColorDark: color });
+  }
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  const setter = runtimeApp?.SetAccentColor;
+  if (typeof setter !== 'function') {
+    return;
+  }
+  void setter(theme, color).catch((error: unknown) => {
+    console.error('Failed to persist accent color:', error);
+  });
 };
 
 export const setThemePreference = async (theme: ThemePreference): Promise<void> => {

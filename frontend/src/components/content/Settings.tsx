@@ -23,6 +23,8 @@ import {
   setUseShortResourceNames as persistUseShortResourceNames,
   setPaletteTint as persistPaletteTint,
   getPaletteTint,
+  getAccentColor,
+  setAccentColor as persistAccentColor,
 } from '@/core/settings/appPreferences';
 import { useTheme } from '@/core/contexts/ThemeContext';
 import {
@@ -31,6 +33,12 @@ import {
   savePaletteTintToLocalStorage,
   isPaletteActive,
 } from '@utils/paletteTint';
+import {
+  applyAccentColor,
+  applyAccentBg,
+  saveAccentColorToLocalStorage,
+  clearAccentColor,
+} from '@utils/accentColor';
 import {
   getGridTablePersistenceMode,
   setGridTablePersistenceMode,
@@ -67,6 +75,9 @@ function Settings({ onClose }: SettingsProps) {
   const [paletteBrightness, setPaletteBrightness] = useState(0);
   // Debounce timer ref for palette tint persistence
   const palettePersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Accent color state and debounce timer
+  const [accentColor, setAccentColorState] = useState('');
+  const accentPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Controls the confirmation modal for clearing all persisted app state.
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   // Controls the confirmation modal for resetting view persistence.
@@ -86,12 +97,13 @@ function Settings({ onClose }: SettingsProps) {
     return themeCleanup;
   }, []);
 
-  // Reload slider values when the resolved theme changes.
+  // Reload slider values and accent color when the resolved theme changes.
   useEffect(() => {
     const tint = getPaletteTint(resolvedTheme);
     setPaletteHue(tint.hue);
     setPaletteTone(tint.tone);
     setPaletteBrightness(tint.brightness);
+    setAccentColorState(getAccentColor(resolvedTheme));
   }, [resolvedTheme]);
 
   const loadThemeInfo = async () => {
@@ -199,6 +211,42 @@ function Settings({ onClose }: SettingsProps) {
     savePaletteTintToLocalStorage(resolvedTheme, 0, 0, 0);
   };
 
+  // Debounced persistence for accent color — avoids hammering the backend during fast changes.
+  const debounceAccentPersist = useCallback(
+    (color: string) => {
+      if (accentPersistTimer.current) {
+        clearTimeout(accentPersistTimer.current);
+      }
+      accentPersistTimer.current = setTimeout(() => {
+        persistAccentColor(resolvedTheme, color);
+        saveAccentColorToLocalStorage(resolvedTheme, color);
+      }, 300);
+    },
+    [resolvedTheme]
+  );
+
+  const handleAccentColorChange = (hex: string) => {
+    setAccentColorState(hex);
+    applyAccentColor(
+      resolvedTheme === 'light' ? hex : getAccentColor('light'),
+      resolvedTheme === 'dark' ? hex : getAccentColor('dark')
+    );
+    applyAccentBg(hex, resolvedTheme);
+    debounceAccentPersist(hex);
+  };
+
+  // Reset accent color for the current resolved theme.
+  const handleAccentReset = () => {
+    setAccentColorState('');
+    applyAccentColor(
+      resolvedTheme === 'light' ? '' : getAccentColor('light'),
+      resolvedTheme === 'dark' ? '' : getAccentColor('dark')
+    );
+    applyAccentBg('', resolvedTheme);
+    persistAccentColor(resolvedTheme, '');
+    saveAccentColorToLocalStorage(resolvedTheme, '');
+  };
+
   const handleAddKubeconfigPath = async () => {
     setKubeconfigPathsSelecting(true);
     try {
@@ -255,8 +303,9 @@ function Settings({ onClose }: SettingsProps) {
   const handleClearAllState = async () => {
     setIsClearStateConfirmOpen(false);
     try {
-      // Clear palette tint before reload so UI reverts immediately.
+      // Clear palette tint and accent color before reload so UI reverts immediately.
       clearTintedPalette();
+      clearAccentColor();
 
       const clearAppState = (window as any)?.go?.backend?.App?.ClearAppState;
       if (typeof clearAppState !== 'function') {
@@ -395,6 +444,25 @@ function Settings({ onClose }: SettingsProps) {
               {paletteBrightness > 0 ? '+' : ''}
               {paletteBrightness}
             </span>
+          </div>
+          <div className="accent-color-row">
+            <label>Accent Color</label>
+            <input
+              type="color"
+              value={accentColor || (resolvedTheme === 'light' ? '#0d9488' : '#f59e0b')}
+              onChange={(e) => handleAccentColorChange(e.target.value)}
+            />
+            <span className="accent-color-value">
+              {accentColor || 'Default'}
+            </span>
+            <button
+              type="button"
+              className="button generic"
+              onClick={handleAccentReset}
+              disabled={!accentColor}
+            >
+              Reset
+            </button>
           </div>
           <button
             type="button"

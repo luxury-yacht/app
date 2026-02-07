@@ -187,6 +187,8 @@ export function ScaleWorkload(arg1:string,arg2:string,arg3:string,arg4:string,ar
 
 export function SendShellInput(arg1:string,arg2:string):Promise<void>;
 
+export function SetAccentColor(arg1:string,arg2:string):Promise<void>;
+
 export function SetApiExtensionsClient(arg1:clientset.Interface):Promise<void>;
 
 export function SetAutoRefreshEnabled(arg1:boolean):Promise<void>;

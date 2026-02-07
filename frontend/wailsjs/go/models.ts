@@ -671,6 +671,8 @@ export namespace types {
 	    paletteHueDark: number;
 	    paletteToneDark: number;
 	    paletteBrightnessDark: number;
+	    accentColorLight: string;
+	    accentColorDark: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -691,6 +693,8 @@ export namespace types {
 	        this.paletteHueDark = source["paletteHueDark"];
 	        this.paletteToneDark = source["paletteToneDark"];
 	        this.paletteBrightnessDark = source["paletteBrightnessDark"];
+	        this.accentColorLight = source["accentColorLight"];
+	        this.accentColorDark = source["accentColorDark"];
 	    }
 	}
 	export class CRDCondition {

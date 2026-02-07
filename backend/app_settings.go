@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -46,7 +47,9 @@ type settingsPreferences struct {
 	PaletteBrightnessLight int `json:"paletteBrightnessLight"`
 	PaletteHueDark         int `json:"paletteHueDark"`
 	PaletteToneDark        int `json:"paletteToneDark"`
-	PaletteBrightnessDark  int `json:"paletteBrightnessDark"`
+	PaletteBrightnessDark  int    `json:"paletteBrightnessDark"`
+	AccentColorLight       string `json:"accentColorLight,omitempty"`
+	AccentColorDark        string `json:"accentColorDark,omitempty"`
 }
 
 // settingsRefresh captures user-configurable refresh settings.
@@ -297,6 +300,8 @@ func (a *App) loadAppSettings() error {
 		PaletteHueDark:                   settings.Preferences.PaletteHueDark,
 		PaletteToneDark:                  settings.Preferences.PaletteToneDark,
 		PaletteBrightnessDark:            settings.Preferences.PaletteBrightnessDark,
+		AccentColorLight:                 settings.Preferences.AccentColorLight,
+		AccentColorDark:                  settings.Preferences.AccentColorDark,
 	}
 	return nil
 }
@@ -327,6 +332,8 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.PaletteHueDark = a.appSettings.PaletteHueDark
 	settings.Preferences.PaletteToneDark = a.appSettings.PaletteToneDark
 	settings.Preferences.PaletteBrightnessDark = a.appSettings.PaletteBrightnessDark
+	settings.Preferences.AccentColorLight = a.appSettings.AccentColorLight
+	settings.Preferences.AccentColorDark = a.appSettings.AccentColorDark
 
 	settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
 
@@ -580,6 +587,36 @@ func (a *App) SetPaletteTint(theme string, hue, tone, brightness int) error {
 		a.appSettings.PaletteHueDark = hue
 		a.appSettings.PaletteToneDark = tone
 		a.appSettings.PaletteBrightnessDark = brightness
+	}
+
+	return a.saveAppSettings()
+}
+
+// validHexColorRe matches a 7-character hex color string (#rrggbb).
+var validHexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// SetAccentColor persists a custom accent color for the specified theme ("light" or "dark").
+// The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
+func (a *App) SetAccentColor(theme string, color string) error {
+	if theme != "light" && theme != "dark" {
+		return fmt.Errorf("invalid accent color theme: %s", theme)
+	}
+	if color != "" && !validHexColorRe.MatchString(color) {
+		return fmt.Errorf("invalid accent color format: %s (expected #rrggbb)", color)
+	}
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", theme, color), "Settings")
+
+	if theme == "light" {
+		a.appSettings.AccentColorLight = color
+	} else {
+		a.appSettings.AccentColorDark = color
 	}
 
 	return a.saveAppSettings()
