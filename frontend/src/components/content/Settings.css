@@ -223,7 +223,9 @@
   font-size: var(--font-size-normal);
   line-height: 1;
   padding: 2px 6px;
-  transition: color var(--transition-fast), border-color var(--transition-fast);
+  transition:
+    color var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .palette-row-reset:hover:not(:disabled) {

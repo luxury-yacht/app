@@ -19,17 +19,17 @@ import { eventBus } from '@/core/events';
 import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { hydrateAppPreferences, getPaletteTint, getAccentColor } from '@/core/settings/appPreferences';
+import {
+  hydrateAppPreferences,
+  getPaletteTint,
+  getAccentColor,
+} from '@/core/settings/appPreferences';
 import {
   applyTintedPalette,
   savePaletteTintToLocalStorage,
   isPaletteActive,
 } from '@utils/paletteTint';
-import {
-  applyAccentColor,
-  applyAccentBg,
-  saveAccentColorToLocalStorage,
-} from '@utils/accentColor';
+import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '@utils/accentColor';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
@@ -94,10 +94,7 @@ function AppContent() {
         const darkAccent = getAccentColor('dark');
         if (lightAccent || darkAccent) {
           applyAccentColor(lightAccent, darkAccent);
-          applyAccentBg(
-            currentTheme === 'light' ? lightAccent : darkAccent,
-            currentTheme
-          );
+          applyAccentBg(currentTheme === 'light' ? lightAccent : darkAccent, currentTheme);
         }
         saveAccentColorToLocalStorage('light', lightAccent);
         saveAccentColorToLocalStorage('dark', darkAccent);

@@ -432,7 +432,13 @@ function Settings({ onClose }: SettingsProps) {
             onChange={(e) => handlePaletteHueChange(Number(e.target.value))}
           />
           <span className="palette-slider-value">{paletteHue}°</span>
-          <button type="button" className="palette-row-reset" onClick={handleHueReset} disabled={paletteHue === 0} title="Reset Hue">
+          <button
+            type="button"
+            className="palette-row-reset"
+            onClick={handleHueReset}
+            disabled={paletteHue === 0}
+            title="Reset Hue"
+          >
             ↺
           </button>
 
@@ -450,7 +456,13 @@ function Settings({ onClose }: SettingsProps) {
             }}
           />
           <span className="palette-slider-value">{paletteTone}%</span>
-          <button type="button" className="palette-row-reset" onClick={handleToneReset} disabled={paletteTone === 0} title="Reset Tone">
+          <button
+            type="button"
+            className="palette-row-reset"
+            onClick={handleToneReset}
+            disabled={paletteTone === 0}
+            title="Reset Tone"
+          >
             ↺
           </button>
 
@@ -468,7 +480,13 @@ function Settings({ onClose }: SettingsProps) {
             {paletteBrightness > 0 ? '+' : ''}
             {paletteBrightness}
           </span>
-          <button type="button" className="palette-row-reset" onClick={handleBrightnessReset} disabled={paletteBrightness === 0} title="Reset Brightness">
+          <button
+            type="button"
+            className="palette-row-reset"
+            onClick={handleBrightnessReset}
+            disabled={paletteBrightness === 0}
+            title="Reset Brightness"
+          >
             ↺
           </button>
 
@@ -479,10 +497,14 @@ function Settings({ onClose }: SettingsProps) {
             value={accentColor || (resolvedTheme === 'light' ? '#0d9488' : '#f59e0b')}
             onChange={(e) => handleAccentColorChange(e.target.value)}
           />
-          <span className="palette-slider-value">
-            {accentColor || 'Default'}
-          </span>
-          <button type="button" className="palette-row-reset" onClick={handleAccentReset} disabled={!accentColor} title="Reset Accent Color">
+          <span className="palette-slider-value">{accentColor || 'Default'}</span>
+          <button
+            type="button"
+            className="palette-row-reset"
+            onClick={handleAccentReset}
+            disabled={!accentColor}
+            title="Reset Accent Color"
+          >
             ↺
           </button>
 
