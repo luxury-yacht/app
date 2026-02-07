@@ -31,7 +31,6 @@ import {
   applyTintedPalette,
   clearTintedPalette,
   savePaletteTintToLocalStorage,
-  isPaletteActive,
 } from '@utils/paletteTint';
 import {
   applyAccentColor,
@@ -201,14 +200,23 @@ function Settings({ onClose }: SettingsProps) {
     debouncePalettePersist(paletteHue, paletteTone, value);
   };
 
-  // Reset palette for the current resolved theme only.
-  const handlePaletteReset = () => {
+  // Per-value reset handlers for individual palette controls.
+  const handleHueReset = () => {
     setPaletteHue(0);
+    applyTintedPalette(0, paletteTone, paletteBrightness);
+    debouncePalettePersist(0, paletteTone, paletteBrightness);
+  };
+
+  const handleToneReset = () => {
     setPaletteTone(0);
+    applyTintedPalette(paletteHue, 0, paletteBrightness);
+    debouncePalettePersist(paletteHue, 0, paletteBrightness);
+  };
+
+  const handleBrightnessReset = () => {
     setPaletteBrightness(0);
-    clearTintedPalette();
-    persistPaletteTint(resolvedTheme, 0, 0, 0);
-    savePaletteTintToLocalStorage(resolvedTheme, 0, 0, 0);
+    applyTintedPalette(paletteHue, paletteTone, 0);
+    debouncePalettePersist(paletteHue, paletteTone, 0);
   };
 
   // Debounced persistence for accent color — avoids hammering the backend during fast changes.
@@ -246,6 +254,20 @@ function Settings({ onClose }: SettingsProps) {
     persistAccentColor(resolvedTheme, '');
     saveAccentColorToLocalStorage(resolvedTheme, '');
   };
+
+  // Reset all appearance customizations for the current resolved theme.
+  const handleResetAll = () => {
+    setPaletteHue(0);
+    setPaletteTone(0);
+    setPaletteBrightness(0);
+    clearTintedPalette();
+    persistPaletteTint(resolvedTheme, 0, 0, 0);
+    savePaletteTintToLocalStorage(resolvedTheme, 0, 0, 0);
+    handleAccentReset();
+  };
+
+  const isAnyCustomized =
+    paletteHue !== 0 || paletteTone !== 0 || paletteBrightness !== 0 || !!accentColor;
 
   const handleAddKubeconfigPath = async () => {
     setKubeconfigPathsSelecting(true);
@@ -399,78 +421,78 @@ function Settings({ onClose }: SettingsProps) {
         </div>
 
         <div className="palette-tint-controls">
-          <div className="palette-slider-row">
-            <label htmlFor="palette-hue">Hue</label>
-            <input
-              type="range"
-              id="palette-hue"
-              className="palette-slider palette-slider-hue"
-              min={0}
-              max={360}
-              value={paletteHue}
-              onChange={(e) => handlePaletteHueChange(Number(e.target.value))}
-            />
-            <span className="palette-slider-value">{paletteHue}°</span>
-          </div>
-          <div className="palette-slider-row">
-            <label htmlFor="palette-tone">Tone</label>
-            <input
-              type="range"
-              id="palette-tone"
-              className="palette-slider palette-slider-tone"
-              min={0}
-              max={100}
-              value={paletteTone}
-              onChange={(e) => handlePaletteToneChange(Number(e.target.value))}
-              style={{
-                // Dynamic gradient from neutral gray to tinted at the current hue
-                background: `linear-gradient(to right, hsl(0, 0%, 50%), hsl(${paletteHue}, 20%, 50%))`,
-              }}
-            />
-            <span className="palette-slider-value">{paletteTone}%</span>
-          </div>
-          <div className="palette-slider-row">
-            <label htmlFor="palette-brightness">Brightness</label>
-            <input
-              type="range"
-              id="palette-brightness"
-              className="palette-slider palette-slider-brightness"
-              min={-50}
-              max={50}
-              value={paletteBrightness}
-              onChange={(e) => handlePaletteBrightnessChange(Number(e.target.value))}
-            />
-            <span className="palette-slider-value">
-              {paletteBrightness > 0 ? '+' : ''}
-              {paletteBrightness}
-            </span>
-          </div>
-          <div className="accent-color-row">
-            <label>Accent Color</label>
-            <input
-              type="color"
-              value={accentColor || (resolvedTheme === 'light' ? '#0d9488' : '#f59e0b')}
-              onChange={(e) => handleAccentColorChange(e.target.value)}
-            />
-            <span className="accent-color-value">
-              {accentColor || 'Default'}
-            </span>
-            <button
-              type="button"
-              className="button generic"
-              onClick={handleAccentReset}
-              disabled={!accentColor}
-            >
-              Reset
-            </button>
-          </div>
+          <label htmlFor="palette-hue">Hue</label>
+          <input
+            type="range"
+            id="palette-hue"
+            className="palette-slider palette-slider-hue"
+            min={0}
+            max={360}
+            value={paletteHue}
+            onChange={(e) => handlePaletteHueChange(Number(e.target.value))}
+          />
+          <span className="palette-slider-value">{paletteHue}°</span>
+          <button type="button" className="palette-row-reset" onClick={handleHueReset} disabled={paletteHue === 0} title="Reset Hue">
+            ↺
+          </button>
+
+          <label htmlFor="palette-tone">Tone</label>
+          <input
+            type="range"
+            id="palette-tone"
+            className="palette-slider palette-slider-tone"
+            min={0}
+            max={100}
+            value={paletteTone}
+            onChange={(e) => handlePaletteToneChange(Number(e.target.value))}
+            style={{
+              background: `linear-gradient(to right, hsl(0, 0%, 50%), hsl(${paletteHue}, 20%, 50%))`,
+            }}
+          />
+          <span className="palette-slider-value">{paletteTone}%</span>
+          <button type="button" className="palette-row-reset" onClick={handleToneReset} disabled={paletteTone === 0} title="Reset Tone">
+            ↺
+          </button>
+
+          <label htmlFor="palette-brightness">Brightness</label>
+          <input
+            type="range"
+            id="palette-brightness"
+            className="palette-slider palette-slider-brightness"
+            min={-50}
+            max={50}
+            value={paletteBrightness}
+            onChange={(e) => handlePaletteBrightnessChange(Number(e.target.value))}
+          />
+          <span className="palette-slider-value">
+            {paletteBrightness > 0 ? '+' : ''}
+            {paletteBrightness}
+          </span>
+          <button type="button" className="palette-row-reset" onClick={handleBrightnessReset} disabled={paletteBrightness === 0} title="Reset Brightness">
+            ↺
+          </button>
+
+          <label>Accent</label>
+          <input
+            type="color"
+            className="palette-accent-swatch"
+            value={accentColor || (resolvedTheme === 'light' ? '#0d9488' : '#f59e0b')}
+            onChange={(e) => handleAccentColorChange(e.target.value)}
+          />
+          <span className="palette-slider-value">
+            {accentColor || 'Default'}
+          </span>
+          <button type="button" className="palette-row-reset" onClick={handleAccentReset} disabled={!accentColor} title="Reset Accent Color">
+            ↺
+          </button>
+
           <button
             type="button"
-            className="button generic"
-            onClick={handlePaletteReset}
-            disabled={!isPaletteActive(paletteTone, paletteBrightness) && paletteHue === 0}
+            className="button generic palette-reset-all"
+            onClick={handleResetAll}
+            disabled={!isAnyCustomized}
           >
-            Reset Palette
+            Reset All
           </button>
         </div>
       </div>

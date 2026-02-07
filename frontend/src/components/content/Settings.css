@@ -120,31 +120,26 @@
   color: var(--color-text);
 }
 
-/* Palette Tint Controls */
+/* Palette Tint Controls — 4-column grid: label | control | value | reset */
 .palette-tint-controls {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: var(--spacing-xs) var(--spacing-sm);
+  align-items: center;
   margin-top: var(--spacing-sm);
   padding-left: 1rem;
 }
 
-.palette-slider-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.palette-slider-row label {
-  min-width: 5.5rem;
+.palette-tint-controls > label {
   font-size: var(--font-size-normal);
   color: var(--color-text);
+  white-space: nowrap;
 }
 
 .palette-slider {
   -webkit-appearance: none;
   appearance: none;
-  flex: 1;
+  width: 100%;
   height: 6px;
   border-radius: 3px;
   outline: none;
@@ -206,20 +201,8 @@
   font-family: var(--font-family-mono);
 }
 
-/* Accent Color Picker */
-.accent-color-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.accent-color-row label {
-  min-width: 5.5rem;
-  font-size: var(--font-size-normal);
-  color: var(--color-text);
-}
-
-.accent-color-row input[type="color"] {
+/* Accent color swatch in the grid */
+.palette-accent-swatch {
   width: 32px;
   height: 24px;
   border: 1px solid var(--color-border);
@@ -227,12 +210,37 @@
   cursor: pointer;
   padding: 0;
   background: none;
+  justify-self: start;
 }
 
-.accent-color-value {
-  font-size: var(--font-size-small);
+/* Per-row reset button */
+.palette-row-reset {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
   color: var(--color-text-secondary);
-  font-family: var(--font-family-mono);
+  cursor: pointer;
+  font-size: var(--font-size-normal);
+  line-height: 1;
+  padding: 2px 6px;
+  transition: color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.palette-row-reset:hover:not(:disabled) {
+  color: var(--color-text);
+  border-color: var(--color-text-secondary);
+}
+
+.palette-row-reset:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Reset All button spans the full grid width */
+.palette-reset-all {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin-top: var(--spacing-xs);
 }
 
 .setting-description {
