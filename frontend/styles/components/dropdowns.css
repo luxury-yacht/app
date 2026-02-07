@@ -161,11 +161,6 @@
   color: var(--color-text);
   user-select: none;
   white-space: nowrap;
-  /* Left border for accent on highlight/focus */
-  border-left: 3px solid transparent;
-  transition:
-    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
-    border-color var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
 .dropdown-option:hover:not(.disabled) {
