@@ -33,10 +33,8 @@ declare -A CONTEXT_NAMES=(
   [prod-cluster]="prod-cluster"
 )
 
-# Deduplicated list of kubeconfig filenames for cleanup
-KUBECONFIG_NAMES=("dev-stg-clusters" "prod-clusters")
-
 start_clusters() {
+  backup_kube
   mkdir -p "${KUBECONFIG_DIR}"
 
   for cluster in "${!CLUSTERS[@]}"; do
@@ -91,16 +89,37 @@ stop_clusters() {
     fi
   done
 
-  # Clean up kubeconfig files
-  for name in "${KUBECONFIG_NAMES[@]}"; do
-    kubeconfig="${KUBECONFIG_DIR}/${name}"
-    if [[ -f "${kubeconfig}" ]]; then
-      rm "${kubeconfig}"
-      echo "Removed ${kubeconfig}"
-    fi
-  done
-
   echo "All clusters stopped."
+
+  rm -rf "${KUBECONFIG_DIR}"
+  restore_kube
+}
+
+BACKUP_DIR="${HOME}/.kube.luxury-yacht-test"
+
+backup_kube() {
+  if [[ ! -d "${KUBECONFIG_DIR}" ]]; then
+    echo "Nothing to back up: ${KUBECONFIG_DIR} does not exist."
+    return
+  fi
+
+  if [[ -d "${BACKUP_DIR}" ]]; then
+    echo "Backup already exists at ${BACKUP_DIR}. Restore it first before creating a new backup."
+    return 1
+  fi
+
+  mv "${KUBECONFIG_DIR}" "${BACKUP_DIR}"
+  echo "Backed up ${KUBECONFIG_DIR} to ${BACKUP_DIR}"
+}
+
+restore_kube() {
+  if [[ ! -d "${BACKUP_DIR}" ]]; then
+    echo "No backup found at ${BACKUP_DIR}."
+    return 1
+  fi
+
+  mv "${BACKUP_DIR}" "${KUBECONFIG_DIR}"
+  echo "Restored ${KUBECONFIG_DIR} from ${BACKUP_DIR}"
 }
 
 case "${1:-}" in
