@@ -14,17 +14,17 @@
 // Gray scale token definitions with their original lightness values.
 // Lightness is derived from the neutral hex values in colors.css (:root).
 export const GRAY_STEPS: { token: string; lightness: number }[] = [
-  { token: '--color-gray-950', lightness: 4 },
-  { token: '--color-gray-900', lightness: 10 },
-  { token: '--color-gray-800', lightness: 18 },
-  { token: '--color-gray-700', lightness: 25 },
-  { token: '--color-gray-600', lightness: 32 },
-  { token: '--color-gray-500', lightness: 44 },
-  { token: '--color-gray-400', lightness: 54 },
-  { token: '--color-gray-300', lightness: 69 },
-  { token: '--color-gray-200', lightness: 82 },
-  { token: '--color-gray-100', lightness: 88 },
-  { token: '--color-gray-50', lightness: 96 },
+  { token: '--color-base-950', lightness: 4 },
+  { token: '--color-base-900', lightness: 10 },
+  { token: '--color-base-800', lightness: 18 },
+  { token: '--color-base-700', lightness: 25 },
+  { token: '--color-base-600', lightness: 32 },
+  { token: '--color-base-500', lightness: 44 },
+  { token: '--color-base-400', lightness: 54 },
+  { token: '--color-base-300', lightness: 69 },
+  { token: '--color-base-200', lightness: 82 },
+  { token: '--color-base-100', lightness: 88 },
+  { token: '--color-base-50', lightness: 96 },
 ];
 
 // Maximum CSS saturation percentage when tone is at 100.

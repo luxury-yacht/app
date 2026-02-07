@@ -85,7 +85,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     mediaQuery.addEventListener('change', handleSystemThemeChange);
 
     const unsubscribeTheme = eventBus.on('settings:theme', (nextTheme) => {
-      const resolved = nextTheme === 'system' ? detectSystemTheme() : (nextTheme as 'light' | 'dark');
+      const resolved =
+        nextTheme === 'system' ? detectSystemTheme() : (nextTheme as 'light' | 'dark');
       applyTheme(resolved);
       setTheme(nextTheme as Theme);
     });

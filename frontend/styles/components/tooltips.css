@@ -47,17 +47,17 @@
 
 /* Dark tooltip (for light backgrounds) */
 .tooltip.dark {
-  --tooltip-bg: var(--color-gray-800, #1e293b);
-  --tooltip-text: var(--color-gray-100, #f1f5f9);
-  --tooltip-border: var(--color-gray-700, #334155);
+  --tooltip-bg: var(--color-base-800, #1e293b);
+  --tooltip-text: var(--color-base-100, #f1f5f9);
+  --tooltip-border: var(--color-base-700, #334155);
   --tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 /* Light tooltip (for dark backgrounds) */
 .tooltip.light {
   --tooltip-bg: #ffffff;
-  --tooltip-text: var(--color-gray-800, #1e293b);
-  --tooltip-border: var(--color-gray-200, #e2e8f0);
+  --tooltip-text: var(--color-base-800, #1e293b);
+  --tooltip-border: var(--color-base-200, #e2e8f0);
   --tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 

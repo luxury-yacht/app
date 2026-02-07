@@ -74,7 +74,12 @@ export interface AppEvents {
   'settings:short-names': boolean;
   'settings:theme': string;
   'settings:metrics-interval': number;
-  'settings:palette-tint': { theme: 'light' | 'dark'; hue: number; tone: number; brightness: number };
+  'settings:palette-tint': {
+    theme: 'light' | 'dark';
+    hue: number;
+    tone: number;
+    brightness: number;
+  };
   'settings:theme-resolved': 'light' | 'dark';
 
   // Feature events

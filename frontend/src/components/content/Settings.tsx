@@ -29,7 +29,6 @@ import {
   applyTintedPalette,
   clearTintedPalette,
   savePaletteTintToLocalStorage,
-  clearPaletteTintFromLocalStorage,
   isPaletteActive,
 } from '@utils/paletteTint';
 import {
@@ -108,11 +107,7 @@ function Settings({ onClose }: SettingsProps) {
     try {
       const preferences = await hydrateAppPreferences();
       setUseShortResourceNames(preferences.useShortResourceNames);
-      // Load palette tint for the current resolved theme.
-      const tint = getPaletteTint(resolvedTheme);
-      setPaletteHue(tint.hue);
-      setPaletteTone(tint.tone);
-      setPaletteBrightness(tint.brightness);
+      // Palette sliders are loaded by the resolvedTheme effect.
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
     }

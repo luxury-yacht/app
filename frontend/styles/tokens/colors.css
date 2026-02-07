@@ -4,30 +4,30 @@
 
 :root {
   /* === Pure Grays (Text & Backgrounds) === */
-  --color-gray-950: #0a0a0a;
-  --color-gray-900: #1a1a1a;
-  --color-gray-800: #2d2d2d;
-  --color-gray-700: #404040;
-  --color-gray-600: #525252;
-  --color-gray-500: #707070;
-  --color-gray-400: #8a8a8a;
-  --color-gray-300: #b0b0b0;
-  --color-gray-200: #d0d0d0;
-  --color-gray-100: #e0e0e0;
-  --color-gray-50: #f5f5f5;
+  --color-base-950: #0a0a0a;
+  --color-base-900: #1a1a1a;
+  --color-base-800: #2d2d2d;
+  --color-base-700: #404040;
+  --color-base-600: #525252;
+  --color-base-500: #707070;
+  --color-base-400: #8a8a8a;
+  --color-base-300: #b0b0b0;
+  --color-base-200: #d0d0d0;
+  --color-base-100: #e0e0e0;
+  --color-base-50: #f5f5f5;
 
   /* === Gold/Amber (dark mode accents) === */
-  --color-gold-700: #b45309;
-  --color-gold-600: #d97706;
-  --color-gold-500: #f59e0b;
-  --color-gold-400: #fbbf24;
-  --color-gold-300: #fcd34d;
-  --color-gold-200: #fde68a;
+  --color-accent-dark-700: #b45309;
+  --color-accent-dark-600: #d97706;
+  --color-accent-dark-500: #f59e0b;
+  --color-accent-dark-400: #fbbf24;
+  --color-accent-dark-300: #fcd34d;
+  --color-accent-dark-200: #fde68a;
 
   /* === Teal (light mode accents) === */
-  --color-teal-700: #0f766e;
-  --color-teal-600: #0d9488;
-  --color-teal-500: #14b8a6;
-  --color-teal-400: #2dd4bf;
-  --color-teal-300: #5eead4;
+  --color-accent-light-700: #0f766e;
+  --color-accent-light-600: #0d9488;
+  --color-accent-light-500: #14b8a6;
+  --color-accent-light-400: #2dd4bf;
+  --color-accent-light-300: #5eead4;
 }

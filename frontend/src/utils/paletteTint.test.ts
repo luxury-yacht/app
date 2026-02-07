@@ -81,10 +81,10 @@ describe('paletteTint', () => {
     it('uses correct lightness for first and last steps with brightness=0', () => {
       const palette = generateTintedPalette(0, 100, 0);
       // gray-950 has lightness 4
-      expect(palette[0].token).toBe('--color-gray-950');
+      expect(palette[0].token).toBe('--color-base-950');
       expect(palette[0].value).toContain('4%');
       // gray-50 has lightness 96
-      expect(palette[10].token).toBe('--color-gray-50');
+      expect(palette[10].token).toBe('--color-base-50');
       expect(palette[10].value).toContain('96%');
     });
 

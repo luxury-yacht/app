@@ -160,11 +160,6 @@ describe('appPreferences', () => {
     expect(getPaletteTint('dark')).toEqual({ hue: 300, tone: 60, brightness: 20 });
     // Light theme should be unchanged.
     expect(getPaletteTint('light')).toEqual({ hue: 180, tone: 75, brightness: -25 });
-    expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith(
-      'dark',
-      300,
-      60,
-      20
-    );
+    expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith('dark', 300, 60, 20);
   });
 });
