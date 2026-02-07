@@ -230,8 +230,8 @@
   /* Segmented button */
   --segmented-bg: var(--color-base-200);
   --segmented-option-text: var(--color-base-700);
-  --segmented-option-divider: var(--color-base-300);
-  --segmented-option-divider-opacity: 0.9;
+  --segmented-option-divider: var(--color-base-400);
+  --segmented-option-divider-opacity: 1;
   --segmented-option-hover: var(--color-base-300);
   --segmented-option-active-bg: var(--color-accent-light-600);
   --segmented-option-active-hover: var(--color-accent-light-500);

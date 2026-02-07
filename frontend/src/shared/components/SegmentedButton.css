@@ -51,9 +51,9 @@
   font-weight: 600;
 }
 
-/* Hide separator next to active button */
-.segmented-button__option--active::after,
-.segmented-button__option--active + .segmented-button__option::after {
+/* Hide dividers adjacent to the active button */
+.segmented-button__option--active:not(:last-child)::after,
+.segmented-button__option:has(+ .segmented-button__option--active)::after {
   opacity: 0;
 }
 
