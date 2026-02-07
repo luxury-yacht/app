@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
@@ -34,6 +35,21 @@ type settingsPreferences struct {
 	UseShortResourceNames    bool             `json:"useShortResourceNames"`
 	Refresh                  *settingsRefresh `json:"refresh"`
 	GridTablePersistenceMode string           `json:"gridTablePersistenceMode"`
+
+	// Migration: old single-value palette fields, read-only, omitted when zero.
+	PaletteHue        int `json:"paletteHue,omitempty"`
+	PaletteTone       int `json:"paletteTone,omitempty"`
+	PaletteBrightness int `json:"paletteBrightness,omitempty"`
+
+	// Per-theme palette fields.
+	PaletteHueLight        int `json:"paletteHueLight"`
+	PaletteToneLight       int `json:"paletteToneLight"`
+	PaletteBrightnessLight int `json:"paletteBrightnessLight"`
+	PaletteHueDark         int `json:"paletteHueDark"`
+	PaletteToneDark        int `json:"paletteToneDark"`
+	PaletteBrightnessDark  int    `json:"paletteBrightnessDark"`
+	AccentColorLight       string `json:"accentColorLight,omitempty"`
+	AccentColorDark        string `json:"accentColorDark,omitempty"`
 }
 
 // settingsRefresh captures user-configurable refresh settings.
@@ -96,6 +112,23 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	if settings.Kubeconfig.SearchPaths == nil {
 		settings.Kubeconfig.SearchPaths = defaultKubeconfigSearchPaths()
 	}
+
+	// Migrate old single-value palette fields to per-theme fields.
+	prefs := &settings.Preferences
+	if (prefs.PaletteHue != 0 || prefs.PaletteTone != 0 || prefs.PaletteBrightness != 0) &&
+		prefs.PaletteHueLight == 0 && prefs.PaletteToneLight == 0 && prefs.PaletteBrightnessLight == 0 &&
+		prefs.PaletteHueDark == 0 && prefs.PaletteToneDark == 0 && prefs.PaletteBrightnessDark == 0 {
+		prefs.PaletteHueLight = prefs.PaletteHue
+		prefs.PaletteToneLight = prefs.PaletteTone
+		prefs.PaletteBrightnessLight = prefs.PaletteBrightness
+		prefs.PaletteHueDark = prefs.PaletteHue
+		prefs.PaletteToneDark = prefs.PaletteTone
+		prefs.PaletteBrightnessDark = prefs.PaletteBrightness
+		prefs.PaletteHue = 0
+		prefs.PaletteTone = 0
+		prefs.PaletteBrightness = 0
+	}
+
 	return settings
 }
 
@@ -261,6 +294,14 @@ func (a *App) loadAppSettings() error {
 		RefreshBackgroundClustersEnabled: settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:         settings.Preferences.Refresh.MetricsIntervalMs,
 		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
+		PaletteHueLight:                  settings.Preferences.PaletteHueLight,
+		PaletteToneLight:                 settings.Preferences.PaletteToneLight,
+		PaletteBrightnessLight:           settings.Preferences.PaletteBrightnessLight,
+		PaletteHueDark:                   settings.Preferences.PaletteHueDark,
+		PaletteToneDark:                  settings.Preferences.PaletteToneDark,
+		PaletteBrightnessDark:            settings.Preferences.PaletteBrightnessDark,
+		AccentColorLight:                 settings.Preferences.AccentColorLight,
+		AccentColorDark:                  settings.Preferences.AccentColorDark,
 	}
 	return nil
 }
@@ -284,6 +325,15 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
 	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
+	// Write per-theme palette fields; leave old fields zeroed so omitempty drops them.
+	settings.Preferences.PaletteHueLight = a.appSettings.PaletteHueLight
+	settings.Preferences.PaletteToneLight = a.appSettings.PaletteToneLight
+	settings.Preferences.PaletteBrightnessLight = a.appSettings.PaletteBrightnessLight
+	settings.Preferences.PaletteHueDark = a.appSettings.PaletteHueDark
+	settings.Preferences.PaletteToneDark = a.appSettings.PaletteToneDark
+	settings.Preferences.PaletteBrightnessDark = a.appSettings.PaletteBrightnessDark
+	settings.Preferences.AccentColorLight = a.appSettings.AccentColorLight
+	settings.Preferences.AccentColorDark = a.appSettings.AccentColorDark
 
 	settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
 
@@ -490,4 +540,84 @@ func (a *App) SetZoomLevel(level int) error {
 
 	settings.UI.ZoomLevel = level
 	return a.saveSettingsFile(settings)
+}
+
+// SetPaletteTint persists the palette hue (0-360), tone (0-100), and brightness (-50 to +50) preferences
+// for the specified theme ("light" or "dark"). Values are clamped to their valid ranges.
+func (a *App) SetPaletteTint(theme string, hue, tone, brightness int) error {
+	if theme != "light" && theme != "dark" {
+		return fmt.Errorf("invalid palette theme: %s", theme)
+	}
+
+	// Clamp hue to 0-360
+	if hue < 0 {
+		hue = 0
+	}
+	if hue > 360 {
+		hue = 360
+	}
+	// Clamp tone to 0-100
+	if tone < 0 {
+		tone = 0
+	}
+	if tone > 100 {
+		tone = 100
+	}
+	// Clamp brightness to -50 to +50
+	if brightness < -50 {
+		brightness = -50
+	}
+	if brightness > 50 {
+		brightness = 50
+	}
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(fmt.Sprintf("Palette tint (%s) changed to hue=%d tone=%d brightness=%d", theme, hue, tone, brightness), "Settings")
+
+	if theme == "light" {
+		a.appSettings.PaletteHueLight = hue
+		a.appSettings.PaletteToneLight = tone
+		a.appSettings.PaletteBrightnessLight = brightness
+	} else {
+		a.appSettings.PaletteHueDark = hue
+		a.appSettings.PaletteToneDark = tone
+		a.appSettings.PaletteBrightnessDark = brightness
+	}
+
+	return a.saveAppSettings()
+}
+
+// validHexColorRe matches a 7-character hex color string (#rrggbb).
+var validHexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+// SetAccentColor persists a custom accent color for the specified theme ("light" or "dark").
+// The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
+func (a *App) SetAccentColor(theme string, color string) error {
+	if theme != "light" && theme != "dark" {
+		return fmt.Errorf("invalid accent color theme: %s", theme)
+	}
+	if color != "" && !validHexColorRe.MatchString(color) {
+		return fmt.Errorf("invalid accent color format: %s (expected #rrggbb)", color)
+	}
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(fmt.Sprintf("Accent color (%s) changed to: %s", theme, color), "Settings")
+
+	if theme == "light" {
+		a.appSettings.AccentColorLight = color
+	} else {
+		a.appSettings.AccentColorDark = color
+	}
+
+	return a.saveAppSettings()
 }

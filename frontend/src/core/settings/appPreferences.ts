@@ -17,6 +17,14 @@ interface AppPreferences {
   refreshBackgroundClustersEnabled: boolean;
   metricsRefreshIntervalMs: number;
   gridTablePersistenceMode: GridTablePersistenceMode;
+  paletteHueLight: number;
+  paletteToneLight: number;
+  paletteBrightnessLight: number;
+  paletteHueDark: number;
+  paletteToneDark: number;
+  paletteBrightnessDark: number;
+  accentColorLight: string;
+  accentColorDark: string;
 }
 
 interface AppSettingsPayload {
@@ -26,6 +34,19 @@ interface AppSettingsPayload {
   refreshBackgroundClustersEnabled?: boolean;
   metricsRefreshIntervalMs?: number;
   gridTablePersistenceMode?: string;
+  // Migration: old single-value fields.
+  paletteHue?: number;
+  paletteTone?: number;
+  paletteBrightness?: number;
+  // Per-theme palette fields.
+  paletteHueLight?: number;
+  paletteToneLight?: number;
+  paletteBrightnessLight?: number;
+  paletteHueDark?: number;
+  paletteToneDark?: number;
+  paletteBrightnessDark?: number;
+  accentColorLight?: string;
+  accentColorDark?: string;
 }
 
 const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
@@ -37,6 +58,14 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
   gridTablePersistenceMode: 'shared',
+  paletteHueLight: 0,
+  paletteToneLight: 0,
+  paletteBrightnessLight: 0,
+  paletteHueDark: 0,
+  paletteToneDark: 0,
+  paletteBrightnessDark: 0,
+  accentColorLight: '',
+  accentColorDark: '',
 };
 
 let preferenceCache: AppPreferences = { ...DEFAULT_PREFERENCES };
@@ -81,6 +110,37 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   }
   if (previous.gridTablePersistenceMode !== next.gridTablePersistenceMode) {
     eventBus.emit('gridtable:persistence-mode', next.gridTablePersistenceMode);
+  }
+  // Emit per-theme palette changes separately for light and dark.
+  if (
+    previous.paletteHueLight !== next.paletteHueLight ||
+    previous.paletteToneLight !== next.paletteToneLight ||
+    previous.paletteBrightnessLight !== next.paletteBrightnessLight
+  ) {
+    eventBus.emit('settings:palette-tint', {
+      theme: 'light',
+      hue: next.paletteHueLight,
+      tone: next.paletteToneLight,
+      brightness: next.paletteBrightnessLight,
+    });
+  }
+  if (
+    previous.paletteHueDark !== next.paletteHueDark ||
+    previous.paletteToneDark !== next.paletteToneDark ||
+    previous.paletteBrightnessDark !== next.paletteBrightnessDark
+  ) {
+    eventBus.emit('settings:palette-tint', {
+      theme: 'dark',
+      hue: next.paletteHueDark,
+      tone: next.paletteToneDark,
+      brightness: next.paletteBrightnessDark,
+    });
+  }
+  if (previous.accentColorLight !== next.accentColorLight) {
+    eventBus.emit('settings:accent-color', { theme: 'light', color: next.accentColorLight });
+  }
+  if (previous.accentColorDark !== next.accentColorDark) {
+    eventBus.emit('settings:accent-color', { theme: 'dark', color: next.accentColorDark });
   }
 };
 
@@ -145,6 +205,16 @@ export const hydrateAppPreferences = async (options?: {
       DEFAULT_PREFERENCES.refreshBackgroundClustersEnabled,
     metricsRefreshIntervalMs: normalizeMetricsIntervalMs(backendSettings?.metricsRefreshIntervalMs),
     gridTablePersistenceMode: normalizeGridTableMode(backendSettings?.gridTablePersistenceMode),
+    paletteHueLight: backendSettings?.paletteHueLight ?? DEFAULT_PREFERENCES.paletteHueLight,
+    paletteToneLight: backendSettings?.paletteToneLight ?? DEFAULT_PREFERENCES.paletteToneLight,
+    paletteBrightnessLight:
+      backendSettings?.paletteBrightnessLight ?? DEFAULT_PREFERENCES.paletteBrightnessLight,
+    paletteHueDark: backendSettings?.paletteHueDark ?? DEFAULT_PREFERENCES.paletteHueDark,
+    paletteToneDark: backendSettings?.paletteToneDark ?? DEFAULT_PREFERENCES.paletteToneDark,
+    paletteBrightnessDark:
+      backendSettings?.paletteBrightnessDark ?? DEFAULT_PREFERENCES.paletteBrightnessDark,
+    accentColorLight: backendSettings?.accentColorLight ?? DEFAULT_PREFERENCES.accentColorLight,
+    accentColorDark: backendSettings?.accentColorDark ?? DEFAULT_PREFERENCES.accentColorDark,
   };
 
   hydrated = true;
@@ -175,6 +245,50 @@ export const getMetricsRefreshIntervalMs = (): number => {
 
 export const getGridTablePersistenceMode = (): GridTablePersistenceMode => {
   return preferenceCache.gridTablePersistenceMode;
+};
+
+// Returns palette tint values for the specified theme.
+export const getPaletteTint = (
+  theme: 'light' | 'dark'
+): { hue: number; tone: number; brightness: number } => {
+  if (theme === 'light') {
+    return {
+      hue: preferenceCache.paletteHueLight,
+      tone: preferenceCache.paletteToneLight,
+      brightness: preferenceCache.paletteBrightnessLight,
+    };
+  }
+  return {
+    hue: preferenceCache.paletteHueDark,
+    tone: preferenceCache.paletteToneDark,
+    brightness: preferenceCache.paletteBrightnessDark,
+  };
+};
+
+// Returns the custom accent color hex for the specified theme (empty = default).
+export const getAccentColor = (theme: 'light' | 'dark'): string => {
+  return theme === 'light' ? preferenceCache.accentColorLight : preferenceCache.accentColorDark;
+};
+
+// Persist accent color for a specific theme to backend via fire-and-forget.
+export const setAccentColor = (theme: 'light' | 'dark', color: string): void => {
+  hydrated = true;
+  if (theme === 'light') {
+    updatePreferenceCache({ accentColorLight: color });
+  } else {
+    updatePreferenceCache({ accentColorDark: color });
+  }
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  const setter = runtimeApp?.SetAccentColor;
+  if (typeof setter !== 'function') {
+    return;
+  }
+  void setter(theme, color).catch((error: unknown) => {
+    console.error('Failed to persist accent color:', error);
+  });
 };
 
 export const setThemePreference = async (theme: ThemePreference): Promise<void> => {
@@ -212,6 +326,40 @@ export const setGridTablePersistenceMode = (mode: GridTablePersistenceMode): voi
   updatePreferenceCache({ gridTablePersistenceMode: normalized });
   void persistGridTableMode(normalized).catch((error) => {
     console.error('Failed to persist grid table persistence mode:', error);
+  });
+};
+
+// Persist palette tint for a specific theme to backend via fire-and-forget.
+export const setPaletteTint = (
+  theme: 'light' | 'dark',
+  hue: number,
+  tone: number,
+  brightness: number = 0
+): void => {
+  hydrated = true;
+  if (theme === 'light') {
+    updatePreferenceCache({
+      paletteHueLight: hue,
+      paletteToneLight: tone,
+      paletteBrightnessLight: brightness,
+    });
+  } else {
+    updatePreferenceCache({
+      paletteHueDark: hue,
+      paletteToneDark: tone,
+      paletteBrightnessDark: brightness,
+    });
+  }
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  const setter = runtimeApp?.SetPaletteTint;
+  if (typeof setter !== 'function') {
+    return;
+  }
+  void setter(theme, hue, tone, brightness).catch((error: unknown) => {
+    console.error('Failed to persist palette tint:', error);
   });
 };
 

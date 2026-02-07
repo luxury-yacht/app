@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   GetKubeconfigSearchPaths,
   GetThemeInfo,
@@ -21,13 +21,30 @@ import { clearAllGridTableState } from '@shared/components/tables/persistence/gr
 import {
   hydrateAppPreferences,
   setUseShortResourceNames as persistUseShortResourceNames,
+  setPaletteTint as persistPaletteTint,
+  getPaletteTint,
+  getAccentColor,
+  setAccentColor as persistAccentColor,
 } from '@/core/settings/appPreferences';
+import { useTheme } from '@/core/contexts/ThemeContext';
+import {
+  applyTintedPalette,
+  clearTintedPalette,
+  savePaletteTintToLocalStorage,
+} from '@utils/paletteTint';
+import {
+  applyAccentColor,
+  applyAccentBg,
+  saveAccentColorToLocalStorage,
+  clearAccentColor,
+} from '@utils/accentColor';
 import {
   getGridTablePersistenceMode,
   setGridTablePersistenceMode,
   type GridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
 import ConfirmationModal from '@components/modals/ConfirmationModal';
+import SegmentedButton from '@shared/components/SegmentedButton';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 interface SettingsProps {
@@ -39,6 +56,7 @@ function Settings({ onClose }: SettingsProps) {
   const { enabled: refreshEnabled, setAutoRefresh } = useAutoRefresh();
   const { enabled: backgroundRefreshEnabled, setBackgroundRefresh } = useBackgroundRefresh();
   const { loadKubeconfigs } = useKubeconfig();
+  const { resolvedTheme } = useTheme();
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
@@ -51,6 +69,19 @@ function Settings({ onClose }: SettingsProps) {
   const [kubeconfigPathsSelecting, setKubeconfigPathsSelecting] = useState(false);
   // Keep the default kubeconfig search path pinned in the list.
   const defaultKubeconfigPath = '~/.kube';
+  // Palette tint state for hue/tone/brightness sliders
+  const [paletteHue, setPaletteHue] = useState(0);
+  const [paletteTone, setPaletteTone] = useState(0);
+  const [paletteBrightness, setPaletteBrightness] = useState(0);
+  // Debounce timer ref for palette tint persistence
+  const palettePersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Accent color state and debounce timer
+  const [accentColor, setAccentColorState] = useState('');
+  const accentPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Inline hex editing state for accent color
+  const [isEditingAccentHex, setIsEditingAccentHex] = useState(false);
+  const [accentHexDraft, setAccentHexDraft] = useState('');
+  const accentHexInputRef = useRef<HTMLInputElement>(null);
   // Controls the confirmation modal for clearing all persisted app state.
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   // Controls the confirmation modal for resetting view persistence.
@@ -70,6 +101,15 @@ function Settings({ onClose }: SettingsProps) {
     return themeCleanup;
   }, []);
 
+  // Reload slider values and accent color when the resolved theme changes.
+  useEffect(() => {
+    const tint = getPaletteTint(resolvedTheme);
+    setPaletteHue(tint.hue);
+    setPaletteTone(tint.tone);
+    setPaletteBrightness(tint.brightness);
+    setAccentColorState(getAccentColor(resolvedTheme));
+  }, [resolvedTheme]);
+
   const loadThemeInfo = async () => {
     try {
       const info = await GetThemeInfo();
@@ -83,6 +123,7 @@ function Settings({ onClose }: SettingsProps) {
     try {
       const preferences = await hydrateAppPreferences();
       setUseShortResourceNames(preferences.useShortResourceNames);
+      // Palette sliders are loaded by the resolvedTheme effect.
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
     }
@@ -131,6 +172,135 @@ function Settings({ onClose }: SettingsProps) {
     setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
   };
+
+  // Debounced persistence for palette tint — avoids hammering the backend during fast drags.
+  const debouncePalettePersist = useCallback(
+    (hue: number, tone: number, brightness: number) => {
+      if (palettePersistTimer.current) {
+        clearTimeout(palettePersistTimer.current);
+      }
+      palettePersistTimer.current = setTimeout(() => {
+        persistPaletteTint(resolvedTheme, hue, tone, brightness);
+        savePaletteTintToLocalStorage(resolvedTheme, hue, tone, brightness);
+      }, 300);
+    },
+    [resolvedTheme]
+  );
+
+  const handlePaletteHueChange = (value: number) => {
+    setPaletteHue(value);
+    applyTintedPalette(value, paletteTone, paletteBrightness);
+    debouncePalettePersist(value, paletteTone, paletteBrightness);
+  };
+
+  const handlePaletteToneChange = (value: number) => {
+    setPaletteTone(value);
+    applyTintedPalette(paletteHue, value, paletteBrightness);
+    debouncePalettePersist(paletteHue, value, paletteBrightness);
+  };
+
+  const handlePaletteBrightnessChange = (value: number) => {
+    setPaletteBrightness(value);
+    applyTintedPalette(paletteHue, paletteTone, value);
+    debouncePalettePersist(paletteHue, paletteTone, value);
+  };
+
+  // Per-value reset handlers for individual palette controls.
+  const handleHueReset = () => {
+    setPaletteHue(0);
+    applyTintedPalette(0, paletteTone, paletteBrightness);
+    debouncePalettePersist(0, paletteTone, paletteBrightness);
+  };
+
+  const handleToneReset = () => {
+    setPaletteTone(0);
+    applyTintedPalette(paletteHue, 0, paletteBrightness);
+    debouncePalettePersist(paletteHue, 0, paletteBrightness);
+  };
+
+  const handleBrightnessReset = () => {
+    setPaletteBrightness(0);
+    applyTintedPalette(paletteHue, paletteTone, 0);
+    debouncePalettePersist(paletteHue, paletteTone, 0);
+  };
+
+  // Debounced persistence for accent color — avoids hammering the backend during fast changes.
+  const debounceAccentPersist = useCallback(
+    (color: string) => {
+      if (accentPersistTimer.current) {
+        clearTimeout(accentPersistTimer.current);
+      }
+      accentPersistTimer.current = setTimeout(() => {
+        persistAccentColor(resolvedTheme, color);
+        saveAccentColorToLocalStorage(resolvedTheme, color);
+      }, 300);
+    },
+    [resolvedTheme]
+  );
+
+  const handleAccentColorChange = (hex: string) => {
+    setAccentColorState(hex);
+    applyAccentColor(
+      resolvedTheme === 'light' ? hex : getAccentColor('light'),
+      resolvedTheme === 'dark' ? hex : getAccentColor('dark')
+    );
+    applyAccentBg(hex, resolvedTheme);
+    debounceAccentPersist(hex);
+  };
+
+  // Reset accent color for the current resolved theme.
+  const handleAccentReset = () => {
+    setAccentColorState('');
+    applyAccentColor(
+      resolvedTheme === 'light' ? '' : getAccentColor('light'),
+      resolvedTheme === 'dark' ? '' : getAccentColor('dark')
+    );
+    applyAccentBg('', resolvedTheme);
+    persistAccentColor(resolvedTheme, '');
+    saveAccentColorToLocalStorage(resolvedTheme, '');
+  };
+
+  // Inline hex editing handlers for accent color.
+  const validHexRe = /^#[0-9a-fA-F]{6}$/;
+  const defaultAccent = resolvedTheme === 'light' ? '#0d9488' : '#f59e0b';
+
+  const handleAccentHexClick = () => {
+    setAccentHexDraft(accentColor || defaultAccent);
+    setIsEditingAccentHex(true);
+    // Focus the input after it renders.
+    requestAnimationFrame(() => accentHexInputRef.current?.select());
+  };
+
+  const handleAccentHexCommit = () => {
+    let trimmed = accentHexDraft.trim().toLowerCase();
+    if (!trimmed.startsWith('#')) trimmed = '#' + trimmed;
+    // Expand shorthand #rgb → #rrggbb
+    if (/^#[0-9a-f]{3}$/.test(trimmed)) {
+      trimmed = '#' + trimmed[1] + trimmed[1] + trimmed[2] + trimmed[2] + trimmed[3] + trimmed[3];
+    }
+    if (validHexRe.test(trimmed)) {
+      handleAccentColorChange(trimmed);
+    }
+    setIsEditingAccentHex(false);
+  };
+
+  const handleAccentHexCancel = () => {
+    setIsEditingAccentHex(false);
+  };
+
+  // Reset all appearance customizations for the current resolved theme.
+  const handleResetAll = () => {
+    setPaletteHue(0);
+    setPaletteTone(0);
+    setPaletteBrightness(0);
+    clearTintedPalette();
+    persistPaletteTint(resolvedTheme, 0, 0, 0);
+    savePaletteTintToLocalStorage(resolvedTheme, 0, 0, 0);
+    handleAccentReset();
+  };
+
+  const isAnyCustomized =
+    paletteHue !== 0 || paletteTone !== 0 || paletteBrightness !== 0 || !!accentColor;
 
   const handleAddKubeconfigPath = async () => {
     setKubeconfigPathsSelecting(true);
@@ -188,6 +358,10 @@ function Settings({ onClose }: SettingsProps) {
   const handleClearAllState = async () => {
     setIsClearStateConfirmOpen(false);
     try {
+      // Clear palette tint and accent color before reload so UI reverts immediately.
+      clearTintedPalette();
+      clearAccentColor();
+
       const clearAppState = (window as any)?.go?.backend?.App?.ClearAppState;
       if (typeof clearAppState !== 'function') {
         throw new Error('ClearAppState is not available');
@@ -234,49 +408,136 @@ function Settings({ onClose }: SettingsProps) {
       )}
       <div className="settings-section">
         <h3>Appearance</h3>
-        <div className="theme-selector">
-          <div className="theme-option">
+        <div className="palette-tint-controls">
+          {/* Theme selector — spans columns 2-4 */}
+          <label>Theme</label>
+          <SegmentedButton
+            options={[
+              { value: 'system', label: 'System' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+            value={themeInfo?.userTheme || 'system'}
+            onChange={handleThemeChange}
+          />
+          <label htmlFor="palette-hue">Hue</label>
+          <input
+            type="range"
+            id="palette-hue"
+            className="palette-slider palette-slider-hue"
+            min={0}
+            max={360}
+            value={paletteHue}
+            onChange={(e) => handlePaletteHueChange(Number(e.target.value))}
+          />
+          <span className="palette-slider-value">{paletteHue}°</span>
+          <button
+            type="button"
+            className="palette-row-reset"
+            onClick={handleHueReset}
+            disabled={paletteHue === 0}
+            title="Reset Hue"
+          >
+            ↺
+          </button>
+
+          <label htmlFor="palette-tone">Tone</label>
+          <input
+            type="range"
+            id="palette-tone"
+            className="palette-slider palette-slider-tone"
+            min={0}
+            max={100}
+            value={paletteTone}
+            onChange={(e) => handlePaletteToneChange(Number(e.target.value))}
+            style={{
+              background: `linear-gradient(to right, hsl(0, 0%, 50%), hsl(${paletteHue}, 20%, 50%))`,
+            }}
+          />
+          <span className="palette-slider-value">{paletteTone}%</span>
+          <button
+            type="button"
+            className="palette-row-reset"
+            onClick={handleToneReset}
+            disabled={paletteTone === 0}
+            title="Reset Tone"
+          >
+            ↺
+          </button>
+
+          <label htmlFor="palette-brightness">Brightness</label>
+          <input
+            type="range"
+            id="palette-brightness"
+            className="palette-slider palette-slider-brightness"
+            min={-50}
+            max={50}
+            value={paletteBrightness}
+            onChange={(e) => handlePaletteBrightnessChange(Number(e.target.value))}
+          />
+          <span className="palette-slider-value">
+            {paletteBrightness > 0 ? '+' : ''}
+            {paletteBrightness}
+          </span>
+          <button
+            type="button"
+            className="palette-row-reset"
+            onClick={handleBrightnessReset}
+            disabled={paletteBrightness === 0}
+            title="Reset Brightness"
+          >
+            ↺
+          </button>
+
+          <label>Accent</label>
+          <input
+            type="color"
+            className="palette-accent-swatch"
+            value={accentColor || (resolvedTheme === 'light' ? '#0d9488' : '#f59e0b')}
+            onChange={(e) => handleAccentColorChange(e.target.value)}
+          />
+          {isEditingAccentHex ? (
             <input
-              type="radio"
-              id="theme-light"
-              name="theme"
-              value="light"
-              checked={themeInfo?.userTheme === 'light'}
-              onChange={(e) => handleThemeChange(e.target.value)}
+              ref={accentHexInputRef}
+              className="palette-slider-value palette-hex-input"
+              value={accentHexDraft}
+              onChange={(e) => setAccentHexDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') { e.preventDefault(); handleAccentHexCommit(); }
+                else if (e.key === 'Escape') { e.preventDefault(); handleAccentHexCancel(); }
+                else e.stopPropagation();
+              }}
+              onBlur={handleAccentHexCancel}
+              maxLength={7}
+              spellCheck={false}
             />
-            <label htmlFor="theme-light" className="theme-label">
-              <span className="theme-icon">☀️</span>
-              <span className="theme-name">Light</span>
-            </label>
-          </div>
-          <div className="theme-option">
-            <input
-              type="radio"
-              id="theme-dark"
-              name="theme"
-              value="dark"
-              checked={themeInfo?.userTheme === 'dark'}
-              onChange={(e) => handleThemeChange(e.target.value)}
-            />
-            <label htmlFor="theme-dark" className="theme-label">
-              <span className="theme-icon">🌙</span>
-              <span className="theme-name">Dark</span>
-            </label>
-          </div>
-          <div className="theme-option">
-            <input
-              type="radio"
-              id="theme-system"
-              name="theme"
-              value="system"
-              checked={themeInfo?.userTheme === 'system' || !themeInfo?.userTheme}
-              onChange={(e) => handleThemeChange(e.target.value)}
-            />
-            <label htmlFor="theme-system" className="theme-label">
-              <span className="theme-icon">💻</span>
-              <span className="theme-name">System</span>
-            </label>
-          </div>
+          ) : (
+            <span
+              className="palette-slider-value palette-hex-clickable"
+              onClick={handleAccentHexClick}
+              title="Click to edit hex value"
+            >
+              {accentColor || defaultAccent}
+            </span>
+          )}
+          <button
+            type="button"
+            className="palette-row-reset"
+            onClick={handleAccentReset}
+            disabled={!accentColor}
+            title="Reset Accent Color"
+          >
+            ↺
+          </button>
+
+          <button
+            type="button"
+            className="button generic palette-reset-all"
+            onClick={handleResetAll}
+            disabled={!isAnyCustomized}
+          >
+            Reset All
+          </button>
         </div>
       </div>
 

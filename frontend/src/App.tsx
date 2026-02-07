@@ -19,7 +19,17 @@ import { eventBus } from '@/core/events';
 import { ConnectionStatusProvider, useConnectionStatus } from '@/core/connection/connectionStatus';
 import { initializeUserPermissionsBootstrap } from '@/core/capabilities';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { hydrateAppPreferences } from '@/core/settings/appPreferences';
+import {
+  hydrateAppPreferences,
+  getPaletteTint,
+  getAccentColor,
+} from '@/core/settings/appPreferences';
+import {
+  applyTintedPalette,
+  savePaletteTintToLocalStorage,
+  isPaletteActive,
+} from '@utils/paletteTint';
+import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '@utils/accentColor';
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
@@ -56,12 +66,38 @@ function AppContent() {
     initializeUserPermissionsBootstrap(selectedClusterId);
   }, [selectedClusterId]);
 
-  // Hydrate persisted preferences before applying refresh settings.
+  // Hydrate persisted preferences before applying refresh settings and palette tint.
   useEffect(() => {
     let active = true;
+
+    // Resolve the current active theme from the document attribute.
+    const resolveTheme = (): 'light' | 'dark' => {
+      const attr = document.documentElement.getAttribute('data-theme');
+      return attr === 'dark' ? 'dark' : 'light';
+    };
+
     const initializePreferences = async () => {
       try {
         await hydrateAppPreferences();
+        if (!active) return;
+
+        // Apply palette tint for the current resolved theme.
+        const currentTheme = resolveTheme();
+        const tint = getPaletteTint(currentTheme);
+        if (isPaletteActive(tint.tone, tint.brightness)) {
+          applyTintedPalette(tint.hue, tint.tone, tint.brightness);
+          savePaletteTintToLocalStorage(currentTheme, tint.hue, tint.tone, tint.brightness);
+        }
+
+        // Apply accent color overrides for both palettes and accent-bg for the current theme.
+        const lightAccent = getAccentColor('light');
+        const darkAccent = getAccentColor('dark');
+        if (lightAccent || darkAccent) {
+          applyAccentColor(lightAccent, darkAccent);
+          applyAccentBg(currentTheme === 'light' ? lightAccent : darkAccent, currentTheme);
+        }
+        saveAccentColorToLocalStorage('light', lightAccent);
+        saveAccentColorToLocalStorage('dark', darkAccent);
       } finally {
         if (active) {
           initializeMetricsRefreshInterval();
@@ -70,8 +106,28 @@ function AppContent() {
       }
     };
     void initializePreferences();
+
+    // When the resolved theme changes, apply the palette for the new theme.
+    const unsubThemeResolved = eventBus.on('settings:theme-resolved', (newTheme) => {
+      if (!active) return;
+      const tint = getPaletteTint(newTheme);
+      if (isPaletteActive(tint.tone, tint.brightness)) {
+        applyTintedPalette(tint.hue, tint.tone, tint.brightness);
+      } else {
+        // Clear palette if the new theme has no tint.
+        applyTintedPalette(0, 0, 0);
+      }
+      savePaletteTintToLocalStorage(newTheme, tint.hue, tint.tone, tint.brightness);
+
+      // Re-apply accent-bg for the new theme.
+      const accent = getAccentColor(newTheme);
+      applyAccentBg(accent, newTheme);
+      saveAccentColorToLocalStorage(newTheme, accent);
+    });
+
     return () => {
       active = false;
+      unsubThemeResolved();
     };
   }, []);
 

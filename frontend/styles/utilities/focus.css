@@ -128,15 +128,6 @@ tr:focus-visible {
 }
 
 /* ==========================================================================
-   Focus Trap Indicator (for modals/dialogs)
-   ========================================================================== */
-
-.focus-trap-active {
-  /* Visual indicator that focus is trapped */
-  box-shadow: 0 0 0 4px var(--color-accent-bg, rgba(var(--color-accent-rgb), 0.2));
-}
-
-/* ==========================================================================
    Reduced Motion Support
    ========================================================================== */
 

@@ -187,6 +187,8 @@ export function ScaleWorkload(arg1:string,arg2:string,arg3:string,arg4:string,ar
 
 export function SendShellInput(arg1:string,arg2:string):Promise<void>;
 
+export function SetAccentColor(arg1:string,arg2:string):Promise<void>;
+
 export function SetApiExtensionsClient(arg1:clientset.Interface):Promise<void>;
 
 export function SetAutoRefreshEnabled(arg1:boolean):Promise<void>;
@@ -208,6 +210,8 @@ export function SetKubeconfigSearchPaths(arg1:Array<string>):Promise<void>;
 export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 
 export function SetMetricsClient(arg1:versioned.Clientset):Promise<void>;
+
+export function SetPaletteTint(arg1:string,arg2:number,arg3:number,arg4:number):Promise<void>;
 
 export function SetPortForwardsPanelVisible(arg1:boolean):Promise<void>;
 

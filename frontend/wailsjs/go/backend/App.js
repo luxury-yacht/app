@@ -354,6 +354,10 @@ export function SendShellInput(arg1, arg2) {
   return window['go']['backend']['App']['SendShellInput'](arg1, arg2);
 }
 
+export function SetAccentColor(arg1, arg2) {
+  return window['go']['backend']['App']['SetAccentColor'](arg1, arg2);
+}
+
 export function SetApiExtensionsClient(arg1) {
   return window['go']['backend']['App']['SetApiExtensionsClient'](arg1);
 }
@@ -396,6 +400,10 @@ export function SetLogsPanelVisible(arg1) {
 
 export function SetMetricsClient(arg1) {
   return window['go']['backend']['App']['SetMetricsClient'](arg1);
+}
+
+export function SetPaletteTint(arg1, arg2, arg3, arg4) {
+  return window['go']['backend']['App']['SetPaletteTint'](arg1, arg2, arg3, arg4);
 }
 
 export function SetPortForwardsPanelVisible(arg1) {
