@@ -86,14 +86,12 @@
   bottom: 0;
   display: flex;
   flex-direction: column;
-  /* Allow filter bar to extend past container bounds for docked panels */
-  overflow: visible;
+  overflow: hidden;
 }
 
 .gridtable-container.embedded {
   position: relative;
   background-color: var(--grid-bg-primary);
-  overflow: hidden;
 }
 
 .gridtable-wrapper {
@@ -104,6 +102,10 @@
   display: flex;
   flex-direction: column;
   position: relative;
+  /* Shrink for docked panels so only the scrollable body area changes,
+     leaving the filter bar and header at full size. */
+  margin-right: var(--dock-right-offset, 0px);
+  margin-bottom: var(--dock-bottom-offset, 0px);
 }
 
 .gridtable-wrapper:focus {
@@ -131,6 +133,25 @@
   position: relative;
   overflow: hidden;
   background-color: var(--grid-bg-header);
+  /* Match the wrapper's right-dock offset so the header stays aligned. */
+  margin-right: var(--dock-right-offset, 0px);
+}
+
+/* Smooth transition only while a right-docked panel is open.
+   When the panel closes the class is removed first so the margin snaps
+   back instantly instead of leaving a visible gap. */
+body.dock-right-open .gridtable-wrapper,
+body.dock-right-open .gridtable-header-container {
+  transition: margin-right 0.3s ease-out;
+}
+
+body.dock-bottom-open .gridtable-wrapper {
+  transition: margin-bottom 0.3s ease-out;
+}
+
+body.dockable-panel-resizing .gridtable-wrapper,
+body.dockable-panel-resizing .gridtable-header-container {
+  transition: none;
 }
 
 .gridtable--header {
@@ -589,20 +610,6 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   padding: 8px 0 6px 0;
   align-items: center;
   justify-content: space-between;
-  /* Extend past the dock-right padding so the filter bar spans the full width
-     while only the gridtable-wrapper area shrinks for docked panels.
-     The negative margin reclaims the space lost to app-main padding-right. */
-  margin-right: calc(-1 * var(--dock-right-offset, 0px));
-  /* Render above the dockable panel layer (z-index 999) so the panel
-     visually appears below the filter bar, not overlapping it. */
-  position: relative;
-  z-index: 1001;
-  transition: margin-right 0.3s ease-out;
-}
-
-/* Disable filter bar transition during panel resize for instant feedback */
-body.dockable-panel-resizing .gridtable-filter-bar {
-  transition: none;
 }
 
 .gridtable-filter-cluster {
