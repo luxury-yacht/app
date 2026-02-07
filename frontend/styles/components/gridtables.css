@@ -86,12 +86,14 @@
   bottom: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* Allow filter bar to extend past container bounds for docked panels */
+  overflow: visible;
 }
 
 .gridtable-container.embedded {
   position: relative;
   background-color: var(--grid-bg-primary);
+  overflow: hidden;
 }
 
 .gridtable-wrapper {
@@ -587,6 +589,20 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   padding: 8px 0 6px 0;
   align-items: center;
   justify-content: space-between;
+  /* Extend past the dock-right padding so the filter bar spans the full width
+     while only the gridtable-wrapper area shrinks for docked panels.
+     The negative margin reclaims the space lost to app-main padding-right. */
+  margin-right: calc(-1 * var(--dock-right-offset, 0px));
+  /* Render above the dockable panel layer (z-index 999) so the panel
+     visually appears below the filter bar, not overlapping it. */
+  position: relative;
+  z-index: 1001;
+  transition: margin-right 0.3s ease-out;
+}
+
+/* Disable filter bar transition during panel resize for instant feedback */
+body.dockable-panel-resizing .gridtable-filter-bar {
+  transition: none;
 }
 
 .gridtable-filter-cluster {
