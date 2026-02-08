@@ -69,9 +69,9 @@ function Settings({ onClose }: SettingsProps) {
   const [kubeconfigPathsSelecting, setKubeconfigPathsSelecting] = useState(false);
   // Keep the default kubeconfig search path pinned in the list.
   const defaultKubeconfigPath = '~/.kube';
-  // Palette tint state for hue/tone/brightness sliders
+  // Palette tint state for hue/saturation/brightness sliders
   const [paletteHue, setPaletteHue] = useState(0);
-  const [paletteTone, setPaletteTone] = useState(0);
+  const [paletteSaturation, setPaletteSaturation] = useState(0);
   const [paletteBrightness, setPaletteBrightness] = useState(0);
   // Debounce timer ref for palette tint persistence
   const palettePersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -105,7 +105,7 @@ function Settings({ onClose }: SettingsProps) {
   useEffect(() => {
     const tint = getPaletteTint(resolvedTheme);
     setPaletteHue(tint.hue);
-    setPaletteTone(tint.tone);
+    setPaletteSaturation(tint.saturation);
     setPaletteBrightness(tint.brightness);
     setAccentColorState(getAccentColor(resolvedTheme));
   }, [resolvedTheme]);
@@ -175,13 +175,13 @@ function Settings({ onClose }: SettingsProps) {
 
   // Debounced persistence for palette tint — avoids hammering the backend during fast drags.
   const debouncePalettePersist = useCallback(
-    (hue: number, tone: number, brightness: number) => {
+    (hue: number, saturation: number, brightness: number) => {
       if (palettePersistTimer.current) {
         clearTimeout(palettePersistTimer.current);
       }
       palettePersistTimer.current = setTimeout(() => {
-        persistPaletteTint(resolvedTheme, hue, tone, brightness);
-        savePaletteTintToLocalStorage(resolvedTheme, hue, tone, brightness);
+        persistPaletteTint(resolvedTheme, hue, saturation, brightness);
+        savePaletteTintToLocalStorage(resolvedTheme, hue, saturation, brightness);
       }, 300);
     },
     [resolvedTheme]
@@ -189,39 +189,39 @@ function Settings({ onClose }: SettingsProps) {
 
   const handlePaletteHueChange = (value: number) => {
     setPaletteHue(value);
-    applyTintedPalette(value, paletteTone, paletteBrightness);
-    debouncePalettePersist(value, paletteTone, paletteBrightness);
+    applyTintedPalette(value, paletteSaturation, paletteBrightness);
+    debouncePalettePersist(value, paletteSaturation, paletteBrightness);
   };
 
-  const handlePaletteToneChange = (value: number) => {
-    setPaletteTone(value);
+  const handlePaletteSaturationChange = (value: number) => {
+    setPaletteSaturation(value);
     applyTintedPalette(paletteHue, value, paletteBrightness);
     debouncePalettePersist(paletteHue, value, paletteBrightness);
   };
 
   const handlePaletteBrightnessChange = (value: number) => {
     setPaletteBrightness(value);
-    applyTintedPalette(paletteHue, paletteTone, value);
-    debouncePalettePersist(paletteHue, paletteTone, value);
+    applyTintedPalette(paletteHue, paletteSaturation, value);
+    debouncePalettePersist(paletteHue, paletteSaturation, value);
   };
 
   // Per-value reset handlers for individual palette controls.
   const handleHueReset = () => {
     setPaletteHue(0);
-    applyTintedPalette(0, paletteTone, paletteBrightness);
-    debouncePalettePersist(0, paletteTone, paletteBrightness);
+    applyTintedPalette(0, paletteSaturation, paletteBrightness);
+    debouncePalettePersist(0, paletteSaturation, paletteBrightness);
   };
 
-  const handleToneReset = () => {
-    setPaletteTone(0);
+  const handleSaturationReset = () => {
+    setPaletteSaturation(0);
     applyTintedPalette(paletteHue, 0, paletteBrightness);
     debouncePalettePersist(paletteHue, 0, paletteBrightness);
   };
 
   const handleBrightnessReset = () => {
     setPaletteBrightness(0);
-    applyTintedPalette(paletteHue, paletteTone, 0);
-    debouncePalettePersist(paletteHue, paletteTone, 0);
+    applyTintedPalette(paletteHue, paletteSaturation, 0);
+    debouncePalettePersist(paletteHue, paletteSaturation, 0);
   };
 
   // Debounced persistence for accent color — avoids hammering the backend during fast changes.
@@ -291,7 +291,7 @@ function Settings({ onClose }: SettingsProps) {
   // Reset all appearance customizations for the current resolved theme.
   const handleResetAll = () => {
     setPaletteHue(0);
-    setPaletteTone(0);
+    setPaletteSaturation(0);
     setPaletteBrightness(0);
     clearTintedPalette();
     persistPaletteTint(resolvedTheme, 0, 0, 0);
@@ -300,7 +300,7 @@ function Settings({ onClose }: SettingsProps) {
   };
 
   const isAnyCustomized =
-    paletteHue !== 0 || paletteTone !== 0 || paletteBrightness !== 0 || !!accentColor;
+    paletteHue !== 0 || paletteSaturation !== 0 || paletteBrightness !== 0 || !!accentColor;
 
   const handleAddKubeconfigPath = async () => {
     setKubeconfigPathsSelecting(true);
@@ -441,26 +441,26 @@ function Settings({ onClose }: SettingsProps) {
             ↺
           </button>
 
-          <label htmlFor="palette-tone">Tone</label>
+          <label htmlFor="palette-saturation">Saturation</label>
           <input
             type="range"
-            id="palette-tone"
-            className="palette-slider palette-slider-tone"
+            id="palette-saturation"
+            className="palette-slider palette-slider-saturation"
             min={0}
             max={100}
-            value={paletteTone}
-            onChange={(e) => handlePaletteToneChange(Number(e.target.value))}
+            value={paletteSaturation}
+            onChange={(e) => handlePaletteSaturationChange(Number(e.target.value))}
             style={{
               background: `linear-gradient(to right, hsl(0, 0%, 50%), hsl(${paletteHue}, 20%, 50%))`,
             }}
           />
-          <span className="palette-slider-value">{paletteTone}%</span>
+          <span className="palette-slider-value">{paletteSaturation}%</span>
           <button
             type="button"
             className="palette-row-reset"
-            onClick={handleToneReset}
-            disabled={paletteTone === 0}
-            title="Reset Tone"
+            onClick={handleSaturationReset}
+            disabled={paletteSaturation === 0}
+            title="Reset Saturation"
           >
             ↺
           </button>

@@ -69,10 +69,10 @@ describe('appPreferences', () => {
       metricsRefreshIntervalMs: 7000,
       gridTablePersistenceMode: 'namespaced',
       paletteHueLight: 220,
-      paletteToneLight: 50,
+      paletteSaturationLight: 50,
       paletteBrightnessLight: -15,
       paletteHueDark: 120,
-      paletteToneDark: 40,
+      paletteSaturationDark: 40,
       paletteBrightnessDark: 10,
       accentColorLight: '#0d9488',
       accentColorDark: '#f59e0b',
@@ -86,21 +86,21 @@ describe('appPreferences', () => {
     expect(getBackgroundRefreshEnabled()).toBe(false);
     expect(getMetricsRefreshIntervalMs()).toBe(7000);
     expect(getGridTablePersistenceMode()).toBe('namespaced');
-    expect(getPaletteTint('light')).toEqual({ hue: 220, tone: 50, brightness: -15 });
-    expect(getPaletteTint('dark')).toEqual({ hue: 120, tone: 40, brightness: 10 });
+    expect(getPaletteTint('light')).toEqual({ hue: 220, saturation: 50, brightness: -15 });
+    expect(getPaletteTint('dark')).toEqual({ hue: 120, saturation: 40, brightness: 10 });
     expect(getAccentColor('light')).toBe('#0d9488');
     expect(getAccentColor('dark')).toBe('#f59e0b');
   });
 
-  it('defaults palette hue, tone, and brightness to 0 when not present', async () => {
+  it('defaults palette hue, saturation, and brightness to 0 when not present', async () => {
     appMocks.GetAppSettings.mockResolvedValue({
       theme: 'system',
     });
 
     await hydrateAppPreferences({ force: true });
 
-    expect(getPaletteTint('light')).toEqual({ hue: 0, tone: 0, brightness: 0 });
-    expect(getPaletteTint('dark')).toEqual({ hue: 0, tone: 0, brightness: 0 });
+    expect(getPaletteTint('light')).toEqual({ hue: 0, saturation: 0, brightness: 0 });
+    expect(getPaletteTint('dark')).toEqual({ hue: 0, saturation: 0, brightness: 0 });
     expect(getAccentColor('light')).toBe('');
     expect(getAccentColor('dark')).toBe('');
   });
@@ -143,10 +143,10 @@ describe('appPreferences', () => {
     appMocks.GetAppSettings.mockResolvedValue({
       theme: 'system',
       paletteHueLight: 0,
-      paletteToneLight: 0,
+      paletteSaturationLight: 0,
       paletteBrightnessLight: 0,
       paletteHueDark: 0,
-      paletteToneDark: 0,
+      paletteSaturationDark: 0,
       paletteBrightnessDark: 0,
     });
 
@@ -154,9 +154,9 @@ describe('appPreferences', () => {
 
     setPaletteTint('light', 180, 75, -25);
 
-    expect(getPaletteTint('light')).toEqual({ hue: 180, tone: 75, brightness: -25 });
+    expect(getPaletteTint('light')).toEqual({ hue: 180, saturation: 75, brightness: -25 });
     // Dark theme should remain at defaults.
-    expect(getPaletteTint('dark')).toEqual({ hue: 0, tone: 0, brightness: 0 });
+    expect(getPaletteTint('dark')).toEqual({ hue: 0, saturation: 0, brightness: 0 });
     expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith(
       'light',
       180,
@@ -166,9 +166,9 @@ describe('appPreferences', () => {
 
     setPaletteTint('dark', 300, 60, 20);
 
-    expect(getPaletteTint('dark')).toEqual({ hue: 300, tone: 60, brightness: 20 });
+    expect(getPaletteTint('dark')).toEqual({ hue: 300, saturation: 60, brightness: 20 });
     // Light theme should be unchanged.
-    expect(getPaletteTint('light')).toEqual({ hue: 180, tone: 75, brightness: -25 });
+    expect(getPaletteTint('light')).toEqual({ hue: 180, saturation: 75, brightness: -25 });
     expect((window as any).go.backend.App.SetPaletteTint).toHaveBeenCalledWith('dark', 300, 60, 20);
   });
 

@@ -2,7 +2,7 @@
  * frontend/src/utils/paletteTint.ts
  *
  * Generates tinted gray palettes using HSL and applies them as CSS custom
- * property overrides on document.documentElement. Persists hue/tone/brightness
+ * property overrides on document.documentElement. Persists hue/saturation/brightness
  * to localStorage so the FOUC-prevention script in index.html can apply
  * the palette before React mounts.
  *
@@ -27,7 +27,7 @@ export const GRAY_STEPS: { token: string; lightness: number }[] = [
   { token: '--color-base-50', lightness: 96 },
 ];
 
-// Maximum CSS saturation percentage when tone is at 100.
+// Maximum CSS saturation percentage when saturation is at 100.
 // 20% is enough to tint without losing the "gray" feel.
 export const MAX_SATURATION = 20;
 
@@ -37,27 +37,27 @@ export const MAX_BRIGHTNESS_OFFSET = 10;
 
 // Per-theme localStorage keys for FOUC prevention bridge.
 const LS_KEY_HUE_LIGHT = 'app-palette-hue-light';
-const LS_KEY_TONE_LIGHT = 'app-palette-tone-light';
+const LS_KEY_TONE_LIGHT = 'app-palette-saturation-light';
 const LS_KEY_BRIGHTNESS_LIGHT = 'app-palette-brightness-light';
 const LS_KEY_HUE_DARK = 'app-palette-hue-dark';
-const LS_KEY_TONE_DARK = 'app-palette-tone-dark';
+const LS_KEY_TONE_DARK = 'app-palette-saturation-dark';
 const LS_KEY_BRIGHTNESS_DARK = 'app-palette-brightness-dark';
 
 // Old localStorage keys for migration cleanup.
 const LS_KEY_HUE_OLD = 'app-palette-hue';
-const LS_KEY_TONE_OLD = 'app-palette-tone';
+const LS_KEY_TONE_OLD = 'app-palette-saturation';
 const LS_KEY_BRIGHTNESS_OLD = 'app-palette-brightness';
 
 /**
  * Returns true when any palette customization is active and overrides
- * should be applied (tone > 0 or brightness != 0).
+ * should be applied (saturation > 0 or brightness != 0).
  */
-export function isPaletteActive(tone: number, brightness: number): boolean {
-  return tone > 0 || brightness !== 0;
+export function isPaletteActive(saturation: number, brightness: number): boolean {
+  return saturation > 0 || brightness !== 0;
 }
 
 /**
- * Generates an array of tinted palette entries from hue, tone, and brightness values.
+ * Generates an array of tinted palette entries from hue, saturation, and brightness values.
  * Each entry contains the CSS custom property token and its HSL value string.
  *
  * @param brightness - Lightness offset (-50 to +50). Maps to ±MAX_BRIGHTNESS_OFFSET
@@ -65,33 +65,33 @@ export function isPaletteActive(tone: number, brightness: number): boolean {
  */
 export function generateTintedPalette(
   hue: number,
-  tone: number,
+  saturation: number,
   brightness: number = 0
 ): { token: string; value: string }[] {
-  const saturation = (tone / 100) * MAX_SATURATION;
+  const saturationOffset = (saturation / 100) * MAX_SATURATION;
   const lightnessOffset = (brightness / 50) * MAX_BRIGHTNESS_OFFSET;
   return GRAY_STEPS.map(({ token, lightness }) => {
     // Clamp adjusted lightness to 1-99% to avoid pure black/white.
     const adjusted = Math.min(99, Math.max(1, lightness + lightnessOffset));
     return {
       token,
-      value: `hsl(${hue}, ${saturation}%, ${adjusted}%)`,
+      value: `hsl(${hue}, ${saturationOffset}%, ${adjusted}%)`,
     };
   });
 }
 
 /**
  * Applies tinted gray palette as inline style overrides on the document root.
- * When no customization is active (tone=0, brightness=0), clears the overrides
+ * When no customization is active (saturation=0, brightness=0), clears the overrides
  * to restore original CSS hex values.
  */
-export function applyTintedPalette(hue: number, tone: number, brightness: number = 0): void {
-  if (!isPaletteActive(tone, brightness)) {
+export function applyTintedPalette(hue: number, saturation: number, brightness: number = 0): void {
+  if (!isPaletteActive(saturation, brightness)) {
     clearTintedPalette();
     return;
   }
 
-  const palette = generateTintedPalette(hue, tone, brightness);
+  const palette = generateTintedPalette(hue, saturation, brightness);
   const root = document.documentElement;
   for (const { token, value } of palette) {
     root.style.setProperty(token, value);
@@ -110,23 +110,23 @@ export function clearTintedPalette(): void {
 }
 
 /**
- * Persists palette hue, tone, and brightness to per-theme localStorage keys
+ * Persists palette hue, saturation, and brightness to per-theme localStorage keys
  * for the FOUC-prevention script in index.html.
  */
 export function savePaletteTintToLocalStorage(
   theme: 'light' | 'dark',
   hue: number,
-  tone: number,
+  saturation: number,
   brightness: number = 0
 ): void {
   try {
     if (theme === 'light') {
       localStorage.setItem(LS_KEY_HUE_LIGHT, String(hue));
-      localStorage.setItem(LS_KEY_TONE_LIGHT, String(tone));
+      localStorage.setItem(LS_KEY_TONE_LIGHT, String(saturation));
       localStorage.setItem(LS_KEY_BRIGHTNESS_LIGHT, String(brightness));
     } else {
       localStorage.setItem(LS_KEY_HUE_DARK, String(hue));
-      localStorage.setItem(LS_KEY_TONE_DARK, String(tone));
+      localStorage.setItem(LS_KEY_TONE_DARK, String(saturation));
       localStorage.setItem(LS_KEY_BRIGHTNESS_DARK, String(brightness));
     }
   } catch {
@@ -135,7 +135,7 @@ export function savePaletteTintToLocalStorage(
 }
 
 /**
- * Removes all palette hue, tone, and brightness keys from localStorage,
+ * Removes all palette hue, saturation, and brightness keys from localStorage,
  * including old single-value keys for migration cleanup.
  */
 export function clearPaletteTintFromLocalStorage(): void {

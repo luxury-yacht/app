@@ -36,11 +36,11 @@ describe('paletteTint', () => {
   });
 
   describe('isPaletteActive', () => {
-    it('returns false when tone=0 and brightness=0', () => {
+    it('returns false when saturation=0 and brightness=0', () => {
       expect(isPaletteActive(0, 0)).toBe(false);
     });
 
-    it('returns true when tone > 0', () => {
+    it('returns true when saturation > 0', () => {
       expect(isPaletteActive(50, 0)).toBe(true);
     });
 
@@ -56,21 +56,21 @@ describe('paletteTint', () => {
       expect(palette).toHaveLength(11);
     });
 
-    it('produces 0% saturation when tone is 0', () => {
+    it('produces 0% saturation when saturation is 0', () => {
       const palette = generateTintedPalette(180, 0);
       for (const entry of palette) {
         expect(entry.value).toMatch(/hsl\(180, 0%, \d+%\)/);
       }
     });
 
-    it('produces MAX_SATURATION% saturation when tone is 100', () => {
+    it('produces MAX_SATURATION% saturation when saturation is 100', () => {
       const palette = generateTintedPalette(90, 100);
       for (const entry of palette) {
         expect(entry.value).toMatch(new RegExp(`hsl\\(90, ${MAX_SATURATION}%, \\d+%\\)`));
       }
     });
 
-    it('scales saturation proportionally for tone=50', () => {
+    it('scales saturation proportionally for saturation=50', () => {
       const palette = generateTintedPalette(120, 50);
       const expectedSaturation = (50 / 100) * MAX_SATURATION; // 10
       for (const entry of palette) {
@@ -131,7 +131,7 @@ describe('paletteTint', () => {
   });
 
   describe('applyTintedPalette', () => {
-    it('sets style properties for each gray step when tone > 0', () => {
+    it('sets style properties for each gray step when saturation > 0', () => {
       applyTintedPalette(200, 50);
       expect(setPropertySpy).toHaveBeenCalledTimes(GRAY_STEPS.length);
       for (const { token } of GRAY_STEPS) {
@@ -144,13 +144,13 @@ describe('paletteTint', () => {
       expect(setPropertySpy).toHaveBeenCalledTimes(GRAY_STEPS.length);
     });
 
-    it('clears style properties when tone is 0 and brightness is 0', () => {
+    it('clears style properties when saturation is 0 and brightness is 0', () => {
       // First apply a palette
       applyTintedPalette(200, 50);
       setPropertySpy.mockClear();
       removePropertySpy.mockClear();
 
-      // Now apply with tone=0, brightness=0 which should clear
+      // Now apply with saturation=0, brightness=0 which should clear
       applyTintedPalette(200, 0, 0);
       expect(setPropertySpy).not.toHaveBeenCalled();
       expect(removePropertySpy).toHaveBeenCalledTimes(GRAY_STEPS.length);
@@ -171,19 +171,19 @@ describe('paletteTint', () => {
   });
 
   describe('localStorage helpers', () => {
-    it('saves light theme hue, tone, and brightness to localStorage', () => {
+    it('saves light theme hue, saturation, and brightness to localStorage', () => {
       savePaletteTintToLocalStorage('light', 220, 75, -30);
       expect(localStorage.getItem('app-palette-hue-light')).toBe('220');
-      expect(localStorage.getItem('app-palette-tone-light')).toBe('75');
+      expect(localStorage.getItem('app-palette-saturation-light')).toBe('75');
       expect(localStorage.getItem('app-palette-brightness-light')).toBe('-30');
       // Dark keys should not be set.
       expect(localStorage.getItem('app-palette-hue-dark')).toBeNull();
     });
 
-    it('saves dark theme hue, tone, and brightness to localStorage', () => {
+    it('saves dark theme hue, saturation, and brightness to localStorage', () => {
       savePaletteTintToLocalStorage('dark', 100, 40, 15);
       expect(localStorage.getItem('app-palette-hue-dark')).toBe('100');
-      expect(localStorage.getItem('app-palette-tone-dark')).toBe('40');
+      expect(localStorage.getItem('app-palette-saturation-dark')).toBe('40');
       expect(localStorage.getItem('app-palette-brightness-dark')).toBe('15');
       // Light keys should not be set.
       expect(localStorage.getItem('app-palette-hue-light')).toBeNull();
@@ -194,21 +194,21 @@ describe('paletteTint', () => {
       savePaletteTintToLocalStorage('dark', 100, 40, 5);
       // Set old keys to simulate migration scenario.
       localStorage.setItem('app-palette-hue', '99');
-      localStorage.setItem('app-palette-tone', '88');
+      localStorage.setItem('app-palette-saturation', '88');
       localStorage.setItem('app-palette-brightness', '77');
 
       clearPaletteTintFromLocalStorage();
 
       // Per-theme keys removed.
       expect(localStorage.getItem('app-palette-hue-light')).toBeNull();
-      expect(localStorage.getItem('app-palette-tone-light')).toBeNull();
+      expect(localStorage.getItem('app-palette-saturation-light')).toBeNull();
       expect(localStorage.getItem('app-palette-brightness-light')).toBeNull();
       expect(localStorage.getItem('app-palette-hue-dark')).toBeNull();
-      expect(localStorage.getItem('app-palette-tone-dark')).toBeNull();
+      expect(localStorage.getItem('app-palette-saturation-dark')).toBeNull();
       expect(localStorage.getItem('app-palette-brightness-dark')).toBeNull();
       // Old keys removed.
       expect(localStorage.getItem('app-palette-hue')).toBeNull();
-      expect(localStorage.getItem('app-palette-tone')).toBeNull();
+      expect(localStorage.getItem('app-palette-saturation')).toBeNull();
       expect(localStorage.getItem('app-palette-brightness')).toBeNull();
     });
 

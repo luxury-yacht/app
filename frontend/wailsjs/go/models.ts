@@ -666,10 +666,10 @@ export namespace types {
 	    metricsRefreshIntervalMs: number;
 	    gridTablePersistenceMode: string;
 	    paletteHueLight: number;
-	    paletteToneLight: number;
+	    paletteSaturationLight: number;
 	    paletteBrightnessLight: number;
 	    paletteHueDark: number;
-	    paletteToneDark: number;
+	    paletteSaturationDark: number;
 	    paletteBrightnessDark: number;
 	    accentColorLight: string;
 	    accentColorDark: string;
@@ -688,10 +688,10 @@ export namespace types {
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];
 	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
 	        this.paletteHueLight = source["paletteHueLight"];
-	        this.paletteToneLight = source["paletteToneLight"];
+	        this.paletteSaturationLight = source["paletteSaturationLight"];
 	        this.paletteBrightnessLight = source["paletteBrightnessLight"];
 	        this.paletteHueDark = source["paletteHueDark"];
-	        this.paletteToneDark = source["paletteToneDark"];
+	        this.paletteSaturationDark = source["paletteSaturationDark"];
 	        this.paletteBrightnessDark = source["paletteBrightnessDark"];
 	        this.accentColorLight = source["accentColorLight"];
 	        this.accentColorDark = source["accentColorDark"];

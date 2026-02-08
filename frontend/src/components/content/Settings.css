@@ -132,8 +132,8 @@
   );
 }
 
-/* Tone slider background is set dynamically via inline style */
-.palette-slider-tone {
+/* Saturation slider background is set dynamically via inline style */
+.palette-slider-saturation {
   background: linear-gradient(to right, hsl(0, 0%, 50%), hsl(0, 20%, 50%));
 }
 
