@@ -503,9 +503,13 @@ function Settings({ onClose }: SettingsProps) {
               value={accentHexDraft}
               onChange={(e) => setAccentHexDraft(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') { e.preventDefault(); handleAccentHexCommit(); }
-                else if (e.key === 'Escape') { e.preventDefault(); handleAccentHexCancel(); }
-                else e.stopPropagation();
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAccentHexCommit();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  handleAccentHexCancel();
+                } else e.stopPropagation();
               }}
               onBlur={handleAccentHexCancel}
               maxLength={7}
