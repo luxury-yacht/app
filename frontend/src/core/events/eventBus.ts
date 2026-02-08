@@ -77,7 +77,7 @@ export interface AppEvents {
   'settings:palette-tint': {
     theme: 'light' | 'dark';
     hue: number;
-    tone: number;
+    saturation: number;
     brightness: number;
   };
   'settings:accent-color': { theme: 'light' | 'dark'; color: string };

@@ -90,10 +90,10 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		MetricsRefreshIntervalMs:         7000,
 		GridTablePersistenceMode:         "namespaced",
 		PaletteHueLight:                  200,
-		PaletteToneLight:                 60,
+		PaletteSaturationLight:           60,
 		PaletteBrightnessLight:           -20,
 		PaletteHueDark:                   120,
-		PaletteToneDark:                  40,
+		PaletteSaturationDark:            40,
 		PaletteBrightnessDark:            10,
 		AccentColorLight:                 "#0d9488",
 		AccentColorDark:                  "#f59e0b",
@@ -111,10 +111,10 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.Equal(t, 7000, app.appSettings.MetricsRefreshIntervalMs)
 	require.Equal(t, "namespaced", app.appSettings.GridTablePersistenceMode)
 	require.Equal(t, 200, app.appSettings.PaletteHueLight)
-	require.Equal(t, 60, app.appSettings.PaletteToneLight)
+	require.Equal(t, 60, app.appSettings.PaletteSaturationLight)
 	require.Equal(t, -20, app.appSettings.PaletteBrightnessLight)
 	require.Equal(t, 120, app.appSettings.PaletteHueDark)
-	require.Equal(t, 40, app.appSettings.PaletteToneDark)
+	require.Equal(t, 40, app.appSettings.PaletteSaturationDark)
 	require.Equal(t, 10, app.appSettings.PaletteBrightnessDark)
 	require.Equal(t, "#0d9488", app.appSettings.AccentColorLight)
 	require.Equal(t, "#f59e0b", app.appSettings.AccentColorDark)
@@ -312,18 +312,18 @@ func TestAppSetPaletteTintPersistsAndClamps(t *testing.T) {
 	// Normal values persist correctly for light theme.
 	require.NoError(t, app.SetPaletteTint("light", 220, 50, -15))
 	require.Equal(t, 220, app.appSettings.PaletteHueLight)
-	require.Equal(t, 50, app.appSettings.PaletteToneLight)
+	require.Equal(t, 50, app.appSettings.PaletteSaturationLight)
 	require.Equal(t, -15, app.appSettings.PaletteBrightnessLight)
 	// Dark theme remains untouched.
 	require.Equal(t, 0, app.appSettings.PaletteHueDark)
-	require.Equal(t, 0, app.appSettings.PaletteToneDark)
+	require.Equal(t, 0, app.appSettings.PaletteSaturationDark)
 	require.Equal(t, 0, app.appSettings.PaletteBrightnessDark)
 
 	// Round-trips through save/load.
 	app.appSettings = nil
 	require.NoError(t, app.loadAppSettings())
 	require.Equal(t, 220, app.appSettings.PaletteHueLight)
-	require.Equal(t, 50, app.appSettings.PaletteToneLight)
+	require.Equal(t, 50, app.appSettings.PaletteSaturationLight)
 	require.Equal(t, -15, app.appSettings.PaletteBrightnessLight)
 
 	// Logs the change.
@@ -331,7 +331,7 @@ func TestAppSetPaletteTintPersistsAndClamps(t *testing.T) {
 	require.NotEmpty(t, entries)
 	last := entries[len(entries)-1]
 	require.Equal(t, "INFO", last.Level)
-	require.Contains(t, last.Message, "Palette tint (light) changed to hue=220 tone=50 brightness=-15")
+	require.Contains(t, last.Message, "Palette tint (light) changed to hue=220 saturation=50 brightness=-15")
 }
 
 func TestAppSetPaletteTintClampsOutOfRange(t *testing.T) {
@@ -341,13 +341,13 @@ func TestAppSetPaletteTintClampsOutOfRange(t *testing.T) {
 	// Values above max are clamped (light theme).
 	require.NoError(t, app.SetPaletteTint("light", 400, 150, 80))
 	require.Equal(t, 360, app.appSettings.PaletteHueLight)
-	require.Equal(t, 100, app.appSettings.PaletteToneLight)
+	require.Equal(t, 100, app.appSettings.PaletteSaturationLight)
 	require.Equal(t, 50, app.appSettings.PaletteBrightnessLight)
 
 	// Values below min are clamped (dark theme).
 	require.NoError(t, app.SetPaletteTint("dark", -10, -5, -100))
 	require.Equal(t, 0, app.appSettings.PaletteHueDark)
-	require.Equal(t, 0, app.appSettings.PaletteToneDark)
+	require.Equal(t, 0, app.appSettings.PaletteSaturationDark)
 	require.Equal(t, -50, app.appSettings.PaletteBrightnessDark)
 }
 
@@ -358,10 +358,10 @@ func TestAppSetPaletteTintDefaultsToZero(t *testing.T) {
 	settings, err := app.GetAppSettings()
 	require.NoError(t, err)
 	require.Equal(t, 0, settings.PaletteHueLight)
-	require.Equal(t, 0, settings.PaletteToneLight)
+	require.Equal(t, 0, settings.PaletteSaturationLight)
 	require.Equal(t, 0, settings.PaletteBrightnessLight)
 	require.Equal(t, 0, settings.PaletteHueDark)
-	require.Equal(t, 0, settings.PaletteToneDark)
+	require.Equal(t, 0, settings.PaletteSaturationDark)
 	require.Equal(t, 0, settings.PaletteBrightnessDark)
 }
 
@@ -388,7 +388,7 @@ func TestAppPaletteTintMigration(t *testing.T) {
 			Theme:                    "system",
 			GridTablePersistenceMode: "shared",
 			PaletteHue:               180,
-			PaletteTone:              65,
+			PaletteSaturation:        65,
 			PaletteBrightness:        -10,
 			Refresh:                  &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
 		},
@@ -400,10 +400,10 @@ func TestAppPaletteTintMigration(t *testing.T) {
 	// Load and verify migration copies old values to both themes.
 	require.NoError(t, app.loadAppSettings())
 	require.Equal(t, 180, app.appSettings.PaletteHueLight)
-	require.Equal(t, 65, app.appSettings.PaletteToneLight)
+	require.Equal(t, 65, app.appSettings.PaletteSaturationLight)
 	require.Equal(t, -10, app.appSettings.PaletteBrightnessLight)
 	require.Equal(t, 180, app.appSettings.PaletteHueDark)
-	require.Equal(t, 65, app.appSettings.PaletteToneDark)
+	require.Equal(t, 65, app.appSettings.PaletteSaturationDark)
 	require.Equal(t, -10, app.appSettings.PaletteBrightnessDark)
 }
 

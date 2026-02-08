@@ -4,6 +4,13 @@
   --dockable-panel-top-offset: var(--app-content-top);
 }
 
+/* When docked right, position the panel below the gridtable filter bar */
+.object-panel-dockable.dockable-panel--right {
+  --dockable-panel-top-offset: calc(
+    var(--app-content-top) + var(--gridtable-filter-bar-height, 0px)
+  );
+}
+
 .object-panel {
   position: absolute;
   top: 0;

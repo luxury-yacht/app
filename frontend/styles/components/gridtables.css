@@ -131,6 +131,35 @@
   background-color: var(--grid-bg-header);
 }
 
+/* Dock-panel offsets scoped to gridtables inside the main content area.
+   The object panel is portaled outside .content-body, so its nested
+   gridtables (e.g. Pods tab) are never affected by these rules. */
+.content-body .gridtable-wrapper {
+  margin-right: var(--dock-right-offset, 0px);
+  margin-bottom: var(--dock-bottom-offset, 0px);
+}
+
+.content-body .gridtable-header-container {
+  margin-right: var(--dock-right-offset, 0px);
+}
+
+/* Smooth transition only while a docked panel is open.
+   When the panel closes the class is removed first so the margin snaps
+   back instantly instead of leaving a visible gap. */
+body.dock-right-open .content-body .gridtable-wrapper,
+body.dock-right-open .content-body .gridtable-header-container {
+  transition: margin-right 0.3s ease-out;
+}
+
+body.dock-bottom-open .content-body .gridtable-wrapper {
+  transition: margin-bottom 0.3s ease-out;
+}
+
+body.dockable-panel-resizing .content-body .gridtable-wrapper,
+body.dockable-panel-resizing .content-body .gridtable-header-container {
+  transition: none;
+}
+
 .gridtable--header {
   position: relative;
   width: fit-content;
@@ -582,7 +611,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-filter-bar {
   background-color: var(--color-bg-secondary);
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0.75rem;
   padding: 8px 0 6px 0;
   align-items: center;
@@ -592,7 +621,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-filter-cluster {
   display: flex;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
 }
 
@@ -610,7 +639,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
 .gridtable-filter-subcluster {
   display: flex;
   gap: 0.75rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
 }
 

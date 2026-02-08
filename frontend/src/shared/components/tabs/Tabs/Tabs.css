@@ -30,48 +30,10 @@
   border-bottom-color: var(--color-text-secondary);
 }
 
-/* Shared view container - used by both namespace and cluster views */
-.view-container {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0; /* Important for nested flex containers */
-}
-
-/* Shared tab content container */
+/* Shared view content wrapper — standard layout for all gridtable views.
+   Provides the positioning context for the absolute-positioned gridtable-container. */
 .view-content {
   flex: 1;
-  position: relative; /* To contain absolute positioned table-container */
-  min-height: 0; /* Important for nested flex containers */
-}
-
-/* Shared resource container - fills parent with absolute positioning */
-.resource-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Apply shared styles to all cluster resource containers */
-.cluster-admission-control-content,
-.cluster-crds-content,
-.cluster-custom-content,
-.cluster-events-content,
-.cluster-ingress-classes-content,
-.cluster-nodes-content,
-.cluster-persistent-volumes-content,
-.cluster-rbac-content,
-.cluster-storage-classes-content,
-.resource-section {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  min-height: 0;
 }

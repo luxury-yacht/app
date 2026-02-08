@@ -44,17 +44,8 @@
   overflow: hidden;
   min-height: 0; /* Important for flex children */
   position: relative;
-  /* Shrink content area when docked panels are open */
-  padding-right: var(--dock-right-offset, 0px);
-  padding-bottom: var(--dock-bottom-offset, 0px);
-  transition:
-    padding-right 0.3s ease-out,
-    padding-bottom 0.3s ease-out;
-}
-
-/* Disable content transition during panel resize for instant feedback */
-body.dockable-panel-resizing .app-main {
-  transition: none;
+  /* Dock offsets are handled at the gridtable level so the filter bar and
+     header stay at full size while only the scrollable body area shrinks. */
 }
 
 .loading {

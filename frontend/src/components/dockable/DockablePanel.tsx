@@ -267,7 +267,11 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         '--dock-right-offset',
         `${panelState.size.width}px`
       );
+      // Signal that a right-docked panel is open so CSS can apply
+      // opening transitions without also transitioning on close.
+      document.body.classList.add('dock-right-open');
       return () => {
+        document.body.classList.remove('dock-right-open');
         document.documentElement.style.setProperty('--dock-right-offset', '0px');
       };
     }
@@ -277,7 +281,9 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         '--dock-bottom-offset',
         `${panelState.size.height}px`
       );
+      document.body.classList.add('dock-bottom-open');
       return () => {
+        document.body.classList.remove('dock-bottom-open');
         document.documentElement.style.setProperty('--dock-bottom-offset', '0px');
       };
     }

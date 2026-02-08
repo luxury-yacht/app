@@ -1,7 +1,7 @@
 /* Settings  */
 
 .settings-view {
-  padding: 0 1rem;
+  padding: 0 0.3rem;
   flex: 1;
   overflow-y: auto;
   position: relative;
@@ -15,14 +15,38 @@
 }
 
 .settings-section {
-  margin-bottom: 1.5rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: 1rem;
+  margin-bottom: 1.2rem;
+}
+
+.settings-section:last-child {
+  margin-bottom: 0.2rem;
 }
 
 .settings-section h3 {
   color: var(--color-text-secondary);
-  padding: 0.7rem 0;
+  /* margin: 0 0 1rem 0; */
+  margin-bottom: 1rem;
   font-size: var(--font-size-title);
   text-transform: uppercase;
+}
+
+.settings-subsection {
+  margin-bottom: 1rem;
+}
+
+.settings-subsection:last-child {
+  margin-bottom: 0;
+}
+
+.settings-subsection h4 {
+  font-size: var(--font-size-normal);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.5rem 0;
 }
 
 .settings-items {
@@ -33,7 +57,6 @@
 
 .setting-item {
   display: block;
-  padding-left: 1rem;
 }
 
 .setting-actions {
@@ -58,7 +81,6 @@
   margin: 0;
 }
 
-
 /* Palette Tint Controls — 4-column grid: label | control | value | reset */
 .palette-tint-controls {
   display: grid;
@@ -66,7 +88,6 @@
   gap: var(--spacing-xs) var(--spacing-sm);
   align-items: center;
   margin-top: var(--spacing-sm);
-  padding-left: 1rem;
 }
 
 /* Theme selector row — extra spacing before the palette sliders */
@@ -110,8 +131,8 @@
   );
 }
 
-/* Tone slider background is set dynamically via inline style */
-.palette-slider-tone {
+/* Saturation slider background is set dynamically via inline style */
+.palette-slider-saturation {
   background: linear-gradient(to right, hsl(0, 0%, 50%), hsl(0, 20%, 50%));
 }
 
@@ -219,7 +240,6 @@
 }
 
 .setting-description {
-  margin-left: 1rem;
   font-size: var(--font-size-small);
   color: var(--color-text-secondary);
 }

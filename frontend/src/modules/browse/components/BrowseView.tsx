@@ -67,7 +67,6 @@ const deriveBrowseScope = (namespace: string | null | undefined): BrowseScope =>
 const BrowseView: React.FC<BrowseViewProps> = ({
   namespace,
   viewId,
-  className,
   tableClassName,
   emptyMessage,
   loadingMessage,
@@ -316,8 +315,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   }, [isRequestingMore]);
 
   // Resolve class names and messages
-  const containerClassName =
-    className ?? (isNamespaceScoped ? 'namespace-browse-view' : 'browse-view');
   const resolvedTableClassName =
     tableClassName ?? (isNamespaceScoped ? 'gridtable-namespace-browse' : 'gridtable-browse');
   const resolvedEmptyMessage =
@@ -327,38 +324,36 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     loadingMessage ?? (isNamespaceScoped ? 'Loading resources...' : 'Loading browse catalog...');
 
   return (
-    <div className={containerClassName}>
-      <ResourceLoadingBoundary
-        loading={loading}
-        dataLength={sortedData.length}
-        hasLoaded={hasLoadedOnce}
-        spinnerMessage={resolvedLoadingMessage}
-        allowPartial
-        suppressEmptyWarning
-      >
-        <GridTable<BrowseTableRow>
-          data={sortedData}
-          columns={columns}
-          keyExtractor={keyExtractor}
-          onRowClick={handleOpen}
-          onSort={handleSort}
-          sortConfig={sortConfig}
-          tableClassName={resolvedTableClassName}
-          useShortNames={useShortResourceNames}
-          enableContextMenu
-          getCustomContextMenuItems={getContextMenuItems}
-          filters={gridFilters}
-          virtualization={virtualizationOptions}
-          allowHorizontalOverflow={true}
-          emptyMessage={resolvedEmptyMessage}
-          columnWidths={persistence.columnWidths}
-          onColumnWidthsChange={persistence.setColumnWidths}
-          columnVisibility={persistence.columnVisibility}
-          onColumnVisibilityChange={persistence.setColumnVisibility}
-          loadingOverlay={loadingOverlay}
-        />
-      </ResourceLoadingBoundary>
-    </div>
+    <ResourceLoadingBoundary
+      loading={loading}
+      dataLength={sortedData.length}
+      hasLoaded={hasLoadedOnce}
+      spinnerMessage={resolvedLoadingMessage}
+      allowPartial
+      suppressEmptyWarning
+    >
+      <GridTable<BrowseTableRow>
+        data={sortedData}
+        columns={columns}
+        keyExtractor={keyExtractor}
+        onRowClick={handleOpen}
+        onSort={handleSort}
+        sortConfig={sortConfig}
+        tableClassName={resolvedTableClassName}
+        useShortNames={useShortResourceNames}
+        enableContextMenu
+        getCustomContextMenuItems={getContextMenuItems}
+        filters={gridFilters}
+        virtualization={virtualizationOptions}
+        allowHorizontalOverflow={true}
+        emptyMessage={resolvedEmptyMessage}
+        columnWidths={persistence.columnWidths}
+        onColumnWidthsChange={persistence.setColumnWidths}
+        columnVisibility={persistence.columnVisibility}
+        onColumnVisibilityChange={persistence.setColumnVisibility}
+        loadingOverlay={loadingOverlay}
+      />
+    </ResourceLoadingBoundary>
   );
 };
 

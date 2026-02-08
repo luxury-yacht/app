@@ -38,15 +38,15 @@ type settingsPreferences struct {
 
 	// Migration: old single-value palette fields, read-only, omitted when zero.
 	PaletteHue        int `json:"paletteHue,omitempty"`
-	PaletteTone       int `json:"paletteTone,omitempty"`
+	PaletteSaturation int `json:"paletteSaturation,omitempty"`
 	PaletteBrightness int `json:"paletteBrightness,omitempty"`
 
 	// Per-theme palette fields.
-	PaletteHueLight        int `json:"paletteHueLight"`
-	PaletteToneLight       int `json:"paletteToneLight"`
-	PaletteBrightnessLight int `json:"paletteBrightnessLight"`
-	PaletteHueDark         int `json:"paletteHueDark"`
-	PaletteToneDark        int `json:"paletteToneDark"`
+	PaletteHueLight        int    `json:"paletteHueLight"`
+	PaletteSaturationLight int    `json:"paletteSaturationLight"`
+	PaletteBrightnessLight int    `json:"paletteBrightnessLight"`
+	PaletteHueDark         int    `json:"paletteHueDark"`
+	PaletteSaturationDark  int    `json:"paletteSaturationDark"`
 	PaletteBrightnessDark  int    `json:"paletteBrightnessDark"`
 	AccentColorLight       string `json:"accentColorLight,omitempty"`
 	AccentColorDark        string `json:"accentColorDark,omitempty"`
@@ -115,17 +115,17 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 
 	// Migrate old single-value palette fields to per-theme fields.
 	prefs := &settings.Preferences
-	if (prefs.PaletteHue != 0 || prefs.PaletteTone != 0 || prefs.PaletteBrightness != 0) &&
-		prefs.PaletteHueLight == 0 && prefs.PaletteToneLight == 0 && prefs.PaletteBrightnessLight == 0 &&
-		prefs.PaletteHueDark == 0 && prefs.PaletteToneDark == 0 && prefs.PaletteBrightnessDark == 0 {
+	if (prefs.PaletteHue != 0 || prefs.PaletteSaturation != 0 || prefs.PaletteBrightness != 0) &&
+		prefs.PaletteHueLight == 0 && prefs.PaletteSaturationLight == 0 && prefs.PaletteBrightnessLight == 0 &&
+		prefs.PaletteHueDark == 0 && prefs.PaletteSaturationDark == 0 && prefs.PaletteBrightnessDark == 0 {
 		prefs.PaletteHueLight = prefs.PaletteHue
-		prefs.PaletteToneLight = prefs.PaletteTone
+		prefs.PaletteSaturationLight = prefs.PaletteSaturation
 		prefs.PaletteBrightnessLight = prefs.PaletteBrightness
 		prefs.PaletteHueDark = prefs.PaletteHue
-		prefs.PaletteToneDark = prefs.PaletteTone
+		prefs.PaletteSaturationDark = prefs.PaletteSaturation
 		prefs.PaletteBrightnessDark = prefs.PaletteBrightness
 		prefs.PaletteHue = 0
-		prefs.PaletteTone = 0
+		prefs.PaletteSaturation = 0
 		prefs.PaletteBrightness = 0
 	}
 
@@ -295,10 +295,10 @@ func (a *App) loadAppSettings() error {
 		MetricsRefreshIntervalMs:         settings.Preferences.Refresh.MetricsIntervalMs,
 		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
 		PaletteHueLight:                  settings.Preferences.PaletteHueLight,
-		PaletteToneLight:                 settings.Preferences.PaletteToneLight,
+		PaletteSaturationLight:           settings.Preferences.PaletteSaturationLight,
 		PaletteBrightnessLight:           settings.Preferences.PaletteBrightnessLight,
 		PaletteHueDark:                   settings.Preferences.PaletteHueDark,
-		PaletteToneDark:                  settings.Preferences.PaletteToneDark,
+		PaletteSaturationDark:            settings.Preferences.PaletteSaturationDark,
 		PaletteBrightnessDark:            settings.Preferences.PaletteBrightnessDark,
 		AccentColorLight:                 settings.Preferences.AccentColorLight,
 		AccentColorDark:                  settings.Preferences.AccentColorDark,
@@ -327,10 +327,10 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
 	// Write per-theme palette fields; leave old fields zeroed so omitempty drops them.
 	settings.Preferences.PaletteHueLight = a.appSettings.PaletteHueLight
-	settings.Preferences.PaletteToneLight = a.appSettings.PaletteToneLight
+	settings.Preferences.PaletteSaturationLight = a.appSettings.PaletteSaturationLight
 	settings.Preferences.PaletteBrightnessLight = a.appSettings.PaletteBrightnessLight
 	settings.Preferences.PaletteHueDark = a.appSettings.PaletteHueDark
-	settings.Preferences.PaletteToneDark = a.appSettings.PaletteToneDark
+	settings.Preferences.PaletteSaturationDark = a.appSettings.PaletteSaturationDark
 	settings.Preferences.PaletteBrightnessDark = a.appSettings.PaletteBrightnessDark
 	settings.Preferences.AccentColorLight = a.appSettings.AccentColorLight
 	settings.Preferences.AccentColorDark = a.appSettings.AccentColorDark
@@ -542,9 +542,9 @@ func (a *App) SetZoomLevel(level int) error {
 	return a.saveSettingsFile(settings)
 }
 
-// SetPaletteTint persists the palette hue (0-360), tone (0-100), and brightness (-50 to +50) preferences
+// SetPaletteTint persists the palette hue (0-360), saturation (0-100), and brightness (-50 to +50) preferences
 // for the specified theme ("light" or "dark"). Values are clamped to their valid ranges.
-func (a *App) SetPaletteTint(theme string, hue, tone, brightness int) error {
+func (a *App) SetPaletteTint(theme string, hue, saturation, brightness int) error {
 	if theme != "light" && theme != "dark" {
 		return fmt.Errorf("invalid palette theme: %s", theme)
 	}
@@ -556,12 +556,12 @@ func (a *App) SetPaletteTint(theme string, hue, tone, brightness int) error {
 	if hue > 360 {
 		hue = 360
 	}
-	// Clamp tone to 0-100
-	if tone < 0 {
-		tone = 0
+	// Clamp saturation to 0-100
+	if saturation < 0 {
+		saturation = 0
 	}
-	if tone > 100 {
-		tone = 100
+	if saturation > 100 {
+		saturation = 100
 	}
 	// Clamp brightness to -50 to +50
 	if brightness < -50 {
@@ -577,15 +577,15 @@ func (a *App) SetPaletteTint(theme string, hue, tone, brightness int) error {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("Palette tint (%s) changed to hue=%d tone=%d brightness=%d", theme, hue, tone, brightness), "Settings")
+	a.logger.Info(fmt.Sprintf("Palette tint (%s) changed to hue=%d saturation=%d brightness=%d", theme, hue, saturation, brightness), "Settings")
 
 	if theme == "light" {
 		a.appSettings.PaletteHueLight = hue
-		a.appSettings.PaletteToneLight = tone
+		a.appSettings.PaletteSaturationLight = saturation
 		a.appSettings.PaletteBrightnessLight = brightness
 	} else {
 		a.appSettings.PaletteHueDark = hue
-		a.appSettings.PaletteToneDark = tone
+		a.appSettings.PaletteSaturationDark = saturation
 		a.appSettings.PaletteBrightnessDark = brightness
 	}
 

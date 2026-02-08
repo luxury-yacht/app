@@ -84,9 +84,9 @@ function AppContent() {
         // Apply palette tint for the current resolved theme.
         const currentTheme = resolveTheme();
         const tint = getPaletteTint(currentTheme);
-        if (isPaletteActive(tint.tone, tint.brightness)) {
-          applyTintedPalette(tint.hue, tint.tone, tint.brightness);
-          savePaletteTintToLocalStorage(currentTheme, tint.hue, tint.tone, tint.brightness);
+        if (isPaletteActive(tint.saturation, tint.brightness)) {
+          applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
+          savePaletteTintToLocalStorage(currentTheme, tint.hue, tint.saturation, tint.brightness);
         }
 
         // Apply accent color overrides for both palettes and accent-bg for the current theme.
@@ -111,13 +111,13 @@ function AppContent() {
     const unsubThemeResolved = eventBus.on('settings:theme-resolved', (newTheme) => {
       if (!active) return;
       const tint = getPaletteTint(newTheme);
-      if (isPaletteActive(tint.tone, tint.brightness)) {
-        applyTintedPalette(tint.hue, tint.tone, tint.brightness);
+      if (isPaletteActive(tint.saturation, tint.brightness)) {
+        applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
       } else {
         // Clear palette if the new theme has no tint.
         applyTintedPalette(0, 0, 0);
       }
-      savePaletteTintToLocalStorage(newTheme, tint.hue, tint.tone, tint.brightness);
+      savePaletteTintToLocalStorage(newTheme, tint.hue, tint.saturation, tint.brightness);
 
       // Re-apply accent-bg for the new theme.
       const accent = getAccentColor(newTheme);
