@@ -542,34 +542,6 @@ function Settings({ onClose }: SettingsProps) {
       </div>
 
       <div className="settings-section">
-        <h3>Auto-Refresh</h3>
-        <div className="settings-items">
-          <div className="setting-item">
-            <label htmlFor="refresh-enabled">
-              <input
-                type="checkbox"
-                id="refresh-enabled"
-                checked={refreshEnabled}
-                onChange={(e) => handleRefreshToggle(e.target.checked)}
-              />
-              Enable auto-refresh
-            </label>
-          </div>
-          <div className="setting-item">
-            <label htmlFor="refresh-background">
-              <input
-                type="checkbox"
-                id="refresh-background"
-                checked={backgroundRefreshEnabled}
-                onChange={(e) => setBackgroundRefresh(e.target.checked)}
-              />
-              Refresh background clusters
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div className="settings-section">
         <h3>Display</h3>
         <div className="settings-items">
           <div className="setting-item">
@@ -646,8 +618,30 @@ function Settings({ onClose }: SettingsProps) {
       </div>
 
       <div className="settings-section">
-        <h3>App State</h3>
+        <h3>Advanced</h3>
         <div className="settings-items">
+          <div className="setting-item">
+            <label htmlFor="refresh-enabled">
+              <input
+                type="checkbox"
+                id="refresh-enabled"
+                checked={refreshEnabled}
+                onChange={(e) => handleRefreshToggle(e.target.checked)}
+              />
+              Enable auto-refresh
+            </label>
+          </div>
+          <div className="setting-item">
+            <label htmlFor="refresh-background">
+              <input
+                type="checkbox"
+                id="refresh-background"
+                checked={backgroundRefreshEnabled}
+                onChange={(e) => setBackgroundRefresh(e.target.checked)}
+              />
+              Refresh background clusters
+            </label>
+          </div>
           <div className="setting-item">
             <label htmlFor="persist-namespaced">
               <input
