@@ -202,7 +202,9 @@ export const AppLayout: React.FC = () => {
                 viewState.viewType === 'cluster' ? (
                   viewState.activeClusterTab === 'browse' ? (
                     <RouteErrorBoundary routeName="browse">
-                      <BrowseView />
+                      <div className="view-content">
+                        <BrowseView />
+                      </div>
                     </RouteErrorBoundary>
                   ) : (
                     <RouteErrorBoundary routeName="cluster">

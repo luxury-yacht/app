@@ -22,9 +22,6 @@ export interface BrowseViewProps {
    */
   viewId?: string;
 
-  /** Additional class name for the container */
-  className?: string;
-
   /** Class name for the table */
   tableClassName?: string;
 
