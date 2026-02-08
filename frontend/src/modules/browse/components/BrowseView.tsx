@@ -316,8 +316,11 @@ const BrowseView: React.FC<BrowseViewProps> = ({
   }, [isRequestingMore]);
 
   // Resolve class names and messages
-  const containerClassName =
-    className ?? (isNamespaceScoped ? 'namespace-browse-view' : 'browse-view');
+  // Only use the view-content layout class when BrowseView is the top-level view
+  // (cluster scope). When embedded inside NsResourcesViews or AllNamespacesView,
+  // the parent already provides div.view-content with positioning — adding another
+  // would create a nested positioned context with zero height.
+  const containerClassName = className ?? (scope === 'cluster' ? 'view-content' : undefined);
   const resolvedTableClassName =
     tableClassName ?? (isNamespaceScoped ? 'gridtable-namespace-browse' : 'gridtable-browse');
   const resolvedEmptyMessage =

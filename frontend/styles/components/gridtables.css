@@ -102,10 +102,6 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  /* Shrink for docked panels so only the scrollable body area changes,
-     leaving the filter bar and header at full size. */
-  margin-right: var(--dock-right-offset, 0px);
-  margin-bottom: var(--dock-bottom-offset, 0px);
 }
 
 .gridtable-wrapper:focus {
@@ -133,24 +129,34 @@
   position: relative;
   overflow: hidden;
   background-color: var(--grid-bg-header);
-  /* Match the wrapper's right-dock offset so the header stays aligned. */
+}
+
+/* Dock-panel offsets scoped to gridtables inside the main content area.
+   The object panel is portaled outside .content-body, so its nested
+   gridtables (e.g. Pods tab) are never affected by these rules. */
+.content-body .gridtable-wrapper {
+  margin-right: var(--dock-right-offset, 0px);
+  margin-bottom: var(--dock-bottom-offset, 0px);
+}
+
+.content-body .gridtable-header-container {
   margin-right: var(--dock-right-offset, 0px);
 }
 
-/* Smooth transition only while a right-docked panel is open.
+/* Smooth transition only while a docked panel is open.
    When the panel closes the class is removed first so the margin snaps
    back instantly instead of leaving a visible gap. */
-body.dock-right-open .gridtable-wrapper,
-body.dock-right-open .gridtable-header-container {
+body.dock-right-open .content-body .gridtable-wrapper,
+body.dock-right-open .content-body .gridtable-header-container {
   transition: margin-right 0.3s ease-out;
 }
 
-body.dock-bottom-open .gridtable-wrapper {
+body.dock-bottom-open .content-body .gridtable-wrapper {
   transition: margin-bottom 0.3s ease-out;
 }
 
-body.dockable-panel-resizing .gridtable-wrapper,
-body.dockable-panel-resizing .gridtable-header-container {
+body.dockable-panel-resizing .content-body .gridtable-wrapper,
+body.dockable-panel-resizing .content-body .gridtable-header-container {
   transition: none;
 }
 

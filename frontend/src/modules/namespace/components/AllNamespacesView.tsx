@@ -297,7 +297,7 @@ const AllNamespacesView: React.FC<AllNamespacesViewProps> = ({ activeTab }) => {
     }
   };
 
-  return <div className="all-namespaces-view">{renderContent()}</div>;
+  return <div className="view-content">{renderContent()}</div>;
 };
 
 export default AllNamespacesView;

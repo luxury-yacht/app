@@ -364,11 +364,9 @@ const NamespaceResourcesViews: React.FC<NamespaceResourcesViewsProps> = ({
   };
 
   return (
-    <div className="view-container">
-      <div className="view-content">
-        {renderTabContent()}
-        {objectPanel}
-      </div>
+    <div className="view-content">
+      {renderTabContent()}
+      {objectPanel}
     </div>
   );
 };
