@@ -542,23 +542,6 @@ function Settings({ onClose }: SettingsProps) {
       </div>
 
       <div className="settings-section">
-        <h3>Display</h3>
-        <div className="settings-items">
-          <div className="setting-item">
-            <label htmlFor="short-resource-names">
-              <input
-                type="checkbox"
-                id="short-resource-names"
-                checked={useShortResourceNames}
-                onChange={(e) => handleShortNamesToggle(e.target.checked)}
-              />
-              Use short resource names (e.g., "sts" for StatefulSets)
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div className="settings-section">
         <h3>Kubeconfig Paths</h3>
         <div className="settings-items">
           <div className="setting-description">Add directories to scan for kubeconfig files.</div>
@@ -618,48 +601,73 @@ function Settings({ onClose }: SettingsProps) {
       </div>
 
       <div className="settings-section">
-        <h3>Advanced</h3>
+        <h3>Display</h3>
         <div className="settings-items">
           <div className="setting-item">
-            <label htmlFor="refresh-enabled">
+            <label htmlFor="short-resource-names">
               <input
                 type="checkbox"
-                id="refresh-enabled"
-                checked={refreshEnabled}
-                onChange={(e) => handleRefreshToggle(e.target.checked)}
+                id="short-resource-names"
+                checked={useShortResourceNames}
+                onChange={(e) => handleShortNamesToggle(e.target.checked)}
               />
-              Enable auto-refresh
+              Use short resource names (e.g., "sts" for StatefulSets)
             </label>
           </div>
-          <div className="setting-item">
-            <label htmlFor="refresh-background">
-              <input
-                type="checkbox"
-                id="refresh-background"
-                checked={backgroundRefreshEnabled}
-                onChange={(e) => setBackgroundRefresh(e.target.checked)}
-              />
-              Refresh background clusters
-            </label>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>Advanced</h3>
+        <div className="settings-subsection">
+          <h4>Refresh</h4>
+          <div className="settings-items">
+            <div className="setting-item">
+              <label htmlFor="refresh-enabled">
+                <input
+                  type="checkbox"
+                  id="refresh-enabled"
+                  checked={refreshEnabled}
+                  onChange={(e) => handleRefreshToggle(e.target.checked)}
+                />
+                Enable auto-refresh
+              </label>
+            </div>
+            <div className="setting-item">
+              <label htmlFor="refresh-background">
+                <input
+                  type="checkbox"
+                  id="refresh-background"
+                  checked={backgroundRefreshEnabled}
+                  onChange={(e) => setBackgroundRefresh(e.target.checked)}
+                />
+                Refresh background clusters
+              </label>
+            </div>
           </div>
-          <div className="setting-item">
-            <label htmlFor="persist-namespaced">
-              <input
-                type="checkbox"
-                id="persist-namespaced"
-                checked={persistenceMode === 'namespaced'}
-                onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
-              />
-              Persist state per namespaced view
-            </label>
-          </div>
-          <div className="setting-item setting-actions">
-            <button type="button" className="button generic" onClick={handleResetViewsRequest}>
-              Reset Views
-            </button>
-            <button type="button" className="button generic" onClick={handleClearAllStateRequest}>
-              Factory Reset
-            </button>
+        </div>
+        <div className="settings-subsection">
+          <h4>Persistence</h4>
+          <div className="settings-items">
+            <div className="setting-item">
+              <label htmlFor="persist-namespaced">
+                <input
+                  type="checkbox"
+                  id="persist-namespaced"
+                  checked={persistenceMode === 'namespaced'}
+                  onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
+                />
+                Persist state per namespaced view
+              </label>
+            </div>
+            <div className="setting-item setting-actions">
+              <button type="button" className="button generic" onClick={handleResetViewsRequest}>
+                Reset Views
+              </button>
+              <button type="button" className="button generic" onClick={handleClearAllStateRequest}>
+                Factory Reset
+              </button>
+            </div>
           </div>
         </div>
       </div>

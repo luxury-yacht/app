@@ -34,6 +34,21 @@
   text-transform: uppercase;
 }
 
+.settings-subsection {
+  margin-bottom: 1rem;
+}
+
+.settings-subsection:last-child {
+  margin-bottom: 0;
+}
+
+.settings-subsection h4 {
+  font-size: var(--font-size-normal);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin: 0 0 0.5rem 0;
+}
+
 .settings-items {
   display: flex;
   flex-direction: column;
