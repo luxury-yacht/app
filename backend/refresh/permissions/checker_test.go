@@ -120,6 +120,63 @@ func TestCheckerDeduplicatesConcurrentCalls(t *testing.T) {
 	require.Equal(t, int64(1), actual, "expected singleflight to deduplicate concurrent SSAR calls, got %d", actual)
 }
 
+func TestCheckerStaleWhileRevalidate(t *testing.T) {
+	var callCount int64
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
+		atomic.AddInt64(&callCount, 1)
+		return true, nil
+	})
+
+	now := time.Date(2024, 5, 1, 10, 0, 0, 0, time.UTC)
+	checker.now = func() time.Time { return now }
+
+	// First call: fresh.
+	decision, err := checker.Can(context.Background(), "", "pods", "list")
+	require.NoError(t, err)
+	require.Equal(t, DecisionSourceFresh, decision.Source)
+	require.Equal(t, int64(1), atomic.LoadInt64(&callCount))
+
+	// Advance past TTL but within stale grace window (TTL=1m, grace=30s -> within 1m30s).
+	now = now.Add(time.Minute + 15*time.Second)
+	decision, err = checker.Can(context.Background(), "", "pods", "list")
+	require.NoError(t, err)
+	require.Equal(t, DecisionSourceStale, decision.Source)
+	require.True(t, decision.Allowed)
+
+	// Wait a moment for the background refresh to fire.
+	time.Sleep(100 * time.Millisecond)
+	require.Equal(t, int64(2), atomic.LoadInt64(&callCount))
+
+	// Next call should get the freshly cached value.
+	decision, err = checker.Can(context.Background(), "", "pods", "list")
+	require.NoError(t, err)
+	require.Equal(t, DecisionSourceCache, decision.Source)
+}
+
+func TestCheckerStaleGracePeriodExpired(t *testing.T) {
+	callCount := 0
+	checker := NewCheckerWithReview("cluster-a", time.Minute, func(context.Context, string, string, string) (bool, error) {
+		callCount++
+		return true, nil
+	})
+
+	now := time.Date(2024, 5, 1, 10, 0, 0, 0, time.UTC)
+	checker.now = func() time.Time { return now }
+
+	// First call: fresh.
+	decision, err := checker.Can(context.Background(), "", "pods", "list")
+	require.NoError(t, err)
+	require.Equal(t, DecisionSourceFresh, decision.Source)
+	require.Equal(t, 1, callCount)
+
+	// Advance past TTL + stale grace (1m + 30s + 1s = 1m31s): should block and fetch fresh.
+	now = now.Add(time.Minute + 31*time.Second)
+	decision, err = checker.Can(context.Background(), "", "pods", "list")
+	require.NoError(t, err)
+	require.Equal(t, DecisionSourceFresh, decision.Source)
+	require.Equal(t, 2, callCount)
+}
+
 func TestCheckerCanListWatch(t *testing.T) {
 	t.Run("both allowed", func(t *testing.T) {
 		checker := NewCheckerWithReview("cluster-c", time.Minute, func(_ context.Context, _, _, verb string) (bool, error) {

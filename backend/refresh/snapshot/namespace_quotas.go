@@ -22,6 +22,13 @@ const (
 	namespaceQuotasEntryLimit = 1000
 )
 
+// NamespaceQuotasPermissions indicates which resources should be included in the domain.
+type NamespaceQuotasPermissions struct {
+	IncludeResourceQuotas      bool
+	IncludeLimitRanges         bool
+	IncludePodDisruptionBudgets bool
+}
+
 // NamespaceQuotasBuilder constructs ResourceQuota/LimitRange/PodDisruptionBudget summaries.
 type NamespaceQuotasBuilder struct {
 	quotaLister corelisters.ResourceQuotaLister
@@ -57,17 +64,25 @@ type QuotaStatus struct {
 }
 
 // RegisterNamespaceQuotasDomain registers quotas domain.
+// Only listers for permitted resources are wired; denied resources are left nil
+// so the builder skips them gracefully.
 func RegisterNamespaceQuotasDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
+	perms NamespaceQuotasPermissions,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	builder := &NamespaceQuotasBuilder{
-		quotaLister: factory.Core().V1().ResourceQuotas().Lister(),
-		limitLister: factory.Core().V1().LimitRanges().Lister(),
-		pdbLister:   factory.Policy().V1().PodDisruptionBudgets().Lister(),
+	builder := &NamespaceQuotasBuilder{}
+	if perms.IncludeResourceQuotas {
+		builder.quotaLister = factory.Core().V1().ResourceQuotas().Lister()
+	}
+	if perms.IncludeLimitRanges {
+		builder.limitLister = factory.Core().V1().LimitRanges().Lister()
+	}
+	if perms.IncludePodDisruptionBudgets {
+		builder.pdbLister = factory.Policy().V1().PodDisruptionBudgets().Lister()
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceQuotasDomainName,
@@ -100,18 +115,26 @@ func (b *NamespaceQuotasBuilder) Build(ctx context.Context, scope string) (*refr
 		scopeLabel = refresh.JoinClusterScope(clusterID, trimmed)
 	}
 
-	quotas, err := b.listResourceQuotas(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace quotas: failed to list resourcequotas: %w", err)
+	var quotas []*corev1.ResourceQuota
+	if b.quotaLister != nil {
+		quotas, err = b.listResourceQuotas(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace quotas: failed to list resourcequotas: %w", err)
+		}
 	}
-	limits, err := b.listLimitRanges(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace quotas: failed to list limitranges: %w", err)
+	var limits []*corev1.LimitRange
+	if b.limitLister != nil {
+		limits, err = b.listLimitRanges(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace quotas: failed to list limitranges: %w", err)
+		}
 	}
-
-	pdbs, err := b.listPodDisruptionBudgets(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace quotas: failed to list poddisruptionbudgets: %w", err)
+	var pdbs []*policyv1.PodDisruptionBudget
+	if b.pdbLister != nil {
+		pdbs, err = b.listPodDisruptionBudgets(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace quotas: failed to list poddisruptionbudgets: %w", err)
+		}
 	}
 
 	return b.buildSnapshot(meta, scopeLabel, quotas, limits, pdbs)

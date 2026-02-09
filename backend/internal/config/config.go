@@ -44,6 +44,11 @@ const (
 	// PermissionCacheTTL controls how long SSAR permission decisions are cached.
 	PermissionCacheTTL = 2 * time.Minute
 
+	// PermissionCacheStaleGracePeriod is the extra window beyond TTL during which
+	// a stale cached permission decision can be returned immediately while a
+	// background refresh is triggered. Beyond TTL + grace, the caller blocks.
+	PermissionCacheStaleGracePeriod = 30 * time.Second
+
 	// PermissionCheckTimeout bounds SelfSubjectAccessReview calls.
 	PermissionCheckTimeout = 5 * time.Second
 

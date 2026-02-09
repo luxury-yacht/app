@@ -22,6 +22,12 @@ const (
 	errNamespaceConfigScopeRequired = "namespace scope is required"
 )
 
+// NamespaceConfigPermissions indicates which resources should be included in the domain.
+type NamespaceConfigPermissions struct {
+	IncludeConfigMaps bool
+	IncludeSecrets    bool
+}
+
 // NamespaceConfigBuilder constructs config summaries for a namespace.
 type NamespaceConfigBuilder struct {
 	configMaps corelisters.ConfigMapLister
@@ -46,16 +52,22 @@ type ConfigSummary struct {
 }
 
 // RegisterNamespaceConfigDomain registers the namespace config domain.
+// Only listers for permitted resources are wired; denied resources are left nil
+// so the builder skips them gracefully.
 func RegisterNamespaceConfigDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
+	perms NamespaceConfigPermissions,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	builder := &NamespaceConfigBuilder{
-		configMaps: factory.Core().V1().ConfigMaps().Lister(),
-		secrets:    factory.Core().V1().Secrets().Lister(),
+	builder := &NamespaceConfigBuilder{}
+	if perms.IncludeConfigMaps {
+		builder.configMaps = factory.Core().V1().ConfigMaps().Lister()
+	}
+	if perms.IncludeSecrets {
+		builder.secrets = factory.Core().V1().Secrets().Lister()
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceConfigDomainName,
@@ -88,14 +100,20 @@ func (b *NamespaceConfigBuilder) Build(ctx context.Context, scope string) (*refr
 		scopeLabel = refresh.JoinClusterScope(clusterID, trimmed)
 	}
 
-	configMaps, err := b.listConfigMaps(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace config: failed to list configmaps: %w", err)
+	var configMaps []*corev1.ConfigMap
+	if b.configMaps != nil {
+		configMaps, err = b.listConfigMaps(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace config: failed to list configmaps: %w", err)
+		}
 	}
 
-	secrets, err := b.listSecrets(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace config: failed to list secrets: %w", err)
+	var secrets []*corev1.Secret
+	if b.secrets != nil {
+		secrets, err = b.listSecrets(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace config: failed to list secrets: %w", err)
+		}
 	}
 
 	return b.buildSnapshot(meta, scopeLabel, configMaps, secrets)

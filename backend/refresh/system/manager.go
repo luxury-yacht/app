@@ -201,7 +201,7 @@ func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	_ = informerFactory.PrimePermissions(ctx, preflight)
 	cancel()
 
-	if err := registerDomains(gate, registrations); err != nil {
+	if err := registerDomains(gate, runtimePerms, registrations); err != nil {
 		return nil, err
 	}
 

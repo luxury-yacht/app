@@ -24,7 +24,9 @@ export enum ErrorSeverity {
   CRITICAL = 'critical',
 }
 
-// Word-boundary token matching avoids resource-name false positives.
+// Word-boundary matching avoids resource-name false positives
+// (e.g. "authorization" in "rbac.authorization.k8s.io" is not an auth error).
+const authWordPattern = /\bauth\b/;
 const authTokenPattern = /\btokens?\b/;
 
 export interface ErrorDetails {
@@ -87,7 +89,7 @@ class ErrorHandler {
     if (
       lowerError.includes('unauthorized') ||
       lowerError.includes('authentication') ||
-      lowerError.includes('auth') ||
+      authWordPattern.test(lowerError) ||
       authTokenPattern.test(lowerError) ||
       lowerError.includes('expired') ||
       lowerError.includes('401')

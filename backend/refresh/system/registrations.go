@@ -1,11 +1,13 @@
 package system
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 )
 
@@ -40,12 +42,17 @@ type domainMeta struct {
 }
 
 // registerDomains registers refresh domains in a fixed order to preserve behavior.
-func registerDomains(gate *permissionGate, registrations []domainRegistration) error {
-	return runDomainRegistrations(gate, registrations)
+// The checker is used for a universal runtime permission check before each registration.
+func registerDomains(gate *permissionGate, checker *permissions.Checker, registrations []domainRegistration) error {
+	return runDomainRegistrations(gate, checker, registrations)
 }
 
 // runDomainRegistrations applies the registration table in-order.
-func runDomainRegistrations(gate *permissionGate, registrations []domainRegistration) error {
+// Before each domain's gate logic, it checks runtime permissions using
+// defaultPermissionChecks() as the single source of truth. If the domain's
+// required permissions are denied, a permission-denied placeholder is registered
+// instead of proceeding with the normal registration.
+func runDomainRegistrations(gate *permissionGate, checker *permissions.Checker, registrations []domainRegistration) error {
 	for _, registration := range registrations {
 		if registration.skipIf != nil && registration.skipIf() {
 			continue
@@ -55,6 +62,21 @@ func runDomainRegistrations(gate *permissionGate, registrations []domainRegistra
 				return err
 			}
 		}
+
+		// Universal runtime permission check: use defaultPermissionChecks() to verify
+		// the user has access to this domain's resources before attempting registration.
+		// If denied, register a placeholder that returns 403 and skip further gate logic.
+		// If the check fails (e.g. SSAR error), fall through to existing gate logic.
+		if checker != nil {
+			allowed, deniedReason, err := snapshot.CheckDomainPermission(context.Background(), registration.name, checker)
+			if err == nil && !allowed {
+				if regErr := snapshot.RegisterPermissionDeniedDomain(gate.registry, registration.name, deniedReason); regErr != nil {
+					return regErr
+				}
+				continue
+			}
+		}
+
 		hasList := registration.list != nil
 		hasListWatch := registration.listWatch != nil
 		hasDirect := registration.direct != nil
@@ -92,6 +114,8 @@ func runDomainRegistrations(gate *permissionGate, registrations []domainRegistra
 }
 
 // preflightRequests collects permission requests used to prime permission caches.
+// It merges requirements from the registration table, the runtime permission checks
+// (defaultPermissionChecks), and any extra requests (e.g. metrics).
 func preflightRequests(registrations []domainRegistration, extra []informer.PermissionRequest) []informer.PermissionRequest {
 	requests := make([]informer.PermissionRequest, 0, len(extra))
 	seen := make(map[string]struct{})
@@ -110,6 +134,11 @@ func preflightRequests(registrations []domainRegistration, extra []informer.Perm
 	}
 
 	for _, req := range extra {
+		add(req.Group, req.Resource, req.Verb)
+	}
+
+	// Add all runtime permission requirements so the universal check is pre-warmed.
+	for _, req := range snapshot.RuntimePreflightRequirements() {
 		add(req.Group, req.Resource, req.Verb)
 	}
 
@@ -161,7 +190,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 	helmProvider, helmOK := deps.cfg.ObjectDetailsProvider.(snapshot.HelmContentProvider)
 
 	return []domainRegistration{
-		directRegistration("namespace-listing", func() error {
+		directRegistration("namespaces", func() error {
 			return snapshot.RegisterNamespaceDomain(deps.registry, deps.informerFactory.SharedInformerFactory())
 		}),
 
@@ -284,33 +313,28 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			},
 		}, crdMeta)),
 
-		listRegistration(listDomainConfig{
-			name:          "cluster-events",
-			issueResource: "core/events",
-			logGroup:      "",
-			logResource:   "events",
-			checks: []listCheck{
-				{group: "", resource: "events"},
-			},
-			register: func(_ map[string]bool) error {
-				return snapshot.RegisterClusterEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory())
-			},
-			deniedReason: "core/events",
+		directRegistration("cluster-events", func() error {
+			return snapshot.RegisterClusterEventsDomain(deps.registry, deps.informerFactory.SharedInformerFactory())
 		}),
 
-		listWatchRegistration(listWatchDomainConfig{
+		listRegistration(listDomainConfig{
 			name:          "cluster-rbac",
 			issueResource: "rbac.authorization.k8s.io/clusterroles,clusterrolebindings",
 			logGroup:      "rbac.authorization.k8s.io",
 			logResource:   "clusterroles/clusterrolebindings",
-			checks: []listWatchCheck{
+			checks: []listCheck{
 				{group: "rbac.authorization.k8s.io", resource: "clusterroles"},
 				{group: "rbac.authorization.k8s.io", resource: "clusterrolebindings"},
 			},
-			registerInformer: func() error {
+			allowAny: true,
+			register: func(allowed map[string]bool) error {
 				return snapshot.RegisterClusterRBACDomain(
 					deps.registry,
 					deps.informerFactory.SharedInformerFactory(),
+					snapshot.ClusterRBACPermissions{
+						IncludeClusterRoles:        allowed["rbac.authorization.k8s.io/clusterroles"],
+						IncludeClusterRoleBindings: allowed["rbac.authorization.k8s.io/clusterrolebindings"],
+					},
 				)
 			},
 			deniedReason: "rbac.authorization.k8s.io",
@@ -333,13 +357,37 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			deniedReason: "core/persistentvolumes",
 		}),
 
-		directRegistration("namespace-workloads", func() error {
-			return snapshot.RegisterNamespaceWorkloadsDomain(
-				deps.registry,
-				deps.informerFactory.SharedInformerFactory(),
-				deps.metricsProvider,
-				deps.cfg.Logger,
-			)
+		listRegistration(listDomainConfig{
+			name:          "namespace-workloads",
+			issueResource: "core/pods,apps/deployments,apps/statefulsets,apps/daemonsets,batch/jobs,batch/cronjobs",
+			logGroup:      "*",
+			logResource:   "pods/deployments/statefulsets/daemonsets/jobs/cronjobs",
+			checks: []listCheck{
+				{group: "", resource: "pods"},
+				{group: "apps", resource: "deployments"},
+				{group: "apps", resource: "statefulsets"},
+				{group: "apps", resource: "daemonsets"},
+				{group: "batch", resource: "jobs"},
+				{group: "batch", resource: "cronjobs"},
+			},
+			allowAny: true,
+			register: func(allowed map[string]bool) error {
+				return snapshot.RegisterNamespaceWorkloadsDomain(
+					deps.registry,
+					deps.informerFactory.SharedInformerFactory(),
+					deps.metricsProvider,
+					deps.cfg.Logger,
+					snapshot.NamespaceWorkloadsPermissions{
+						IncludePods:         allowed["core/pods"],
+						IncludeDeployments:  allowed["apps/deployments"],
+						IncludeStatefulSets: allowed["apps/statefulsets"],
+						IncludeDaemonSets:   allowed["apps/daemonsets"],
+						IncludeJobs:         allowed["batch/jobs"],
+						IncludeCronJobs:     allowed["batch/cronjobs"],
+					},
+				)
+			},
+			deniedReason: "workload resources",
 		}),
 		directRegistration("namespace-autoscaling", func() error {
 			return snapshot.RegisterNamespaceAutoscalingDomain(
@@ -347,11 +395,27 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 				deps.informerFactory.SharedInformerFactory(),
 			)
 		}),
-		directRegistration("namespace-config", func() error {
-			return snapshot.RegisterNamespaceConfigDomain(
-				deps.registry,
-				deps.informerFactory.SharedInformerFactory(),
-			)
+		listRegistration(listDomainConfig{
+			name:          "namespace-config",
+			issueResource: "core/configmaps,secrets",
+			logGroup:      "",
+			logResource:   "configmaps/secrets",
+			checks: []listCheck{
+				{group: "", resource: "configmaps"},
+				{group: "", resource: "secrets"},
+			},
+			allowAny: true,
+			register: func(allowed map[string]bool) error {
+				return snapshot.RegisterNamespaceConfigDomain(
+					deps.registry,
+					deps.informerFactory.SharedInformerFactory(),
+					snapshot.NamespaceConfigPermissions{
+						IncludeConfigMaps: allowed["core/configmaps"],
+						IncludeSecrets:    allowed["core/secrets"],
+					},
+				)
+			},
+			deniedReason: "core/configmaps,secrets",
 		}),
 
 		withRequire(listRegistration(applyListMeta(listDomainConfig{
@@ -387,34 +451,80 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			}
 			return nil
 		}),
-		withPreflightListWatch(directRegistration("namespace-network", func() error {
-			return snapshot.RegisterNamespaceNetworkDomain(
-				deps.registry,
-				deps.informerFactory.SharedInformerFactory(),
-			)
-		}), []listWatchCheck{
-			{group: "discovery.k8s.io", resource: "endpointslices"},
+		listRegistration(listDomainConfig{
+			name:          "namespace-network",
+			issueResource: "core/services,discovery.k8s.io/endpointslices,networking.k8s.io/ingresses,networking.k8s.io/networkpolicies",
+			logGroup:      "*",
+			logResource:   "services/endpointslices/ingresses/networkpolicies",
+			checks: []listCheck{
+				{group: "", resource: "services"},
+				{group: "discovery.k8s.io", resource: "endpointslices"},
+				{group: "networking.k8s.io", resource: "ingresses"},
+				{group: "networking.k8s.io", resource: "networkpolicies"},
+			},
+			allowAny: true,
+			register: func(allowed map[string]bool) error {
+				return snapshot.RegisterNamespaceNetworkDomain(
+					deps.registry,
+					deps.informerFactory.SharedInformerFactory(),
+					snapshot.NamespaceNetworkPermissions{
+						IncludeServices:        allowed["core/services"],
+						IncludeEndpointSlices:  allowed["discovery.k8s.io/endpointslices"],
+						IncludeIngresses:       allowed["networking.k8s.io/ingresses"],
+						IncludeNetworkPolicies: allowed["networking.k8s.io/networkpolicies"],
+					},
+				)
+			},
+			deniedReason: "network resources",
 		}),
-		directRegistration("namespace-quotas", func() error {
-			return snapshot.RegisterNamespaceQuotasDomain(
-				deps.registry,
-				deps.informerFactory.SharedInformerFactory(),
-			)
+		listRegistration(listDomainConfig{
+			name:          "namespace-quotas",
+			issueResource: "core/resourcequotas,limitranges,policy/poddisruptionbudgets",
+			logGroup:      "*",
+			logResource:   "resourcequotas/limitranges/poddisruptionbudgets",
+			checks: []listCheck{
+				{group: "", resource: "resourcequotas"},
+				{group: "", resource: "limitranges"},
+				{group: "policy", resource: "poddisruptionbudgets"},
+			},
+			allowAny: true,
+			register: func(allowed map[string]bool) error {
+				return snapshot.RegisterNamespaceQuotasDomain(
+					deps.registry,
+					deps.informerFactory.SharedInformerFactory(),
+					snapshot.NamespaceQuotasPermissions{
+						IncludeResourceQuotas:       allowed["core/resourcequotas"],
+						IncludeLimitRanges:          allowed["core/limitranges"],
+						IncludePodDisruptionBudgets: allowed["policy/poddisruptionbudgets"],
+					},
+				)
+			},
+			deniedReason: "quota resources",
 		}),
 
 		listRegistration(listDomainConfig{
 			name:          "namespace-rbac",
-			issueResource: "rbac.authorization.k8s.io/roles,rolebindings",
+			issueResource: "rbac.authorization.k8s.io/roles,rolebindings,core/serviceaccounts",
 			logGroup:      "rbac.authorization.k8s.io",
-			logResource:   "roles/rolebindings",
+			logResource:   "roles/rolebindings/serviceaccounts",
 			checks: []listCheck{
 				{group: "rbac.authorization.k8s.io", resource: "roles"},
 				{group: "rbac.authorization.k8s.io", resource: "rolebindings"},
+				{group: "", resource: "serviceaccounts"},
 			},
-			register: func(_ map[string]bool) error {
-				return snapshot.RegisterNamespaceRBACDomain(deps.registry, deps.informerFactory.SharedInformerFactory())
+			allowAny: true,
+			register: func(allowed map[string]bool) error {
+				return snapshot.RegisterNamespaceRBACDomain(
+					deps.registry,
+					deps.informerFactory.SharedInformerFactory(),
+					snapshot.NamespaceRBACPermissions{
+						IncludeRoles:           allowed["rbac.authorization.k8s.io/roles"],
+						IncludeRoleBindings:    allowed["rbac.authorization.k8s.io/rolebindings"],
+						IncludeServiceAccounts: allowed["core/serviceaccounts"],
+					},
+				)
 			},
-			deniedReason: "rbac.authorization.k8s.io/roles",
+			deniedReason: "rbac.authorization.k8s.io/roles,rolebindings,serviceaccounts",
 		}),
 
 		directRegistration("namespace-storage", func() error {
@@ -424,7 +534,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 			)
 		}),
 
-		directRegistration("pod", func() error {
+		directRegistration("pods", func() error {
 			return snapshot.RegisterPodDomain(deps.registry, deps.informerFactory.SharedInformerFactory(), deps.metricsProvider)
 		}),
 

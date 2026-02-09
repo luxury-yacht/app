@@ -154,8 +154,15 @@ func (s *Service) Build(ctx context.Context, domainName, scope string) (*refresh
 }
 
 // ensurePermissions blocks snapshot builds when the current identity no longer has list access.
+// Permission-denied placeholder domains are skipped — their BuildSnapshot stub already
+// returns the correct PermissionDeniedError, so firing SSAR calls is redundant.
 func (s *Service) ensurePermissions(ctx context.Context, domainName, scope string) error {
 	if s == nil || s.permissionChecker == nil || len(s.permissionChecks) == 0 {
+		return nil
+	}
+	// Skip SSAR checks for domains already registered as permission-denied placeholders.
+	// The domain's BuildSnapshot will return a PermissionDeniedError on its own.
+	if s.registry != nil && s.registry.IsPermissionDenied(domainName) {
 		return nil
 	}
 	check, ok := s.permissionChecks[domainName]

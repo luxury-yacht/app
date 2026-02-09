@@ -107,13 +107,65 @@ func permissionResourceLabel(req permissionRequirement) string {
 	return fmt.Sprintf("%s/%s", group, req.resource)
 }
 
+// PreflightRequirement describes a single permission to prime during startup.
+type PreflightRequirement struct {
+	Group    string
+	Resource string
+	Verb     string
+}
+
+// CheckDomainPermission checks whether the runtime permission requirements for the given
+// domain are satisfied. It uses defaultPermissionChecks() as the single source of truth.
+// Returns (true, "", nil) if allowed or if no check is defined for the domain.
+// Returns (false, reason, nil) if denied.
+// Returns (false, "", err) if the check itself fails.
+func CheckDomainPermission(ctx context.Context, domainName string, checker *permissions.Checker) (bool, string, error) {
+	checks := defaultPermissionChecks()
+	check, ok := checks[domainName]
+	if !ok {
+		return true, "", nil
+	}
+	allowed, err := check.allows(ctx, checker)
+	if err != nil {
+		return false, "", err
+	}
+	if !allowed {
+		return false, check.resource, nil
+	}
+	return true, "", nil
+}
+
+// RuntimePreflightRequirements returns all permission requirements from defaultPermissionChecks
+// for cache priming at startup. This ensures every runtime permission check is pre-warmed.
+func RuntimePreflightRequirements() []PreflightRequirement {
+	checks := defaultPermissionChecks()
+	var reqs []PreflightRequirement
+	seen := make(map[string]struct{})
+	for _, check := range checks {
+		for _, req := range check.requirements {
+			key := fmt.Sprintf("%s/%s/%s", req.group, req.resource, req.verb)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			reqs = append(reqs, PreflightRequirement{
+				Group:    req.group,
+				Resource: req.resource,
+				Verb:     req.verb,
+			})
+		}
+	}
+	return reqs
+}
+
 // defaultPermissionChecks maps snapshot domains to list permissions for per-request SSAR gating.
 func defaultPermissionChecks() map[string]permissionCheck {
 	return map[string]permissionCheck{
 		"namespaces": requireAll(
 			listPermission("", "namespaces"),
 		),
-		namespaceWorkloadsDomainName: requireAll(
+		namespaceWorkloadsDomainName: requireAny(
+			"workload resources",
 			listPermission("", "pods"),
 			listPermission("apps", "deployments"),
 			listPermission("apps", "statefulsets"),
@@ -121,11 +173,13 @@ func defaultPermissionChecks() map[string]permissionCheck {
 			listPermission("batch", "jobs"),
 			listPermission("batch", "cronjobs"),
 		),
-		namespaceConfigDomainName: requireAll(
+		namespaceConfigDomainName: requireAny(
+			"core/configmaps,secrets",
 			listPermission("", "configmaps"),
 			listPermission("", "secrets"),
 		),
-		namespaceNetworkDomainName: requireAll(
+		namespaceNetworkDomainName: requireAny(
+			"network resources",
 			listPermission("", "services"),
 			listPermission("discovery.k8s.io", "endpointslices"),
 			listPermission("networking.k8s.io", "ingresses"),
@@ -137,12 +191,14 @@ func defaultPermissionChecks() map[string]permissionCheck {
 		namespaceAutoscalingDomainName: requireAll(
 			listPermission("autoscaling", "horizontalpodautoscalers"),
 		),
-		namespaceQuotasDomainName: requireAll(
+		namespaceQuotasDomainName: requireAny(
+			"quota resources",
 			listPermission("", "resourcequotas"),
 			listPermission("", "limitranges"),
 			listPermission("policy", "poddisruptionbudgets"),
 		),
-		namespaceRBACDomainName: requireAll(
+		namespaceRBACDomainName: requireAny(
+			"rbac.authorization.k8s.io/roles,rolebindings,serviceaccounts",
 			listPermission("rbac.authorization.k8s.io", "roles"),
 			listPermission("rbac.authorization.k8s.io", "rolebindings"),
 			listPermission("", "serviceaccounts"),
@@ -162,11 +218,13 @@ func defaultPermissionChecks() map[string]permissionCheck {
 		"nodes": requireAll(
 			listPermission("", "nodes"),
 		),
-		clusterOverviewDomainName: requireAll(
+		clusterOverviewDomainName: requireAny(
+			"cluster overview resources",
 			listPermission("", "nodes"),
 			listPermission("", "namespaces"),
 		),
-		clusterRBACDomainName: requireAll(
+		clusterRBACDomainName: requireAny(
+			"rbac.authorization.k8s.io",
 			listPermission("rbac.authorization.k8s.io", "clusterroles"),
 			listPermission("rbac.authorization.k8s.io", "clusterrolebindings"),
 		),
