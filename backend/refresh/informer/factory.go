@@ -354,7 +354,12 @@ func (f *Factory) checkResourceVerb(group, resource, verb string) (bool, error) 
 	if f.runtimePermissions != nil {
 		decision, err := f.runtimePermissions.Can(context.Background(), group, resource, verb)
 		if err == nil {
-			f.storeLegacyPermission(key, decision.Allowed)
+			// Only track that this permission was granted (for the revalidator);
+			// skip writing to permissionCache since the runtime Checker already
+			// caches the result, avoiding a redundant dual-cache write.
+			if decision.Allowed {
+				f.trackAllowedPermission(key)
+			}
 			return decision.Allowed, nil
 		}
 		if allowed, ok := f.readLegacyPermission(key); ok {
@@ -426,6 +431,20 @@ func (f *Factory) readLegacyPermission(key string) (bool, bool) {
 		return false, false
 	}
 	return entry.allowed, true
+}
+
+// trackAllowedPermission records that a permission key has been granted at least once.
+// Unlike storeLegacyPermission, this does not write to the TTL-based permission cache,
+// avoiding redundant mirroring of results already cached by the runtime Checker.
+func (f *Factory) trackAllowedPermission(key string) {
+	if f == nil {
+		return
+	}
+	f.permissionMu.Lock()
+	if f.permissionAllowed != nil {
+		f.permissionAllowed[key] = struct{}{}
+	}
+	f.permissionMu.Unlock()
 }
 
 func (f *Factory) storeLegacyPermission(key string, allowed bool) {
