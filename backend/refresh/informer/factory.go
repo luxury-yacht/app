@@ -92,6 +92,9 @@ func (f *Factory) CanListWatch(group, resource string) bool {
 // New returns a new informer Factory with the provided resync period.
 // The checker is used for all permission (SSAR) checks; it must not be nil.
 func New(client kubernetes.Interface, apiextClient apiextensionsclientset.Interface, resync time.Duration, checker *permissions.Checker) *Factory {
+	if checker == nil {
+		panic("informer.New: permissions checker must not be nil")
+	}
 	if resync <= 0 {
 		resync = config.RefreshResyncInterval
 	}
