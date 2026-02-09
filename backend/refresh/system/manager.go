@@ -97,9 +97,8 @@ func NewSubsystem(cfg Config) (*refresh.Manager, http.Handler, *telemetry.Record
 // NewSubsystemWithServices returns a fully wired refresh subsystem.
 func NewSubsystemWithServices(cfg Config) (*Subsystem, error) {
 	registry := domain.New()
-	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, nil)
 	runtimePerms := permissions.NewChecker(cfg.KubernetesClient, cfg.ClusterID, 0)
-	informerFactory.ConfigureRuntimePermissions(runtimePerms, cfg.Logger)
+	informerFactory := informer.New(cfg.KubernetesClient, cfg.APIExtensionsClient, cfg.ResyncInterval, runtimePerms)
 	var permissionIssues []PermissionIssue
 
 	// appendIssue adds a permission issue to the list if any errors are present.
