@@ -14,8 +14,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/luxury-yacht/app/backend/internal/config"
 )
+
+// ListWatchChecker gates informer access based on RBAC permissions.
+// Implementations return true only when the identity can both list and watch the resource.
+type ListWatchChecker interface {
+	CanListWatch(group, resource string) bool
+}
 
 // AccessReviewFunc issues a SelfSubjectAccessReview for the specified resource verb.
 type AccessReviewFunc func(ctx context.Context, group, resource, verb string) (bool, error)
@@ -50,8 +58,9 @@ type Checker struct {
 	review    AccessReviewFunc
 	now       func() time.Time
 
-	mu    sync.RWMutex
-	cache map[string]cacheEntry
+	mu      sync.RWMutex
+	cache   map[string]cacheEntry
+	sfGroup singleflight.Group // deduplicates concurrent SSAR calls for the same key
 }
 
 // NewChecker constructs a permission checker backed by the Kubernetes client.
@@ -133,7 +142,18 @@ func (c *Checker) Can(ctx context.Context, group, resource, verb string) (Decisi
 		}, nil
 	}
 
-	allowed, err := c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb))
+	// Use singleflight to deduplicate concurrent SSAR calls for the same cache key.
+	type sfResult struct {
+		allowed bool
+		err     error
+	}
+	val, _, _ := c.sfGroup.Do(key, func() (interface{}, error) {
+		allowed, err := c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb))
+		return sfResult{allowed: allowed, err: err}, nil
+	})
+	result := val.(sfResult)
+	allowed, err := result.allowed, result.err
+
 	if err == nil {
 		entry = c.storeEntry(key, allowed, now)
 		return Decision{
@@ -194,6 +214,22 @@ func ensureContext(ctx context.Context) context.Context {
 		return ctx
 	}
 	return context.Background()
+}
+
+// CanListWatch reports whether the identity can both list and watch the resource.
+func (c *Checker) CanListWatch(group, resource string) bool {
+	if c == nil {
+		return false
+	}
+	listDec, err := c.Can(context.Background(), group, resource, "list")
+	if err != nil || !listDec.Allowed {
+		return false
+	}
+	watchDec, err := c.Can(context.Background(), group, resource, "watch")
+	if err != nil || !watchDec.Allowed {
+		return false
+	}
+	return true
 }
 
 func isTransientPermissionError(err error) bool {

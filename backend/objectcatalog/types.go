@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -84,12 +85,6 @@ func (d Descriptor) GVR() schema.GroupVersionResource {
 	}
 }
 
-// PermissionChecker gates access to resources based on RBAC.
-type PermissionChecker interface {
-	// CanListWatch reports whether the current identity can list AND watch the resource.
-	CanListWatch(group, resource string) bool
-}
-
 // Dependencies captures collaborators required by the catalog service.
 type Dependencies struct {
 	Common                       common.Dependencies                   // common dependencies
@@ -99,7 +94,7 @@ type Dependencies struct {
 	Now                          func() time.Time                      // function to get the current time
 	InformerFactory              informers.SharedInformerFactory       // Kubernetes informer factory
 	APIExtensionsInformerFactory apiextinformers.SharedInformerFactory // Kubernetes API extensions informer factory
-	PermissionChecker            PermissionChecker                     // optional; if nil, assumes all permissions granted
+	PermissionChecker            permissions.ListWatchChecker          // optional; if nil, assumes all permissions granted
 	ClusterID                    string                                // stable identifier for the source cluster
 	ClusterName                  string                                // display name for the source cluster
 }

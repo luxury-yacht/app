@@ -36,6 +36,7 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/config"
 	"github.com/luxury-yacht/app/backend/refresh/informer"
 	"github.com/luxury-yacht/app/backend/refresh/logstream"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/metrics"
 	"github.com/luxury-yacht/app/backend/refresh/snapshot"
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
@@ -186,34 +187,13 @@ func (c *customResourceInformer) stop() {
 	})
 }
 
-type permissionChecker interface {
-	CanListResource(group, resource string) (bool, error)
-	CanWatchResource(group, resource string) (bool, error)
-}
-
-// canListWatch reports whether the current identity can both list and watch the resource.
-func canListWatch(pc permissionChecker, group, resource string) bool {
-	if pc == nil {
-		return true
-	}
-	listOK, err := pc.CanListResource(group, resource)
-	if err != nil || !listOK {
-		return false
-	}
-	watchOK, err := pc.CanWatchResource(group, resource)
-	if err != nil || !watchOK {
-		return false
-	}
-	return true
-}
-
 // Manager fan-outs informer updates to websocket subscribers.
 type Manager struct {
 	clusterMeta snapshot.ClusterMeta
 	metrics     metrics.Provider
 	logger      logstream.Logger
 	telemetry   *telemetry.Recorder
-	permissions permissionChecker
+	permissions permissions.ListWatchChecker
 
 	dynamicClient dynamic.Interface
 
@@ -280,7 +260,7 @@ func NewManager(
 
 	// All informers watch at cluster scope, so every resource needs a permission check
 	// to prevent lazy informer creation for resources the user cannot list/watch cluster-wide.
-	if canListWatch(mgr.permissions, "", "pods") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("", "pods") {
 		podInformer := shared.Core().V1().Pods()
 		mgr.podLister = podInformer.Lister()
 		mgr.podIndexer = podInformer.Informer().GetIndexer()
@@ -291,7 +271,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "", "configmaps") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("", "configmaps") {
 		configMapInformer := shared.Core().V1().ConfigMaps()
 		configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleConfigMap(obj, MessageTypeAdded) },
@@ -300,7 +280,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "", "secrets") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("", "secrets") {
 		secretInformer := shared.Core().V1().Secrets()
 		secretInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleSecret(obj, MessageTypeAdded) },
@@ -309,7 +289,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "", "services") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("", "services") {
 		serviceInformer := shared.Core().V1().Services()
 		mgr.serviceLister = serviceInformer.Lister()
 		serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -319,7 +299,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "discovery.k8s.io", "endpointslices") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("discovery.k8s.io", "endpointslices") {
 		sliceInformer := shared.Discovery().V1().EndpointSlices()
 		mgr.sliceLister = sliceInformer.Lister()
 		sliceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -329,7 +309,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "networking.k8s.io", "ingresses") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("networking.k8s.io", "ingresses") {
 		ingressInformer := shared.Networking().V1().Ingresses()
 		mgr.ingressLister = ingressInformer.Lister()
 		ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -339,7 +319,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "networking.k8s.io", "networkpolicies") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("networking.k8s.io", "networkpolicies") {
 		policyInformer := shared.Networking().V1().NetworkPolicies()
 		mgr.policyLister = policyInformer.Lister()
 		policyInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -349,7 +329,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "", "persistentvolumeclaims") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("", "persistentvolumeclaims") {
 		pvcInformer := shared.Core().V1().PersistentVolumeClaims()
 		pvcInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handlePersistentVolumeClaim(obj, MessageTypeAdded) },
@@ -358,7 +338,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "autoscaling", "horizontalpodautoscalers") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("autoscaling", "horizontalpodautoscalers") {
 		hpaInformer := shared.Autoscaling().V1().HorizontalPodAutoscalers()
 		hpaInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleHPA(obj, MessageTypeAdded) },
@@ -367,7 +347,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "", "nodes") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("", "nodes") {
 		nodeInformer := shared.Core().V1().Nodes()
 		mgr.nodeLister = nodeInformer.Lister()
 		nodeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -377,12 +357,12 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "apps", "replicasets") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("apps", "replicasets") {
 		rsInformer := shared.Apps().V1().ReplicaSets()
 		mgr.rsLister = rsInformer.Lister()
 	}
 
-	if canListWatch(mgr.permissions, "apps", "deployments") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("apps", "deployments") {
 		deploymentInformer := shared.Apps().V1().Deployments()
 		mgr.deploymentLister = deploymentInformer.Lister()
 		deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -392,7 +372,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "apps", "statefulsets") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("apps", "statefulsets") {
 		statefulInformer := shared.Apps().V1().StatefulSets()
 		mgr.statefulLister = statefulInformer.Lister()
 		statefulInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -402,7 +382,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "apps", "daemonsets") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("apps", "daemonsets") {
 		daemonInformer := shared.Apps().V1().DaemonSets()
 		mgr.daemonLister = daemonInformer.Lister()
 		daemonInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -412,7 +392,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "batch", "jobs") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("batch", "jobs") {
 		jobInformer := shared.Batch().V1().Jobs()
 		mgr.jobLister = jobInformer.Lister()
 		jobInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -422,7 +402,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "batch", "cronjobs") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("batch", "cronjobs") {
 		cronInformer := shared.Batch().V1().CronJobs()
 		mgr.cronJobLister = cronInformer.Lister()
 		cronInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -432,7 +412,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "rbac.authorization.k8s.io", "roles") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("rbac.authorization.k8s.io", "roles") {
 		roleInformer := shared.Rbac().V1().Roles()
 		roleInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleRole(obj, MessageTypeAdded) },
@@ -441,7 +421,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "rbac.authorization.k8s.io", "rolebindings") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("rbac.authorization.k8s.io", "rolebindings") {
 		bindingInformer := shared.Rbac().V1().RoleBindings()
 		bindingInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleRoleBinding(obj, MessageTypeAdded) },
@@ -450,7 +430,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "", "serviceaccounts") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("", "serviceaccounts") {
 		serviceAccountInformer := shared.Core().V1().ServiceAccounts()
 		serviceAccountInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleServiceAccount(obj, MessageTypeAdded) },
@@ -459,7 +439,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "", "resourcequotas") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("", "resourcequotas") {
 		resourceQuotaInformer := shared.Core().V1().ResourceQuotas()
 		resourceQuotaInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleResourceQuota(obj, MessageTypeAdded) },
@@ -468,7 +448,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "", "limitranges") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("", "limitranges") {
 		limitRangeInformer := shared.Core().V1().LimitRanges()
 		limitRangeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleLimitRange(obj, MessageTypeAdded) },
@@ -477,7 +457,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "policy", "poddisruptionbudgets") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("policy", "poddisruptionbudgets") {
 		pdbInformer := shared.Policy().V1().PodDisruptionBudgets()
 		pdbInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handlePodDisruptionBudget(obj, MessageTypeAdded) },
@@ -488,7 +468,7 @@ func NewManager(
 
 	// Cluster-scoped informers drive the cluster tab streaming domains.
 	// Each is gated on permissions to avoid triggering forbidden list/watch errors.
-	if canListWatch(mgr.permissions, "rbac.authorization.k8s.io", "clusterroles") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("rbac.authorization.k8s.io", "clusterroles") {
 		clusterRoleInformer := shared.Rbac().V1().ClusterRoles()
 		clusterRoleInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleClusterRole(obj, MessageTypeAdded) },
@@ -497,7 +477,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "rbac.authorization.k8s.io", "clusterrolebindings") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("rbac.authorization.k8s.io", "clusterrolebindings") {
 		clusterRoleBindingInformer := shared.Rbac().V1().ClusterRoleBindings()
 		clusterRoleBindingInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleClusterRoleBinding(obj, MessageTypeAdded) },
@@ -506,7 +486,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "", "persistentvolumes") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("", "persistentvolumes") {
 		pvInformer := shared.Core().V1().PersistentVolumes()
 		pvInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handlePersistentVolume(obj, MessageTypeAdded) },
@@ -515,7 +495,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "storage.k8s.io", "storageclasses") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("storage.k8s.io", "storageclasses") {
 		storageClassInformer := shared.Storage().V1().StorageClasses()
 		storageClassInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleStorageClass(obj, MessageTypeAdded) },
@@ -524,7 +504,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "networking.k8s.io", "ingressclasses") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("networking.k8s.io", "ingressclasses") {
 		ingressClassInformer := shared.Networking().V1().IngressClasses()
 		ingressClassInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleIngressClass(obj, MessageTypeAdded) },
@@ -533,7 +513,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "admissionregistration.k8s.io", "validatingwebhookconfigurations") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("admissionregistration.k8s.io", "validatingwebhookconfigurations") {
 		validatingWebhookInformer := shared.Admissionregistration().V1().ValidatingWebhookConfigurations()
 		validatingWebhookInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleValidatingWebhook(obj, MessageTypeAdded) },
@@ -542,7 +522,7 @@ func NewManager(
 		})
 	}
 
-	if canListWatch(mgr.permissions, "admissionregistration.k8s.io", "mutatingwebhookconfigurations") {
+	if mgr.permissions == nil || mgr.permissions.CanListWatch("admissionregistration.k8s.io", "mutatingwebhookconfigurations") {
 		mutatingWebhookInformer := shared.Admissionregistration().V1().MutatingWebhookConfigurations()
 		mutatingWebhookInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc:    func(obj interface{}) { mgr.handleMutatingWebhook(obj, MessageTypeAdded) },
@@ -594,7 +574,7 @@ func (m *Manager) initCustomResourceInformers(factory *informer.Factory) {
 		return
 	}
 	// CustomResourceDefinitions are cluster-scoped — gate on permissions.
-	if !canListWatch(m.permissions, "apiextensions.k8s.io", "customresourcedefinitions") {
+	if m.permissions != nil && !m.permissions.CanListWatch("apiextensions.k8s.io", "customresourcedefinitions") {
 		return
 	}
 	apiextFactory := factory.APIExtensionsInformerFactory()

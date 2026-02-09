@@ -13,6 +13,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/luxury-yacht/app/backend/internal/config"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/refresh/system"
 )
 
@@ -42,11 +43,6 @@ type responseCacheInvalidationGuard struct {
 	now       func() time.Time
 }
 
-// responseCachePermissionChecker gates informer access based on RBAC permissions.
-type responseCachePermissionChecker interface {
-	CanListWatch(group, resource string) bool
-}
-
 // registerResponseCacheInvalidation wires informer-driven cache eviction for cached detail/YAML/helm responses.
 func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, selectionKey string) {
 	if a == nil || a.responseCache == nil || subsystem == nil || subsystem.InformerFactory == nil {
@@ -66,7 +62,7 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 
 	// Use the informer factory as a permission checker to avoid triggering lazy informer
 	// creation for cluster-scoped resources the user cannot list/watch.
-	var perms responseCachePermissionChecker = subsystem.InformerFactory
+	var perms permissions.ListWatchChecker = subsystem.InformerFactory
 
 	a.registerCoreInvalidation(shared, selectionKey, guard, perms)
 	a.registerAppsInvalidation(shared, selectionKey, guard, perms)
@@ -89,7 +85,7 @@ func (a *App) registerResponseCacheInvalidation(subsystem *system.Subsystem, sel
 	}
 }
 
-func (a *App) registerCoreInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms responseCachePermissionChecker) {
+func (a *App) registerCoreInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
 	// All informers watch at cluster scope, so every resource needs a permission check
 	// to prevent lazy informer creation for resources the user cannot list/watch cluster-wide.
 	if perms == nil || perms.CanListWatch("", "pods") {
@@ -127,7 +123,7 @@ func (a *App) registerCoreInvalidation(shared informers.SharedInformerFactory, s
 	}
 }
 
-func (a *App) registerAppsInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms responseCachePermissionChecker) {
+func (a *App) registerAppsInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
 	if perms == nil || perms.CanListWatch("apps", "replicasets") {
 		a.addResponseCacheInvalidationHandler(shared.Apps().V1().ReplicaSets().Informer(), selectionKey, "ReplicaSet", guard)
 	}
@@ -142,7 +138,7 @@ func (a *App) registerAppsInvalidation(shared informers.SharedInformerFactory, s
 	}
 }
 
-func (a *App) registerBatchInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms responseCachePermissionChecker) {
+func (a *App) registerBatchInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
 	if perms == nil || perms.CanListWatch("batch", "jobs") {
 		a.addResponseCacheInvalidationHandler(shared.Batch().V1().Jobs().Informer(), selectionKey, "Job", guard)
 	}
@@ -151,7 +147,7 @@ func (a *App) registerBatchInvalidation(shared informers.SharedInformerFactory, 
 	}
 }
 
-func (a *App) registerRBACInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms responseCachePermissionChecker) {
+func (a *App) registerRBACInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
 	if perms == nil || perms.CanListWatch("rbac.authorization.k8s.io", "roles") {
 		a.addResponseCacheInvalidationHandler(shared.Rbac().V1().Roles().Informer(), selectionKey, "Role", guard)
 	}
@@ -166,14 +162,14 @@ func (a *App) registerRBACInvalidation(shared informers.SharedInformerFactory, s
 	}
 }
 
-func (a *App) registerStorageInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms responseCachePermissionChecker) {
+func (a *App) registerStorageInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
 	// StorageClasses are cluster-scoped — gate on permissions.
 	if perms == nil || perms.CanListWatch("storage.k8s.io", "storageclasses") {
 		a.addResponseCacheInvalidationHandler(shared.Storage().V1().StorageClasses().Informer(), selectionKey, "StorageClass", guard)
 	}
 }
 
-func (a *App) registerNetworkingInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms responseCachePermissionChecker) {
+func (a *App) registerNetworkingInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
 	if perms == nil || perms.CanListWatch("networking.k8s.io", "ingresses") {
 		a.addResponseCacheInvalidationHandler(shared.Networking().V1().Ingresses().Informer(), selectionKey, "Ingress", guard)
 	}
@@ -188,19 +184,19 @@ func (a *App) registerNetworkingInvalidation(shared informers.SharedInformerFact
 	}
 }
 
-func (a *App) registerAutoscalingInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms responseCachePermissionChecker) {
+func (a *App) registerAutoscalingInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
 	if perms == nil || perms.CanListWatch("autoscaling", "horizontalpodautoscalers") {
 		a.addResponseCacheInvalidationHandler(shared.Autoscaling().V1().HorizontalPodAutoscalers().Informer(), selectionKey, "HorizontalPodAutoscaler", guard)
 	}
 }
 
-func (a *App) registerPolicyInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms responseCachePermissionChecker) {
+func (a *App) registerPolicyInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
 	if perms == nil || perms.CanListWatch("policy", "poddisruptionbudgets") {
 		a.addResponseCacheInvalidationHandler(shared.Policy().V1().PodDisruptionBudgets().Informer(), selectionKey, "PodDisruptionBudget", guard)
 	}
 }
 
-func (a *App) registerAdmissionInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms responseCachePermissionChecker) {
+func (a *App) registerAdmissionInvalidation(shared informers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
 	// MutatingWebhookConfigurations and ValidatingWebhookConfigurations are cluster-scoped — gate on permissions.
 	if perms == nil || perms.CanListWatch("admissionregistration.k8s.io", "mutatingwebhookconfigurations") {
 		a.addResponseCacheInvalidationHandler(shared.Admissionregistration().V1().MutatingWebhookConfigurations().Informer(), selectionKey, "MutatingWebhookConfiguration", guard)
@@ -210,7 +206,7 @@ func (a *App) registerAdmissionInvalidation(shared informers.SharedInformerFacto
 	}
 }
 
-func (a *App) registerAPIExtensionsInvalidation(shared apiextensionsinformers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms responseCachePermissionChecker) {
+func (a *App) registerAPIExtensionsInvalidation(shared apiextensionsinformers.SharedInformerFactory, selectionKey string, guard responseCacheInvalidationGuard, perms permissions.ListWatchChecker) {
 	if shared == nil {
 		return
 	}
