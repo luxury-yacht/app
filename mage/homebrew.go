@@ -87,9 +87,13 @@ func updateHomebrewTemplate(version, arm64Sha, amd64Sha string) ([]byte, error) 
 		return nil, fmt.Errorf("failed to read Homebrew cask template at %s: %w", caskTemplate, err)
 	}
 
+	// Strip the leading "v" from the version to conform to Homebrew convention.
+	// The template re-adds "v" where needed (e.g. in the download URL).
+	brewVersion := strings.TrimPrefix(version, "v")
+
 	// Replace placeholders in the template.
 	r := strings.NewReplacer(
-		"${VERSION}", version,
+		"${VERSION}", brewVersion,
 		"${ARM64_SHA256}", arm64Sha,
 		"${AMD64_SHA256}", amd64Sha,
 	)

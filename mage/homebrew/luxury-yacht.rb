@@ -14,4 +14,14 @@ cask "luxury-yacht" do
   app "Luxury Yacht.app"
 
   zap trash: "~/Library/Application Support/luxury-yacht"
+
+  caveats <<~EOS
+  ⚠️ Luxury Yacht is now in the official Homebrew Cask repo.
+
+  If you previously installed from the luxury-yacht tap, migrate with:
+
+    brew uninstall luxury-yacht
+    brew untap luxury-yacht/tap
+    brew install luxury-yacht
+  EOS
 end
