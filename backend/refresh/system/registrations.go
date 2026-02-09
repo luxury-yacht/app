@@ -611,8 +611,3 @@ func applyListWatchMeta(cfg listWatchDomainConfig, meta domainMeta) listWatchDom
 	cfg.deniedReason = meta.deniedReason
 	return cfg
 }
-
-func withPreflightListWatch(registration domainRegistration, checks []listWatchCheck) domainRegistration {
-	registration.preflightListWatch = append(registration.preflightListWatch, checks...)
-	return registration
-}
