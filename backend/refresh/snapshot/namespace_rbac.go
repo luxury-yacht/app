@@ -19,6 +19,13 @@ import (
 
 const namespaceRBACDomainName = "namespace-rbac"
 
+// NamespaceRBACPermissions indicates which resources should be included in the domain.
+type NamespaceRBACPermissions struct {
+	IncludeRoles           bool
+	IncludeRoleBindings    bool
+	IncludeServiceAccounts bool
+}
+
 // NamespaceRBACBuilder constructs RBAC summaries for a namespace.
 type NamespaceRBACBuilder struct {
 	roleLister    rbaclisters.RoleLister
@@ -43,14 +50,25 @@ type RBACSummary struct {
 }
 
 // RegisterNamespaceRBACDomain registers the namespace RBAC domain.
-func RegisterNamespaceRBACDomain(reg *domain.Registry, factory informers.SharedInformerFactory) error {
+// Only listers for permitted resources are wired; denied resources are left nil
+// so the builder skips them gracefully.
+func RegisterNamespaceRBACDomain(
+	reg *domain.Registry,
+	factory informers.SharedInformerFactory,
+	perms NamespaceRBACPermissions,
+) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	builder := &NamespaceRBACBuilder{
-		roleLister:    factory.Rbac().V1().Roles().Lister(),
-		bindingLister: factory.Rbac().V1().RoleBindings().Lister(),
-		saLister:      factory.Core().V1().ServiceAccounts().Lister(),
+	builder := &NamespaceRBACBuilder{}
+	if perms.IncludeRoles {
+		builder.roleLister = factory.Rbac().V1().Roles().Lister()
+	}
+	if perms.IncludeRoleBindings {
+		builder.bindingLister = factory.Rbac().V1().RoleBindings().Lister()
+	}
+	if perms.IncludeServiceAccounts {
+		builder.saLister = factory.Core().V1().ServiceAccounts().Lister()
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceRBACDomainName,
@@ -85,30 +103,42 @@ func (b *NamespaceRBACBuilder) Build(ctx context.Context, scope string) (*refres
 	)
 
 	if isAll {
-		roles, err = b.roleLister.List(labels.Everything())
-		if err != nil {
-			return nil, err
+		if b.roleLister != nil {
+			roles, err = b.roleLister.List(labels.Everything())
+			if err != nil {
+				return nil, err
+			}
 		}
-		bindings, err = b.bindingLister.List(labels.Everything())
-		if err != nil {
-			return nil, err
+		if b.bindingLister != nil {
+			bindings, err = b.bindingLister.List(labels.Everything())
+			if err != nil {
+				return nil, err
+			}
 		}
-		serviceAccounts, err = b.saLister.List(labels.Everything())
-		if err != nil {
-			return nil, err
+		if b.saLister != nil {
+			serviceAccounts, err = b.saLister.List(labels.Everything())
+			if err != nil {
+				return nil, err
+			}
 		}
 	} else {
-		roles, err = b.roleLister.Roles(namespace).List(labels.Everything())
-		if err != nil {
-			return nil, err
+		if b.roleLister != nil {
+			roles, err = b.roleLister.Roles(namespace).List(labels.Everything())
+			if err != nil {
+				return nil, err
+			}
 		}
-		bindings, err = b.bindingLister.RoleBindings(namespace).List(labels.Everything())
-		if err != nil {
-			return nil, err
+		if b.bindingLister != nil {
+			bindings, err = b.bindingLister.RoleBindings(namespace).List(labels.Everything())
+			if err != nil {
+				return nil, err
+			}
 		}
-		serviceAccounts, err = b.saLister.ServiceAccounts(namespace).List(labels.Everything())
-		if err != nil {
-			return nil, err
+		if b.saLister != nil {
+			serviceAccounts, err = b.saLister.ServiceAccounts(namespace).List(labels.Everything())
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 

@@ -52,6 +52,8 @@ type ClusterConfigEntry struct {
 }
 
 // RegisterClusterConfigDomain registers the domain with the registry.
+// Only listers for permitted resources are wired; denied resources are left nil
+// so the builder skips them gracefully.
 func RegisterClusterConfigDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,

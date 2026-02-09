@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/luxury-yacht/app/backend/capabilities"
+	"github.com/luxury-yacht/app/backend/refresh/permissions"
 	"github.com/luxury-yacht/app/backend/resources/common"
 	apiextinformers "k8s.io/apiextensions-apiserver/pkg/client/informers/externalversions"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -93,6 +94,7 @@ type Dependencies struct {
 	Now                          func() time.Time                      // function to get the current time
 	InformerFactory              informers.SharedInformerFactory       // Kubernetes informer factory
 	APIExtensionsInformerFactory apiextinformers.SharedInformerFactory // Kubernetes API extensions informer factory
+	PermissionChecker            permissions.ListWatchChecker          // optional; if nil, assumes all permissions granted
 	ClusterID                    string                                // stable identifier for the source cluster
 	ClusterName                  string                                // display name for the source cluster
 }

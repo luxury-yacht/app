@@ -229,6 +229,7 @@ func TestServiceBuildBlocksPermissionDenied(t *testing.T) {
 	reg := domain.New()
 	called := false
 	// Use a real domain name so the default permission map is applied.
+	// namespace-config uses requireAny, so we must deny ALL resources to trigger denial.
 	if err := reg.Register(refresh.DomainConfig{
 		Name: namespaceConfigDomainName,
 		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
@@ -243,11 +244,9 @@ func TestServiceBuildBlocksPermissionDenied(t *testing.T) {
 		t.Fatalf("register failed: %v", err)
 	}
 
+	// Deny all resources in the namespace-config domain (configmaps + secrets).
 	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
-		if resource == "configmaps" && verb == "list" {
-			return false, nil
-		}
-		return true, nil
+		return false, nil
 	})
 	service := NewServiceWithPermissions(reg, nil, ClusterMeta{}, checker)
 
@@ -258,6 +257,71 @@ func TestServiceBuildBlocksPermissionDenied(t *testing.T) {
 	}
 	if called {
 		t.Fatalf("expected snapshot builder to be skipped on permission denial")
+	}
+}
+
+func TestServiceBuildAllowsPartialPermissions(t *testing.T) {
+	reg := domain.New()
+	called := false
+	// namespace-config uses requireAny — if at least one resource is allowed, the domain should load.
+	if err := reg.Register(refresh.DomainConfig{
+		Name: namespaceConfigDomainName,
+		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
+			called = true
+			return &refresh.Snapshot{
+				Domain: namespaceConfigDomainName,
+				Scope:  scope,
+				Stats:  refresh.SnapshotStats{TotalItems: 1},
+			}, nil
+		},
+	}); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	// Deny configmaps but allow secrets.
+	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
+		if resource == "configmaps" && verb == "list" {
+			return false, nil
+		}
+		return true, nil
+	})
+	service := NewServiceWithPermissions(reg, nil, ClusterMeta{}, checker)
+
+	if _, err := service.Build(context.Background(), namespaceConfigDomainName, "scope-a"); err != nil {
+		t.Fatalf("expected partial permissions to allow build, got: %v", err)
+	}
+	if !called {
+		t.Fatalf("expected snapshot builder to run with partial permissions")
+	}
+}
+
+func TestServiceBuildSkipsEnsureForPermissionDeniedDomain(t *testing.T) {
+	reg := domain.New()
+	// Register a permission-denied placeholder domain.
+	if err := RegisterPermissionDeniedDomain(reg, namespaceConfigDomainName, "core/configmaps,secrets"); err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+
+	reviewCalled := false
+	checker := permissions.NewCheckerWithReview("cluster-a", 0, func(ctx context.Context, group, resource, verb string) (bool, error) {
+		reviewCalled = true
+		return false, nil
+	})
+	service := NewServiceWithPermissions(reg, nil, ClusterMeta{}, checker)
+
+	// Build should return PermissionDeniedError from the placeholder's BuildSnapshot,
+	// NOT from ensurePermissions (which should be skipped).
+	_, err := service.Build(context.Background(), namespaceConfigDomainName, "scope-a")
+	if err == nil {
+		t.Fatalf("expected permission error from placeholder domain")
+	}
+	if !refresh.IsPermissionDenied(err) {
+		t.Fatalf("expected permission denied error, got %v", err)
+	}
+	// The SSAR review function should NOT have been called because ensurePermissions
+	// short-circuits for permission-denied domains.
+	if reviewCalled {
+		t.Fatalf("expected SSAR review to be skipped for permission-denied placeholder domain")
 	}
 }
 

@@ -16,6 +16,12 @@ import (
 
 const clusterRBACDomainName = "cluster-rbac"
 
+// ClusterRBACPermissions indicates which resources should be included in the domain.
+type ClusterRBACPermissions struct {
+	IncludeClusterRoles        bool
+	IncludeClusterRoleBindings bool
+}
+
 // ClusterRBACBuilder produces cluster-level RBAC snapshots.
 type ClusterRBACBuilder struct {
 	roleLister    rbaclisters.ClusterRoleLister
@@ -39,16 +45,22 @@ type ClusterRBACEntry struct {
 }
 
 // RegisterClusterRBACDomain wires the cluster RBAC domain into the registry.
+// Only listers for permitted resources are wired; denied resources are left nil
+// so the builder skips them gracefully.
 func RegisterClusterRBACDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
+	perms ClusterRBACPermissions,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	builder := &ClusterRBACBuilder{
-		roleLister:    factory.Rbac().V1().ClusterRoles().Lister(),
-		bindingLister: factory.Rbac().V1().ClusterRoleBindings().Lister(),
+	builder := &ClusterRBACBuilder{}
+	if perms.IncludeClusterRoles {
+		builder.roleLister = factory.Rbac().V1().ClusterRoles().Lister()
+	}
+	if perms.IncludeClusterRoleBindings {
+		builder.bindingLister = factory.Rbac().V1().ClusterRoleBindings().Lister()
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          clusterRBACDomainName,
@@ -58,18 +70,22 @@ func RegisterClusterRBACDomain(
 
 // Build constructs a snapshot of cluster RBAC resources.
 func (b *ClusterRBACBuilder) Build(ctx context.Context, scope string) (*refresh.Snapshot, error) {
-	if b.roleLister == nil || b.bindingLister == nil {
-		return nil, fmt.Errorf("cluster rbac: listers not configured")
-	}
-
 	meta := ClusterMetaFromContext(ctx)
-	roles, err := b.roleLister.List(labels.Everything())
-	if err != nil {
-		return nil, fmt.Errorf("cluster rbac: failed to list clusterroles: %w", err)
+	var roles []*rbacv1.ClusterRole
+	if b.roleLister != nil {
+		var err error
+		roles, err = b.roleLister.List(labels.Everything())
+		if err != nil {
+			return nil, fmt.Errorf("cluster rbac: failed to list clusterroles: %w", err)
+		}
 	}
-	bindings, err := b.bindingLister.List(labels.Everything())
-	if err != nil {
-		return nil, fmt.Errorf("cluster rbac: failed to list clusterrolebindings: %w", err)
+	var bindings []*rbacv1.ClusterRoleBinding
+	if b.bindingLister != nil {
+		var err error
+		bindings, err = b.bindingLister.List(labels.Everything())
+		if err != nil {
+			return nil, fmt.Errorf("cluster rbac: failed to list clusterrolebindings: %w", err)
+		}
 	}
 
 	entries := make([]ClusterRBACEntry, 0, len(roles)+len(bindings))

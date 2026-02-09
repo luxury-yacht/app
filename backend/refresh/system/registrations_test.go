@@ -13,7 +13,7 @@ import (
 func TestDomainRegistrationOrder(t *testing.T) {
 	// Keep the expected order in sync with domainRegistrations to prevent drift.
 	expected := []string{
-		"namespace-listing",
+		"namespaces",
 		"cluster-overview",
 		"catalog",
 		"catalog-diff",
@@ -34,7 +34,7 @@ func TestDomainRegistrationOrder(t *testing.T) {
 		"namespace-quotas",
 		"namespace-rbac",
 		"namespace-storage",
-		"pod",
+		"pods",
 		"object-details",
 		"object-yaml",
 		"object-helm-manifest",

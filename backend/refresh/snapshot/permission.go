@@ -13,7 +13,8 @@ func RegisterPermissionDeniedDomain(reg *domain.Registry, name string, resource 
 		return nil
 	}
 	return reg.Register(refresh.DomainConfig{
-		Name: name,
+		Name:             name,
+		PermissionDenied: true,
 		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 			return nil, refresh.NewPermissionDeniedError(name, resource)
 		},

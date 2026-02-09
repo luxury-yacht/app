@@ -14,8 +14,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/luxury-yacht/app/backend/internal/config"
 )
+
+// ListWatchChecker gates informer access based on RBAC permissions.
+// Implementations return true only when the identity can both list and watch the resource.
+type ListWatchChecker interface {
+	CanListWatch(group, resource string) bool
+}
 
 // AccessReviewFunc issues a SelfSubjectAccessReview for the specified resource verb.
 type AccessReviewFunc func(ctx context.Context, group, resource, verb string) (bool, error)
@@ -27,6 +35,7 @@ const (
 	DecisionSourceCache    DecisionSource = "cache"
 	DecisionSourceFresh    DecisionSource = "fresh"
 	DecisionSourceFallback DecisionSource = "fallback"
+	DecisionSourceStale    DecisionSource = "stale"
 )
 
 // Decision reports the result of a permission check and how it was derived.
@@ -45,13 +54,15 @@ type cacheEntry struct {
 
 // Checker performs SSAR requests and caches the results per cluster selection.
 type Checker struct {
-	clusterID string
-	ttl       time.Duration
-	review    AccessReviewFunc
-	now       func() time.Time
+	clusterID  string
+	ttl        time.Duration
+	staleGrace time.Duration // extra window beyond TTL where stale results are served
+	review     AccessReviewFunc
+	now        func() time.Time
 
-	mu    sync.RWMutex
-	cache map[string]cacheEntry
+	mu      sync.RWMutex
+	cache   map[string]cacheEntry
+	sfGroup singleflight.Group // deduplicates concurrent SSAR calls for the same key
 }
 
 // NewChecker constructs a permission checker backed by the Kubernetes client.
@@ -93,6 +104,13 @@ func NewChecker(client kubernetes.Interface, clusterID string, ttl time.Duration
 	return NewCheckerWithReview(clusterID, ttl, review)
 }
 
+// NewCheckerWithStaleGrace constructs a checker with a custom stale grace period.
+func NewCheckerWithStaleGrace(client kubernetes.Interface, clusterID string, ttl time.Duration, staleGrace time.Duration) *Checker {
+	c := NewChecker(client, clusterID, ttl)
+	c.staleGrace = staleGrace
+	return c
+}
+
 // NewCheckerWithReview constructs a checker with a custom review function.
 func NewCheckerWithReview(clusterID string, ttl time.Duration, review AccessReviewFunc) *Checker {
 	if ttl <= 0 {
@@ -104,11 +122,12 @@ func NewCheckerWithReview(clusterID string, ttl time.Duration, review AccessRevi
 		}
 	}
 	return &Checker{
-		clusterID: strings.TrimSpace(clusterID),
-		ttl:       ttl,
-		review:    review,
-		now:       time.Now,
-		cache:     make(map[string]cacheEntry),
+		clusterID:  strings.TrimSpace(clusterID),
+		ttl:        ttl,
+		staleGrace: config.PermissionCacheStaleGracePeriod,
+		review:     review,
+		now:        time.Now,
+		cache:      make(map[string]cacheEntry),
 	}
 }
 
@@ -133,7 +152,30 @@ func (c *Checker) Can(ctx context.Context, group, resource, verb string) (Decisi
 		}, nil
 	}
 
-	allowed, err := c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb))
+	// Stale-while-revalidate: if the entry is expired but within the grace window,
+	// return the stale value immediately and trigger a background refresh.
+	if ok && c.staleGrace > 0 && !now.After(entry.expiresAt.Add(c.staleGrace)) {
+		c.triggerBackgroundRefresh(ctx, key, group, resource, verb)
+		return Decision{
+			Allowed:   entry.allowed,
+			Source:    DecisionSourceStale,
+			CachedAt:  entry.cachedAt,
+			ExpiresAt: entry.expiresAt,
+		}, nil
+	}
+
+	// Use singleflight to deduplicate concurrent SSAR calls for the same cache key.
+	type sfResult struct {
+		allowed bool
+		err     error
+	}
+	val, _, _ := c.sfGroup.Do(key, func() (interface{}, error) {
+		allowed, err := c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb))
+		return sfResult{allowed: allowed, err: err}, nil
+	})
+	result := val.(sfResult)
+	allowed, err := result.allowed, result.err
+
 	if err == nil {
 		entry = c.storeEntry(key, allowed, now)
 		return Decision{
@@ -154,6 +196,40 @@ func (c *Checker) Can(ctx context.Context, group, resource, verb string) (Decisi
 	}
 
 	return Decision{}, err
+}
+
+// triggerBackgroundRefresh fires an async SSAR call (deduplicated via singleflight)
+// to refresh an expired cache entry without blocking the caller.
+func (c *Checker) triggerBackgroundRefresh(ctx context.Context, key, group, resource, verb string) {
+	// Use a detached context so the background call outlives the request.
+	bgCtx := context.Background()
+	if _, hasDeadline := ctx.Deadline(); hasDeadline {
+		var cancel context.CancelFunc
+		bgCtx, cancel = context.WithTimeout(bgCtx, config.PermissionCheckTimeout)
+		// cancel is invoked after the goroutine completes.
+		go func() {
+			defer cancel()
+			c.doBackgroundRefresh(bgCtx, key, group, resource, verb)
+		}()
+		return
+	}
+	go c.doBackgroundRefresh(bgCtx, key, group, resource, verb)
+}
+
+// doBackgroundRefresh executes the SSAR call and stores the result via singleflight.
+func (c *Checker) doBackgroundRefresh(ctx context.Context, key, group, resource, verb string) {
+	type sfResult struct {
+		allowed bool
+		err     error
+	}
+	val, _, _ := c.sfGroup.Do(key, func() (interface{}, error) {
+		allowed, err := c.review(ctx, strings.TrimSpace(group), strings.TrimSpace(resource), strings.TrimSpace(verb))
+		return sfResult{allowed: allowed, err: err}, nil
+	})
+	result := val.(sfResult)
+	if result.err == nil {
+		c.storeEntry(key, result.allowed, c.now())
+	}
 }
 
 func (c *Checker) cacheKey(group, resource, verb string) (string, error) {
@@ -194,6 +270,22 @@ func ensureContext(ctx context.Context) context.Context {
 		return ctx
 	}
 	return context.Background()
+}
+
+// CanListWatch reports whether the identity can both list and watch the resource.
+func (c *Checker) CanListWatch(group, resource string) bool {
+	if c == nil {
+		return false
+	}
+	listDec, err := c.Can(context.Background(), group, resource, "list")
+	if err != nil || !listDec.Allowed {
+		return false
+	}
+	watchDec, err := c.Can(context.Background(), group, resource, "watch")
+	if err != nil || !watchDec.Allowed {
+		return false
+	}
+	return true
 }
 
 func isTransientPermissionError(err error) bool {

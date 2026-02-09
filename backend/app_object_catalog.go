@@ -164,6 +164,7 @@ func (a *App) startObjectCatalogForTarget(target catalogTarget) error {
 		Telemetry:                    telemetryRecorder,
 		InformerFactory:              subsystem.InformerFactory.SharedInformerFactory(),
 		APIExtensionsInformerFactory: subsystem.InformerFactory.APIExtensionsInformerFactory(),
+		PermissionChecker:            subsystem.InformerFactory,
 		CapabilityFactory: func() *capabilities.Service {
 			return capabilities.NewService(capabilities.Dependencies{
 				Common:             commonDeps,

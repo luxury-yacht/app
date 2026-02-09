@@ -34,9 +34,10 @@ type Registry interface {
 
 // DomainConfig describes how to build and manually refresh a snapshot domain.
 type DomainConfig struct {
-	Name          string
-	BuildSnapshot func(ctx context.Context, scope string) (*Snapshot, error)
-	ManualRefresh func(ctx context.Context, scope string) (*ManualRefreshResult, error)
+	Name             string
+	BuildSnapshot    func(ctx context.Context, scope string) (*Snapshot, error)
+	ManualRefresh    func(ctx context.Context, scope string) (*ManualRefreshResult, error)
+	PermissionDenied bool // Set when domain is registered as a permission-denied placeholder.
 }
 
 // InformerHub exposes informer lifecycle hooks used by the refresh manager.

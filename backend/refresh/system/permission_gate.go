@@ -38,8 +38,8 @@ type listDomainConfig struct {
 	logGroup      string
 	logResource   string
 	checks        []listCheck
-	allowAny      bool
-	register      func(allowed map[string]bool) error
+	allowAny      bool                           // When true, register if any check passes (not all).
+	register      func(allowed map[string]bool) error // Callback receives per-resource allow map.
 	deniedReason  string
 }
 

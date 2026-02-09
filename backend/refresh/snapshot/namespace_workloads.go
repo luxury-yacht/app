@@ -31,6 +31,16 @@ const (
 	errNamespaceScopeRequired    = "namespace scope is required"
 )
 
+// NamespaceWorkloadsPermissions indicates which resources should be included in the domain.
+type NamespaceWorkloadsPermissions struct {
+	IncludePods         bool
+	IncludeDeployments  bool
+	IncludeStatefulSets bool
+	IncludeDaemonSets   bool
+	IncludeJobs         bool
+	IncludeCronJobs     bool
+}
+
 // NamespaceWorkloadsBuilder constructs namespace-scoped workload snapshots.
 type NamespaceWorkloadsBuilder struct {
 	podLister        corelisters.PodLister
@@ -85,25 +95,41 @@ func parseNamespaceScope(scope string) (string, error) {
 }
 
 // RegisterNamespaceWorkloadsDomain wires the workloads domain into the registry.
+// Only listers for permitted resources are wired; denied resources are left nil
+// so the builder skips them gracefully.
 func RegisterNamespaceWorkloadsDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
 	provider metrics.Provider,
 	logger logstream.Logger,
+	perms NamespaceWorkloadsPermissions,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
 	builder := &NamespaceWorkloadsBuilder{
-		podLister:        factory.Core().V1().Pods().Lister(),
-		deploymentLister: factory.Apps().V1().Deployments().Lister(),
-		statefulLister:   factory.Apps().V1().StatefulSets().Lister(),
-		daemonLister:     factory.Apps().V1().DaemonSets().Lister(),
-		jobLister:        factory.Batch().V1().Jobs().Lister(),
-		cronJobLister:    factory.Batch().V1().CronJobs().Lister(),
-		hpaLister:        factory.Autoscaling().V1().HorizontalPodAutoscalers().Lister(),
-		metrics:          provider,
-		logger:           logger,
+		// HPA lister is always wired — it's informational and doesn't block on missing perms.
+		hpaLister: factory.Autoscaling().V1().HorizontalPodAutoscalers().Lister(),
+		metrics:   provider,
+		logger:    logger,
+	}
+	if perms.IncludePods {
+		builder.podLister = factory.Core().V1().Pods().Lister()
+	}
+	if perms.IncludeDeployments {
+		builder.deploymentLister = factory.Apps().V1().Deployments().Lister()
+	}
+	if perms.IncludeStatefulSets {
+		builder.statefulLister = factory.Apps().V1().StatefulSets().Lister()
+	}
+	if perms.IncludeDaemonSets {
+		builder.daemonLister = factory.Apps().V1().DaemonSets().Lister()
+	}
+	if perms.IncludeJobs {
+		builder.jobLister = factory.Batch().V1().Jobs().Lister()
+	}
+	if perms.IncludeCronJobs {
+		builder.cronJobLister = factory.Batch().V1().CronJobs().Lister()
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceWorkloadsDomainName,
@@ -136,29 +162,47 @@ func (b *NamespaceWorkloadsBuilder) Build(ctx context.Context, scope string) (*r
 		scopeLabel = refresh.JoinClusterScope(clusterID, trimmed)
 	}
 
-	pods, err := b.listPods(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace workloads: failed to list pods: %w", err)
+	var pods []*corev1.Pod
+	if b.podLister != nil {
+		pods, err = b.listPods(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace workloads: failed to list pods: %w", err)
+		}
 	}
-	deployments, err := b.listDeployments(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace workloads: failed to list deployments: %w", err)
+	var deployments []*appsv1.Deployment
+	if b.deploymentLister != nil {
+		deployments, err = b.listDeployments(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace workloads: failed to list deployments: %w", err)
+		}
 	}
-	statefulSets, err := b.listStatefulSets(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace workloads: failed to list statefulsets: %w", err)
+	var statefulSets []*appsv1.StatefulSet
+	if b.statefulLister != nil {
+		statefulSets, err = b.listStatefulSets(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace workloads: failed to list statefulsets: %w", err)
+		}
 	}
-	daemonSets, err := b.listDaemonSets(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace workloads: failed to list daemonsets: %w", err)
+	var daemonSets []*appsv1.DaemonSet
+	if b.daemonLister != nil {
+		daemonSets, err = b.listDaemonSets(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace workloads: failed to list daemonsets: %w", err)
+		}
 	}
-	jobs, err := b.listJobs(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace workloads: failed to list jobs: %w", err)
+	var jobs []*batchv1.Job
+	if b.jobLister != nil {
+		jobs, err = b.listJobs(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace workloads: failed to list jobs: %w", err)
+		}
 	}
-	cronJobs, err := b.listCronJobs(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace workloads: failed to list cronjobs: %w", err)
+	var cronJobs []*batchv1.CronJob
+	if b.cronJobLister != nil {
+		cronJobs, err = b.listCronJobs(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace workloads: failed to list cronjobs: %w", err)
+		}
 	}
 
 	// List HPAs to mark workloads that are managed by an autoscaler.

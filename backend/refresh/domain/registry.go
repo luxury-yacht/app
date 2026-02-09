@@ -60,6 +60,15 @@ func (r *Registry) List() []refresh.DomainConfig {
 	return result
 }
 
+// IsPermissionDenied reports whether a domain was registered as a permission-denied placeholder.
+func (r *Registry) IsPermissionDenied(name string) bool {
+	cfg, ok := r.Get(name)
+	if !ok {
+		return false
+	}
+	return cfg.PermissionDenied
+}
+
 // Build invokes the domain-specific builder.
 func (r *Registry) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
 	cfg, ok := r.Get(domain)

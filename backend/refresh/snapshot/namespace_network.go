@@ -27,6 +27,14 @@ const (
 	errNamespaceNetworkScopeRequired = "namespace scope is required"
 )
 
+// NamespaceNetworkPermissions indicates which resources should be included in the domain.
+type NamespaceNetworkPermissions struct {
+	IncludeServices       bool
+	IncludeEndpointSlices bool
+	IncludeIngresses      bool
+	IncludeNetworkPolicies bool
+}
+
 // NamespaceNetworkBuilder constructs summaries for namespace-scoped network resources.
 type NamespaceNetworkBuilder struct {
 	serviceLister       corelisters.ServiceLister
@@ -52,18 +60,28 @@ type NetworkSummary struct {
 }
 
 // RegisterNamespaceNetworkDomain registers the network domain with the registry.
+// Only listers for permitted resources are wired; denied resources are left nil
+// so the builder skips them gracefully.
 func RegisterNamespaceNetworkDomain(
 	reg *domain.Registry,
 	factory informers.SharedInformerFactory,
+	perms NamespaceNetworkPermissions,
 ) error {
 	if factory == nil {
 		return fmt.Errorf("shared informer factory is nil")
 	}
-	builder := &NamespaceNetworkBuilder{
-		serviceLister:       factory.Core().V1().Services().Lister(),
-		endpointSliceLister: factory.Discovery().V1().EndpointSlices().Lister(),
-		ingressLister:       factory.Networking().V1().Ingresses().Lister(),
-		policyLister:        factory.Networking().V1().NetworkPolicies().Lister(),
+	builder := &NamespaceNetworkBuilder{}
+	if perms.IncludeServices {
+		builder.serviceLister = factory.Core().V1().Services().Lister()
+	}
+	if perms.IncludeEndpointSlices {
+		builder.endpointSliceLister = factory.Discovery().V1().EndpointSlices().Lister()
+	}
+	if perms.IncludeIngresses {
+		builder.ingressLister = factory.Networking().V1().Ingresses().Lister()
+	}
+	if perms.IncludeNetworkPolicies {
+		builder.policyLister = factory.Networking().V1().NetworkPolicies().Lister()
 	}
 	return reg.Register(refresh.DomainConfig{
 		Name:          namespaceNetworkDomainName,
@@ -93,21 +111,33 @@ func (b *NamespaceNetworkBuilder) Build(ctx context.Context, scope string) (*ref
 		}
 	}
 
-	services, err := b.listServices(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace network: failed to list services: %w", err)
+	var services []*corev1.Service
+	if b.serviceLister != nil {
+		services, err = b.listServices(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace network: failed to list services: %w", err)
+		}
 	}
-	slices, err := b.listEndpointSlices(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace network: failed to list endpoint slices: %w", err)
+	var slices []*discoveryv1.EndpointSlice
+	if b.endpointSliceLister != nil {
+		slices, err = b.listEndpointSlices(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace network: failed to list endpoint slices: %w", err)
+		}
 	}
-	ingresses, err := b.listIngresses(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace network: failed to list ingresses: %w", err)
+	var ingresses []*networkingv1.Ingress
+	if b.ingressLister != nil {
+		ingresses, err = b.listIngresses(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace network: failed to list ingresses: %w", err)
+		}
 	}
-	policies, err := b.listNetworkPolicies(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("namespace network: failed to list network policies: %w", err)
+	var policies []*networkingv1.NetworkPolicy
+	if b.policyLister != nil {
+		policies, err = b.listNetworkPolicies(namespace)
+		if err != nil {
+			return nil, fmt.Errorf("namespace network: failed to list network policies: %w", err)
+		}
 	}
 
 	slicesByService := groupEndpointSlicesByService(slices)

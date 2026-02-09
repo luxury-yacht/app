@@ -18,7 +18,7 @@ func createTempKubeconfig(t *testing.T, dir, filename, context string) string {
 clusters:
 - cluster:
     insecure-skip-tls-verify: true
-    server: https://test-server:6443
+    server: https://127.0.0.1:6443
   name: test-cluster
 contexts:
 - context:
