@@ -88,6 +88,23 @@ func (f *Factory) CanWatchResource(group, resource string) (bool, error) {
 	return f.checkResourceVerb(group, resource, "watch")
 }
 
+// CanListWatch reports whether the current identity can both list and watch the resource.
+// Returns false if either permission is denied or if checking fails.
+func (f *Factory) CanListWatch(group, resource string) bool {
+	if f == nil {
+		return false
+	}
+	listAllowed, listErr := f.CanListResource(group, resource)
+	if listErr != nil || !listAllowed {
+		return false
+	}
+	watchAllowed, watchErr := f.CanWatchResource(group, resource)
+	if watchErr != nil || !watchAllowed {
+		return false
+	}
+	return true
+}
+
 // ConfigureRuntimePermissions sets the runtime permission checker used for gating.
 func (f *Factory) ConfigureRuntimePermissions(checker *permissions.Checker, logger logstream.Logger) {
 	if f == nil {

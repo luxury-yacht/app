@@ -63,6 +63,13 @@ func (s *Service) collectViaSharedInformer(index int, desc resourceDescriptor, n
 		return nil, true, nil
 	}
 
+	// Check permissions before accessing shared informer listers to avoid triggering
+	// lazy informer creation for resources the user cannot list/watch.
+	if s.deps.PermissionChecker != nil && !s.deps.PermissionChecker.CanListWatch(gr.Group, gr.Resource) {
+		// No permission - fall back to listResource which handles 403 gracefully
+		return emitSummaries(index, agg, nil, nil, false)
+	}
+
 	if gr == (schema.GroupResource{Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions"}) {
 		if s.deps.APIExtensionsInformerFactory == nil {
 			return emitSummaries(index, agg, nil, nil, false)

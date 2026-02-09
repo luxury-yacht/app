@@ -191,6 +191,22 @@ type permissionChecker interface {
 	CanWatchResource(group, resource string) (bool, error)
 }
 
+// canListWatch reports whether the current identity can both list and watch the resource.
+func canListWatch(pc permissionChecker, group, resource string) bool {
+	if pc == nil {
+		return true
+	}
+	listOK, err := pc.CanListResource(group, resource)
+	if err != nil || !listOK {
+		return false
+	}
+	watchOK, err := pc.CanWatchResource(group, resource)
+	if err != nil || !watchOK {
+		return false
+	}
+	return true
+}
+
 // Manager fan-outs informer updates to websocket subscribers.
 type Manager struct {
 	clusterMeta snapshot.ClusterMeta
@@ -262,217 +278,278 @@ func NewManager(
 		return mgr
 	}
 
-	podInformer := shared.Core().V1().Pods()
-	mgr.podLister = podInformer.Lister()
-	mgr.podIndexer = podInformer.Informer().GetIndexer()
-	podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handlePod(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handlePod(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handlePod(obj, MessageTypeDeleted) },
-	})
+	// All informers watch at cluster scope, so every resource needs a permission check
+	// to prevent lazy informer creation for resources the user cannot list/watch cluster-wide.
+	if canListWatch(mgr.permissions, "", "pods") {
+		podInformer := shared.Core().V1().Pods()
+		mgr.podLister = podInformer.Lister()
+		mgr.podIndexer = podInformer.Informer().GetIndexer()
+		podInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handlePod(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handlePod(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handlePod(obj, MessageTypeDeleted) },
+		})
+	}
 
-	configMapInformer := shared.Core().V1().ConfigMaps()
-	configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleConfigMap(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleConfigMap(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleConfigMap(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "", "configmaps") {
+		configMapInformer := shared.Core().V1().ConfigMaps()
+		configMapInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleConfigMap(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleConfigMap(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleConfigMap(obj, MessageTypeDeleted) },
+		})
+	}
 
-	secretInformer := shared.Core().V1().Secrets()
-	secretInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleSecret(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleSecret(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleSecret(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "", "secrets") {
+		secretInformer := shared.Core().V1().Secrets()
+		secretInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleSecret(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleSecret(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleSecret(obj, MessageTypeDeleted) },
+		})
+	}
 
-	serviceInformer := shared.Core().V1().Services()
-	mgr.serviceLister = serviceInformer.Lister()
-	serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleService(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleService(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleService(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "", "services") {
+		serviceInformer := shared.Core().V1().Services()
+		mgr.serviceLister = serviceInformer.Lister()
+		serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleService(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleService(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleService(obj, MessageTypeDeleted) },
+		})
+	}
 
-	sliceInformer := shared.Discovery().V1().EndpointSlices()
-	mgr.sliceLister = sliceInformer.Lister()
-	sliceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleEndpointSlice(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleEndpointSlice(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleEndpointSlice(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "discovery.k8s.io", "endpointslices") {
+		sliceInformer := shared.Discovery().V1().EndpointSlices()
+		mgr.sliceLister = sliceInformer.Lister()
+		sliceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleEndpointSlice(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleEndpointSlice(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleEndpointSlice(obj, MessageTypeDeleted) },
+		})
+	}
 
-	ingressInformer := shared.Networking().V1().Ingresses()
-	mgr.ingressLister = ingressInformer.Lister()
-	ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleIngress(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleIngress(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleIngress(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "networking.k8s.io", "ingresses") {
+		ingressInformer := shared.Networking().V1().Ingresses()
+		mgr.ingressLister = ingressInformer.Lister()
+		ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleIngress(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleIngress(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleIngress(obj, MessageTypeDeleted) },
+		})
+	}
 
-	policyInformer := shared.Networking().V1().NetworkPolicies()
-	mgr.policyLister = policyInformer.Lister()
-	policyInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleNetworkPolicy(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleNetworkPolicy(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleNetworkPolicy(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "networking.k8s.io", "networkpolicies") {
+		policyInformer := shared.Networking().V1().NetworkPolicies()
+		mgr.policyLister = policyInformer.Lister()
+		policyInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleNetworkPolicy(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleNetworkPolicy(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleNetworkPolicy(obj, MessageTypeDeleted) },
+		})
+	}
 
-	pvcInformer := shared.Core().V1().PersistentVolumeClaims()
-	pvcInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handlePersistentVolumeClaim(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handlePersistentVolumeClaim(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handlePersistentVolumeClaim(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "", "persistentvolumeclaims") {
+		pvcInformer := shared.Core().V1().PersistentVolumeClaims()
+		pvcInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handlePersistentVolumeClaim(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handlePersistentVolumeClaim(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handlePersistentVolumeClaim(obj, MessageTypeDeleted) },
+		})
+	}
 
-	hpaInformer := shared.Autoscaling().V1().HorizontalPodAutoscalers()
-	hpaInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleHPA(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleHPA(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleHPA(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "autoscaling", "horizontalpodautoscalers") {
+		hpaInformer := shared.Autoscaling().V1().HorizontalPodAutoscalers()
+		hpaInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleHPA(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleHPA(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleHPA(obj, MessageTypeDeleted) },
+		})
+	}
 
-	nodeInformer := shared.Core().V1().Nodes()
-	mgr.nodeLister = nodeInformer.Lister()
-	nodeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleNode(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleNode(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleNode(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "", "nodes") {
+		nodeInformer := shared.Core().V1().Nodes()
+		mgr.nodeLister = nodeInformer.Lister()
+		nodeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleNode(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleNode(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleNode(obj, MessageTypeDeleted) },
+		})
+	}
 
-	rsInformer := shared.Apps().V1().ReplicaSets()
-	mgr.rsLister = rsInformer.Lister()
+	if canListWatch(mgr.permissions, "apps", "replicasets") {
+		rsInformer := shared.Apps().V1().ReplicaSets()
+		mgr.rsLister = rsInformer.Lister()
+	}
 
-	deploymentInformer := shared.Apps().V1().Deployments()
-	mgr.deploymentLister = deploymentInformer.Lister()
-	deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleWorkload(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "apps", "deployments") {
+		deploymentInformer := shared.Apps().V1().Deployments()
+		mgr.deploymentLister = deploymentInformer.Lister()
+		deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleWorkload(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeDeleted) },
+		})
+	}
 
-	statefulInformer := shared.Apps().V1().StatefulSets()
-	mgr.statefulLister = statefulInformer.Lister()
-	statefulInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleWorkload(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "apps", "statefulsets") {
+		statefulInformer := shared.Apps().V1().StatefulSets()
+		mgr.statefulLister = statefulInformer.Lister()
+		statefulInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleWorkload(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeDeleted) },
+		})
+	}
 
-	daemonInformer := shared.Apps().V1().DaemonSets()
-	mgr.daemonLister = daemonInformer.Lister()
-	daemonInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleWorkload(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "apps", "daemonsets") {
+		daemonInformer := shared.Apps().V1().DaemonSets()
+		mgr.daemonLister = daemonInformer.Lister()
+		daemonInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleWorkload(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeDeleted) },
+		})
+	}
 
-	jobInformer := shared.Batch().V1().Jobs()
-	mgr.jobLister = jobInformer.Lister()
-	jobInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleWorkload(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "batch", "jobs") {
+		jobInformer := shared.Batch().V1().Jobs()
+		mgr.jobLister = jobInformer.Lister()
+		jobInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleWorkload(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeDeleted) },
+		})
+	}
 
-	cronInformer := shared.Batch().V1().CronJobs()
-	mgr.cronJobLister = cronInformer.Lister()
-	cronInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleWorkload(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "batch", "cronjobs") {
+		cronInformer := shared.Batch().V1().CronJobs()
+		mgr.cronJobLister = cronInformer.Lister()
+		cronInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleWorkload(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleWorkload(obj, MessageTypeDeleted) },
+		})
+	}
 
-	roleInformer := shared.Rbac().V1().Roles()
-	roleInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleRole(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleRole(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleRole(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "rbac.authorization.k8s.io", "roles") {
+		roleInformer := shared.Rbac().V1().Roles()
+		roleInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleRole(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleRole(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleRole(obj, MessageTypeDeleted) },
+		})
+	}
 
-	bindingInformer := shared.Rbac().V1().RoleBindings()
-	bindingInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleRoleBinding(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleRoleBinding(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleRoleBinding(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "rbac.authorization.k8s.io", "rolebindings") {
+		bindingInformer := shared.Rbac().V1().RoleBindings()
+		bindingInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleRoleBinding(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleRoleBinding(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleRoleBinding(obj, MessageTypeDeleted) },
+		})
+	}
 
-	serviceAccountInformer := shared.Core().V1().ServiceAccounts()
-	serviceAccountInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleServiceAccount(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleServiceAccount(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleServiceAccount(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "", "serviceaccounts") {
+		serviceAccountInformer := shared.Core().V1().ServiceAccounts()
+		serviceAccountInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleServiceAccount(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleServiceAccount(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleServiceAccount(obj, MessageTypeDeleted) },
+		})
+	}
 
-	resourceQuotaInformer := shared.Core().V1().ResourceQuotas()
-	resourceQuotaInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleResourceQuota(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleResourceQuota(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleResourceQuota(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "", "resourcequotas") {
+		resourceQuotaInformer := shared.Core().V1().ResourceQuotas()
+		resourceQuotaInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleResourceQuota(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleResourceQuota(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleResourceQuota(obj, MessageTypeDeleted) },
+		})
+	}
 
-	limitRangeInformer := shared.Core().V1().LimitRanges()
-	limitRangeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleLimitRange(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleLimitRange(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleLimitRange(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "", "limitranges") {
+		limitRangeInformer := shared.Core().V1().LimitRanges()
+		limitRangeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleLimitRange(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleLimitRange(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleLimitRange(obj, MessageTypeDeleted) },
+		})
+	}
 
-	pdbInformer := shared.Policy().V1().PodDisruptionBudgets()
-	pdbInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handlePodDisruptionBudget(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handlePodDisruptionBudget(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handlePodDisruptionBudget(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "policy", "poddisruptionbudgets") {
+		pdbInformer := shared.Policy().V1().PodDisruptionBudgets()
+		pdbInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handlePodDisruptionBudget(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handlePodDisruptionBudget(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handlePodDisruptionBudget(obj, MessageTypeDeleted) },
+		})
+	}
 
 	// Cluster-scoped informers drive the cluster tab streaming domains.
-	clusterRoleInformer := shared.Rbac().V1().ClusterRoles()
-	clusterRoleInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleClusterRole(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleClusterRole(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleClusterRole(obj, MessageTypeDeleted) },
-	})
+	// Each is gated on permissions to avoid triggering forbidden list/watch errors.
+	if canListWatch(mgr.permissions, "rbac.authorization.k8s.io", "clusterroles") {
+		clusterRoleInformer := shared.Rbac().V1().ClusterRoles()
+		clusterRoleInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleClusterRole(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleClusterRole(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleClusterRole(obj, MessageTypeDeleted) },
+		})
+	}
 
-	clusterRoleBindingInformer := shared.Rbac().V1().ClusterRoleBindings()
-	clusterRoleBindingInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleClusterRoleBinding(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleClusterRoleBinding(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleClusterRoleBinding(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "rbac.authorization.k8s.io", "clusterrolebindings") {
+		clusterRoleBindingInformer := shared.Rbac().V1().ClusterRoleBindings()
+		clusterRoleBindingInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleClusterRoleBinding(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleClusterRoleBinding(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleClusterRoleBinding(obj, MessageTypeDeleted) },
+		})
+	}
 
-	pvInformer := shared.Core().V1().PersistentVolumes()
-	pvInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handlePersistentVolume(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handlePersistentVolume(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handlePersistentVolume(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "", "persistentvolumes") {
+		pvInformer := shared.Core().V1().PersistentVolumes()
+		pvInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handlePersistentVolume(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handlePersistentVolume(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handlePersistentVolume(obj, MessageTypeDeleted) },
+		})
+	}
 
-	storageClassInformer := shared.Storage().V1().StorageClasses()
-	storageClassInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleStorageClass(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleStorageClass(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleStorageClass(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "storage.k8s.io", "storageclasses") {
+		storageClassInformer := shared.Storage().V1().StorageClasses()
+		storageClassInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleStorageClass(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleStorageClass(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleStorageClass(obj, MessageTypeDeleted) },
+		})
+	}
 
-	ingressClassInformer := shared.Networking().V1().IngressClasses()
-	ingressClassInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleIngressClass(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleIngressClass(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleIngressClass(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "networking.k8s.io", "ingressclasses") {
+		ingressClassInformer := shared.Networking().V1().IngressClasses()
+		ingressClassInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleIngressClass(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleIngressClass(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleIngressClass(obj, MessageTypeDeleted) },
+		})
+	}
 
-	validatingWebhookInformer := shared.Admissionregistration().V1().ValidatingWebhookConfigurations()
-	validatingWebhookInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleValidatingWebhook(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleValidatingWebhook(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleValidatingWebhook(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "admissionregistration.k8s.io", "validatingwebhookconfigurations") {
+		validatingWebhookInformer := shared.Admissionregistration().V1().ValidatingWebhookConfigurations()
+		validatingWebhookInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleValidatingWebhook(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleValidatingWebhook(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleValidatingWebhook(obj, MessageTypeDeleted) },
+		})
+	}
 
-	mutatingWebhookInformer := shared.Admissionregistration().V1().MutatingWebhookConfigurations()
-	mutatingWebhookInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(obj interface{}) { mgr.handleMutatingWebhook(obj, MessageTypeAdded) },
-		UpdateFunc: func(_, newObj interface{}) { mgr.handleMutatingWebhook(newObj, MessageTypeModified) },
-		DeleteFunc: func(obj interface{}) { mgr.handleMutatingWebhook(obj, MessageTypeDeleted) },
-	})
+	if canListWatch(mgr.permissions, "admissionregistration.k8s.io", "mutatingwebhookconfigurations") {
+		mutatingWebhookInformer := shared.Admissionregistration().V1().MutatingWebhookConfigurations()
+		mutatingWebhookInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+			AddFunc:    func(obj interface{}) { mgr.handleMutatingWebhook(obj, MessageTypeAdded) },
+			UpdateFunc: func(_, newObj interface{}) { mgr.handleMutatingWebhook(newObj, MessageTypeModified) },
+			DeleteFunc: func(obj interface{}) { mgr.handleMutatingWebhook(obj, MessageTypeDeleted) },
+		})
+	}
 
 	mgr.initCustomResourceInformers(factory)
 
@@ -514,6 +591,10 @@ func (m *Manager) invalidateCustomResourceCache(kind, namespace, name string) {
 
 func (m *Manager) initCustomResourceInformers(factory *informer.Factory) {
 	if m == nil || m.dynamicClient == nil || factory == nil {
+		return
+	}
+	// CustomResourceDefinitions are cluster-scoped — gate on permissions.
+	if !canListWatch(m.permissions, "apiextensions.k8s.io", "customresourcedefinitions") {
 		return
 	}
 	apiextFactory := factory.APIExtensionsInformerFactory()

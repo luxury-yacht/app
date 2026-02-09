@@ -84,6 +84,12 @@ func (d Descriptor) GVR() schema.GroupVersionResource {
 	}
 }
 
+// PermissionChecker gates access to resources based on RBAC.
+type PermissionChecker interface {
+	// CanListWatch reports whether the current identity can list AND watch the resource.
+	CanListWatch(group, resource string) bool
+}
+
 // Dependencies captures collaborators required by the catalog service.
 type Dependencies struct {
 	Common                       common.Dependencies                   // common dependencies
@@ -93,6 +99,7 @@ type Dependencies struct {
 	Now                          func() time.Time                      // function to get the current time
 	InformerFactory              informers.SharedInformerFactory       // Kubernetes informer factory
 	APIExtensionsInformerFactory apiextinformers.SharedInformerFactory // Kubernetes API extensions informer factory
+	PermissionChecker            PermissionChecker                     // optional; if nil, assumes all permissions granted
 	ClusterID                    string                                // stable identifier for the source cluster
 	ClusterName                  string                                // display name for the source cluster
 }
