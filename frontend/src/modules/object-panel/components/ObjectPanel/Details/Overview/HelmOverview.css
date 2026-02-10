@@ -42,6 +42,7 @@
 /* Release Notes */
 .helm-release-notes {
   padding: 0.5rem;
+  line-height: 1rem;
   font-family: var(--font-family-mono);
   font-size: var(--font-size-mono);
   background-color: var(--color-bg-tertiary);

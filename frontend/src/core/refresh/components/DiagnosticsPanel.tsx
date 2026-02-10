@@ -2337,13 +2337,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           EFFECTIVE PERMISSIONS
         </button>
       </div>
-      {activeTab === 'refresh-domains'
-        ? refreshDomainsContent
-        : activeTab === 'streams'
-          ? streamsContent
-          : activeTab === 'capability-checks'
-            ? capabilityChecksContent
-            : effectivePermissionsContent}
+      <div className="diagnostics-scroll-area">
+        {activeTab === 'refresh-domains'
+          ? refreshDomainsContent
+          : activeTab === 'streams'
+            ? streamsContent
+            : activeTab === 'capability-checks'
+              ? capabilityChecksContent
+              : effectivePermissionsContent}
+      </div>
     </DockablePanel>
   );
 };

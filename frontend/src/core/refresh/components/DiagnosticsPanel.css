@@ -14,6 +14,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: hidden;
 }
 
 .diagnostics-header-content {
@@ -83,11 +84,21 @@
   color: var(--color-error-text, var(--color-error));
 }
 
+/* Container below the fixed tabs; fills remaining space. */
+.diagnostics-scroll-area {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .diagnostics-section {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.5rem 0;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .diagnostics-section-header {
@@ -206,9 +217,9 @@
 }
 
 .diagnostics-table-wrapper {
-  overflow: auto;
   flex: 1 1 auto;
   min-height: 0;
+  overflow: auto;
 }
 
 .diagnostics-table {
@@ -223,6 +234,7 @@
   border-bottom: 1px solid var(--color-table-border);
   text-align: left;
   white-space: nowrap;
+  vertical-align: top;
 }
 
 .diagnostics-table th {
@@ -234,22 +246,33 @@
 }
 
 .diagnostics-table-descriptor {
-  max-width: 14rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--color-text-secondary);
   display: inline-block;
-  vertical-align: middle;
+  vertical-align: top;
+  cursor: pointer;
 }
 
 .diagnostics-table-feature {
-  max-width: 10rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   display: inline-block;
-  vertical-align: middle;
+  vertical-align: top;
+  cursor: pointer;
+}
+
+/* Expanded state shows each item on its own line. */
+.diagnostics-table-cell-expanded {
+  overflow: visible;
+  text-overflow: unset;
+  line-height: 1rem;
+}
+
+.diagnostics-descriptor-resource {
+  color: var(--color-text);
 }
 
 .diagnostics-permission-denied {
