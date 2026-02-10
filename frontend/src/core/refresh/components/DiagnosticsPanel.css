@@ -189,6 +189,16 @@
   font-weight: 600;
 }
 
+.diagnostics-scope-entries {
+  white-space: nowrap;
+  line-height: 1rem;
+}
+
+.diagnostics-scope-label {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
 .diagnostics-error {
   max-width: 240px;
   overflow: hidden;

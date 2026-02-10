@@ -54,7 +54,20 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
                     {row.label}
                   </span>
                 </td>
-                <td title={row.scopeTooltip ?? ''}>{row.scope}</td>
+                <td title={row.scopeTooltip ?? ''}>
+                  {row.scopeEntries && row.scopeEntries.length > 0 ? (
+                    <span className="diagnostics-scope-entries">
+                      {row.scopeEntries.map((entry) => (
+                        <div key={entry.clusterName}>
+                          <span className="diagnostics-scope-label">{entry.label}:</span>{' '}
+                          {entry.clusterName}
+                        </div>
+                      ))}
+                    </span>
+                  ) : (
+                    row.scope
+                  )}
+                </td>
                 <td>{row.namespace}</td>
                 <td title={row.modeTooltip ?? ''}>{row.mode}</td>
                 <td title={row.healthTooltip ?? ''}>{row.healthStatus}</td>
