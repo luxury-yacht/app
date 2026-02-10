@@ -52,6 +52,8 @@ interface NamespaceContextType {
   setSelectedNamespace: (namespace: string, clusterId?: string) => void;
   loadNamespaces: (showSpinner?: boolean) => Promise<void>;
   refreshNamespaces: () => Promise<void>;
+  // Lookup a specific cluster's selected namespace (for background refresh).
+  getClusterNamespace: (clusterId: string) => string | undefined;
 }
 
 const NamespaceContext = createContext<NamespaceContextType | undefined>(undefined);
@@ -82,6 +84,18 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     selectedNamespace && selectedClusterId ? selectedClusterId : undefined;
   const lastErrorRef = useRef<string | null>(null);
   const lastEvaluatedNamespaceRef = useRef<string | null>(null);
+
+  // Keep a ref to the latest namespace selections map for stable callback access.
+  const namespaceSelectionsRef = useRef(namespaceSelections);
+  namespaceSelectionsRef.current = namespaceSelections;
+
+  // Lookup a specific cluster's selected namespace (for background refresh).
+  const getClusterNamespace = useCallback(
+    (clusterId: string): string | undefined => {
+      return namespaceSelectionsRef.current[clusterId];
+    },
+    []
+  );
 
   const [namespaces, setNamespaces] = useState<NamespaceListItem[]>([]);
   const namespacesRef = useRef<NamespaceListItem[]>([]);
@@ -374,6 +388,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       setSelectedNamespace: handleSetSelectedNamespace,
       loadNamespaces,
       refreshNamespaces,
+      getClusterNamespace,
     }),
     [
       namespaces,
@@ -384,6 +399,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       handleSetSelectedNamespace,
       loadNamespaces,
       refreshNamespaces,
+      getClusterNamespace,
     ]
   );
 

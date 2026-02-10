@@ -188,11 +188,15 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
 
   const updateRefreshContext = useCallback(
     (meta: { id: string; name: string }, clusterIds: string[]) => {
-      const refreshClusterIds = backgroundRefreshEnabled ? clusterIds : meta.id ? [meta.id] : [];
+      // Foreground view-specific domains only refresh for the active cluster.
+      const foregroundClusterIds = meta.id ? [meta.id] : [];
+      // System domains and the background refresher use all clusters when background refresh is on.
+      const allConnectedClusterIds = backgroundRefreshEnabled ? clusterIds : foregroundClusterIds;
       refreshOrchestrator.updateContext({
         selectedClusterId: meta.id || undefined,
         selectedClusterName: meta.name || undefined,
-        selectedClusterIds: refreshClusterIds,
+        selectedClusterIds: foregroundClusterIds,
+        allConnectedClusterIds,
       });
     },
     [backgroundRefreshEnabled]

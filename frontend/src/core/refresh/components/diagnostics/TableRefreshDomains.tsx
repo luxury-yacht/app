@@ -59,8 +59,10 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
                     <span className="diagnostics-scope-entries">
                       {row.scopeEntries.map((entry) => (
                         <div key={entry.clusterName}>
-                          <span className="diagnostics-scope-label">{entry.label}:</span>{' '}
                           {entry.clusterName}
+                          {entry.label === 'Active' && (
+                            <span className="diagnostics-scope-label"> (active)</span>
+                          )}
                         </div>
                       ))}
                     </span>

@@ -30,6 +30,8 @@ export interface RefreshContext {
   selectedClusterIds?: string[];
   selectedClusterId?: string;
   selectedClusterName?: string;
+  // All connected cluster IDs when background refresh is enabled (system domains + background refresher).
+  allConnectedClusterIds?: string[];
   objectPanel: {
     isOpen: boolean;
     objectKind?: string;

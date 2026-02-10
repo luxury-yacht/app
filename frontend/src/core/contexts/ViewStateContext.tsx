@@ -15,7 +15,7 @@
  * - useObjectPanelState() - object panel, navigation history
  * - useModalState() - settings and about modals
  */
-import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import type { ViewType, NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
 import { getObjectKind, getObjectName, getObjectNamespace } from '@/types/view-state';
 import { refreshOrchestrator } from '@/core/refresh';
@@ -51,11 +51,14 @@ interface NavigationStateContextType {
   navigateToNamespace: () => void;
   onNamespaceSelect: (namespace: string) => void;
   onClusterObjectsClick: () => void;
+
+  // Per-cluster view state lookup for background refresh
+  getClusterNavigationState: (clusterId: string) => NavigationTabState;
 }
 
 const NavigationStateContext = createContext<NavigationStateContextType | undefined>(undefined);
 
-interface NavigationTabState {
+export interface NavigationTabState {
   viewType: ViewType;
   previousView: ViewType;
   activeNamespaceView: NamespaceViewType;
@@ -90,6 +93,18 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
   const clusterKey = selectedClusterId || '__default__';
   const activeState = navigationStateByCluster[clusterKey] ?? DEFAULT_NAVIGATION_STATE;
   const { viewType, previousView, activeNamespaceView, activeClusterView } = activeState;
+
+  // Keep a ref to the latest navigation state map for stable callback access.
+  const navigationStateByClusterRef = useRef(navigationStateByCluster);
+  navigationStateByClusterRef.current = navigationStateByCluster;
+
+  // Lookup a specific cluster's last-viewed navigation state (for background refresh).
+  const getClusterNavigationState = useCallback(
+    (clusterId: string): NavigationTabState => {
+      return navigationStateByClusterRef.current[clusterId] ?? DEFAULT_NAVIGATION_STATE;
+    },
+    []
+  );
 
   // Get sidebar state for navigation actions
   const { setSidebarSelection } = useSidebarState();
@@ -222,6 +237,7 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       navigateToNamespace,
       onNamespaceSelect,
       onClusterObjectsClick,
+      getClusterNavigationState,
     }),
     [
       viewType,
@@ -236,6 +252,7 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
       navigateToNamespace,
       onNamespaceSelect,
       onClusterObjectsClick,
+      getClusterNavigationState,
     ]
   );
 

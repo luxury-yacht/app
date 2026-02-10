@@ -7,14 +7,33 @@
 import React, { ReactNode } from 'react';
 import { KubeconfigProvider } from '@modules/kubernetes/config/KubeconfigContext';
 import { NamespaceProvider } from '@modules/namespace/contexts/NamespaceContext';
-import { ViewStateProvider } from './ViewStateContext';
+import { ViewStateProvider, useViewState } from './ViewStateContext';
 import { ThemeProvider } from './ThemeContext';
 import { RefreshManagerProvider } from '@/core/refresh/contexts/RefreshManagerContext';
 import { ObjectCatalogProvider } from './ObjectCatalogContext';
+import { useBackgroundClusterRefresh } from '@/core/refresh/hooks/useBackgroundClusterRefresh';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 
 interface KubernetesProviderProps {
   children: ReactNode;
 }
+
+/**
+ * Bridge component that wires up background cluster refresh.
+ * Must be mounted inside both ViewStateProvider and NamespaceProvider
+ * so it can access per-cluster navigation state and namespace selections.
+ */
+const BackgroundClusterRefreshBridge: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const { getClusterNavigationState } = useViewState();
+  const { getClusterNamespace } = useNamespace();
+
+  useBackgroundClusterRefresh({
+    getClusterNavigationState,
+    getClusterNamespace,
+  });
+
+  return <>{children}</>;
+};
 
 /**
  * Composite provider that wraps all Kubernetes-related contexts.
@@ -33,7 +52,9 @@ export const KubernetesProvider: React.FC<KubernetesProviderProps> = ({ children
         <ObjectCatalogProvider>
           <KubeconfigProvider>
             <ViewStateProvider>
-              <NamespaceProvider>{children}</NamespaceProvider>
+              <NamespaceProvider>
+                <BackgroundClusterRefreshBridge>{children}</BackgroundClusterRefreshBridge>
+              </NamespaceProvider>
             </ViewStateProvider>
           </KubeconfigProvider>
         </ObjectCatalogProvider>

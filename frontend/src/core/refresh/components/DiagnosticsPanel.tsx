@@ -126,7 +126,7 @@ const resolveScopeDetails = (
   if (clusterIds.length === 0) {
     return { display: trimmed, tooltip: trimmed };
   }
-  // Build structured entries sorted with Active first.
+  // Build structured entries sorted with active cluster first.
   const entries: ScopeEntry[] = clusterIds
     .map((id) => {
       const meta = getClusterMeta(id);
@@ -139,7 +139,10 @@ const resolveScopeDetails = (
       if (b.label === 'Active' && a.label !== 'Active') return 1;
       return a.clusterName.localeCompare(b.clusterName);
     });
-  const display = entries.map((e) => `${e.label}: ${e.clusterName}`).join(', ');
+  // Format as "cluster-A (active), cluster-B, cluster-C".
+  const display = entries
+    .map((e) => (e.label === 'Active' ? `${e.clusterName} (active)` : e.clusterName))
+    .join(', ');
   return { display, tooltip: trimmed, entries };
 };
 
