@@ -21,3 +21,4 @@ export { useRefreshContext } from './hooks/useRefreshContext';
 export { useAutoRefresh, initializeAutoRefresh } from './hooks/useAutoRefresh';
 export { initializeMetricsRefreshInterval } from './hooks/useMetricsInterval';
 export { useBackgroundRefresh } from './hooks/useBackgroundRefresh';
+export { useBackgroundClusterRefresh } from './hooks/useBackgroundClusterRefresh';

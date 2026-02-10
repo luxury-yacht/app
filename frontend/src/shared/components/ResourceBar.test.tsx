@@ -163,6 +163,8 @@ describe('ResourceBar', () => {
   });
 
   it('hides tooltip gracefully when positioning fails', async () => {
+    vi.useFakeTimers();
+
     const { container, cleanup } = await renderBar({
       type: 'cpu',
       usage: '200m',
@@ -183,10 +185,15 @@ describe('ResourceBar', () => {
       compactContainer.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
       await Promise.resolve();
     });
+    // Advance past the tooltip hover delay
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
 
     expect(container.querySelector('.resource-bar-tooltip')).toBeFalsy();
 
     cleanup();
+    vi.useRealTimers();
   });
 
   it('handles unbounded usage and resets animations when RAF is unavailable', async () => {
@@ -228,6 +235,8 @@ describe('ResourceBar', () => {
   });
 
   it('renders compact tooltip with converted memory units and configuration warnings', async () => {
+    vi.useFakeTimers();
+
     const actualReactDOM = await vi.importActual<typeof import('react-dom')>('react-dom');
     const portalSpy = vi.mocked(ReactDOM.createPortal);
     portalSpy.mockImplementation(actualReactDOM.createPortal);
@@ -261,7 +270,10 @@ describe('ResourceBar', () => {
       compactContainer.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
       await Promise.resolve();
     });
-    await act(async () => {});
+    // Advance past the tooltip hover delay
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
 
     const leadingValue = container.querySelector('.resource-bar-leading')?.textContent ?? '';
     expect(leadingValue).toContain('1Mi');
@@ -274,6 +286,7 @@ describe('ResourceBar', () => {
     expect(overcommitBar).toBeTruthy();
 
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     expect(
       warnSpy.mock.calls.some(
@@ -286,6 +299,8 @@ describe('ResourceBar', () => {
   });
 
   it('scales usage against requests when limits are missing and warns when constraints are absent', async () => {
+    vi.useFakeTimers();
+
     const actualReactDOM = await vi.importActual<typeof import('react-dom')>('react-dom');
     const portalSpy = vi.mocked(ReactDOM.createPortal);
     portalSpy.mockImplementation(actualReactDOM.createPortal);
@@ -314,7 +329,10 @@ describe('ResourceBar', () => {
       compactContainer.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
       await Promise.resolve();
     });
-    await act(async () => {});
+    // Advance past the tooltip hover delay
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
 
     let tooltip = document.body.querySelector('.resource-bar-tooltip') as HTMLElement;
     expect(tooltip).toBeTruthy();
@@ -360,7 +378,10 @@ describe('ResourceBar', () => {
       rerenderedContainer.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
       await Promise.resolve();
     });
-    await act(async () => {});
+    // Advance past the tooltip hover delay
+    await act(async () => {
+      vi.advanceTimersByTime(250);
+    });
 
     tooltip = document.body.querySelector('.resource-bar-tooltip') as HTMLElement;
     expect(tooltip).toBeTruthy();
@@ -371,6 +392,7 @@ describe('ResourceBar', () => {
     ).toBe(true);
 
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     portalSpy.mockImplementation((element: any) => element as any);
   });

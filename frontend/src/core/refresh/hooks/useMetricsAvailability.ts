@@ -17,8 +17,10 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
   const { viewType } = useViewState();
 
   useEffect(() => {
-    const shouldEnable = viewType === 'overview' || viewType === 'namespace';
-    // Gate overview metrics refreshes to views that surface metrics to avoid background polling.
+    // Keep cluster-overview running for all active views so diagnostics and background
+    // metrics stay current regardless of which view type is selected.
+    const shouldEnable =
+      viewType === 'overview' || viewType === 'namespace' || viewType === 'cluster';
     refreshOrchestrator.setDomainEnabled('cluster-overview', shouldEnable);
 
     const shouldTrigger = shouldEnable && viewType !== 'overview';

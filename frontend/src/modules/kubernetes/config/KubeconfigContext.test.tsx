@@ -127,7 +127,8 @@ describe('KubeconfigContext', () => {
     expect(mocks.refreshOrchestrator.updateContext).toHaveBeenLastCalledWith({
       selectedClusterId: 'alpha:dev',
       selectedClusterName: 'dev',
-      selectedClusterIds: ['alpha:dev', 'beta:prod'],
+      selectedClusterIds: ['alpha:dev'],
+      allConnectedClusterIds: ['alpha:dev', 'beta:prod'],
     });
 
     unmount();
@@ -160,6 +161,7 @@ describe('KubeconfigContext', () => {
       selectedClusterId: 'alpha:dev',
       selectedClusterName: 'dev',
       selectedClusterIds: ['alpha:dev'],
+      allConnectedClusterIds: ['alpha:dev'],
     });
 
     unmount();
@@ -353,6 +355,7 @@ describe('KubeconfigContext', () => {
       selectedClusterId: 'default:minikube',
       selectedClusterName: 'minikube',
       selectedClusterIds: ['default:minikube'],
+      allConnectedClusterIds: ['default:minikube'],
     });
 
     unmount();

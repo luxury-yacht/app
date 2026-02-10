@@ -270,8 +270,6 @@ describe('DockablePanel behaviour (real hook)', () => {
         panelId="panel-bottom"
         defaultPosition="bottom"
         defaultSize={{ height: 360 }}
-        minHeight={280}
-        maxHeight={260}
         isOpen
       >
         <div>panel</div>

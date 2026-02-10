@@ -645,7 +645,7 @@ function Settings({ onClose }: SettingsProps) {
                   checked={backgroundRefreshEnabled}
                   onChange={(e) => setBackgroundRefresh(e.target.checked)}
                 />
-                Refresh background clusters
+                Include background clusters in auto-refresh
               </label>
             </div>
           </div>
@@ -661,7 +661,7 @@ function Settings({ onClose }: SettingsProps) {
                   checked={persistenceMode === 'namespaced'}
                   onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
                 />
-                Persist state per namespaced view
+                Enable per-namespace view settings
               </label>
             </div>
             <div className="setting-item setting-actions">

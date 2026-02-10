@@ -27,7 +27,6 @@ import { ObjectPanelTabs } from '@modules/object-panel/components/ObjectPanel/Ob
 import { ObjectPanelHeader } from '@modules/object-panel/components/ObjectPanel/ObjectPanelHeader';
 import { ObjectPanelContent } from '@modules/object-panel/components/ObjectPanel/ObjectPanelContent';
 import {
-  MIN_PANEL_WIDTH,
   CLUSTER_SCOPE,
   RESOURCE_CAPABILITIES,
   WORKLOAD_KIND_API_NAMES,
@@ -617,9 +616,6 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
         title={`${objectData?.kindAlias || objectData?.kind || 'Object'}: ${objectData?.name || 'Unknown'}`}
         isOpen={isOpen}
         defaultPosition="right"
-        defaultSize={{ width: 700, height: 600 }}
-        minWidth={MIN_PANEL_WIDTH}
-        minHeight={400}
         className="object-panel-dockable"
         allowMaximize
         maximizeTargetSelector=".content-body"

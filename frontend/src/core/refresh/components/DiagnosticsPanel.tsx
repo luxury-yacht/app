@@ -26,7 +26,8 @@ import { resourceStreamManager } from '../streaming/resourceStreamManager';
 import { useShortcut, useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { fetchTelemetrySummary } from '../client';
-import { stripClusterScope } from '@/core/refresh/clusterScope';
+import { stripClusterScope, parseClusterScopeList } from '@/core/refresh/clusterScope';
+import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import {
   getPermissionKey,
   useCapabilityDiagnostics,
@@ -110,12 +111,42 @@ const STREAM_MODE_BY_NAME: Record<string, 'streaming' | 'watch'> = {
 const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'access denied', 'rbac'];
 
 // Diagnostics helpers for scope, error, and health labels.
-const resolveScopeDetails = (scope?: string): { display: string; tooltip?: string } => {
+type ScopeEntry = { label: 'Active' | 'Background'; clusterName: string };
+
+const resolveScopeDetails = (
+  scope: string | undefined,
+  activeClusterId: string,
+  getClusterMeta: (config: string) => { id: string; name: string }
+): { display: string; tooltip?: string; entries?: ScopeEntry[] } => {
   const trimmed = (scope ?? '').trim();
   if (!trimmed) {
     return { display: '-', tooltip: 'No active scope' };
   }
-  return { display: trimmed, tooltip: trimmed };
+  const { clusterIds } = parseClusterScopeList(trimmed);
+  if (clusterIds.length === 0) {
+    return { display: trimmed, tooltip: trimmed };
+  }
+  // Build structured entries sorted with active cluster first.
+  const entries: ScopeEntry[] = clusterIds
+    .map((id) => {
+      const meta = getClusterMeta(id);
+      const name = meta.name || id;
+      const isActive = id === activeClusterId;
+      return {
+        label: (isActive ? 'Active' : 'Background') as ScopeEntry['label'],
+        clusterName: name,
+      };
+    })
+    .sort((a, b) => {
+      if (a.label === 'Active' && b.label !== 'Active') return -1;
+      if (b.label === 'Active' && a.label !== 'Active') return 1;
+      return a.clusterName.localeCompare(b.clusterName);
+    });
+  // Format as "cluster-A (active), cluster-B, cluster-C".
+  const display = entries
+    .map((e) => (e.label === 'Active' ? `${e.clusterName} (active)` : e.clusterName))
+    .join(', ');
+  return { display, tooltip: trimmed, entries };
 };
 
 const resolveErrorReason = (error?: string | null): string | null => {
@@ -196,6 +227,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const capabilityDiagnostics = useCapabilityDiagnostics();
   const { viewType, activeClusterTab, activeNamespaceTab } = useViewState();
   const { selectedNamespace } = useNamespace();
+  const { selectedClusterId, getClusterMeta } = useKubeconfig();
   const [showAllPermissions, setShowAllPermissions] = useState(false);
   const [diagnosticsClock, setDiagnosticsClock] = useState(() => Date.now());
 
@@ -542,7 +574,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         : undefined;
       const isResourceStreamDomain = streamName === 'resources';
       const streamMode = streamName ? (STREAM_MODE_BY_NAME[streamName] ?? 'streaming') : null;
-      const scopeDetails = resolveScopeDetails(state.scope);
+      const scopeDetails = resolveScopeDetails(state.scope, selectedClusterId, getClusterMeta);
       const streamLastEvent = isResourceStreamDomain ? streamTelemetry?.lastEvent : 0;
       const baseLastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
       const lastUpdated = (() => {
@@ -808,6 +840,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         namespace: namespaceLabel,
         scope: scopeDetails.display,
         scopeTooltip: scopeDetails.tooltip,
+        scopeEntries: scopeDetails.entries,
         mode: modeDetails.label,
         modeTooltip: modeDetails.tooltip,
         healthStatus: healthDetails.label,
@@ -978,7 +1011,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         return { display: '-', tooltip: 'No pod scopes active' };
       }
       if (podScopes.length === 1) {
-        return resolveScopeDetails(podScopes[0][0]);
+        return resolveScopeDetails(podScopes[0][0], selectedClusterId, getClusterMeta);
       }
       return {
         display: 'multiple',
@@ -1045,6 +1078,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespace: '-',
       scope: podScopeDetails.display,
       scopeTooltip: podScopeDetails.tooltip,
+      scopeEntries: podScopeDetails.entries,
       mode: podModeDetails.label,
       modeTooltip: podModeDetails.tooltip,
       healthStatus: podHealthDetails.label,
@@ -1118,7 +1152,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         scope,
         streamHealth,
       });
-      const scopeDetails = resolveScopeDetails(scope);
+      const scopeDetails = resolveScopeDetails(scope, selectedClusterId, getClusterMeta);
       const telemetryStatus = [state.status, streamHealth ? `Stream ${streamHealth.status}` : null]
         .filter(Boolean)
         .join(' • ');
@@ -1188,6 +1222,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         namespace: namespaceLabel,
         scope: scopeDetails.display,
         scopeTooltip: scopeDetails.tooltip,
+        scopeEntries: scopeDetails.entries,
         mode: modeDetails.label,
         modeTooltip: modeDetails.tooltip,
         healthStatus: healthDetails.label,
@@ -1247,7 +1282,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         return { display: '-', tooltip: 'No log scopes active' };
       }
       if (logScopeEntries.length === 1) {
-        return resolveScopeDetails(logScopeEntries[0][0]);
+        return resolveScopeDetails(logScopeEntries[0][0], selectedClusterId, getClusterMeta);
       }
       return {
         display: 'multiple',
@@ -1317,6 +1352,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespace: '-',
       scope: logScopeDetails.display,
       scopeTooltip: logScopeDetails.tooltip,
+      scopeEntries: logScopeDetails.entries,
       mode: logModeDetails.label,
       modeTooltip: logModeDetails.tooltip,
       healthStatus: logHealthDetails.label,
@@ -1348,7 +1384,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         truncated && totalItems !== undefined ? `${count} / ${totalItems}` : String(count);
       const countTooltip = warnings.length > 0 ? warnings.join('\n') : undefined;
       const countClassName = warnings.length > 0 ? 'diagnostics-count-warning' : undefined;
-      const scopeDetails = resolveScopeDetails(scope);
+      const scopeDetails = resolveScopeDetails(scope, selectedClusterId, getClusterMeta);
       const healthDetails = resolveHealthDetails({
         domain: 'object-logs',
         status: state.status,
@@ -1390,6 +1426,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         namespace: namespaceLabel,
         scope: scopeDetails.display,
         scopeTooltip: scopeDetails.tooltip,
+        scopeEntries: scopeDetails.entries,
         mode: logModeDetails.label,
         modeTooltip: logModeDetails.tooltip,
         healthStatus: healthDetails.label,
@@ -1424,7 +1461,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const intervalLabel = formatInterval(
         refresherName ? refreshManager.getRefresherInterval(refresherName) : null
       );
-      const scopeDetails = resolveScopeDetails(state.scope);
+      const scopeDetails = resolveScopeDetails(state.scope, selectedClusterId, getClusterMeta);
       const streamTelemetry = telemetrySummary?.streams.find((entry) => entry.name === 'events');
       const streamHealth = resolveStreamTelemetryHealth(streamTelemetry);
       const streamActive = Boolean(streamTelemetry?.activeSessions);
@@ -1482,6 +1519,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         namespace: '-',
         scope: scopeDetails.display,
         scopeTooltip: scopeDetails.tooltip,
+        scopeEntries: scopeDetails.entries,
         mode: modeDetails.label,
         modeTooltip: modeDetails.tooltip,
         healthStatus: healthDetails.label,
@@ -1515,7 +1553,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         refresherName ? refreshManager.getRefresherInterval(refresherName) : null
       );
       const namespaceLabel = resolveDomainNamespace('namespace-events', state.scope);
-      const scopeDetails = resolveScopeDetails(state.scope);
+      const scopeDetails = resolveScopeDetails(state.scope, selectedClusterId, getClusterMeta);
       const streamTelemetry = telemetrySummary?.streams.find((entry) => entry.name === 'events');
       const streamHealth = resolveStreamTelemetryHealth(streamTelemetry);
       const streamActive = Boolean(streamTelemetry?.activeSessions);
@@ -1574,6 +1612,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         namespace: namespaceLabel,
         scope: scopeDetails.display,
         scopeTooltip: scopeDetails.tooltip,
+        scopeEntries: scopeDetails.entries,
         mode: modeDetails.label,
         modeTooltip: modeDetails.tooltip,
         healthStatus: healthDetails.label,
@@ -1616,6 +1655,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     namespaceEventsDomain,
     telemetrySummary,
     resourceStreamStats,
+    selectedClusterId,
+    getClusterMeta,
   ]);
 
   // Build stream telemetry rows for the dedicated diagnostics section.
@@ -2189,10 +2230,33 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     />
   );
 
+  // Split capability batch rows into current (Cluster + selected namespace + in-flight)
+  // and previous (everything else).
+  const { currentCapabilityRows, previousCapabilityRows } = useMemo(() => {
+    const current: typeof capabilityBatchRows = [];
+    const previous: typeof capabilityBatchRows = [];
+    const activeNamespaceKey = selectedNamespace?.toLowerCase() ?? null;
+
+    for (const row of capabilityBatchRows) {
+      const isCurrent =
+        row.namespace === 'Cluster' ||
+        row.pendingCount > 0 ||
+        row.inFlightCount > 0 ||
+        (activeNamespaceKey != null && row.namespace.toLowerCase() === activeNamespaceKey);
+      if (isCurrent) {
+        current.push(row);
+      } else {
+        previous.push(row);
+      }
+    }
+    return { currentCapabilityRows: current, previousCapabilityRows: previous };
+  }, [capabilityBatchRows, selectedNamespace]);
+
   // Capabilities Checks tab content.
   const capabilityChecksContent = (
     <CapabilityChecksTable
-      rows={capabilityBatchRows}
+      currentRows={currentCapabilityRows}
+      previousRows={previousCapabilityRows}
       summary={`${capabilityBatchRows.length} namespace${
         capabilityBatchRows.length === 1 ? '' : 's'
       }`}
@@ -2287,9 +2351,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       isOpen={isOpen}
       defaultPosition="bottom"
       defaultSize={{ width: 840, height: 320 }}
-      minWidth={800}
-      minHeight={200}
-      maxHeight={640}
       allowMaximize
       maximizeTargetSelector=".content-body"
       onClose={onClose}
@@ -2337,13 +2398,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           EFFECTIVE PERMISSIONS
         </button>
       </div>
-      {activeTab === 'refresh-domains'
-        ? refreshDomainsContent
-        : activeTab === 'streams'
-          ? streamsContent
-          : activeTab === 'capability-checks'
-            ? capabilityChecksContent
-            : effectivePermissionsContent}
+      <div className="diagnostics-scroll-area">
+        {activeTab === 'refresh-domains'
+          ? refreshDomainsContent
+          : activeTab === 'streams'
+            ? streamsContent
+            : activeTab === 'capability-checks'
+              ? capabilityChecksContent
+              : effectivePermissionsContent}
+      </div>
     </DockablePanel>
   );
 };

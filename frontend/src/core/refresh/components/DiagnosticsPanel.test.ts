@@ -114,6 +114,13 @@ vi.mock('@/modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => mockNamespaceState,
 }));
 
+vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
+  useKubeconfig: () => ({
+    selectedClusterId: 'test-cluster',
+    getClusterMeta: (id: string) => ({ id, name: id }),
+  }),
+}));
+
 vi.mock('../store', async () => {
   const actual = await vi.importActual<typeof import('../store')>('../store');
   return {
@@ -1037,17 +1044,21 @@ describe('DiagnosticsPanel component', () => {
     const batchRows = rendered.container.querySelectorAll<HTMLTableRowElement>(
       '.diagnostics-table tbody tr'
     );
-    expect(batchRows.length).toBe(2);
-    expect(batchRows[0].textContent).toContain('Cluster');
-    expect(batchRows[1].className).toContain('diagnostics-permission-denied');
-    const batchCells = batchRows[1].querySelectorAll<HTMLTableCellElement>('td');
+    // Row 0 is the "Current Checks" section header; data rows follow.
+    expect(batchRows.length).toBe(3);
+    expect(batchRows[0].textContent).toContain('Current Checks');
+    expect(batchRows[1].textContent).toContain('Cluster');
+    expect(batchRows[2].className).toContain('diagnostics-permission-denied');
+    const batchCells = batchRows[2].querySelectorAll<HTMLTableCellElement>('td');
     expect(batchCells[0].textContent?.trim()).toBe('default');
     expect(batchCells[1].textContent?.trim()).toBe('2');
     expect(batchCells[2].textContent?.trim()).toBe('1');
     expect(batchCells[3].textContent?.trim()).toMatch(/s$/);
     expect(batchCells[6].textContent?.trim()).toBe('Error');
     expect(batchCells[9].textContent).toContain('Denied by policy');
-    expect(batchCells[10].textContent).toContain('deployments/get, pods/create (exec)');
+    // Descriptors are rendered in grouped format: "resource: verb(s)".
+    expect(batchCells[10].textContent).toContain('deployments:');
+    expect(batchCells[10].textContent).toContain('pods:');
 
     await act(async () => {
       tabButtons[3].click();

@@ -38,6 +38,8 @@
 
 .object-panel-navigation {
   padding-right: 15px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .object-panel-nav-controls {
@@ -151,6 +153,11 @@
   overflow-y: auto;
   min-height: 0;
   position: relative;
+}
+
+/* Prevent inner sections from wrapping at narrow widths */
+.object-panel-content > * {
+  min-width: 500px;
 }
 
 .object-panel-tab-content {

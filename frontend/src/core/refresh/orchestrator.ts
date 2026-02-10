@@ -452,7 +452,10 @@ class RefreshOrchestrator {
         const activeScope = this.domainStreamingScopes.get(domain);
         if (activeScope) {
           this.streamingReady.delete(makeInFlightKey(domain, activeScope));
-          this.stopStreamingDomain(domain, activeScope, { reset: false });
+          // When disabling, use reset: true for immediate unsubscribe to prevent
+          // a race where debounced WebSocket messages reset the domain state to 'ready'
+          // after resetDomainState has already set it to 'idle'.
+          this.stopStreamingDomain(domain, activeScope, { reset: !enabled });
         }
         this.domainStreamingScopes.delete(domain);
         if (allowRefresher) {
@@ -834,6 +837,34 @@ class RefreshOrchestrator {
     // Keep the active tab's cluster ID available for per-tab refresh scopes.
     const selected = (this.context.selectedClusterId ?? '').trim();
     return selected || undefined;
+  }
+
+  // Return all cluster IDs from the current refresh context (foreground selection).
+  getClusterIds(): string[] {
+    return this.getSelectedClusterIds();
+  }
+
+  // Return all connected cluster IDs (includes background clusters when background refresh is on).
+  getAllConnectedClusterIds(): string[] {
+    const all = (this.context.allConnectedClusterIds ?? [])
+      .map((id) => (id ?? '').trim())
+      .filter(Boolean);
+    return all.length > 0 ? all : this.getSelectedClusterIds();
+  }
+
+  // Fetch a single domain's snapshot for a specific cluster (background refresh, no streaming).
+  async fetchDomainForCluster(
+    domain: RefreshDomain,
+    clusterId: string,
+    scope?: string
+  ): Promise<void> {
+    const config = this.configs.get(domain);
+    if (!config) {
+      return;
+    }
+    // Build a cluster-scoped scope string and perform a direct snapshot fetch.
+    const clusterScope = buildClusterScopeList([clusterId], scope ?? '');
+    await this.performFetch(domain, clusterScope, { isManual: false }, config);
   }
 
   isStreamingDomain(domain: RefreshDomain): boolean {
@@ -2337,6 +2368,11 @@ refreshOrchestrator.registerDomain({
   domain: 'namespaces',
   refresherName: SYSTEM_REFRESHERS.namespaces,
   category: 'system',
+  scopeResolver: () => {
+    // Refresh namespaces for all connected clusters so background tabs have up-to-date lists.
+    const clusterIds = refreshOrchestrator.getAllConnectedClusterIds();
+    return clusterIds.length > 0 ? buildClusterScopeList(clusterIds, '') : '';
+  },
   autoStart: false,
 });
 
@@ -2345,9 +2381,9 @@ refreshOrchestrator.registerDomain({
   refresherName: SYSTEM_REFRESHERS.clusterOverview,
   category: 'system',
   scopeResolver: () => {
-    // Refresh the overview only for the active tab's cluster to avoid closed-tab errors.
-    const clusterId = refreshOrchestrator.getSelectedClusterId();
-    return clusterId ? buildClusterScopeList([clusterId], '') : '';
+    // Refresh cluster-overview for all connected clusters so background tabs stay current.
+    const clusterIds = refreshOrchestrator.getAllConnectedClusterIds();
+    return clusterIds.length > 0 ? buildClusterScopeList(clusterIds, '') : '';
   },
   autoStart: false,
 });
