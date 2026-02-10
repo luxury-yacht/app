@@ -282,7 +282,6 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
           let style: React.CSSProperties = {
             position: 'fixed',
             left: rect.left + rect.width / 2,
-            transform: 'translateX(-50%)',
           };
 
           // Check space above
@@ -292,10 +291,13 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
           if (spaceAbove < 200) {
             // Position below
             style.top = rect.bottom + tooltipOffset;
+            style.transform = 'translateX(-50%)';
             setTooltipPosition('bottom');
           } else {
-            // Position above - directly above the element
-            style.bottom = window.innerHeight - rect.top + tooltipOffset;
+            // Position above — use top + translateY(-100%) instead of bottom
+            // with window.innerHeight (different coordinate spaces at zoom)
+            style.top = rect.top - tooltipOffset;
+            style.transform = 'translate(-50%, -100%)';
             setTooltipPosition('top');
           }
 
