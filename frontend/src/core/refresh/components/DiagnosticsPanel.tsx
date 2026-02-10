@@ -132,7 +132,10 @@ const resolveScopeDetails = (
       const meta = getClusterMeta(id);
       const name = meta.name || id;
       const isActive = id === activeClusterId;
-      return { label: (isActive ? 'Active' : 'Background') as ScopeEntry['label'], clusterName: name };
+      return {
+        label: (isActive ? 'Active' : 'Background') as ScopeEntry['label'],
+        clusterName: name,
+      };
     })
     .sort((a, b) => {
       if (a.label === 'Active' && b.label !== 'Active') return -1;
@@ -1652,6 +1655,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     namespaceEventsDomain,
     telemetrySummary,
     resourceStreamStats,
+    selectedClusterId,
+    getClusterMeta,
   ]);
 
   // Build stream telemetry rows for the dedicated diagnostics section.

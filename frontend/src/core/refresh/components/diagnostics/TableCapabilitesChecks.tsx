@@ -22,7 +22,10 @@ const splitAndSort = (summary: string): string[] =>
  * Output: [{ resource: "deployments", verbs: "get" }, { resource: "pods", verbs: "delete, list, list (status)" }]
  */
 const groupDescriptors = (summary: string): { resource: string; verbs: string }[] => {
-  const items = summary.split(', ').map((s) => s.trim()).filter(Boolean);
+  const items = summary
+    .split(', ')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const groups = new Map<string, string[]>();
 
   for (const item of items) {
@@ -100,8 +103,7 @@ const CapabilityRow: React.FC<{
       {row.featureSummary ? (
         <span
           className={
-            `diagnostics-table-feature` +
-            (!isCollapsed ? ' diagnostics-table-cell-expanded' : '')
+            `diagnostics-table-feature` + (!isCollapsed ? ' diagnostics-table-cell-expanded' : '')
           }
           title={!isCollapsed ? undefined : row.featureSummary}
           onClick={() => onToggle(row.key)}

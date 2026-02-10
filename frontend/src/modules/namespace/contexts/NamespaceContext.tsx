@@ -90,12 +90,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
   namespaceSelectionsRef.current = namespaceSelections;
 
   // Lookup a specific cluster's selected namespace (for background refresh).
-  const getClusterNamespace = useCallback(
-    (clusterId: string): string | undefined => {
-      return namespaceSelectionsRef.current[clusterId];
-    },
-    []
-  );
+  const getClusterNamespace = useCallback((clusterId: string): string | undefined => {
+    return namespaceSelectionsRef.current[clusterId];
+  }, []);
 
   const [namespaces, setNamespaces] = useState<NamespaceListItem[]>([]);
   const namespacesRef = useRef<NamespaceListItem[]>([]);

@@ -29,9 +29,7 @@ type NamespaceGetter = (clusterId: string) => string | undefined;
  * Maps a cluster view tab name to the corresponding refresh domain.
  * Returns undefined if the view has no associated domain (e.g. null mapping).
  */
-const clusterViewToDomain = (
-  clusterView: string | null | undefined
-): RefreshDomain | undefined => {
+const clusterViewToDomain = (clusterView: string | null | undefined): RefreshDomain | undefined => {
   if (!clusterView) {
     return undefined;
   }
@@ -94,22 +92,17 @@ const refresherNameToDomain = (
 
 export class BackgroundClusterRefresher {
   private intervalTimer: ReturnType<typeof setInterval> | null = null;
-  private foregroundClusterId = '';
   private backgroundClusterIds: string[] = [];
   private getNavigationState: NavigationStateGetter;
   private getNamespace: NamespaceGetter;
 
-  constructor(
-    getNavigationState: NavigationStateGetter,
-    getNamespace: NamespaceGetter
-  ) {
+  constructor(getNavigationState: NavigationStateGetter, getNamespace: NamespaceGetter) {
     this.getNavigationState = getNavigationState;
     this.getNamespace = getNamespace;
   }
 
   /** Update the set of clusters and which one is in the foreground. */
   updateClusters(foregroundClusterId: string, allClusterIds: string[]): void {
-    this.foregroundClusterId = foregroundClusterId;
     this.backgroundClusterIds = allClusterIds.filter((id) => id !== foregroundClusterId);
   }
 
@@ -139,10 +132,7 @@ export class BackgroundClusterRefresher {
   }
 
   /** Update the callback references (e.g. when React re-renders). */
-  updateCallbacks(
-    getNavigationState: NavigationStateGetter,
-    getNamespace: NamespaceGetter
-  ): void {
+  updateCallbacks(getNavigationState: NavigationStateGetter, getNamespace: NamespaceGetter): void {
     this.getNavigationState = getNavigationState;
     this.getNamespace = getNamespace;
   }

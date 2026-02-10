@@ -15,7 +15,15 @@
  * - useObjectPanelState() - object panel, navigation history
  * - useModalState() - settings and about modals
  */
-import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from 'react';
 import type { ViewType, NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
 import { getObjectKind, getObjectName, getObjectNamespace } from '@/types/view-state';
 import { refreshOrchestrator } from '@/core/refresh';
@@ -99,12 +107,9 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
   navigationStateByClusterRef.current = navigationStateByCluster;
 
   // Lookup a specific cluster's last-viewed navigation state (for background refresh).
-  const getClusterNavigationState = useCallback(
-    (clusterId: string): NavigationTabState => {
-      return navigationStateByClusterRef.current[clusterId] ?? DEFAULT_NAVIGATION_STATE;
-    },
-    []
-  );
+  const getClusterNavigationState = useCallback((clusterId: string): NavigationTabState => {
+    return navigationStateByClusterRef.current[clusterId] ?? DEFAULT_NAVIGATION_STATE;
+  }, []);
 
   // Get sidebar state for navigation actions
   const { setSidebarSelection } = useSidebarState();
