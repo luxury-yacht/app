@@ -169,6 +169,16 @@
   font-style: italic;
 }
 
+.diagnostics-table-section-header td {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+  padding: 0.4rem 0.45rem;
+}
+
 .diagnostics-stale-cell {
   color: var(--color-warning, #ffb74d);
   font-weight: 600;

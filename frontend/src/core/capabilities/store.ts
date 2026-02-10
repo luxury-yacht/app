@@ -540,6 +540,16 @@ const ensureDiagnosticsEntry = (
     }
     return existing;
   }
+
+  // When a cluster-qualified key arrives (e.g. "clusterId|__cluster__"), remove
+  // the stale bare key ("__cluster__") that was created before the cluster ID
+  // was known.  This prevents duplicate "Cluster" rows in diagnostics.
+  if (isClusterDiagnosticsKey(key) && key !== DIAGNOSTICS_CLUSTER_KEY) {
+    if (namespaceDiagnostics.has(DIAGNOSTICS_CLUSTER_KEY)) {
+      namespaceDiagnostics.delete(DIAGNOSTICS_CLUSTER_KEY);
+    }
+  }
+
   const entry: CapabilityNamespaceDiagnostics = {
     key,
     namespace,

@@ -2189,10 +2189,33 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     />
   );
 
+  // Split capability batch rows into current (Cluster + selected namespace + in-flight)
+  // and previous (everything else).
+  const { currentCapabilityRows, previousCapabilityRows } = useMemo(() => {
+    const current: typeof capabilityBatchRows = [];
+    const previous: typeof capabilityBatchRows = [];
+    const activeNamespaceKey = selectedNamespace?.toLowerCase() ?? null;
+
+    for (const row of capabilityBatchRows) {
+      const isCurrent =
+        row.namespace === 'Cluster' ||
+        row.pendingCount > 0 ||
+        row.inFlightCount > 0 ||
+        (activeNamespaceKey != null && row.namespace.toLowerCase() === activeNamespaceKey);
+      if (isCurrent) {
+        current.push(row);
+      } else {
+        previous.push(row);
+      }
+    }
+    return { currentCapabilityRows: current, previousCapabilityRows: previous };
+  }, [capabilityBatchRows, selectedNamespace]);
+
   // Capabilities Checks tab content.
   const capabilityChecksContent = (
     <CapabilityChecksTable
-      rows={capabilityBatchRows}
+      currentRows={currentCapabilityRows}
+      previousRows={previousCapabilityRows}
       summary={`${capabilityBatchRows.length} namespace${
         capabilityBatchRows.length === 1 ? '' : 's'
       }`}
