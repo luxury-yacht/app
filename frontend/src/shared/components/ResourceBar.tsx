@@ -43,6 +43,7 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
   const [tooltipPosition, setTooltipPosition] = useState<'top' | 'bottom'>('top');
   const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
+  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [transitionsEnabled, setTransitionsEnabled] = useState(true);
   const lastScopeKeyRef = useRef<string | undefined>(undefined);
 
@@ -78,6 +79,15 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
       }
     }
   }, [animationScopeKey]);
+
+  // Clear tooltip delay timer on unmount
+  useEffect(() => {
+    return () => {
+      if (tooltipTimerRef.current) {
+        clearTimeout(tooltipTimerRef.current);
+      }
+    };
+  }, []);
 
   // Parse resource values to numbers
   const parseResource = (value: string | undefined): number => {
@@ -260,39 +270,43 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
   const handleMouseEnter = () => {
     // Only show tooltip in compact view
     if (!enableTooltip || variant !== 'compact') return;
-    try {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect();
-        const tooltipOffset = 4; // Small offset to stay close
 
-        // Calculate position for fixed positioning
-        let style: React.CSSProperties = {
-          position: 'fixed',
-          left: rect.left + rect.width / 2,
-          transform: 'translateX(-50%)',
-        };
+    // Small delay to avoid flickering on quick mouse passes
+    tooltipTimerRef.current = setTimeout(() => {
+      try {
+        if (containerRef.current) {
+          const rect = containerRef.current.getBoundingClientRect();
+          const tooltipOffset = 4; // Small offset to stay close
 
-        // Check space above
-        const spaceAbove = rect.top;
+          // Calculate position for fixed positioning
+          let style: React.CSSProperties = {
+            position: 'fixed',
+            left: rect.left + rect.width / 2,
+            transform: 'translateX(-50%)',
+          };
 
-        // Prefer positioning above, but switch to below if not enough space
-        if (spaceAbove < 200) {
-          // Position below
-          style.top = rect.bottom + tooltipOffset;
-          setTooltipPosition('bottom');
-        } else {
-          // Position above - directly above the element
-          style.bottom = window.innerHeight - rect.top + tooltipOffset;
-          setTooltipPosition('top');
+          // Check space above
+          const spaceAbove = rect.top;
+
+          // Prefer positioning above, but switch to below if not enough space
+          if (spaceAbove < 200) {
+            // Position below
+            style.top = rect.bottom + tooltipOffset;
+            setTooltipPosition('bottom');
+          } else {
+            // Position above - directly above the element
+            style.bottom = window.innerHeight - rect.top + tooltipOffset;
+            setTooltipPosition('top');
+          }
+
+          setTooltipStyle(style);
+          setShowTooltip(true);
         }
-
-        setTooltipStyle(style);
-        setShowTooltip(true);
+      } catch (error) {
+        console.warn('Error showing ResourceBar tooltip:', error);
+        setShowTooltip(false);
       }
-    } catch (error) {
-      console.warn('Error showing ResourceBar tooltip:', error);
-      setShowTooltip(false);
-    }
+    }, 250);
   };
 
   return (
@@ -300,7 +314,17 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
       ref={containerRef}
       className={containerClasses.join(' ')}
       onMouseEnter={enableTooltip ? handleMouseEnter : undefined}
-      onMouseLeave={enableTooltip ? () => setShowTooltip(false) : undefined}
+      onMouseLeave={
+        enableTooltip
+          ? () => {
+              if (tooltipTimerRef.current) {
+                clearTimeout(tooltipTimerRef.current);
+                tooltipTimerRef.current = null;
+              }
+              setShowTooltip(false);
+            }
+          : undefined
+      }
     >
       {/* Show usage value above bar in compact mode */}
       {variant === 'compact' && (
