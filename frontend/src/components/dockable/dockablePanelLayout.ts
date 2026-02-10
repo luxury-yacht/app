@@ -44,6 +44,49 @@ const getAppTopOffset = (): number => {
   return parseCssPixelValue(raw, LAYOUT.APP_HEADER_HEIGHT);
 };
 
+/** Default panel size constraints (matches Object Panel values). */
+export const PANEL_DEFAULTS = {
+  DEFAULT_WIDTH: 700,
+  DEFAULT_HEIGHT: 600,
+  MIN_WIDTH: 500,
+  MIN_HEIGHT: 400,
+} as const;
+
+export interface PanelSizeConstraints {
+  minWidth: number;
+  minHeight: number;
+  maxWidth: number | undefined;
+  maxHeight: number | undefined;
+}
+
+/**
+ * Read size-constraint CSS custom properties from a panel element.
+ * Falls back to PANEL_DEFAULTS when the element is unavailable (JSDOM / SSR).
+ */
+export function getPanelSizeConstraints(panel?: HTMLElement | null): PanelSizeConstraints {
+  if (typeof document === 'undefined' || !panel) {
+    return {
+      minWidth: PANEL_DEFAULTS.MIN_WIDTH,
+      minHeight: PANEL_DEFAULTS.MIN_HEIGHT,
+      maxWidth: undefined,
+      maxHeight: undefined,
+    };
+  }
+  const style = getComputedStyle(panel);
+  const readOpt = (prop: string): number | undefined => {
+    const raw = style.getPropertyValue(prop).trim();
+    if (!raw) return undefined;
+    const parsed = Number.parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+  return {
+    minWidth: readOpt('--dockable-panel-min-width') ?? PANEL_DEFAULTS.MIN_WIDTH,
+    minHeight: readOpt('--dockable-panel-min-height') ?? PANEL_DEFAULTS.MIN_HEIGHT,
+    maxWidth: readOpt('--dockable-panel-max-width'),
+    maxHeight: readOpt('--dockable-panel-max-height'),
+  };
+}
+
 export const getDockablePanelTopOffset = (panel?: HTMLElement | null): number => {
   if (typeof document === 'undefined') {
     return LAYOUT.APP_HEADER_HEIGHT;

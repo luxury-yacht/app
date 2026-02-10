@@ -2351,9 +2351,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       isOpen={isOpen}
       defaultPosition="bottom"
       defaultSize={{ width: 840, height: 320 }}
-      minWidth={800}
-      minHeight={200}
-      maxHeight={640}
       allowMaximize
       maximizeTargetSelector=".content-body"
       onClose={onClose}

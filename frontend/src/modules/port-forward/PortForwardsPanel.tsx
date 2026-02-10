@@ -248,8 +248,6 @@ function PortForwardsPanel() {
       isOpen={panelState.isOpen}
       defaultPosition="right"
       defaultSize={{ width: 350, height: 400 }}
-      minWidth={300}
-      minHeight={200}
       onClose={() => panelState.setOpen(false)}
       contentClassName="pf-panel-content"
     >

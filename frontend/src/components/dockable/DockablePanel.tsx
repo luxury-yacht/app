@@ -5,7 +5,7 @@
  * Handles dragging, resizing, docking, maximizing, and window bounds constraints.
  */
 
-import React, { useEffect, useLayoutEffect, useRef, useCallback, memo, useMemo } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, memo, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   closeDockedPanels,
@@ -20,6 +20,8 @@ import { DockablePanelHeader } from './DockablePanelHeader';
 import { useDockablePanelDragResize } from './useDockablePanelDragResize';
 import { useDockablePanelMaximize } from './useDockablePanelMaximize';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
+import { PANEL_DEFAULTS, getPanelSizeConstraints } from './dockablePanelLayout';
+import type { PanelSizeConstraints } from './dockablePanelLayout';
 import type { DockPosition } from './useDockablePanelState';
 import './DockablePanel.css';
 
@@ -38,14 +40,8 @@ interface DockablePanelProps {
   // Optional initial position
   defaultPosition?: DockPosition;
 
-  // Optional initial size
+  // Optional initial size (defaults to Object Panel dimensions)
   defaultSize?: { width?: number; height?: number };
-
-  // Optional min/max constraints
-  minWidth?: number;
-  minHeight?: number;
-  maxWidth?: number;
-  maxHeight?: number;
 
   // Callbacks
   onClose?: () => void;
@@ -109,11 +105,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     children,
     title = 'Panel',
     defaultPosition = 'right',
-    defaultSize = { width: 400, height: 300 },
-    minWidth = 200,
-    minHeight = 150,
-    maxWidth,
-    maxHeight,
+    defaultSize = { width: PANEL_DEFAULTS.DEFAULT_WIDTH, height: PANEL_DEFAULTS.DEFAULT_HEIGHT },
     onClose,
     onPositionChange,
     headerContent,
@@ -126,11 +118,12 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   } = props;
   const isControlled = typeof props.isOpen !== 'undefined';
   const resolvedIsOpen = props.isOpen ?? true;
-  // Validate constraints
-  const safeMinWidth = Math.max(100, minWidth);
-  const safeMinHeight = Math.max(100, minHeight);
-  const safeMaxWidth = maxWidth ? Math.max(safeMinWidth, maxWidth) : undefined;
-  const safeMaxHeight = maxHeight ? Math.max(safeMinHeight, maxHeight) : undefined;
+
+  // Size constraints are read from CSS custom properties on the panel element.
+  // Initial state uses fallback defaults (panel DOM doesn't exist yet on first render).
+  const [constraints, setConstraints] = useState<PanelSizeConstraints>(
+    () => getPanelSizeConstraints(null)
+  );
   const panelState = useDockablePanelState(panelId);
   const { registerPanel, unregisterPanel } = useDockablePanelContext();
   const panelHostNode = useDockablePanelHost();
@@ -139,6 +132,10 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     (node: HTMLDivElement | null) => {
       panelRef.current = node;
       assignRef(forwardedPanelRef, node);
+      // Read size constraints from CSS custom properties once the panel DOM is available.
+      if (node) {
+        setConstraints(getPanelSizeConstraints(node));
+      }
     },
     [forwardedPanelRef]
   );
@@ -163,10 +160,10 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   } = useDockablePanelDragResize({
     panelState,
     panelRef,
-    safeMinWidth,
-    safeMinHeight,
-    safeMaxWidth,
-    safeMaxHeight,
+    safeMinWidth: constraints.minWidth,
+    safeMinHeight: constraints.minHeight,
+    safeMaxWidth: constraints.maxWidth,
+    safeMaxHeight: constraints.maxHeight,
     isMaximized,
   });
 
@@ -244,8 +241,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
   // Handle window resize to keep panels within bounds
   useWindowBoundsConstraint(panelState, {
-    minWidth: safeMinWidth,
-    minHeight: safeMinHeight,
+    minWidth: constraints.minWidth,
+    minHeight: constraints.minHeight,
     isResizing,
     isMaximized,
     panelRef,

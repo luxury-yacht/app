@@ -38,6 +38,8 @@
 
 .object-panel-navigation {
   padding-right: 15px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .object-panel-nav-controls {
