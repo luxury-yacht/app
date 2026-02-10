@@ -5,7 +5,15 @@
  * Handles dragging, resizing, docking, maximizing, and window bounds constraints.
  */
 
-import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, memo, useMemo } from 'react';
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useCallback,
+  memo,
+  useMemo,
+} from 'react';
 import { createPortal } from 'react-dom';
 import {
   closeDockedPanels,
@@ -121,8 +129,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
   // Size constraints are read from CSS custom properties on the panel element.
   // Initial state uses fallback defaults (panel DOM doesn't exist yet on first render).
-  const [constraints, setConstraints] = useState<PanelSizeConstraints>(
-    () => getPanelSizeConstraints(null)
+  const [constraints, setConstraints] = useState<PanelSizeConstraints>(() =>
+    getPanelSizeConstraints(null)
   );
   const panelState = useDockablePanelState(panelId);
   const { registerPanel, unregisterPanel } = useDockablePanelContext();

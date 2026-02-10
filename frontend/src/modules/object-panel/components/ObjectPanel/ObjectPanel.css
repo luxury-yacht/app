@@ -155,6 +155,11 @@
   position: relative;
 }
 
+/* Prevent inner sections from wrapping at narrow widths */
+.object-panel-content > * {
+  min-width: 500px;
+}
+
 .object-panel-tab-content {
   height: 100%;
 }

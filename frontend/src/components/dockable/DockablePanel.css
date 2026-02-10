@@ -19,7 +19,7 @@
   flex-direction: column;
   z-index: 1000;
   --dockable-panel-top-offset: var(--app-header-height);
-  --dockable-panel-min-width: 50;
+  --dockable-panel-min-width: 150;
   --dockable-panel-min-height: 50;
   transition: none; /* We'll handle animations separately */
 }
