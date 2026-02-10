@@ -217,9 +217,10 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       });
     };
 
-    const disableOverview = () => {
-      refreshOrchestrator.setDomainEnabled('cluster-overview', false);
-      refreshOrchestrator.resetDomain('cluster-overview');
+    // Clear local component state without touching the domain lifecycle.
+    // The domain is kept running by useClusterMetricsAvailability so it
+    // remains active across view switches.
+    const clearLocalState = () => {
       setOverviewData(EMPTY_OVERVIEW);
       setIsHydrated(false);
       setIsSwitching(true);
@@ -230,7 +231,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     if (typeof window !== 'undefined') {
       const handleKubeconfigChanging = () => {
         setIsSwitching(true);
-        disableOverview();
+        clearLocalState();
       };
       const handleKubeconfigChanged = () => {
         setIsSwitching(true);
@@ -241,14 +242,14 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
       const unsubChanged = eventBus.on('kubeconfig:changed', handleKubeconfigChanged);
 
       return () => {
-        disableOverview();
+        clearLocalState();
         unsubChanging();
         unsubChanged();
       };
     }
 
     return () => {
-      disableOverview();
+      clearLocalState();
     };
   }, []);
 

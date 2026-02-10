@@ -452,7 +452,10 @@ class RefreshOrchestrator {
         const activeScope = this.domainStreamingScopes.get(domain);
         if (activeScope) {
           this.streamingReady.delete(makeInFlightKey(domain, activeScope));
-          this.stopStreamingDomain(domain, activeScope, { reset: false });
+          // When disabling, use reset: true for immediate unsubscribe to prevent
+          // a race where debounced WebSocket messages reset the domain state to 'ready'
+          // after resetDomainState has already set it to 'idle'.
+          this.stopStreamingDomain(domain, activeScope, { reset: !enabled });
         }
         this.domainStreamingScopes.delete(domain);
         if (allowRefresher) {
