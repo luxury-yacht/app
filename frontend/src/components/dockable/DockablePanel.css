@@ -120,6 +120,7 @@
   flex-shrink: 0; /* Never shrink */
   margin-left: auto; /* Push to the right */
   z-index: 1; /* Ensure controls are above other content */
+  background: var(--color-bg-secondary, #242424); /* Opaque so header-content doesn't show through */
 }
 
 .dockable-panel__control-btn {
