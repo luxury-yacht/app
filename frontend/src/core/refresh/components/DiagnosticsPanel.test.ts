@@ -450,7 +450,7 @@ describe('DiagnosticsPanel component', () => {
       })
     );
 
-    expect(markup).toContain('Pods (team-a)');
+    expect(markup).toContain('ObjPanel - Pods - team-a');
     expect(markup).toContain('team-a');
   });
 
@@ -491,7 +491,7 @@ describe('DiagnosticsPanel component', () => {
     );
 
     // Only the namespace portion should be shown in the label.
-    expect(markup).toContain('Pods (team-a)');
+    expect(markup).toContain('ObjPanel - Pods - team-a');
   });
 
   test('renders telemetry summaries after successful fetch', async () => {

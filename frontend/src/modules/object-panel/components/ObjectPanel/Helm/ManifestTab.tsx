@@ -57,6 +57,10 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
   const effectiveScope = scope ?? INACTIVE_SCOPE;
   const snapshot = useRefreshScopedDomain('object-helm-manifest', effectiveScope);
 
+  // Enable/disable the scoped domain based on tab activity. preserveState
+  // keeps the store entry alive when the tab unmounts so diagnostics can still
+  // see it. Full cleanup (reset) is handled by ObjectPanelContent when the
+  // panel closes.
   useEffect(() => {
     if (!scope) {
       return undefined;
@@ -69,8 +73,7 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
     }
 
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-helm-manifest', scope, false);
-      refreshOrchestrator.resetScopedDomain('object-helm-manifest', scope);
+      refreshOrchestrator.setScopedDomainEnabled('object-helm-manifest', scope, false, { preserveState: true });
     };
   }, [scope, isActive]);
 

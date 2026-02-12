@@ -693,7 +693,12 @@ class RefreshOrchestrator {
     return this.domainScopeOverrides.get(domain);
   }
 
-  setScopedDomainEnabled(domain: RefreshDomain, scope: string, enabled: boolean): void {
+  setScopedDomainEnabled(
+    domain: RefreshDomain,
+    scope: string,
+    enabled: boolean,
+    options?: { preserveState?: boolean },
+  ): void {
     const config = this.getConfig(domain);
     const allowRefresher = this.shouldAllowRefresher(config);
     if (!config.scoped) {
@@ -728,6 +733,12 @@ class RefreshOrchestrator {
       }
     }
 
+    // When preserveState is true, disabling stops activity but keeps the
+    // scoped domain state in the store so diagnostics and other consumers
+    // can still see the last snapshot. Full cleanup happens via an explicit
+    // resetScopedDomain call (e.g. when the panel closes).
+    const resetOnDisable = !options?.preserveState;
+
     if (config.streaming) {
       const readyKey = makeInFlightKey(domain, normalizedScope);
       const shouldStream = this.shouldStreamScope(domain, normalizedScope);
@@ -737,7 +748,7 @@ class RefreshOrchestrator {
         this.scheduleStreamingStart(domain, normalizedScope, config.streaming, { scoped: true });
       } else if (!enabled) {
         this.streamingReady.delete(readyKey);
-        this.stopStreamingScope(domain, normalizedScope, config.streaming, true);
+        this.stopStreamingScope(domain, normalizedScope, config.streaming, resetOnDisable);
         this.cancelInFlightForScopedDomain(domain, normalizedScope);
       } else if (!shouldStream) {
         if (
@@ -755,7 +766,9 @@ class RefreshOrchestrator {
 
     if (!enabled) {
       this.cancelInFlightForScopedDomain(domain, normalizedScope);
-      resetScopedDomainState(domain, normalizedScope);
+      if (resetOnDisable) {
+        resetScopedDomainState(domain, normalizedScope);
+      }
     }
     this.updateMetricsDemand();
   }
@@ -1908,11 +1921,11 @@ class RefreshOrchestrator {
       return { ...incoming, namespaces: merged } as DomainPayloadMap[K];
     }
 
-    if (domain === 'node-maintenance') {
+    if (domain === 'object-maintenance') {
       if (!scope) {
         return payload;
       }
-      const previous = getScopedDomainState('node-maintenance', scope)
+      const previous = getScopedDomainState('object-maintenance', scope)
         .data as NodeMaintenanceSnapshotPayload | null;
       if (!previous?.drains?.length) {
         return payload;
@@ -2402,9 +2415,9 @@ refreshOrchestrator.registerDomain({
 });
 
 refreshOrchestrator.registerDomain({
-  domain: 'node-maintenance',
-  refresherName: CLUSTER_REFRESHERS.nodeMaintenance,
-  category: 'cluster',
+  domain: 'object-maintenance',
+  refresherName: SYSTEM_REFRESHERS.objectMaintenance,
+  category: 'system',
   scoped: true,
   autoStart: false,
 });

@@ -207,11 +207,11 @@ describe('refreshOrchestrator', () => {
     orchestratorInternals.streamingCleanup.set(makeTestInFlightKey(domain, scope), () => undefined);
   };
 
-  const registerNodeMaintenanceDomain = () => {
+  const registerObjectMaintenanceDomain = () => {
     refreshOrchestrator.registerDomain({
-      domain: 'node-maintenance',
-      refresherName: CLUSTER_REFRESHERS.nodeMaintenance,
-      category: 'cluster',
+      domain: 'object-maintenance',
+      refresherName: SYSTEM_REFRESHERS.objectMaintenance,
+      category: 'system',
       scoped: true,
       autoStart: false,
     });
@@ -489,7 +489,7 @@ describe('refreshOrchestrator', () => {
     };
 
     const scope = 'node:node-a';
-    setScopedDomainState('node-maintenance', scope, (prev) => ({
+    setScopedDomainState('object-maintenance', scope, (prev) => ({
       ...prev,
       status: 'ready',
       data: { drains: [cachedDrain, changedDrain] },
@@ -498,7 +498,7 @@ describe('refreshOrchestrator', () => {
 
     clientMocks.fetchSnapshotMock.mockResolvedValue({
       snapshot: {
-        domain: 'node-maintenance',
+        domain: 'object-maintenance',
         version: 2,
         checksum: 'etag-3',
         generatedAt: Date.now(),
@@ -515,11 +515,11 @@ describe('refreshOrchestrator', () => {
       notModified: false,
     });
 
-    registerNodeMaintenanceDomain();
+    registerObjectMaintenanceDomain();
 
-    await refreshOrchestrator.fetchScopedDomain('node-maintenance', scope, { isManual: true });
+    await refreshOrchestrator.fetchScopedDomain('object-maintenance', scope, { isManual: true });
 
-    const nextDrains = getScopedDomainState('node-maintenance', scope).data?.drains ?? [];
+    const nextDrains = getScopedDomainState('object-maintenance', scope).data?.drains ?? [];
     expect(nextDrains[0]).toBe(cachedDrain);
     expect(nextDrains[1]).not.toBe(changedDrain);
   });

@@ -36,7 +36,6 @@ const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
   [NAMESPACE_REFRESHERS.helm]: { interval: 10000, cooldown: 1000, timeout: 10 },
 
   [CLUSTER_REFRESHERS.nodes]: { interval: 5000, cooldown: 1000, timeout: 10 },
-  [CLUSTER_REFRESHERS.nodeMaintenance]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [CLUSTER_REFRESHERS.rbac]: { interval: 10000, cooldown: 1000, timeout: 10 },
   [CLUSTER_REFRESHERS.storage]: { interval: 10000, cooldown: 1000, timeout: 10 },
   [CLUSTER_REFRESHERS.config]: { interval: 10000, cooldown: 1000, timeout: 10 },
@@ -53,6 +52,7 @@ const STATIC_REFRESHER_CONFIG: Record<StaticRefresherName, RefresherTiming> = {
   [SYSTEM_REFRESHERS.objectHelmManifest]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectHelmValues]: { interval: 5000, cooldown: 1000, timeout: 10 },
   [SYSTEM_REFRESHERS.objectLogs]: { interval: 5000, cooldown: 1000, timeout: 10 },
+  [SYSTEM_REFRESHERS.objectMaintenance]: { interval: 5000, cooldown: 1000, timeout: 10 },
 
   // Placeholder value. Changing these intervals has no effect.
   // Actual timings are in frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.ts

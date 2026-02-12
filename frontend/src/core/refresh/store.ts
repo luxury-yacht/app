@@ -73,7 +73,7 @@ const state: RefreshStoreState = {
     namespaces: createInitialDomainState(),
     'cluster-overview': createInitialDomainState(),
     nodes: createInitialDomainState(),
-    'node-maintenance': createInitialDomainState(),
+    'object-maintenance': createInitialDomainState(),
     pods: createInitialDomainState(),
     'object-details': createInitialDomainState(),
     'object-events': createInitialDomainState(),

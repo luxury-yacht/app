@@ -27,7 +27,7 @@ interface NodeMaintenanceTabProps {
   clusterId?: string | null;
 }
 
-const CAPABILITY_PREFIX = 'node-maintenance';
+const CAPABILITY_PREFIX = 'object-maintenance';
 const NODE_SCOPE_PREFIX = 'node:';
 
 const formatTimestamp = (value?: number | null): string => {
@@ -77,7 +77,7 @@ const useNodeMaintenanceDomain = (
     return buildClusterScope(clusterId ?? undefined, rawScope);
   }, [clusterId, nodeName]);
   const snapshot = useRefreshScopedDomain(
-    'node-maintenance',
+    'object-maintenance',
     scope ?? INACTIVE_SCOPE
   ) as NodeMaintenanceSnapshotPayloadState;
 
@@ -86,10 +86,10 @@ const useNodeMaintenanceDomain = (
       return;
     }
     const active = Boolean(enabled && nodeName);
-    refreshOrchestrator.setScopedDomainEnabled('node-maintenance', scope, active);
+    refreshOrchestrator.setScopedDomainEnabled('object-maintenance', scope, active);
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('node-maintenance', scope, false);
-      refreshOrchestrator.resetScopedDomain('node-maintenance', scope);
+      refreshOrchestrator.setScopedDomainEnabled('object-maintenance', scope, false);
+      refreshOrchestrator.resetScopedDomain('object-maintenance', scope);
     };
   }, [scope, enabled, nodeName]);
 
@@ -98,7 +98,7 @@ const useNodeMaintenanceDomain = (
       return;
     }
     try {
-      await refreshOrchestrator.fetchScopedDomain('node-maintenance', scope, { isManual: true });
+      await refreshOrchestrator.fetchScopedDomain('object-maintenance', scope, { isManual: true });
     } catch (error) {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: 'node-maintenance-refresh',
@@ -283,7 +283,7 @@ export function NodeMaintenanceTab({
         errorHandler.handle(
           error instanceof Error ? error : new Error(message || 'Node maintenance failed'),
           {
-            source: 'node-maintenance',
+            source: 'object-maintenance',
             context: { action, nodeName },
           }
         );
@@ -343,7 +343,7 @@ export function NodeMaintenanceTab({
             : 'Unknown error';
       setDrainError(message);
       errorHandler.handle(error instanceof Error ? error : new Error(message || 'Drain failed'), {
-        source: 'node-maintenance',
+        source: 'object-maintenance',
         context: { action: 'drain', nodeName },
       });
     } finally {
@@ -371,7 +371,7 @@ export function NodeMaintenanceTab({
             : 'Unknown error';
       setDeleteError(message);
       errorHandler.handle(error instanceof Error ? error : new Error(message || 'Delete failed'), {
-        source: 'node-maintenance',
+        source: 'object-maintenance',
         context: { action: 'delete', nodeName },
       });
     } finally {

@@ -8,11 +8,11 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/domain"
 )
 
-// RegisterNodeMaintenanceDomain wires the node-maintenance domain into the registry.
+// RegisterNodeMaintenanceDomain wires the object-maintenance domain into the registry.
 func RegisterNodeMaintenanceDomain(reg *domain.Registry) error {
 	store := nodemaintenance.GlobalStore()
 	return reg.Register(refresh.DomainConfig{
-		Name: "node-maintenance",
+		Name: "object-maintenance",
 		BuildSnapshot: func(ctx context.Context, scope string) (*refresh.Snapshot, error) {
 			meta := ClusterMetaFromContext(ctx)
 			clusterID, trimmed := refresh.SplitClusterScope(scope)
@@ -31,7 +31,7 @@ func RegisterNodeMaintenanceDomain(reg *domain.Registry) error {
 			payload.Drains = filterDrainJobsByCluster(payload.Drains, meta.ClusterID)
 
 			return &refresh.Snapshot{
-				Domain:  "node-maintenance",
+				Domain:  "object-maintenance",
 				Scope:   refresh.JoinClusterScope(clusterID, trimmed),
 				Version: version,
 				Payload: payload,

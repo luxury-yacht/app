@@ -564,7 +564,7 @@ func domainRegistrations(deps registrationDeps) []domainRegistration {
 		directRegistration("object-events", func() error {
 			return snapshot.RegisterObjectEventsDomain(deps.registry, deps.cfg.KubernetesClient, deps.informerFactory.SharedInformerFactory())
 		}),
-		directRegistration("node-maintenance", func() error {
+		directRegistration("object-maintenance", func() error {
 			return snapshot.RegisterNodeMaintenanceDomain(deps.registry)
 		}),
 	}

@@ -62,7 +62,6 @@ const namespaceViewToDomain = (
 const REFRESHER_TO_DOMAIN: Record<string, RefreshDomain> = {
   // Cluster refreshers
   'cluster-nodes': 'nodes',
-  'node-maintenance': 'node-maintenance',
   'cluster-rbac': 'cluster-rbac',
   'cluster-storage': 'cluster-storage',
   'cluster-config': 'cluster-config',
@@ -82,6 +81,8 @@ const REFRESHER_TO_DOMAIN: Record<string, RefreshDomain> = {
   autoscaling: 'namespace-autoscaling',
   custom: 'namespace-custom',
   helm: 'namespace-helm',
+  // Object panel refreshers
+  'object-maintenance': 'object-maintenance',
 };
 
 const refresherNameToDomain = (

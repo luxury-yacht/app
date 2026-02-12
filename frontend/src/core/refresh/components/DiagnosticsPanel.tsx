@@ -8,7 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './DiagnosticsPanel.css';
 import { DockablePanel } from '@components/dockable';
-import { useRefreshDomain, useRefreshState, useRefreshScopedDomainEntries } from '../store';
+import { useRefreshDomain, useRefreshState, useRefreshScopedDomainEntries, type DomainSnapshotState } from '../store';
 import type {
   RefreshDomain,
   NodeMetricsInfo,
@@ -200,7 +200,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const namespaceDomain = useRefreshDomain('namespaces');
   const clusterOverviewDomain = useRefreshDomain('cluster-overview');
   const nodeDomain = useRefreshDomain('nodes');
-  const nodeMaintenanceDomain = useRefreshDomain('node-maintenance');
+  const objectMaintenanceDomain = useRefreshDomain('object-maintenance');
   const clusterConfigDomain = useRefreshDomain('cluster-config');
   const clusterCRDDomain = useRefreshDomain('cluster-crds');
   const clusterCustomDomain = useRefreshDomain('cluster-custom');
@@ -221,6 +221,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const namespaceStorageDomain = useRefreshDomain('namespace-storage');
   const podScopeEntries = useRefreshScopedDomainEntries('pods');
   const logScopeEntries = useRefreshScopedDomainEntries('object-logs');
+  // Object panel scoped domains – visible only while the object panel is open.
+  const objectDetailsScopeEntries = useRefreshScopedDomainEntries('object-details');
+  const objectEventsScopeEntries = useRefreshScopedDomainEntries('object-events');
+  const objectYamlScopeEntries = useRefreshScopedDomainEntries('object-yaml');
+  const objectHelmManifestScopeEntries = useRefreshScopedDomainEntries('object-helm-manifest');
+  const objectHelmValuesScopeEntries = useRefreshScopedDomainEntries('object-helm-values');
   const [telemetrySummary, setTelemetrySummary] = useState<TelemetrySummary | null>(null);
   const [telemetryError, setTelemetryError] = useState<string | null>(null);
   const permissionMap = useUserPermissions();
@@ -318,9 +324,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         state: clusterEventsDomain,
       },
       {
-        domain: 'node-maintenance' as RefreshDomain,
-        label: 'Node Maintenance',
-        state: nodeMaintenanceDomain,
+        domain: 'object-maintenance' as RefreshDomain,
+        label: 'ObjPanel - Maintenance',
+        state: objectMaintenanceDomain,
       },
       {
         domain: 'catalog' as RefreshDomain,
@@ -397,7 +403,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespaceDomain,
       clusterOverviewDomain,
       nodeDomain,
-      nodeMaintenanceDomain,
+      objectMaintenanceDomain,
       catalogDomain,
       catalogDiffDomain,
       clusterCRDDomain,
@@ -708,7 +714,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
             return data.overview?.totalNodes ?? 0;
           case 'nodes':
             return Array.isArray(data.nodes) ? data.nodes.length : 0;
-          case 'node-maintenance':
+          case 'object-maintenance':
             return Array.isArray(data.drains) ? data.drains.length : 0;
           case 'cluster-rbac':
             return Array.isArray(data.resources) ? data.resources.length : 0;
@@ -1048,7 +1054,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     const podSummaryRow: DiagnosticsRow = {
       rowKey: 'pods-summary',
       domain: 'pods' as RefreshDomain,
-      label: 'Pods',
+      label: 'ObjPanel - Pods',
       status: podSummaryStatus,
       version: podSummaryVersion,
       interval: podSummaryInterval,
@@ -1176,16 +1182,17 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         telemetryTooltipParts.length > 0 ? telemetryTooltipParts.join('\n') : undefined;
 
       const displayScope = stripClusterScope(scope);
-      let label = 'Pods';
+      let label = 'ObjPanel - Pods';
       if (displayScope.startsWith('namespace:')) {
         const namespace = displayScope.slice('namespace:'.length) || 'all';
-        label = namespace === 'all' ? 'Pods (All namespaces)' : `Pods (${namespace})`;
+        label = namespace === 'all' ? 'ObjPanel - Pods - All namespaces' : `ObjPanel - Pods - ${namespace}`;
       } else if (displayScope.startsWith('node:')) {
         const nodeName = displayScope.slice('node:'.length);
-        label = `Pods (Node ${nodeName})`;
+        label = `ObjPanel - Pods - ${nodeName}`;
       } else if (displayScope.startsWith('workload:')) {
-        const [, namespace, kind, name] = displayScope.split(':');
-        label = `Pods (${namespace}/${kind}/${name})`;
+        const parts = displayScope.split(':');
+        const workloadName = parts[parts.length - 1];
+        label = `ObjPanel - Pods - ${workloadName}`;
       }
 
       return {
@@ -1322,7 +1329,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     const logSummaryRow: DiagnosticsRow = {
       rowKey: 'object-logs-summary',
       domain: 'object-logs' as RefreshDomain,
-      label: 'Object Logs',
+      label: 'ObjPanel - Logs',
       status: logSummaryStatus,
       version: logSummaryVersion,
       interval: '—',
@@ -1365,12 +1372,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const payload = state.data as ObjectLogsSnapshotPayload | null;
       const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
       const lastUpdatedInfo = formatLastUpdated(lastUpdated);
-      const parts = scope.split(':');
+      const normalizedScope = stripClusterScope(scope);
+      const parts = normalizedScope.split(':');
       const namespace = parts[0] ?? '';
-      const kind = parts[1] ?? '';
       const name = parts.slice(2).join(':');
       const namespaceLabel = namespace && namespace !== CLUSTER_SCOPE ? namespace : '-';
-      const label = kind && name ? `${kind}/${name}` : name || scope;
+      const label = name ? `ObjPanel - Logs - ${name}` : scope;
       const resetCount = payload?.resetCount ?? 0;
       const count = payload?.entries?.length ?? 0;
       const stats = state.stats;
@@ -1622,6 +1629,76 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       };
     })();
 
+    // Build rows for object panel scoped domains (details, events, yaml, helm).
+    const buildObjectPanelRows = (
+      domain: RefreshDomain,
+      tabName: string,
+      entries: Array<[string, DomainSnapshotState<any>]>,
+    ): DiagnosticsRow[] => {
+      return entries.map(([scope, state]) => {
+        const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
+        const lastUpdatedInfo = formatLastUpdated(lastUpdated);
+        const normalizedScope = stripClusterScope(scope);
+        const parts = normalizedScope.split(':');
+        const namespace = parts[0] ?? '';
+        const kind = parts[1] ?? '';
+        const name = parts.slice(2).join(':');
+        const namespaceLabel = namespace && namespace !== CLUSTER_SCOPE ? namespace : '-';
+        const label = name ? `ObjPanel - ${tabName} - ${name}` : `ObjPanel - ${tabName}`;
+        const version = state.version != null ? String(state.version) : '—';
+        const scopeDetails = resolveScopeDetails(scope, selectedClusterId, getClusterMeta);
+        const healthDetails = resolveHealthDetails({
+          domain,
+          status: state.status,
+          error: state.error,
+          scope,
+        });
+
+        return {
+          rowKey: `${domain}:${scope}`,
+          domain,
+          label,
+          status: state.status,
+          version,
+          interval: '—',
+          lastUpdated: lastUpdatedInfo.display,
+          lastUpdatedTooltip: lastUpdatedInfo.tooltip,
+          duration: '—',
+          dropped: state.droppedAutoRefreshes,
+          stale: false,
+          error: state.error ?? '—',
+          telemetryStatus: state.status,
+          telemetryTooltip: state.error ?? undefined,
+          metricsStatus: '—',
+          metricsTooltip: 'Polling domain',
+          metricsStale: false,
+          metricsSuccess: undefined,
+          metricsFailure: undefined,
+          telemetrySuccess: undefined,
+          telemetryFailure: undefined,
+          hasMetrics: false,
+          count: 0,
+          countDisplay: '—',
+          namespace: namespaceLabel,
+          scope: scopeDetails.display,
+          scopeTooltip: scopeDetails.tooltip,
+          scopeEntries: scopeDetails.entries,
+          mode: 'polling',
+          modeTooltip: 'Polling via object panel refresher',
+          healthStatus: healthDetails.label,
+          healthTooltip: healthDetails.tooltip,
+          pollingStatus: '—',
+          pollingTooltip: undefined,
+        };
+      });
+    };
+
+    const objectDetailsRows = buildObjectPanelRows('object-details', 'Details', objectDetailsScopeEntries);
+    const objectEventsRows = buildObjectPanelRows('object-events', 'Events', objectEventsScopeEntries);
+    const objectYamlRows = buildObjectPanelRows('object-yaml', 'YAML', objectYamlScopeEntries);
+    const objectHelmManifestRows = buildObjectPanelRows('object-helm-manifest', 'Manifest', objectHelmManifestScopeEntries);
+    const objectHelmValuesRows = buildObjectPanelRows('object-helm-values', 'Values', objectHelmValuesScopeEntries);
+
     const priorityRows = baseRows.filter((row) => prioritySet.has(row.domain));
     const remainingRows = baseRows.filter(
       (row) =>
@@ -1640,18 +1717,26 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     // Sort all rows alphabetically by the Domain label.
     return [
       ...sortedPriorityRows,
-      podSummaryRow,
       ...orderedPodRows,
-      logSummaryRow,
       ...orderedLogRows,
       clusterEventsRow,
       namespaceEventsRow,
       ...remainingRows,
+      ...objectDetailsRows,
+      ...objectEventsRows,
+      ...objectYamlRows,
+      ...objectHelmManifestRows,
+      ...objectHelmValuesRows,
     ].sort((a, b) => a.label.localeCompare(b.label));
   }, [
     domainStates,
     podScopeEntries,
     logScopeEntries,
+    objectDetailsScopeEntries,
+    objectEventsScopeEntries,
+    objectYamlScopeEntries,
+    objectHelmManifestScopeEntries,
+    objectHelmValuesScopeEntries,
     clusterEventsDomain,
     namespaceEventsDomain,
     telemetrySummary,

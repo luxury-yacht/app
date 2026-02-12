@@ -65,7 +65,6 @@ const ClusterResourcesContext = createContext<ClusterResourcesContextType | unde
 // Map cluster resource refreshers to their domains.
 const CLUSTER_REFRESHER_TO_DOMAIN: Partial<Record<ClusterRefresherName, RefreshDomain>> = {
   [CLUSTER_REFRESHERS.nodes]: 'nodes',
-  [CLUSTER_REFRESHERS.nodeMaintenance]: 'node-maintenance',
   [CLUSTER_REFRESHERS.rbac]: 'cluster-rbac',
   [CLUSTER_REFRESHERS.storage]: 'cluster-storage',
   [CLUSTER_REFRESHERS.config]: 'cluster-config',

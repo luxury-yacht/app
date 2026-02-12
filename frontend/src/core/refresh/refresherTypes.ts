@@ -22,7 +22,6 @@ const NAMESPACE_REFRESHERS = {
 
 const CLUSTER_REFRESHERS = {
   nodes: 'cluster-nodes',
-  nodeMaintenance: 'node-maintenance',
   rbac: 'cluster-rbac',
   storage: 'cluster-storage',
   config: 'cluster-config',
@@ -43,6 +42,7 @@ const SYSTEM_REFRESHERS = {
   objectHelmManifest: 'object-helm-manifest',
   objectHelmValues: 'object-helm-values',
   objectLogs: 'object-logs',
+  objectMaintenance: 'object-maintenance',
 } as const;
 
 type ValueOf<T> = T[keyof T];

@@ -101,6 +101,10 @@ const YamlTab: React.FC<YamlTabProps> = ({
     return () => observer.disconnect();
   }, []);
 
+  // Enable/disable the scoped domain based on tab activity. preserveState
+  // keeps the store entry alive when the tab unmounts so diagnostics can still
+  // see it. Full cleanup (reset) is handled by ObjectPanelContent when the
+  // panel closes.
   useEffect(() => {
     if (!scope) {
       return undefined;
@@ -113,8 +117,7 @@ const YamlTab: React.FC<YamlTabProps> = ({
     }
 
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, false);
-      refreshOrchestrator.resetScopedDomain('object-yaml', scope);
+      refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, false, { preserveState: true });
     };
   }, [scope, isActive]);
 
