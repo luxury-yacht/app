@@ -2,6 +2,12 @@
 
 ## Issues
 
+create namespace - slow to appear
+create deployment in new namespace - does not appear until tab switch away and back
+delete deployment - does not disappear
+object panel - correctly shows object not available but stays open, and clicking tab throws error
+delete namespace - 5 second delay, shows logo image??
+
 ## Feature Ideas
 
 - Transfer files to/from pods
