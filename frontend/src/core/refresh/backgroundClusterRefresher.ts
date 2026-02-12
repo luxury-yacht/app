@@ -19,9 +19,6 @@ import { logAppInfo } from '@/core/logging/appLogClient';
 // Default interval between background refresh ticks (15 seconds).
 const BACKGROUND_REFRESH_INTERVAL_MS = 15_000;
 
-// Domains already refreshed for all clusters by their scopeResolvers — skip in background loop.
-const SYSTEM_DOMAINS_SKIP = new Set<string>(['cluster-overview', 'namespaces']);
-
 type NavigationStateGetter = (clusterId: string) => NavigationTabState;
 type NamespaceGetter = (clusterId: string) => string | undefined;
 
@@ -174,11 +171,6 @@ export class BackgroundClusterRefresher {
     }
 
     if (!domain) {
-      return;
-    }
-
-    // Skip domains already refreshed for all clusters by their scopeResolvers.
-    if (SYSTEM_DOMAINS_SKIP.has(domain)) {
       return;
     }
 

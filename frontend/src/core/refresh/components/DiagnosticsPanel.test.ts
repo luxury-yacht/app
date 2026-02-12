@@ -154,6 +154,13 @@ const setDomainState = (domain: string, state: DomainSnapshotState<any>) => {
   domainStateMap[domain] = state;
 };
 
+const setScopedEntries = (
+  domain: string,
+  entries: Array<[string, DomainSnapshotState<any>]>
+) => {
+  scopedEntriesMap[domain] = entries;
+};
+
 const resetDomainStates = () => {
   Object.keys(domainStateMap).forEach((key) => delete domainStateMap[key]);
   Object.keys(scopedEntriesMap).forEach((key) => delete scopedEntriesMap[key]);
@@ -679,12 +686,14 @@ describe('DiagnosticsPanel component', () => {
     const now = Date.now();
 
     const scope = buildClusterScopeList(['cluster-a'], '');
-    setDomainState('cluster-config', {
+    const configState = {
       ...createReadyState({
         resources: [{ kind: 'ConfigMap', name: 'app-config', namespace: 'default', data: 2 }],
       }),
       scope,
-    });
+    };
+    // cluster-config is now a scoped domain, so set scoped entries instead of domain state.
+    setScopedEntries('cluster-config', [[scope, configState]]);
 
     fetchTelemetrySummaryMock.mockResolvedValueOnce({
       snapshots: [],

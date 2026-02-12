@@ -61,8 +61,10 @@ const refreshMocks = vi.hoisted(() => ({
   },
   orchestrator: {
     setDomainEnabled: vi.fn(),
+    setScopedDomainEnabled: vi.fn(),
     setDomainScope: vi.fn(),
     triggerManualRefresh: vi.fn(),
+    fetchScopedDomain: vi.fn(),
   },
   catalogDomain: {
     status: 'idle' as any,
@@ -75,6 +77,7 @@ vi.mock('@/core/refresh', () => ({
   refreshManager: refreshMocks.manager,
   refreshOrchestrator: refreshMocks.orchestrator,
   useRefreshDomain: () => refreshMocks.catalogDomain,
+  useRefreshScopedDomain: () => refreshMocks.catalogDomain,
 }));
 
 vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => ({
@@ -123,7 +126,9 @@ describe('BrowseView', () => {
     gridTablePropsRef.current = null;
     refreshMocks.orchestrator.setDomainScope.mockReset();
     refreshMocks.orchestrator.setDomainEnabled.mockReset();
+    refreshMocks.orchestrator.setScopedDomainEnabled.mockReset();
     refreshMocks.orchestrator.triggerManualRefresh.mockReset();
+    refreshMocks.orchestrator.fetchScopedDomain.mockReset();
     refreshMocks.manager.disable.mockReset();
     refreshMocks.catalogDomain.status = 'idle';
     refreshMocks.catalogDomain.data = null;
@@ -144,14 +149,16 @@ describe('BrowseView', () => {
         await Promise.resolve();
       });
 
-      expect(refreshMocks.orchestrator.setDomainEnabled).toHaveBeenCalledWith('catalog', true);
-      expect(refreshMocks.orchestrator.setDomainScope).toHaveBeenCalledWith(
+      expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=200&namespace=cluster'
+        'cluster-1|limit=200&namespace=cluster',
+        true
       );
-      expect(refreshMocks.orchestrator.triggerManualRefresh).toHaveBeenCalledWith('catalog', {
-        suppressSpinner: true,
-      });
+      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+        'catalog',
+        'cluster-1|limit=200&namespace=cluster',
+        expect.objectContaining({ isManual: true })
+      );
     });
 
     it('hides namespace column for cluster scope (cluster-scoped objects only)', async () => {
@@ -206,9 +213,10 @@ describe('BrowseView', () => {
       });
 
       // The scope should include the pinned namespace
-      expect(refreshMocks.orchestrator.setDomainScope).toHaveBeenCalledWith(
+      expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=200&namespace=kube-system'
+        'cluster-1|limit=200&namespace=kube-system',
+        true
       );
     });
   });
@@ -279,13 +287,16 @@ describe('BrowseView', () => {
         await Promise.resolve();
       });
 
-      expect(refreshMocks.orchestrator.setDomainScope).toHaveBeenCalledWith(
+      expect(refreshMocks.orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
         'catalog',
-        'cluster-1|limit=200&namespace=cluster&continue=200'
+        'cluster-1|limit=200&namespace=cluster&continue=200',
+        true
       );
-      expect(refreshMocks.orchestrator.triggerManualRefresh).toHaveBeenCalledWith('catalog', {
-        suppressSpinner: true,
-      });
+      expect(refreshMocks.orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+        'catalog',
+        'cluster-1|limit=200&namespace=cluster&continue=200',
+        expect.objectContaining({ isManual: true })
+      );
 
       refreshMocks.catalogDomain.scope = 'cluster-1|limit=200&namespace=cluster&continue=200';
       refreshMocks.catalogDomain.data = {

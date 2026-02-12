@@ -28,7 +28,7 @@ import {
 import type { NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
 import { isMacPlatform } from '@/utils/platform';
 import type { CatalogNamespaceGroup } from '@/core/refresh/types';
-import { useRefreshDomain } from '@/core/refresh';
+import { useRefreshScopedDomainStates } from '@/core/refresh';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { useSidebarKeyboardControls, SidebarCursorTarget } from './SidebarKeys';
@@ -81,7 +81,18 @@ function Sidebar() {
     selectedNamespaceClusterId,
   } = useNamespace();
   const { selectedClusterId } = useKubeconfig();
-  const catalogDomain = useRefreshDomain('catalog');
+  // Catalog is scoped — read all active scopes and find data for the active cluster.
+  const catalogScopedStates = useRefreshScopedDomainStates('catalog');
+  const catalogDomain = useMemo(() => {
+    // Find the first scope entry that has data (the active catalog scope for this cluster).
+    const entries = Object.values(catalogScopedStates);
+    for (const entry of entries) {
+      if (entry?.data) {
+        return entry;
+      }
+    }
+    return { data: null, status: 'idle' as const };
+  }, [catalogScopedStates]);
   const viewState = useViewState();
   const [expandedNamespaceKey, setExpandedNamespaceKey] = useState<string | null>(null);
   const [clusterResourcesExpanded, setClusterResourcesExpanded] = useState<boolean>(true);

@@ -21,7 +21,8 @@ import React, {
   ReactNode,
 } from 'react';
 import type { ResourceDataReturn } from '@hooks/resources';
-import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
+import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { buildClusterScope } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
 import {
   CLUSTER_REFRESHERS,
@@ -76,6 +77,9 @@ const CLUSTER_REFRESHER_TO_DOMAIN: Partial<Record<ClusterRefresherName, RefreshD
 // Managed cluster domains derived from the mapping (exclude catalog to avoid touching browse)
 const CLUSTER_DOMAIN_SET = new Set<RefreshDomain>(Object.values(CLUSTER_REFRESHER_TO_DOMAIN));
 
+// Domains that use 'cluster' as their domain scope suffix (events need special scope).
+const CLUSTER_EVENTS_DOMAIN: RefreshDomain = 'cluster-events';
+
 const noop = () => {};
 
 // Keep merged multi-cluster payloads scoped to the active tab.
@@ -95,35 +99,25 @@ const filterByClusterId = <T extends { clusterId?: string | null }>(
 function useClusterDomainResource<K extends RefreshDomain, TResult>(
   domainName: K,
   state: DomainSnapshotState<DomainPayloadMap[K]>,
-  extractFn: (payload: DomainPayloadMap[K] | null) => TResult | null
+  extractFn: (payload: DomainPayloadMap[K] | null) => TResult | null,
+  scope: string
 ): ResourceDataReturn<TResult> {
-  const isStreaming = refreshOrchestrator.isStreamingDomain(domainName);
   const load = useCallback(
-    async (showSpinner: boolean = true) => {
-      if (isStreaming) {
-        return;
-      }
-      await refreshOrchestrator.triggerManualRefresh(domainName, {
-        suppressSpinner: !showSpinner,
-      });
+    async (_showSpinner: boolean = true) => {
+      // fetchScopedDomain handles streaming domains internally — it will use
+      // refreshOnce for active streams or fall back to a snapshot fetch.
+      await refreshOrchestrator.fetchScopedDomain(domainName, scope, { isManual: true });
     },
-    [domainName, isStreaming]
+    [domainName, scope]
   );
 
   const refresh = useCallback(async () => {
-    if (isStreaming) {
-      return;
-    }
-    await refreshOrchestrator.triggerManualRefresh(domainName, { suppressSpinner: true });
-  }, [domainName, isStreaming]);
+    await refreshOrchestrator.fetchScopedDomain(domainName, scope, { isManual: true });
+  }, [domainName, scope]);
 
   const reset = useCallback(() => {
-    if (isStreaming) {
-      refreshOrchestrator.resetDomain(domainName);
-      return;
-    }
-    refreshOrchestrator.resetDomain(domainName);
-  }, [domainName, isStreaming]);
+    refreshOrchestrator.resetScopedDomain(domainName, scope);
+  }, [domainName, scope]);
 
   return useMemo(() => {
     const payload = state.data ?? null;
@@ -192,15 +186,25 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const defaultRefresher = activeView ? clusterViewToRefresher[activeView] : undefined;
   const activeClusterRefresherRef = useRef<ClusterRefresherName | null>(defaultRefresher ?? null);
 
-  const nodeDomain = useRefreshDomain('nodes');
-  const rbacDomain = useRefreshDomain('cluster-rbac');
-  const storageDomain = useRefreshDomain('cluster-storage');
-  const configDomain = useRefreshDomain('cluster-config');
-  const crdDomain = useRefreshDomain('cluster-crds');
-  const customDomain = useRefreshDomain('cluster-custom');
-  const eventsDomain = useRefreshDomain('cluster-events');
-
   const { selectedClusterId } = useKubeconfig();
+
+  // Build scoped keys for cluster-isolated state storage.
+  const clusterScope = useMemo(
+    () => buildClusterScope(selectedClusterId ?? undefined, ''),
+    [selectedClusterId]
+  );
+  const clusterEventsScope = useMemo(
+    () => buildClusterScope(selectedClusterId ?? undefined, 'cluster'),
+    [selectedClusterId]
+  );
+
+  const nodeDomain = useRefreshScopedDomain('nodes', clusterScope);
+  const rbacDomain = useRefreshScopedDomain('cluster-rbac', clusterScope);
+  const storageDomain = useRefreshScopedDomain('cluster-storage', clusterScope);
+  const configDomain = useRefreshScopedDomain('cluster-config', clusterScope);
+  const crdDomain = useRefreshScopedDomain('cluster-crds', clusterScope);
+  const customDomain = useRefreshScopedDomain('cluster-custom', clusterScope);
+  const eventsDomain = useRefreshScopedDomain('cluster-events', clusterEventsScope);
   // Ensure permission state is tracked per-cluster to prevent cross-cluster leakage.
   const permissionClusterId = selectedClusterId || null;
 
@@ -317,18 +321,17 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const nodeLastUpdated = nodeDomain.lastUpdated;
 
   const loadNodes = useCallback(async (showSpinner: boolean = true) => {
-    await refreshOrchestrator.triggerManualRefresh('nodes', {
-      suppressSpinner: !showSpinner,
-    });
-  }, []);
+    void showSpinner;
+    await refreshOrchestrator.fetchScopedDomain('nodes', clusterScope, { isManual: true });
+  }, [clusterScope]);
 
   const refreshNodes = useCallback(async () => {
-    await refreshOrchestrator.triggerManualRefresh('nodes', { suppressSpinner: true });
-  }, []);
+    await refreshOrchestrator.fetchScopedDomain('nodes', clusterScope, { isManual: true });
+  }, [clusterScope]);
 
   const resetNodes = useCallback(() => {
-    refreshOrchestrator.resetDomain('nodes');
-  }, []);
+    refreshOrchestrator.resetScopedDomain('nodes', clusterScope);
+  }, [clusterScope]);
 
   const cancelNodes = useCallback(() => {
     // No explicit cancellation required; orchestrator tracks request lifecycles internally.
@@ -429,6 +432,12 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     };
   }, [configDomain, crdDomain, customDomain, eventsDomain, nodeDomain, rbacDomain, storageDomain]);
 
+  // Resolve the scoped key for a cluster domain — events uses a different scope suffix.
+  const getScopeForDomain = useCallback(
+    (domain: RefreshDomain) => (domain === CLUSTER_EVENTS_DOMAIN ? clusterEventsScope : clusterScope),
+    [clusterScope, clusterEventsScope]
+  );
+
   useEffect(() => {
     const nextRefresher = activeResourceType ? clusterViewToRefresher[activeResourceType] : null;
     const previousRefresher = activeClusterRefresherRef.current;
@@ -436,7 +445,8 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     if (previousRefresher && previousRefresher !== nextRefresher) {
       const previousDomain = CLUSTER_REFRESHER_TO_DOMAIN[previousRefresher];
       if (previousDomain) {
-        refreshOrchestrator.setDomainEnabled(previousDomain, false);
+        const scope = getScopeForDomain(previousDomain);
+        refreshOrchestrator.setScopedDomainEnabled(previousDomain, scope, false);
       }
     }
 
@@ -446,40 +456,42 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
         activeClusterRefresherRef.current = null;
         return;
       }
+      const scope = getScopeForDomain(nextDomain);
       if (nextDomain !== 'nodes' && domainPermissionDenied[nextDomain]) {
-        refreshOrchestrator.setDomainEnabled(nextDomain, false);
+        refreshOrchestrator.setScopedDomainEnabled(nextDomain, scope, false);
         activeClusterRefresherRef.current = null;
         return;
       }
       // Allow fetches even while permissions are pending to avoid delaying the view.
 
-      refreshOrchestrator.setDomainEnabled(nextDomain, true);
+      refreshOrchestrator.setScopedDomainEnabled(nextDomain, scope, true);
       const state = domainStateRef.current[nextDomain];
-      if (
-        state &&
-        !state.data &&
-        state.status === 'idle' &&
-        !refreshOrchestrator.isStreamingDomain(nextDomain)
-      ) {
-        void refreshOrchestrator.triggerManualRefresh(nextDomain);
+      if (state && !state.data && state.status === 'idle') {
+        // fetchScopedDomain handles streaming domains internally — it will
+        // start a stream if appropriate, or fall back to a snapshot fetch.
+        void refreshOrchestrator.fetchScopedDomain(nextDomain, scope, { isManual: true });
       }
     }
 
     activeClusterRefresherRef.current = nextRefresher ?? null;
-  }, [activeResourceType, domainPermissionDenied]);
+  }, [activeResourceType, domainPermissionDenied, getScopeForDomain]);
 
   useEffect(() => {
+    // Capture scope values for cleanup to avoid stale closure issues.
+    const scopeForCleanup = clusterScope;
+    const eventsScopeForCleanup = clusterEventsScope;
     return () => {
       CLUSTER_DOMAIN_SET.forEach((domain) => {
-        refreshOrchestrator.setDomainEnabled(domain, false);
+        const scope = domain === CLUSTER_EVENTS_DOMAIN ? eventsScopeForCleanup : scopeForCleanup;
+        refreshOrchestrator.setScopedDomainEnabled(domain, scope, false);
       });
     };
-  }, []);
+  }, [clusterScope, clusterEventsScope]);
 
   useEffect(() => {
     const handleKubeconfigChanging = () => {
       CLUSTER_DOMAIN_SET.forEach((domain) => {
-        refreshOrchestrator.setDomainEnabled(domain, false);
+        // resetDomain already delegates to resetAllScopedDomainStates for scoped domains.
         refreshOrchestrator.resetDomain(domain);
       });
     };
@@ -529,12 +541,12 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     [selectedClusterId]
   );
 
-  const rbac = useClusterDomainResource('cluster-rbac', rbacDomain, rbacExtractor);
-  const storage = useClusterDomainResource('cluster-storage', storageDomain, storageExtractor);
-  const config = useClusterDomainResource('cluster-config', configDomain, configExtractor);
-  const crds = useClusterDomainResource('cluster-crds', crdDomain, crdExtractor);
-  const custom = useClusterDomainResource('cluster-custom', customDomain, customExtractor);
-  const events = useClusterDomainResource('cluster-events', eventsDomain, eventsExtractor);
+  const rbac = useClusterDomainResource('cluster-rbac', rbacDomain, rbacExtractor, clusterScope);
+  const storage = useClusterDomainResource('cluster-storage', storageDomain, storageExtractor, clusterScope);
+  const config = useClusterDomainResource('cluster-config', configDomain, configExtractor, clusterScope);
+  const crds = useClusterDomainResource('cluster-crds', crdDomain, crdExtractor, clusterScope);
+  const custom = useClusterDomainResource('cluster-custom', customDomain, customExtractor, clusterScope);
+  const events = useClusterDomainResource('cluster-events', eventsDomain, eventsExtractor, clusterEventsScope);
 
   const manualLoaders = useMemo<Record<ClusterViewType, () => Promise<void>>>(() => {
     const wrap = (load?: (showSpinner?: boolean) => Promise<void>) => {

@@ -197,28 +197,30 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     'refresh-domains' | 'streams' | 'capability-checks' | 'effective-permissions'
   >('refresh-domains');
   const refreshState = useRefreshState();
+  // Non-scoped system domains
   const namespaceDomain = useRefreshDomain('namespaces');
   const clusterOverviewDomain = useRefreshDomain('cluster-overview');
-  const nodeDomain = useRefreshDomain('nodes');
   const objectMaintenanceDomain = useRefreshDomain('object-maintenance');
-  const clusterConfigDomain = useRefreshDomain('cluster-config');
-  const clusterCRDDomain = useRefreshDomain('cluster-crds');
-  const clusterCustomDomain = useRefreshDomain('cluster-custom');
-  const clusterRBACDomain = useRefreshDomain('cluster-rbac');
-  const clusterStorageDomain = useRefreshDomain('cluster-storage');
-  const clusterEventsDomain = useRefreshDomain('cluster-events');
-  const catalogDomain = useRefreshDomain('catalog');
-  const catalogDiffDomain = useRefreshDomain('catalog-diff');
-  const namespaceWorkloadsDomain = useRefreshDomain('namespace-workloads');
-  const namespaceAutoscalingDomain = useRefreshDomain('namespace-autoscaling');
-  const namespaceConfigDomain = useRefreshDomain('namespace-config');
-  const namespaceCustomDomain = useRefreshDomain('namespace-custom');
-  const namespaceEventsDomain = useRefreshDomain('namespace-events');
-  const namespaceHelmDomain = useRefreshDomain('namespace-helm');
-  const namespaceNetworkDomain = useRefreshDomain('namespace-network');
-  const namespaceQuotasDomain = useRefreshDomain('namespace-quotas');
-  const namespaceRBACDomain = useRefreshDomain('namespace-rbac');
-  const namespaceStorageDomain = useRefreshDomain('namespace-storage');
+  // Scoped cluster/namespace/catalog domains — read all scope entries for diagnostics.
+  const nodeScopeEntries = useRefreshScopedDomainEntries('nodes');
+  const clusterConfigScopeEntries = useRefreshScopedDomainEntries('cluster-config');
+  const clusterCRDScopeEntries = useRefreshScopedDomainEntries('cluster-crds');
+  const clusterCustomScopeEntries = useRefreshScopedDomainEntries('cluster-custom');
+  const clusterRBACScopeEntries = useRefreshScopedDomainEntries('cluster-rbac');
+  const clusterStorageScopeEntries = useRefreshScopedDomainEntries('cluster-storage');
+  const clusterEventsScopeEntries = useRefreshScopedDomainEntries('cluster-events');
+  const catalogScopeEntries = useRefreshScopedDomainEntries('catalog');
+  const catalogDiffScopeEntries = useRefreshScopedDomainEntries('catalog-diff');
+  const namespaceWorkloadsScopeEntries = useRefreshScopedDomainEntries('namespace-workloads');
+  const namespaceAutoscalingScopeEntries = useRefreshScopedDomainEntries('namespace-autoscaling');
+  const namespaceConfigScopeEntries = useRefreshScopedDomainEntries('namespace-config');
+  const namespaceCustomScopeEntries = useRefreshScopedDomainEntries('namespace-custom');
+  const namespaceEventsScopeEntries = useRefreshScopedDomainEntries('namespace-events');
+  const namespaceHelmScopeEntries = useRefreshScopedDomainEntries('namespace-helm');
+  const namespaceNetworkScopeEntries = useRefreshScopedDomainEntries('namespace-network');
+  const namespaceQuotasScopeEntries = useRefreshScopedDomainEntries('namespace-quotas');
+  const namespaceRBACScopeEntries = useRefreshScopedDomainEntries('namespace-rbac');
+  const namespaceStorageScopeEntries = useRefreshScopedDomainEntries('namespace-storage');
   const podScopeEntries = useRefreshScopedDomainEntries('pods');
   const logScopeEntries = useRefreshScopedDomainEntries('object-logs');
   // Object panel scoped domains – visible only while the object panel is open.
@@ -227,6 +229,23 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const objectYamlScopeEntries = useRefreshScopedDomainEntries('object-yaml');
   const objectHelmManifestScopeEntries = useRefreshScopedDomainEntries('object-helm-manifest');
   const objectHelmValuesScopeEntries = useRefreshScopedDomainEntries('object-helm-values');
+
+  // Helper to pick the first active scoped domain state for the base rows display.
+  // Diagnostics shows one summary row per domain; individual scope entries appear in expanded views.
+  const pickFirstScopeState = useCallback(
+    (entries: Array<[string, DomainSnapshotState<any>]>): DomainSnapshotState<any> => {
+      if (entries.length === 0) {
+        return { status: 'idle', data: null, stats: null, error: null, droppedAutoRefreshes: 0 };
+      }
+      // Prefer entries with data, then non-idle entries, then the first entry.
+      const withData = entries.find(([, s]) => s.data !== null);
+      if (withData) return withData[1];
+      const nonIdle = entries.find(([, s]) => s.status !== 'idle');
+      if (nonIdle) return nonIdle[1];
+      return entries[0][1];
+    },
+    []
+  );
   const [telemetrySummary, setTelemetrySummary] = useState<TelemetrySummary | null>(null);
   const [telemetryError, setTelemetryError] = useState<string | null>(null);
   const permissionMap = useUserPermissions();
@@ -300,28 +319,28 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       {
         domain: 'nodes' as RefreshDomain,
         label: 'Nodes',
-        state: nodeDomain,
+        state: pickFirstScopeState(nodeScopeEntries),
         hasMetrics: true,
       },
       {
         domain: 'cluster-config' as RefreshDomain,
         label: 'Cluster Config',
-        state: clusterConfigDomain,
+        state: pickFirstScopeState(clusterConfigScopeEntries),
       },
       {
         domain: 'cluster-crds' as RefreshDomain,
         label: 'Cluster CRDs',
-        state: clusterCRDDomain,
+        state: pickFirstScopeState(clusterCRDScopeEntries),
       },
       {
         domain: 'cluster-custom' as RefreshDomain,
         label: 'Cluster Custom Resources',
-        state: clusterCustomDomain,
+        state: pickFirstScopeState(clusterCustomScopeEntries),
       },
       {
         domain: 'cluster-events' as RefreshDomain,
         label: 'Cluster Events',
-        state: clusterEventsDomain,
+        state: pickFirstScopeState(clusterEventsScopeEntries),
       },
       {
         domain: 'object-maintenance' as RefreshDomain,
@@ -331,97 +350,98 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       {
         domain: 'catalog' as RefreshDomain,
         label: 'Browse Catalog',
-        state: catalogDomain,
+        state: pickFirstScopeState(catalogScopeEntries),
       },
       {
         domain: 'catalog-diff' as RefreshDomain,
         label: 'Diff Catalog',
-        state: catalogDiffDomain,
+        state: pickFirstScopeState(catalogDiffScopeEntries),
       },
       {
         domain: 'cluster-rbac' as RefreshDomain,
         label: 'Cluster RBAC',
-        state: clusterRBACDomain,
+        state: pickFirstScopeState(clusterRBACScopeEntries),
       },
       {
         domain: 'cluster-storage' as RefreshDomain,
         label: 'Cluster Storage',
-        state: clusterStorageDomain,
+        state: pickFirstScopeState(clusterStorageScopeEntries),
       },
       {
         domain: 'namespace-workloads' as RefreshDomain,
         label: 'Workloads',
-        state: namespaceWorkloadsDomain,
+        state: pickFirstScopeState(namespaceWorkloadsScopeEntries),
       },
       {
         domain: 'namespace-autoscaling' as RefreshDomain,
         label: 'NS Autoscaling',
-        state: namespaceAutoscalingDomain,
+        state: pickFirstScopeState(namespaceAutoscalingScopeEntries),
       },
       {
         domain: 'namespace-config' as RefreshDomain,
         label: 'NS Config',
-        state: namespaceConfigDomain,
+        state: pickFirstScopeState(namespaceConfigScopeEntries),
       },
       {
         domain: 'namespace-custom' as RefreshDomain,
         label: 'NS Custom',
-        state: namespaceCustomDomain,
+        state: pickFirstScopeState(namespaceCustomScopeEntries),
       },
       {
         domain: 'namespace-events' as RefreshDomain,
         label: 'NS Events',
-        state: namespaceEventsDomain,
+        state: pickFirstScopeState(namespaceEventsScopeEntries),
       },
       {
         domain: 'namespace-helm' as RefreshDomain,
         label: 'NS Helm',
-        state: namespaceHelmDomain,
+        state: pickFirstScopeState(namespaceHelmScopeEntries),
       },
       {
         domain: 'namespace-network' as RefreshDomain,
         label: 'NS Network',
-        state: namespaceNetworkDomain,
+        state: pickFirstScopeState(namespaceNetworkScopeEntries),
       },
       {
         domain: 'namespace-quotas' as RefreshDomain,
         label: 'NS Quotas',
-        state: namespaceQuotasDomain,
+        state: pickFirstScopeState(namespaceQuotasScopeEntries),
       },
       {
         domain: 'namespace-rbac' as RefreshDomain,
         label: 'NS RBAC',
-        state: namespaceRBACDomain,
+        state: pickFirstScopeState(namespaceRBACScopeEntries),
       },
       {
         domain: 'namespace-storage' as RefreshDomain,
         label: 'NS Storage',
-        state: namespaceStorageDomain,
+        state: pickFirstScopeState(namespaceStorageScopeEntries),
       },
     ],
     [
       namespaceDomain,
       clusterOverviewDomain,
-      nodeDomain,
       objectMaintenanceDomain,
-      catalogDomain,
-      catalogDiffDomain,
-      clusterCRDDomain,
-      clusterCustomDomain,
-      clusterConfigDomain,
-      clusterEventsDomain,
-      clusterRBACDomain,
-      clusterStorageDomain,
-      namespaceWorkloadsDomain,
-      namespaceAutoscalingDomain,
-      namespaceConfigDomain,
-      namespaceEventsDomain,
-      namespaceCustomDomain,
-      namespaceHelmDomain,
-      namespaceNetworkDomain,
-      namespaceQuotasDomain,
-      namespaceRBACDomain,
-      namespaceStorageDomain,
+      pickFirstScopeState,
+      nodeScopeEntries,
+      clusterConfigScopeEntries,
+      clusterCRDScopeEntries,
+      clusterCustomScopeEntries,
+      clusterEventsScopeEntries,
+      clusterRBACScopeEntries,
+      clusterStorageScopeEntries,
+      catalogScopeEntries,
+      catalogDiffScopeEntries,
+      namespaceWorkloadsScopeEntries,
+      namespaceAutoscalingScopeEntries,
+      namespaceConfigScopeEntries,
+      namespaceEventsScopeEntries,
+      namespaceCustomScopeEntries,
+      namespaceHelmScopeEntries,
+      namespaceNetworkScopeEntries,
+      namespaceQuotasScopeEntries,
+      namespaceRBACScopeEntries,
+      namespaceStorageScopeEntries,
     ]
   );
 
@@ -856,244 +876,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       };
     });
 
-    const podScopes = podScopeEntries;
-
-    const podSummaryInterval = formatInterval(
-      DOMAIN_REFRESHER_MAP.pods
-        ? refreshManager.getRefresherInterval(DOMAIN_REFRESHER_MAP.pods)
-        : null
-    );
-
-    const podSummaryLastUpdatedTs = podScopes.reduce((latest, [, state]) => {
-      const timestamp = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh ?? 0;
-      return Math.max(latest, timestamp);
-    }, 0);
-
-    const podSummaryLastUpdatedInfo = formatLastUpdated(
-      podSummaryLastUpdatedTs > 0 ? podSummaryLastUpdatedTs : undefined
-    );
-
-    const podSummaryStatus = (() => {
-      if (podScopes.some(([, state]) => state.status === 'error')) return 'error';
-      if (podScopes.some(([, state]) => state.status === 'initialising')) return 'initialising';
-      if (podScopes.some(([, state]) => state.status === 'loading')) return 'loading';
-      if (podScopes.some(([, state]) => state.status === 'updating')) return 'updating';
-      if (podScopes.some(([, state]) => state.status === 'ready')) return 'ready';
-      return 'idle';
-    })();
-
-    const podSummaryDropped = podScopes.reduce(
-      (acc, [, state]) => acc + (state.droppedAutoRefreshes ?? 0),
-      0
-    );
-
-    const podSummaryCount = podScopes.reduce((acc, [, state]) => {
-      const payload = state.data as PodSnapshotPayload | null;
-      return acc + (payload?.pods?.length ?? 0);
-    }, 0);
-
-    const podSummaryStale = podScopes.some(([, state]) => {
-      const payload = state.data as PodSnapshotPayload | null;
-      return Boolean(payload?.metrics?.stale);
-    });
-
-    const podSummaryError = (() => {
-      const problem = podScopes.find(([, state]) => state.error);
-      return problem?.[1].error ?? '—';
-    })();
-
-    const podSummaryVersion = (() => {
-      const maxVersion = podScopes.reduce((acc, [, state]) => {
-        const version = state.version ?? 0;
-        return version > acc ? version : acc;
-      }, 0);
-      return maxVersion > 0 ? String(maxVersion) : '—';
-    })();
-
-    const podSuccess = podScopes.reduce((acc, [, state]) => {
-      const payload = state.data as PodSnapshotPayload | null;
-      return acc + (payload?.metrics?.successCount ?? 0);
-    }, 0);
-
-    const podFailures = podScopes.reduce((acc, [, state]) => {
-      const payload = state.data as PodSnapshotPayload | null;
-      return acc + (payload?.metrics?.failureCount ?? 0);
-    }, 0);
-
-    const anyMetricsError = podScopes.some(([, state]) => {
-      const payload = state.data as PodSnapshotPayload | null;
-      return Boolean(payload?.metrics?.lastError);
-    });
-
-    let podSummaryMetricsStatus = '—';
-    let podSummaryMetricsTooltip = podScopes.length
-      ? 'Aggregated across pod scopes'
-      : 'No pod scopes active';
-
-    if (podScopes.length) {
-      if (anyMetricsError) {
-        podSummaryMetricsStatus = `Error (${podFailures} fails)`;
-        podSummaryMetricsTooltip = 'One or more pod scopes reported metrics errors';
-      } else if (podSummaryStale) {
-        podSummaryMetricsStatus = `Unavailable (${podFailures} fails)`;
-        podSummaryMetricsTooltip = 'One or more pod scopes have stale metrics data';
-      } else if (podSuccess > 0) {
-        podSummaryMetricsStatus = `OK (${podSuccess} polls)`;
-        podSummaryMetricsTooltip = 'Pod metrics polls aggregated across scopes';
-      } else {
-        podSummaryMetricsStatus = 'N/A';
-      }
-    }
-
-    // Aggregate pod stream health across scopes using worst-status wins.
-    const podSummaryHealth = (() => {
-      if (!podScopes.length) {
-        return null;
-      }
-      let hasHealthEntry = false;
-      const healthOrder = { healthy: 0, degraded: 1, unhealthy: 2 } as const;
-      let status: keyof typeof healthOrder = 'healthy';
-      let reason = 'delivering';
-      let lastDeliveryAt = 0;
-      let lastMessageAt = 0;
-      let connectionStatus: StreamHealthSummary['connectionStatus'];
-      podScopes.forEach(([scope]) => {
-        const health = resourceStreamManager.getHealthSnapshot('pods', scope);
-        if (!health) {
-          return;
-        }
-        hasHealthEntry = true;
-        if (!connectionStatus) {
-          connectionStatus = health.connectionStatus;
-        }
-        if (healthOrder[health.status] > healthOrder[status]) {
-          status = health.status;
-          reason = health.reason;
-        }
-        lastDeliveryAt = Math.max(lastDeliveryAt, health.lastDeliveryAt ?? 0);
-        lastMessageAt = Math.max(lastMessageAt, health.lastMessageAt ?? 0);
-      });
-      if (!hasHealthEntry) {
-        return null;
-      }
-      return {
-        status,
-        reason,
-        connectionStatus,
-        lastDeliveryAt: lastDeliveryAt || undefined,
-        lastMessageAt: lastMessageAt || undefined,
-      };
-    })();
-
-    const podSummaryTelemetryStatus = [
-      podSummaryStatus,
-      podSummaryHealth ? `Stream ${podSummaryHealth.status}` : null,
-    ]
-      .filter(Boolean)
-      .join(' • ');
-    const podSummaryTelemetryTooltipParts: string[] = [];
-    if (podSummaryError !== '—') {
-      podSummaryTelemetryTooltipParts.push(podSummaryError);
-    }
-    if (podSummaryHealth) {
-      podSummaryTelemetryTooltipParts.push(`Stream health: ${podSummaryHealth.status}`);
-      podSummaryTelemetryTooltipParts.push(`Stream reason: ${podSummaryHealth.reason}`);
-      if (podSummaryHealth.lastDeliveryAt) {
-        const deliveryInfo = formatLastUpdated(podSummaryHealth.lastDeliveryAt);
-        podSummaryTelemetryTooltipParts.push(`Stream last delivery: ${deliveryInfo.tooltip}`);
-      }
-      if (podSummaryHealth.lastMessageAt) {
-        const messageInfo = formatLastUpdated(podSummaryHealth.lastMessageAt);
-        podSummaryTelemetryTooltipParts.push(`Stream last message: ${messageInfo.tooltip}`);
-      }
-    }
-    const podSummaryTelemetryTooltip =
-      podSummaryTelemetryTooltipParts.length > 0
-        ? podSummaryTelemetryTooltipParts.join('\n')
-        : undefined;
-
-    const podScopeDetails = (() => {
-      if (!podScopes.length) {
-        return { display: '-', tooltip: 'No pod scopes active' };
-      }
-      if (podScopes.length === 1) {
-        return resolveScopeDetails(podScopes[0][0], selectedClusterId, getClusterMeta);
-      }
-      return {
-        display: 'multiple',
-        tooltip: podScopes.map(([scope]) => scope).join('\n'),
-      };
-    })();
-
-    const podStreamMode = STREAM_MODE_BY_NAME.resources;
-    const podStreamActive = Boolean(podSummaryHealth && podSummaryHealth.reason !== 'inactive');
-    const podStreamHealthy = podSummaryHealth?.status === 'healthy';
-    const podPollingDetails = resolvePollingDetails({
-      domain: 'pods',
-      refresherName: DOMAIN_REFRESHER_MAP.pods,
-      streamActive: podStreamActive,
-      streamHealthy: podStreamHealthy,
-      metricsOnly: true,
-    });
-    const podModeDetails = resolveModeDetails({
-      domain: 'pods',
-      streamMode: podStreamMode,
-      streamActive: podStreamActive,
-      streamHealthy: podStreamHealthy,
-      pollingEnabled: podPollingDetails.enabled,
-      metricsOnly: true,
-    });
-    const podHealthDetails = resolveHealthDetails({
-      domain: 'pods',
-      status: podSummaryStatus,
-      error: podSummaryError !== '—' ? podSummaryError : null,
-      scope: podScopes.length ? podScopeDetails.display : '',
-      streamHealth: podSummaryHealth ?? null,
-    });
-
-    const podSummaryRow: DiagnosticsRow = {
-      rowKey: 'pods-summary',
-      domain: 'pods' as RefreshDomain,
-      label: 'ObjPanel - Pods',
-      status: podSummaryStatus,
-      version: podSummaryVersion,
-      interval: podSummaryInterval,
-      lastUpdated: podSummaryLastUpdatedInfo.display,
-      lastUpdatedTooltip: podSummaryLastUpdatedInfo.tooltip,
-      duration: '—',
-      dropped: podSummaryDropped,
-      stale: podSummaryStale,
-      error: podSummaryError,
-      telemetryStatus: podSummaryTelemetryStatus,
-      telemetryTooltip: podSummaryTelemetryTooltip,
-      metricsStatus: podSummaryMetricsStatus,
-      metricsTooltip: podSummaryMetricsTooltip,
-      metricsStale: podSummaryStale,
-      metricsSuccess: podSuccess,
-      metricsFailure: podFailures,
-      telemetrySuccess: podSuccess,
-      telemetryFailure: podFailures,
-      hasMetrics: podScopes.length > 0,
-      count: podSummaryCount,
-      countDisplay: String(podSummaryCount),
-      countTooltip: undefined,
-      countClassName: undefined,
-      warnings: [],
-      truncated: false,
-      totalItems: undefined,
-      namespace: '-',
-      scope: podScopeDetails.display,
-      scopeTooltip: podScopeDetails.tooltip,
-      scopeEntries: podScopeDetails.entries,
-      mode: podModeDetails.label,
-      modeTooltip: podModeDetails.tooltip,
-      healthStatus: podHealthDetails.label,
-      healthTooltip: podHealthDetails.tooltip,
-      pollingStatus: podPollingDetails.label,
-      pollingTooltip: podPollingDetails.tooltip,
-    };
-
-    const podRows = podScopes.map<DiagnosticsRow>(([scope, state]) => {
+    const podRows = podScopeEntries.map<DiagnosticsRow>(([scope, state]) => {
       const payload = state.data as PodSnapshotPayload | null;
       const metricsInfo = payload?.metrics;
       const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
@@ -1143,12 +926,19 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       );
       const streamActive = Boolean(streamHealth && streamHealth.reason !== 'inactive');
       const streamHealthy = streamHealth?.status === 'healthy';
-      const modeDetails = resolveModeDetails({
+      const pollingDetails = resolvePollingDetails({
         domain: 'pods',
-        streamMode: podStreamMode,
+        refresherName: DOMAIN_REFRESHER_MAP.pods,
         streamActive,
         streamHealthy,
-        pollingEnabled: podPollingDetails.enabled,
+        metricsOnly: true,
+      });
+      const modeDetails = resolveModeDetails({
+        domain: 'pods',
+        streamMode: STREAM_MODE_BY_NAME.resources,
+        streamActive,
+        streamHealthy,
+        pollingEnabled: pollingDetails.enabled,
         metricsOnly: true,
       });
       const healthDetails = resolveHealthDetails({
@@ -1234,68 +1024,12 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         modeTooltip: modeDetails.tooltip,
         healthStatus: healthDetails.label,
         healthTooltip: healthDetails.tooltip,
-        pollingStatus: podPollingDetails.label,
-        pollingTooltip: podPollingDetails.tooltip,
+        pollingStatus: pollingDetails.label,
+        pollingTooltip: pollingDetails.tooltip,
       };
     });
 
     const orderedPodRows = podRows.sort((a, b) => a.label.localeCompare(b.label));
-
-    const logSummaryLastUpdatedTs = logScopeEntries.reduce((latest, [, state]) => {
-      const timestamp = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh ?? 0;
-      return Math.max(latest, timestamp);
-    }, 0);
-
-    const logSummaryLastUpdatedInfo = formatLastUpdated(
-      logSummaryLastUpdatedTs > 0 ? logSummaryLastUpdatedTs : undefined
-    );
-
-    const logSummaryStatus = (() => {
-      if (logScopeEntries.some(([, state]) => state.status === 'error')) return 'error';
-      if (logScopeEntries.some(([, state]) => state.status === 'initialising'))
-        return 'initialising';
-      if (logScopeEntries.some(([, state]) => state.status === 'loading')) return 'loading';
-      if (logScopeEntries.some(([, state]) => state.status === 'updating')) return 'updating';
-      if (logScopeEntries.some(([, state]) => state.status === 'ready')) return 'ready';
-      return 'idle';
-    })();
-
-    const logSummaryDropped = logScopeEntries.reduce(
-      (acc, [, state]) => acc + (state.droppedAutoRefreshes ?? 0),
-      0
-    );
-
-    const logSummaryCount = logScopeEntries.reduce((acc, [, state]) => {
-      const payload = state.data as ObjectLogsSnapshotPayload | null;
-      return acc + (payload?.entries?.length ?? 0);
-    }, 0);
-
-    const logSummaryError = (() => {
-      const problem = logScopeEntries.find(([, state]) => state.error);
-      return problem?.[1].error ?? '—';
-    })();
-
-    const logSummaryVersion = (() => {
-      const maxReset = logScopeEntries.reduce((acc, [, state]) => {
-        const payload = state.data as ObjectLogsSnapshotPayload | null;
-        const resetCount = payload?.resetCount ?? 0;
-        return Math.max(acc, resetCount);
-      }, 0);
-      return maxReset > 0 ? String(maxReset) : '—';
-    })();
-
-    const logScopeDetails = (() => {
-      if (!logScopeEntries.length) {
-        return { display: '-', tooltip: 'No log scopes active' };
-      }
-      if (logScopeEntries.length === 1) {
-        return resolveScopeDetails(logScopeEntries[0][0], selectedClusterId, getClusterMeta);
-      }
-      return {
-        display: 'multiple',
-        tooltip: logScopeEntries.map(([scope]) => scope).join('\n'),
-      };
-    })();
 
     const logStreamTelemetry = telemetrySummary?.streams.find(
       (entry) => entry.name === 'object-logs'
@@ -1318,56 +1052,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       pollingEnabled: logPollingDetails.enabled,
       metricsOnly: false,
     });
-    const logHealthDetails = resolveHealthDetails({
-      domain: 'object-logs',
-      status: logSummaryStatus,
-      error: logSummaryError !== '—' ? logSummaryError : null,
-      scope: logScopeEntries.length ? logScopeDetails.display : '',
-      streamHealth: logStreamHealth,
-    });
-
-    const logSummaryRow: DiagnosticsRow = {
-      rowKey: 'object-logs-summary',
-      domain: 'object-logs' as RefreshDomain,
-      label: 'ObjPanel - Logs',
-      status: logSummaryStatus,
-      version: logSummaryVersion,
-      interval: '—',
-      lastUpdated: logSummaryLastUpdatedInfo.display,
-      lastUpdatedTooltip: logSummaryLastUpdatedInfo.tooltip,
-      duration: '—',
-      dropped: logSummaryDropped,
-      stale: false,
-      error: logSummaryError,
-      telemetryStatus: logSummaryStatus,
-      telemetryTooltip: logSummaryError !== '—' ? logSummaryError : undefined,
-      metricsStatus: '—',
-      metricsTooltip: 'Streaming domain',
-      metricsStale: false,
-      metricsSuccess: undefined,
-      metricsFailure: undefined,
-      telemetrySuccess: undefined,
-      telemetryFailure: undefined,
-      hasMetrics: false,
-      count: logSummaryCount,
-      countDisplay: String(logSummaryCount),
-      countTooltip: undefined,
-      countClassName: undefined,
-      warnings: [],
-      truncated: false,
-      totalItems: undefined,
-      namespace: '-',
-      scope: logScopeDetails.display,
-      scopeTooltip: logScopeDetails.tooltip,
-      scopeEntries: logScopeDetails.entries,
-      mode: logModeDetails.label,
-      modeTooltip: logModeDetails.tooltip,
-      healthStatus: logHealthDetails.label,
-      healthTooltip: logHealthDetails.tooltip,
-      pollingStatus: logPollingDetails.label,
-      pollingTooltip: logPollingDetails.tooltip,
-    };
-
     const logRows = logScopeEntries.map<DiagnosticsRow>(([scope, state]) => {
       const payload = state.data as ObjectLogsSnapshotPayload | null;
       const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
@@ -1446,7 +1130,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     const orderedLogRows = logRows.sort((a, b) => a.label.localeCompare(b.label));
 
     const clusterEventsRow: DiagnosticsRow = (() => {
-      const state = clusterEventsDomain;
+      const state = pickFirstScopeState(clusterEventsScopeEntries);
       const payload = state.data as ClusterEventsSnapshotPayload | null;
       const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
       const lastUpdatedInfo = formatLastUpdated(lastUpdated);
@@ -1537,7 +1221,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     })();
 
     const namespaceEventsRow: DiagnosticsRow = (() => {
-      const state = namespaceEventsDomain;
+      const state = pickFirstScopeState(namespaceEventsScopeEntries);
       const payload = state.data as NamespaceEventsSnapshotPayload | null;
       const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
       const lastUpdatedInfo = formatLastUpdated(lastUpdated);
@@ -1641,7 +1325,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         const normalizedScope = stripClusterScope(scope);
         const parts = normalizedScope.split(':');
         const namespace = parts[0] ?? '';
-        const kind = parts[1] ?? '';
         const name = parts.slice(2).join(':');
         const namespaceLabel = namespace && namespace !== CLUSTER_SCOPE ? namespace : '-';
         const label = name ? `ObjPanel - ${tabName} - ${name}` : `ObjPanel - ${tabName}`;
@@ -1737,8 +1420,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     objectYamlScopeEntries,
     objectHelmManifestScopeEntries,
     objectHelmValuesScopeEntries,
-    clusterEventsDomain,
-    namespaceEventsDomain,
+    clusterEventsScopeEntries,
+    namespaceEventsScopeEntries,
     telemetrySummary,
     resourceStreamStats,
     selectedClusterId,
@@ -2158,9 +1841,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   }, [eventStreamTelemetry, telemetryError, telemetrySummary]);
 
   const catalogSummary = useMemo(() => {
-    const catalogSnapshot = catalogDomain.data as CatalogSnapshotPayload | null;
+    const catalogState = pickFirstScopeState(catalogScopeEntries);
+    const catalogSnapshot = catalogState.data as CatalogSnapshotPayload | null;
     const firstRowLatencyMs =
-      catalogDomain.stats?.timeToFirstRowMs ?? catalogSnapshot?.firstBatchLatencyMs ?? null;
+      catalogState.stats?.timeToFirstRowMs ?? catalogSnapshot?.firstBatchLatencyMs ?? null;
     const firstRowDisplay = formatDurationMs(firstRowLatencyMs);
 
     if (catalogStreamTelemetry) {
@@ -2208,7 +1892,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       className: undefined,
       title: undefined,
     };
-  }, [catalogDomain, catalogStreamTelemetry, telemetryError, telemetrySummary]);
+  }, [catalogScopeEntries, pickFirstScopeState, catalogStreamTelemetry, telemetryError, telemetrySummary]);
 
   const logSummary = useMemo(() => {
     const totalScopes = logScopeEntries.length;

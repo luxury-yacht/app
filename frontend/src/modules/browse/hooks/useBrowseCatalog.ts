@@ -6,7 +6,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
+import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -93,9 +93,6 @@ export function useBrowseCatalog({
   filters,
   diagnosticLabel,
 }: UseBrowseCatalogOptions): UseBrowseCatalogResult {
-  const domain = useRefreshDomain('catalog');
-  useCatalogDiagnostics(domain, diagnosticLabel);
-
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [continueToken, setContinueToken] = useState<string | null>(null);
   const [isRequestingMore, setIsRequestingMore] = useState(false);
@@ -155,20 +152,35 @@ export function useBrowseCatalog({
     [pageLimit, filters.search, filters.kinds, namespacesToQuery]
   );
 
-  // Enable catalog domain on mount, disable on unmount
+  // Build the cluster-scoped catalog scope for the current query.
+  const catalogScope = useMemo(() => {
+    return (
+      normalizeCatalogScope(baseScope, pageLimit, pinnedNamespaces, clusterId) ??
+      buildClusterScope(clusterId ?? undefined, baseScope)
+    );
+  }, [baseScope, pageLimit, pinnedNamespaces, clusterId]);
+
+  // Read scoped state for the current catalog scope.
+  const domain = useRefreshScopedDomain('catalog', catalogScope);
+  useCatalogDiagnostics(domain, diagnosticLabel);
+
+  // Enable catalog domain on mount, disable on unmount.
+  // Re-run when catalogScope changes so we enable the new scope and disable the old one.
+  const prevCatalogScopeRef = useRef<string>(catalogScope);
   useEffect(() => {
-    refreshOrchestrator.setDomainEnabled('catalog', true);
+    const prevScope = prevCatalogScopeRef.current;
+    if (prevScope && prevScope !== catalogScope) {
+      refreshOrchestrator.setScopedDomainEnabled('catalog', prevScope, false);
+    }
+    prevCatalogScopeRef.current = catalogScope;
+    refreshOrchestrator.setScopedDomainEnabled('catalog', catalogScope, true);
     return () => {
-      refreshOrchestrator.setDomainEnabled('catalog', false);
+      refreshOrchestrator.setScopedDomainEnabled('catalog', catalogScope, false);
     };
-  }, []);
+  }, [catalogScope]);
 
   // Apply query scope and refresh page 0 when the query changes
   useEffect(() => {
-    const normalizedScope =
-      normalizeCatalogScope(baseScope, pageLimit, pinnedNamespaces, clusterId) ??
-      buildClusterScope(clusterId ?? undefined, baseScope);
-
     // Reset pagination state on query change
     requestModeRef.current = 'reset';
     setIsRequestingMore(false);
@@ -178,27 +190,24 @@ export function useBrowseCatalog({
     indexByUidRef.current = new Map();
     setItems([]);
 
-    refreshOrchestrator.setDomainScope('catalog', normalizedScope);
-    lastAppliedScopeRef.current = normalizedScope;
-    void refreshOrchestrator.triggerManualRefresh('catalog', { suppressSpinner: true });
-  }, [baseScope, pageLimit, pinnedNamespaces, clusterId]);
+    lastAppliedScopeRef.current = catalogScope;
+    void refreshOrchestrator.fetchScopedDomain('catalog', catalogScope, { isManual: true });
+  }, [catalogScope]);
 
   // Apply incoming snapshots to local pagination state
   useEffect(() => {
-    if (!domain.data || !domain.scope) {
+    if (!domain.data) {
       return;
     }
-    // The refresh store updates `domain.scope` when a fetch begins, but intentionally keeps
-    // `domain.data` until a new snapshot lands. Only apply snapshots once the domain is
-    // `ready` so we don't mistakenly treat stale data as belonging to the new scope (which
-    // can cause scope thrash, broken pagination, and virtual-scroll update loops).
+    // Only apply snapshots once the domain is `ready` so we don't mistakenly treat
+    // stale data as belonging to a new scope.
     if (domain.status !== 'ready') {
       return;
     }
     // Check if the incoming data matches the namespace we're expecting.
-    // Extract namespace from domain.scope and compare against pinnedNamespaces.
+    // Extract namespace from the scope and compare against pinnedNamespaces.
     const incomingScopeParams = new URLSearchParams(
-      splitClusterScope(domain.scope).scope.replace(/^\?/, '')
+      splitClusterScope(domain.scope ?? catalogScope).scope.replace(/^\?/, '')
     );
     const incomingNamespaces = incomingScopeParams.getAll('namespace').sort();
     const expectedNamespaces = pinnedNamespaces.slice().sort();
@@ -212,12 +221,6 @@ export function useBrowseCatalog({
         // Data is from a different namespace, ignore it
         return;
       }
-    }
-
-    const normalizedIncoming =
-      normalizeCatalogScope(domain.scope, pageLimit, pinnedNamespaces, clusterId) ?? domain.scope;
-    if (normalizedIncoming !== lastAppliedScopeRef.current) {
-      return;
     }
 
     const payload = domain.data as CatalogSnapshotPayload;
@@ -247,16 +250,12 @@ export function useBrowseCatalog({
     setTotalCount(payload.total ?? 0);
     setIsRequestingMore(false);
 
-    // After a load-more request, restore the base scope so subsequent manual refreshes
-    // refresh the first page for the current query rather than a paginated continuation.
+    // After a load-more request, the base scope is already set via catalogScope;
+    // no need to manually override the domain scope since we use scoped domains.
     if (mode === 'append') {
-      const normalizedBaseScope =
-        normalizeCatalogScope(baseScope, pageLimit, pinnedNamespaces, clusterId) ??
-        buildClusterScope(clusterId ?? undefined, baseScope);
-      refreshOrchestrator.setDomainScope('catalog', normalizedBaseScope);
-      lastAppliedScopeRef.current = normalizedBaseScope;
+      lastAppliedScopeRef.current = catalogScope;
     }
-  }, [domain.data, domain.scope, domain.status, baseScope, pageLimit, pinnedNamespaces, clusterId]);
+  }, [domain.data, domain.scope, domain.status, catalogScope, pageLimit, pinnedNamespaces, clusterId]);
 
   // Handle first load
   useEffect(() => {
@@ -285,9 +284,10 @@ export function useBrowseCatalog({
     const normalizedScope =
       normalizeCatalogScope(pageScope, pageLimit, pinnedNamespaces, clusterId) ??
       buildClusterScope(clusterId ?? undefined, pageScope);
-    refreshOrchestrator.setDomainScope('catalog', normalizedScope);
+    // Enable the paginated scope and fetch it directly.
+    refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, true);
     lastAppliedScopeRef.current = normalizedScope;
-    void refreshOrchestrator.triggerManualRefresh('catalog', { suppressSpinner: true });
+    void refreshOrchestrator.fetchScopedDomain('catalog', normalizedScope, { isManual: true });
   }, [
     continueToken,
     isRequestingMore,

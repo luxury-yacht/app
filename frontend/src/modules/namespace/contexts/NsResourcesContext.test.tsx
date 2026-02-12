@@ -26,6 +26,7 @@ const {
     updateContext: vi.fn(),
     setDomainEnabled: vi.fn(),
     resetDomain: vi.fn(),
+    resetScopedDomain: vi.fn(),
     setScopedDomainEnabled: vi.fn(),
     triggerManualRefresh: vi.fn().mockResolvedValue(undefined),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
@@ -78,6 +79,8 @@ const {
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: orchestrator,
   useRefreshDomain: (domain: string) => getDomainState(domain),
+  useRefreshScopedDomain: (_domain: string, scope: string) =>
+    scopedStates[scope] ?? { status: 'idle', data: null, error: null, lastUpdated: null },
   useRefreshScopedDomainStates: () => scopedStates,
 }));
 
@@ -212,10 +215,15 @@ describe('NamespaceResourcesProvider', () => {
       selectedNamespace: 'team-a',
       selectedNamespaceClusterId: testClusterId,
     });
-    expect(orchestrator.setDomainEnabled).toHaveBeenCalledWith('namespace-config', true);
-    expect(orchestrator.triggerManualRefresh).toHaveBeenCalledWith(
+    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'namespace-config',
-      expect.objectContaining({ suppressSpinner: false })
+      `${testClusterId}|namespace:team-a`,
+      true
+    );
+    expect(orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespace-config',
+      `${testClusterId}|namespace:team-a`,
+      expect.objectContaining({ isManual: true })
     );
     expect(capabilityMocks.registerNamespaceCapabilityDefinitions).toHaveBeenCalledWith(
       'team-a',
@@ -264,7 +272,11 @@ describe('NamespaceResourcesProvider', () => {
       await Promise.resolve();
     });
 
-    expect(orchestrator.setDomainEnabled).toHaveBeenCalledWith('namespace-network', true);
+    expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
+      'namespace-network',
+      `${testClusterId}|namespace:team-a`,
+      true
+    );
   });
 
   it('resets domains and triggers reload when the namespace changes', async () => {
@@ -284,6 +296,7 @@ describe('NamespaceResourcesProvider', () => {
     );
 
     orchestrator.triggerManualRefresh.mockClear();
+    orchestrator.fetchScopedDomain.mockClear();
     orchestrator.resetDomain.mockClear();
     storeMocks.resetScopedDomainState.mockClear();
 
@@ -305,10 +318,14 @@ describe('NamespaceResourcesProvider', () => {
       await Promise.resolve();
     });
 
-    expect(orchestrator.resetDomain).toHaveBeenCalledWith('namespace-workloads');
-    expect(orchestrator.triggerManualRefresh).toHaveBeenCalledWith(
+    expect(orchestrator.resetScopedDomain).toHaveBeenCalledWith(
       'namespace-workloads',
-      expect.objectContaining({ suppressSpinner: false })
+      `${testClusterId}|namespace:team-b`
+    );
+    expect(orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespace-workloads',
+      `${testClusterId}|namespace:team-b`,
+      expect.objectContaining({ isManual: true })
     );
     expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'pods',
@@ -331,14 +348,14 @@ describe('NamespaceResourcesProvider', () => {
     expect(getActiveResource()).toBe('workloads');
 
     const initialEnabledDomains = new Set(
-      orchestrator.setDomainEnabled.mock.calls
-        .filter(([, enabled]) => enabled)
+      orchestrator.setScopedDomainEnabled.mock.calls
+        .filter(([, , enabled]) => enabled)
         .map(([domain]) => domain)
     );
     expect(Array.from(initialEnabledDomains)).toEqual(['namespace-workloads']);
 
-    orchestrator.triggerManualRefresh.mockClear();
-    orchestrator.setDomainEnabled.mockClear();
+    orchestrator.fetchScopedDomain.mockClear();
+    orchestrator.setScopedDomainEnabled.mockClear();
 
     await render(
       <NamespaceResourcesProvider namespace="alpha" activeView="config">
@@ -351,13 +368,13 @@ describe('NamespaceResourcesProvider', () => {
     expect(getActiveResource()).toBe('config');
 
     const reenabledDomains = new Set(
-      orchestrator.setDomainEnabled.mock.calls
-        .filter(([, enabled]) => enabled)
+      orchestrator.setScopedDomainEnabled.mock.calls
+        .filter(([, , enabled]) => enabled)
         .map(([domain]) => domain)
     );
     expect(Array.from(reenabledDomains)).toEqual(['namespace-config']);
 
-    const invokedDomains = orchestrator.triggerManualRefresh.mock.calls.map((call) => call[0]);
+    const invokedDomains = orchestrator.fetchScopedDomain.mock.calls.map((call) => call[0]);
     expect(invokedDomains).toContain('namespace-config');
   });
 
