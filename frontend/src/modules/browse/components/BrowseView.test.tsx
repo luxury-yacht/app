@@ -74,7 +74,6 @@ const refreshMocks = vi.hoisted(() => ({
 vi.mock('@/core/refresh', () => ({
   refreshManager: refreshMocks.manager,
   refreshOrchestrator: refreshMocks.orchestrator,
-  useRefreshDomain: () => refreshMocks.catalogDomain,
   useRefreshScopedDomain: () => refreshMocks.catalogDomain,
 }));
 

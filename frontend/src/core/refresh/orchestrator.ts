@@ -31,13 +31,10 @@ import {
   type RefresherTiming,
 } from './refresherConfig';
 import {
-  getDomainState,
   getScopedDomainState,
   markPendingRequest,
   resetAllScopedDomainStates,
-  resetDomainState,
   resetScopedDomainState,
-  setDomainState,
   setScopedDomainState,
 } from './store';
 import type {
@@ -80,7 +77,6 @@ type DomainRegistration<K extends RefreshDomain> = {
   refresherName: RefresherName;
   category: DomainCategory;
   autoStart?: boolean;
-  scoped?: boolean;
   streaming?: StreamingRegistration;
 };
 
@@ -447,12 +443,7 @@ class RefreshOrchestrator {
   }
 
   resetDomain(domain: RefreshDomain): void {
-    const config = this.getConfig(domain);
-    if (config.scoped) {
-      resetAllScopedDomainStates(domain);
-      return;
-    }
-    resetDomainState(domain);
+    resetAllScopedDomainStates(domain);
   }
 
   setScopedDomainEnabled(
@@ -463,9 +454,6 @@ class RefreshOrchestrator {
   ): void {
     const config = this.getConfig(domain);
     const allowRefresher = this.shouldAllowRefresher(config);
-    if (!config.scoped) {
-      throw new Error(`Domain "${domain}" is not scoped`);
-    }
     const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope value`);
@@ -536,10 +524,6 @@ class RefreshOrchestrator {
   }
 
   resetScopedDomain(domain: RefreshDomain, scope: string): void {
-    const config = this.getConfig(domain);
-    if (!config.scoped) {
-      throw new Error(`Domain "${domain}" is not scoped`);
-    }
     const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       return;
@@ -634,7 +618,7 @@ class RefreshOrchestrator {
     scope?: string
   ): Promise<void> {
     const config = this.configs.get(domain);
-    if (!config || !config.scoped) {
+    if (!config) {
       return;
     }
     // Build a cluster-scoped scope string and perform a direct snapshot fetch.
@@ -1141,9 +1125,6 @@ class RefreshOrchestrator {
     options: { signal?: AbortSignal; isManual?: boolean } = {}
   ): Promise<void> {
     const config = this.getConfig(domain);
-    if (!config.scoped) {
-      throw new Error(`Domain "${domain}" is not registered as scoped`);
-    }
     const normalizedScope = this.normalizeScope(scope);
     if (!normalizedScope) {
       throw new Error(`Scoped domain "${domain}" requires a non-empty scope`);
@@ -1479,9 +1460,7 @@ class RefreshOrchestrator {
     scope?: string
   ): DomainPayloadMap[K] {
     if (domain === 'namespaces') {
-      const previous = (scope
-        ? getScopedDomainState('namespaces', scope).data
-        : getDomainState('namespaces').data) as NamespaceSnapshotPayload | null;
+      const previous = getScopedDomainState('namespaces', scope!).data as NamespaceSnapshotPayload | null;
       if (!previous?.namespaces?.length) {
         return payload;
       }
@@ -1620,7 +1599,10 @@ class RefreshOrchestrator {
     }
 
     if (domain === 'namespace-workloads') {
-      const previous = getDomainState('namespace-workloads');
+      if (!scope) {
+        return false;
+      }
+      const previous = getScopedDomainState('namespace-workloads', scope);
       if (!previous.data) {
         return false;
       }
@@ -1648,7 +1630,7 @@ class RefreshOrchestrator {
         ...previous.data,
         workloads: nextWorkloads,
       };
-      setDomainState('namespace-workloads', (prev) => ({
+      setScopedDomainState('namespace-workloads', resolvedScope, (prev) => ({
         ...prev,
         status: 'ready',
         data: nextPayload,
@@ -1661,14 +1643,17 @@ class RefreshOrchestrator {
         lastAutoRefresh: !isManual ? now : prev.lastAutoRefresh,
         error: null,
         isManual,
-        scope: resolvedScope || prev.scope,
+        scope: resolvedScope,
       }));
       this.clearRefreshError(domain, resolvedScope || undefined);
       return true;
     }
 
     if (domain === 'nodes') {
-      const previous = getDomainState('nodes');
+      if (!scope) {
+        return false;
+      }
+      const previous = getScopedDomainState('nodes', scope);
       if (!previous.data) {
         return false;
       }
@@ -1696,7 +1681,7 @@ class RefreshOrchestrator {
         metrics: payload.metrics ?? previous.data.metrics,
         metricsByCluster: payload.metricsByCluster ?? previous.data.metricsByCluster,
       };
-      setDomainState('nodes', (prev) => ({
+      setScopedDomainState('nodes', resolvedScope, (prev) => ({
         ...prev,
         status: 'ready',
         data: nextPayload,
@@ -1709,7 +1694,7 @@ class RefreshOrchestrator {
         lastAutoRefresh: !isManual ? now : prev.lastAutoRefresh,
         error: null,
         isManual,
-        scope: resolvedScope || prev.scope,
+        scope: resolvedScope,
       }));
       this.clearRefreshError(domain, resolvedScope || undefined);
       return true;
@@ -1902,7 +1887,6 @@ refreshOrchestrator.registerDomain({
   domain: 'namespaces',
   refresherName: SYSTEM_REFRESHERS.namespaces,
   category: 'system',
-  scoped: true,
   autoStart: false,
 });
 
@@ -1910,7 +1894,6 @@ refreshOrchestrator.registerDomain({
   domain: 'cluster-overview',
   refresherName: SYSTEM_REFRESHERS.clusterOverview,
   category: 'system',
-  scoped: true,
   autoStart: false,
 });
 
@@ -1918,7 +1901,6 @@ refreshOrchestrator.registerDomain({
   domain: 'nodes',
   refresherName: CLUSTER_REFRESHERS.nodes,
   category: 'cluster',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('nodes', scope),
     stop: (scope, options) => resourceStreamManager.stop('nodes', scope, options?.reset ?? false),
@@ -1931,7 +1913,6 @@ refreshOrchestrator.registerDomain({
   domain: 'object-maintenance',
   refresherName: SYSTEM_REFRESHERS.objectMaintenance,
   category: 'system',
-  scoped: true,
   autoStart: false,
 });
 
@@ -1939,7 +1920,6 @@ refreshOrchestrator.registerDomain({
   domain: 'pods',
   refresherName: SYSTEM_REFRESHERS.unifiedPods,
   category: 'system',
-  scoped: true,
   autoStart: false,
   streaming: {
     start: (scope) => resourceStreamManager.start('pods', scope),
@@ -1953,7 +1933,6 @@ refreshOrchestrator.registerDomain({
   domain: 'object-details',
   refresherName: SYSTEM_REFRESHERS.objectDetails,
   category: 'system',
-  scoped: true,
   autoStart: false,
 });
 
@@ -1961,7 +1940,6 @@ refreshOrchestrator.registerDomain({
   domain: 'object-events',
   refresherName: SYSTEM_REFRESHERS.objectEvents,
   category: 'system',
-  scoped: true,
   autoStart: false,
 });
 
@@ -1969,7 +1947,6 @@ refreshOrchestrator.registerDomain({
   domain: 'object-yaml',
   refresherName: SYSTEM_REFRESHERS.objectYaml,
   category: 'system',
-  scoped: true,
   autoStart: false,
 });
 
@@ -1977,7 +1954,6 @@ refreshOrchestrator.registerDomain({
   domain: 'object-helm-manifest',
   refresherName: SYSTEM_REFRESHERS.objectHelmManifest,
   category: 'system',
-  scoped: true,
   autoStart: false,
 });
 
@@ -1985,7 +1961,6 @@ refreshOrchestrator.registerDomain({
   domain: 'object-helm-values',
   refresherName: SYSTEM_REFRESHERS.objectHelmValues,
   category: 'system',
-  scoped: true,
   autoStart: false,
 });
 
@@ -1993,7 +1968,6 @@ refreshOrchestrator.registerDomain({
   domain: 'object-logs',
   refresherName: SYSTEM_REFRESHERS.objectLogs,
   category: 'system',
-  scoped: true,
   autoStart: false,
   streaming: {
     start: (scope) => logStreamManager.startStream(scope),
@@ -2006,7 +1980,6 @@ refreshOrchestrator.registerDomain({
   domain: 'catalog',
   refresherName: CLUSTER_REFRESHERS.browse,
   category: 'cluster',
-  scoped: true,
   streaming: {
     start: (scope) => catalogStreamManager.start(scope),
     stop: (_scope, options) => catalogStreamManager.stop(options?.reset ?? false),
@@ -2019,7 +1992,6 @@ refreshOrchestrator.registerDomain({
   domain: 'catalog-diff',
   refresherName: CLUSTER_REFRESHERS.catalogDiff,
   category: 'cluster',
-  scoped: true,
   autoStart: false,
 });
 
@@ -2027,7 +1999,6 @@ refreshOrchestrator.registerDomain({
   domain: 'cluster-rbac',
   refresherName: CLUSTER_REFRESHERS.rbac,
   category: 'cluster',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('cluster-rbac', scope),
     stop: (scope, options) =>
@@ -2042,7 +2013,6 @@ refreshOrchestrator.registerDomain({
   domain: 'cluster-storage',
   refresherName: CLUSTER_REFRESHERS.storage,
   category: 'cluster',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('cluster-storage', scope),
     stop: (scope, options) =>
@@ -2057,7 +2027,6 @@ refreshOrchestrator.registerDomain({
   domain: 'cluster-config',
   refresherName: CLUSTER_REFRESHERS.config,
   category: 'cluster',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('cluster-config', scope),
     stop: (scope, options) =>
@@ -2072,7 +2041,6 @@ refreshOrchestrator.registerDomain({
   domain: 'cluster-crds',
   refresherName: CLUSTER_REFRESHERS.crds,
   category: 'cluster',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('cluster-crds', scope),
     stop: (scope, options) =>
@@ -2087,7 +2055,6 @@ refreshOrchestrator.registerDomain({
   domain: 'cluster-custom',
   refresherName: CLUSTER_REFRESHERS.custom,
   category: 'cluster',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('cluster-custom', scope),
     stop: (scope, options) =>
@@ -2102,7 +2069,6 @@ refreshOrchestrator.registerDomain({
   domain: 'cluster-events',
   refresherName: CLUSTER_REFRESHERS.events,
   category: 'cluster',
-  scoped: true,
   streaming: {
     start: (scope) => eventStreamManager.startCluster(scope),
     stop: (scope, options) => eventStreamManager.stopCluster(scope, options?.reset ?? false),
@@ -2116,7 +2082,6 @@ refreshOrchestrator.registerDomain({
   domain: 'namespace-workloads',
   refresherName: NAMESPACE_REFRESHERS.workloads,
   category: 'namespace',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('namespace-workloads', scope),
     stop: (scope, options) =>
@@ -2130,7 +2095,6 @@ refreshOrchestrator.registerDomain({
   domain: 'namespace-config',
   refresherName: NAMESPACE_REFRESHERS.config,
   category: 'namespace',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('namespace-config', scope),
     stop: (scope, options) =>
@@ -2145,7 +2109,6 @@ refreshOrchestrator.registerDomain({
   domain: 'namespace-network',
   refresherName: NAMESPACE_REFRESHERS.network,
   category: 'namespace',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('namespace-network', scope),
     stop: (scope, options) =>
@@ -2159,7 +2122,6 @@ refreshOrchestrator.registerDomain({
   domain: 'namespace-rbac',
   refresherName: NAMESPACE_REFRESHERS.rbac,
   category: 'namespace',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('namespace-rbac', scope),
     stop: (scope, options) =>
@@ -2174,7 +2136,6 @@ refreshOrchestrator.registerDomain({
   domain: 'namespace-storage',
   refresherName: NAMESPACE_REFRESHERS.storage,
   category: 'namespace',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('namespace-storage', scope),
     stop: (scope, options) =>
@@ -2188,7 +2149,6 @@ refreshOrchestrator.registerDomain({
   domain: 'namespace-autoscaling',
   refresherName: NAMESPACE_REFRESHERS.autoscaling,
   category: 'namespace',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('namespace-autoscaling', scope),
     stop: (scope, options) =>
@@ -2203,7 +2163,6 @@ refreshOrchestrator.registerDomain({
   domain: 'namespace-quotas',
   refresherName: NAMESPACE_REFRESHERS.quotas,
   category: 'namespace',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('namespace-quotas', scope),
     stop: (scope, options) =>
@@ -2217,7 +2176,6 @@ refreshOrchestrator.registerDomain({
   domain: 'namespace-events',
   refresherName: NAMESPACE_REFRESHERS.events,
   category: 'namespace',
-  scoped: true,
   streaming: {
     start: (scope) => eventStreamManager.startNamespace(scope),
     stop: (scope, options) => eventStreamManager.stopNamespace(scope, options?.reset ?? false),
@@ -2231,7 +2189,6 @@ refreshOrchestrator.registerDomain({
   domain: 'namespace-custom',
   refresherName: NAMESPACE_REFRESHERS.custom,
   category: 'namespace',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('namespace-custom', scope),
     stop: (scope, options) =>
@@ -2246,7 +2203,6 @@ refreshOrchestrator.registerDomain({
   domain: 'namespace-helm',
   refresherName: NAMESPACE_REFRESHERS.helm,
   category: 'namespace',
-  scoped: true,
   streaming: {
     start: (scope) => resourceStreamManager.start('namespace-helm', scope),
     stop: (scope, options) =>

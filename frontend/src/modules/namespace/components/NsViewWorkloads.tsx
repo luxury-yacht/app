@@ -8,7 +8,9 @@
 import './NsViewWorkloads.css';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
-import { useRefreshDomain } from '@/core/refresh';
+import { useRefreshScopedDomain } from '@/core/refresh';
+import { buildClusterScopeList } from '@/core/refresh/clusterScope';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
@@ -71,7 +73,10 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
-    const nodesDomain = useRefreshDomain('nodes');
+    const { selectedClusterIds } = useKubeconfig();
+    // Build scoped key for multi-cluster node metrics lookup.
+    const nodesScope = useMemo(() => buildClusterScopeList(selectedClusterIds, ''), [selectedClusterIds]);
+    const nodesDomain = useRefreshScopedDomain('nodes', nodesScope);
     const metricsInfo = metrics ?? nodesDomain.data?.metrics ?? null;
 
     const [restartConfirm, setRestartConfirm] = useState<{

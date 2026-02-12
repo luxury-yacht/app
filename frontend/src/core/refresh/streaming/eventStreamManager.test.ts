@@ -24,7 +24,7 @@ vi.mock('@utils/errorHandler', () => ({
   errorHandler: errorHandlerMock,
 }));
 
-import { getDomainState, resetDomainState } from '../store';
+import { getScopedDomainState, resetAllScopedDomainStates } from '../store';
 
 const flushTimers = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -41,8 +41,8 @@ beforeEach(() => {
       writable: true,
     });
   }
-  resetDomainState('cluster-events');
-  resetDomainState('namespace-events');
+  resetAllScopedDomainStates('cluster-events');
+  resetAllScopedDomainStates('namespace-events');
 });
 
 afterEach(() => {
@@ -85,7 +85,7 @@ describe('EventStreamManager', () => {
 
     await flushTimers();
 
-    const state = getDomainState('cluster-events');
+    const state = getScopedDomainState('cluster-events', 'cluster');
     expect(state.status).toBe('ready');
     expect(state.data?.events).toHaveLength(1);
     expect(state.data?.events?.[0].message).toBe('Container started');
@@ -122,7 +122,7 @@ describe('EventStreamManager', () => {
 
     await flushTimers();
 
-    const state = getDomainState('namespace-events');
+    const state = getScopedDomainState('namespace-events', 'default');
     expect(state.status).toBe('ready');
     expect(state.data?.events).toHaveLength(1);
     expect(state.data?.events?.[0].reason).toBe('Backoff');
@@ -146,7 +146,7 @@ describe('EventStreamManager', () => {
 
     await flushTimers();
 
-    const state = getDomainState('cluster-events');
+    const state = getScopedDomainState('cluster-events', 'cluster');
     expect(state.status).toBe('idle');
     expect(state.data).toBeNull();
   });
@@ -172,7 +172,7 @@ describe('EventStreamManager', () => {
 
     await flushTimers();
 
-    const state = getDomainState('cluster-events');
+    const state = getScopedDomainState('cluster-events', 'cluster');
     expect(state.status).toBe('error');
     expect(state.error).toBe('permission denied (domain cluster-events, resource core/events)');
   });
@@ -183,19 +183,19 @@ describe('EventStreamManager', () => {
 
     manager.handleStreamError('cluster-events', 'cluster', 'stream disconnected');
     manager.handleStreamError('cluster-events', 'cluster', 'stream disconnected');
-    const clusterState = getDomainState('cluster-events');
+    const clusterState = getScopedDomainState('cluster-events', 'cluster');
     expect(clusterState.status).toBe('updating');
     expect(clusterState.error).toBe('Stream resyncing');
 
     manager.handleStreamError('cluster-events', 'cluster', 'stream disconnected');
-    const clusterStateTerminal = getDomainState('cluster-events');
+    const clusterStateTerminal = getScopedDomainState('cluster-events', 'cluster');
     expect(clusterStateTerminal.status).toBe('error');
     expect(clusterStateTerminal.error).toBe('stream disconnected');
 
     manager.handleStreamError('namespace-events', 'default', 'namespace stream error');
     manager.handleStreamError('namespace-events', 'default', 'namespace stream error');
     manager.handleStreamError('namespace-events', 'default', 'namespace stream error');
-    const nsState = getDomainState('namespace-events');
+    const nsState = getScopedDomainState('namespace-events', 'default');
     expect(nsState.status).toBe('error');
     expect(nsState.error).toBe('namespace stream error');
   });
@@ -245,7 +245,7 @@ describe('EventStreamManager', () => {
     await vi.runOnlyPendingTimersAsync();
     expect(updateSpy).toHaveBeenCalledTimes(1);
 
-    const state = getDomainState('namespace-events');
+    const state = getScopedDomainState('namespace-events', 'namespace:dev');
     expect(state.data?.events?.[0].message).toBe('Updated');
 
     vi.useRealTimers();
@@ -260,7 +260,7 @@ describe('EventStreamManager', () => {
     expect(errorHandlerMock.handle).toHaveBeenCalledTimes(0);
 
     (manager as any).markIdle('cluster-events', 'cluster', true);
-    const state = getDomainState('cluster-events');
+    const state = getScopedDomainState('cluster-events', 'cluster');
     expect(state.status).toBe('idle');
   });
 
@@ -288,7 +288,7 @@ describe('EventStreamManager', () => {
     await flushTimers();
 
     manager.stopNamespace('namespace:default', true);
-    expect(getDomainState('namespace-events').data).toBeNull();
+    expect(getScopedDomainState('namespace-events', 'namespace:default').data).toBeNull();
   });
 
   test('stopAll reset clears both cluster and namespace caches', async () => {
@@ -317,8 +317,8 @@ describe('EventStreamManager', () => {
     await flushTimers();
 
     manager.stopAll(true);
-    expect(getDomainState('cluster-events').data).toBeNull();
-    expect(getDomainState('namespace-events').data).toBeNull();
+    expect(getScopedDomainState('cluster-events', 'cluster').data).toBeNull();
+    expect(getScopedDomainState('namespace-events', 'namespace:default').data).toBeNull();
   });
 
   test('retries event streams with exponential backoff and clears errors when connected', async () => {
@@ -386,7 +386,7 @@ describe('EventStreamManager', () => {
     expect(ensureRefreshBaseURLMock).toHaveBeenCalledTimes(3);
     expect(MockEventSource.instances).toHaveLength(1);
 
-    const latestState = getDomainState('cluster-events');
+    const latestState = getScopedDomainState('cluster-events', 'cluster');
     expect(latestState.error).toBeNull();
     expect(latestState.status).toBe('ready');
 
@@ -465,7 +465,7 @@ describe('EventStreamManager', () => {
     expect(MockEventSource.instances).toHaveLength(1);
     expect(MockEventSource.instances[0]?.url).toContain('scope=namespace%3Aprod');
 
-    const namespaceState = getDomainState('namespace-events');
+    const namespaceState = getScopedDomainState('namespace-events', 'namespace:prod');
     expect(namespaceState.error).toBeNull();
     expect(namespaceState.status).toBe('ready');
 
@@ -604,14 +604,14 @@ describe('EventStreamManager', () => {
     });
 
     await flushTimers();
-    expect(getDomainState('cluster-events').status).toBe('ready');
-    expect(getDomainState('namespace-events').status).toBe('ready');
+    expect(getScopedDomainState('cluster-events', 'cluster').status).toBe('ready');
+    expect(getScopedDomainState('namespace-events', 'namespace:dev').status).toBe('ready');
 
     (manager as any).namespaceScope = 'namespace:dev';
     manager.stopAll(true);
 
-    const clusterState = getDomainState('cluster-events');
-    const namespaceState = getDomainState('namespace-events');
+    const clusterState = getScopedDomainState('cluster-events', 'cluster');
+    const namespaceState = getScopedDomainState('namespace-events', 'namespace:dev');
 
     expect(clusterState.status).toBe('idle');
     expect(clusterState.data).toBeNull();
@@ -642,7 +642,7 @@ describe('EventStreamManager', () => {
 
     await flushTimers();
 
-    const state = getDomainState('namespace-events');
+    const state = getScopedDomainState('namespace-events', 'namespace:qa');
     expect(state.status).toBe('error');
     expect(state.error).toBe('namespace failure');
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(
@@ -674,7 +674,7 @@ describe('EventStreamManager', () => {
 
     await flushTimers();
 
-    const state = getDomainState('cluster-events');
+    const state = getScopedDomainState('cluster-events', 'cluster');
     expect(state.status).toBe('error');
     expect(state.error).toBe('cluster failure');
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(
@@ -697,7 +697,7 @@ describe('EventStreamManager', () => {
     });
 
     await flushTimers();
-    const state = getDomainState('namespace-events');
+    const state = getScopedDomainState('namespace-events', 'namespace:staging');
     expect(state.data).toBeNull();
     expect(state.status).toBe('idle');
   });

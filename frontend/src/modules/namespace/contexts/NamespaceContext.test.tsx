@@ -38,12 +38,6 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: mockRefreshOrchestrator,
-  useRefreshDomain: (domain: string) => {
-    if (domain !== 'namespaces') {
-      throw new Error(`Unexpected domain requested in test: ${domain}`);
-    }
-    return namespaceDomainRef.current;
-  },
   useRefreshScopedDomain: (domain: string) => {
     if (domain !== 'namespaces') {
       throw new Error(`Unexpected scoped domain requested in test: ${domain}`);

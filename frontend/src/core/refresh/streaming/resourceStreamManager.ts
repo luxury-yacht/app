@@ -11,7 +11,7 @@ import {
   type Snapshot,
   type SnapshotStats,
 } from '../client';
-import { setDomainState, setScopedDomainState } from '../store';
+import { setScopedDomainState } from '../store';
 import type {
   ClusterNodeSnapshotEntry,
   ClusterNodeSnapshotPayload,
@@ -1740,7 +1740,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-workloads') {
-      setDomainState('namespace-workloads', (previous) => {
+      setScopedDomainState('namespace-workloads', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { workloads: [] };
         const existingRows = currentPayload.workloads ?? [];
         const byKey = new Map(
@@ -1793,7 +1793,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-config') {
-      setDomainState('namespace-config', (previous) => {
+      setScopedDomainState('namespace-config', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
@@ -1844,7 +1844,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-network') {
-      setDomainState('namespace-network', (previous) => {
+      setScopedDomainState('namespace-network', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
@@ -1895,7 +1895,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-rbac') {
-      setDomainState('namespace-rbac', (previous) => {
+      setScopedDomainState('namespace-rbac', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
@@ -1946,7 +1946,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-custom') {
-      setDomainState('namespace-custom', (previous) => {
+      setScopedDomainState('namespace-custom', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
@@ -1997,7 +1997,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-helm') {
-      setDomainState('namespace-helm', (previous) => {
+      setScopedDomainState('namespace-helm', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { releases: [] };
         const existingRows = currentPayload.releases ?? [];
         const byKey = new Map(
@@ -2042,7 +2042,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-autoscaling') {
-      setDomainState('namespace-autoscaling', (previous) => {
+      setScopedDomainState('namespace-autoscaling', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
@@ -2093,7 +2093,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-quotas') {
-      setDomainState('namespace-quotas', (previous) => {
+      setScopedDomainState('namespace-quotas', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
@@ -2144,7 +2144,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-storage') {
-      setDomainState('namespace-storage', (previous) => {
+      setScopedDomainState('namespace-storage', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
@@ -2195,7 +2195,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-rbac') {
-      setDomainState('cluster-rbac', (previous) => {
+      setScopedDomainState('cluster-rbac', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
@@ -2240,7 +2240,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-storage') {
-      setDomainState('cluster-storage', (previous) => {
+      setScopedDomainState('cluster-storage', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { volumes: [] };
         const existingRows = currentPayload.volumes ?? [];
         const byKey = new Map(
@@ -2284,7 +2284,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-config') {
-      setDomainState('cluster-config', (previous) => {
+      setScopedDomainState('cluster-config', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
@@ -2329,7 +2329,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-crds') {
-      setDomainState('cluster-crds', (previous) => {
+      setScopedDomainState('cluster-crds', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { definitions: [] };
         const existingRows = currentPayload.definitions ?? [];
         const byKey = new Map(
@@ -2373,7 +2373,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-custom') {
-      setDomainState('cluster-custom', (previous) => {
+      setScopedDomainState('cluster-custom', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { resources: [] };
         const existingRows = currentPayload.resources ?? [];
         const byKey = new Map(
@@ -2418,7 +2418,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'nodes') {
-      setDomainState('nodes', (previous) => {
+      setScopedDomainState('nodes', subscription.reportScope, (previous) => {
         const currentPayload = previous.data ?? { nodes: [] };
         const existingRows = currentPayload.nodes ?? [];
         const byKey = new Map(
@@ -2885,7 +2885,7 @@ export class ResourceStreamManager {
       const payload = snapshot.payload as NamespaceWorkloadSnapshotPayload;
       // Multi-cluster snapshots must merge per-cluster rows into the shared scope.
       const shouldMerge = isMultiClusterScope(subscription.reportScope);
-      setDomainState('namespace-workloads', (previous) => {
+      setScopedDomainState('namespace-workloads', subscription.reportScope, (previous) => {
         const incoming = payload.workloads ?? [];
         const merged = shouldMerge
           ? mergeClusterRows(previous.data?.workloads, incoming, subscription.clusterId)
@@ -2914,7 +2914,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-config') {
       const payload = snapshot.payload as NamespaceConfigSnapshotPayload;
-      setDomainState('namespace-config', (previous) => ({
+      setScopedDomainState('namespace-config', subscription.reportScope, (previous) => ({
         ...previous,
         status: 'ready',
         data: payload,
@@ -2934,7 +2934,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-network') {
       const payload = snapshot.payload as NamespaceNetworkSnapshotPayload;
-      setDomainState('namespace-network', (previous) => ({
+      setScopedDomainState('namespace-network', subscription.reportScope, (previous) => ({
         ...previous,
         status: 'ready',
         data: payload,
@@ -2954,7 +2954,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-rbac') {
       const payload = snapshot.payload as NamespaceRBACSnapshotPayload;
-      setDomainState('namespace-rbac', (previous) => ({
+      setScopedDomainState('namespace-rbac', subscription.reportScope, (previous) => ({
         ...previous,
         status: 'ready',
         data: payload,
@@ -2974,7 +2974,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-custom') {
       const payload = snapshot.payload as NamespaceCustomSnapshotPayload;
-      setDomainState('namespace-custom', (previous) => ({
+      setScopedDomainState('namespace-custom', subscription.reportScope, (previous) => ({
         ...previous,
         status: 'ready',
         data: payload,
@@ -2994,7 +2994,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-helm') {
       const payload = snapshot.payload as NamespaceHelmSnapshotPayload;
-      setDomainState('namespace-helm', (previous) => ({
+      setScopedDomainState('namespace-helm', subscription.reportScope, (previous) => ({
         ...previous,
         status: 'ready',
         data: payload,
@@ -3014,7 +3014,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-autoscaling') {
       const payload = snapshot.payload as NamespaceAutoscalingSnapshotPayload;
-      setDomainState('namespace-autoscaling', (previous) => ({
+      setScopedDomainState('namespace-autoscaling', subscription.reportScope, (previous) => ({
         ...previous,
         status: 'ready',
         data: payload,
@@ -3034,7 +3034,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-quotas') {
       const payload = snapshot.payload as NamespaceQuotasSnapshotPayload;
-      setDomainState('namespace-quotas', (previous) => ({
+      setScopedDomainState('namespace-quotas', subscription.reportScope, (previous) => ({
         ...previous,
         status: 'ready',
         data: payload,
@@ -3054,7 +3054,7 @@ export class ResourceStreamManager {
 
     if (subscription.domain === 'namespace-storage') {
       const payload = snapshot.payload as NamespaceStorageSnapshotPayload;
-      setDomainState('namespace-storage', (previous) => ({
+      setScopedDomainState('namespace-storage', subscription.reportScope, (previous) => ({
         ...previous,
         status: 'ready',
         data: payload,
@@ -3075,7 +3075,7 @@ export class ResourceStreamManager {
     if (subscription.domain === 'cluster-rbac') {
       const payload = snapshot.payload as ClusterRBACSnapshotPayload;
       const shouldMerge = isMultiClusterScope(subscription.reportScope);
-      setDomainState('cluster-rbac', (previous) => {
+      setScopedDomainState('cluster-rbac', subscription.reportScope, (previous) => {
         const incoming = payload.resources ?? [];
         const merged = shouldMerge
           ? mergeClusterRows(previous.data?.resources, incoming, subscription.clusterId)
@@ -3105,7 +3105,7 @@ export class ResourceStreamManager {
     if (subscription.domain === 'cluster-storage') {
       const payload = snapshot.payload as ClusterStorageSnapshotPayload;
       const shouldMerge = isMultiClusterScope(subscription.reportScope);
-      setDomainState('cluster-storage', (previous) => {
+      setScopedDomainState('cluster-storage', subscription.reportScope, (previous) => {
         const incoming = payload.volumes ?? [];
         const merged = shouldMerge
           ? mergeClusterRows(previous.data?.volumes, incoming, subscription.clusterId)
@@ -3135,7 +3135,7 @@ export class ResourceStreamManager {
     if (subscription.domain === 'cluster-config') {
       const payload = snapshot.payload as ClusterConfigSnapshotPayload;
       const shouldMerge = isMultiClusterScope(subscription.reportScope);
-      setDomainState('cluster-config', (previous) => {
+      setScopedDomainState('cluster-config', subscription.reportScope, (previous) => {
         const incoming = payload.resources ?? [];
         const merged = shouldMerge
           ? mergeClusterRows(previous.data?.resources, incoming, subscription.clusterId)
@@ -3165,7 +3165,7 @@ export class ResourceStreamManager {
     if (subscription.domain === 'cluster-crds') {
       const payload = snapshot.payload as ClusterCRDSnapshotPayload;
       const shouldMerge = isMultiClusterScope(subscription.reportScope);
-      setDomainState('cluster-crds', (previous) => {
+      setScopedDomainState('cluster-crds', subscription.reportScope, (previous) => {
         const incoming = payload.definitions ?? [];
         const merged = shouldMerge
           ? mergeClusterRows(previous.data?.definitions, incoming, subscription.clusterId)
@@ -3195,7 +3195,7 @@ export class ResourceStreamManager {
     if (subscription.domain === 'cluster-custom') {
       const payload = snapshot.payload as ClusterCustomSnapshotPayload;
       const shouldMerge = isMultiClusterScope(subscription.reportScope);
-      setDomainState('cluster-custom', (previous) => {
+      setScopedDomainState('cluster-custom', subscription.reportScope, (previous) => {
         const incoming = payload.resources ?? [];
         const merged = shouldMerge
           ? mergeClusterRows(previous.data?.resources, incoming, subscription.clusterId)
@@ -3225,7 +3225,7 @@ export class ResourceStreamManager {
     if (subscription.domain === 'nodes') {
       const payload = snapshot.payload as ClusterNodeSnapshotPayload;
       const shouldMerge = isMultiClusterScope(subscription.reportScope);
-      setDomainState('nodes', (previous) => {
+      setScopedDomainState('nodes', subscription.reportScope, (previous) => {
         const incoming = payload.nodes ?? [];
         const merged = shouldMerge
           ? mergeClusterRows(previous.data?.nodes, incoming, subscription.clusterId)
@@ -3412,7 +3412,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-workloads') {
-      setDomainState('namespace-workloads', (previous) => ({
+      setScopedDomainState('namespace-workloads', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3425,7 +3425,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-config') {
-      setDomainState('namespace-config', (previous) => ({
+      setScopedDomainState('namespace-config', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3438,7 +3438,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-network') {
-      setDomainState('namespace-network', (previous) => ({
+      setScopedDomainState('namespace-network', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3451,7 +3451,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-rbac') {
-      setDomainState('namespace-rbac', (previous) => ({
+      setScopedDomainState('namespace-rbac', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3464,7 +3464,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-custom') {
-      setDomainState('namespace-custom', (previous) => ({
+      setScopedDomainState('namespace-custom', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3477,7 +3477,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-helm') {
-      setDomainState('namespace-helm', (previous) => ({
+      setScopedDomainState('namespace-helm', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3490,7 +3490,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-autoscaling') {
-      setDomainState('namespace-autoscaling', (previous) => ({
+      setScopedDomainState('namespace-autoscaling', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3503,7 +3503,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-quotas') {
-      setDomainState('namespace-quotas', (previous) => ({
+      setScopedDomainState('namespace-quotas', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3516,7 +3516,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-storage') {
-      setDomainState('namespace-storage', (previous) => ({
+      setScopedDomainState('namespace-storage', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3529,7 +3529,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-rbac') {
-      setDomainState('cluster-rbac', (previous) => ({
+      setScopedDomainState('cluster-rbac', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3542,7 +3542,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-storage') {
-      setDomainState('cluster-storage', (previous) => ({
+      setScopedDomainState('cluster-storage', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3555,7 +3555,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-config') {
-      setDomainState('cluster-config', (previous) => ({
+      setScopedDomainState('cluster-config', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3568,7 +3568,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-crds') {
-      setDomainState('cluster-crds', (previous) => ({
+      setScopedDomainState('cluster-crds', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3581,7 +3581,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-custom') {
-      setDomainState('cluster-custom', (previous) => ({
+      setScopedDomainState('cluster-custom', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3594,7 +3594,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'nodes') {
-      setDomainState('nodes', (previous) => ({
+      setScopedDomainState('nodes', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'ready' : 'idle',
         error: null,
@@ -3619,7 +3619,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-workloads') {
-      setDomainState('namespace-workloads', (previous) => ({
+      setScopedDomainState('namespace-workloads', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3629,7 +3629,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-config') {
-      setDomainState('namespace-config', (previous) => ({
+      setScopedDomainState('namespace-config', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3639,7 +3639,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-network') {
-      setDomainState('namespace-network', (previous) => ({
+      setScopedDomainState('namespace-network', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3649,7 +3649,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-rbac') {
-      setDomainState('namespace-rbac', (previous) => ({
+      setScopedDomainState('namespace-rbac', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3659,7 +3659,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-custom') {
-      setDomainState('namespace-custom', (previous) => ({
+      setScopedDomainState('namespace-custom', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3669,7 +3669,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-helm') {
-      setDomainState('namespace-helm', (previous) => ({
+      setScopedDomainState('namespace-helm', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3679,7 +3679,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-autoscaling') {
-      setDomainState('namespace-autoscaling', (previous) => ({
+      setScopedDomainState('namespace-autoscaling', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3689,7 +3689,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-quotas') {
-      setDomainState('namespace-quotas', (previous) => ({
+      setScopedDomainState('namespace-quotas', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3699,7 +3699,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'namespace-storage') {
-      setDomainState('namespace-storage', (previous) => ({
+      setScopedDomainState('namespace-storage', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3709,7 +3709,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-rbac') {
-      setDomainState('cluster-rbac', (previous) => ({
+      setScopedDomainState('cluster-rbac', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3719,7 +3719,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-storage') {
-      setDomainState('cluster-storage', (previous) => ({
+      setScopedDomainState('cluster-storage', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3729,7 +3729,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-config') {
-      setDomainState('cluster-config', (previous) => ({
+      setScopedDomainState('cluster-config', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3739,7 +3739,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-crds') {
-      setDomainState('cluster-crds', (previous) => ({
+      setScopedDomainState('cluster-crds', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3749,7 +3749,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'cluster-custom') {
-      setDomainState('cluster-custom', (previous) => ({
+      setScopedDomainState('cluster-custom', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3759,7 +3759,7 @@ export class ResourceStreamManager {
     }
 
     if (subscription.domain === 'nodes') {
-      setDomainState('nodes', (previous) => ({
+      setScopedDomainState('nodes', subscription.reportScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'initialising',
         error: message,
@@ -3783,105 +3783,105 @@ export class ResourceStreamManager {
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-workloads') {
-      setDomainState('namespace-workloads', (previous) => ({
+      setScopedDomainState('namespace-workloads', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-config') {
-      setDomainState('namespace-config', (previous) => ({
+      setScopedDomainState('namespace-config', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-network') {
-      setDomainState('namespace-network', (previous) => ({
+      setScopedDomainState('namespace-network', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-rbac') {
-      setDomainState('namespace-rbac', (previous) => ({
+      setScopedDomainState('namespace-rbac', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-custom') {
-      setDomainState('namespace-custom', (previous) => ({
+      setScopedDomainState('namespace-custom', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-helm') {
-      setDomainState('namespace-helm', (previous) => ({
+      setScopedDomainState('namespace-helm', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'cluster-rbac') {
-      setDomainState('cluster-rbac', (previous) => ({
+      setScopedDomainState('cluster-rbac', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'cluster-storage') {
-      setDomainState('cluster-storage', (previous) => ({
+      setScopedDomainState('cluster-storage', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'cluster-config') {
-      setDomainState('cluster-config', (previous) => ({
+      setScopedDomainState('cluster-config', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'cluster-crds') {
-      setDomainState('cluster-crds', (previous) => ({
+      setScopedDomainState('cluster-crds', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'cluster-custom') {
-      setDomainState('cluster-custom', (previous) => ({
+      setScopedDomainState('cluster-custom', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-autoscaling') {
-      setDomainState('namespace-autoscaling', (previous) => ({
+      setScopedDomainState('namespace-autoscaling', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-quotas') {
-      setDomainState('namespace-quotas', (previous) => ({
+      setScopedDomainState('namespace-quotas', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'namespace-storage') {
-      setDomainState('namespace-storage', (previous) => ({
+      setScopedDomainState('namespace-storage', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,
         scope: subscription.reportScope,
       }));
     } else if (subscription.domain === 'nodes') {
-      setDomainState('nodes', (previous) => ({
+      setScopedDomainState('nodes', subscription.reportScope, (previous) => ({
         ...previous,
         status: isTerminal ? 'error' : previous.status,
         error: isTerminal ? message : previous.error,

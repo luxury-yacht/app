@@ -20,7 +20,6 @@ const {
   domainStates,
   scopedStates,
   contextRef,
-  getDomainState,
 } = vi.hoisted(() => {
   const orchestratorMock = {
     updateContext: vi.fn(),
@@ -77,7 +76,6 @@ const {
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: orchestrator,
-  useRefreshDomain: (domain: string) => getDomainState(domain),
   useRefreshScopedDomain: (_domain: string, scope: string) =>
     scopedStates[scope] ?? { status: 'idle', data: null, error: null, lastUpdated: null },
   useRefreshScopedDomainStates: () => scopedStates,

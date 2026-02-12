@@ -11,7 +11,8 @@ import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
-import { useRefreshDomain } from '@/core/refresh';
+import { useRefreshScopedDomain } from '@/core/refresh';
+import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -46,14 +47,16 @@ interface NodesViewProps {
 const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
-    const { selectedClusterId } = useKubeconfig();
+    const { selectedClusterId, selectedClusterIds } = useKubeconfig();
     // Metadata-aware search: when toggled on, includes labels and annotations.
     const { searchActions, getSearchText } = useMetadataSearch<ClusterNodeRow>({
       getDefaultValues: useCallback((row: ClusterNodeRow) => [row.name, row.kind], []),
       getMetadataMaps: useCallback((row: ClusterNodeRow) => [row.labels, row.annotations], []),
     });
     const useShortResourceNames = useShortNames();
-    const nodesDomain = useRefreshDomain('nodes');
+    // Build scoped key for multi-cluster node metrics lookup.
+    const nodesScope = useMemo(() => buildClusterScopeList(selectedClusterIds, ''), [selectedClusterIds]);
+    const nodesDomain = useRefreshScopedDomain('nodes', nodesScope);
     const metricsInfo = useMemo(() => {
       const metricsByCluster = nodesDomain.data?.metricsByCluster;
       if (metricsByCluster) {

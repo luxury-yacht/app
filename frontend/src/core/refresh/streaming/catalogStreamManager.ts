@@ -8,7 +8,7 @@
 import { ensureRefreshBaseURL } from '../client';
 import { refreshManager } from '../RefreshManager';
 import { CLUSTER_REFRESHERS } from '../refresherTypes';
-import { resetDomainState, setDomainState } from '../store';
+import { resetScopedDomainState, setScopedDomainState } from '../store';
 import type { CatalogStreamEventPayload } from '../types';
 import type { CatalogStreamMergeResult } from './catalogStreamMerge';
 import { CatalogStreamMergeQueue } from './catalogStreamMerge';
@@ -173,8 +173,11 @@ class CatalogStreamManager {
       this.eventSource = null;
     }
     if (reset) {
+      // Guard: scope is set to null after reset, so capture before clearing.
+      if (this.scope) {
+        resetScopedDomainState('catalog', this.scope);
+      }
       this.scope = null;
-      resetDomainState('catalog');
     }
   }
 
@@ -295,7 +298,7 @@ class CatalogStreamManager {
     const ready = result.ready;
     const timestamp = result.generatedAt ?? Date.now();
 
-    setDomainState('catalog', (previous) => {
+    setScopedDomainState('catalog', scope!, (previous) => {
       if (result.reset) {
         return {
           status: ready ? 'ready' : 'updating',

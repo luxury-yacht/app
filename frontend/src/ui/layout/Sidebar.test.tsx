@@ -36,7 +36,7 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
 }));
 
 vi.mock('@core/refresh', () => ({
-  useRefreshDomain: () => ({ status: 'idle', data: null, stats: null, error: null, droppedAutoRefreshes: 0, scope: undefined }),
+  useRefreshScopedDomain: () => ({ status: 'idle', data: null, stats: null, error: null, droppedAutoRefreshes: 0, scope: undefined }),
   useRefreshScopedDomainStates: () => refreshMocks.catalogScopedStates,
 }));
 

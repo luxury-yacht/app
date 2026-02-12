@@ -8,8 +8,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './DiagnosticsPanel.css';
 import { DockablePanel } from '@components/dockable';
-import { useRefreshDomain, useRefreshState, useRefreshScopedDomainEntries, type DomainSnapshotState } from '../store';
-// useRefreshDomain is still needed for object-maintenance (non-scoped system domain)
+import { useRefreshState, useRefreshScopedDomainEntries, type DomainSnapshotState } from '../store';
 import type {
   RefreshDomain,
   NodeMetricsInfo,
@@ -198,8 +197,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     'refresh-domains' | 'streams' | 'capability-checks' | 'effective-permissions'
   >('refresh-domains');
   const refreshState = useRefreshState();
-  const objectMaintenanceDomain = useRefreshDomain('object-maintenance');
   // Scoped domains — read all scope entries for diagnostics.
+  const objectMaintenanceScopeEntries = useRefreshScopedDomainEntries('object-maintenance');
   const namespaceScopeEntries = useRefreshScopedDomainEntries('namespaces');
   const clusterOverviewScopeEntries = useRefreshScopedDomainEntries('cluster-overview');
   const nodeScopeEntries = useRefreshScopedDomainEntries('nodes');
@@ -349,7 +348,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       {
         domain: 'object-maintenance' as RefreshDomain,
         label: 'ObjPanel - Maintenance',
-        state: objectMaintenanceDomain,
+        state: pickFirstScopeState(objectMaintenanceScopeEntries),
       },
       {
         domain: 'catalog' as RefreshDomain,
@@ -423,7 +422,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       },
     ],
     [
-      objectMaintenanceDomain,
+      objectMaintenanceScopeEntries,
       pickFirstScopeState,
       namespaceScopeEntries,
       clusterOverviewScopeEntries,
