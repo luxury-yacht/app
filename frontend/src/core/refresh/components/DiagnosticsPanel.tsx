@@ -1637,6 +1637,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       priorityRows.find((row) => row.domain === domain)
     ).filter(Boolean) as typeof priorityRows;
 
+    // Sort all rows alphabetically by the Domain label.
     return [
       ...sortedPriorityRows,
       podSummaryRow,
@@ -1646,7 +1647,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       clusterEventsRow,
       namespaceEventsRow,
       ...remainingRows,
-    ];
+    ].sort((a, b) => a.label.localeCompare(b.label));
   }, [
     domainStates,
     podScopeEntries,
