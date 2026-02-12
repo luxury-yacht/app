@@ -33,7 +33,6 @@ import {
 import {
   getDomainState,
   getScopedDomainState,
-  incrementDroppedAutoRefresh,
   markPendingRequest,
   resetAllScopedDomainStates,
   resetDomainState,
@@ -80,7 +79,6 @@ type DomainRegistration<K extends RefreshDomain> = {
   domain: K;
   refresherName: RefresherName;
   category: DomainCategory;
-  scopeResolver?: () => string | undefined;
   autoStart?: boolean;
   scoped?: boolean;
   streaming?: StreamingRegistration;
@@ -163,7 +161,7 @@ class RefreshOrchestrator {
   private configs = new Map<RefreshDomain, DomainRegistration<RefreshDomain>>();
   private unsubscriptions = new Map<RefreshDomain, () => void>();
   private registeredRefreshers = new Set<RefresherName>();
-  private scopedDomains = new Set<RefreshDomain>();
+
   private inFlight = new Map<
     string,
     {
@@ -181,13 +179,13 @@ class RefreshOrchestrator {
   private pendingStreaming = new Map<string, Promise<(() => void) | void>>();
   private streamingReady = new Map<string, Promise<void>>();
   private cancelledStreaming = new Set<string>();
-  private domainStreamingScopes = new Map<RefreshDomain, string>();
+
   private blockedStreaming = new Set<string>();
   private lastMetricsRefreshAt = new Map<string, number>();
   private metricsDemandActive = false;
-  private domainEnabledState = new Map<RefreshDomain, boolean>();
+
   private scopedEnabledState = new Map<RefreshDomain, Map<string, boolean>>();
-  private domainScopeOverrides = new Map<RefreshDomain, string>();
+
   private suspendedDomains = new Map<RefreshDomain, boolean>();
   private contextVersion = 0;
   private context: RefreshContext = {
@@ -285,49 +283,28 @@ class RefreshOrchestrator {
     const allowRefresher = this.shouldAllowRefresher(config);
     const existing = this.configs.get(config.domain);
     if (existing) {
-      if (!existing.scoped) {
-        const unsubscribe = this.unsubscriptions.get(config.domain);
-        unsubscribe?.();
-        this.unsubscriptions.delete(config.domain);
-      }
+      const unsubscribe = this.unsubscriptions.get(config.domain);
+      unsubscribe?.();
+      this.unsubscriptions.delete(config.domain);
     }
 
     this.configs.set(config.domain, config);
-    if (config.scoped) {
-      this.scopedDomains.add(config.domain);
-      this.domainEnabledState.set(config.domain, true);
 
-      if (allowRefresher) {
-        this.ensureRefresher(config);
+    if (allowRefresher) {
+      this.ensureRefresher(config);
 
-        const unsubscribe = refreshManager.subscribe(
-          config.refresherName,
-          async (isManual, signal) => {
-            await this.refreshEnabledScopes(config.domain, { isManual, signal });
-          }
-        );
-
-        this.unsubscriptions.set(config.domain, unsubscribe);
-
-        if ((config.autoStart ?? DEFAULT_AUTO_START) === false) {
-          refreshManager.disable(config.refresherName);
+      const unsubscribe = refreshManager.subscribe(
+        config.refresherName,
+        async (isManual, signal) => {
+          await this.refreshEnabledScopes(config.domain, { isManual, signal });
         }
+      );
+
+      this.unsubscriptions.set(config.domain, unsubscribe);
+
+      if ((config.autoStart ?? DEFAULT_AUTO_START) === false) {
+        refreshManager.disable(config.refresherName);
       }
-      return;
-    }
-
-    this.scopedDomains.delete(config.domain);
-    this.ensureRefresher(config);
-    this.domainEnabledState.set(config.domain, config.autoStart ?? DEFAULT_AUTO_START);
-
-    const unsubscribe = refreshManager.subscribe(config.refresherName, async (isManual, signal) => {
-      await this.fetchDomain(config.domain, { isManual, signal });
-    });
-
-    this.unsubscriptions.set(config.domain, unsubscribe);
-
-    if ((config.autoStart ?? DEFAULT_AUTO_START) === false) {
-      refreshManager.disable(config.refresherName);
     }
   }
 
@@ -359,9 +336,8 @@ class RefreshOrchestrator {
     const targetContext: RefreshContext = context ? { ...this.context, ...context } : this.context;
     const tasks: Promise<void>[] = [refreshManager.triggerManualRefreshForContext(targetContext)];
 
-    if (this.isDomainEnabledInternal('namespaces')) {
-      tasks.push(this.triggerManualRefresh('namespaces'));
-    }
+    // Refresh namespaces across all enabled scopes.
+    tasks.push(this.refreshEnabledScopes('namespaces', { isManual: true }));
 
     const podsRefresh = this.triggerActiveNamespacePodsRefresh(targetContext);
     if (podsRefresh) {
@@ -371,162 +347,13 @@ class RefreshOrchestrator {
     await Promise.all(tasks);
   }
 
-  async triggerManualRefresh(
-    domain: RefreshDomain,
-    options?: { suppressSpinner?: boolean }
-  ): Promise<void> {
-    if (!this.isDomainEnabledInternal(domain)) {
-      return;
-    }
-    const config = this.getConfig(domain);
-
-    if (config.scoped) {
-      throw new Error(`Scoped domain "${domain}" requires triggerScopedManualRefresh`);
-    }
-
-    if (!options?.suppressSpinner) {
-      setDomainState(domain, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'loading',
-        error: null,
-        isManual: true,
-      }));
-    }
-
-    await refreshManager.triggerManualRefresh(config.refresherName);
-  }
-
   setDomainEnabled(domain: RefreshDomain, enabled: boolean): void {
-    const config = this.getConfig(domain);
-    const allowRefresher = this.shouldAllowRefresher(config);
-
-    if (config.scoped) {
-      const scopedState = this.scopedEnabledState.get(domain) ?? new Map<string, boolean>();
-      scopedState.forEach((_value, scope) => {
-        this.setScopedDomainEnabled(domain, scope, enabled);
-      });
-      this.scopedEnabledState.set(domain, scopedState);
-      this.updateMetricsDemand();
-      return;
-    }
-
-    const previousEnabled = this.domainEnabledState.get(domain);
-    const initialEnabled = previousEnabled ?? config.autoStart ?? DEFAULT_AUTO_START;
-    const normalizedScope =
-      config.streaming && !config.scoped
-        ? this.normalizeStreamingScope(domain, config.scopeResolver?.())
-        : undefined;
-    const previousScope =
-      config.streaming && !config.scoped ? this.domainStreamingScopes.get(domain) : undefined;
-    const shouldStream =
-      config.streaming && !config.scoped ? this.shouldStreamScope(domain, normalizedScope) : false;
-
-    if (config.streaming && !config.scoped) {
-      if (enabled && !normalizedScope) {
-        this.updateMetricsDemand();
-        return;
-      }
-      if (initialEnabled === enabled && previousScope === normalizedScope && shouldStream) {
-        this.updateMetricsDemand();
-        return;
-      }
-    } else if (initialEnabled === enabled) {
-      this.updateMetricsDemand();
-      return;
-    }
-
-    if (config.category === 'namespace' && enabled && !this.isNamespaceContextActive()) {
-      this.domainEnabledState.set(domain, false);
-      refreshManager.disable(config.refresherName);
-      this.cancelInFlightForDomain(domain);
-      resetDomainState(domain);
-      this.updateMetricsDemand();
-      return;
-    }
-
-    this.domainEnabledState.set(domain, enabled);
-
-    if (config.streaming && !config.scoped) {
-      if (!shouldStream) {
-        const activeScope = this.domainStreamingScopes.get(domain);
-        if (activeScope) {
-          this.streamingReady.delete(makeInFlightKey(domain, activeScope));
-          // When disabling, use reset: true for immediate unsubscribe to prevent
-          // a race where debounced WebSocket messages reset the domain state to 'ready'
-          // after resetDomainState has already set it to 'idle'.
-          this.stopStreamingDomain(domain, activeScope, { reset: !enabled });
-        }
-        this.domainStreamingScopes.delete(domain);
-        if (allowRefresher) {
-          if (enabled) {
-            refreshManager.enable(config.refresherName);
-          } else {
-            refreshManager.disable(config.refresherName);
-            this.cancelInFlightForDomain(domain);
-            resetDomainState(domain);
-          }
-        } else {
-          refreshManager.disable(config.refresherName);
-        }
-        this.updateRefresherForStreaming(domain);
-        this.updateMetricsDemand();
-        return;
-      }
-      if (enabled) {
-        const currentScope = this.domainStreamingScopes.get(domain);
-        if (currentScope && currentScope !== normalizedScope) {
-          this.streamingReady.delete(makeInFlightKey(domain, currentScope));
-          this.stopStreamingDomain(domain, currentScope, { reset: true });
-        }
-        if (normalizedScope) {
-          const readyKey = makeInFlightKey(domain, normalizedScope);
-          const hasActiveStream =
-            this.streamingCleanup.has(readyKey) || this.pendingStreaming.has(readyKey);
-          this.domainStreamingScopes.set(domain, normalizedScope);
-          if (!hasActiveStream) {
-            this.streamingReady.delete(readyKey);
-            resetDomainState(domain);
-            this.scheduleStreamingStart(domain, normalizedScope, config.streaming, {
-              scoped: false,
-            });
-          }
-        }
-      } else {
-        const activeScope = this.domainStreamingScopes.get(domain) ?? normalizedScope;
-        if (activeScope) {
-          this.streamingReady.delete(makeInFlightKey(domain, activeScope));
-          this.stopStreamingDomain(domain, activeScope, { reset: true });
-        }
-        this.domainStreamingScopes.delete(domain);
-        resetDomainState(domain);
-      }
-
-      if (allowRefresher) {
-        if (enabled) {
-          refreshManager.enable(config.refresherName);
-        } else {
-          refreshManager.disable(config.refresherName);
-        }
-      } else {
-        refreshManager.disable(config.refresherName);
-      }
-      this.updateRefresherForStreaming(domain);
-      this.updateMetricsDemand();
-      return;
-    }
-
-    if (initialEnabled === enabled) {
-      this.updateMetricsDemand();
-      return;
-    }
-
-    if (enabled) {
-      refreshManager.enable(config.refresherName);
-    } else {
-      refreshManager.disable(config.refresherName);
-      this.cancelInFlightForDomain(domain);
-      resetDomainState(domain);
-    }
+    // All domains are scoped — delegate to each known scope.
+    const scopedState = this.scopedEnabledState.get(domain) ?? new Map<string, boolean>();
+    scopedState.forEach((_value, scope) => {
+      this.setScopedDomainEnabled(domain, scope, enabled);
+    });
+    this.scopedEnabledState.set(domain, scopedState);
     this.updateMetricsDemand();
   }
 
@@ -534,7 +361,6 @@ class RefreshOrchestrator {
     domain: RefreshDomain,
     scope: string,
     streaming: StreamingRegistration,
-    options: { scoped: boolean }
   ): void {
     const normalizedScope = scope.trim();
     if (!normalizedScope) {
@@ -546,85 +372,39 @@ class RefreshOrchestrator {
       return;
     }
 
-    this.setStreamingLoadingState(domain, normalizedScope, options);
+    // All domains are scoped — set loading state in the scoped store.
+    setScopedDomainState(domain, normalizedScope, (previous) => ({
+      ...previous,
+      status: previous.data ? 'updating' : 'initialising',
+      error: null,
+      scope: normalizedScope,
+    }));
 
     const readyTask = ensureRefreshBaseURL()
       .then(() => {
-        if (options.scoped) {
-          if (!this.isScopedDomainEnabledInternal(domain, normalizedScope)) {
-            return;
-          }
-        } else {
-          if (!this.isDomainEnabledInternal(domain)) {
-            return;
-          }
-          const activeScope = this.domainStreamingScopes.get(domain);
-          if (activeScope !== normalizedScope) {
-            return;
-          }
+        if (!this.isScopedDomainEnabledInternal(domain, normalizedScope)) {
+          return;
         }
-
         this.startStreamingScope(domain, normalizedScope, streaming);
       })
       .catch((error) => {
         const message =
           error instanceof Error ? error.message : 'Failed to initialise refresh subsystem';
         console.error(`Failed to initialise streaming for ${domain}`, error);
-        this.setStreamingErrorState(domain, normalizedScope, message, options);
+        setScopedDomainState(domain, normalizedScope, (previous) => ({
+          ...previous,
+          status: 'error',
+          error: message,
+          scope: normalizedScope,
+        }));
+        const notificationScope = normalizedScope?.trim() || undefined;
+        this.notifyRefreshError(domain, notificationScope, message);
       })
       .finally(() => {
         this.streamingReady.delete(readyKey);
       });
 
     this.streamingReady.set(readyKey, readyTask);
-  }
-
-  private setStreamingLoadingState(
-    domain: RefreshDomain,
-    scope: string,
-    options: { scoped: boolean }
-  ): void {
-    if (options.scoped) {
-      setScopedDomainState(domain, scope, (previous) => ({
-        ...previous,
-        status: previous.data ? 'updating' : 'initialising',
-        error: null,
-        scope,
-      }));
-      return;
-    }
-
-    setDomainState(domain, (previous) => ({
-      ...previous,
-      status: previous.data ? 'updating' : 'initialising',
-      error: null,
-      scope,
-    }));
-  }
-
-  private setStreamingErrorState(
-    domain: RefreshDomain,
-    scope: string,
-    message: string,
-    options: { scoped: boolean }
-  ): void {
-    if (options.scoped) {
-      setScopedDomainState(domain, scope, (previous) => ({
-        ...previous,
-        status: 'error',
-        error: message,
-        scope,
-      }));
-    } else {
-      setDomainState(domain, (previous) => ({
-        ...previous,
-        status: 'error',
-        error: message,
-        scope,
-      }));
-    }
-    const notificationScope = scope?.trim() || undefined;
-    this.notifyRefreshError(domain, notificationScope, message);
   }
 
   private hasEnabledScopedSources(domain: RefreshDomain): boolean {
@@ -673,23 +453,6 @@ class RefreshOrchestrator {
       return;
     }
     resetDomainState(domain);
-  }
-
-  setDomainScope(domain: RefreshDomain, scope: string | null | undefined): void {
-    const normalized = scope?.trim();
-    if (!normalized) {
-      this.domainScopeOverrides.delete(domain);
-      return;
-    }
-    this.domainScopeOverrides.set(domain, normalized);
-  }
-
-  clearDomainScope(domain: RefreshDomain): void {
-    this.domainScopeOverrides.delete(domain);
-  }
-
-  getDomainScope(domain: RefreshDomain): string | undefined {
-    return this.domainScopeOverrides.get(domain);
   }
 
   setScopedDomainEnabled(
@@ -744,7 +507,7 @@ class RefreshOrchestrator {
       if (enabled && shouldStream) {
         this.streamingReady.delete(readyKey);
         resetScopedDomainState(domain, normalizedScope);
-        this.scheduleStreamingStart(domain, normalizedScope, config.streaming, { scoped: true });
+        this.scheduleStreamingStart(domain, normalizedScope, config.streaming);
       } else if (!enabled) {
         this.streamingReady.delete(readyKey);
         this.stopStreamingScope(domain, normalizedScope, config.streaming, resetOnDisable);
@@ -1091,46 +854,6 @@ class RefreshOrchestrator {
     this.lastMetricsRefreshAt.set(makeInFlightKey(domain, scope), Date.now());
   }
 
-  private hasActiveStreaming(domain: RefreshDomain): boolean {
-    const prefix = `${domain}::`;
-    for (const key of this.streamingCleanup.keys()) {
-      if (key.startsWith(prefix)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // Pause polling when streaming is active for domains that don't need metrics refreshes.
-  private updateRefresherForStreaming(domain: RefreshDomain): void {
-    const config = this.configs.get(domain);
-    if (!config?.streaming?.pauseRefresherWhenStreaming || config.scoped) {
-      return;
-    }
-    if (!this.isDomainEnabledInternal(domain)) {
-      refreshManager.disable(config.refresherName);
-      return;
-    }
-    if (this.isResourceStreamDomain(domain)) {
-      const scope = this.domainStreamingScopes.get(domain);
-      if (
-        scope &&
-        this.isStreamingActive(domain, scope) &&
-        this.isStreamingHealthy(domain, scope)
-      ) {
-        refreshManager.disable(config.refresherName);
-        return;
-      }
-      refreshManager.enable(config.refresherName);
-      return;
-    }
-    if (this.hasActiveStreaming(domain)) {
-      refreshManager.disable(config.refresherName);
-      return;
-    }
-    refreshManager.enable(config.refresherName);
-  }
-
   private getConfig(domain: RefreshDomain): DomainRegistration<RefreshDomain> {
     const config = this.configs.get(domain);
     if (!config) {
@@ -1156,9 +879,7 @@ class RefreshOrchestrator {
         return;
       }
       this.stopStreamingScope(domain, scope, config.streaming, reset);
-      if (reset && !config.scoped) {
-        this.domainStreamingScopes.delete(domain);
-      }
+      // All domains are scoped — no need to clean up domainStreamingScopes.
     });
 
     if (reset) {
@@ -1209,19 +930,20 @@ class RefreshOrchestrator {
         } else {
           this.streamingCleanup.set(key, noopStreamingCleanup);
         }
-        if (!this.scopedDomains.has(domain)) {
-          this.domainStreamingScopes.set(domain, scope);
-        }
-        this.updateRefresherForStreaming(domain);
       })
       .catch((error) => {
         this.pendingStreaming.delete(key);
         const message = error instanceof Error ? error.message : String(error);
         console.error(`Failed to start streaming domain ${domain}::${scope}`, error);
-        this.setStreamingErrorState(domain, scope, message, {
-          scoped: this.scopedDomains.has(domain),
-        });
-        this.updateRefresherForStreaming(domain);
+        // All domains are scoped — write error to scoped store.
+        setScopedDomainState(domain, scope, (previous) => ({
+          ...previous,
+          status: 'error',
+          error: message,
+          scope,
+        }));
+        const notificationScope = scope?.trim() || undefined;
+        this.notifyRefreshError(domain, notificationScope, message);
       });
 
     return startPromise.then(() => undefined).catch(() => undefined);
@@ -1268,7 +990,6 @@ class RefreshOrchestrator {
     if (reset) {
       resetScopedDomainState(domain, scope);
     }
-    this.updateRefresherForStreaming(domain);
   }
 
   private isNamespaceContextActive(context: RefreshContext = this.context): boolean {
@@ -1281,16 +1002,14 @@ class RefreshOrchestrator {
         return;
       }
 
-      if (this.isDomainEnabledInternal(domain)) {
+      if (this.hasEnabledScopedSources(domain)) {
         this.setDomainEnabled(domain, false);
       } else {
         refreshManager.disable(config.refresherName);
       }
 
-      const state = getDomainState(domain);
-      if (state.status !== 'idle' || state.data !== null) {
-        resetDomainState(domain);
-      }
+      // All domains are scoped — reset via the scoped store.
+      this.resetDomain(domain);
     });
   }
 
@@ -1416,57 +1135,6 @@ class RefreshOrchestrator {
     );
   }
 
-  private async fetchDomain<K extends RefreshDomain>(
-    domain: K,
-    options: DomainFetchOptions
-  ): Promise<void> {
-    const config = this.getConfig(domain);
-    if (config.scoped) {
-      throw new Error(`Domain "${domain}" is scoped; use fetchScopedDomain`);
-    }
-
-    const scope = config.scopeResolver?.();
-    if (config.scopeResolver && (!scope || scope.trim() === '')) {
-      this.resetDomain(domain);
-      return;
-    }
-
-    if (config.streaming && !config.scoped) {
-      const normalizedScope = this.normalizeStreamingScope(domain, scope);
-      const shouldStream = this.shouldStreamScope(domain, normalizedScope);
-      const key = makeInFlightKey(domain, normalizedScope);
-      const hasStream =
-        shouldStream &&
-        (this.streamingCleanup.has(key) ||
-          this.pendingStreaming.has(key) ||
-          (this.domainStreamingScopes.get(domain) === normalizedScope && normalizedScope !== ''));
-      const streamHealthy = hasStream && this.isStreamingHealthy(domain, normalizedScope);
-
-      if (hasStream) {
-        if (options.isManual && config.streaming.refreshOnce && normalizedScope) {
-          await config.streaming.refreshOnce(normalizedScope);
-          return;
-        }
-        if (!options.isManual && config.streaming.metricsOnly) {
-          if (streamHealthy) {
-            if (this.shouldSkipStreamingMetricsRefresh(domain, normalizedScope)) {
-              incrementDroppedAutoRefresh(domain);
-              return;
-            }
-            await this.performFetch(domain, scope, { ...options, metricsOnly: true }, config);
-            return;
-          }
-        } else if (!options.isManual && streamHealthy) {
-          return;
-        } else if (options.isManual) {
-          return;
-        }
-      }
-    }
-
-    await this.performFetch(domain, scope, options, config);
-  }
-
   async fetchScopedDomain<K extends RefreshDomain>(
     domain: K,
     scope: string,
@@ -1532,26 +1200,20 @@ class RefreshOrchestrator {
     options: DomainFetchOptions,
     config: DomainRegistration<RefreshDomain>
   ): Promise<void> {
-    const isScoped = Boolean(config.scoped);
     const metricsOnly = Boolean(options.metricsOnly);
-    // Include the active cluster scope for unscoped domains so tab switches with the same view
-    // still fetch the selected cluster data.
-    const normalizedScope = this.normalizeScope(scope, !isScoped);
+    // All domains are scoped — normalizeScope without allowEmpty.
+    const normalizedScope = this.normalizeScope(scope);
 
     if (options.signal?.aborted) {
       return;
     }
 
-    if (isScoped && (!normalizedScope || normalizedScope.length === 0)) {
+    if (!normalizedScope || normalizedScope.length === 0) {
       throw new Error(`Scoped domain "${domain}" requires a valid scope`);
     }
 
-    if (isScoped) {
-      if (!this.isScopedDomainEnabledInternal(domain, normalizedScope!)) {
-        resetScopedDomainState(domain, normalizedScope!);
-        return;
-      }
-    } else if (!this.isDomainEnabledInternal(domain)) {
+    if (!this.isScopedDomainEnabledInternal(domain, normalizedScope)) {
+      resetScopedDomainState(domain, normalizedScope);
       return;
     }
 
@@ -1564,9 +1226,6 @@ class RefreshOrchestrator {
         currentInFlight.controller.abort();
         this.teardownInFlight(inFlightKey, currentInFlight);
       } else if (!options.isManual) {
-        if (!isScoped) {
-          incrementDroppedAutoRefresh(domain);
-        }
         return;
       } else if (options.isManual && currentInFlight.isManual) {
         currentInFlight.controller.abort();
@@ -1574,28 +1233,16 @@ class RefreshOrchestrator {
       }
     }
 
-    const previousState = isScoped
-      ? getScopedDomainState(domain, normalizedScope!)
-      : getDomainState(domain);
+    const previousState = getScopedDomainState(domain, normalizedScope);
     const nextStatus = previousState.data ? 'updating' : 'loading';
 
-    if (isScoped) {
-      setScopedDomainState(domain, normalizedScope!, (prev) => ({
-        ...prev,
-        status: nextStatus,
-        error: null,
-        isManual: options.isManual,
-        scope: normalizedScope,
-      }));
-    } else {
-      setDomainState(domain, (prev) => ({
-        ...prev,
-        status: nextStatus,
-        error: null,
-        isManual: options.isManual,
-        scope: normalizedScope ?? prev.scope,
-      }));
-    }
+    setScopedDomainState(domain, normalizedScope, (prev) => ({
+      ...prev,
+      status: nextStatus,
+      error: null,
+      isManual: options.isManual,
+      scope: normalizedScope,
+    }));
 
     const controller = new AbortController();
     const requestId = ++this.requestCounter;
@@ -1625,9 +1272,6 @@ class RefreshOrchestrator {
     try {
       const multiClusterScope = metricsOnly ? this.parseMultiClusterScope(normalizedScope) : null;
       if (metricsOnly && multiClusterScope && this.isMultiClusterMetricsDomain(domain)) {
-        if (!normalizedScope) {
-          return;
-        }
         await this.performMultiClusterMetricsFetch(
           domain,
           normalizedScope,
@@ -1638,7 +1282,7 @@ class RefreshOrchestrator {
           contextVersion
         );
         if (metricsOnly && !options.isManual) {
-          this.recordStreamingMetricsRefresh(domain, normalizedScope ?? '');
+          this.recordStreamingMetricsRefresh(domain, normalizedScope);
         }
         return;
       }
@@ -1658,31 +1302,19 @@ class RefreshOrchestrator {
       }
 
       if (notModified || !snapshot) {
-        if (isScoped) {
-          if (!this.isScopedDomainEnabledInternal(domain, normalizedScope!)) {
-            return;
-          }
-          setScopedDomainState(domain, normalizedScope!, (prev) => ({
-            ...prev,
-            status: prev.data ? 'ready' : 'idle',
-            isManual: options.isManual,
-            lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
-          }));
-        } else {
-          if (!this.isDomainEnabledInternal(domain)) {
-            return;
-          }
-          setDomainState(domain, (prev) => ({
-            ...prev,
-            status: prev.data ? 'ready' : 'idle',
-            isManual: options.isManual,
-            lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
-          }));
+        if (!this.isScopedDomainEnabledInternal(domain, normalizedScope)) {
+          return;
         }
+        setScopedDomainState(domain, normalizedScope, (prev) => ({
+          ...prev,
+          status: prev.data ? 'ready' : 'idle',
+          isManual: options.isManual,
+          lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
+        }));
         if (metricsOnly && !options.isManual) {
-          this.recordStreamingMetricsRefresh(domain, normalizedScope ?? '');
+          this.recordStreamingMetricsRefresh(domain, normalizedScope);
         }
-        this.clearRefreshError(domain, isScoped ? normalizedScope : undefined);
+        this.clearRefreshError(domain, normalizedScope);
         return;
       }
 
@@ -1692,28 +1324,16 @@ class RefreshOrchestrator {
           snapshot,
           etag,
           options.isManual,
-          isScoped ? normalizedScope : undefined
+          normalizedScope
         );
         if (!applied) {
-          this.applySnapshot(
-            domain,
-            snapshot,
-            etag,
-            options.isManual,
-            isScoped ? normalizedScope : undefined
-          );
+          this.applySnapshot(domain, snapshot, etag, options.isManual, normalizedScope);
         }
       } else {
-        this.applySnapshot(
-          domain,
-          snapshot,
-          etag,
-          options.isManual,
-          isScoped ? normalizedScope : undefined
-        );
+        this.applySnapshot(domain, snapshot, etag, options.isManual, normalizedScope);
       }
       if (metricsOnly && !options.isManual) {
-        this.recordStreamingMetricsRefresh(domain, normalizedScope ?? '');
+        this.recordStreamingMetricsRefresh(domain, normalizedScope);
       }
     } catch (error) {
       if (controller.signal.aborted) {
@@ -1726,40 +1346,22 @@ class RefreshOrchestrator {
 
       const message = error instanceof Error ? error.message : String(error);
       if (this.shouldSuppressNetworkError(message)) {
-        if (isScoped) {
-          setScopedDomainState(domain, normalizedScope!, (prev) => ({
-            ...prev,
-            status: prev.data ? 'ready' : prev.status,
-            error: null,
-            isManual: options.isManual,
-          }));
-        } else {
-          setDomainState(domain, (prev) => ({
-            ...prev,
-            status: prev.data ? 'ready' : prev.status,
-            error: null,
-            isManual: options.isManual,
-          }));
-        }
+        setScopedDomainState(domain, normalizedScope, (prev) => ({
+          ...prev,
+          status: prev.data ? 'ready' : prev.status,
+          error: null,
+          isManual: options.isManual,
+        }));
         return;
       }
 
-      if (isScoped) {
-        setScopedDomainState(domain, normalizedScope!, (prev) => ({
-          ...prev,
-          status: 'error',
-          error: message,
-          isManual: options.isManual,
-        }));
-      } else {
-        setDomainState(domain, (prev) => ({
-          ...prev,
-          status: 'error',
-          error: message,
-          isManual: options.isManual,
-        }));
-      }
-      this.notifyRefreshError(domain, isScoped ? normalizedScope : undefined, message);
+      setScopedDomainState(domain, normalizedScope, (prev) => ({
+        ...prev,
+        status: 'error',
+        error: message,
+        isManual: options.isManual,
+      }));
+      this.notifyRefreshError(domain, normalizedScope, message);
     } finally {
       const tracked = this.inFlight.get(inFlightKey);
       if (tracked && tracked.requestId === requestId) {
@@ -1776,12 +1378,11 @@ class RefreshOrchestrator {
     reportScope: string,
     clusterScope: { clusterIds: string[]; scope: string },
     options: DomainFetchOptions,
-    config: DomainRegistration<RefreshDomain>,
+    _config: DomainRegistration<RefreshDomain>,
     controller: AbortController,
     contextVersion: number
   ): Promise<void> {
     // Fan out metrics-only refreshes per cluster to avoid invalid multi-cluster scopes.
-    const isScoped = Boolean(config.scoped);
     let applied = false;
 
     for (const clusterId of clusterScope.clusterIds) {
@@ -1820,29 +1421,17 @@ class RefreshOrchestrator {
       return;
     }
 
-    if (isScoped) {
-      if (!this.isScopedDomainEnabledInternal(domain, reportScope)) {
-        return;
-      }
-      setScopedDomainState(domain, reportScope, (prev) => ({
-        ...prev,
-        status: prev.data ? 'ready' : 'idle',
-        isManual: options.isManual,
-        lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
-      }));
-    } else {
-      if (!this.isDomainEnabledInternal(domain)) {
-        return;
-      }
-      setDomainState(domain, (prev) => ({
-        ...prev,
-        status: prev.data ? 'ready' : 'idle',
-        isManual: options.isManual,
-        lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
-      }));
+    if (!this.isScopedDomainEnabledInternal(domain, reportScope)) {
+      return;
     }
+    setScopedDomainState(domain, reportScope, (prev) => ({
+      ...prev,
+      status: prev.data ? 'ready' : 'idle',
+      isManual: options.isManual,
+      lastAutoRefresh: options.isManual ? prev.lastAutoRefresh : Date.now(),
+    }));
 
-    this.clearRefreshError(domain, isScoped ? reportScope : undefined);
+    this.clearRefreshError(domain, reportScope);
   }
 
   private applySnapshot<K extends RefreshDomain>(
@@ -1858,12 +1447,13 @@ class RefreshOrchestrator {
       return;
     }
     const payload = this.mergePollingListPayload(domain, snapshot.payload, scope);
+    const resolvedScope = scope ?? snapshot.scope ?? '';
 
-    if (scope) {
-      if (!this.isScopedDomainEnabledInternal(domain, scope)) {
+    if (resolvedScope) {
+      if (!this.isScopedDomainEnabledInternal(domain, resolvedScope)) {
         return;
       }
-      setScopedDomainState(domain, scope, (prev) => ({
+      setScopedDomainState(domain, resolvedScope, (prev) => ({
         ...prev,
         status: 'ready',
         data: payload,
@@ -1876,31 +1466,10 @@ class RefreshOrchestrator {
         lastAutoRefresh: !isManual ? Date.now() : prev.lastAutoRefresh,
         error: null,
         isManual,
-        scope,
+        scope: resolvedScope,
       }));
-      this.clearRefreshError(domain, scope);
-      return;
+      this.clearRefreshError(domain, resolvedScope);
     }
-
-    if (!this.isDomainEnabledInternal(domain)) {
-      return;
-    }
-    setDomainState(domain, (prev) => ({
-      ...prev,
-      status: 'ready',
-      data: payload,
-      stats: snapshot.stats ?? null,
-      version: snapshot.version,
-      checksum: snapshot.checksum,
-      etag: etag ?? snapshot.checksum ?? prev.etag,
-      lastUpdated: Date.now(),
-      lastManualRefresh: isManual ? Date.now() : prev.lastManualRefresh,
-      lastAutoRefresh: !isManual ? Date.now() : prev.lastAutoRefresh,
-      error: null,
-      isManual,
-      scope: snapshot.scope ?? prev.scope,
-    }));
-    this.clearRefreshError(domain, snapshot.scope ?? undefined);
   }
 
   // Incrementally reuse row objects for polling-only list payloads.
@@ -1910,7 +1479,9 @@ class RefreshOrchestrator {
     scope?: string
   ): DomainPayloadMap[K] {
     if (domain === 'namespaces') {
-      const previous = getDomainState('namespaces').data as NamespaceSnapshotPayload | null;
+      const previous = (scope
+        ? getScopedDomainState('namespaces', scope).data
+        : getDomainState('namespaces').data) as NamespaceSnapshotPayload | null;
       if (!previous?.namespaces?.length) {
         return payload;
       }
@@ -2147,15 +1718,11 @@ class RefreshOrchestrator {
     return false;
   }
 
-  private isDomainEnabledInternal(domain: RefreshDomain): boolean {
-    return this.domainEnabledState.get(domain) ?? DEFAULT_AUTO_START;
-  }
-
   private isMetricsDemandActive(): boolean {
-    if (this.isDomainEnabledInternal('cluster-overview')) {
+    if (this.hasEnabledScopedSources('cluster-overview')) {
       return true;
     }
-    if (this.isDomainEnabledInternal('nodes')) {
+    if (this.hasEnabledScopedSources('nodes')) {
       return true;
     }
     if (this.hasEnabledScopedSources('pods')) {
@@ -2201,14 +1768,6 @@ class RefreshOrchestrator {
     this.contextVersion += 1;
   }
 
-  private cancelInFlightForDomain(domain: RefreshDomain): void {
-    this.inFlight.forEach((details, key) => {
-      if (details.domain === domain) {
-        this.teardownInFlight(key, details);
-      }
-    });
-  }
-
   private cancelInFlightForScopedDomain(domain: RefreshDomain, scope: string): void {
     const key = makeInFlightKey(domain, scope);
     const details = this.inFlight.get(key);
@@ -2237,9 +1796,6 @@ class RefreshOrchestrator {
     const config = this.configs.get(domain);
     if (config?.streaming) {
       this.stopStreamingScope(domain, scope, config.streaming, false);
-      if (!config.scoped && this.domainStreamingScopes.get(domain) === scope) {
-        this.domainStreamingScopes.delete(domain);
-      }
     }
 
     logWarning(
@@ -2248,17 +1804,10 @@ class RefreshOrchestrator {
   };
 
   private handleResourceStreamHealth = (
-    payload: AppEvents['refresh:resource-stream-health']
+    _payload: AppEvents['refresh:resource-stream-health']
   ): void => {
-    const scope = payload.scope.trim();
-    if (!scope) {
-      return;
-    }
-    const domain = payload.domain as RefreshDomain;
-    if (!this.isResourceStreamDomain(domain)) {
-      return;
-    }
-    this.updateRefresherForStreaming(domain);
+    // All domains are scoped — streaming health is managed via the scoped
+    // domain lifecycle (shouldStreamScope / handleStreamingScopeChanges).
   };
 
   private handleResetViews = () => {
@@ -2268,7 +1817,6 @@ class RefreshOrchestrator {
     this.inFlight.forEach((details, key) => {
       this.teardownInFlight(key, details);
     });
-    this.domainScopeOverrides.clear();
     this.blockedStreaming.clear();
     this.lastMetricsRefreshAt.clear();
     this.configs.forEach((_, domain) => {
@@ -2283,96 +1831,49 @@ class RefreshOrchestrator {
     this.inFlight.forEach((details, key) => {
       this.teardownInFlight(key, details);
     });
-    this.domainScopeOverrides.clear();
     this.blockedStreaming.clear();
     this.lastMetricsRefreshAt.clear();
-    this.configs.forEach((config, domain) => {
-      const wasEnabled = this.domainEnabledState.get(domain) ?? true;
+    this.configs.forEach((_config, domain) => {
+      const wasEnabled = this.hasEnabledScopedSources(domain);
       this.suspendedDomains.set(domain, wasEnabled);
 
       this.setDomainEnabled(domain, false);
       this.resetDomain(domain);
 
-      if (config.scoped) {
-        this.scopedEnabledState.delete(domain);
-      }
+      this.scopedEnabledState.delete(domain);
     });
   };
 
+  // Re-evaluate streaming for all scoped domains when the orchestrator context changes.
   private handleStreamingScopeChanges(): void {
     this.configs.forEach((config, domain) => {
       if (!config.streaming) {
         return;
       }
 
-      // For scoped streaming domains, re-evaluate shouldStreamScope for each
-      // enabled scope.  This is needed because the orchestrator context
-      // (currentView, activeClusterView, etc.) may have changed since the
-      // scope was originally enabled — and that first evaluation may have
-      // returned false, leaving streaming un-started.
-      if (config.scoped) {
-        const scopedMap = this.scopedEnabledState.get(domain);
-        if (!scopedMap) {
+      const scopedMap = this.scopedEnabledState.get(domain);
+      if (!scopedMap) {
+        return;
+      }
+      scopedMap.forEach((enabled, scope) => {
+        if (!enabled) {
           return;
         }
-        scopedMap.forEach((enabled, scope) => {
-          if (!enabled) {
-            return;
-          }
-          const readyKey = makeInFlightKey(domain, scope);
-          const shouldStream = this.shouldStreamScope(domain, scope);
-          const alreadyStreaming =
-            this.streamingCleanup.has(readyKey) || this.pendingStreaming.has(readyKey);
+        const readyKey = makeInFlightKey(domain, scope);
+        const shouldStream = this.shouldStreamScope(domain, scope);
+        const alreadyStreaming =
+          this.streamingCleanup.has(readyKey) || this.pendingStreaming.has(readyKey);
 
-          if (shouldStream && !alreadyStreaming) {
-            // Context now allows streaming for this scope — start it.
-            this.scheduleStreamingStart(domain, scope, config.streaming!, { scoped: true });
-          } else if (!shouldStream && alreadyStreaming) {
-            // Context no longer allows streaming — stop it.
-            this.streamingReady.delete(readyKey);
-            this.stopStreamingScope(domain, scope, config.streaming!, false);
-          }
-        });
-        return;
-      }
-
-      const enabled = this.domainEnabledState.get(domain) ?? config.autoStart ?? DEFAULT_AUTO_START;
-      if (!enabled) {
-        return;
-      }
-
-      const nextScope = this.normalizeStreamingScope(domain, config.scopeResolver?.());
-      const currentScope = this.domainStreamingScopes.get(domain);
-      const shouldStream = this.shouldStreamScope(domain, nextScope);
-
-      if (nextScope === currentScope) {
-        return;
-      }
-
-      if (currentScope) {
-        this.stopStreamingDomain(domain, currentScope, { reset: true });
-        this.domainStreamingScopes.delete(domain);
-      }
-
-      if (nextScope) {
-        resetDomainState(domain);
-        if (shouldStream) {
-          this.startStreamingDomain(domain, nextScope);
-          this.domainStreamingScopes.set(domain, nextScope);
-        } else {
-          this.domainStreamingScopes.delete(domain);
+        if (shouldStream && !alreadyStreaming) {
+          // Context now allows streaming for this scope — start it.
+          this.scheduleStreamingStart(domain, scope, config.streaming!);
+        } else if (!shouldStream && alreadyStreaming) {
+          // Context no longer allows streaming — stop it.
+          this.streamingReady.delete(readyKey);
+          this.stopStreamingScope(domain, scope, config.streaming!, false);
         }
-      }
+      });
     });
-  }
-
-  // Normalize streaming scope for non-scoped streaming domains.
-  // All cluster/namespace domains are now scoped and handle their own scope via setScopedDomainEnabled.
-  private normalizeStreamingScope(_domain: RefreshDomain, rawScope?: string): string {
-    if (rawScope && rawScope.trim()) {
-      return buildClusterScopeList(this.getSelectedClusterIds(), rawScope.trim());
-    }
-    return '';
   }
 
   private handleKubeconfigChanged = () => {
@@ -2396,16 +1897,12 @@ class RefreshOrchestrator {
 
 export const refreshOrchestrator = new RefreshOrchestrator();
 
-// Dedicated scoped catalog domain for the diff viewer to keep Browse scopes isolated.
+// System domains — scoped so they share the same codepath as all other domains.
 refreshOrchestrator.registerDomain({
   domain: 'namespaces',
   refresherName: SYSTEM_REFRESHERS.namespaces,
   category: 'system',
-  scopeResolver: () => {
-    // Refresh namespaces for all connected clusters so background tabs have up-to-date lists.
-    const clusterIds = refreshOrchestrator.getAllConnectedClusterIds();
-    return clusterIds.length > 0 ? buildClusterScopeList(clusterIds, '') : '';
-  },
+  scoped: true,
   autoStart: false,
 });
 
@@ -2413,11 +1910,7 @@ refreshOrchestrator.registerDomain({
   domain: 'cluster-overview',
   refresherName: SYSTEM_REFRESHERS.clusterOverview,
   category: 'system',
-  scopeResolver: () => {
-    // Refresh cluster-overview for all connected clusters so background tabs stay current.
-    const clusterIds = refreshOrchestrator.getAllConnectedClusterIds();
-    return clusterIds.length > 0 ? buildClusterScopeList(clusterIds, '') : '';
-  },
+  scoped: true,
   autoStart: false,
 });
 

@@ -70,10 +70,11 @@ const EMPTY_SCOPED_ENTRIES: ReadonlyArray<[string, DomainSnapshotState<any>]> = 
 
 const state: RefreshStoreState = {
   domains: {
-    // System domains (non-scoped, aggregate across all clusters)
+    // All domains are scoped and use the scopedDomains map below; these entries
+    // exist for type safety and are never read at runtime for scoped domains.
+    'object-maintenance': createInitialDomainState(),
     namespaces: createInitialDomainState(),
     'cluster-overview': createInitialDomainState(),
-    'object-maintenance': createInitialDomainState(),
     // Scoped domains use scopedDomains map below; these entries exist for type safety.
     // They are never read for scoped domains at runtime.
     nodes: createInitialDomainState(),

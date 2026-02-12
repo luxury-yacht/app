@@ -20,7 +20,8 @@ const { mockRefreshOrchestrator, namespaceDomainRef } = vi.hoisted(() => {
     mockRefreshOrchestrator: {
       setDomainEnabled: vi.fn(),
       resetDomain: vi.fn(),
-      triggerManualRefresh: vi.fn(() => Promise.resolve()),
+      fetchScopedDomain: vi.fn(() => Promise.resolve()),
+      setScopedDomainEnabled: vi.fn(),
       updateContext: vi.fn(),
     },
     namespaceDomainRef: { current: createNamespaceDomain('ready', ['alpha', 'beta']) },
@@ -40,6 +41,12 @@ vi.mock('@/core/refresh', () => ({
   useRefreshDomain: (domain: string) => {
     if (domain !== 'namespaces') {
       throw new Error(`Unexpected domain requested in test: ${domain}`);
+    }
+    return namespaceDomainRef.current;
+  },
+  useRefreshScopedDomain: (domain: string) => {
+    if (domain !== 'namespaces') {
+      throw new Error(`Unexpected scoped domain requested in test: ${domain}`);
     }
     return namespaceDomainRef.current;
   },
@@ -334,9 +341,11 @@ describe('NamespaceProvider selection behaviour', () => {
       await namespaceRef.current?.loadNamespaces(false);
     });
 
-    expect(mockRefreshOrchestrator.triggerManualRefresh).toHaveBeenCalledWith('namespaces', {
-      suppressSpinner: true,
-    });
+    expect(mockRefreshOrchestrator.fetchScopedDomain).toHaveBeenCalledWith(
+      'namespaces',
+      expect.any(String),
+      { isManual: true }
+    );
     cleanup();
   });
 });

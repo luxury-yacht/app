@@ -26,9 +26,9 @@ const {
 } = vi.hoisted(() => {
   return {
     mockRefreshOrchestrator: {
-      setDomainEnabled: vi.fn(),
+      setScopedDomainEnabled: vi.fn(),
+      fetchScopedDomain: vi.fn(() => Promise.resolve()),
       resetDomain: vi.fn(),
-      triggerManualRefresh: vi.fn(() => Promise.resolve()),
     },
     domainStateRef: {
       current: createDomainState('loading'),
@@ -45,7 +45,7 @@ const {
 
 vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: mockRefreshOrchestrator,
-  useRefreshDomain: () => domainStateRef.current,
+  useRefreshScopedDomain: () => domainStateRef.current,
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({

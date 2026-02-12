@@ -308,10 +308,11 @@ describe('DiagnosticsPanel component', () => {
     'namespace-storage',
   ];
 
+  // All base domains are now scoped — seed scopedEntriesMap so rows pass the idle filter.
   const seedBaseDomainStates = () => {
     baseDomains.forEach((domain) => {
-      if (!domainStateMap[domain]) {
-        setDomainState(domain, createReadyState(null));
+      if (!scopedEntriesMap[domain]?.length) {
+        setScopedEntries(domain, [['default-scope', createReadyState(null)]]);
       }
     });
   };
@@ -319,17 +320,17 @@ describe('DiagnosticsPanel component', () => {
   test('renders cluster overview row with metrics summary before pods', async () => {
     seedBaseDomainStates();
 
-    setDomainState(
-      'namespaces',
+    setScopedEntries('namespaces', [[
+      'default-scope',
       createReadyState({
         namespaces: [
           { name: 'default', phase: 'Active', resourceVersion: '1', creationTimestamp: Date.now() },
         ],
-      })
-    );
+      }),
+    ]]);
 
-    setDomainState(
-      'nodes',
+    setScopedEntries('nodes', [[
+      'default-scope',
       createReadyState({
         nodes: [],
         metrics: {
@@ -340,11 +341,11 @@ describe('DiagnosticsPanel component', () => {
           successCount: 2,
           failureCount: 0,
         },
-      })
-    );
+      }),
+    ]]);
 
-    setDomainState(
-      'cluster-overview',
+    setScopedEntries('cluster-overview', [[
+      'default-scope',
       createReadyState({
         overview: {
           clusterType: 'EKS',
@@ -377,8 +378,8 @@ describe('DiagnosticsPanel component', () => {
           successCount: 5,
           failureCount: 1,
         },
-      })
-    );
+      }),
+    ]]);
 
     scopedEntriesMap['pods'] = [
       [

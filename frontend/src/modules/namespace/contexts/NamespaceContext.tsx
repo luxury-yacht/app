@@ -21,7 +21,8 @@ import { formatAge } from '@utils/ageFormatter';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { errorHandler } from '@utils/errorHandler';
 import { evaluateNamespacePermissions } from '@/core/capabilities';
-import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
+import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
 import {
   ALL_NAMESPACES_DISPLAY_NAME,
@@ -71,8 +72,15 @@ interface NamespaceProviderProps {
 }
 
 export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }) => {
-  const namespaceDomain = useRefreshDomain('namespaces');
   const { selectedKubeconfig, selectedClusterId, selectedClusterIds } = useKubeconfig();
+
+  // Build scope covering all connected clusters for the namespaces domain.
+  const namespacesScope = useMemo(
+    () => buildClusterScopeList(selectedClusterIds, ''),
+    [selectedClusterIds]
+  );
+
+  const namespaceDomain = useRefreshScopedDomain('namespaces', namespacesScope);
   const activeClusterId = selectedClusterId?.trim() || '';
   // Track namespace selection per cluster tab to avoid cross-tab selection bleed.
   const [namespaceSelections, setNamespaceSelections] = useState<
@@ -176,11 +184,10 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     Boolean(activeClusterId) && !hasActiveClusterNamespaces && namespaceDomain.status !== 'error';
   const namespaceRefreshing = hasActiveClusterNamespaces && namespaceDomain.status === 'updating';
 
-  const loadNamespaces = useCallback(async (showSpinner: boolean = true) => {
-    await refreshOrchestrator.triggerManualRefresh('namespaces', {
-      suppressSpinner: !showSpinner,
-    });
-  }, []);
+  const loadNamespaces = useCallback(async (_showSpinner: boolean = true) => {
+    if (!namespacesScope) return;
+    await refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, { isManual: true });
+  }, [namespacesScope]);
 
   const refreshNamespaces = useCallback(async () => {
     await loadNamespaces(false);
@@ -220,7 +227,19 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
 
   useEffect(() => {
     const enabled = Boolean(selectedKubeconfig);
-    refreshOrchestrator.setDomainEnabled('namespaces', enabled);
+
+    // Skip scoped calls when no clusters are connected (scope is empty).
+    if (!namespacesScope) {
+      if (!enabled) {
+        clearSelection();
+        refreshOrchestrator.resetDomain('namespaces');
+        updateNamespaces([]);
+        lastEvaluatedNamespaceRef.current = null;
+      }
+      return;
+    }
+
+    refreshOrchestrator.setScopedDomainEnabled('namespaces', namespacesScope, enabled);
 
     if (!enabled) {
       clearSelection();
@@ -231,11 +250,12 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     }
 
     if (namespaceDomain.status === 'idle' && !namespaceDomain.data) {
-      void refreshOrchestrator.triggerManualRefresh('namespaces');
+      void refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, { isManual: true });
     }
   }, [
     allNamespaceItem,
     clearSelection,
+    namespacesScope,
     selectedKubeconfig,
     namespaceDomain.status,
     namespaceDomain.data,
@@ -335,15 +355,19 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     };
 
     const handleKubeconfigChanging = () => {
-      refreshOrchestrator.setDomainEnabled('namespaces', false);
+      if (namespacesScope) {
+        refreshOrchestrator.setScopedDomainEnabled('namespaces', namespacesScope, false);
+      }
       refreshOrchestrator.resetDomain('namespaces');
       clearSelection();
       updateNamespaces([]);
     };
 
     const handleKubeconfigChanged = () => {
-      refreshOrchestrator.setDomainEnabled('namespaces', true);
-      void refreshOrchestrator.triggerManualRefresh('namespaces');
+      if (namespacesScope) {
+        refreshOrchestrator.setScopedDomainEnabled('namespaces', namespacesScope, true);
+        void refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, { isManual: true });
+      }
     };
 
     const unsubReset = eventBus.on('view:reset', handleResetViews);
@@ -355,7 +379,7 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
       unsubChanging();
       unsubChanged();
     };
-  }, [allNamespaceItem, clearSelection, updateNamespaces]);
+  }, [allNamespaceItem, clearSelection, namespacesScope, updateNamespaces]);
 
   useEffect(() => {
     if (namespaceDomain.status === 'error' && namespaceDomain.error) {

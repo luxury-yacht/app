@@ -62,8 +62,6 @@ const refreshMocks = vi.hoisted(() => ({
   orchestrator: {
     setDomainEnabled: vi.fn(),
     setScopedDomainEnabled: vi.fn(),
-    setDomainScope: vi.fn(),
-    triggerManualRefresh: vi.fn(),
     fetchScopedDomain: vi.fn(),
   },
   catalogDomain: {
@@ -124,10 +122,8 @@ describe('BrowseView', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     gridTablePropsRef.current = null;
-    refreshMocks.orchestrator.setDomainScope.mockReset();
     refreshMocks.orchestrator.setDomainEnabled.mockReset();
     refreshMocks.orchestrator.setScopedDomainEnabled.mockReset();
-    refreshMocks.orchestrator.triggerManualRefresh.mockReset();
     refreshMocks.orchestrator.fetchScopedDomain.mockReset();
     refreshMocks.manager.disable.mockReset();
     refreshMocks.catalogDomain.status = 'idle';

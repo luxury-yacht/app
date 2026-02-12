@@ -28,7 +28,6 @@ const {
     resetDomain: vi.fn(),
     resetScopedDomain: vi.fn(),
     setScopedDomainEnabled: vi.fn(),
-    triggerManualRefresh: vi.fn().mockResolvedValue(undefined),
     fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
     isStreamingDomain: vi.fn().mockReturnValue(false),
   };
@@ -295,7 +294,6 @@ describe('NamespaceResourcesProvider', () => {
       </NamespaceResourcesProvider>
     );
 
-    orchestrator.triggerManualRefresh.mockClear();
     orchestrator.fetchScopedDomain.mockClear();
     orchestrator.resetDomain.mockClear();
     storeMocks.resetScopedDomainState.mockClear();

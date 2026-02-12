@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './DiagnosticsPanel.css';
 import { DockablePanel } from '@components/dockable';
 import { useRefreshDomain, useRefreshState, useRefreshScopedDomainEntries, type DomainSnapshotState } from '../store';
+// useRefreshDomain is still needed for object-maintenance (non-scoped system domain)
 import type {
   RefreshDomain,
   NodeMetricsInfo,
@@ -197,11 +198,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     'refresh-domains' | 'streams' | 'capability-checks' | 'effective-permissions'
   >('refresh-domains');
   const refreshState = useRefreshState();
-  // Non-scoped system domains
-  const namespaceDomain = useRefreshDomain('namespaces');
-  const clusterOverviewDomain = useRefreshDomain('cluster-overview');
   const objectMaintenanceDomain = useRefreshDomain('object-maintenance');
-  // Scoped cluster/namespace/catalog domains — read all scope entries for diagnostics.
+  // Scoped domains — read all scope entries for diagnostics.
+  const namespaceScopeEntries = useRefreshScopedDomainEntries('namespaces');
+  const clusterOverviewScopeEntries = useRefreshScopedDomainEntries('cluster-overview');
   const nodeScopeEntries = useRefreshScopedDomainEntries('nodes');
   const clusterConfigScopeEntries = useRefreshScopedDomainEntries('cluster-config');
   const clusterCRDScopeEntries = useRefreshScopedDomainEntries('cluster-crds');
@@ -309,11 +309,15 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
 
   const domainStates = useMemo(
     () => [
-      { domain: 'namespaces' as RefreshDomain, label: 'Namespaces', state: namespaceDomain },
+      {
+        domain: 'namespaces' as RefreshDomain,
+        label: 'Namespaces',
+        state: pickFirstScopeState(namespaceScopeEntries),
+      },
       {
         domain: 'cluster-overview' as RefreshDomain,
         label: 'Cluster Overview',
-        state: clusterOverviewDomain,
+        state: pickFirstScopeState(clusterOverviewScopeEntries),
         hasMetrics: true,
       },
       {
@@ -419,10 +423,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       },
     ],
     [
-      namespaceDomain,
-      clusterOverviewDomain,
       objectMaintenanceDomain,
       pickFirstScopeState,
+      namespaceScopeEntries,
+      clusterOverviewScopeEntries,
       nodeScopeEntries,
       clusterConfigScopeEntries,
       clusterCRDScopeEntries,
