@@ -913,7 +913,15 @@ function Settings({ onClose }: SettingsProps) {
                   <div className="themes-table-header">
                     <span></span>
                     <span>Theme Name</span>
-                    <span>Pattern</span>
+                    <span>
+                      Pattern{' '}
+                      <span
+                        className="themes-header-tooltip"
+                        title="Auto-apply theme when cluster name matches. Use * for any characters, ? for a single character. Example: prod* matches prod-us, prod-eu."
+                      >
+                        ?
+                      </span>
+                    </span>
                     <span></span>
                     <span></span>
                   </div>
