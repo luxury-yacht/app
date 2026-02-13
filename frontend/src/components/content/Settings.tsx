@@ -1012,8 +1012,7 @@ function Settings({ onClose }: SettingsProps) {
               {themes.length > 0 && (
                 <div className="themes-table">
                   <div className="themes-table-header">
-                    <span></span>
-                    <span>Theme Name</span>
+                    <span className="themes-header-name">Theme Name</span>
                     <span>
                       Pattern{' '}
                       <Tooltip content="Auto-apply theme when cluster name matches. Use * for any characters, ? for a single character. Example: prod* matches prod-us, prod-eu." />
