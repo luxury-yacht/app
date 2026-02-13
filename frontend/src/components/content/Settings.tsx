@@ -25,12 +25,18 @@ import {
   getPaletteTint,
   getAccentColor,
   setAccentColor as persistAccentColor,
+  getThemes,
+  saveTheme,
+  deleteTheme as deleteThemeApi,
+  reorderThemes,
+  applyTheme as applyThemeApi,
 } from '@/core/settings/appPreferences';
 import { useTheme } from '@/core/contexts/ThemeContext';
 import {
   applyTintedPalette,
   clearTintedPalette,
   savePaletteTintToLocalStorage,
+  isPaletteActive,
 } from '@utils/paletteTint';
 import {
   applyAccentColor,
@@ -82,6 +88,30 @@ function Settings({ onClose }: SettingsProps) {
   const [isEditingAccentHex, setIsEditingAccentHex] = useState(false);
   const [accentHexDraft, setAccentHexDraft] = useState('');
   const accentHexInputRef = useRef<HTMLInputElement>(null);
+  // Inline editing state for palette slider values
+  const [editingPaletteField, setEditingPaletteField] = useState<
+    'hue' | 'saturation' | 'brightness' | null
+  >(null);
+  const [paletteDraft, setPaletteDraft] = useState('');
+  const paletteInputRef = useRef<HTMLInputElement>(null);
+  // Saved themes state
+  const [themes, setThemes] = useState<types.Theme[]>([]);
+  const [themesLoading, setThemesLoading] = useState(false);
+  // 'new' = creating new theme via the form at the bottom
+  const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
+  const [themeDraft, setThemeDraft] = useState({ name: '', clusterPattern: '' });
+  // Per-field inline editing for existing theme rows (name or pattern)
+  const [editingThemeField, setEditingThemeField] = useState<{
+    themeId: string;
+    field: 'name' | 'clusterPattern';
+  } | null>(null);
+  const [themeFieldDraft, setThemeFieldDraft] = useState('');
+  const themeFieldInputRef = useRef<HTMLInputElement>(null);
+  // Drag reorder state (same pattern as ClusterTabs)
+  const [draggingThemeId, setDraggingThemeId] = useState<string | null>(null);
+  const [dropTargetThemeId, setDropTargetThemeId] = useState<string | null>(null);
+  // Delete confirmation
+  const [deleteConfirmThemeId, setDeleteConfirmThemeId] = useState<string | null>(null);
   // Controls the confirmation modal for clearing all persisted app state.
   const [isClearStateConfirmOpen, setIsClearStateConfirmOpen] = useState(false);
   // Controls the confirmation modal for resetting view persistence.
@@ -101,6 +131,22 @@ function Settings({ onClose }: SettingsProps) {
     return themeCleanup;
   }, []);
 
+  // Load saved themes on mount.
+  useEffect(() => {
+    const loadThemes = async () => {
+      setThemesLoading(true);
+      try {
+        const result = await getThemes();
+        setThemes(result);
+      } catch (error) {
+        errorHandler.handle(error, { action: 'loadThemes' });
+      } finally {
+        setThemesLoading(false);
+      }
+    };
+    loadThemes();
+  }, []);
+
   // Reload slider values and accent color when the resolved theme changes.
   useEffect(() => {
     const tint = getPaletteTint(resolvedTheme);
@@ -109,6 +155,22 @@ function Settings({ onClose }: SettingsProps) {
     setPaletteBrightness(tint.brightness);
     setAccentColorState(getAccentColor(resolvedTheme));
   }, [resolvedTheme]);
+
+  // Auto-focus the palette inline edit input when it appears.
+  useEffect(() => {
+    if (editingPaletteField && paletteInputRef.current) {
+      paletteInputRef.current.focus();
+      paletteInputRef.current.select();
+    }
+  }, [editingPaletteField]);
+
+  // Auto-focus the theme field inline edit input when it appears.
+  useEffect(() => {
+    if (editingThemeField && themeFieldInputRef.current) {
+      themeFieldInputRef.current.focus();
+      themeFieldInputRef.current.select();
+    }
+  }, [editingThemeField]);
 
   const loadThemeInfo = async () => {
     try {
@@ -288,6 +350,35 @@ function Settings({ onClose }: SettingsProps) {
     setIsEditingAccentHex(false);
   };
 
+  // Palette value inline editing handlers — same pattern as accent hex editing.
+  const handlePaletteValueClick = (field: 'hue' | 'saturation' | 'brightness') => {
+    const current =
+      field === 'hue' ? paletteHue : field === 'saturation' ? paletteSaturation : paletteBrightness;
+    setPaletteDraft(String(current));
+    setEditingPaletteField(field);
+  };
+
+  const handlePaletteValueCommit = () => {
+    if (!editingPaletteField) return;
+    const parsed = parseInt(paletteDraft, 10);
+    if (isNaN(parsed)) {
+      setEditingPaletteField(null);
+      return;
+    }
+    if (editingPaletteField === 'hue') {
+      handlePaletteHueChange(Math.max(0, Math.min(360, parsed)));
+    } else if (editingPaletteField === 'saturation') {
+      handlePaletteSaturationChange(Math.max(0, Math.min(100, parsed)));
+    } else if (editingPaletteField === 'brightness') {
+      handlePaletteBrightnessChange(Math.max(-50, Math.min(50, parsed)));
+    }
+    setEditingPaletteField(null);
+  };
+
+  const handlePaletteValueCancel = () => {
+    setEditingPaletteField(null);
+  };
+
   // Reset all appearance customizations for the current resolved theme.
   const handleResetAll = () => {
     setPaletteHue(0);
@@ -297,6 +388,174 @@ function Settings({ onClose }: SettingsProps) {
     persistPaletteTint(resolvedTheme, 0, 0, 0);
     savePaletteTintToLocalStorage(resolvedTheme, 0, 0, 0);
     handleAccentReset();
+  };
+
+  // Reload themes from backend.
+  const reloadThemes = async () => {
+    try {
+      const result = await getThemes();
+      setThemes(result);
+    } catch (error) {
+      errorHandler.handle(error, { action: 'loadThemes' });
+    }
+  };
+
+  // Save current palette as a new theme.
+  const handleSaveCurrentAsTheme = () => {
+    setEditingThemeId('new');
+    setThemeDraft({ name: '', clusterPattern: '' });
+  };
+
+  // Start inline editing a single field (name or pattern) on an existing theme row.
+  const handleThemeFieldClick = (
+    themeId: string,
+    field: 'name' | 'clusterPattern',
+    currentValue: string
+  ) => {
+    setThemeFieldDraft(currentValue);
+    setEditingThemeField({ themeId, field });
+  };
+
+  // Commit the single-field inline edit for an existing theme.
+  const handleThemeFieldCommit = async () => {
+    if (!editingThemeField) return;
+    const { themeId, field } = editingThemeField;
+    const trimmed = themeFieldDraft.trim();
+
+    // Name must not be empty; pattern can be empty.
+    if (field === 'name' && !trimmed) {
+      setEditingThemeField(null);
+      return;
+    }
+
+    const existing = themes.find((t) => t.id === themeId);
+    if (existing) {
+      const updated = new types.Theme({
+        ...existing,
+        [field]: trimmed,
+      });
+      try {
+        await saveTheme(updated);
+        await reloadThemes();
+      } catch (error) {
+        errorHandler.handle(error, { action: 'saveTheme' });
+      }
+    }
+    setEditingThemeField(null);
+  };
+
+  // Cancel the single-field inline edit.
+  const handleThemeFieldCancel = () => {
+    setEditingThemeField(null);
+  };
+
+  // Commit new theme creation (the "Save Current as Theme" form).
+  const handleThemeSave = async () => {
+    if (!themeDraft.name.trim()) return;
+
+    try {
+      // Create new theme capturing both light and dark palette values.
+      const lightTint = getPaletteTint('light');
+      const darkTint = getPaletteTint('dark');
+      const newTheme = new types.Theme({
+        id: crypto.randomUUID(),
+        name: themeDraft.name.trim(),
+        clusterPattern: themeDraft.clusterPattern.trim(),
+        paletteHueLight: lightTint.hue,
+        paletteSaturationLight: lightTint.saturation,
+        paletteBrightnessLight: lightTint.brightness,
+        paletteHueDark: darkTint.hue,
+        paletteSaturationDark: darkTint.saturation,
+        paletteBrightnessDark: darkTint.brightness,
+        accentColorLight: getAccentColor('light'),
+        accentColorDark: getAccentColor('dark'),
+      });
+      await saveTheme(newTheme);
+      await reloadThemes();
+      setEditingThemeId(null);
+    } catch (error) {
+      errorHandler.handle(error, { action: 'saveTheme' });
+    }
+  };
+
+  // Cancel editing.
+  const handleThemeEditCancel = () => {
+    setEditingThemeId(null);
+  };
+
+  // Delete a theme after confirmation.
+  const handleDeleteThemeConfirm = async () => {
+    if (!deleteConfirmThemeId) return;
+    try {
+      await deleteThemeApi(deleteConfirmThemeId);
+      await reloadThemes();
+    } catch (error) {
+      errorHandler.handle(error, { action: 'deleteTheme' });
+    } finally {
+      setDeleteConfirmThemeId(null);
+    }
+  };
+
+  // Apply a saved theme: copies its palette values into the active settings
+  // and re-applies CSS overrides so the change is visible immediately.
+  const handleApplyTheme = async (id: string) => {
+    try {
+      await applyThemeApi(id);
+      await hydrateAppPreferences({ force: true });
+
+      // Re-apply CSS overrides for the current resolved theme.
+      const currentTheme = resolvedTheme === 'dark' ? 'dark' : 'light';
+      const tint = getPaletteTint(currentTheme);
+      if (isPaletteActive(tint.saturation, tint.brightness)) {
+        applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
+      } else {
+        applyTintedPalette(0, 0, 0);
+      }
+      savePaletteTintToLocalStorage(currentTheme, tint.hue, tint.saturation, tint.brightness);
+
+      const lightAccent = getAccentColor('light');
+      const darkAccent = getAccentColor('dark');
+      applyAccentColor(lightAccent, darkAccent);
+      applyAccentBg(currentTheme === 'light' ? lightAccent : darkAccent, currentTheme);
+      saveAccentColorToLocalStorage('light', lightAccent);
+      saveAccentColorToLocalStorage('dark', darkAccent);
+
+      // Update local slider/accent state to reflect the applied theme values.
+      setPaletteHue(tint.hue);
+      setPaletteSaturation(tint.saturation);
+      setPaletteBrightness(tint.brightness);
+      setAccentColorState(getAccentColor(currentTheme));
+    } catch (error) {
+      errorHandler.handle(error, { action: 'applyTheme' });
+    }
+  };
+
+  // Drag-and-drop reorder handler.
+  const handleThemeDrop = async (targetId: string) => {
+    if (!draggingThemeId || draggingThemeId === targetId) {
+      setDraggingThemeId(null);
+      setDropTargetThemeId(null);
+      return;
+    }
+    const ids = themes.map((t) => t.id);
+    const fromIdx = ids.indexOf(draggingThemeId);
+    const toIdx = ids.indexOf(targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    // Move item from fromIdx to toIdx.
+    const reordered = [...ids];
+    reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, draggingThemeId);
+
+    try {
+      await reorderThemes(reordered);
+      await reloadThemes();
+    } catch (error) {
+      errorHandler.handle(error, { action: 'reorderThemes' });
+    } finally {
+      setDraggingThemeId(null);
+      setDropTargetThemeId(null);
+    }
   };
 
   const isAnyCustomized =
@@ -394,6 +653,49 @@ function Settings({ onClose }: SettingsProps) {
     setIsResetViewsConfirmOpen(true);
   };
 
+  // Render an inline-editable value for a palette slider (hue, saturation, brightness).
+  const renderEditableValue = (
+    field: 'hue' | 'saturation' | 'brightness',
+    value: number,
+    suffix: string
+  ) => {
+    if (editingPaletteField === field) {
+      return (
+        <input
+          ref={paletteInputRef}
+          className="palette-slider-value palette-hex-input"
+          value={paletteDraft}
+          onChange={(e) => setPaletteDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              handlePaletteValueCommit();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              handlePaletteValueCancel();
+            } else {
+              e.stopPropagation();
+            }
+          }}
+          onBlur={handlePaletteValueCancel}
+          maxLength={4}
+          spellCheck={false}
+        />
+      );
+    }
+    return (
+      <span
+        className="palette-slider-value palette-hex-clickable"
+        onClick={() => handlePaletteValueClick(field)}
+        title="Click to edit value"
+      >
+        {value > 0 && field === 'brightness' ? '+' : ''}
+        {value}
+        {suffix}
+      </span>
+    );
+  };
+
   return (
     <div className="settings-view">
       {onClose && (
@@ -430,7 +732,7 @@ function Settings({ onClose }: SettingsProps) {
             value={paletteHue}
             onChange={(e) => handlePaletteHueChange(Number(e.target.value))}
           />
-          <span className="palette-slider-value">{paletteHue}°</span>
+          {renderEditableValue('hue', paletteHue, '\u00B0')}
           <button
             type="button"
             className="palette-row-reset"
@@ -454,7 +756,7 @@ function Settings({ onClose }: SettingsProps) {
               background: `linear-gradient(to right, hsl(0, 0%, 50%), hsl(${paletteHue}, 20%, 50%))`,
             }}
           />
-          <span className="palette-slider-value">{paletteSaturation}%</span>
+          {renderEditableValue('saturation', paletteSaturation, '%')}
           <button
             type="button"
             className="palette-row-reset"
@@ -475,10 +777,7 @@ function Settings({ onClose }: SettingsProps) {
             value={paletteBrightness}
             onChange={(e) => handlePaletteBrightnessChange(Number(e.target.value))}
           />
-          <span className="palette-slider-value">
-            {paletteBrightness > 0 ? '+' : ''}
-            {paletteBrightness}
-          </span>
+          {renderEditableValue('brightness', paletteBrightness, '')}
           <button
             type="button"
             className="palette-row-reset"
@@ -534,14 +833,223 @@ function Settings({ onClose }: SettingsProps) {
             ↺
           </button>
 
-          <button
-            type="button"
-            className="button generic palette-reset-all"
-            onClick={handleResetAll}
-            disabled={!isAnyCustomized}
-          >
-            Reset All
-          </button>
+          <div className="palette-bottom-actions">
+            <button
+              type="button"
+              className="button generic"
+              onClick={handleResetAll}
+              disabled={!isAnyCustomized}
+            >
+              Reset All
+            </button>
+            {editingThemeId !== 'new' && (
+              <button
+                type="button"
+                className="button generic"
+                onClick={handleSaveCurrentAsTheme}
+              >
+                Save Theme
+              </button>
+            )}
+          </div>
+        </div>
+        {editingThemeId === 'new' && (
+          <div className="themes-new-form">
+            <input
+              className="theme-name-input"
+              value={themeDraft.name}
+              onChange={(e) =>
+                setThemeDraft((d) => ({ ...d, name: e.target.value }))
+              }
+              placeholder="Theme name"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleThemeSave();
+                else if (e.key === 'Escape') handleThemeEditCancel();
+                else e.stopPropagation();
+              }}
+            />
+            <input
+              className="theme-pattern-input"
+              value={themeDraft.clusterPattern}
+              onChange={(e) =>
+                setThemeDraft((d) => ({
+                  ...d,
+                  clusterPattern: e.target.value,
+                }))
+              }
+              placeholder="Cluster pattern (optional)"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleThemeSave();
+                else if (e.key === 'Escape') handleThemeEditCancel();
+                else e.stopPropagation();
+              }}
+            />
+            <button
+              type="button"
+              className="button generic"
+              onClick={handleThemeSave}
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              className="button generic"
+              onClick={handleThemeEditCancel}
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        {/* Saved Themes */}
+        <div className="themes-section">
+          <h4>Saved Themes</h4>
+          {themesLoading ? (
+            <div className="themes-loading">Loading themes...</div>
+          ) : (
+            <>
+              {themes.length > 0 && (
+                <div className="themes-table">
+                  <div className="themes-table-header">
+                    <span></span>
+                    <span>Theme Name</span>
+                    <span>Pattern</span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                  {themes.map((theme) => {
+                    const isDragging = theme.id === draggingThemeId;
+                    const isDropTarget =
+                      theme.id === dropTargetThemeId && theme.id !== draggingThemeId;
+                    const isEditingName =
+                      editingThemeField?.themeId === theme.id &&
+                      editingThemeField.field === 'name';
+                    const isEditingPattern =
+                      editingThemeField?.themeId === theme.id &&
+                      editingThemeField.field === 'clusterPattern';
+                    return (
+                      <div
+                        key={theme.id}
+                        className={`themes-table-row${isDragging ? ' themes-table-row--dragging' : ''}${isDropTarget ? ' themes-table-row--drop-target' : ''}`}
+                        onDragOver={(e) => {
+                          if (!draggingThemeId) return;
+                          e.preventDefault();
+                          setDropTargetThemeId(theme.id);
+                        }}
+                        onDragLeave={() => {
+                          setDropTargetThemeId((c) => (c === theme.id ? null : c));
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          handleThemeDrop(theme.id);
+                        }}
+                      >
+                        <span
+                          className="themes-drag-handle"
+                          draggable
+                          onDragStart={(e) => {
+                            e.dataTransfer.effectAllowed = 'move';
+                            setDraggingThemeId(theme.id);
+                          }}
+                          onDragEnd={() => {
+                            setDraggingThemeId(null);
+                            setDropTargetThemeId(null);
+                          }}
+                          title="Drag to reorder"
+                        >
+                          &#x2807;
+                        </span>
+                        {/* Inline-editable name */}
+                        {isEditingName ? (
+                          <input
+                            ref={themeFieldInputRef}
+                            className="theme-name-input"
+                            value={themeFieldDraft}
+                            onChange={(e) => setThemeFieldDraft(e.target.value)}
+                            placeholder="Theme name"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleThemeFieldCommit();
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                handleThemeFieldCancel();
+                              } else {
+                                e.stopPropagation();
+                              }
+                            }}
+                            onBlur={handleThemeFieldCancel}
+                          />
+                        ) : (
+                          <span
+                            className="theme-name theme-field-clickable"
+                            onClick={() =>
+                              handleThemeFieldClick(theme.id, 'name', theme.name)
+                            }
+                            title="Click to edit name"
+                          >
+                            {theme.name}
+                          </span>
+                        )}
+                        {/* Inline-editable pattern */}
+                        {isEditingPattern ? (
+                          <input
+                            ref={themeFieldInputRef}
+                            className="theme-pattern-input"
+                            value={themeFieldDraft}
+                            onChange={(e) => setThemeFieldDraft(e.target.value)}
+                            placeholder="e.g. prod*"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleThemeFieldCommit();
+                              } else if (e.key === 'Escape') {
+                                e.preventDefault();
+                                handleThemeFieldCancel();
+                              } else {
+                                e.stopPropagation();
+                              }
+                            }}
+                            onBlur={handleThemeFieldCancel}
+                          />
+                        ) : (
+                          <span
+                            className="theme-pattern theme-field-clickable"
+                            onClick={() =>
+                              handleThemeFieldClick(
+                                theme.id,
+                                'clusterPattern',
+                                theme.clusterPattern
+                              )
+                            }
+                            title="Click to edit pattern"
+                          >
+                            {theme.clusterPattern || '\u2014'}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="theme-action-button"
+                          onClick={() => handleApplyTheme(theme.id)}
+                          title="Apply theme"
+                        >
+                          Apply
+                        </button>
+                        <button
+                          type="button"
+                          className="theme-action-button theme-action-delete"
+                          onClick={() => setDeleteConfirmThemeId(theme.id)}
+                          title="Delete theme"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -675,6 +1183,15 @@ function Settings({ onClose }: SettingsProps) {
           </div>
         </div>
       </div>
+      <ConfirmationModal
+        isOpen={deleteConfirmThemeId !== null}
+        title="Delete Theme"
+        message={`Delete "${themes.find((t) => t.id === deleteConfirmThemeId)?.name || 'this theme'}"?`}
+        confirmText="Confirm"
+        confirmButtonClass="danger"
+        onConfirm={handleDeleteThemeConfirm}
+        onCancel={() => setDeleteConfirmThemeId(null)}
+      />
       <ConfirmationModal
         isOpen={isResetViewsConfirmOpen}
         title="Reset Views"

@@ -15,6 +15,7 @@
 ### Task 1: Add Theme Type to Backend
 
 **Files:**
+
 - Modify: `backend/resources/types/types.go` (after ThemeInfo struct, ~line 53)
 - Modify: `backend/app_settings.go` (settingsPreferences struct, ~line 32)
 
@@ -83,6 +84,7 @@ feat: add Theme type and settings persistence field
 ### Task 2: Backend CRUD Methods
 
 **Files:**
+
 - Modify: `backend/app_settings.go` (add methods after SetAccentColor, ~line 623)
 - Create: `backend/app_settings_themes_test.go`
 
@@ -239,6 +241,7 @@ feat: add theme CRUD backend methods with tests
 ### Task 3: Backend ApplyTheme and MatchThemeForCluster
 
 **Files:**
+
 - Modify: `backend/app_settings.go` (add methods)
 - Modify: `backend/app_settings_themes_test.go` (add tests)
 
@@ -345,6 +348,7 @@ feat: add ApplyTheme and MatchThemeForCluster backend methods
 ### Task 4: Frontend — Wails Bindings and appPreferences Integration
 
 **Files:**
+
 - Modify: `frontend/src/core/settings/appPreferences.ts` (add theme functions)
 
 **Step 1: Check that Wails auto-generates bindings**
@@ -408,6 +412,7 @@ feat: add theme Wails bindings and appPreferences helpers
 ### Task 5: Frontend — Editable Palette Values (Inline Number Editing)
 
 **Files:**
+
 - Modify: `frontend/src/components/content/Settings.tsx` (~lines 423-490, the slider value spans)
 - Modify: `frontend/src/components/content/Settings.css`
 
@@ -521,18 +526,27 @@ const renderEditableValue = (
 **Step 5: Replace the three value spans in JSX**
 
 Replace the hue value span (`{paletteHue}°`, ~line 433):
+
 ```tsx
-{renderEditableValue('hue', paletteHue, '\u00B0')}
+{
+  renderEditableValue('hue', paletteHue, '\u00B0');
+}
 ```
 
 Replace the saturation value span (`{paletteSaturation}%`, ~line 457):
+
 ```tsx
-{renderEditableValue('saturation', paletteSaturation, '%')}
+{
+  renderEditableValue('saturation', paletteSaturation, '%');
+}
 ```
 
 Replace the brightness value span (~lines 478-481):
+
 ```tsx
-{renderEditableValue('brightness', paletteBrightness, '')}
+{
+  renderEditableValue('brightness', paletteBrightness, '');
+}
 ```
 
 **Step 6: Verify in browser**
@@ -550,6 +564,7 @@ feat: make palette slider values clickable/editable inline
 ### Task 6: Frontend — Saved Themes Table UI
 
 **Files:**
+
 - Modify: `frontend/src/components/content/Settings.tsx`
 - Modify: `frontend/src/components/content/Settings.css`
 
@@ -707,7 +722,9 @@ const handleThemeDrop = async (targetId: string) => {
 Add JSX after the `</div>` that closes `palette-tint-controls` (~line 545), inside the Appearance section:
 
 ```tsx
-{/* Saved Themes */}
+{
+  /* Saved Themes */
+}
 <div className="themes-section">
   <h4>Saved Themes</h4>
   {themesLoading ? (
@@ -725,8 +742,7 @@ Add JSX after the `</div>` that closes `palette-tint-controls` (~line 545), insi
           </div>
           {themes.map((theme) => {
             const isDragging = theme.id === draggingThemeId;
-            const isDropTarget =
-              theme.id === dropTargetThemeId && theme.id !== draggingThemeId;
+            const isDropTarget = theme.id === dropTargetThemeId && theme.id !== draggingThemeId;
             const isEditing = editingThemeId === theme.id;
             return (
               <div
@@ -738,9 +754,7 @@ Add JSX after the `</div>` that closes `palette-tint-controls` (~line 545), insi
                   setDropTargetThemeId(theme.id);
                 }}
                 onDragLeave={() => {
-                  setDropTargetThemeId((c) =>
-                    c === theme.id ? null : c
-                  );
+                  setDropTargetThemeId((c) => (c === theme.id ? null : c));
                 }}
                 onDrop={(e) => {
                   e.preventDefault();
@@ -817,9 +831,7 @@ Add JSX after the `</div>` that closes `palette-tint-controls` (~line 545), insi
                 ) : (
                   <>
                     <span className="theme-name">{theme.name}</span>
-                    <span className="theme-pattern">
-                      {theme.clusterPattern || '\u2014'}
-                    </span>
+                    <span className="theme-pattern">{theme.clusterPattern || '\u2014'}</span>
                     <button
                       type="button"
                       className="theme-action-button"
@@ -831,9 +843,7 @@ Add JSX after the `</div>` that closes `palette-tint-controls` (~line 545), insi
                     <button
                       type="button"
                       className="theme-action-button theme-action-delete"
-                      onClick={() =>
-                        setDeleteConfirmThemeId(theme.id)
-                      }
+                      onClick={() => setDeleteConfirmThemeId(theme.id)}
                       title="Delete theme"
                     >
                       Delete
@@ -850,9 +860,7 @@ Add JSX after the `</div>` that closes `palette-tint-controls` (~line 545), insi
           <input
             className="theme-name-input"
             value={themeDraft.name}
-            onChange={(e) =>
-              setThemeDraft((d) => ({ ...d, name: e.target.value }))
-            }
+            onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
             placeholder="Theme name"
             autoFocus
             onKeyDown={(e) => {
@@ -877,18 +885,10 @@ Add JSX after the `</div>` that closes `palette-tint-controls` (~line 545), insi
               else e.stopPropagation();
             }}
           />
-          <button
-            type="button"
-            className="button generic"
-            onClick={handleThemeSave}
-          >
+          <button type="button" className="button generic" onClick={handleThemeSave}>
             Save
           </button>
-          <button
-            type="button"
-            className="button generic"
-            onClick={handleThemeEditCancel}
-          >
+          <button type="button" className="button generic" onClick={handleThemeEditCancel}>
             Cancel
           </button>
         </div>
@@ -903,7 +903,7 @@ Add JSX after the `</div>` that closes `palette-tint-controls` (~line 545), insi
       )}
     </>
   )}
-</div>
+</div>;
 ```
 
 **Step 5: Add delete confirmation modal**
@@ -1052,6 +1052,7 @@ Note: The CSS variable names above are placeholders — verify the actual variab
 **Step 7: Verify in browser**
 
 Run the app. The themes table should render below the palette controls. Test:
+
 - Save current as theme
 - Edit name/pattern
 - Delete with confirmation
@@ -1068,6 +1069,7 @@ feat: add saved themes table UI with drag-to-reorder
 ### Task 7: Frontend — Cluster Auto-Match on Switch
 
 **Files:**
+
 - Modify: `frontend/src/modules/kubernetes/config/KubeconfigContext.tsx` (or wherever active cluster change is handled)
 - Modify: `frontend/src/core/settings/appPreferences.ts` (already has the helpers)
 
@@ -1103,6 +1105,7 @@ The exact integration point depends on how `setActiveKubeconfig` is structured. 
 After `hydrateAppPreferences()` resolves, the Settings component (if open) needs to re-read values. Check if `hydrateAppPreferences` already emits events that the Settings component listens to. If so, this should "just work." If not, the Settings component may need to re-read settings when `resolvedTheme` or active cluster changes.
 
 Also ensure the palette CSS overrides are re-applied:
+
 ```typescript
 import { applyTintedPalette } from '@utils/paletteTint';
 import { applyAccentColor, applyAccentBg } from '@utils/accentColor';
@@ -1134,12 +1137,14 @@ feat: auto-apply matching theme on cluster switch
 ### Task 8: Testing and Polish
 
 **Files:**
+
 - Modify: `backend/app_settings_themes_test.go` (expand test coverage)
 - Create: `frontend/src/components/content/Settings.test.tsx` additions (or modify existing)
 
 **Step 1: Expand backend test coverage**
 
 Ensure tests cover edge cases:
+
 - Theme with all zero palette values
 - Theme with accent colors set vs empty
 - `filepath.Match` edge cases: pattern `*` matches everything, `?` matches single char
@@ -1150,6 +1155,7 @@ Ensure tests cover edge cases:
 **Step 2: Add frontend tests**
 
 Add tests to `Settings.test.tsx` (or create if it doesn't exist) for:
+
 - Theme table renders saved themes
 - "Save Current as Theme" button appears
 - Edit mode shows name/pattern inputs
@@ -1163,6 +1169,7 @@ Frontend: `cd /Volumes/git/luxury-yacht/app/frontend && npx vitest run`
 **Step 4: Verify CSS variable names**
 
 Check `frontend/src/styles/themes/light.css` and `dark.css` for correct variable names used in the themes table CSS. Common ones to verify:
+
 - `--color-text-secondary`, `--color-text-tertiary`, `--color-text-primary`
 - `--color-border`, `--color-border-subtle`
 - `--color-bg-input`
@@ -1181,6 +1188,7 @@ test: expand theme system test coverage
 ### Task 9: Update Plan Doc
 
 **Files:**
+
 - Modify: `docs/plans/themes.md`
 
 **Step 1: Mark items complete**

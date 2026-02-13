@@ -4,7 +4,18 @@
  * Centralized preference cache and backend sync for app settings.
  */
 
-import { GetAppSettings, SetTheme, SetUseShortResourceNames } from '@wailsjs/go/backend/App';
+import {
+  GetAppSettings,
+  SetTheme,
+  SetUseShortResourceNames,
+  GetThemes,
+  SaveTheme,
+  DeleteTheme,
+  ReorderThemes,
+  ApplyTheme,
+  MatchThemeForCluster,
+} from '@wailsjs/go/backend/App';
+import { types } from '@wailsjs/go/models';
 import { eventBus } from '@/core/events';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
@@ -363,6 +374,44 @@ export const setPaletteTint = (
   void setter(theme, hue, saturation, brightness).catch((error: unknown) => {
     console.error('Failed to persist palette tint:', error);
   });
+};
+
+// --- Theme library helpers ---
+
+// Fetches all saved themes from the backend.
+export const getThemes = async (): Promise<types.Theme[]> => {
+  const result = await GetThemes();
+  return result || [];
+};
+
+// Persists a new or updated theme to the backend.
+export const saveTheme = async (theme: types.Theme): Promise<void> => {
+  await SaveTheme(theme);
+};
+
+// Deletes a theme by its ID from the backend.
+export const deleteTheme = async (id: string): Promise<void> => {
+  await DeleteTheme(id);
+};
+
+// Reorders themes in the backend by the given ordered list of IDs.
+export const reorderThemes = async (ids: string[]): Promise<void> => {
+  await ReorderThemes(ids);
+};
+
+// Applies a saved theme's palette/accent values as the active settings.
+export const applyTheme = async (id: string): Promise<void> => {
+  await ApplyTheme(id);
+};
+
+// Returns the best-matching theme for a cluster context name, or null if none match.
+export const matchThemeForCluster = async (contextName: string): Promise<types.Theme | null> => {
+  try {
+    const result = await MatchThemeForCluster(contextName);
+    return result || null;
+  } catch {
+    return null;
+  }
 };
 
 // Test helper to reset cached values between test runs.

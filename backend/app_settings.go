@@ -50,6 +50,9 @@ type settingsPreferences struct {
 	PaletteBrightnessDark  int    `json:"paletteBrightnessDark"`
 	AccentColorLight       string `json:"accentColorLight,omitempty"`
 	AccentColorDark        string `json:"accentColorDark,omitempty"`
+
+	// Saved theme library. Order matters: first match wins for cluster pattern matching.
+	Themes []Theme `json:"themes,omitempty"`
 }
 
 // settingsRefresh captures user-configurable refresh settings.
@@ -302,6 +305,7 @@ func (a *App) loadAppSettings() error {
 		PaletteBrightnessDark:            settings.Preferences.PaletteBrightnessDark,
 		AccentColorLight:                 settings.Preferences.AccentColorLight,
 		AccentColorDark:                  settings.Preferences.AccentColorDark,
+		Themes:                           settings.Preferences.Themes,
 	}
 	return nil
 }
@@ -334,6 +338,7 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.PaletteBrightnessDark = a.appSettings.PaletteBrightnessDark
 	settings.Preferences.AccentColorLight = a.appSettings.AccentColorLight
 	settings.Preferences.AccentColorDark = a.appSettings.AccentColorDark
+	settings.Preferences.Themes = a.appSettings.Themes
 
 	settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
 
@@ -620,4 +625,199 @@ func (a *App) SetAccentColor(theme string, color string) error {
 	}
 
 	return a.saveAppSettings()
+}
+
+// syncThemesCache updates the in-memory appSettings cache with the current
+// themes list so that saveAppSettings (used by SetPaletteTint, SetAccentColor,
+// etc.) does not overwrite disk-persisted themes with stale cached data.
+func (a *App) syncThemesCache(themes []Theme) {
+	if a.appSettings != nil {
+		a.appSettings.Themes = themes
+	}
+}
+
+// GetThemes returns the saved theme library.
+func (a *App) GetThemes() ([]Theme, error) {
+	settings, err := a.loadSettingsFile()
+	if err != nil {
+		return nil, fmt.Errorf("loading settings: %w", err)
+	}
+	if settings.Preferences.Themes == nil {
+		return []Theme{}, nil
+	}
+	return settings.Preferences.Themes, nil
+}
+
+// SaveTheme creates or updates a theme in the library. If a theme with the
+// same ID exists it is updated in place; otherwise the theme is appended.
+func (a *App) SaveTheme(theme Theme) error {
+	if theme.ID == "" {
+		return fmt.Errorf("theme ID is required")
+	}
+	if theme.Name == "" {
+		return fmt.Errorf("theme name is required")
+	}
+
+	settings, err := a.loadSettingsFile()
+	if err != nil {
+		return fmt.Errorf("loading settings: %w", err)
+	}
+
+	found := false
+	for i, t := range settings.Preferences.Themes {
+		if t.ID == theme.ID {
+			settings.Preferences.Themes[i] = theme
+			found = true
+			break
+		}
+	}
+	if !found {
+		settings.Preferences.Themes = append(settings.Preferences.Themes, theme)
+	}
+
+	if err := a.saveSettingsFile(settings); err != nil {
+		return err
+	}
+	a.syncThemesCache(settings.Preferences.Themes)
+	return nil
+}
+
+// DeleteTheme removes a theme from the library by ID.
+func (a *App) DeleteTheme(id string) error {
+	settings, err := a.loadSettingsFile()
+	if err != nil {
+		return fmt.Errorf("loading settings: %w", err)
+	}
+
+	idx := -1
+	for i, t := range settings.Preferences.Themes {
+		if t.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return fmt.Errorf("theme not found: %s", id)
+	}
+
+	settings.Preferences.Themes = append(
+		settings.Preferences.Themes[:idx],
+		settings.Preferences.Themes[idx+1:]...,
+	)
+
+	if err := a.saveSettingsFile(settings); err != nil {
+		return err
+	}
+	a.syncThemesCache(settings.Preferences.Themes)
+	return nil
+}
+
+// ReorderThemes sets the theme ordering. The ids slice must contain exactly the
+// same IDs as the current theme list (first-match priority depends on order).
+func (a *App) ReorderThemes(ids []string) error {
+	settings, err := a.loadSettingsFile()
+	if err != nil {
+		return fmt.Errorf("loading settings: %w", err)
+	}
+
+	if len(ids) != len(settings.Preferences.Themes) {
+		return fmt.Errorf("id count mismatch: got %d, have %d themes", len(ids), len(settings.Preferences.Themes))
+	}
+
+	byID := make(map[string]Theme, len(settings.Preferences.Themes))
+	for _, t := range settings.Preferences.Themes {
+		byID[t.ID] = t
+	}
+
+	reordered := make([]Theme, 0, len(ids))
+	for _, id := range ids {
+		t, ok := byID[id]
+		if !ok {
+			return fmt.Errorf("unknown theme ID: %s", id)
+		}
+		reordered = append(reordered, t)
+	}
+
+	settings.Preferences.Themes = reordered
+	if err := a.saveSettingsFile(settings); err != nil {
+		return err
+	}
+	a.syncThemesCache(settings.Preferences.Themes)
+	return nil
+}
+
+// ApplyTheme loads a saved theme by ID and copies its palette values into the
+// active settings fields, then persists. The frontend re-reads settings to
+// pick up the changes.
+func (a *App) ApplyTheme(id string) error {
+	settings, err := a.loadSettingsFile()
+	if err != nil {
+		return fmt.Errorf("loading settings: %w", err)
+	}
+
+	var theme *Theme
+	for i, t := range settings.Preferences.Themes {
+		if t.ID == id {
+			theme = &settings.Preferences.Themes[i]
+			break
+		}
+	}
+	if theme == nil {
+		return fmt.Errorf("theme not found: %s", id)
+	}
+
+	// Copy theme values into active palette fields.
+	settings.Preferences.PaletteHueLight = theme.PaletteHueLight
+	settings.Preferences.PaletteSaturationLight = theme.PaletteSaturationLight
+	settings.Preferences.PaletteBrightnessLight = theme.PaletteBrightnessLight
+	settings.Preferences.PaletteHueDark = theme.PaletteHueDark
+	settings.Preferences.PaletteSaturationDark = theme.PaletteSaturationDark
+	settings.Preferences.PaletteBrightnessDark = theme.PaletteBrightnessDark
+	settings.Preferences.AccentColorLight = theme.AccentColorLight
+	settings.Preferences.AccentColorDark = theme.AccentColorDark
+
+	if err := a.saveSettingsFile(settings); err != nil {
+		return err
+	}
+
+	// Sync the in-memory cache so saveAppSettings doesn't overwrite with stale data.
+	if a.appSettings != nil {
+		a.appSettings.PaletteHueLight = theme.PaletteHueLight
+		a.appSettings.PaletteSaturationLight = theme.PaletteSaturationLight
+		a.appSettings.PaletteBrightnessLight = theme.PaletteBrightnessLight
+		a.appSettings.PaletteHueDark = theme.PaletteHueDark
+		a.appSettings.PaletteSaturationDark = theme.PaletteSaturationDark
+		a.appSettings.PaletteBrightnessDark = theme.PaletteBrightnessDark
+		a.appSettings.AccentColorLight = theme.AccentColorLight
+		a.appSettings.AccentColorDark = theme.AccentColorDark
+		a.appSettings.Themes = settings.Preferences.Themes
+	}
+	return nil
+}
+
+// MatchThemeForCluster returns the first saved theme whose ClusterPattern
+// matches the given context name using filepath.Match glob rules (* and ?).
+// Returns nil if no theme matches.
+func (a *App) MatchThemeForCluster(contextName string) (*Theme, error) {
+	settings, err := a.loadSettingsFile()
+	if err != nil {
+		return nil, fmt.Errorf("loading settings: %w", err)
+	}
+
+	for _, t := range settings.Preferences.Themes {
+		if t.ClusterPattern == "" {
+			continue
+		}
+		matched, err := filepath.Match(t.ClusterPattern, contextName)
+		if err != nil {
+			// Invalid pattern — skip rather than fail.
+			continue
+		}
+		if matched {
+			result := t // copy
+			return &result, nil
+		}
+	}
+
+	return nil, nil
 }

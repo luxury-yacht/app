@@ -10,6 +10,7 @@ type (
 	WindowSettings                        = types.WindowSettings
 	AppSettings                           = types.AppSettings
 	ThemeInfo                             = types.ThemeInfo
+	Theme                                 = types.Theme
 	PodLogEntry                           = types.PodLogEntry
 	LogFetchRequest                       = types.LogFetchRequest
 	LogFetchResponse                      = types.LogFetchResponse

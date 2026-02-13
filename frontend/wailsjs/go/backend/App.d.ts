@@ -13,6 +13,8 @@ import {rest} from '../models';
 
 export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
+export function ApplyTheme(arg1:string):Promise<void>;
+
 export function ClearAppState():Promise<void>;
 
 export function ClearGridTablePersistence():Promise<number>;
@@ -38,6 +40,8 @@ export function DeleteNode(arg1:string,arg2:string):Promise<void>;
 export function DeletePod(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function DeleteResource(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
+
+export function DeleteTheme(arg1:string):Promise<void>;
 
 export function DrainNode(arg1:string,arg2:string,arg3:types.DrainNodeOptions):Promise<void>;
 
@@ -145,6 +149,8 @@ export function GetTargetPorts(arg1:string,arg2:string,arg3:string,arg4:string):
 
 export function GetThemeInfo():Promise<types.ThemeInfo>;
 
+export function GetThemes():Promise<Array<types.Theme>>;
+
 export function GetValidatingWebhookConfiguration(arg1:string,arg2:string):Promise<types.ValidatingWebhookConfigurationDetails>;
 
 export function GetWorkloads(arg1:string,arg2:string,arg3:string):Promise<backend.VersionedResponse>;
@@ -171,7 +177,11 @@ export function LogFetcher(arg1:string,arg2:types.LogFetchRequest):Promise<types
 
 export function LogFrontend(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function MatchThemeForCluster(arg1:string):Promise<types.Theme>;
+
 export function OpenKubeconfigSearchPathDialog():Promise<string>;
+
+export function ReorderThemes(arg1:Array<string>):Promise<void>;
 
 export function ResizeShellSession(arg1:string,arg2:number,arg3:number):Promise<void>;
 
@@ -180,6 +190,8 @@ export function RestartWorkload(arg1:string,arg2:string,arg3:string,arg4:string)
 export function RetryAuth():Promise<void>;
 
 export function RetryClusterAuth(arg1:string):Promise<void>;
+
+export function SaveTheme(arg1:types.Theme):Promise<void>;
 
 export function SaveWindowSettings():Promise<void>;
 

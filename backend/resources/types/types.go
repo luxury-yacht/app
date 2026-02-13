@@ -44,12 +44,31 @@ type AppSettings struct {
 	PaletteBrightnessDark            int      `json:"paletteBrightnessDark"`            // Brightness offset for gray palette in dark theme (-50 to +50)
 	AccentColorLight                 string   `json:"accentColorLight"`                 // Custom accent hex for light theme (empty = default)
 	AccentColorDark                  string   `json:"accentColorDark"`                  // Custom accent hex for dark theme (empty = default)
+	Themes                           []Theme  `json:"themes"`                           // Saved theme library
 }
 
 // ThemeInfo represents theme information to send to frontend
 type ThemeInfo struct {
 	CurrentTheme string `json:"currentTheme"` // "light" or "dark"
 	UserTheme    string `json:"userTheme"`    // "light", "dark", or "system"
+}
+
+// Theme represents a saved color theme with optional cluster pattern matching.
+// Themes are ordered; when matching clusters, the first match wins.
+type Theme struct {
+	ID             string `json:"id"`             // UUID
+	Name           string `json:"name"`           // Display name, e.g. "Danger Red"
+	ClusterPattern string `json:"clusterPattern"` // Glob pattern matched against context name, e.g. "prod*"; empty = no auto-match
+
+	PaletteHueLight        int `json:"paletteHueLight"`        // 0-360
+	PaletteSaturationLight int `json:"paletteSaturationLight"` // 0-100
+	PaletteBrightnessLight int `json:"paletteBrightnessLight"` // -50 to +50
+	PaletteHueDark         int `json:"paletteHueDark"`         // 0-360
+	PaletteSaturationDark  int `json:"paletteSaturationDark"`  // 0-100
+	PaletteBrightnessDark  int `json:"paletteBrightnessDark"`  // -50 to +50
+
+	AccentColorLight string `json:"accentColorLight,omitempty"` // Hex "#rrggbb" or empty for default
+	AccentColorDark  string `json:"accentColorDark,omitempty"`  // Hex "#rrggbb" or empty for default
 }
 
 // PodLogEntry represents a single log line with metadata
