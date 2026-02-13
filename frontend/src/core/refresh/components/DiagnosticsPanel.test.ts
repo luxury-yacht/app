@@ -70,15 +70,6 @@ const domainStateMap: Record<string, DomainSnapshotState<any>> = {};
 const scopedEntriesMap: Record<string, Array<[string, DomainSnapshotState<any>]>> = {};
 let refreshState: { pendingRequests: number } = { pendingRequests: 0 };
 
-const defaultDomainState: DomainSnapshotState<any> = {
-  status: 'idle',
-  data: null,
-  stats: null,
-  error: null,
-  droppedAutoRefreshes: 0,
-  scope: undefined,
-};
-
 const mockRefreshManager = vi.hoisted(() => ({
   register: vi.fn(),
   unregister: vi.fn(),
@@ -125,7 +116,6 @@ vi.mock('../store', async () => {
   const actual = await vi.importActual<typeof import('../store')>('../store');
   return {
     ...actual,
-    useRefreshDomain: (domain: string) => domainStateMap[domain] ?? defaultDomainState,
     useRefreshScopedDomainEntries: (domain: string) => scopedEntriesMap[domain] ?? [],
     useRefreshState: () => refreshState,
   };
@@ -152,6 +142,10 @@ const getPermissionKeySafe = (
 
 const setDomainState = (domain: string, state: DomainSnapshotState<any>) => {
   domainStateMap[domain] = state;
+};
+
+const setScopedEntries = (domain: string, entries: Array<[string, DomainSnapshotState<any>]>) => {
+  scopedEntriesMap[domain] = entries;
 };
 
 const resetDomainStates = () => {
@@ -301,10 +295,11 @@ describe('DiagnosticsPanel component', () => {
     'namespace-storage',
   ];
 
+  // All base domains are now scoped — seed scopedEntriesMap so rows pass the idle filter.
   const seedBaseDomainStates = () => {
     baseDomains.forEach((domain) => {
-      if (!domainStateMap[domain]) {
-        setDomainState(domain, createReadyState(null));
+      if (!scopedEntriesMap[domain]?.length) {
+        setScopedEntries(domain, [['default-scope', createReadyState(null)]]);
       }
     });
   };
@@ -312,66 +307,77 @@ describe('DiagnosticsPanel component', () => {
   test('renders cluster overview row with metrics summary before pods', async () => {
     seedBaseDomainStates();
 
-    setDomainState(
-      'namespaces',
-      createReadyState({
-        namespaces: [
-          { name: 'default', phase: 'Active', resourceVersion: '1', creationTimestamp: Date.now() },
-        ],
-      })
-    );
+    setScopedEntries('namespaces', [
+      [
+        'default-scope',
+        createReadyState({
+          namespaces: [
+            {
+              name: 'default',
+              phase: 'Active',
+              resourceVersion: '1',
+              creationTimestamp: Date.now(),
+            },
+          ],
+        }),
+      ],
+    ]);
 
-    setDomainState(
-      'nodes',
-      createReadyState({
-        nodes: [],
-        metrics: {
-          collectedAt: Date.now(),
-          stale: false,
-          lastError: '',
-          consecutiveFailures: 0,
-          successCount: 2,
-          failureCount: 0,
-        },
-      })
-    );
+    setScopedEntries('nodes', [
+      [
+        'default-scope',
+        createReadyState({
+          nodes: [],
+          metrics: {
+            collectedAt: Date.now(),
+            stale: false,
+            lastError: '',
+            consecutiveFailures: 0,
+            successCount: 2,
+            failureCount: 0,
+          },
+        }),
+      ],
+    ]);
 
-    setDomainState(
-      'cluster-overview',
-      createReadyState({
-        overview: {
-          clusterType: 'EKS',
-          clusterVersion: 'v1.29.3',
-          cpuUsage: '150m',
-          cpuRequests: '320m',
-          cpuLimits: '500m',
-          cpuAllocatable: '2.50',
-          memoryUsage: '200.0Mi',
-          memoryRequests: '320.0Mi',
-          memoryLimits: '512.0Mi',
-          memoryAllocatable: '9.0Gi',
-          totalNodes: 3,
-          fargateNodes: 1,
-          regularNodes: 0,
-          ec2Nodes: 2,
-          totalPods: 24,
-          totalContainers: 48,
-          totalInitContainers: 4,
-          runningPods: 20,
-          pendingPods: 3,
-          failedPods: 1,
-          totalNamespaces: 6,
-        },
-        metrics: {
-          collectedAt: Date.now(),
-          stale: false,
-          lastError: '',
-          consecutiveFailures: 0,
-          successCount: 5,
-          failureCount: 1,
-        },
-      })
-    );
+    setScopedEntries('cluster-overview', [
+      [
+        'default-scope',
+        createReadyState({
+          overview: {
+            clusterType: 'EKS',
+            clusterVersion: 'v1.29.3',
+            cpuUsage: '150m',
+            cpuRequests: '320m',
+            cpuLimits: '500m',
+            cpuAllocatable: '2.50',
+            memoryUsage: '200.0Mi',
+            memoryRequests: '320.0Mi',
+            memoryLimits: '512.0Mi',
+            memoryAllocatable: '9.0Gi',
+            totalNodes: 3,
+            fargateNodes: 1,
+            regularNodes: 0,
+            ec2Nodes: 2,
+            totalPods: 24,
+            totalContainers: 48,
+            totalInitContainers: 4,
+            runningPods: 20,
+            pendingPods: 3,
+            failedPods: 1,
+            totalNamespaces: 6,
+          },
+          metrics: {
+            collectedAt: Date.now(),
+            stale: false,
+            lastError: '',
+            consecutiveFailures: 0,
+            successCount: 5,
+            failureCount: 1,
+          },
+        }),
+      ],
+    ]);
 
     scopedEntriesMap['pods'] = [
       [
@@ -450,7 +456,7 @@ describe('DiagnosticsPanel component', () => {
       })
     );
 
-    expect(markup).toContain('Pods (team-a)');
+    expect(markup).toContain('ObjPanel - Pods - team-a');
     expect(markup).toContain('team-a');
   });
 
@@ -491,7 +497,7 @@ describe('DiagnosticsPanel component', () => {
     );
 
     // Only the namespace portion should be shown in the label.
-    expect(markup).toContain('Pods (team-a)');
+    expect(markup).toContain('ObjPanel - Pods - team-a');
   });
 
   test('renders telemetry summaries after successful fetch', async () => {
@@ -679,12 +685,14 @@ describe('DiagnosticsPanel component', () => {
     const now = Date.now();
 
     const scope = buildClusterScopeList(['cluster-a'], '');
-    setDomainState('cluster-config', {
+    const configState = {
       ...createReadyState({
         resources: [{ kind: 'ConfigMap', name: 'app-config', namespace: 'default', data: 2 }],
       }),
       scope,
-    });
+    };
+    // cluster-config is now a scoped domain, so set scoped entries instead of domain state.
+    setScopedEntries('cluster-config', [[scope, configState]]);
 
     fetchTelemetrySummaryMock.mockResolvedValueOnce({
       snapshots: [],

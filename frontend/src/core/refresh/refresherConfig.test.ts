@@ -41,12 +41,6 @@ describe('refresherConfig cadence defaults', () => {
       cooldown: 1000,
       timeout: 10,
     });
-    expect(clusterRefresherConfig(CLUSTER_REFRESHERS.nodeMaintenance)).toEqual({
-      interval: 5000,
-      cooldown: 1000,
-      timeout: 10,
-    });
-
     expect(clusterRefresherConfig(CLUSTER_REFRESHERS.browse)).toEqual({
       interval: 15000,
       cooldown: 1500,
@@ -55,6 +49,12 @@ describe('refresherConfig cadence defaults', () => {
   });
 
   it('exposes expected system refresher timings', () => {
+    expect(systemRefresherConfig(SYSTEM_REFRESHERS.objectMaintenance)).toEqual({
+      interval: 5000,
+      cooldown: 1000,
+      timeout: 10,
+    });
+
     expect(systemRefresherConfig(SYSTEM_REFRESHERS.objectLogs)).toEqual({
       interval: 5000,
       cooldown: 1000,

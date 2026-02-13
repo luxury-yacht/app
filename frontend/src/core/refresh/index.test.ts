@@ -12,16 +12,16 @@ import {
   refreshManager,
   refreshOrchestrator,
   useRefreshContext,
-  useRefreshDomain,
   useRefreshManager,
   useRefreshManagerContext,
+  useRefreshScopedDomain,
   useRefreshScopedDomainStates,
   useRefreshWatcher,
 } from './index';
 import { refreshManager as rawRefreshManager } from './RefreshManager';
 import { refreshOrchestrator as rawOrchestrator } from './orchestrator';
 import {
-  useRefreshDomain as rawUseDomain,
+  useRefreshScopedDomain as rawUseScopedDomain,
   useRefreshScopedDomainStates as rawUseScopedStates,
 } from './store';
 import {
@@ -36,7 +36,7 @@ describe('core/refresh index exports', () => {
   it('re-exports manager primitives and hooks', () => {
     expect(refreshManager).toBe(rawRefreshManager);
     expect(refreshOrchestrator).toBe(rawOrchestrator);
-    expect(useRefreshDomain).toBe(rawUseDomain);
+    expect(useRefreshScopedDomain).toBe(rawUseScopedDomain);
     expect(useRefreshScopedDomainStates).toBe(rawUseScopedStates);
     expect(RefreshManagerProvider).toBe(RawProvider);
     expect(useRefreshManagerContext).toBe(rawUseManagerContext);

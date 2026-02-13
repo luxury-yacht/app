@@ -31,7 +31,7 @@ vi.mock('../RefreshManager', () => ({
   refreshManager: refreshManagerMock,
 }));
 
-import { getDomainState, resetDomainState, setDomainState } from '../store';
+import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
 
 class MockEventSource {
   static instances: MockEventSource[] = [];
@@ -135,7 +135,7 @@ describe('catalogStreamManager', () => {
     ensureRefreshBaseURLMock.mockResolvedValue('http://127.0.0.1:0');
     errorHandlerMock.handle.mockReset();
     refreshManagerMock.triggerManualRefresh.mockReset();
-    resetDomainState('catalog');
+    resetAllScopedDomainStates('catalog');
     const module = await import('./catalogStreamManager');
     module.catalogStreamManager.stop(true);
   });
@@ -144,7 +144,7 @@ describe('catalogStreamManager', () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     MockEventSource.reset();
-    resetDomainState('catalog');
+    resetAllScopedDomainStates('catalog');
   });
 
   it('opens an EventSource stream and applies snapshot payloads', async () => {
@@ -169,7 +169,7 @@ describe('catalogStreamManager', () => {
 
     await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
 
-    const state = getDomainState('catalog');
+    const state = getScopedDomainState('catalog', 'limit=50');
     expect(state.status).toBe('ready');
     expect(state.data).toEqual(snapshot);
     expect(state.stats?.itemCount).toBe(1);
@@ -183,7 +183,7 @@ describe('catalogStreamManager', () => {
     const manager = await importManager();
     await manager.start('limit=5');
 
-    setDomainState('catalog', () => ({
+    setScopedDomainState('catalog', 'limit=5', () => ({
       status: 'ready',
       data: createEmptySnapshot(),
       stats: null,
@@ -196,7 +196,7 @@ describe('catalogStreamManager', () => {
 
     await Promise.resolve();
 
-    const state = getDomainState('catalog');
+    const state = getScopedDomainState('catalog', 'limit=5');
     expect(state.status).toBe('idle');
     expect(state.data).toBeNull();
     expect(MockEventSource.instances[0].closed).toBe(true);
@@ -258,7 +258,7 @@ describe('catalogStreamManager', () => {
 
     await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
 
-    const state = getDomainState('catalog');
+    const state = getScopedDomainState('catalog', 'limit=50');
     const mergedItems = state.data?.items ?? [];
     const byUid = new Map(mergedItems.map((item) => [item.uid, item]));
     expect(mergedItems).toHaveLength(2);
@@ -360,7 +360,7 @@ describe('catalogStreamManager', () => {
     await manager.start('continue=token');
 
     const initialSnapshot = createSnapshot();
-    setDomainState('catalog', () => ({
+    setScopedDomainState('catalog', 'continue=token', () => ({
       status: 'ready',
       data: initialSnapshot,
       stats: { itemCount: 1, buildDurationMs: 10 },
@@ -389,12 +389,12 @@ describe('catalogStreamManager', () => {
       ),
     } as MessageEvent);
 
-    const preState = getDomainState('catalog');
+    const preState = getScopedDomainState('catalog', 'continue=token');
     expect(preState.data?.items?.[0]?.name).toBe('api');
 
     await vi.advanceTimersByTimeAsync(FLUSH_DELAY_MS);
 
-    const state = getDomainState('catalog');
+    const state = getScopedDomainState('catalog', 'continue=token');
     expect(state.status).toBe('updating');
     expect(state.scope).toBe('continue=token');
     expect(state.stats?.itemCount).toBe(2);

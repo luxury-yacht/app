@@ -581,7 +581,7 @@ export type RefreshDomain =
   | 'namespaces'
   | 'cluster-overview'
   | 'nodes'
-  | 'node-maintenance'
+  | 'object-maintenance'
   | 'pods'
   | 'object-details'
   | 'object-events'
@@ -612,7 +612,7 @@ export interface DomainPayloadMap {
   namespaces: NamespaceSnapshotPayload;
   'cluster-overview': ClusterOverviewSnapshotPayload;
   nodes: ClusterNodeSnapshotPayload;
-  'node-maintenance': NodeMaintenanceSnapshotPayload;
+  'object-maintenance': NodeMaintenanceSnapshotPayload;
   pods: PodSnapshotPayload;
   'object-details': ObjectDetailsSnapshotPayload;
   'object-events': ObjectEventsSnapshotPayload;

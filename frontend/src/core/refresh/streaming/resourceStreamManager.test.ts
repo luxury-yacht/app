@@ -33,15 +33,7 @@ vi.mock('@/core/logging/appLogClient', () => ({
 }));
 
 import { buildClusterScopeList } from '../clusterScope';
-import {
-  getDomainState,
-  getScopedDomainState,
-  resetAllScopedDomainStates,
-  resetDomainState,
-  resetScopedDomainState,
-  setDomainState,
-  setScopedDomainState,
-} from '../store';
+import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
 import {
   ResourceStreamManager,
   mergeNodeMetricsRow,
@@ -95,42 +87,41 @@ beforeEach(() => {
   (window as any).clearTimeout = globalThis.clearTimeout;
   (globalThis as any).WebSocket = FakeWebSocket;
 
-  resetDomainState('nodes');
-  resetDomainState('namespace-workloads');
-  resetDomainState('namespace-config');
-  resetDomainState('namespace-network');
-  resetDomainState('namespace-rbac');
-  resetDomainState('namespace-custom');
-  resetDomainState('namespace-helm');
-  resetDomainState('namespace-autoscaling');
-  resetDomainState('namespace-quotas');
-  resetDomainState('namespace-storage');
-  resetDomainState('cluster-rbac');
-  resetDomainState('cluster-storage');
-  resetDomainState('cluster-config');
-  resetDomainState('cluster-crds');
-  resetDomainState('cluster-custom');
+  resetAllScopedDomainStates('nodes');
+  resetAllScopedDomainStates('namespace-workloads');
+  resetAllScopedDomainStates('namespace-config');
+  resetAllScopedDomainStates('namespace-network');
+  resetAllScopedDomainStates('namespace-rbac');
+  resetAllScopedDomainStates('namespace-custom');
+  resetAllScopedDomainStates('namespace-helm');
+  resetAllScopedDomainStates('namespace-autoscaling');
+  resetAllScopedDomainStates('namespace-quotas');
+  resetAllScopedDomainStates('namespace-storage');
+  resetAllScopedDomainStates('cluster-rbac');
+  resetAllScopedDomainStates('cluster-storage');
+  resetAllScopedDomainStates('cluster-config');
+  resetAllScopedDomainStates('cluster-crds');
+  resetAllScopedDomainStates('cluster-custom');
   resetAllScopedDomainStates('pods');
 });
 
 afterEach(() => {
-  resetDomainState('nodes');
-  resetDomainState('namespace-workloads');
-  resetDomainState('namespace-config');
-  resetDomainState('namespace-network');
-  resetDomainState('namespace-rbac');
-  resetDomainState('namespace-custom');
-  resetDomainState('namespace-helm');
-  resetDomainState('namespace-autoscaling');
-  resetDomainState('namespace-quotas');
-  resetDomainState('namespace-storage');
-  resetDomainState('cluster-rbac');
-  resetDomainState('cluster-storage');
-  resetDomainState('cluster-config');
-  resetDomainState('cluster-crds');
-  resetDomainState('cluster-custom');
+  resetAllScopedDomainStates('nodes');
+  resetAllScopedDomainStates('namespace-workloads');
+  resetAllScopedDomainStates('namespace-config');
+  resetAllScopedDomainStates('namespace-network');
+  resetAllScopedDomainStates('namespace-rbac');
+  resetAllScopedDomainStates('namespace-custom');
+  resetAllScopedDomainStates('namespace-helm');
+  resetAllScopedDomainStates('namespace-autoscaling');
+  resetAllScopedDomainStates('namespace-quotas');
+  resetAllScopedDomainStates('namespace-storage');
+  resetAllScopedDomainStates('cluster-rbac');
+  resetAllScopedDomainStates('cluster-storage');
+  resetAllScopedDomainStates('cluster-config');
+  resetAllScopedDomainStates('cluster-crds');
+  resetAllScopedDomainStates('cluster-custom');
   resetAllScopedDomainStates('pods');
-  resetScopedDomainState('pods', 'cluster-a|namespace:default');
   delete (globalThis as any).WebSocket;
   vi.useRealTimers();
 });
@@ -383,7 +374,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-config', storeScope);
 
-    setDomainState('namespace-config', () => ({
+    setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -417,7 +408,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('namespace-config');
+    const state = getScopedDomainState('namespace-config', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('config-a');
   });
 
@@ -431,7 +422,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-config', storeScope);
 
-    setDomainState('namespace-config', () => ({
+    setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -466,7 +457,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('namespace-config');
+    const state = getScopedDomainState('namespace-config', storeScope);
     expect(state.data?.resources?.[0]?.clusterId).toBe('cluster-a');
   });
 
@@ -480,7 +471,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-config', storeScope);
 
-    setDomainState('namespace-config', () => ({
+    setScopedDomainState('namespace-config', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -514,7 +505,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('namespace-config');
+    const state = getScopedDomainState('namespace-config', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('config-a');
   });
 
@@ -528,7 +519,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-network', storeScope);
 
-    setDomainState('namespace-network', () => ({
+    setScopedDomainState('namespace-network', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -561,7 +552,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('namespace-network');
+    const state = getScopedDomainState('namespace-network', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('svc-a');
   });
 
@@ -575,7 +566,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-rbac', storeScope);
 
-    setDomainState('namespace-rbac', () => ({
+    setScopedDomainState('namespace-rbac', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -608,7 +599,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('namespace-rbac');
+    const state = getScopedDomainState('namespace-rbac', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('role-a');
   });
 
@@ -622,7 +613,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-custom', storeScope);
 
-    setDomainState('namespace-custom', () => ({
+    setScopedDomainState('namespace-custom', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -656,7 +647,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('namespace-custom');
+    const state = getScopedDomainState('namespace-custom', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('widget-a');
   });
 
@@ -670,7 +661,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-helm', storeScope);
 
-    setDomainState('namespace-helm', () => ({
+    setScopedDomainState('namespace-helm', storeScope, () => ({
       status: 'ready',
       data: { releases: [] },
       stats: null,
@@ -706,7 +697,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('namespace-helm');
+    const state = getScopedDomainState('namespace-helm', storeScope);
     expect(state.data?.releases?.[0]?.name).toBe('release-a');
   });
 
@@ -720,7 +711,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-autoscaling', storeScope);
 
-    setDomainState('namespace-autoscaling', () => ({
+    setScopedDomainState('namespace-autoscaling', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -756,7 +747,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('namespace-autoscaling');
+    const state = getScopedDomainState('namespace-autoscaling', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('hpa-a');
   });
 
@@ -770,7 +761,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-quotas', storeScope);
 
-    setDomainState('namespace-quotas', () => ({
+    setScopedDomainState('namespace-quotas', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -803,7 +794,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('namespace-quotas');
+    const state = getScopedDomainState('namespace-quotas', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('quota-a');
   });
 
@@ -817,7 +808,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('namespace-storage', storeScope);
 
-    setDomainState('namespace-storage', () => ({
+    setScopedDomainState('namespace-storage', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -852,7 +843,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('namespace-storage');
+    const state = getScopedDomainState('namespace-storage', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('pvc-a');
   });
 
@@ -866,7 +857,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('cluster-rbac', storeScope);
 
-    setDomainState('cluster-rbac', () => ({
+    setScopedDomainState('cluster-rbac', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -898,7 +889,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('cluster-rbac');
+    const state = getScopedDomainState('cluster-rbac', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('cluster-role');
   });
 
@@ -912,7 +903,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('cluster-storage', storeScope);
 
-    setDomainState('cluster-storage', () => ({
+    setScopedDomainState('cluster-storage', storeScope, () => ({
       status: 'ready',
       data: { volumes: [] },
       stats: null,
@@ -946,7 +937,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('cluster-storage');
+    const state = getScopedDomainState('cluster-storage', storeScope);
     expect(state.data?.volumes?.[0]?.name).toBe('pv-a');
   });
 
@@ -960,7 +951,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('cluster-config', storeScope);
 
-    setDomainState('cluster-config', () => ({
+    setScopedDomainState('cluster-config', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -992,7 +983,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('cluster-config');
+    const state = getScopedDomainState('cluster-config', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('standard');
   });
 
@@ -1006,7 +997,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('cluster-crds', storeScope);
 
-    setDomainState('cluster-crds', () => ({
+    setScopedDomainState('cluster-crds', storeScope, () => ({
       status: 'ready',
       data: { definitions: [] },
       stats: null,
@@ -1040,7 +1031,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('cluster-crds');
+    const state = getScopedDomainState('cluster-crds', storeScope);
     expect(state.data?.definitions?.[0]?.name).toBe('widgets.example.com');
   });
 
@@ -1054,7 +1045,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('cluster-custom', storeScope);
 
-    setDomainState('cluster-custom', () => ({
+    setScopedDomainState('cluster-custom', storeScope, () => ({
       status: 'ready',
       data: { resources: [] },
       stats: null,
@@ -1085,7 +1076,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('cluster-custom');
+    const state = getScopedDomainState('cluster-custom', storeScope);
     expect(state.data?.resources?.[0]?.name).toBe('cluster-widget');
   });
 
@@ -1099,7 +1090,7 @@ describe('ResourceStreamManager', () => {
       manager as unknown as { ensureSubscriptions: (...args: unknown[]) => void }
     ).ensureSubscriptions('nodes', storeScope);
 
-    setDomainState('nodes', () => ({
+    setScopedDomainState('nodes', storeScope, () => ({
       status: 'ready',
       data: { nodes: [] },
       stats: null,
@@ -1120,7 +1111,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('nodes');
+    const state = getScopedDomainState('nodes', storeScope);
     expect(state.data?.nodes?.[0]?.name).toBe('node-a');
   });
 
@@ -1164,7 +1155,7 @@ describe('ResourceStreamManager', () => {
     vi.advanceTimersByTime(200);
 
     expect(fetchSnapshotMock).not.toHaveBeenCalled();
-    const state = getDomainState('nodes');
+    const state = getScopedDomainState('nodes', storeScope);
     expect(state.data?.nodes?.[0]?.status).toBe('NotReady');
   });
 
@@ -1208,7 +1199,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('nodes');
+    const state = getScopedDomainState('nodes', storeScope);
     expect(state.data?.nodes?.[0]?.name).toBe('node-a');
   });
 
@@ -1436,7 +1427,7 @@ describe('ResourceStreamManager', () => {
 
     vi.advanceTimersByTime(200);
 
-    const state = getDomainState('nodes');
+    const state = getScopedDomainState('nodes', storeScope);
     expect(state.data?.nodes?.[0]?.status).toBe('Ready');
     expect(fetchSnapshotMock).toHaveBeenCalledTimes(1);
   });
@@ -1728,7 +1719,7 @@ describe('ResourceStreamManager', () => {
     await manager.start('namespace-workloads', storeScope);
     await flushPromises();
 
-    const initialState = getDomainState('namespace-workloads');
+    const initialState = getScopedDomainState('namespace-workloads', storeScope);
     expect(initialState.data?.workloads).toHaveLength(2);
 
     vi.advanceTimersByTime(1100);
@@ -1756,7 +1747,7 @@ describe('ResourceStreamManager', () => {
 
     await flushPromises();
 
-    const state = getDomainState('namespace-workloads');
+    const state = getScopedDomainState('namespace-workloads', storeScope);
     const names = (state.data?.workloads ?? []).map((row) => row.name).sort();
     expect(names).toEqual(['api', 'web']);
   });

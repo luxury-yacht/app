@@ -7,7 +7,7 @@
 
 import { ensureRefreshBaseURL } from '../client';
 import type { SnapshotStats } from '../client';
-import { setDomainState, resetDomainState } from '../store';
+import { setScopedDomainState, resetScopedDomainState } from '../store';
 import type {
   ClusterEventEntry,
   ClusterEventsSnapshotPayload,
@@ -361,7 +361,7 @@ export class EventStreamManager {
     if (reset) {
       this.clusterEvents = [];
       this.clusterEventMeta = { total: 0, truncated: false };
-      resetDomainState(CLUSTER_DOMAIN);
+      resetScopedDomainState(CLUSTER_DOMAIN, this.clusterScope ?? CLUSTER_SCOPE);
       this.clusterScope = null;
     }
   }
@@ -395,7 +395,7 @@ export class EventStreamManager {
     if (reset && activeScope) {
       this.namespaceEvents.delete(activeScope);
       this.namespaceEventMeta.delete(activeScope);
-      resetDomainState(NAMESPACE_DOMAIN);
+      resetScopedDomainState(NAMESPACE_DOMAIN, activeScope);
     }
     if (reset) {
       this.namespaceScope = null;
@@ -460,7 +460,7 @@ export class EventStreamManager {
     const resyncing = RESYNC_STATE_ENABLED && !isTerminal;
 
     if (domain === CLUSTER_DOMAIN) {
-      setDomainState(CLUSTER_DOMAIN, (previous) => ({
+      setScopedDomainState(CLUSTER_DOMAIN, scope, (previous) => ({
         ...previous,
         status: isTerminal
           ? 'error'
@@ -478,7 +478,7 @@ export class EventStreamManager {
       return;
     }
     if (domain === NAMESPACE_DOMAIN) {
-      setDomainState(NAMESPACE_DOMAIN, (previous) => ({
+      setScopedDomainState(NAMESPACE_DOMAIN, scope, (previous) => ({
         ...previous,
         status: isTerminal
           ? 'error'
@@ -508,7 +508,7 @@ export class EventStreamManager {
         this.clusterEventMeta.truncated,
         'events'
       );
-      setDomainState(CLUSTER_DOMAIN, (previous) => ({
+      setScopedDomainState(CLUSTER_DOMAIN, scope, (previous) => ({
         ...previous,
         status: 'ready',
         data: payload,
@@ -530,7 +530,7 @@ export class EventStreamManager {
       };
       const meta = this.namespaceEventMeta.get(scope) ?? { total: events.length, truncated: false };
       const stats = this.buildStats(events.length, meta.total, meta.truncated, 'events');
-      setDomainState(NAMESPACE_DOMAIN, (previous) => ({
+      setScopedDomainState(NAMESPACE_DOMAIN, scope, (previous) => ({
         ...previous,
         status: 'ready',
         data: payload,
@@ -549,14 +549,14 @@ export class EventStreamManager {
     if (domain === CLUSTER_DOMAIN) {
       const activeScope = scope?.trim() || this.clusterScope || CLUSTER_SCOPE;
       if (reset) {
-        resetDomainState(CLUSTER_DOMAIN);
+        resetScopedDomainState(CLUSTER_DOMAIN, activeScope);
         this.clusterEvents = [];
         this.pendingClusterState = null;
         this.clusterUpdateScheduled = false;
         this.clearStreamError(CLUSTER_DOMAIN, activeScope);
         return;
       }
-      setDomainState(CLUSTER_DOMAIN, (previous) => ({
+      setScopedDomainState(CLUSTER_DOMAIN, activeScope, (previous) => ({
         ...previous,
         status: previous.status === 'ready' ? 'ready' : 'idle',
         stats: this.buildStats(
@@ -573,14 +573,14 @@ export class EventStreamManager {
 
     if (domain === NAMESPACE_DOMAIN) {
       if (reset) {
-        resetDomainState(NAMESPACE_DOMAIN);
+        resetScopedDomainState(NAMESPACE_DOMAIN, scope);
         this.namespaceEvents.delete(scope);
         this.pendingNamespaceState.delete(scope);
         this.namespaceUpdateScheduled.delete(scope);
         this.clearStreamError(NAMESPACE_DOMAIN, scope);
         return;
       }
-      setDomainState(NAMESPACE_DOMAIN, (previous) => ({
+      setScopedDomainState(NAMESPACE_DOMAIN, scope, (previous) => ({
         ...previous,
         status: previous.status === 'ready' ? 'ready' : 'idle',
         stats: this.buildStats(
@@ -627,7 +627,7 @@ export class EventStreamManager {
   private markLoading(domain: string, scope?: string): void {
     if (domain === CLUSTER_DOMAIN) {
       const activeScope = scope?.trim() || this.clusterScope || CLUSTER_SCOPE;
-      setDomainState(CLUSTER_DOMAIN, (previous) => ({
+      setScopedDomainState(CLUSTER_DOMAIN, activeScope, (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'loading',
         error: null,
@@ -637,7 +637,7 @@ export class EventStreamManager {
       return;
     }
     if (domain === NAMESPACE_DOMAIN) {
-      setDomainState(NAMESPACE_DOMAIN, (previous) => ({
+      setScopedDomainState(NAMESPACE_DOMAIN, scope ?? this.namespaceScope ?? '', (previous) => ({
         ...previous,
         status: previous.data ? 'updating' : 'loading',
         error: null,
@@ -660,7 +660,7 @@ export class EventStreamManager {
       events: this.clusterEvents,
     };
     const stats = this.buildStats(this.clusterEvents.length, totalItems, truncated, 'events');
-    setDomainState(CLUSTER_DOMAIN, (previous) => ({
+    setScopedDomainState(CLUSTER_DOMAIN, activeScope, (previous) => ({
       ...previous,
       status: error ? 'error' : 'ready',
       data: payload,
@@ -690,7 +690,7 @@ export class EventStreamManager {
       events,
     };
     const stats = this.buildStats(events.length, totalItems, truncated, 'events');
-    setDomainState(NAMESPACE_DOMAIN, (previous) => ({
+    setScopedDomainState(NAMESPACE_DOMAIN, scope, (previous) => ({
       ...previous,
       status: error ? 'error' : 'ready',
       data: payload,

@@ -5,30 +5,45 @@
  * Encapsulates state and side effects for the core layer.
  */
 
-import { useEffect } from 'react';
-import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
+import { useEffect, useMemo } from 'react';
+import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import type { ClusterOverviewMetrics } from '@/core/refresh/types';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 
 export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null => {
-  const overviewDomain = useRefreshDomain('cluster-overview');
-  const { selectedClusterId } = useKubeconfig();
+  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
   const { viewType } = useViewState();
 
+  // Build scope covering all connected clusters for the cluster-overview domain.
+  const overviewScope = useMemo(
+    () => buildClusterScopeList(selectedClusterIds, ''),
+    [selectedClusterIds]
+  );
+
+  const overviewDomain = useRefreshScopedDomain('cluster-overview', overviewScope);
+
   useEffect(() => {
+    // Skip scoped calls when no clusters are connected (scope is empty).
+    if (!overviewScope) {
+      return;
+    }
+
     // Keep cluster-overview running for all active views so diagnostics and background
     // metrics stay current regardless of which view type is selected.
     const shouldEnable =
       viewType === 'overview' || viewType === 'namespace' || viewType === 'cluster';
-    refreshOrchestrator.setDomainEnabled('cluster-overview', shouldEnable);
+    refreshOrchestrator.setScopedDomainEnabled('cluster-overview', overviewScope, shouldEnable);
 
     const shouldTrigger = shouldEnable && viewType !== 'overview';
     // ClusterOverview handles its own initial refresh; only prime from non-overview views.
     if (shouldTrigger && !overviewDomain.data && overviewDomain.status === 'idle') {
-      void refreshOrchestrator.triggerManualRefresh('cluster-overview', { suppressSpinner: true });
+      void refreshOrchestrator.fetchScopedDomain('cluster-overview', overviewScope, {
+        isManual: true,
+      });
     }
-  }, [overviewDomain.data, overviewDomain.status, viewType]);
+  }, [overviewDomain.data, overviewDomain.status, overviewScope, viewType]);
 
   const metricsByCluster = overviewDomain.data?.metricsByCluster;
   if (metricsByCluster) {

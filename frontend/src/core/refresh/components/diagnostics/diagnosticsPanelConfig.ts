@@ -66,7 +66,7 @@ export const DOMAIN_REFRESHER_MAP: Partial<Record<RefreshDomain, RefresherName>>
   namespaces: SYSTEM_REFRESHERS.namespaces,
   'cluster-overview': SYSTEM_REFRESHERS.clusterOverview,
   nodes: CLUSTER_REFRESHERS.nodes,
-  'node-maintenance': CLUSTER_REFRESHERS.nodeMaintenance,
+  'object-maintenance': SYSTEM_REFRESHERS.objectMaintenance,
   pods: SYSTEM_REFRESHERS.unifiedPods,
   'cluster-config': CLUSTER_REFRESHERS.config,
   'cluster-crds': CLUSTER_REFRESHERS.crds,
@@ -116,7 +116,7 @@ export const DOMAIN_STREAM_MAP: Partial<Record<RefreshDomain, string>> = {
 export const PRIORITY_DOMAINS: RefreshDomain[] = [
   'namespaces',
   'nodes',
-  'node-maintenance',
+  'object-maintenance',
   'cluster-overview',
   'catalog',
   'namespace-workloads',

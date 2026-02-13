@@ -7,7 +7,8 @@
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import ResourceBar from '@shared/components/ResourceBar';
-import { refreshOrchestrator, useRefreshDomain } from '@/core/refresh';
+import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { eventBus } from '@/core/events';
 import type { ClusterOverviewPayload } from '@/core/refresh/types';
 import logo from '@assets/luxury-yacht-logo.png';
@@ -64,8 +65,13 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     return clusterContext.substring(lastColonIndex + 1) || 'default';
   }, [clusterContext]);
 
-  const overviewDomain = useRefreshDomain('cluster-overview');
-  const { selectedClusterId } = useKubeconfig();
+  const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  // Build scope covering all connected clusters for the cluster-overview domain.
+  const overviewScope = useMemo(
+    () => buildClusterScopeList(selectedClusterIds, ''),
+    [selectedClusterIds]
+  );
+  const overviewDomain = useRefreshScopedDomain('cluster-overview', overviewScope);
   const [overviewData, setOverviewData] = useState<ClusterOverviewPayload>(EMPTY_OVERVIEW);
   const [isHydrated, setIsHydrated] = useState(false);
   const [hydratedClusterId, setHydratedClusterId] = useState<string | null>(null);
@@ -208,13 +214,20 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     (isSwitching || isLoading || overviewDomain.status === 'idle');
 
   useEffect(() => {
+    // Skip scoped calls when no clusters are connected (scope is empty).
+    if (!overviewScope) {
+      return;
+    }
+
     const enableOverview = () => {
-      refreshOrchestrator.setDomainEnabled('cluster-overview', true);
-      refreshOrchestrator.triggerManualRefresh('cluster-overview').catch(() => {
-        setOverviewData(EMPTY_OVERVIEW);
-        setIsHydrated(false);
-        setIsSwitching(true);
-      });
+      refreshOrchestrator.setScopedDomainEnabled('cluster-overview', overviewScope, true);
+      refreshOrchestrator
+        .fetchScopedDomain('cluster-overview', overviewScope, { isManual: true })
+        .catch(() => {
+          setOverviewData(EMPTY_OVERVIEW);
+          setIsHydrated(false);
+          setIsSwitching(true);
+        });
     };
 
     // Clear local component state without touching the domain lifecycle.
@@ -251,7 +264,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
     return () => {
       clearLocalState();
     };
-  }, []);
+  }, [overviewScope]);
 
   const handlePodStatusNavigate = useCallback(
     (key: string, count: number) => {

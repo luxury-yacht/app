@@ -40,7 +40,7 @@ func TestDomainRegistrationOrder(t *testing.T) {
 		"object-helm-manifest",
 		"object-helm-values",
 		"object-events",
-		"node-maintenance",
+		"object-maintenance",
 	}
 
 	registrations := domainRegistrations(registrationDeps{cfg: Config{}})

@@ -59,6 +59,7 @@ const mockUseKeyboardNavigationScope = vi.fn();
 const mockRefreshOrchestrator = {
   setScopedDomainEnabled: vi.fn(),
   resetScopedDomain: vi.fn(),
+  stopStreamingDomain: vi.fn(),
   fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
   updateContext: vi.fn(),
 };

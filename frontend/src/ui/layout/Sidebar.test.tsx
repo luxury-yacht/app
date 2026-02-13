@@ -19,14 +19,19 @@ const runtimeMocks = vi.hoisted(() => ({
 }));
 
 const refreshMocks = vi.hoisted(() => ({
-  catalogDomain: {
-    status: 'idle' as const,
-    data: null as any,
-    stats: null,
-    error: null,
-    droppedAutoRefreshes: 0,
-    scope: undefined,
-  },
+  // Scoped domain states: Record<string, DomainState>
+  // The component iterates Object.values() looking for an entry with .data
+  catalogScopedStates: {} as Record<
+    string,
+    {
+      status: 'idle' | 'loading' | 'success' | 'error';
+      data: any;
+      stats: any;
+      error: any;
+      droppedAutoRefreshes: number;
+      scope: string | undefined;
+    }
+  >,
 }));
 
 const testClusterId = 'cluster-a';
@@ -38,7 +43,15 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
 }));
 
 vi.mock('@core/refresh', () => ({
-  useRefreshDomain: () => refreshMocks.catalogDomain,
+  useRefreshScopedDomain: () => ({
+    status: 'idle',
+    data: null,
+    stats: null,
+    error: null,
+    droppedAutoRefreshes: 0,
+    scope: undefined,
+  }),
+  useRefreshScopedDomainStates: () => refreshMocks.catalogScopedStates,
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
@@ -155,7 +168,7 @@ describe('Sidebar', () => {
     root = ReactDOM.createRoot(container);
     namespaceState = createNamespaceState();
     viewStateMock = createViewState();
-    refreshMocks.catalogDomain.data = null;
+    refreshMocks.catalogScopedStates = {};
   });
 
   afterEach(() => {
@@ -323,19 +336,28 @@ describe('Sidebar', () => {
   });
 
   it('filters catalog namespace groups to the active cluster', () => {
-    refreshMocks.catalogDomain.data = {
-      namespaceGroups: [
-        {
-          clusterId: testClusterId,
-          clusterName: 'Cluster A',
-          namespaces: ['default'],
+    refreshMocks.catalogScopedStates = {
+      'test-scope': {
+        status: 'success',
+        data: {
+          namespaceGroups: [
+            {
+              clusterId: testClusterId,
+              clusterName: 'Cluster A',
+              namespaces: ['default'],
+            },
+            {
+              clusterId: 'cluster-b',
+              clusterName: 'Cluster B',
+              namespaces: ['other'],
+            },
+          ],
         },
-        {
-          clusterId: 'cluster-b',
-          clusterName: 'Cluster B',
-          namespaces: ['other'],
-        },
-      ],
+        stats: null,
+        error: null,
+        droppedAutoRefreshes: 0,
+        scope: 'test-scope',
+      },
     };
     renderSidebar();
     const namespaceToggle = container!.querySelector<HTMLDivElement>(

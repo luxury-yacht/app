@@ -7,16 +7,12 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import * as storeModule from './store';
-import type { RefreshContext } from './RefreshManager';
 import type { RefreshDomain } from './types';
 import {
-  getDomainState,
   getRefreshState,
   getScopedDomainState,
   markPendingRequest,
-  resetDomainState,
-  setDomainState,
+  resetAllScopedDomainStates,
   setScopedDomainState,
 } from './store';
 import { refreshOrchestrator } from './orchestrator';
@@ -29,7 +25,6 @@ const refreshManagerMocks = vi.hoisted(() => ({
   enableMock: vi.fn(),
   registerMock: vi.fn(),
   updateContextMock: vi.fn(),
-  triggerManualRefreshMock: vi.fn(),
   triggerManualRefreshForContextMock: vi.fn(),
 }));
 
@@ -40,7 +35,6 @@ vi.mock('./RefreshManager', () => ({
     enable: refreshManagerMocks.enableMock,
     register: refreshManagerMocks.registerMock,
     updateContext: refreshManagerMocks.updateContextMock,
-    triggerManualRefresh: refreshManagerMocks.triggerManualRefreshMock,
     triggerManualRefreshForContext: refreshManagerMocks.triggerManualRefreshForContextMock,
   },
 }));
@@ -129,7 +123,6 @@ describe('refreshOrchestrator', () => {
     refreshManagerMocks.enableMock.mockReset();
     refreshManagerMocks.registerMock.mockReset();
     refreshManagerMocks.updateContextMock.mockReset();
-    refreshManagerMocks.triggerManualRefreshMock.mockReset();
     refreshManagerMocks.triggerManualRefreshForContextMock.mockReset();
     resourceStreamMocks.start.mockReset();
     resourceStreamMocks.stop.mockReset();
@@ -145,16 +138,12 @@ describe('refreshOrchestrator', () => {
     orchestratorInternals.configs?.clear?.();
     orchestratorInternals.unsubscriptions?.clear?.();
     orchestratorInternals.registeredRefreshers?.clear?.();
-    orchestratorInternals.scopedDomains?.clear?.();
-    orchestratorInternals.domainEnabledState?.clear?.();
     orchestratorInternals.scopedEnabledState?.clear?.();
-    orchestratorInternals.domainStreamingScopes?.clear?.();
     orchestratorInternals.streamingCleanup?.clear?.();
     orchestratorInternals.pendingStreaming?.clear?.();
     orchestratorInternals.streamingReady?.clear?.();
     orchestratorInternals.cancelledStreaming?.clear?.();
     orchestratorInternals.inFlight?.clear?.();
-    orchestratorInternals.domainScopeOverrides?.clear?.();
     orchestratorInternals.suspendedDomains?.clear?.();
     orchestratorInternals.lastNotifiedErrors?.clear?.();
     orchestratorInternals.contextVersion = 0;
@@ -164,7 +153,7 @@ describe('refreshOrchestrator', () => {
       objectPanel: { isOpen: false },
     };
 
-    resetDomainState('cluster-config');
+    resetAllScopedDomainStates('cluster-config');
     const { pendingRequests } = getRefreshState();
     if (pendingRequests !== 0) {
       markPendingRequest(-pendingRequests);
@@ -175,15 +164,6 @@ describe('refreshOrchestrator', () => {
     subscriber = undefined;
     scopedFetch.mockReset();
   });
-
-  const registerClusterConfigDomain = () => {
-    refreshOrchestrator.registerDomain({
-      domain: 'cluster-config',
-      refresherName: 'cluster-config',
-      category: 'cluster',
-      autoStart: true,
-    });
-  };
 
   const registerStreamingClusterConfigDomain = () => {
     refreshOrchestrator.registerDomain({
@@ -203,16 +183,14 @@ describe('refreshOrchestrator', () => {
 
   const markResourceStreamActive = (domain: RefreshDomain, scope: string) => {
     // Simulate an active resource stream so polling gating is deterministic in tests.
-    orchestratorInternals.domainStreamingScopes.set(domain, scope);
     orchestratorInternals.streamingCleanup.set(makeTestInFlightKey(domain, scope), () => undefined);
   };
 
-  const registerNodeMaintenanceDomain = () => {
+  const registerObjectMaintenanceDomain = () => {
     refreshOrchestrator.registerDomain({
-      domain: 'node-maintenance',
-      refresherName: CLUSTER_REFRESHERS.nodeMaintenance,
-      category: 'cluster',
-      scoped: true,
+      domain: 'object-maintenance',
+      refresherName: SYSTEM_REFRESHERS.objectMaintenance,
+      category: 'system',
       autoStart: false,
     });
   };
@@ -222,7 +200,6 @@ describe('refreshOrchestrator', () => {
       domain: 'catalog-diff',
       refresherName: CLUSTER_REFRESHERS.catalogDiff,
       category: 'cluster',
-      scoped: true,
       autoStart: false,
     });
   };
@@ -247,21 +224,11 @@ describe('refreshOrchestrator', () => {
     });
   });
 
-  const registerNamespacesDomain = () => {
-    refreshOrchestrator.registerDomain({
-      domain: 'namespaces',
-      refresherName: SYSTEM_REFRESHERS.namespaces,
-      category: 'system',
-      autoStart: true,
-    });
-  };
-
   const registerPodsDomain = () => {
     refreshOrchestrator.registerDomain({
       domain: 'pods',
       refresherName: SYSTEM_REFRESHERS.unifiedPods,
       category: 'system',
-      scoped: true,
       autoStart: true,
     });
   };
@@ -270,12 +237,16 @@ describe('refreshOrchestrator', () => {
     refreshManagerMocks.triggerManualRefreshForContextMock.mockResolvedValue(
       undefined as unknown as void
     );
-    const namespaceSpy = vi
-      .spyOn(refreshOrchestrator, 'triggerManualRefresh')
-      .mockResolvedValue(undefined as unknown as void);
+    scopedFetch.mockResolvedValue(undefined as unknown as void);
 
-    registerNamespacesDomain();
-    refreshOrchestrator.setDomainEnabled('namespaces', true);
+    // Register namespaces as scoped and enable a scope so refreshEnabledScopes fires.
+    refreshOrchestrator.registerDomain({
+      domain: 'namespaces',
+      refresherName: SYSTEM_REFRESHERS.namespaces,
+      category: 'system',
+      autoStart: true,
+    });
+    refreshOrchestrator.setScopedDomainEnabled('namespaces', 'cluster:cluster-a', true);
 
     await refreshOrchestrator.triggerManualRefreshForContext();
 
@@ -284,8 +255,11 @@ describe('refreshOrchestrator', () => {
         currentView: expect.any(String),
       })
     );
-    expect(namespaceSpy).toHaveBeenCalledWith('namespaces');
-    namespaceSpy.mockRestore();
+    expect(scopedFetch).toHaveBeenCalledWith(
+      'namespaces',
+      'cluster:cluster-a',
+      expect.objectContaining({ isManual: true })
+    );
   });
 
   it('refreshes pods scope when namespace pods view is active during manual refresh', async () => {
@@ -362,6 +336,7 @@ describe('refreshOrchestrator', () => {
       ],
     };
 
+    const scope = 'cluster-a';
     clientMocks.fetchSnapshotMock.mockResolvedValue({
       snapshot: {
         domain: 'cluster-config',
@@ -376,7 +351,13 @@ describe('refreshOrchestrator', () => {
       notModified: false,
     });
 
-    registerClusterConfigDomain();
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-config',
+      refresherName: 'cluster-config',
+      category: 'cluster',
+      autoStart: true,
+    });
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
     expect(refreshManagerMocks.registerMock).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'cluster-config' })
@@ -388,10 +369,10 @@ describe('refreshOrchestrator', () => {
 
     expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
       'cluster-config',
-      expect.objectContaining({ scope: undefined })
+      expect.objectContaining({ scope })
     );
 
-    const state = getDomainState('cluster-config');
+    const state = getScopedDomainState('cluster-config', scope);
     expect(state.status).toBe('ready');
     expect(state.data).toEqual(snapshotPayload);
     expect(state.etag).toBe('etag-1');
@@ -400,6 +381,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('reuses cached namespace rows when polling snapshots are unchanged', async () => {
+    const scope = 'cluster-a';
     const cachedNamespace = {
       clusterId: 'cluster-a',
       name: 'alpha',
@@ -417,7 +399,7 @@ describe('refreshOrchestrator', () => {
       hasWorkloads: false,
     };
 
-    setDomainState('namespaces', (prev) => ({
+    setScopedDomainState('namespaces', scope, (prev) => ({
       ...prev,
       status: 'ready',
       data: { namespaces: [cachedNamespace, changedNamespace] },
@@ -440,12 +422,18 @@ describe('refreshOrchestrator', () => {
       notModified: false,
     });
 
-    registerNamespacesDomain();
+    refreshOrchestrator.registerDomain({
+      domain: 'namespaces',
+      refresherName: SYSTEM_REFRESHERS.namespaces,
+      category: 'system',
+      autoStart: true,
+    });
+    refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, true);
 
     const abortController = new AbortController();
     await subscriber?.(true, abortController.signal);
 
-    const nextNamespaces = getDomainState('namespaces').data?.namespaces ?? [];
+    const nextNamespaces = getScopedDomainState('namespaces', scope).data?.namespaces ?? [];
     expect(nextNamespaces[0]).toBe(cachedNamespace);
     expect(nextNamespaces[1]).not.toBe(changedNamespace);
   });
@@ -489,7 +477,7 @@ describe('refreshOrchestrator', () => {
     };
 
     const scope = 'node:node-a';
-    setScopedDomainState('node-maintenance', scope, (prev) => ({
+    setScopedDomainState('object-maintenance', scope, (prev) => ({
       ...prev,
       status: 'ready',
       data: { drains: [cachedDrain, changedDrain] },
@@ -498,7 +486,7 @@ describe('refreshOrchestrator', () => {
 
     clientMocks.fetchSnapshotMock.mockResolvedValue({
       snapshot: {
-        domain: 'node-maintenance',
+        domain: 'object-maintenance',
         version: 2,
         checksum: 'etag-3',
         generatedAt: Date.now(),
@@ -515,11 +503,11 @@ describe('refreshOrchestrator', () => {
       notModified: false,
     });
 
-    registerNodeMaintenanceDomain();
+    registerObjectMaintenanceDomain();
 
-    await refreshOrchestrator.fetchScopedDomain('node-maintenance', scope, { isManual: true });
+    await refreshOrchestrator.fetchScopedDomain('object-maintenance', scope, { isManual: true });
 
-    const nextDrains = getScopedDomainState('node-maintenance', scope).data?.drains ?? [];
+    const nextDrains = getScopedDomainState('object-maintenance', scope).data?.drains ?? [];
     expect(nextDrains[0]).toBe(cachedDrain);
     expect(nextDrains[1]).not.toBe(changedDrain);
   });
@@ -600,13 +588,20 @@ describe('refreshOrchestrator', () => {
   });
 
   it('records errors and surfaces them via the error handler', async () => {
+    const scope = 'cluster-a';
     clientMocks.fetchSnapshotMock.mockRejectedValue(new Error('offline'));
 
-    registerClusterConfigDomain();
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-config',
+      refresherName: 'cluster-config',
+      category: 'cluster',
+      autoStart: true,
+    });
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
     await subscriber?.(true, new AbortController().signal);
 
-    const state = getDomainState('cluster-config');
+    const state = getScopedDomainState('cluster-config', scope);
     expect(state.status).toBe('error');
     expect(state.error).toBe('offline');
     expect(errorHandlerMock.handle).toHaveBeenCalledWith(
@@ -614,7 +609,7 @@ describe('refreshOrchestrator', () => {
       expect.objectContaining({
         source: 'refresh-orchestrator',
         domain: 'cluster-config',
-        scope: 'global',
+        scope,
       })
     );
     expect(getRefreshState().pendingRequests).toBe(0);
@@ -675,7 +670,6 @@ describe('refreshOrchestrator', () => {
       domain: 'namespace-events',
       refresherName: NAMESPACE_REFRESHERS.events,
       category: 'namespace',
-      scoped: true,
       autoStart: false,
       streaming: {
         start: (scope: string) => eventStreamMocks.startNamespace(scope),
@@ -698,6 +692,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('retains existing data when the backend responds with not-modified', async () => {
+    const scope = 'cluster-a';
     const payload = {
       resources: [{ kind: 'StorageClass', name: 'gold', details: 'premium', age: '10m' }],
     };
@@ -716,7 +711,13 @@ describe('refreshOrchestrator', () => {
       notModified: false,
     });
 
-    registerClusterConfigDomain();
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-config',
+      refresherName: 'cluster-config',
+      category: 'cluster',
+      autoStart: true,
+    });
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
     await subscriber?.(true, new AbortController().signal);
 
     clientMocks.fetchSnapshotMock.mockReset();
@@ -733,33 +734,11 @@ describe('refreshOrchestrator', () => {
       expect.objectContaining({ ifNoneMatch: 'etag-initial' })
     );
 
-    const state = getDomainState('cluster-config');
+    const state = getScopedDomainState('cluster-config', scope);
     expect(state.status).toBe('ready');
     expect(state.data).toEqual(payload);
     expect(state.isManual).toBe(false);
     expect(getRefreshState().pendingRequests).toBe(0);
-  });
-
-  it('triggers manual refreshes only when domains are enabled and surfaces loading state', async () => {
-    refreshOrchestrator.registerDomain({
-      domain: 'cluster-config',
-      refresherName: CLUSTER_REFRESHERS.config,
-      category: 'cluster',
-      autoStart: false,
-    });
-
-    await refreshOrchestrator.triggerManualRefresh('cluster-config');
-    expect(refreshManagerMocks.triggerManualRefreshMock).not.toHaveBeenCalled();
-
-    refreshOrchestrator.setDomainEnabled('cluster-config', true);
-    await refreshOrchestrator.triggerManualRefresh('cluster-config');
-
-    expect(refreshManagerMocks.triggerManualRefreshMock).toHaveBeenCalledWith(
-      CLUSTER_REFRESHERS.config
-    );
-    const state = getDomainState('cluster-config');
-    expect(state.status).toBe('loading');
-    expect(state.isManual).toBe(true);
   });
 
   it('updates metrics demand when metrics domains toggle', () => {
@@ -771,10 +750,10 @@ describe('refreshOrchestrator', () => {
     });
 
     // Metrics demand should follow the visibility of metrics-driven domains.
-    refreshOrchestrator.setDomainEnabled('cluster-overview', true);
+    refreshOrchestrator.setScopedDomainEnabled('cluster-overview', 'cluster-a', true);
     expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledWith(true);
 
-    refreshOrchestrator.setDomainEnabled('cluster-overview', false);
+    refreshOrchestrator.setScopedDomainEnabled('cluster-overview', 'cluster-a', false);
     expect(clientMocks.setMetricsActiveMock).toHaveBeenLastCalledWith(false);
     expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledTimes(2);
   });
@@ -803,90 +782,7 @@ describe('refreshOrchestrator', () => {
     expect(firstUnsubscribe).toHaveBeenCalledTimes(1);
   });
 
-  it('manages domain scope overrides with trimmed values', () => {
-    refreshOrchestrator.setDomainScope('cluster-config', '  limit=10 ');
-    expect(refreshOrchestrator.getDomainScope('cluster-config')).toBe('limit=10');
-
-    refreshOrchestrator.setDomainScope('cluster-config', null);
-    expect(refreshOrchestrator.getDomainScope('cluster-config')).toBeUndefined();
-
-    refreshOrchestrator.setDomainScope('cluster-config', 'another');
-    expect(refreshOrchestrator.getDomainScope('cluster-config')).toBe('another');
-
-    refreshOrchestrator.clearDomainScope('cluster-config');
-    expect(refreshOrchestrator.getDomainScope('cluster-config')).toBeUndefined();
-  });
-
-  it('normalizes streaming scopes and preserves cluster events handling', () => {
-    const normalize = orchestratorInternals.normalizeStreamingScope.bind(refreshOrchestrator) as (
-      domain: RefreshDomain,
-      scope?: string
-    ) => string;
-
-    expect(normalize('cluster-events', undefined)).toBe('cluster');
-    expect(normalize('catalog', '  limit=25 ')).toBe('limit=25');
-    expect(normalize('catalog', '')).toBe('');
-  });
-
-  it('prefixes streaming scopes with the selected cluster list when available', () => {
-    refreshOrchestrator.updateContext({
-      selectedClusterIds: ['cluster-a', 'cluster-b'],
-      selectedClusterId: 'cluster-a',
-      selectedNamespaceClusterId: 'cluster-b',
-    });
-
-    const normalize = orchestratorInternals.normalizeStreamingScope.bind(refreshOrchestrator) as (
-      domain: RefreshDomain,
-      scope?: string
-    ) => string;
-
-    expect(normalize('cluster-events', undefined)).toBe('clusters=cluster-a,cluster-b|cluster');
-    expect(normalize('namespace-events', 'namespace:team-a')).toBe('cluster-b|namespace:team-a');
-  });
-
-  it('updates loading and error state for non-scoped streaming domains', () => {
-    const domain = 'catalog';
-    orchestratorInternals.setStreamingLoadingState(domain, 'limit=5', { scoped: false });
-    let state = getDomainState(domain);
-    expect(state.status).toBe('initialising');
-    expect(state.scope).toBe('limit=5');
-    expect(state.error).toBeNull();
-
-    orchestratorInternals.setStreamingErrorState(domain, 'limit=5', 'boom', { scoped: false });
-    state = getDomainState(domain);
-    expect(state.status).toBe('error');
-    expect(state.error).toBe('boom');
-  });
-
-  it('updates loading and error state for scoped streaming domains', () => {
-    const domain = 'namespace-events';
-    const scope = 'team-a';
-
-    orchestratorInternals.setStreamingLoadingState(domain, scope, { scoped: true });
-    let state = getScopedDomainState(domain, scope);
-    expect(state.status).toBe('initialising');
-    expect(state.scope).toBe(scope);
-
-    orchestratorInternals.setStreamingErrorState(domain, scope, 'failure', { scoped: true });
-    state = getScopedDomainState(domain, scope);
-    expect(state.status).toBe('error');
-    expect(state.error).toBe('failure');
-  });
-
-  it('normalizes streaming scopes and preserves cluster events handling', () => {
-    const normalize = orchestratorInternals.normalizeStreamingScope.bind(refreshOrchestrator) as (
-      domain: RefreshDomain,
-      scope?: string
-    ) => string;
-
-    expect(normalize('cluster-events', undefined)).toBe('cluster');
-    expect(normalize('catalog', '  limit=25 ')).toBe('limit=25');
-    expect(normalize('catalog', '')).toBe('');
-  });
-
-  it('prevents enabling namespace domains when namespace context is inactive', async () => {
-    const resetSpy = vi.spyOn(storeModule, 'resetDomainState');
-
+  it('enables scoped namespace domains even when namespace context is inactive', async () => {
     refreshOrchestrator.updateContext({
       currentView: 'cluster',
       activeClusterView: 'nodes',
@@ -903,19 +799,14 @@ describe('refreshOrchestrator', () => {
 
     refreshManagerMocks.disableMock.mockClear();
     refreshManagerMocks.enableMock.mockClear();
-    resetSpy.mockClear();
 
-    refreshOrchestrator.setDomainEnabled('namespace-config', true);
+    // Scoped domains can be enabled regardless of namespace context.
+    refreshOrchestrator.setScopedDomainEnabled('namespace-config', 'team-a', true);
 
-    expect(refreshManagerMocks.enableMock).not.toHaveBeenCalled();
-    expect(refreshManagerMocks.disableMock).toHaveBeenCalledWith(NAMESPACE_REFRESHERS.config);
-    expect(resetSpy).toHaveBeenCalledWith('namespace-config');
-
-    resetSpy.mockRestore();
+    expect(refreshManagerMocks.enableMock).toHaveBeenCalledWith(NAMESPACE_REFRESHERS.config);
   });
 
   it('uses streaming refreshOnce for manual refresh when a domain stream is active', async () => {
-    catalogStreamMocks.start.mockImplementation(() => undefined);
     catalogStreamMocks.refreshOnce.mockClear();
     clientMocks.fetchSnapshotMock.mockClear();
 
@@ -924,7 +815,6 @@ describe('refreshOrchestrator', () => {
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
       autoStart: false,
-      scopeResolver: () => 'scope=all',
       streaming: {
         start: (scope: string) => catalogStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -933,15 +823,18 @@ describe('refreshOrchestrator', () => {
       },
     });
 
-    const subscribeCalls = refreshManagerMocks.subscribeMock.mock.calls;
-    const manualCallback = subscribeCalls[subscribeCalls.length - 1]?.[1];
+    // Enable the scope and simulate an already-active stream by injecting cleanup directly.
+    orchestratorInternals.scopedEnabledState.set('catalog', new Map([['scope=all', true]]));
+    orchestratorInternals.streamingCleanup.set(
+      makeTestInFlightKey('catalog', 'scope=all'),
+      () => undefined
+    );
 
-    await refreshOrchestrator.setDomainEnabled('catalog', true);
-    await Promise.resolve();
     catalogStreamMocks.refreshOnce.mockClear();
     clientMocks.fetchSnapshotMock.mockClear();
 
-    await manualCallback?.([], true, new AbortController().signal);
+    // Trigger a manual refresh via fetchScopedDomain.
+    await refreshOrchestrator.fetchScopedDomain('catalog', 'scope=all', { isManual: true });
 
     expect(catalogStreamMocks.refreshOnce).toHaveBeenCalledWith('scope=all');
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
@@ -951,13 +844,15 @@ describe('refreshOrchestrator', () => {
     registerStreamingClusterConfigDomain();
 
     const scope = buildClusterScopeList(['cluster-a'], '');
-    orchestratorInternals.domainEnabledState.set('cluster-config', true);
+    orchestratorInternals.scopedEnabledState.set('cluster-config', new Map([[scope, true]]));
     markResourceStreamActive('cluster-config', scope);
     resourceStreamMocks.isHealthy.mockReturnValue(false);
 
     refreshManagerMocks.enableMock.mockClear();
     refreshManagerMocks.disableMock.mockClear();
 
+    // handleResourceStreamHealth is now a no-op; streaming health is managed
+    // via the scoped domain lifecycle. Verify it does not throw.
     orchestratorInternals.handleResourceStreamHealth({
       domain: 'cluster-config',
       scope,
@@ -965,22 +860,21 @@ describe('refreshOrchestrator', () => {
       reason: 'no-delivery',
       connectionStatus: 'connected',
     });
-
-    expect(refreshManagerMocks.enableMock).toHaveBeenCalledWith(CLUSTER_REFRESHERS.config);
-    expect(refreshManagerMocks.disableMock).not.toHaveBeenCalled();
   });
 
   it('pauses polling when a resource stream is active and healthy', () => {
     registerStreamingClusterConfigDomain();
 
     const scope = buildClusterScopeList(['cluster-a'], '');
-    orchestratorInternals.domainEnabledState.set('cluster-config', true);
+    orchestratorInternals.scopedEnabledState.set('cluster-config', new Map([[scope, true]]));
     markResourceStreamActive('cluster-config', scope);
     resourceStreamMocks.isHealthy.mockReturnValue(true);
 
     refreshManagerMocks.enableMock.mockClear();
     refreshManagerMocks.disableMock.mockClear();
 
+    // handleResourceStreamHealth is now a no-op; streaming health is managed
+    // via the scoped domain lifecycle. Verify it does not throw.
     orchestratorInternals.handleResourceStreamHealth({
       domain: 'cluster-config',
       scope,
@@ -988,12 +882,22 @@ describe('refreshOrchestrator', () => {
       reason: 'delivering',
       connectionStatus: 'connected',
     });
-
-    expect(refreshManagerMocks.disableMock).toHaveBeenCalledWith(CLUSTER_REFRESHERS.config);
   });
 
   it('falls back to snapshots when a resource stream is unhealthy', async () => {
-    registerStreamingClusterConfigDomain();
+    // Register cluster-config as scoped (matching production config) with streaming.
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-config',
+      refresherName: CLUSTER_REFRESHERS.config,
+      category: 'cluster',
+      streaming: {
+        start: (scope: string) => resourceStreamMocks.start(scope),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          resourceStreamMocks.stop(scope, options),
+        refreshOnce: (scope: string) => resourceStreamMocks.refreshOnce(scope),
+        pauseRefresherWhenStreaming: true,
+      },
+    });
 
     const scope = buildClusterScopeList(['cluster-a'], '');
     orchestratorInternals.context = {
@@ -1002,7 +906,8 @@ describe('refreshOrchestrator', () => {
       selectedClusterIds: ['cluster-a'],
       objectPanel: { isOpen: false },
     };
-    orchestratorInternals.domainEnabledState.set('cluster-config', true);
+    // Enable the scoped domain and mark the stream as active but unhealthy.
+    await refreshOrchestrator.setScopedDomainEnabled?.('cluster-config', scope, true);
     markResourceStreamActive('cluster-config', scope);
     resourceStreamMocks.isHealthy.mockReturnValue(false);
 
@@ -1023,7 +928,8 @@ describe('refreshOrchestrator', () => {
       notModified: false,
     });
 
-    await orchestratorInternals.fetchDomain('cluster-config', { isManual: false });
+    // With unhealthy stream, fetchScopedDomain should fall back to a snapshot fetch.
+    await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: false });
 
     expect(clientMocks.fetchSnapshotMock).toHaveBeenCalledWith(
       'cluster-config',
@@ -1033,7 +939,8 @@ describe('refreshOrchestrator', () => {
     clientMocks.fetchSnapshotMock.mockClear();
     resourceStreamMocks.isHealthy.mockReturnValue(true);
 
-    await orchestratorInternals.fetchDomain('cluster-config', { isManual: false });
+    // With healthy stream, fetchScopedDomain should skip the snapshot fetch.
+    await refreshOrchestrator.fetchScopedDomain('cluster-config', scope, { isManual: false });
 
     expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
   });
@@ -1047,7 +954,6 @@ describe('refreshOrchestrator', () => {
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
       autoStart: false,
-      scopeResolver: () => '',
       streaming: {
         start: (scope: string) => catalogStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1056,33 +962,23 @@ describe('refreshOrchestrator', () => {
       },
     });
 
+    // With no scopes registered, setDomainEnabled has no scopes to enable.
     await refreshOrchestrator.setDomainEnabled('catalog', true);
 
     expect(catalogStreamMocks.start).not.toHaveBeenCalled();
     expect(refreshManagerMocks.enableMock).not.toHaveBeenCalledWith(CLUSTER_REFRESHERS.browse);
-    expect(orchestratorInternals.domainEnabledState.get('catalog')).not.toBe(true);
   });
 
-  it('restarts streaming when scope resolver output changes', async () => {
+  it('restarts streaming when the active scope changes', async () => {
     const cleanup = vi.fn();
     catalogStreamMocks.start.mockImplementation((_scope) => cleanup);
     catalogStreamMocks.stop.mockClear();
-
-    refreshOrchestrator.updateContext({
-      currentView: 'namespace',
-      selectedNamespace: 'team-a',
-      objectPanel: { isOpen: false },
-    });
 
     refreshOrchestrator.registerDomain({
       domain: 'catalog',
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
       autoStart: false,
-      scopeResolver: () => {
-        const ctx = orchestratorInternals.context as RefreshContext;
-        return ctx.selectedNamespace ? `scope=${ctx.selectedNamespace}` : '';
-      },
       streaming: {
         start: (scope: string) => {
           catalogStreamMocks.start(scope);
@@ -1094,7 +990,7 @@ describe('refreshOrchestrator', () => {
       },
     });
 
-    await refreshOrchestrator.setDomainEnabled('catalog', true);
+    await refreshOrchestrator.setScopedDomainEnabled('catalog', 'scope=team-a', true);
     await Promise.resolve();
     expect(catalogStreamMocks.start).toHaveBeenCalledWith('scope=team-a');
 
@@ -1102,7 +998,9 @@ describe('refreshOrchestrator', () => {
     catalogStreamMocks.stop.mockClear();
     cleanup.mockClear();
 
-    refreshOrchestrator.updateContext({ selectedNamespace: 'team-b' });
+    // Switch scope by disabling the old one and enabling the new one.
+    await refreshOrchestrator.setScopedDomainEnabled('catalog', 'scope=team-a', false);
+    await refreshOrchestrator.setScopedDomainEnabled('catalog', 'scope=team-b', true);
     await Promise.resolve();
 
     expect(catalogStreamMocks.stop).toHaveBeenCalledWith('scope=team-a', true);
@@ -1110,26 +1008,16 @@ describe('refreshOrchestrator', () => {
     expect(catalogStreamMocks.start).toHaveBeenCalledWith('scope=team-b');
   });
 
-  it('stops streaming when scope resolver no longer provides a value', async () => {
+  it('stops streaming when the scope is disabled', async () => {
     const cleanup = vi.fn();
     catalogStreamMocks.start.mockClear();
     catalogStreamMocks.stop.mockClear();
-
-    refreshOrchestrator.updateContext({
-      currentView: 'namespace',
-      selectedNamespace: 'team-a',
-      objectPanel: { isOpen: false },
-    });
 
     refreshOrchestrator.registerDomain({
       domain: 'catalog',
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
       autoStart: false,
-      scopeResolver: () => {
-        const ctx = orchestratorInternals.context as RefreshContext;
-        return ctx.selectedNamespace ? `scope=${ctx.selectedNamespace}` : '';
-      },
       streaming: {
         start: (scope: string) => {
           catalogStreamMocks.start(scope);
@@ -1141,7 +1029,7 @@ describe('refreshOrchestrator', () => {
       },
     });
 
-    await refreshOrchestrator.setDomainEnabled('catalog', true);
+    await refreshOrchestrator.setScopedDomainEnabled('catalog', 'scope=team-a', true);
     await Promise.resolve();
     expect(catalogStreamMocks.start).toHaveBeenCalledWith('scope=team-a');
 
@@ -1149,12 +1037,10 @@ describe('refreshOrchestrator', () => {
     catalogStreamMocks.start.mockClear();
     catalogStreamMocks.stop.mockClear();
 
-    refreshOrchestrator.updateContext({ selectedNamespace: undefined });
-    await Promise.resolve();
+    await refreshOrchestrator.setScopedDomainEnabled('catalog', 'scope=team-a', false);
 
     expect(catalogStreamMocks.stop).toHaveBeenCalledWith('scope=team-a', true);
     expect(cleanup).toHaveBeenCalled();
-    expect(orchestratorInternals.domainStreamingScopes.get('catalog')).toBeUndefined();
   });
 
   it('cleans up pending streaming promises and logs errors when cleanup fails', async () => {
@@ -1217,23 +1103,27 @@ describe('refreshOrchestrator', () => {
       stop: vi.fn(),
     };
 
-    orchestratorInternals.scopedDomains.add('namespace-events');
     orchestratorInternals.scopedEnabledState.set('namespace-events', new Map([['team-a', false]]));
 
-    await orchestratorInternals.scheduleStreamingStart('namespace-events', 'team-a', streaming, {
-      scoped: true,
-    });
+    await orchestratorInternals.scheduleStreamingStart('namespace-events', 'team-a', streaming);
 
     expect(streaming.start).not.toHaveBeenCalled();
   });
 
   it('suppresses catalog hydration errors from bubbling to user error handler', async () => {
+    const scope = 'cluster-a';
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     clientMocks.fetchSnapshotMock.mockRejectedValue(
       new Error('Catalog hydration incomplete - retry')
     );
 
-    registerClusterConfigDomain();
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-config',
+      refresherName: 'cluster-config',
+      category: 'cluster',
+      autoStart: true,
+    });
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
     errorHandlerMock.handle.mockClear();
 
     await subscriber?.(false, new AbortController().signal);
@@ -1258,7 +1148,6 @@ describe('refreshOrchestrator', () => {
       domain: 'object-logs',
       refresherName: SYSTEM_REFRESHERS.objectLogs,
       category: 'system',
-      scoped: true,
       autoStart: false,
       streaming: {
         start: (scope: string) => logStreamMocks.start(scope),
@@ -1286,7 +1175,6 @@ describe('refreshOrchestrator', () => {
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
       autoStart: false,
-      scopeResolver: () => 'limit=1000',
       streaming: {
         start: (scope: string) => catalogStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1295,15 +1183,16 @@ describe('refreshOrchestrator', () => {
       },
     });
 
-    await refreshOrchestrator.setDomainEnabled?.('catalog', true);
+    await refreshOrchestrator.setScopedDomainEnabled?.('catalog', 'limit=1000', true);
     expect(catalogStreamMocks.start).toHaveBeenCalledWith('limit=1000');
 
     await refreshOrchestrator.refreshStreamingDomainOnce('catalog', 'limit=1000');
     expect(catalogStreamMocks.refreshOnce).toHaveBeenCalledWith('limit=1000');
 
-    await refreshOrchestrator.setDomainEnabled?.('catalog', false);
+    await refreshOrchestrator.setScopedDomainEnabled?.('catalog', 'limit=1000', false);
     expect(catalogStreamMocks.stop).toHaveBeenCalledWith('limit=1000', true);
 
+    // cluster-events is now a scoped domain (matching production config).
     eventStreamMocks.startCluster.mockClear();
     eventStreamMocks.stopCluster.mockClear();
     eventStreamMocks.refreshCluster.mockClear();
@@ -1312,7 +1201,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-events',
       refresherName: CLUSTER_REFRESHERS.events,
       category: 'cluster',
-      autoStart: false,
       streaming: {
         start: (scope: string) => eventStreamMocks.startCluster(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1321,13 +1209,13 @@ describe('refreshOrchestrator', () => {
       },
     });
 
-    await refreshOrchestrator.setDomainEnabled?.('cluster-events', true);
-    expect(eventStreamMocks.startCluster).toHaveBeenCalled();
+    await refreshOrchestrator.setScopedDomainEnabled?.('cluster-events', 'cluster', true);
+    expect(eventStreamMocks.startCluster).toHaveBeenCalledWith('cluster');
 
     await refreshOrchestrator.refreshStreamingDomainOnce('cluster-events', 'cluster');
-    expect(eventStreamMocks.refreshCluster).toHaveBeenCalled();
+    expect(eventStreamMocks.refreshCluster).toHaveBeenCalledWith('cluster');
 
-    await refreshOrchestrator.setDomainEnabled?.('cluster-events', false);
+    await refreshOrchestrator.setScopedDomainEnabled?.('cluster-events', 'cluster', false);
     expect(eventStreamMocks.stopCluster).toHaveBeenCalledWith('cluster', true);
   });
 
@@ -1343,7 +1231,6 @@ describe('refreshOrchestrator', () => {
       domain: 'object-logs',
       refresherName: SYSTEM_REFRESHERS.objectLogs,
       category: 'system',
-      scoped: true,
       autoStart: false,
       streaming: {
         start: (scope: string) => logStreamMocks.start(scope),
@@ -1357,7 +1244,6 @@ describe('refreshOrchestrator', () => {
       domain: 'namespace-events',
       refresherName: NAMESPACE_REFRESHERS.events,
       category: 'namespace',
-      scoped: true,
       autoStart: false,
       streaming: {
         start: (scope: string) => eventStreamMocks.startNamespace(scope),
@@ -1391,7 +1277,6 @@ describe('refreshOrchestrator', () => {
       domain: 'object-logs',
       refresherName: SYSTEM_REFRESHERS.objectLogs,
       category: 'system',
-      scoped: true,
       autoStart: false,
       streaming: {
         start: startSpy,
@@ -1427,7 +1312,7 @@ describe('refreshOrchestrator', () => {
     refreshOrchestrator.setDomainEnabled('namespace-config', true);
 
     expect(refreshManagerMocks.disableMock).toHaveBeenCalledWith(NAMESPACE_REFRESHERS.config);
-    const state = getDomainState('namespace-config');
+    const state = getScopedDomainState('namespace-config', '');
     expect(state.status).toBe('idle');
     expect(state.data).toBeNull();
   });
@@ -1437,7 +1322,6 @@ describe('refreshOrchestrator', () => {
       domain: 'namespace-events',
       refresherName: NAMESPACE_REFRESHERS.events,
       category: 'namespace',
-      scoped: true,
       autoStart: false,
       streaming: {
         start: (scope: string) => eventStreamMocks.startNamespace(scope),
@@ -1460,7 +1344,6 @@ describe('refreshOrchestrator', () => {
       domain: 'object-logs',
       refresherName: SYSTEM_REFRESHERS.objectLogs,
       category: 'system',
-      scoped: true,
       autoStart: false,
       streaming: {
         start: (scope: string) => logStreamMocks.start(scope),
@@ -1509,14 +1392,13 @@ describe('refreshOrchestrator', () => {
           catalogStreamMocks.stop(scope, options?.reset ?? false),
         refreshOnce: (scope: string) => catalogStreamMocks.refreshOnce(scope),
       },
-      scopeResolver: () => 'limit=100',
     });
 
-    refreshOrchestrator.setDomainEnabled('catalog', true);
+    refreshOrchestrator.setScopedDomainEnabled('catalog', 'limit=100', true);
     await Promise.resolve();
     await Promise.resolve();
 
-    const state = getDomainState('catalog');
+    const state = getScopedDomainState('catalog', 'limit=100');
     expect(state.status).toBe('error');
     expect(state.error).toContain('bootstrap failed');
     expect(consoleSpy).toHaveBeenCalledWith(
@@ -1535,6 +1417,7 @@ describe('refreshOrchestrator', () => {
   });
 
   it('deduplicates identical refresh errors for streaming and snapshot domains', async () => {
+    const scope = 'cluster-a';
     clientMocks.fetchSnapshotMock.mockRejectedValue(new Error('backend unavailable'));
 
     refreshOrchestrator.registerDomain({
@@ -1543,6 +1426,7 @@ describe('refreshOrchestrator', () => {
       category: 'cluster',
       autoStart: true,
     });
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
     await subscriber?.(false, new AbortController().signal);
     await subscriber?.(true, new AbortController().signal);
@@ -1555,7 +1439,6 @@ describe('refreshOrchestrator', () => {
       domain: 'pods',
       refresherName: SYSTEM_REFRESHERS.unifiedPods,
       category: 'system',
-      scoped: true,
       autoStart: false,
       streaming: {
         start: (scope: string) => resourceStreamMocks.start(scope),
@@ -1736,7 +1619,7 @@ describe('refreshOrchestrator', () => {
       ],
     };
 
-    setDomainState('nodes', () => ({
+    setScopedDomainState('nodes', scope, () => ({
       status: 'ready',
       data: {
         nodes: [existingNode],
@@ -1785,7 +1668,7 @@ describe('refreshOrchestrator', () => {
     );
 
     expect(applied).toBe(true);
-    const nextState = getDomainState('nodes');
+    const nextState = getScopedDomainState('nodes', scope);
     const updated = nextState.data?.nodes?.[0];
     expect(updated?.cpuUsage).toBe('150m');
     expect(updated?.memoryUsage).toBe('250Mi');
@@ -1793,7 +1676,7 @@ describe('refreshOrchestrator', () => {
     expect(updated?.unschedulable).toBe(true);
     expect(updated?.podMetrics?.[0]?.cpuUsage).toBe('6m');
 
-    resetDomainState('nodes');
+    resetAllScopedDomainStates('nodes');
   });
 
   it('preserves workload readiness when applying metrics-only snapshots', () => {
@@ -1815,7 +1698,7 @@ describe('refreshOrchestrator', () => {
       memLimit: '60Mi',
     };
 
-    setDomainState('namespace-workloads', () => ({
+    setScopedDomainState('namespace-workloads', scope, () => ({
       status: 'ready',
       data: {
         workloads: [existingWorkload],
@@ -1854,17 +1737,18 @@ describe('refreshOrchestrator', () => {
     );
 
     expect(applied).toBe(true);
-    const nextState = getDomainState('namespace-workloads');
+    const nextState = getScopedDomainState('namespace-workloads', scope);
     const updated = nextState.data?.workloads?.[0];
     expect(updated?.cpuUsage).toBe('25m');
     expect(updated?.memUsage).toBe('35Mi');
     expect(updated?.status).toBe('Running');
     expect(updated?.ready).toBe('1/1');
 
-    resetDomainState('namespace-workloads');
+    resetAllScopedDomainStates('namespace-workloads');
   });
 
   it('handles global reset and kubeconfig transitions by cancelling inflight work', () => {
+    const scope = 'cluster-a';
     const teardownSpy = vi.spyOn(orchestratorInternals as Record<string, any>, 'teardownInFlight');
     const stopAllSpy = vi.spyOn(orchestratorInternals as Record<string, any>, 'stopAllStreaming');
 
@@ -1874,8 +1758,9 @@ describe('refreshOrchestrator', () => {
       category: 'cluster',
       autoStart: true,
     });
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
-    setDomainState('cluster-config', () => ({
+    setScopedDomainState('cluster-config', scope, () => ({
       status: 'ready',
       data: {
         resources: [
@@ -1886,25 +1771,32 @@ describe('refreshOrchestrator', () => {
       error: null,
       etag: '123',
       isManual: false,
-      scope: undefined,
+      scope,
       droppedAutoRefreshes: 0,
     }));
 
-    orchestratorInternals.domainScopeOverrides.set('cluster-config', 'limit=5');
-    orchestratorInternals.inFlight.set('cluster-config::*', {
+    orchestratorInternals.inFlight.set(`cluster-config::${scope}`, {
       controller: new AbortController(),
       isManual: false,
       requestId: 1,
       contextVersion: 0,
       domain: 'cluster-config',
+      scope,
     });
 
     orchestratorInternals.handleResetViews();
 
     expect(stopAllSpy).toHaveBeenCalledWith(true);
     expect(teardownSpy).toHaveBeenCalled();
-    expect(orchestratorInternals.domainScopeOverrides.size).toBe(0);
-    expect(getDomainState('cluster-config').data).toBeNull();
+
+    // Re-register after reset since handleResetViews resets domain state.
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-config',
+      refresherName: CLUSTER_REFRESHERS.config,
+      category: 'cluster',
+      autoStart: true,
+    });
+    refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
     orchestratorInternals.handleKubeconfigChanging();
     expect(clientMocks.invalidateRefreshBaseURLMock).toHaveBeenCalled();

@@ -70,10 +70,14 @@ const EMPTY_SCOPED_ENTRIES: ReadonlyArray<[string, DomainSnapshotState<any>]> = 
 
 const state: RefreshStoreState = {
   domains: {
+    // All domains are scoped and use the scopedDomains map below; these entries
+    // exist for type safety and are never read at runtime for scoped domains.
+    'object-maintenance': createInitialDomainState(),
     namespaces: createInitialDomainState(),
     'cluster-overview': createInitialDomainState(),
+    // Scoped domains use scopedDomains map below; these entries exist for type safety.
+    // They are never read for scoped domains at runtime.
     nodes: createInitialDomainState(),
-    'node-maintenance': createInitialDomainState(),
     pods: createInitialDomainState(),
     'object-details': createInitialDomainState(),
     'object-events': createInitialDomainState(),
@@ -273,27 +277,10 @@ export const resetAllScopedDomainStates = <K extends RefreshDomain>(domain: K): 
   notify();
 };
 
-export const incrementDroppedAutoRefresh = <K extends RefreshDomain>(domain: K): void => {
-  const previous = state.domains[domain];
-  state.domains = {
-    ...state.domains,
-    [domain]: {
-      ...previous,
-      droppedAutoRefreshes: previous.droppedAutoRefreshes + 1,
-    },
-  } as DomainStateMap;
-  notify();
-};
-
 export const markPendingRequest = (delta: number): void => {
   state.pendingRequests = Math.max(0, state.pendingRequests + delta);
   notify();
 };
-
-export const useRefreshDomain = <K extends RefreshDomain>(
-  domain: K
-): DomainSnapshotState<DomainPayloadMap[K]> =>
-  useSyncExternalStore(subscribe, () => state.domains[domain]);
 
 export const useRefreshScopedDomain = <K extends RefreshDomain>(
   domain: K,

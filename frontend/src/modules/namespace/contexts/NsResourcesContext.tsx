@@ -34,7 +34,7 @@ import {
 } from '@/core/capabilities';
 import {
   refreshOrchestrator,
-  useRefreshDomain,
+  useRefreshScopedDomain,
   useRefreshScopedDomainStates,
 } from '@/core/refresh';
 import type { NamespaceRefresherKey } from '@/core/refresh/refresherTypes';
@@ -522,9 +522,13 @@ function useRefreshBackedResource<T>(
   namespace?: string | null,
   clusterId?: string | null
 ): ResourceDataReturn<T> {
-  const domainState = useRefreshDomain(domain);
+  // Build the cluster-scoped namespace scope for this domain.
+  const namespaceScope = useMemo(
+    () => normalizeNamespaceScope(namespace, clusterId),
+    [namespace, clusterId]
+  );
+  const domainState = useRefreshScopedDomain(domain, namespaceScope ?? '');
   const domainData = domainState.data;
-  const isStreaming = refreshOrchestrator.isStreamingDomain(domain);
   const capabilitySpecs = useMemo(
     () => NAMESPACE_CAPABILITY_SPECS[resourceKey] ?? [],
     [resourceKey]
@@ -532,8 +536,8 @@ function useRefreshBackedResource<T>(
   const capabilityNamespace = useMemo(() => getCapabilityNamespace(namespace), [namespace]);
 
   const load = useCallback(
-    async (showSpinner: boolean = true) => {
-      if (isStreaming || !enabled) {
+    async (_showSpinner: boolean = true) => {
+      if (!enabled || !namespaceScope) {
         return;
       }
 
@@ -551,20 +555,18 @@ function useRefreshBackedResource<T>(
       }
 
       try {
-        await refreshOrchestrator.triggerManualRefresh(domain, {
-          suppressSpinner: !showSpinner,
-        });
+        await refreshOrchestrator.fetchScopedDomain(domain, namespaceScope, { isManual: true });
       } catch (error) {
         errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
           source: `namespace-resource-load-${resourceKey}`,
         });
       }
     },
-    [capabilityNamespace, capabilitySpecs, clusterId, domain, enabled, isStreaming, resourceKey]
+    [capabilityNamespace, capabilitySpecs, clusterId, domain, enabled, namespaceScope, resourceKey]
   );
 
   const refresh = useCallback(async () => {
-    if (isStreaming || !enabled) {
+    if (!enabled || !namespaceScope) {
       return;
     }
 
@@ -581,29 +583,36 @@ function useRefreshBackedResource<T>(
     }
 
     try {
-      await refreshOrchestrator.triggerManualRefresh(domain, { suppressSpinner: true });
+      await refreshOrchestrator.fetchScopedDomain(domain, namespaceScope, { isManual: true });
     } catch (error) {
       errorHandler.handle(error instanceof Error ? error : new Error(String(error)), {
         source: `namespace-resource-refresh-${resourceKey}`,
       });
     }
-  }, [capabilityNamespace, capabilitySpecs, clusterId, domain, enabled, isStreaming, resourceKey]);
+  }, [
+    capabilityNamespace,
+    capabilitySpecs,
+    clusterId,
+    domain,
+    enabled,
+    namespaceScope,
+    resourceKey,
+  ]);
 
   const reset = useCallback(() => {
-    refreshOrchestrator.resetDomain(domain);
-  }, [domain]);
+    if (namespaceScope) {
+      refreshOrchestrator.resetScopedDomain(domain, namespaceScope);
+    }
+  }, [domain, namespaceScope]);
 
   useEffect(() => {
-    if (isStreaming) {
-      return;
-    }
-    if (!enabled) {
+    if (!enabled || !namespaceScope) {
       return;
     }
     if (domainState.status === 'idle' && !domainData) {
       void load(true);
     }
-  }, [isStreaming, enabled, domainState.status, domainData, load]);
+  }, [enabled, domainState.status, domainData, load, namespaceScope]);
 
   const data = useMemo(() => {
     if (!domainData) {
@@ -615,10 +624,12 @@ function useRefreshBackedResource<T>(
 
   const initialising =
     enabled &&
+    Boolean(namespaceScope) &&
     (domainState.status === 'idle' || domainState.status === 'initialising') &&
     !domainData;
   const loadingStatus =
-    initialising || (enabled && domainState.status === 'loading' && !domainData);
+    initialising ||
+    (enabled && Boolean(namespaceScope) && domainState.status === 'loading' && !domainData);
 
   return useMemo(
     () => ({
@@ -629,7 +640,11 @@ function useRefreshBackedResource<T>(
       load,
       refresh,
       reset,
-      cancel: () => refreshOrchestrator.resetDomain(domain),
+      cancel: () => {
+        if (namespaceScope) {
+          refreshOrchestrator.resetScopedDomain(domain, namespaceScope);
+        }
+      },
       lastFetchTime: domainState.lastUpdated ? new Date(domainState.lastUpdated) : null,
       hasLoaded:
         domainState.status === 'ready' ||
@@ -648,6 +663,7 @@ function useRefreshBackedResource<T>(
       domain,
       enabled,
       loadingStatus,
+      namespaceScope,
     ]
   );
 }
@@ -887,6 +903,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
   }, [currentNamespace, isNamespaceView, namespaceClusterId]);
 
   useEffect(() => {
+    const namespaceScope = normalizeNamespaceScope(currentNamespace, namespaceClusterId);
     const entries = Object.entries(DOMAIN_BY_RESOURCE) as Array<
       [NamespaceViewType, RefreshDomain | null]
     >;
@@ -898,15 +915,16 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
 
       const shouldEnable =
         Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === resourceKey;
-      refreshOrchestrator.setDomainEnabled(domain, shouldEnable);
+      if (namespaceScope) {
+        refreshOrchestrator.setScopedDomainEnabled(domain, namespaceScope, shouldEnable);
+      }
 
       if (!shouldEnable && !currentNamespace) {
         refreshOrchestrator.resetDomain(domain);
       }
     });
-    const scope = normalizeNamespaceScope(currentNamespace, namespaceClusterId);
-    if (scope) {
-      refreshOrchestrator.setScopedDomainEnabled('pods', scope, podsEnabled);
+    if (namespaceScope) {
+      refreshOrchestrator.setScopedDomainEnabled('pods', namespaceScope, podsEnabled);
     }
   }, [
     activeNamespaceView,
@@ -919,14 +937,15 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
 
   useEffect(() => {
     const domains = Object.values(DOMAIN_BY_RESOURCE).filter(Boolean) as RefreshDomain[];
+    // Capture scope for cleanup closure.
+    const cleanupScope = normalizeNamespaceScope(currentNamespace, namespaceClusterId);
 
     return () => {
-      domains.forEach((domain) => {
-        refreshOrchestrator.setDomainEnabled(domain, false);
-      });
-      const scope = normalizeNamespaceScope(currentNamespace, namespaceClusterId);
-      if (scope) {
-        refreshOrchestrator.setScopedDomainEnabled('pods', scope, false);
+      if (cleanupScope) {
+        domains.forEach((domain) => {
+          refreshOrchestrator.setScopedDomainEnabled(domain, cleanupScope, false);
+        });
+        refreshOrchestrator.setScopedDomainEnabled('pods', cleanupScope, false);
       }
     };
   }, [currentNamespace, namespaceClusterId]);
@@ -1032,9 +1051,7 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
               storage.load(true);
               break;
             case 'events':
-              if (!refreshOrchestrator.isStreamingDomain('namespace-events')) {
-                events.load(true);
-              }
+              events.load(true);
               break;
             case 'quotas':
               quotas.load(true);

@@ -45,7 +45,7 @@ export const resolveDomainNamespace = (domain: RefreshDomain, scope?: string): s
     }
     return '-';
   }
-  if (domain === 'node-maintenance') {
+  if (domain === 'object-maintenance') {
     if (normalizedScope.startsWith('node:')) {
       const node = normalizedScope.slice('node:'.length);
       return node || '-';

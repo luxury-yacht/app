@@ -8,7 +8,7 @@
 // Core exports
 export { refreshManager } from './RefreshManager';
 export { refreshOrchestrator } from './orchestrator';
-export { useRefreshDomain, useRefreshScopedDomainStates, useRefreshScopedDomain } from './store';
+export { useRefreshScopedDomainStates, useRefreshScopedDomain } from './store';
 export type { Refresher, RefreshContext, RefresherState, RefreshCallback } from './RefreshManager';
 
 // Context exports

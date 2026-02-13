@@ -31,7 +31,11 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedKubeconfig: 'path:context' }),
+  useKubeconfig: () => ({
+    selectedKubeconfig: 'path:context',
+    selectedClusterId: 'path:context',
+    selectedClusterIds: ['path:context'],
+  }),
 }));
 
 vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
@@ -77,7 +81,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
 }));
 
 vi.mock('@/core/refresh', () => ({
-  useRefreshDomain: () => ({
+  useRefreshScopedDomain: () => ({
     data: { metrics: null, nodes: [] },
     status: 'idle',
     isManual: false,

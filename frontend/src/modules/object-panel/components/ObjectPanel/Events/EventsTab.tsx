@@ -87,6 +87,10 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
 
   const eventsSnapshot = useRefreshScopedDomain('object-events', eventsScope ?? INACTIVE_SCOPE);
 
+  // Enable/disable the scoped domain based on tab activity. preserveState
+  // keeps the store entry alive when the tab unmounts so diagnostics can still
+  // see it. Full cleanup (reset) is handled by ObjectPanelContent when the
+  // panel closes.
   useEffect(() => {
     if (!eventsScope) {
       return;
@@ -94,8 +98,9 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
     const enabled = Boolean(isActive && objectData);
     refreshOrchestrator.setScopedDomainEnabled('object-events', eventsScope, enabled);
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-events', eventsScope, false);
-      refreshOrchestrator.resetScopedDomain('object-events', eventsScope);
+      refreshOrchestrator.setScopedDomainEnabled('object-events', eventsScope, false, {
+        preserveState: true,
+      });
     };
   }, [eventsScope, isActive, objectData]);
 
