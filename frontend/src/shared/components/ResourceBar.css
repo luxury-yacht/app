@@ -290,75 +290,42 @@
   }
 }
 
-.resource-bar-tooltip {
-  padding: 10px;
-  background-color: var(--resourcebar-tooltip-bg);
-  color: var(--color-text);
-  font-size: 0.75rem;
-  border-radius: var(--border-radius-sm);
-  white-space: normal;
-  min-width: 200px;
-  max-width: 200px;
-  z-index: 10000;
-  pointer-events: none;
-  box-shadow: var(--resourcebar-tooltip-shadow);
-  border: 1px solid var(--resourcebar-tooltip-border);
-  position: relative;
-}
-
-.tooltip-content {
+/* ResourceBar tooltip inner layout (rendered inside shared Tooltip component) */
+.rb-tooltip-content {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.tooltip-divider {
+.rb-tooltip-divider {
   height: 1px;
   background-color: var(--color-border);
   margin: 4px 0;
 }
 
-.tooltip-row {
+.rb-tooltip-row {
   display: grid;
-  grid-template-columns: 80px 60px 40px;
+  grid-template-columns: 50% 25% 25%;
   align-items: center;
 }
 
-.tooltip-row span:first-child {
+.rb-tooltip-row span:first-child {
   color: var(--color-text-secondary);
   font-size: 0.7rem;
   text-align: left;
 }
 
-.tooltip-value {
+.rb-tooltip-value {
   font-weight: 600;
   color: var(--color-text);
   font-size: 0.7rem;
   text-align: right;
 }
 
-.tooltip-row.warning {
+.rb-tooltip-row.warning {
   color: var(--resourcebar-warning-text);
   font-weight: 500;
   padding-top: 4px;
   margin-top: 4px;
   display: block;
-}
-
-.resource-bar-tooltip::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  border: 5px solid transparent;
-}
-
-.resource-bar-tooltip.tooltip-top::after {
-  top: 100%;
-  border-top-color: rgba(0, 0, 0, 0.9);
-}
-
-.resource-bar-tooltip.tooltip-bottom::after {
-  bottom: 100%;
-  border-bottom-color: rgba(0, 0, 0, 0.9);
 }

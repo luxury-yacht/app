@@ -19,6 +19,11 @@ vi.mock('react-dom', async () => {
   };
 });
 
+// Mock ZoomContext used by the Tooltip component
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
+}));
+
 import ResourceBar from './ResourceBar';
 
 const renderBar = async (props: React.ComponentProps<typeof ResourceBar>) => {
@@ -162,40 +167,6 @@ describe('ResourceBar', () => {
     vi.unstubAllGlobals();
   });
 
-  it('hides tooltip gracefully when positioning fails', async () => {
-    vi.useFakeTimers();
-
-    const { container, cleanup } = await renderBar({
-      type: 'cpu',
-      usage: '200m',
-      request: '400m',
-      allocatable: '800m',
-      variant: 'compact',
-      showTooltip: true,
-    });
-
-    const compactContainer = container.querySelector('.resource-bar-container') as HTMLElement;
-    Object.defineProperty(compactContainer, 'getBoundingClientRect', {
-      value: () => {
-        throw new Error('Failed rect');
-      },
-    });
-
-    await act(async () => {
-      compactContainer.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-      await Promise.resolve();
-    });
-    // Advance past the tooltip hover delay
-    await act(async () => {
-      vi.advanceTimersByTime(250);
-    });
-
-    expect(container.querySelector('.resource-bar-tooltip')).toBeFalsy();
-
-    cleanup();
-    vi.useRealTimers();
-  });
-
   it('handles unbounded usage and resets animations when RAF is unavailable', async () => {
     const originalRAF = window.requestAnimationFrame;
     // Simulate environments without requestAnimationFrame (e.g., server-side render)
@@ -235,14 +206,6 @@ describe('ResourceBar', () => {
   });
 
   it('renders compact tooltip with converted memory units and configuration warnings', async () => {
-    vi.useFakeTimers();
-
-    const actualReactDOM = await vi.importActual<typeof import('react-dom')>('react-dom');
-    const portalSpy = vi.mocked(ReactDOM.createPortal);
-    portalSpy.mockImplementation(actualReactDOM.createPortal);
-
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
     vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
       cb(0);
       return 0;
@@ -260,21 +223,6 @@ describe('ResourceBar', () => {
       metricsStale: true,
     });
 
-    const compactContainer = container.querySelector('.resource-bar-container') as HTMLElement;
-    Object.defineProperty(compactContainer, 'getBoundingClientRect', {
-      configurable: true,
-      value: () => ({ left: 100, width: 220, top: 320, bottom: 360 }),
-    });
-
-    await act(async () => {
-      compactContainer.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-      await Promise.resolve();
-    });
-    // Advance past the tooltip hover delay
-    await act(async () => {
-      vi.advanceTimersByTime(250);
-    });
-
     const leadingValue = container.querySelector('.resource-bar-leading')?.textContent ?? '';
     expect(leadingValue).toContain('1Mi');
 
@@ -286,29 +234,11 @@ describe('ResourceBar', () => {
     expect(overcommitBar).toBeTruthy();
 
     cleanup();
-    vi.useRealTimers();
     vi.unstubAllGlobals();
-    expect(
-      warnSpy.mock.calls.some(
-        ([message]) =>
-          typeof message === 'string' && message.includes('Error showing ResourceBar tooltip')
-      )
-    ).toBe(false);
-    warnSpy.mockRestore();
-    portalSpy.mockImplementation((element: any) => element as any);
   });
 
   it('scales usage against requests when limits are missing and warns when constraints are absent', async () => {
     vi.useFakeTimers();
-
-    const actualReactDOM = await vi.importActual<typeof import('react-dom')>('react-dom');
-    const portalSpy = vi.mocked(ReactDOM.createPortal);
-    portalSpy.mockImplementation(actualReactDOM.createPortal);
-
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      cb(0);
-      return 0;
-    });
 
     const { container, root, cleanup } = await renderBar({
       type: 'cpu',
@@ -319,14 +249,11 @@ describe('ResourceBar', () => {
       showTooltip: true,
     });
 
-    const compactContainer = container.querySelector('.resource-bar-container') as HTMLElement;
-    Object.defineProperty(compactContainer, 'getBoundingClientRect', {
-      configurable: true,
-      value: () => ({ left: 60, width: 220, top: 40, bottom: 70 }),
-    });
+    // Trigger tooltip via the Tooltip wrapper (mouseover bubbles to .tooltip-trigger)
+    const tooltipTrigger = container.querySelector('.tooltip-trigger') as HTMLElement;
 
     await act(async () => {
-      compactContainer.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      tooltipTrigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
       await Promise.resolve();
     });
     // Advance past the tooltip hover delay
@@ -334,23 +261,22 @@ describe('ResourceBar', () => {
       vi.advanceTimersByTime(250);
     });
 
-    let tooltip = document.body.querySelector('.resource-bar-tooltip') as HTMLElement;
+    let tooltip = container.querySelector('.tooltip') as HTMLElement;
     expect(tooltip).toBeTruthy();
-    expect(tooltip.className).toContain('tooltip-bottom');
 
-    const consumptionRow = Array.from(tooltip.querySelectorAll('.tooltip-row')).find((row) =>
+    const consumptionRow = Array.from(tooltip.querySelectorAll('.rb-tooltip-row')).find((row) =>
       row.textContent?.includes('Consumption:')
     ) as HTMLElement;
     expect(consumptionRow.textContent).toContain('250%');
     expect(consumptionRow.querySelector('.warning')).toBeTruthy();
 
-    const limitRow = Array.from(tooltip.querySelectorAll('.tooltip-row')).find((row) =>
+    const limitRow = Array.from(tooltip.querySelectorAll('.rb-tooltip-row')).find((row) =>
       row.textContent?.includes('Limits:')
     ) as HTMLElement;
     expect(limitRow.textContent).toContain('-');
 
     await act(async () => {
-      compactContainer.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+      tooltipTrigger.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
       await Promise.resolve();
     });
 
@@ -368,14 +294,10 @@ describe('ResourceBar', () => {
       await Promise.resolve();
     });
 
-    const rerenderedContainer = container.querySelector('.resource-bar-container') as HTMLElement;
-    Object.defineProperty(rerenderedContainer, 'getBoundingClientRect', {
-      configurable: true,
-      value: () => ({ left: 60, width: 220, top: 40, bottom: 70 }),
-    });
+    const rerenderedTrigger = container.querySelector('.tooltip-trigger') as HTMLElement;
 
     await act(async () => {
-      rerenderedContainer.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+      rerenderedTrigger.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
       await Promise.resolve();
     });
     // Advance past the tooltip hover delay
@@ -383,17 +305,15 @@ describe('ResourceBar', () => {
       vi.advanceTimersByTime(250);
     });
 
-    tooltip = document.body.querySelector('.resource-bar-tooltip') as HTMLElement;
+    tooltip = container.querySelector('.tooltip') as HTMLElement;
     expect(tooltip).toBeTruthy();
     expect(
-      Array.from(tooltip.querySelectorAll('.tooltip-row')).some((row) =>
+      Array.from(tooltip.querySelectorAll('.rb-tooltip-row')).some((row) =>
         row.textContent?.includes('⚠️ No resource constraints set')
       )
     ).toBe(true);
 
     cleanup();
     vi.useRealTimers();
-    vi.unstubAllGlobals();
-    portalSpy.mockImplementation((element: any) => element as any);
   });
 });

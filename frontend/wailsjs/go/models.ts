@@ -657,6 +657,38 @@ export namespace types {
 	        this.clusterRoleSelectors = source["clusterRoleSelectors"];
 	    }
 	}
+	export class Theme {
+	    id: string;
+	    name: string;
+	    clusterPattern: string;
+	    paletteHueLight: number;
+	    paletteSaturationLight: number;
+	    paletteBrightnessLight: number;
+	    paletteHueDark: number;
+	    paletteSaturationDark: number;
+	    paletteBrightnessDark: number;
+	    accentColorLight?: string;
+	    accentColorDark?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Theme(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.clusterPattern = source["clusterPattern"];
+	        this.paletteHueLight = source["paletteHueLight"];
+	        this.paletteSaturationLight = source["paletteSaturationLight"];
+	        this.paletteBrightnessLight = source["paletteBrightnessLight"];
+	        this.paletteHueDark = source["paletteHueDark"];
+	        this.paletteSaturationDark = source["paletteSaturationDark"];
+	        this.paletteBrightnessDark = source["paletteBrightnessDark"];
+	        this.accentColorLight = source["accentColorLight"];
+	        this.accentColorDark = source["accentColorDark"];
+	    }
+	}
 	export class AppSettings {
 	    theme: string;
 	    selectedKubeconfigs: string[];
@@ -673,6 +705,7 @@ export namespace types {
 	    paletteBrightnessDark: number;
 	    accentColorLight: string;
 	    accentColorDark: string;
+	    themes: Theme[];
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -695,7 +728,26 @@ export namespace types {
 	        this.paletteBrightnessDark = source["paletteBrightnessDark"];
 	        this.accentColorLight = source["accentColorLight"];
 	        this.accentColorDark = source["accentColorDark"];
+	        this.themes = this.convertValues(source["themes"], Theme);
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class CRDCondition {
 	    kind: string;
@@ -3907,6 +3959,7 @@ export namespace types {
 		    return a;
 		}
 	}
+	
 	
 	export class ThemeInfo {
 	    currentTheme: string;

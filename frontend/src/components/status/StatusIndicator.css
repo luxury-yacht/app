@@ -1,4 +1,4 @@
-/* Shared status indicator dot + popover */
+/* Shared status indicator dot + tooltip */
 
 .status-indicator {
   position: relative;
@@ -54,51 +54,14 @@
   }
 }
 
-/* Popover - appears below the dot with a connecting notch */
+/* Tooltip popover overrides — applied via Tooltip className="status-popover" */
 .status-popover {
-  position: absolute;
-  top: calc(100% + 12px);
-  left: 50%;
-  transform: translateX(-50%);
   min-width: 190px;
   max-width: 260px;
-  background: var(--color-bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.25),
-    0 2px 8px rgba(0, 0, 0, 0.15);
   padding: 12px 14px;
-  z-index: 1000;
-  font-size: 12px;
-  animation: status-popover-enter 0.15s ease-out;
 }
 
-/* Arrow pointing up from the popover toward the dot */
-.status-popover-arrow {
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  margin-left: -8px;
-  width: 0;
-  height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 10px solid var(--color-bg-tertiary);
-}
-
-@keyframes status-popover-enter {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-}
-
-/* Title row with inline status dot echo */
+/* Title row */
 .status-popover-title {
   display: flex;
   align-items: center;

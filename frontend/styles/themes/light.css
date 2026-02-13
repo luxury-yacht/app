@@ -186,10 +186,10 @@
   --log-cell-hover-bg: rgba(0, 0, 0, 0.02);
   --log-cell-active-bg: rgba(0, 0, 0, 0.04);
   --log-cell-copied-bg: rgba(34, 197, 94, 0.12);
-  --log-tooltip-bg: #ffffff;
-  --log-tooltip-text: var(--color-base-800);
-  --log-tooltip-border: rgba(0, 0, 0, 0.08);
-  --log-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  --log-tooltip-bg: var(--tooltip-bg);
+  --log-tooltip-text: var(--tooltip-text);
+  --log-tooltip-border: var(--tooltip-border);
+  --log-tooltip-shadow: var(--tooltip-shadow);
   --log-fallback-retry-hover-bg: rgba(245, 158, 11, 0.15);
 
   /* Log pod colors - Darker variants for light backgrounds */
@@ -377,9 +377,9 @@
   --resourcebar-usage-shadow-warning: 0 0 8px rgba(245, 158, 11, 0.25);
   --resourcebar-usage-shadow-critical: 0 0 8px rgba(239, 68, 68, 0.25);
   --resourcebar-usage-shadow-unbounded: 0 0 8px rgba(100, 116, 139, 0.25);
-  --resourcebar-tooltip-bg: #ffffff;
-  --resourcebar-tooltip-border: var(--color-base-200);
-  --resourcebar-tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  --resourcebar-tooltip-bg: var(--tooltip-bg);
+  --resourcebar-tooltip-border: var(--tooltip-border);
+  --resourcebar-tooltip-shadow: var(--tooltip-shadow);
   --resourcebar-warning-text: #d97706;
 
   /* Metrics availability banner */

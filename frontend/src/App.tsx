@@ -23,6 +23,8 @@ import {
   hydrateAppPreferences,
   getPaletteTint,
   getAccentColor,
+  matchThemeForCluster,
+  applyTheme,
 } from '@/core/settings/appPreferences';
 import {
   applyTintedPalette,
@@ -59,7 +61,7 @@ function AppContent() {
   const appLogsPanel = useAppLogsPanel();
   const portForwardsPanel = usePortForwardsPanel();
   const connectionStatus = useConnectionStatus();
-  const { selectedClusterId } = useKubeconfig();
+  const { selectedClusterId, selectedClusterName } = useKubeconfig();
 
   // Initialize permissions bootstrap
   useEffect(() => {
@@ -130,6 +132,45 @@ function AppContent() {
       unsubThemeResolved();
     };
   }, []);
+
+  // Auto-apply a matching theme when the active cluster changes.
+  useEffect(() => {
+    if (!selectedClusterName) return;
+
+    const resolveTheme = (): 'light' | 'dark' => {
+      const attr = document.documentElement.getAttribute('data-theme');
+      return attr === 'dark' ? 'dark' : 'light';
+    };
+
+    const applyMatchingTheme = async () => {
+      const matched = await matchThemeForCluster(selectedClusterName);
+      if (!matched) return;
+
+      await applyTheme(matched.id);
+
+      // Re-hydrate the preference cache so getPaletteTint/getAccentColor reflect new values.
+      await hydrateAppPreferences({ force: true });
+
+      // Re-apply CSS overrides for the current resolved theme.
+      const currentTheme = resolveTheme();
+      const tint = getPaletteTint(currentTheme);
+      if (isPaletteActive(tint.saturation, tint.brightness)) {
+        applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
+      } else {
+        applyTintedPalette(0, 0, 0);
+      }
+      savePaletteTintToLocalStorage(currentTheme, tint.hue, tint.saturation, tint.brightness);
+
+      const lightAccent = getAccentColor('light');
+      const darkAccent = getAccentColor('dark');
+      applyAccentColor(lightAccent, darkAccent);
+      applyAccentBg(currentTheme === 'light' ? lightAccent : darkAccent, currentTheme);
+      saveAccentColorToLocalStorage('light', lightAccent);
+      saveAccentColorToLocalStorage('dark', darkAccent);
+    };
+
+    void applyMatchingTheme();
+  }, [selectedClusterName]);
 
   // Handle backend errors from Wails runtime
   useBackendErrorHandler();

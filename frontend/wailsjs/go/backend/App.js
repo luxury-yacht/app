@@ -6,6 +6,10 @@ export function ApplyObjectYaml(arg1, arg2) {
   return window['go']['backend']['App']['ApplyObjectYaml'](arg1, arg2);
 }
 
+export function ApplyTheme(arg1) {
+  return window['go']['backend']['App']['ApplyTheme'](arg1);
+}
+
 export function ClearAppState() {
   return window['go']['backend']['App']['ClearAppState']();
 }
@@ -56,6 +60,10 @@ export function DeletePod(arg1, arg2, arg3) {
 
 export function DeleteResource(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['DeleteResource'](arg1, arg2, arg3, arg4);
+}
+
+export function DeleteTheme(arg1) {
+  return window['go']['backend']['App']['DeleteTheme'](arg1);
 }
 
 export function DrainNode(arg1, arg2, arg3) {
@@ -270,6 +278,10 @@ export function GetThemeInfo() {
   return window['go']['backend']['App']['GetThemeInfo']();
 }
 
+export function GetThemes() {
+  return window['go']['backend']['App']['GetThemes']();
+}
+
 export function GetValidatingWebhookConfiguration(arg1, arg2) {
   return window['go']['backend']['App']['GetValidatingWebhookConfiguration'](arg1, arg2);
 }
@@ -322,8 +334,16 @@ export function LogFrontend(arg1, arg2, arg3) {
   return window['go']['backend']['App']['LogFrontend'](arg1, arg2, arg3);
 }
 
+export function MatchThemeForCluster(arg1) {
+  return window['go']['backend']['App']['MatchThemeForCluster'](arg1);
+}
+
 export function OpenKubeconfigSearchPathDialog() {
   return window['go']['backend']['App']['OpenKubeconfigSearchPathDialog']();
+}
+
+export function ReorderThemes(arg1) {
+  return window['go']['backend']['App']['ReorderThemes'](arg1);
 }
 
 export function ResizeShellSession(arg1, arg2, arg3) {
@@ -340,6 +360,10 @@ export function RetryAuth() {
 
 export function RetryClusterAuth(arg1) {
   return window['go']['backend']['App']['RetryClusterAuth'](arg1);
+}
+
+export function SaveTheme(arg1) {
+  return window['go']['backend']['App']['SaveTheme'](arg1);
 }
 
 export function SaveWindowSettings() {
