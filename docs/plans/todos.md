@@ -2,18 +2,7 @@
 
 ## Issues
 
-create namespace - slow to appear
-create deployment in new namespace - does not appear until tab switch away and back
-delete deployment - does not disappear
-object panel - correctly shows object not available but stays open, and clicking tab throws error
-delete namespace - 5 second delay, shows logo image??
-
 ## Feature Ideas
-
-- Save and load themes
-- Each theme has clickable, typeable values
-- Assign themes to clusters
-  - Maybe assign by patterns (name contains "prod" use this theme)
 
 - Bottom-docked panel does not obscure sidebar
 
