@@ -121,10 +121,7 @@ const Tooltip: React.FC<TooltipProps> = ({
     // Horizontal: centre on the trigger, constrained to viewport
     const padding = 8;
     const centreX = triggerRect.left + triggerRect.width / 2 - tooltipWidth / 2;
-    const clampedX = Math.max(
-      padding,
-      Math.min(centreX, viewportWidth - tooltipWidth - padding)
-    );
+    const clampedX = Math.max(padding, Math.min(centreX, viewportWidth - tooltipWidth - padding));
 
     // Vertical: above or below the trigger
     let top: number;
