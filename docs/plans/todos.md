@@ -10,6 +10,23 @@ delete namespace - 5 second delay, shows logo image??
 
 ## Feature Ideas
 
+- Save and load themes
+- Each theme has clickable, typeable values
+- Assign themes to clusters
+  - Maybe assign by patterns (name contains "prod" use this theme)
+
+- Bottom-docked panel does not obscure sidebar
+
+- Multiple panels in the same location use tabs
+  - For example, two panels docked to bottom creates a tab per panel in the header
+  - Diag Panel, Port Forwards OK
+  - App Logs would need to move controls down
+  - Object Panel would need to move controls, badge, object name down
+- Tearaway support
+  - Show target zones (new floating, existing floating, opposite docked location)
+- Only one docked container in each docked location
+- Support multiple floating windows, each its own container with tab support
+
 - Transfer files to/from pods
   - Select container
   - can we show a file dialog for the remote filesystem?
