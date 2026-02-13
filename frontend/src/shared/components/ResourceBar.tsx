@@ -344,15 +344,12 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
     <Tooltip
       content={tooltipContent}
       placement="top"
-      maxWidth={200}
-      minWidth={200}
+      maxWidth={220}
+      minWidth={220}
       disabled={!enableTooltip || variant !== 'compact'}
       inline={false}
     >
-      <div
-        ref={containerRef}
-        className={containerClasses.join(' ')}
-      >
+      <div ref={containerRef} className={containerClasses.join(' ')}>
         {/* Show usage value above bar in compact mode */}
         {variant === 'compact' && (
           <div className="resource-bar-value">

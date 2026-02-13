@@ -305,7 +305,7 @@
 
 .rb-tooltip-row {
   display: grid;
-  grid-template-columns: 80px 60px 40px;
+  grid-template-columns: 50% 25% 25%;
   align-items: center;
 }
 

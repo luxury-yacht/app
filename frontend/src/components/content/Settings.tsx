@@ -382,7 +382,6 @@ function Settings({ onClose }: SettingsProps) {
     setEditingPaletteField(null);
   };
 
-
   // Reload themes from backend.
   const reloadThemes = async () => {
     try {
@@ -589,8 +588,14 @@ function Settings({ onClose }: SettingsProps) {
         : (theme.accentColorLight || '') === (otherAccent || '');
 
       return (
-        activeHueMatch && activeSatMatch && activeBrtMatch && activeAccentMatch &&
-        otherHueMatch && otherSatMatch && otherBrtMatch && otherAccentMatch
+        activeHueMatch &&
+        activeSatMatch &&
+        activeBrtMatch &&
+        activeAccentMatch &&
+        otherHueMatch &&
+        otherSatMatch &&
+        otherBrtMatch &&
+        otherAccentMatch
       );
     },
     [resolvedTheme, paletteHue, paletteSaturation, paletteBrightness, accentColor]
@@ -623,7 +628,6 @@ function Settings({ onClose }: SettingsProps) {
       setDropTargetThemeId(null);
     }
   };
-
 
   const handleAddKubeconfigPath = async () => {
     setKubeconfigPathsSelecting(true);
@@ -906,9 +910,7 @@ function Settings({ onClose }: SettingsProps) {
                       type="button"
                       className="button generic"
                       onClick={() => handleSaveToTheme(activeThemeId)}
-                      disabled={themeMatchesCurrent(
-                        themes.find((t) => t.id === activeThemeId)!
-                      )}
+                      disabled={themeMatchesCurrent(themes.find((t) => t.id === activeThemeId)!)}
                     >
                       Save
                     </button>
@@ -924,11 +926,7 @@ function Settings({ onClose }: SettingsProps) {
                     </button>
                   </>
                 )}
-                <button
-                  type="button"
-                  className="button generic"
-                  onClick={handleSaveCurrentAsTheme}
-                >
+                <button type="button" className="button generic" onClick={handleSaveCurrentAsTheme}>
                   Save New Theme
                 </button>
               </>
@@ -940,9 +938,7 @@ function Settings({ onClose }: SettingsProps) {
             <input
               className="theme-name-input"
               value={themeDraft.name}
-              onChange={(e) =>
-                setThemeDraft((d) => ({ ...d, name: e.target.value }))
-              }
+              onChange={(e) => setThemeDraft((d) => ({ ...d, name: e.target.value }))}
               placeholder="Theme name"
               autoFocus
               onKeyDown={(e) => {
@@ -967,41 +963,49 @@ function Settings({ onClose }: SettingsProps) {
                 else e.stopPropagation();
               }}
             />
-            <button
-              type="button"
-              className="button generic"
-              onClick={handleThemeSave}
-            >
+            <button type="button" className="button generic" onClick={handleThemeSave}>
               Save
             </button>
-            <button
-              type="button"
-              className="button generic"
-              onClick={handleThemeEditCancel}
-            >
+            <button type="button" className="button generic" onClick={handleThemeEditCancel}>
               Cancel
             </button>
           </div>
         )}
         {/* Saved Themes */}
-        <div className="themes-section">
-          <h4>Saved Themes</h4>
-          {themesLoading ? (
-            <div className="themes-loading">Loading themes...</div>
-          ) : (
-            <>
-              {themes.length > 0 && (
+        {(themesLoading || themes.length > 0) && (
+          <div className="themes-section">
+            <h4>Saved Themes</h4>
+            {themesLoading ? (
+              <div className="themes-loading">Loading themes...</div>
+            ) : (
+              <>
                 <div className="themes-table">
                   <div className="themes-table-header">
                     <span className="themes-header-name">Theme Name</span>
                     <span>
                       Pattern{' '}
-                      <Tooltip content={<>Auto-apply the theme when the cluster name matches the pattern.<br/><br/>
-                        Supports wildcards <code>*</code> and <code>?</code><br/><br/>
-                        Examples:<br/>
-                        &nbsp;&nbsp;- <code>prod*</code> matches <code>prod-us</code> and <code>prod-eu</code><br/>
-                        &nbsp;&nbsp;- <code>*</code> matches any name<br/><br/>
-                        First matching pattern will be applied. Use the drag handles to reorder themes.</>} />
+                      <Tooltip
+                        content={
+                          <>
+                            Auto-apply the theme when the cluster name matches the pattern.
+                            <br />
+                            <br />
+                            Supports wildcards <code>*</code> and <code>?</code>
+                            <br />
+                            <br />
+                            Examples:
+                            <br />
+                            &nbsp;&nbsp;- <code>prod*</code> matches <code>prod-us</code> and{' '}
+                            <code>prod-eu</code>
+                            <br />
+                            &nbsp;&nbsp;- <code>*</code> matches any name
+                            <br />
+                            <br />
+                            First matching pattern will be applied. Use the drag handles to reorder
+                            themes.
+                          </>
+                        }
+                      />
                     </span>
                     <span></span>
                     <span></span>
@@ -1011,8 +1015,7 @@ function Settings({ onClose }: SettingsProps) {
                     const isDropTarget =
                       theme.id === dropTargetThemeId && theme.id !== draggingThemeId;
                     const isEditingName =
-                      editingThemeField?.themeId === theme.id &&
-                      editingThemeField.field === 'name';
+                      editingThemeField?.themeId === theme.id && editingThemeField.field === 'name';
                     const isEditingPattern =
                       editingThemeField?.themeId === theme.id &&
                       editingThemeField.field === 'clusterPattern';
@@ -1072,9 +1075,7 @@ function Settings({ onClose }: SettingsProps) {
                         ) : (
                           <span
                             className="theme-name theme-field-clickable"
-                            onClick={() =>
-                              handleThemeFieldClick(theme.id, 'name', theme.name)
-                            }
+                            onClick={() => handleThemeFieldClick(theme.id, 'name', theme.name)}
                             title="Click to edit name"
                           >
                             {theme.name}
@@ -1136,10 +1137,10 @@ function Settings({ onClose }: SettingsProps) {
                     );
                   })}
                 </div>
-              )}
-            </>
-          )}
-        </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="settings-section">
