@@ -504,6 +504,7 @@ function Settings({ onClose }: SettingsProps) {
   const handleApplyTheme = async (id: string) => {
     try {
       await applyThemeApi(id);
+      setActiveThemeId(id);
       await hydrateAppPreferences({ force: true });
 
       // Re-apply CSS overrides for the current resolved theme.
@@ -917,13 +918,39 @@ function Settings({ onClose }: SettingsProps) {
               Reset All
             </button>
             {editingThemeId !== 'new' && (
-              <button
-                type="button"
-                className="button generic"
-                onClick={handleSaveCurrentAsTheme}
-              >
-                Save Theme
-              </button>
+              <>
+                {activeThemeId && (
+                  <>
+                    <button
+                      type="button"
+                      className="button generic"
+                      onClick={() => handleSaveToTheme(activeThemeId)}
+                      disabled={themeMatchesCurrent(
+                        themes.find((t) => t.id === activeThemeId)!
+                      )}
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      className="button generic"
+                      onClick={async () => {
+                        await handleApplyTheme(activeThemeId);
+                        setActiveThemeId(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="button generic"
+                  onClick={handleSaveCurrentAsTheme}
+                >
+                  Save New Theme
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -993,7 +1020,6 @@ function Settings({ onClose }: SettingsProps) {
                     </span>
                     <span></span>
                     <span></span>
-                    <span></span>
                   </div>
                   {themes.map((theme) => {
                     const isDragging = theme.id === draggingThemeId;
@@ -1008,7 +1034,7 @@ function Settings({ onClose }: SettingsProps) {
                     return (
                       <div
                         key={theme.id}
-                        className={`themes-table-row${isDragging ? ' themes-table-row--dragging' : ''}${isDropTarget ? ' themes-table-row--drop-target' : ''}`}
+                        className={`themes-table-row${isDragging ? ' themes-table-row--dragging' : ''}${isDropTarget ? ' themes-table-row--drop-target' : ''}${activeThemeId && activeThemeId !== theme.id ? ' themes-table-row--dimmed' : ''}`}
                         onDragOver={(e) => {
                           if (!draggingThemeId) return;
                           e.preventDefault();
@@ -1112,15 +1138,6 @@ function Settings({ onClose }: SettingsProps) {
                           title="Load this theme's settings"
                         >
                           Open
-                        </button>
-                        <button
-                          type="button"
-                          className="theme-action-button"
-                          onClick={() => handleSaveToTheme(theme.id)}
-                          title="Save current settings into this theme"
-                          disabled={themeMatchesCurrent(theme)}
-                        >
-                          Save
                         </button>
                         <button
                           type="button"

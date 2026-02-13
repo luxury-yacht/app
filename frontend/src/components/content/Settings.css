@@ -307,10 +307,10 @@
   margin: 0 0 0.5rem 0;
 }
 
-/* Themes table — 6-column grid: drag handle | name | pattern | open | save | delete */
+/* Themes table — 5-column grid: drag handle | name | pattern | open | delete */
 .themes-table {
   display: grid;
-  grid-template-columns: 24px 1fr 1fr auto auto auto;
+  grid-template-columns: 24px 1fr 1fr auto auto;
   gap: var(--spacing-xs) var(--spacing-sm);
   align-items: center;
 }
@@ -330,6 +330,11 @@
 
 .themes-table-row {
   display: contents;
+}
+
+/* Dim non-active rows when a theme is open for editing */
+.themes-table-row--dimmed > * {
+  opacity: 0.4;
 }
 
 /* Reduce opacity of the dragged row's cells */
