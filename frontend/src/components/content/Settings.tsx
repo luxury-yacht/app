@@ -382,16 +382,6 @@ function Settings({ onClose }: SettingsProps) {
     setEditingPaletteField(null);
   };
 
-  // Reset all appearance customizations for the current resolved theme.
-  const handleResetAll = () => {
-    setPaletteHue(0);
-    setPaletteSaturation(0);
-    setPaletteBrightness(0);
-    clearTintedPalette();
-    persistPaletteTint(resolvedTheme, 0, 0, 0);
-    savePaletteTintToLocalStorage(resolvedTheme, 0, 0, 0);
-    handleAccentReset();
-  };
 
   // Reload themes from backend.
   const reloadThemes = async () => {
@@ -555,6 +545,7 @@ function Settings({ onClose }: SettingsProps) {
       });
       await saveTheme(updated);
       await reloadThemes();
+      setActiveThemeId(null);
     } catch (error) {
       errorHandler.handle(error, { action: 'saveTheme' });
     }
@@ -633,8 +624,6 @@ function Settings({ onClose }: SettingsProps) {
     }
   };
 
-  const isAnyCustomized =
-    paletteHue !== 0 || paletteSaturation !== 0 || paletteBrightness !== 0 || !!accentColor;
 
   const handleAddKubeconfigPath = async () => {
     setKubeconfigPathsSelecting(true);
@@ -909,14 +898,6 @@ function Settings({ onClose }: SettingsProps) {
           </button>
 
           <div className="palette-bottom-actions">
-            <button
-              type="button"
-              className="button generic"
-              onClick={handleResetAll}
-              disabled={!isAnyCustomized}
-            >
-              Reset All
-            </button>
             {editingThemeId !== 'new' && (
               <>
                 {activeThemeId && (
@@ -1015,7 +996,12 @@ function Settings({ onClose }: SettingsProps) {
                     <span className="themes-header-name">Theme Name</span>
                     <span>
                       Pattern{' '}
-                      <Tooltip content="Auto-apply theme when cluster name matches. Use * for any characters, ? for a single character. Example: prod* matches prod-us, prod-eu." />
+                      <Tooltip content={<>Auto-apply the theme when the cluster name matches the pattern.<br/><br/>
+                        Supports wildcards <code>*</code> and <code>?</code><br/><br/>
+                        Examples:<br/>
+                        &nbsp;&nbsp;- <code>prod*</code> matches <code>prod-us</code> and <code>prod-eu</code><br/>
+                        &nbsp;&nbsp;- <code>*</code> matches any name<br/><br/>
+                        First matching pattern will be applied. Use the drag handles to reorder themes.</>} />
                     </span>
                     <span></span>
                     <span></span>
