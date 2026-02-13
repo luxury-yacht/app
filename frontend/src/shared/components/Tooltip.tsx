@@ -94,15 +94,21 @@ const Tooltip: React.FC<TooltipProps> = ({
     const triggerRect = triggerRef.current.getBoundingClientRect();
     const tooltipEl = tooltipRef.current;
 
-    // Tooltip CSS dimensions → visual dimensions
-    const tooltipVisualWidth = tooltipEl.offsetWidth * zoomFactor;
-    const tooltipVisualHeight = tooltipEl.offsetHeight * zoomFactor;
+    // getBoundingClientRect, offsetWidth/Height, and CSS left/top are all in
+    // the same CSS coordinate space — no zoom conversion needed between them.
+    // Only window.innerWidth/Height are "unzoomed" (see ZoomContext docs).
+    const tooltipWidth = tooltipEl.offsetWidth;
+    const tooltipHeight = tooltipEl.offsetHeight;
 
-    const gap = 6; // visual px between trigger and tooltip
+    const gap = 6;
+
+    // Viewport dimensions in CSS coordinates
+    const viewportWidth = window.innerWidth / zoomFactor;
+    const viewportHeight = window.innerHeight / zoomFactor;
 
     // Determine placement — flip if not enough space
     const spaceAbove = triggerRect.top;
-    const spaceBelow = window.innerHeight - triggerRect.bottom;
+    const spaceBelow = viewportHeight - triggerRect.bottom;
     let effectivePlacement = placement;
 
     if (placement === 'top' && spaceAbove < FLIP_THRESHOLD) {
@@ -114,25 +120,21 @@ const Tooltip: React.FC<TooltipProps> = ({
 
     // Horizontal: centre on the trigger, constrained to viewport
     const padding = 8;
-    const centreX = triggerRect.left + triggerRect.width / 2 - tooltipVisualWidth / 2;
+    const centreX = triggerRect.left + triggerRect.width / 2 - tooltipWidth / 2;
     const clampedX = Math.max(
       padding,
-      Math.min(centreX, window.innerWidth - tooltipVisualWidth - padding)
+      Math.min(centreX, viewportWidth - tooltipWidth - padding)
     );
 
     // Vertical: above or below the trigger
-    let visualY: number;
+    let top: number;
     if (effectivePlacement === 'top') {
-      visualY = triggerRect.top - gap - tooltipVisualHeight;
+      top = triggerRect.top - gap - tooltipHeight;
     } else {
-      visualY = triggerRect.bottom + gap;
+      top = triggerRect.bottom + gap;
     }
 
-    // Convert visual coords → CSS coords (accounting for zoom)
-    setStyle({
-      left: clampedX / zoomFactor,
-      top: visualY / zoomFactor,
-    });
+    setStyle({ left: clampedX, top });
   }, [visible, placement, zoomLevel]);
 
   // ------------------------------------------------------------------
