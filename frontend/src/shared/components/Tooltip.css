@@ -1,0 +1,48 @@
+/* ==========================================================================
+   Tooltip Component — Portal Overrides & Trigger Styles
+   ==========================================================================
+   The base .tooltip class, arrow system, and variants are defined in
+   styles/components/tooltips.css.  This file adds only the portal-specific
+   override and the trigger/icon helpers used by Tooltip.tsx.
+   ========================================================================== */
+
+/* Portal tooltips use fixed positioning (base .tooltip uses absolute) */
+.tooltip--portal {
+  position: fixed;
+}
+
+/* Interactive tooltips accept mouse events so users can click buttons/links */
+.tooltip--interactive {
+  pointer-events: auto;
+}
+
+/* Wrapper around the trigger element (children or default icon) */
+.tooltip-trigger {
+  display: inline-flex;
+  align-items: center;
+  cursor: default;
+}
+
+/* Block-level trigger for wrapping block children (e.g. ResourceBar) */
+.tooltip-trigger--block {
+  display: block;
+  width: 100%;
+}
+
+/* Default circled "i" icon rendered when no children are provided */
+.tooltip-info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--color-text-tertiary);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  cursor: help;
+  vertical-align: middle;
+  line-height: 1;
+  color: var(--color-text-tertiary);
+}

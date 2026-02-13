@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react';
-import ReactDOM from 'react-dom';
+import Tooltip from './Tooltip';
 import './ResourceBar.css';
 
 interface ResourceBarProps {
@@ -39,11 +39,7 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
   animationScopeKey,
   showEmptyState = true,
 }) => {
-  const [showTooltip, setShowTooltip] = useState(false);
-  const [tooltipPosition, setTooltipPosition] = useState<'top' | 'bottom'>('top');
-  const [tooltipStyle, setTooltipStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
-  const tooltipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [transitionsEnabled, setTransitionsEnabled] = useState(true);
   const lastScopeKeyRef = useRef<string | undefined>(undefined);
 
@@ -79,15 +75,6 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
       }
     }
   }, [animationScopeKey]);
-
-  // Clear tooltip delay timer on unmount
-  useEffect(() => {
-    return () => {
-      if (tooltipTimerRef.current) {
-        clearTimeout(tooltipTimerRef.current);
-      }
-    };
-  }, []);
 
   // Parse resource values to numbers
   const parseResource = (value: string | undefined): number => {
@@ -267,219 +254,166 @@ const ResourceBar: React.FC<ResourceBarProps> = ({
   // Calculate consumption metric (percentage of request)
   const consumption = currentRequest > 0 ? Math.round((currentUsage / currentRequest) * 100) : null;
 
-  const handleMouseEnter = () => {
-    // Only show tooltip in compact view
-    if (!enableTooltip || variant !== 'compact') return;
+  // Tooltip content for compact mode
+  const tooltipContent = (
+    <div className="rb-tooltip-content">
+      <div className="rb-tooltip-row">
+        <span>Usage:</span>
+        <span className="rb-tooltip-value">{tooltipUsage}</span>
+        <span className="rb-tooltip-value">
+          {currentAllocatable > 0 && `${Math.round(usageVsAllocatable)}%`}
+          {!currentAllocatable && currentLimit > 0 && `${Math.round(usageVsLimit)}%`}
+        </span>
+      </div>
 
-    // Small delay to avoid flickering on quick mouse passes
-    tooltipTimerRef.current = setTimeout(() => {
-      try {
-        if (containerRef.current) {
-          const rect = containerRef.current.getBoundingClientRect();
-          const tooltipOffset = 4; // Small offset to stay close
-
-          // Calculate position for fixed positioning
-          let style: React.CSSProperties = {
-            position: 'fixed',
-            left: rect.left + rect.width / 2,
-          };
-
-          // Check space above
-          const spaceAbove = rect.top;
-
-          // Prefer positioning above, but switch to below if not enough space
-          if (spaceAbove < 200) {
-            // Position below
-            style.top = rect.bottom + tooltipOffset;
-            style.transform = 'translateX(-50%)';
-            setTooltipPosition('bottom');
-          } else {
-            // Position above — use top + translateY(-100%) instead of bottom
-            // with window.innerHeight (different coordinate spaces at zoom)
-            style.top = rect.top - tooltipOffset;
-            style.transform = 'translate(-50%, -100%)';
-            setTooltipPosition('top');
-          }
-
-          setTooltipStyle(style);
-          setShowTooltip(true);
-        }
-      } catch (error) {
-        console.warn('Error showing ResourceBar tooltip:', error);
-        setShowTooltip(false);
-      }
-    }, 250);
-  };
-
-  return (
-    <div
-      ref={containerRef}
-      className={containerClasses.join(' ')}
-      onMouseEnter={enableTooltip ? handleMouseEnter : undefined}
-      onMouseLeave={
-        enableTooltip
-          ? () => {
-              if (tooltipTimerRef.current) {
-                clearTimeout(tooltipTimerRef.current);
-                tooltipTimerRef.current = null;
-              }
-              setShowTooltip(false);
-            }
-          : undefined
-      }
-    >
-      {/* Show usage value above bar in compact mode */}
-      {variant === 'compact' && (
-        <div className="resource-bar-value">
-          <span className="resource-bar-leading">{displayUsage}</span>
+      {currentAllocatable > 0 && (
+        <div className="rb-tooltip-row">
+          <span>Allocatable:</span>
+          <span className="rb-tooltip-value">{tooltipAllocatable}</span>
+          <span className="rb-tooltip-value"></span>
         </div>
       )}
-      <div className="resource-bar">
-        {/* Background track */}
-        <div className="resource-bar-track">
-          {/* Usage fill */}
-          <div
-            className={`resource-bar-usage ${statusClass}`}
-            style={{ width: `${usagePercent}%` }}
-          >
-            {/* No inline text on the bar */}
-          </div>
 
-          {/* Reserved but unused area (if request > usage) */}
-          {currentRequest > currentUsage && requestPercent > usagePercent && (
-            <div
-              className="resource-bar-reserved"
-              style={{
-                left: `${usagePercent}%`,
-                width: `${requestPercent - usagePercent}%`,
-              }}
-            />
-          )}
-
-          {/* Request marker - show in default variant, and in compact for pods (no allocatable) */}
+      {currentAllocatable > 0 && <div className="rb-tooltip-divider" />}
+      {!currentAllocatable && <div className="rb-tooltip-divider" />}
+      <div className="rb-tooltip-row">
+        <span>Requests:</span>
+        <span className="rb-tooltip-value">{currentRequest > 0 ? tooltipRequest : '-'}</span>
+        <span className="rb-tooltip-value">
           {currentRequest > 0 &&
-            (variant === 'default' || (variant === 'compact' && !currentAllocatable)) && (
+            currentAllocatable > 0 &&
+            `${Math.round((currentRequest / currentAllocatable) * 100)}%`}
+          {currentRequest > 0 &&
+            !currentAllocatable &&
+            currentLimit > 0 &&
+            `${Math.round((currentRequest / currentLimit) * 100)}%`}
+        </span>
+      </div>
+      <div className="rb-tooltip-row">
+        <span>Limits:</span>
+        <span className="rb-tooltip-value">{currentLimit > 0 ? tooltipLimit : '-'}</span>
+        <span
+          className={`rb-tooltip-value ${currentLimit > 0 && currentAllocatable > 0 && (currentLimit / currentAllocatable) * 100 > 100 ? 'warning' : ''}`}
+        >
+          {currentLimit > 0 &&
+            currentAllocatable > 0 &&
+            `${Math.round((currentLimit / currentAllocatable) * 100)}%`}
+        </span>
+      </div>
+
+      {hasConfigIssue && (
+        <div className="rb-tooltip-row warning">
+          <span>⚠️ Requests exceeds Limits</span>
+        </div>
+      )}
+
+      {(consumption !== null ||
+        (overcommitPercent && overcommitPercent > 0) ||
+        (!currentRequest && !currentLimit)) && <div className="rb-tooltip-divider" />}
+      {consumption !== null && (
+        <div className="rb-tooltip-row">
+          <span>Consumption:</span>
+          <span className="rb-tooltip-value">{tooltipUsage}</span>
+          <span className={`rb-tooltip-value ${consumption > 100 ? 'warning' : ''}`}>
+            {consumption}%
+          </span>
+        </div>
+      )}
+
+      {currentAllocatable > 0 && currentLimit > currentAllocatable && (
+        <div className="rb-tooltip-row">
+          <span>Overcommitted:</span>
+          <span className="rb-tooltip-value">
+            {formatValue(limit, currentLimit - currentAllocatable)}
+          </span>
+          <span className="rb-tooltip-value warning">
+            {`${Math.round(((currentLimit - currentAllocatable) / currentAllocatable) * 100)}%`}
+          </span>
+        </div>
+      )}
+
+      {!currentRequest && !currentLimit && (
+        <div className="rb-tooltip-row warning">
+          <span>⚠️ No resource constraints set</span>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <Tooltip
+      content={tooltipContent}
+      placement="top"
+      maxWidth={200}
+      minWidth={200}
+      disabled={!enableTooltip || variant !== 'compact'}
+      inline={false}
+    >
+      <div
+        ref={containerRef}
+        className={containerClasses.join(' ')}
+      >
+        {/* Show usage value above bar in compact mode */}
+        {variant === 'compact' && (
+          <div className="resource-bar-value">
+            <span className="resource-bar-leading">{displayUsage}</span>
+          </div>
+        )}
+        <div className="resource-bar">
+          {/* Background track */}
+          <div className="resource-bar-track">
+            {/* Usage fill */}
+            <div
+              className={`resource-bar-usage ${statusClass}`}
+              style={{ width: `${usagePercent}%` }}
+            >
+              {/* No inline text on the bar */}
+            </div>
+
+            {/* Reserved but unused area (if request > usage) */}
+            {currentRequest > currentUsage && requestPercent > usagePercent && (
               <div
-                className="resource-bar-marker request"
-                style={{ left: `${requestPercent}%` }}
-                title={`Request: ${tooltipRequest}`}
+                className="resource-bar-reserved"
+                style={{
+                  left: `${usagePercent}%`,
+                  width: `${requestPercent - usagePercent}%`,
+                }}
               />
             )}
 
-          {/* Limit marker - only show in default variant */}
-          {currentLimit > 0 && variant === 'default' && (
-            <div
-              className="resource-bar-marker limit"
-              style={{ left: `${limitPercent}%` }}
-              title={`Limit: ${tooltipLimit}`}
-            />
-          )}
-        </div>
-      </div>
-      {/* Show overcommit bar below main bar for nodes in compact mode */}
-      {variant === 'compact' && overcommitPercent && overcommitPercent > 0 && (
-        <div className="resource-bar-overcommit">
-          <div className="resource-bar-overcommit-track">
-            <div
-              className="resource-bar-overcommit-fill"
-              style={{ width: `${Math.min(100, overcommitPercent)}%` }}
-            />
+            {/* Request marker - show in default variant, and in compact for pods (no allocatable) */}
+            {currentRequest > 0 &&
+              (variant === 'default' || (variant === 'compact' && !currentAllocatable)) && (
+                <div
+                  className="resource-bar-marker request"
+                  style={{ left: `${requestPercent}%` }}
+                  title={`Request: ${tooltipRequest}`}
+                />
+              )}
+
+            {/* Limit marker - only show in default variant */}
+            {currentLimit > 0 && variant === 'default' && (
+              <div
+                className="resource-bar-marker limit"
+                style={{ left: `${limitPercent}%` }}
+                title={`Limit: ${tooltipLimit}`}
+              />
+            )}
           </div>
         </div>
-      )}
-      {showTooltip &&
-        tooltipStyle &&
-        ReactDOM.createPortal(
-          <div
-            className={`resource-bar-tooltip tooltip-${tooltipPosition}`}
-            style={{ ...tooltipStyle, fontSize: '0.85rem' }}
-          >
-            <div className="tooltip-content">
-              <div className="tooltip-row">
-                <span>Usage:</span>
-                <span className="tooltip-value">{tooltipUsage}</span>
-                <span className="tooltip-value">
-                  {currentAllocatable > 0 && `${Math.round(usageVsAllocatable)}%`}
-                  {!currentAllocatable && currentLimit > 0 && `${Math.round(usageVsLimit)}%`}
-                </span>
-              </div>
-
-              {currentAllocatable > 0 && (
-                <div className="tooltip-row">
-                  <span>Allocatable:</span>
-                  <span className="tooltip-value">{tooltipAllocatable}</span>
-                  <span className="tooltip-value"></span>
-                </div>
-              )}
-
-              {currentAllocatable > 0 && <div className="tooltip-divider" />}
-              {!currentAllocatable && <div className="tooltip-divider" />}
-              <div className="tooltip-row">
-                <span>Requests:</span>
-                <span className="tooltip-value">{currentRequest > 0 ? tooltipRequest : '-'}</span>
-                <span className="tooltip-value">
-                  {currentRequest > 0 &&
-                    currentAllocatable > 0 &&
-                    `${Math.round((currentRequest / currentAllocatable) * 100)}%`}
-                  {currentRequest > 0 &&
-                    !currentAllocatable &&
-                    currentLimit > 0 &&
-                    `${Math.round((currentRequest / currentLimit) * 100)}%`}
-                </span>
-              </div>
-              <div className="tooltip-row">
-                <span>Limits:</span>
-                <span className="tooltip-value">{currentLimit > 0 ? tooltipLimit : '-'}</span>
-                <span
-                  className={`tooltip-value ${currentLimit > 0 && currentAllocatable > 0 && (currentLimit / currentAllocatable) * 100 > 100 ? 'warning' : ''}`}
-                >
-                  {currentLimit > 0 &&
-                    currentAllocatable > 0 &&
-                    `${Math.round((currentLimit / currentAllocatable) * 100)}%`}
-                </span>
-              </div>
-
-              {hasConfigIssue && (
-                <div className="tooltip-row warning">
-                  <span>⚠️ Requests exceeds Limits</span>
-                </div>
-              )}
-
-              {(consumption !== null ||
-                (overcommitPercent && overcommitPercent > 0) ||
-                (!currentRequest && !currentLimit)) && <div className="tooltip-divider" />}
-              {consumption !== null && (
-                <div className="tooltip-row">
-                  <span>Consumption:</span>
-                  <span className="tooltip-value">{tooltipUsage}</span>
-                  <span className={`tooltip-value ${consumption > 100 ? 'warning' : ''}`}>
-                    {consumption}%
-                  </span>
-                </div>
-              )}
-
-              {currentAllocatable > 0 && currentLimit > currentAllocatable && (
-                <div className="tooltip-row">
-                  <span>Overcommitted:</span>
-                  <span className="tooltip-value">
-                    {formatValue(limit, currentLimit - currentAllocatable)}
-                  </span>
-                  <span className="tooltip-value warning">
-                    {`${Math.round(((currentLimit - currentAllocatable) / currentAllocatable) * 100)}%`}
-                  </span>
-                </div>
-              )}
-
-              {!currentRequest && !currentLimit && (
-                <div className="tooltip-row warning">
-                  <span>⚠️ No resource constraints set</span>
-                </div>
-              )}
+        {/* Show overcommit bar below main bar for nodes in compact mode */}
+        {variant === 'compact' && overcommitPercent && overcommitPercent > 0 && (
+          <div className="resource-bar-overcommit">
+            <div className="resource-bar-overcommit-track">
+              <div
+                className="resource-bar-overcommit-fill"
+                style={{ width: `${Math.min(100, overcommitPercent)}%` }}
+              />
             </div>
-          </div>,
-          document.body
+          </div>
         )}
-    </div>
+      </div>
+    </Tooltip>
   );
 };
 

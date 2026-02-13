@@ -18,8 +18,8 @@
   --z-index-base: 10;
   --z-index-panel: 500;
   --z-index-modal-backdrop: 1500;
-  --z-index-tooltip: 2000;
   --z-index-modal: 3000;
+  --z-index-tooltip: 3200;
   --z-index-grid-row: 10;
   --z-index-grid-header: 20;
   --z-index-grid-resize-handle: 40;

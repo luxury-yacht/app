@@ -328,22 +328,6 @@
   font-weight: 600;
 }
 
-/* Tooltip icon in table header */
-.themes-header-tooltip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 1px solid var(--color-text-tertiary);
-  font-size: 10px;
-  font-weight: 700;
-  cursor: help;
-  vertical-align: middle;
-  line-height: 1;
-}
-
 .themes-table-row {
   display: contents;
 }

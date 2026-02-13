@@ -2,11 +2,12 @@
  * frontend/src/components/status/StatusIndicator.tsx
  *
  * Shared status indicator component.
- * Renders a colored dot with an optional popover that appears below.
+ * Renders a colored dot with a hover tooltip that appears below.
  * All three header indicators (Connectivity, Metrics, Port Forwards) use this.
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React from 'react';
+import Tooltip from '@shared/components/Tooltip';
 import './StatusIndicator.css';
 
 /** The five shared status states. */
@@ -35,70 +36,44 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   onAction,
   ariaLabel,
 }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  /** Close the popover when clicking outside or pressing Escape. */
-  const handleClickOutside = useCallback((e: MouseEvent) => {
-    if (ref.current && !ref.current.contains(e.target as Node)) {
-      setIsOpen(false);
-    }
-  }, []);
-
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setIsOpen(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      document.addEventListener('keydown', handleKeyDown);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isOpen, handleClickOutside, handleKeyDown]);
-
-  return (
-    <div
-      className="status-indicator"
-      ref={ref}
-      onClick={() => setIsOpen((prev) => !prev)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          setIsOpen((prev) => !prev);
-        }
-      }}
-      aria-label={ariaLabel}
-      role="button"
-      tabIndex={0}
-    >
-      <div className="status-indicator-dot" data-status={status} />
-      {isOpen && (
-        <div className="status-popover" data-status={status}>
-          <div className="status-popover-arrow" />
-          <div className="status-popover-title">{title}</div>
-          <div className="status-popover-message">{message}</div>
-          {actionLabel && onAction && (
-            <div className="status-popover-action">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsOpen(false);
-                  onAction();
-                }}
-              >
-                {actionLabel}
-              </button>
-            </div>
-          )}
+  /* Build the rich tooltip content matching the existing popover layout */
+  const tooltipContent = (
+    <div className="status-popover-content" data-status={status}>
+      <div className="status-popover-title">{title}</div>
+      <div className="status-popover-message">{message}</div>
+      {actionLabel && onAction && (
+        <div className="status-popover-action">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onAction();
+            }}
+          >
+            {actionLabel}
+          </button>
         </div>
       )}
     </div>
+  );
+
+  return (
+    <Tooltip
+      content={tooltipContent}
+      placement="bottom"
+      showArrow={false}
+      hoverDelay={150}
+      className="status-popover"
+      interactive
+    >
+      <div
+        className="status-indicator"
+        aria-label={ariaLabel}
+        role="status"
+        tabIndex={0}
+      >
+        <div className="status-indicator-dot" data-status={status} />
+      </div>
+    </Tooltip>
   );
 };
 

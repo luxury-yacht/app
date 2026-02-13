@@ -16,6 +16,7 @@ import { types } from '@wailsjs/go/models';
 import { errorHandler } from '@utils/errorHandler';
 import { useAutoRefresh, useBackgroundRefresh } from '@/core/refresh';
 import { changeTheme, initSystemThemeListener } from '@/utils/themes';
+import Tooltip from '@shared/components/Tooltip';
 import './Settings.css';
 import { clearAllGridTableState } from '@shared/components/tables/persistence/gridTablePersistenceReset';
 import {
@@ -915,12 +916,7 @@ function Settings({ onClose }: SettingsProps) {
                     <span>Theme Name</span>
                     <span>
                       Pattern{' '}
-                      <span
-                        className="themes-header-tooltip"
-                        title="Auto-apply theme when cluster name matches. Use * for any characters, ? for a single character. Example: prod* matches prod-us, prod-eu."
-                      >
-                        ?
-                      </span>
+                      <Tooltip content="Auto-apply theme when cluster name matches. Use * for any characters, ? for a single character. Example: prod* matches prod-us, prod-eu." />
                     </span>
                     <span></span>
                     <span></span>
