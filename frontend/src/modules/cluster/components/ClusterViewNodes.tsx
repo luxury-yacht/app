@@ -55,7 +55,10 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     });
     const useShortResourceNames = useShortNames();
     // Build scoped key for multi-cluster node metrics lookup.
-    const nodesScope = useMemo(() => buildClusterScopeList(selectedClusterIds, ''), [selectedClusterIds]);
+    const nodesScope = useMemo(
+      () => buildClusterScopeList(selectedClusterIds, ''),
+      [selectedClusterIds]
+    );
     const nodesDomain = useRefreshScopedDomain('nodes', nodesScope);
     const metricsInfo = useMemo(() => {
       const metricsByCluster = nodesDomain.data?.metricsByCluster;

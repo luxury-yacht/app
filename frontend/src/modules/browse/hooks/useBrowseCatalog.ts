@@ -255,7 +255,15 @@ export function useBrowseCatalog({
     if (mode === 'append') {
       lastAppliedScopeRef.current = catalogScope;
     }
-  }, [domain.data, domain.scope, domain.status, catalogScope, pageLimit, pinnedNamespaces, clusterId]);
+  }, [
+    domain.data,
+    domain.scope,
+    domain.status,
+    catalogScope,
+    pageLimit,
+    pinnedNamespaces,
+    clusterId,
+  ]);
 
   // Handle first load
   useEffect(() => {

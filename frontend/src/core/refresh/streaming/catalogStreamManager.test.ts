@@ -31,11 +31,7 @@ vi.mock('../RefreshManager', () => ({
   refreshManager: refreshManagerMock,
 }));
 
-import {
-  getScopedDomainState,
-  resetAllScopedDomainStates,
-  setScopedDomainState,
-} from '../store';
+import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
 
 class MockEventSource {
   static instances: MockEventSource[] = [];

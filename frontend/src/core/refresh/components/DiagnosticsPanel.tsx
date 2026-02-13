@@ -978,7 +978,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       let label = 'ObjPanel - Pods';
       if (displayScope.startsWith('namespace:')) {
         const namespace = displayScope.slice('namespace:'.length) || 'all';
-        label = namespace === 'all' ? 'ObjPanel - Pods - All namespaces' : `ObjPanel - Pods - ${namespace}`;
+        label =
+          namespace === 'all'
+            ? 'ObjPanel - Pods - All namespaces'
+            : `ObjPanel - Pods - ${namespace}`;
       } else if (displayScope.startsWith('node:')) {
         const nodeName = displayScope.slice('node:'.length);
         label = `ObjPanel - Pods - ${nodeName}`;
@@ -1320,7 +1323,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     const buildObjectPanelRows = (
       domain: RefreshDomain,
       tabName: string,
-      entries: Array<[string, DomainSnapshotState<any>]>,
+      entries: Array<[string, DomainSnapshotState<any>]>
     ): DiagnosticsRow[] => {
       return entries.map(([scope, state]) => {
         const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
@@ -1379,11 +1382,27 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       });
     };
 
-    const objectDetailsRows = buildObjectPanelRows('object-details', 'Details', objectDetailsScopeEntries);
-    const objectEventsRows = buildObjectPanelRows('object-events', 'Events', objectEventsScopeEntries);
+    const objectDetailsRows = buildObjectPanelRows(
+      'object-details',
+      'Details',
+      objectDetailsScopeEntries
+    );
+    const objectEventsRows = buildObjectPanelRows(
+      'object-events',
+      'Events',
+      objectEventsScopeEntries
+    );
     const objectYamlRows = buildObjectPanelRows('object-yaml', 'YAML', objectYamlScopeEntries);
-    const objectHelmManifestRows = buildObjectPanelRows('object-helm-manifest', 'Manifest', objectHelmManifestScopeEntries);
-    const objectHelmValuesRows = buildObjectPanelRows('object-helm-values', 'Values', objectHelmValuesScopeEntries);
+    const objectHelmManifestRows = buildObjectPanelRows(
+      'object-helm-manifest',
+      'Manifest',
+      objectHelmManifestScopeEntries
+    );
+    const objectHelmValuesRows = buildObjectPanelRows(
+      'object-helm-values',
+      'Values',
+      objectHelmValuesScopeEntries
+    );
 
     const priorityRows = baseRows.filter((row) => prioritySet.has(row.domain));
     const remainingRows = baseRows.filter(
@@ -1425,6 +1444,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     objectHelmValuesScopeEntries,
     clusterEventsScopeEntries,
     namespaceEventsScopeEntries,
+    pickFirstScopeState,
     telemetrySummary,
     resourceStreamStats,
     selectedClusterId,
@@ -1895,7 +1915,13 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       className: undefined,
       title: undefined,
     };
-  }, [catalogScopeEntries, pickFirstScopeState, catalogStreamTelemetry, telemetryError, telemetrySummary]);
+  }, [
+    catalogScopeEntries,
+    pickFirstScopeState,
+    catalogStreamTelemetry,
+    telemetryError,
+    telemetrySummary,
+  ]);
 
   const logSummary = useMemo(() => {
     const totalScopes = logScopeEntries.length;

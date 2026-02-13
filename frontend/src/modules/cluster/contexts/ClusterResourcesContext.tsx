@@ -320,10 +320,13 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   const nodeError = nodeDomain.error;
   const nodeLastUpdated = nodeDomain.lastUpdated;
 
-  const loadNodes = useCallback(async (showSpinner: boolean = true) => {
-    void showSpinner;
-    await refreshOrchestrator.fetchScopedDomain('nodes', clusterScope, { isManual: true });
-  }, [clusterScope]);
+  const loadNodes = useCallback(
+    async (showSpinner: boolean = true) => {
+      void showSpinner;
+      await refreshOrchestrator.fetchScopedDomain('nodes', clusterScope, { isManual: true });
+    },
+    [clusterScope]
+  );
 
   const refreshNodes = useCallback(async () => {
     await refreshOrchestrator.fetchScopedDomain('nodes', clusterScope, { isManual: true });
@@ -434,7 +437,8 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
 
   // Resolve the scoped key for a cluster domain — events uses a different scope suffix.
   const getScopeForDomain = useCallback(
-    (domain: RefreshDomain) => (domain === CLUSTER_EVENTS_DOMAIN ? clusterEventsScope : clusterScope),
+    (domain: RefreshDomain) =>
+      domain === CLUSTER_EVENTS_DOMAIN ? clusterEventsScope : clusterScope,
     [clusterScope, clusterEventsScope]
   );
 
@@ -542,11 +546,31 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   );
 
   const rbac = useClusterDomainResource('cluster-rbac', rbacDomain, rbacExtractor, clusterScope);
-  const storage = useClusterDomainResource('cluster-storage', storageDomain, storageExtractor, clusterScope);
-  const config = useClusterDomainResource('cluster-config', configDomain, configExtractor, clusterScope);
+  const storage = useClusterDomainResource(
+    'cluster-storage',
+    storageDomain,
+    storageExtractor,
+    clusterScope
+  );
+  const config = useClusterDomainResource(
+    'cluster-config',
+    configDomain,
+    configExtractor,
+    clusterScope
+  );
   const crds = useClusterDomainResource('cluster-crds', crdDomain, crdExtractor, clusterScope);
-  const custom = useClusterDomainResource('cluster-custom', customDomain, customExtractor, clusterScope);
-  const events = useClusterDomainResource('cluster-events', eventsDomain, eventsExtractor, clusterEventsScope);
+  const custom = useClusterDomainResource(
+    'cluster-custom',
+    customDomain,
+    customExtractor,
+    clusterScope
+  );
+  const events = useClusterDomainResource(
+    'cluster-events',
+    eventsDomain,
+    eventsExtractor,
+    clusterEventsScope
+  );
 
   const manualLoaders = useMemo<Record<ClusterViewType, () => Promise<void>>>(() => {
     const wrap = (load?: (showSpinner?: boolean) => Promise<void>) => {

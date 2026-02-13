@@ -277,27 +277,10 @@ export const resetAllScopedDomainStates = <K extends RefreshDomain>(domain: K): 
   notify();
 };
 
-export const incrementDroppedAutoRefresh = <K extends RefreshDomain>(domain: K): void => {
-  const previous = state.domains[domain];
-  state.domains = {
-    ...state.domains,
-    [domain]: {
-      ...previous,
-      droppedAutoRefreshes: previous.droppedAutoRefreshes + 1,
-    },
-  } as DomainStateMap;
-  notify();
-};
-
 export const markPendingRequest = (delta: number): void => {
   state.pendingRequests = Math.max(0, state.pendingRequests + delta);
   notify();
 };
-
-export const useRefreshDomain = <K extends RefreshDomain>(
-  domain: K
-): DomainSnapshotState<DomainPayloadMap[K]> =>
-  useSyncExternalStore(subscribe, () => state.domains[domain]);
 
 export const useRefreshScopedDomain = <K extends RefreshDomain>(
   domain: K,

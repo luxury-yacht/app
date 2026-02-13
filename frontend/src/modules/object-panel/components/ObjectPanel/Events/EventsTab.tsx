@@ -98,7 +98,9 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
     const enabled = Boolean(isActive && objectData);
     refreshOrchestrator.setScopedDomainEnabled('object-events', eventsScope, enabled);
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-events', eventsScope, false, { preserveState: true });
+      refreshOrchestrator.setScopedDomainEnabled('object-events', eventsScope, false, {
+        preserveState: true,
+      });
     };
   }, [eventsScope, isActive, objectData]);
 

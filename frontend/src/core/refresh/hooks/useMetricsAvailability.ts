@@ -39,7 +39,9 @@ export const useClusterMetricsAvailability = (): ClusterOverviewMetrics | null =
     const shouldTrigger = shouldEnable && viewType !== 'overview';
     // ClusterOverview handles its own initial refresh; only prime from non-overview views.
     if (shouldTrigger && !overviewDomain.data && overviewDomain.status === 'idle') {
-      void refreshOrchestrator.fetchScopedDomain('cluster-overview', overviewScope, { isManual: true });
+      void refreshOrchestrator.fetchScopedDomain('cluster-overview', overviewScope, {
+        isManual: true,
+      });
     }
   }, [overviewDomain.data, overviewDomain.status, overviewScope, viewType]);
 

@@ -589,7 +589,15 @@ function useRefreshBackedResource<T>(
         source: `namespace-resource-refresh-${resourceKey}`,
       });
     }
-  }, [capabilityNamespace, capabilitySpecs, clusterId, domain, enabled, namespaceScope, resourceKey]);
+  }, [
+    capabilityNamespace,
+    capabilitySpecs,
+    clusterId,
+    domain,
+    enabled,
+    namespaceScope,
+    resourceKey,
+  ]);
 
   const reset = useCallback(() => {
     if (namespaceScope) {
@@ -620,7 +628,8 @@ function useRefreshBackedResource<T>(
     (domainState.status === 'idle' || domainState.status === 'initialising') &&
     !domainData;
   const loadingStatus =
-    initialising || (enabled && Boolean(namespaceScope) && domainState.status === 'loading' && !domainData);
+    initialising ||
+    (enabled && Boolean(namespaceScope) && domainState.status === 'loading' && !domainData);
 
   return useMemo(
     () => ({

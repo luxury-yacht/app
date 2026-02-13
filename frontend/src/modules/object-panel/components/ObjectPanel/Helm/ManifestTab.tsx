@@ -73,7 +73,9 @@ const ManifestTab: React.FC<ManifestTabProps> = ({ scope, isActive = false }) =>
     }
 
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-helm-manifest', scope, false, { preserveState: true });
+      refreshOrchestrator.setScopedDomainEnabled('object-helm-manifest', scope, false, {
+        preserveState: true,
+      });
     };
   }, [scope, isActive]);
 

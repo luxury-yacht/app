@@ -844,10 +844,7 @@ describe('refreshOrchestrator', () => {
     registerStreamingClusterConfigDomain();
 
     const scope = buildClusterScopeList(['cluster-a'], '');
-    orchestratorInternals.scopedEnabledState.set(
-      'cluster-config',
-      new Map([[scope, true]])
-    );
+    orchestratorInternals.scopedEnabledState.set('cluster-config', new Map([[scope, true]]));
     markResourceStreamActive('cluster-config', scope);
     resourceStreamMocks.isHealthy.mockReturnValue(false);
 
@@ -869,10 +866,7 @@ describe('refreshOrchestrator', () => {
     registerStreamingClusterConfigDomain();
 
     const scope = buildClusterScopeList(['cluster-a'], '');
-    orchestratorInternals.scopedEnabledState.set(
-      'cluster-config',
-      new Map([[scope, true]])
-    );
+    orchestratorInternals.scopedEnabledState.set('cluster-config', new Map([[scope, true]]));
     markResourceStreamActive('cluster-config', scope);
     resourceStreamMocks.isHealthy.mockReturnValue(true);
 

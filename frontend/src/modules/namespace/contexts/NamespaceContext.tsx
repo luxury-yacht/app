@@ -184,10 +184,15 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     Boolean(activeClusterId) && !hasActiveClusterNamespaces && namespaceDomain.status !== 'error';
   const namespaceRefreshing = hasActiveClusterNamespaces && namespaceDomain.status === 'updating';
 
-  const loadNamespaces = useCallback(async (_showSpinner: boolean = true) => {
-    if (!namespacesScope) return;
-    await refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, { isManual: true });
-  }, [namespacesScope]);
+  const loadNamespaces = useCallback(
+    async (_showSpinner: boolean = true) => {
+      if (!namespacesScope) return;
+      await refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, {
+        isManual: true,
+      });
+    },
+    [namespacesScope]
+  );
 
   const refreshNamespaces = useCallback(async () => {
     await loadNamespaces(false);
@@ -366,7 +371,9 @@ export const NamespaceProvider: React.FC<NamespaceProviderProps> = ({ children }
     const handleKubeconfigChanged = () => {
       if (namespacesScope) {
         refreshOrchestrator.setScopedDomainEnabled('namespaces', namespacesScope, true);
-        void refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, { isManual: true });
+        void refreshOrchestrator.fetchScopedDomain('namespaces', namespacesScope, {
+          isManual: true,
+        });
       }
     };
 

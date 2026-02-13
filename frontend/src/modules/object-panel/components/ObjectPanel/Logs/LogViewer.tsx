@@ -318,15 +318,21 @@ const LogViewer: React.FC<LogViewerProps> = ({
       // Use preserveState so the diagnostics panel can still see the last
       // log snapshot while the logs tab is inactive. Full cleanup happens
       // via ObjectPanelContent when the panel closes.
-      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, { preserveState: true });
+      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
+        preserveState: true,
+      });
       return;
     }
 
     if (showPreviousLogs) {
       refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
-      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, { preserveState: true });
+      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
+        preserveState: true,
+      });
       return () => {
-        refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, { preserveState: true });
+        refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
+          preserveState: true,
+        });
       };
     }
 
@@ -335,14 +341,20 @@ const LogViewer: React.FC<LogViewerProps> = ({
         refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true);
         return () => {
           if (!fallbackRecoveringRef.current) {
-            refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, { preserveState: true });
+            refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
+              preserveState: true,
+            });
           }
         };
       }
       refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
-      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, { preserveState: true });
+      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
+        preserveState: true,
+      });
       return () => {
-        refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, { preserveState: true });
+        refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
+          preserveState: true,
+        });
       };
     }
 
@@ -350,7 +362,9 @@ const LogViewer: React.FC<LogViewerProps> = ({
     refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true);
     return () => {
       refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
-      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, { preserveState: true });
+      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
+        preserveState: true,
+      });
     };
   }, [fallbackActive, isActive, logScope, showPreviousLogs]);
 

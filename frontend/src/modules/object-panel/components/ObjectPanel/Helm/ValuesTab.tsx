@@ -80,7 +80,9 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
     }
 
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-helm-values', scope, false, { preserveState: true });
+      refreshOrchestrator.setScopedDomainEnabled('object-helm-values', scope, false, {
+        preserveState: true,
+      });
     };
   }, [scope, isActive]);
 

@@ -33,11 +33,7 @@ vi.mock('@/core/logging/appLogClient', () => ({
 }));
 
 import { buildClusterScopeList } from '../clusterScope';
-import {
-  getScopedDomainState,
-  resetAllScopedDomainStates,
-  setScopedDomainState,
-} from '../store';
+import { getScopedDomainState, resetAllScopedDomainStates, setScopedDomainState } from '../store';
 import {
   ResourceStreamManager,
   mergeNodeMetricsRow,

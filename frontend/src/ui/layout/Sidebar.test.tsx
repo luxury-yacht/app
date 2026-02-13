@@ -23,7 +23,14 @@ const refreshMocks = vi.hoisted(() => ({
   // The component iterates Object.values() looking for an entry with .data
   catalogScopedStates: {} as Record<
     string,
-    { status: 'idle' | 'loading' | 'success' | 'error'; data: any; stats: any; error: any; droppedAutoRefreshes: number; scope: string | undefined }
+    {
+      status: 'idle' | 'loading' | 'success' | 'error';
+      data: any;
+      stats: any;
+      error: any;
+      droppedAutoRefreshes: number;
+      scope: string | undefined;
+    }
   >,
 }));
 
@@ -36,7 +43,14 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
 }));
 
 vi.mock('@core/refresh', () => ({
-  useRefreshScopedDomain: () => ({ status: 'idle', data: null, stats: null, error: null, droppedAutoRefreshes: 0, scope: undefined }),
+  useRefreshScopedDomain: () => ({
+    status: 'idle',
+    data: null,
+    stats: null,
+    error: null,
+    droppedAutoRefreshes: 0,
+    scope: undefined,
+  }),
   useRefreshScopedDomainStates: () => refreshMocks.catalogScopedStates,
 }));
 

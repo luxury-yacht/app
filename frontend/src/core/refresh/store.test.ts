@@ -13,7 +13,6 @@ import {
   getScopedDomainEntries,
   getScopedDomainState,
   getScopedDomainStates,
-  incrementDroppedAutoRefresh,
   markPendingRequest,
   resetAllScopedDomainStates,
   resetDomainState,
@@ -161,12 +160,6 @@ describe('refresh store helpers', () => {
     expect(Object.keys(getScopedDomainStates('namespace-config'))).toHaveLength(0);
     expect(getScopedDomainState('namespace-config', 'team-a').status).toBe('idle');
     expect(getScopedDomainState('namespace-config', 'team-b').status).toBe('idle');
-  });
-
-  it('increments dropped auto refresh counters safely', () => {
-    const before = getDomainState('cluster-config').droppedAutoRefreshes;
-    incrementDroppedAutoRefresh('cluster-config');
-    expect(getDomainState('cluster-config').droppedAutoRefreshes).toBe(before + 1);
   });
 
   it('never allows pending request counters to drop below zero', () => {

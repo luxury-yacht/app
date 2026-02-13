@@ -117,7 +117,9 @@ const YamlTab: React.FC<YamlTabProps> = ({
     }
 
     return () => {
-      refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, false, { preserveState: true });
+      refreshOrchestrator.setScopedDomainEnabled('object-yaml', scope, false, {
+        preserveState: true,
+      });
     };
   }, [scope, isActive]);
 

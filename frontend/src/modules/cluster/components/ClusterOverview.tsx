@@ -221,11 +221,13 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
 
     const enableOverview = () => {
       refreshOrchestrator.setScopedDomainEnabled('cluster-overview', overviewScope, true);
-      refreshOrchestrator.fetchScopedDomain('cluster-overview', overviewScope, { isManual: true }).catch(() => {
-        setOverviewData(EMPTY_OVERVIEW);
-        setIsHydrated(false);
-        setIsSwitching(true);
-      });
+      refreshOrchestrator
+        .fetchScopedDomain('cluster-overview', overviewScope, { isManual: true })
+        .catch(() => {
+          setOverviewData(EMPTY_OVERVIEW);
+          setIsHydrated(false);
+          setIsSwitching(true);
+        });
     };
 
     // Clear local component state without touching the domain lifecycle.

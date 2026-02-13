@@ -75,7 +75,10 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     const permissionMap = useUserPermissions();
     const { selectedClusterIds } = useKubeconfig();
     // Build scoped key for multi-cluster node metrics lookup.
-    const nodesScope = useMemo(() => buildClusterScopeList(selectedClusterIds, ''), [selectedClusterIds]);
+    const nodesScope = useMemo(
+      () => buildClusterScopeList(selectedClusterIds, ''),
+      [selectedClusterIds]
+    );
     const nodesDomain = useRefreshScopedDomain('nodes', nodesScope);
     const metricsInfo = metrics ?? nodesDomain.data?.metrics ?? null;
 

@@ -70,15 +70,6 @@ const domainStateMap: Record<string, DomainSnapshotState<any>> = {};
 const scopedEntriesMap: Record<string, Array<[string, DomainSnapshotState<any>]>> = {};
 let refreshState: { pendingRequests: number } = { pendingRequests: 0 };
 
-const defaultDomainState: DomainSnapshotState<any> = {
-  status: 'idle',
-  data: null,
-  stats: null,
-  error: null,
-  droppedAutoRefreshes: 0,
-  scope: undefined,
-};
-
 const mockRefreshManager = vi.hoisted(() => ({
   register: vi.fn(),
   unregister: vi.fn(),
@@ -125,7 +116,6 @@ vi.mock('../store', async () => {
   const actual = await vi.importActual<typeof import('../store')>('../store');
   return {
     ...actual,
-    useRefreshDomain: (domain: string) => domainStateMap[domain] ?? defaultDomainState,
     useRefreshScopedDomainEntries: (domain: string) => scopedEntriesMap[domain] ?? [],
     useRefreshState: () => refreshState,
   };
@@ -154,10 +144,7 @@ const setDomainState = (domain: string, state: DomainSnapshotState<any>) => {
   domainStateMap[domain] = state;
 };
 
-const setScopedEntries = (
-  domain: string,
-  entries: Array<[string, DomainSnapshotState<any>]>
-) => {
+const setScopedEntries = (domain: string, entries: Array<[string, DomainSnapshotState<any>]>) => {
   scopedEntriesMap[domain] = entries;
 };
 
@@ -320,66 +307,77 @@ describe('DiagnosticsPanel component', () => {
   test('renders cluster overview row with metrics summary before pods', async () => {
     seedBaseDomainStates();
 
-    setScopedEntries('namespaces', [[
-      'default-scope',
-      createReadyState({
-        namespaces: [
-          { name: 'default', phase: 'Active', resourceVersion: '1', creationTimestamp: Date.now() },
-        ],
-      }),
-    ]]);
+    setScopedEntries('namespaces', [
+      [
+        'default-scope',
+        createReadyState({
+          namespaces: [
+            {
+              name: 'default',
+              phase: 'Active',
+              resourceVersion: '1',
+              creationTimestamp: Date.now(),
+            },
+          ],
+        }),
+      ],
+    ]);
 
-    setScopedEntries('nodes', [[
-      'default-scope',
-      createReadyState({
-        nodes: [],
-        metrics: {
-          collectedAt: Date.now(),
-          stale: false,
-          lastError: '',
-          consecutiveFailures: 0,
-          successCount: 2,
-          failureCount: 0,
-        },
-      }),
-    ]]);
+    setScopedEntries('nodes', [
+      [
+        'default-scope',
+        createReadyState({
+          nodes: [],
+          metrics: {
+            collectedAt: Date.now(),
+            stale: false,
+            lastError: '',
+            consecutiveFailures: 0,
+            successCount: 2,
+            failureCount: 0,
+          },
+        }),
+      ],
+    ]);
 
-    setScopedEntries('cluster-overview', [[
-      'default-scope',
-      createReadyState({
-        overview: {
-          clusterType: 'EKS',
-          clusterVersion: 'v1.29.3',
-          cpuUsage: '150m',
-          cpuRequests: '320m',
-          cpuLimits: '500m',
-          cpuAllocatable: '2.50',
-          memoryUsage: '200.0Mi',
-          memoryRequests: '320.0Mi',
-          memoryLimits: '512.0Mi',
-          memoryAllocatable: '9.0Gi',
-          totalNodes: 3,
-          fargateNodes: 1,
-          regularNodes: 0,
-          ec2Nodes: 2,
-          totalPods: 24,
-          totalContainers: 48,
-          totalInitContainers: 4,
-          runningPods: 20,
-          pendingPods: 3,
-          failedPods: 1,
-          totalNamespaces: 6,
-        },
-        metrics: {
-          collectedAt: Date.now(),
-          stale: false,
-          lastError: '',
-          consecutiveFailures: 0,
-          successCount: 5,
-          failureCount: 1,
-        },
-      }),
-    ]]);
+    setScopedEntries('cluster-overview', [
+      [
+        'default-scope',
+        createReadyState({
+          overview: {
+            clusterType: 'EKS',
+            clusterVersion: 'v1.29.3',
+            cpuUsage: '150m',
+            cpuRequests: '320m',
+            cpuLimits: '500m',
+            cpuAllocatable: '2.50',
+            memoryUsage: '200.0Mi',
+            memoryRequests: '320.0Mi',
+            memoryLimits: '512.0Mi',
+            memoryAllocatable: '9.0Gi',
+            totalNodes: 3,
+            fargateNodes: 1,
+            regularNodes: 0,
+            ec2Nodes: 2,
+            totalPods: 24,
+            totalContainers: 48,
+            totalInitContainers: 4,
+            runningPods: 20,
+            pendingPods: 3,
+            failedPods: 1,
+            totalNamespaces: 6,
+          },
+          metrics: {
+            collectedAt: Date.now(),
+            stale: false,
+            lastError: '',
+            consecutiveFailures: 0,
+            successCount: 5,
+            failureCount: 1,
+          },
+        }),
+      ],
+    ]);
 
     scopedEntriesMap['pods'] = [
       [

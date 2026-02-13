@@ -15,7 +15,6 @@ import (
 
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 	"github.com/luxury-yacht/app/backend/internal/errorcapture"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // handleClusterAuthStateChange handles auth state changes for a specific cluster.
@@ -41,7 +40,7 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 			a.logger.Info(fmt.Sprintf("Cluster %s: auth recovered", clusterName), "Auth")
 		}
 		// Emit per-cluster recovery event for the frontend
-		runtime.EventsEmit(a.Ctx, "cluster:auth:recovered", map[string]any{
+		a.emitEvent("cluster:auth:recovered", map[string]any{
 			"clusterId":   clusterID,
 			"clusterName": clusterName,
 		})
@@ -53,7 +52,7 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 			a.logger.Warn(fmt.Sprintf("Cluster %s: auth recovering - %s", clusterName, reason), "Auth")
 		}
 		// Emit per-cluster recovering event for the frontend
-		runtime.EventsEmit(a.Ctx, "cluster:auth:recovering", map[string]any{
+		a.emitEvent("cluster:auth:recovering", map[string]any{
 			"clusterId":   clusterID,
 			"clusterName": clusterName,
 			"reason":      reason,
@@ -68,7 +67,7 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 		// Capture the auth failure with cluster context for error enhancement
 		errorcapture.CaptureWithCluster(clusterID, fmt.Sprintf("auth failed: %s", reason))
 		// Emit per-cluster failure event for the frontend
-		runtime.EventsEmit(a.Ctx, "cluster:auth:failed", map[string]any{
+		a.emitEvent("cluster:auth:failed", map[string]any{
 			"clusterId":   clusterID,
 			"clusterName": clusterName,
 			"reason":      reason,
@@ -326,7 +325,7 @@ func (a *App) handleClusterAuthRecoveryProgress(clusterID string, progress auths
 	}
 
 	// Emit per-cluster progress event for the frontend
-	runtime.EventsEmit(a.Ctx, "cluster:auth:progress", map[string]any{
+	a.emitEvent("cluster:auth:progress", map[string]any{
 		"clusterId":         clusterID,
 		"clusterName":       clusterName,
 		"currentAttempt":    progress.CurrentAttempt,

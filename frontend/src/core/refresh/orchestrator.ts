@@ -356,7 +356,7 @@ class RefreshOrchestrator {
   private scheduleStreamingStart(
     domain: RefreshDomain,
     scope: string,
-    streaming: StreamingRegistration,
+    streaming: StreamingRegistration
   ): void {
     const normalizedScope = scope.trim();
     if (!normalizedScope) {
@@ -450,7 +450,7 @@ class RefreshOrchestrator {
     domain: RefreshDomain,
     scope: string,
     enabled: boolean,
-    options?: { preserveState?: boolean },
+    options?: { preserveState?: boolean }
   ): void {
     const config = this.getConfig(domain);
     const allowRefresher = this.shouldAllowRefresher(config);
@@ -1460,7 +1460,8 @@ class RefreshOrchestrator {
     scope?: string
   ): DomainPayloadMap[K] {
     if (domain === 'namespaces') {
-      const previous = getScopedDomainState('namespaces', scope!).data as NamespaceSnapshotPayload | null;
+      const previous = getScopedDomainState('namespaces', scope!)
+        .data as NamespaceSnapshotPayload | null;
       if (!previous?.namespaces?.length) {
         return payload;
       }
@@ -1630,7 +1631,7 @@ class RefreshOrchestrator {
         ...previous.data,
         workloads: nextWorkloads,
       };
-      setScopedDomainState('namespace-workloads', resolvedScope, (prev) => ({
+      setScopedDomainState('namespace-workloads', scope, (prev) => ({
         ...prev,
         status: 'ready',
         data: nextPayload,
@@ -1643,9 +1644,9 @@ class RefreshOrchestrator {
         lastAutoRefresh: !isManual ? now : prev.lastAutoRefresh,
         error: null,
         isManual,
-        scope: resolvedScope,
+        scope,
       }));
-      this.clearRefreshError(domain, resolvedScope || undefined);
+      this.clearRefreshError(domain, scope || undefined);
       return true;
     }
 
@@ -1681,7 +1682,7 @@ class RefreshOrchestrator {
         metrics: payload.metrics ?? previous.data.metrics,
         metricsByCluster: payload.metricsByCluster ?? previous.data.metricsByCluster,
       };
-      setScopedDomainState('nodes', resolvedScope, (prev) => ({
+      setScopedDomainState('nodes', scope, (prev) => ({
         ...prev,
         status: 'ready',
         data: nextPayload,
@@ -1694,9 +1695,9 @@ class RefreshOrchestrator {
         lastAutoRefresh: !isManual ? now : prev.lastAutoRefresh,
         error: null,
         isManual,
-        scope: resolvedScope,
+        scope,
       }));
-      this.clearRefreshError(domain, resolvedScope || undefined);
+      this.clearRefreshError(domain, scope || undefined);
       return true;
     }
 
