@@ -307,10 +307,10 @@
   margin: 0 0 0.5rem 0;
 }
 
-/* Themes table — 5-column grid: drag handle | name | pattern | apply | delete */
+/* Themes table — 6-column grid: drag handle | name | pattern | open | save | delete */
 .themes-table {
   display: grid;
-  grid-template-columns: 24px 1fr 1fr auto auto;
+  grid-template-columns: 24px 1fr 1fr auto auto auto;
   gap: var(--spacing-xs) var(--spacing-sm);
   align-items: center;
 }
@@ -415,9 +415,14 @@
     border-color var(--transition-fast);
 }
 
-.theme-action-button:hover {
+.theme-action-button:hover:not(:disabled) {
   color: var(--color-text);
   border-color: var(--color-text-secondary);
+}
+
+.theme-action-button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* Delete button turns red on hover */

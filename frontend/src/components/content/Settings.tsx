@@ -98,6 +98,8 @@ function Settings({ onClose }: SettingsProps) {
   // Saved themes state
   const [themes, setThemes] = useState<types.Theme[]>([]);
   const [themesLoading, setThemesLoading] = useState(false);
+  // Tracks which theme was last loaded via "Open" so Save is only enabled for it.
+  const [activeThemeId, setActiveThemeId] = useState<string | null>(null);
   // 'new' = creating new theme via the form at the bottom
   const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
   const [themeDraft, setThemeDraft] = useState({ name: '', clusterPattern: '' });
@@ -531,6 +533,77 @@ function Settings({ onClose }: SettingsProps) {
     }
   };
 
+  // Save the current palette/accent settings into an existing theme.
+  const handleSaveToTheme = async (id: string) => {
+    const existing = themes.find((t) => t.id === id);
+    if (!existing) return;
+
+    try {
+      const lightTint = getPaletteTint('light');
+      const darkTint = getPaletteTint('dark');
+      const updated = new types.Theme({
+        ...existing,
+        paletteHueLight: lightTint.hue,
+        paletteSaturationLight: lightTint.saturation,
+        paletteBrightnessLight: lightTint.brightness,
+        paletteHueDark: darkTint.hue,
+        paletteSaturationDark: darkTint.saturation,
+        paletteBrightnessDark: darkTint.brightness,
+        accentColorLight: getAccentColor('light'),
+        accentColorDark: getAccentColor('dark'),
+      });
+      await saveTheme(updated);
+      await reloadThemes();
+    } catch (error) {
+      errorHandler.handle(error, { action: 'saveTheme' });
+    }
+  };
+
+  // Check whether a theme already matches the current palette/accent settings.
+  // Uses the live slider state for the active mode (avoids debounce lag from
+  // the persisted preference cache) and getPaletteTint for the inactive mode.
+  const themeMatchesCurrent = useCallback(
+    (theme: types.Theme): boolean => {
+      const isLight = resolvedTheme === 'light';
+
+      // Active mode: compare against live slider / accent state.
+      const activeHueMatch = isLight
+        ? theme.paletteHueLight === paletteHue
+        : theme.paletteHueDark === paletteHue;
+      const activeSatMatch = isLight
+        ? theme.paletteSaturationLight === paletteSaturation
+        : theme.paletteSaturationDark === paletteSaturation;
+      const activeBrtMatch = isLight
+        ? theme.paletteBrightnessLight === paletteBrightness
+        : theme.paletteBrightnessDark === paletteBrightness;
+      const activeAccentMatch = isLight
+        ? (theme.accentColorLight || '') === (accentColor || '')
+        : (theme.accentColorDark || '') === (accentColor || '');
+
+      // Inactive mode: compare against persisted preference cache.
+      const otherTint = getPaletteTint(isLight ? 'dark' : 'light');
+      const otherAccent = getAccentColor(isLight ? 'dark' : 'light');
+      const otherHueMatch = isLight
+        ? theme.paletteHueDark === otherTint.hue
+        : theme.paletteHueLight === otherTint.hue;
+      const otherSatMatch = isLight
+        ? theme.paletteSaturationDark === otherTint.saturation
+        : theme.paletteSaturationLight === otherTint.saturation;
+      const otherBrtMatch = isLight
+        ? theme.paletteBrightnessDark === otherTint.brightness
+        : theme.paletteBrightnessLight === otherTint.brightness;
+      const otherAccentMatch = isLight
+        ? (theme.accentColorDark || '') === (otherAccent || '')
+        : (theme.accentColorLight || '') === (otherAccent || '');
+
+      return (
+        activeHueMatch && activeSatMatch && activeBrtMatch && activeAccentMatch &&
+        otherHueMatch && otherSatMatch && otherBrtMatch && otherAccentMatch
+      );
+    },
+    [resolvedTheme, paletteHue, paletteSaturation, paletteBrightness, accentColor]
+  );
+
   // Drag-and-drop reorder handler.
   const handleThemeDrop = async (targetId: string) => {
     if (!draggingThemeId || draggingThemeId === targetId) {
@@ -920,6 +993,7 @@ function Settings({ onClose }: SettingsProps) {
                     </span>
                     <span></span>
                     <span></span>
+                    <span></span>
                   </div>
                   {themes.map((theme) => {
                     const isDragging = theme.id === draggingThemeId;
@@ -1035,9 +1109,18 @@ function Settings({ onClose }: SettingsProps) {
                           type="button"
                           className="theme-action-button"
                           onClick={() => handleApplyTheme(theme.id)}
-                          title="Apply theme"
+                          title="Load this theme's settings"
                         >
-                          Apply
+                          Open
+                        </button>
+                        <button
+                          type="button"
+                          className="theme-action-button"
+                          onClick={() => handleSaveToTheme(theme.id)}
+                          title="Save current settings into this theme"
+                          disabled={themeMatchesCurrent(theme)}
+                        >
+                          Save
                         </button>
                         <button
                           type="button"
