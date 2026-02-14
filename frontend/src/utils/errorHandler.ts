@@ -306,14 +306,20 @@ class ErrorHandler {
     this.logError(errorDetails);
 
     // Suppress notifications for auth-related errors that are handled by the AuthFailureOverlay.
+    // All AUTHENTICATION-category errors (token expired, SSO failures, 401s, etc.) are
+    // surfaced via the overlay, so we suppress their toast notifications entirely.
     const isAuthOverlayError =
       errorString.includes('no active clusters available') ||
       errorString.includes('Error loading SSO Token') ||
       errorString.includes('auth failed:') ||
       errorString.includes('getting credentials: exec:') ||
+      errorString.includes('refresh subsystem not initialised') ||
       (errorString.includes('executable') && errorString.includes('failed with exit code'));
 
-    const suppressNotification = category === ErrorCategory.PERMISSION || isAuthOverlayError;
+    const suppressNotification =
+      category === ErrorCategory.PERMISSION ||
+      category === ErrorCategory.AUTHENTICATION ||
+      isAuthOverlayError;
 
     if (!suppressNotification) {
       // Store in history

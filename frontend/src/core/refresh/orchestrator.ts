@@ -191,6 +191,10 @@ class RefreshOrchestrator {
   private lastNotifiedErrors = new Map<string, string>();
   private suppressNetworkErrorsUntil = 0;
 
+  // Tracks clusters with auth failures so refresh is paused while auth is invalid.
+  private authFailedClusters = new Set<string>();
+  private authPaused = false;
+
   constructor() {
     eventBus.on('view:reset', this.handleResetViews);
     eventBus.on('kubeconfig:changing', this.handleKubeconfigChanging);
@@ -198,6 +202,8 @@ class RefreshOrchestrator {
     eventBus.on('kubeconfig:selection-changed', this.handleKubeconfigSelectionChanged);
     eventBus.on('refresh:resource-stream-drift', this.handleResourceStreamDrift);
     eventBus.on('refresh:resource-stream-health', this.handleResourceStreamHealth);
+    eventBus.on('cluster:auth:failed', this.handleClusterAuthFailed);
+    eventBus.on('cluster:auth:recovered', this.handleClusterAuthRecovered);
     // Emit a single log so operators can confirm streaming config at runtime.
     logInfo('[refresh] resource streaming enabled (mode=active, domains=all)');
   }
@@ -358,6 +364,9 @@ class RefreshOrchestrator {
     scope: string,
     streaming: StreamingRegistration
   ): void {
+    if (this.authPaused) {
+      return;
+    }
     const normalizedScope = scope.trim();
     if (!normalizedScope) {
       return;
@@ -1181,6 +1190,9 @@ class RefreshOrchestrator {
     options: DomainFetchOptions,
     config: DomainRegistration<RefreshDomain>
   ): Promise<void> {
+    if (this.authPaused) {
+      return;
+    }
     const metricsOnly = Boolean(options.metricsOnly);
     // All domains are scoped — normalizeScope without allowEmpty.
     const normalizedScope = this.normalizeScope(scope);
@@ -1796,6 +1808,41 @@ class RefreshOrchestrator {
     // domain lifecycle (shouldStreamScope / handleStreamingScopeChanges).
   };
 
+  private handleClusterAuthFailed = (payload: { clusterId: string }) => {
+    this.authFailedClusters.add(payload.clusterId);
+    if (this.authPaused) {
+      return;
+    }
+    // Pause all refresh activity — the refresh subsystem is unavailable while auth is invalid.
+    this.authPaused = true;
+    logInfo('[refresh] pausing — cluster auth failed');
+    this.incrementContextVersion();
+    invalidateRefreshBaseURL();
+    this.stopAllStreaming(false);
+    this.inFlight.forEach((details, key) => {
+      this.teardownInFlight(key, details);
+    });
+  };
+
+  private handleClusterAuthRecovered = (payload: { clusterId: string }) => {
+    this.authFailedClusters.delete(payload.clusterId);
+    if (!this.authPaused) {
+      return;
+    }
+    // Only unpause when all tracked auth failures have been resolved.
+    if (this.authFailedClusters.size > 0) {
+      return;
+    }
+    this.authPaused = false;
+    logInfo('[refresh] resuming — cluster auth recovered');
+    this.incrementContextVersion();
+    invalidateRefreshBaseURL();
+    this.blockedStreaming.clear();
+    this.lastMetricsRefreshAt.clear();
+    // Re-evaluate streaming for all enabled scoped domains so connections restart.
+    this.handleStreamingScopeChanges();
+  };
+
   private handleResetViews = () => {
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
@@ -1811,6 +1858,9 @@ class RefreshOrchestrator {
   };
 
   private handleKubeconfigChanging = () => {
+    // A kubeconfig change supersedes any auth-paused state.
+    this.authPaused = false;
+    this.authFailedClusters.clear();
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
     this.stopAllStreaming(true);

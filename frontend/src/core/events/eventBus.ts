@@ -38,6 +38,10 @@ export interface AppEvents {
   'kubeconfig:change-request': string; // config name to change to
   'kubeconfig:selection-changed': void;
 
+  // Auth events — bridged from Wails runtime by AuthErrorContext.
+  'cluster:auth:failed': { clusterId: string };
+  'cluster:auth:recovered': { clusterId: string };
+
   // View events
   'view:reset': void;
   'view:toggle-diagnostics': void;

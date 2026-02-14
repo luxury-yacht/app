@@ -107,6 +107,19 @@ describe('ErrorHandler', () => {
     expect(details.category).toBe(ErrorCategory.AUTHENTICATION);
   });
 
+  it('suppresses toast notification for SSO token expiration errors', () => {
+    const listener = vi.fn();
+    handler.subscribe(listener);
+
+    handler.handle('token has expired');
+    handler.handle('token is expired');
+    handler.handle('Error loading SSO Token Provider');
+
+    // Auth errors should be suppressed — the AuthFailureOverlay handles them.
+    expect(handler.getHistory()).toHaveLength(0);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('updates options and disables console logging when requested', () => {
     handler.updateOptions({ enableLogging: true, logToConsole: false });
     handler.handle('Unknown failure');

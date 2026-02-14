@@ -5,6 +5,7 @@
  * Subscribes to backend auth events and provides auth state to all consumers.
  */
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { eventBus } from '@/core/events';
 
 /**
  * Auth state for a single cluster.
@@ -171,6 +172,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
       const { clusterId, clusterName, reason } = payload;
 
+      // Notify the refresh orchestrator so it can pause refresh activity.
+      eventBus.emit('cluster:auth:failed', { clusterId });
+
       setClusterAuthErrors((prev) => {
         const next = new Map(prev);
         next.set(clusterId, {
@@ -252,6 +256,9 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
 
       const { clusterId } = payload;
+
+      // Notify the refresh orchestrator so it can resume refresh activity.
+      eventBus.emit('cluster:auth:recovered', { clusterId });
 
       setClusterAuthErrors((prev) => {
         const next = new Map(prev);
