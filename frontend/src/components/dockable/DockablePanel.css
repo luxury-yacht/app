@@ -1,7 +1,7 @@
 /* DockablePanel Component Styles */
 
 .dockable-panel-layer {
-  position: fixed;
+  position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 999;
@@ -12,13 +12,12 @@
 }
 
 .dockable-panel {
-  position: fixed;
+  position: absolute;
   background: var(--color-bg, #1a1a1a);
   border: 1px solid var(--color-border, #333);
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  --dockable-panel-top-offset: var(--app-header-height);
   --dockable-panel-min-width: 150;
   --dockable-panel-min-height: 50;
   transition: none; /* We'll handle animations separately */
@@ -26,12 +25,12 @@
 
 /* Position variants */
 .dockable-panel--right {
-  top: var(--dockable-panel-top-offset);
+  top: 0;
   right: 0;
   bottom: 0;
   border-left: 2px solid var(--color-border, #333);
   border-right: none;
-  max-height: calc(100vh - var(--dockable-panel-top-offset));
+  max-height: 100%;
   overflow: visible;
 }
 

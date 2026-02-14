@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, type RefObject } from 'react';
 import type { DockPosition } from './useDockablePanelState';
-import { LAYOUT, getDockablePanelTopOffset } from './dockablePanelLayout';
+import { LAYOUT, getContentBounds } from './dockablePanelLayout';
 import { useZoom, getZoomAwareViewport } from '@core/contexts/ZoomContext';
 
 interface DockablePanelState {
@@ -59,7 +59,7 @@ export function useWindowBoundsConstraint(
     let resizeTimer: NodeJS.Timeout;
     let initialResizeTimer: NodeJS.Timeout | null = null;
 
-    const handleWindowResize = () => {
+    const handleResize = () => {
       // If the window object is not available, return early.
       if (typeof window === 'undefined') {
         return;
@@ -80,14 +80,14 @@ export function useWindowBoundsConstraint(
         let newSize = { ...currentSize };
         let newPosition = { ...currentPosition };
 
-        // Get zoom-aware viewport dimensions for constraint calculations.
-        // Panel size/position are in CSS coordinates, so we use the zoom-adjusted viewport.
+        // Use content bounds instead of viewport dimensions.
         const viewport = getZoomAwareViewport(zoomLevelRef.current);
+        const content = getContentBounds(viewport.zoomFactor);
 
-        // If the panel is floating, constrain its size and position within window bounds.
+        // If the panel is floating, constrain its size and position within content bounds.
         if (currentPanelState.position === 'floating') {
-          const maxWidth = viewport.width - LAYOUT.WINDOW_MARGIN;
-          const maxHeight = viewport.height - LAYOUT.WINDOW_MARGIN;
+          const maxWidth = content.width - LAYOUT.WINDOW_MARGIN;
+          const maxHeight = content.height - LAYOUT.WINDOW_MARGIN;
 
           // Constrain width.
           if (currentSize.width > maxWidth) {
@@ -106,16 +106,16 @@ export function useWindowBoundsConstraint(
           const bottomEdge = currentPosition.y + newSize.height;
 
           // Ensure panel stays within right edge.
-          if (rightEdge > viewport.width) {
-            newPosition.x = Math.max(LAYOUT.MIN_EDGE_DISTANCE, viewport.width - newSize.width - 20);
+          if (rightEdge > content.width) {
+            newPosition.x = Math.max(LAYOUT.MIN_EDGE_DISTANCE, content.width - newSize.width - 20);
             needsUpdate = true;
           }
 
           // Ensure panel stays within bottom edge.
-          if (bottomEdge > viewport.height) {
+          if (bottomEdge > content.height) {
             newPosition.y = Math.max(
               LAYOUT.MIN_EDGE_DISTANCE,
-              viewport.height - newSize.height - 20
+              content.height - newSize.height - 20
             );
             needsUpdate = true;
           }
@@ -127,27 +127,20 @@ export function useWindowBoundsConstraint(
           }
 
           // Ensure panel stays within top edge.
-          const topOffset = Math.max(
-            LAYOUT.MIN_EDGE_DISTANCE,
-            getDockablePanelTopOffset(panelRef?.current)
-          );
-          if (currentPosition.y < topOffset) {
-            newPosition.y = topOffset;
+          if (currentPosition.y < LAYOUT.MIN_EDGE_DISTANCE) {
+            newPosition.y = LAYOUT.MIN_EDGE_DISTANCE;
             needsUpdate = true;
           }
         } else if (currentPanelState.position === 'right') {
-          const maxWidth = viewport.width - LAYOUT.SIDEBAR_WIDTH;
+          // Constrain right-docked panel width to the full content width.
+          const maxWidth = content.width;
           if (currentSize.width > maxWidth) {
             newSize.width = Math.max(minWidth, maxWidth);
             needsUpdate = true;
           }
-          // If the panel is docked to the bottom, constrain its height.
         } else if (currentPanelState.position === 'bottom') {
-          const reservedTop = Math.max(
-            LAYOUT.BOTTOM_RESERVED_HEIGHT,
-            getDockablePanelTopOffset(panelRef?.current)
-          );
-          const maxHeight = viewport.height - reservedTop;
+          // Constrain bottom-docked panel height to the full content height.
+          const maxHeight = content.height;
           if (currentSize.height > maxHeight) {
             newSize.height = maxHeight;
             needsUpdate = true;
@@ -168,16 +161,28 @@ export function useWindowBoundsConstraint(
       }, LAYOUT.RESIZE_DEBOUNCE_MS);
     };
 
-    window.addEventListener('resize', handleWindowResize);
-    // Schedule an initial clamp to match the current window bounds.
-    initialResizeTimer = setTimeout(handleWindowResize, LAYOUT.RESIZE_DEBOUNCE_MS);
+    window.addEventListener('resize', handleResize);
+
+    // Also observe the .content element for size changes (e.g. sidebar resize)
+    let resizeObserver: ResizeObserver | null = null;
+    const contentEl = typeof document !== 'undefined' ? document.querySelector('.content') : null;
+    if (contentEl && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(handleResize);
+      resizeObserver.observe(contentEl);
+    }
+
+    // Schedule an initial clamp to match the current content bounds.
+    initialResizeTimer = setTimeout(handleResize, LAYOUT.RESIZE_DEBOUNCE_MS);
 
     return () => {
       clearTimeout(resizeTimer);
       if (initialResizeTimer) {
         clearTimeout(initialResizeTimer);
       }
-      window.removeEventListener('resize', handleWindowResize);
+      window.removeEventListener('resize', handleResize);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
     };
   }, [minWidth, minHeight, isResizing, isMaximized, panelState.isOpen, panelRef, zoomLevel]);
 }

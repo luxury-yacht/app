@@ -7,6 +7,7 @@
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import { getContentBounds } from './dockablePanelLayout';
 
 export type DockPosition = 'right' | 'bottom' | 'floating';
 
@@ -43,11 +44,12 @@ const panelCloseHandlers = new Map<string, (reason: PanelCloseReason) => void>()
 // Get or create initial state for a panel
 function getInitialState(panelId: string): PanelState {
   if (!panelStates.has(panelId)) {
-    // Center the floating panel by default
+    // Center the floating panel within the content area by default
     const defaultFloatingWidth = 600;
     const defaultFloatingHeight = 400;
-    const centerX = Math.max(100, (window.innerWidth - defaultFloatingWidth) / 2);
-    const centerY = Math.max(100, (window.innerHeight - defaultFloatingHeight) / 2);
+    const content = getContentBounds();
+    const centerX = Math.max(100, (content.width - defaultFloatingWidth) / 2);
+    const centerY = Math.max(100, (content.height - defaultFloatingHeight) / 2);
 
     panelStates.set(panelId, {
       position: 'right',
@@ -280,9 +282,10 @@ export function useDockablePanelState(panelId: string) {
     (position: { x: number; y: number }) => {
       // Ensure minimum distance from edges to prevent panel from hiding
       const minDistanceFromEdge = 50;
+      const content = getContentBounds();
       const validatedPosition = {
-        x: Math.max(minDistanceFromEdge, Math.min(position.x, window.innerWidth - 200)),
-        y: Math.max(minDistanceFromEdge, Math.min(position.y, window.innerHeight - 100)),
+        x: Math.max(minDistanceFromEdge, Math.min(position.x, content.width - 200)),
+        y: Math.max(minDistanceFromEdge, Math.min(position.y, content.height - 100)),
       };
 
       // Never allow position to be at 0,0 or very close to it
@@ -290,8 +293,8 @@ export function useDockablePanelState(panelId: string) {
         // Reset to center if somehow we get invalid coordinates
         const defaultFloatingWidth = 600;
         const defaultFloatingHeight = 400;
-        validatedPosition.x = Math.max(100, (window.innerWidth - defaultFloatingWidth) / 2);
-        validatedPosition.y = Math.max(100, (window.innerHeight - defaultFloatingHeight) / 2);
+        validatedPosition.x = Math.max(100, (content.width - defaultFloatingWidth) / 2);
+        validatedPosition.y = Math.max(100, (content.height - defaultFloatingHeight) / 2);
       }
 
       updatePanelState(panelId, { floatingPosition: validatedPosition });
@@ -322,8 +325,9 @@ export function useDockablePanelState(panelId: string) {
   const reset = useCallback(() => {
     const defaultFloatingWidth = 600;
     const defaultFloatingHeight = 400;
-    const centerX = Math.max(100, (window.innerWidth - defaultFloatingWidth) / 2);
-    const centerY = Math.max(100, (window.innerHeight - defaultFloatingHeight) / 2);
+    const content = getContentBounds();
+    const centerX = Math.max(100, (content.width - defaultFloatingWidth) / 2);
+    const centerY = Math.max(100, (content.height - defaultFloatingHeight) / 2);
 
     updatePanelState(panelId, {
       position: 'right',

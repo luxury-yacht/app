@@ -18,7 +18,24 @@ vi.mock('@wailsjs/go/backend/App', () => ({
   SetZoomLevel: vi.fn().mockResolvedValue(undefined),
 }));
 
+const ensureContentElement = () => {
+  if (!document.querySelector('.content')) {
+    const el = document.createElement('div');
+    el.className = 'content';
+    document.body.appendChild(el);
+    // JSDOM doesn't do layout, so mock getBoundingClientRect to return realistic dimensions.
+    el.getBoundingClientRect = () =>
+      DOMRect.fromRect({
+        x: 0,
+        y: 0,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+  }
+};
+
 const renderPanel = async (ui: React.ReactElement) => {
+  ensureContentElement();
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);

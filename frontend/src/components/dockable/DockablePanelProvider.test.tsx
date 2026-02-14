@@ -38,8 +38,18 @@ describe('DockablePanelProvider', () => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
   });
 
+  beforeEach(() => {
+    // Create a .content element so the panel host can be appended inside it.
+    const contentEl = document.createElement('div');
+    contentEl.className = 'content';
+    document.body.appendChild(contentEl);
+  });
+
   afterEach(() => {
-    document.body.innerHTML = '';
+    // Clean up all children from body
+    while (document.body.firstChild) {
+      document.body.removeChild(document.body.firstChild);
+    }
     document.documentElement.style.removeProperty('--dock-right-offset');
     document.documentElement.style.removeProperty('--dock-bottom-offset');
   });
@@ -108,17 +118,18 @@ describe('DockablePanelProvider', () => {
     await unmount();
   });
 
-  it('creates a shared host layer respecting offsets', async () => {
+  it('creates a shared host layer inside .content', async () => {
     const { unmount } = await render(
-      <DockablePanelProvider topOffset={24} leftOffset={12}>
+      <DockablePanelProvider>
         <div data-testid="child">content</div>
       </DockablePanelProvider>
     );
 
     const layer = document.querySelector('.dockable-panel-layer') as HTMLDivElement | null;
     expect(layer).toBeTruthy();
-    expect(layer?.style.top).toBe('24px');
-    expect(layer?.style.left).toBe('12px');
+    // The layer should be a child of .content, not document.body
+    const contentEl = document.querySelector('.content');
+    expect(contentEl?.contains(layer)).toBe(true);
 
     await unmount();
     expect(document.querySelector('.dockable-panel-layer')).toBeNull();

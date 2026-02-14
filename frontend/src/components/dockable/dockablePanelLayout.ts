@@ -12,37 +12,17 @@
  */
 
 export const LAYOUT = {
-  /** Minimum distance panels should maintain from window edges */
+  /** Minimum distance panels should maintain from content edges */
   MIN_EDGE_DISTANCE: 50,
-  /** Margin to leave when constraining panel size to window */
+  /** Margin to leave when constraining panel size to content area */
   WINDOW_MARGIN: 100,
-  /** Approximate width of the sidebar for layout calculations */
-  SIDEBAR_WIDTH: 250,
-  /** Space reserved for header and content when bottom-docked */
-  BOTTOM_RESERVED_HEIGHT: 150,
-  /** Height of the app header */
-  APP_HEADER_HEIGHT: 45,
   /** Size of the resize detection zone on panel edges */
   RESIZE_EDGE_SIZE: 8,
   /** Size of the resize detection zone on top edge (smaller to avoid header conflict) */
   RESIZE_TOP_EDGE_SIZE: 4,
-  /** Debounce delay for window resize handling */
+  /** Debounce delay for resize handling */
   RESIZE_DEBOUNCE_MS: 100,
 } as const;
-
-// Read the CSS token so drag/resizes match the combined header + tab strip height.
-const parseCssPixelValue = (raw: string, fallback: number): number => {
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const getAppTopOffset = (): number => {
-  if (typeof document === 'undefined') {
-    return LAYOUT.APP_HEADER_HEIGHT;
-  }
-  const raw = getComputedStyle(document.documentElement).getPropertyValue('--app-content-top');
-  return parseCssPixelValue(raw, LAYOUT.APP_HEADER_HEIGHT);
-};
 
 /** Default panel size constraints (matches Object Panel values). */
 export const PANEL_DEFAULTS = {
@@ -87,13 +67,38 @@ export function getPanelSizeConstraints(panel?: HTMLElement | null): PanelSizeCo
   };
 }
 
-export const getDockablePanelTopOffset = (panel?: HTMLElement | null): number => {
+/**
+ * Return the bounding rect of the `.content` element in CSS-pixel space.
+ * When the browser zoom is not 100%, divide by the zoomFactor so that all
+ * coordinates stay in CSS pixels (consistent with panel size/position values).
+ * Falls back to the full viewport if `.content` is not found (e.g. tests / SSR).
+ */
+export interface ContentBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+export function getContentBounds(zoomFactor = 1): ContentBounds {
   if (typeof document === 'undefined') {
-    return LAYOUT.APP_HEADER_HEIGHT;
+    return { left: 0, top: 0, width: 800, height: 600 };
   }
-  if (panel) {
-    const raw = getComputedStyle(panel).getPropertyValue('--dockable-panel-top-offset');
-    return parseCssPixelValue(raw, getAppTopOffset());
+  const el = document.querySelector('.content');
+  if (el) {
+    const rect = el.getBoundingClientRect();
+    return {
+      left: rect.left / zoomFactor,
+      top: rect.top / zoomFactor,
+      width: rect.width / zoomFactor,
+      height: rect.height / zoomFactor,
+    };
   }
-  return getAppTopOffset();
-};
+  // Fallback: use full viewport dimensions.
+  return {
+    left: 0,
+    top: 0,
+    width: window.innerWidth / zoomFactor,
+    height: window.innerHeight / zoomFactor,
+  };
+}

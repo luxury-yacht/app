@@ -23,7 +23,24 @@ const removePanelLayers = () => {
   document.querySelectorAll('.dockable-panel-layer').forEach((node) => node.remove());
 };
 
+const ensureContentElement = () => {
+  if (!document.querySelector('.content')) {
+    const el = document.createElement('div');
+    el.className = 'content';
+    document.body.appendChild(el);
+    // JSDOM doesn't do layout, so mock getBoundingClientRect to return realistic dimensions.
+    el.getBoundingClientRect = () =>
+      DOMRect.fromRect({
+        x: 0,
+        y: 0,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+  }
+};
+
 const renderPanel = async (element: React.ReactElement) => {
+  ensureContentElement();
   const host = document.createElement('div');
   document.body.appendChild(host);
   const root = ReactDOM.createRoot(host);
@@ -259,10 +276,11 @@ describe('DockablePanel behaviour (real hook)', () => {
 
   it('clamps bottom-docked height based on window resize bounds', async () => {
     vi.useFakeTimers();
+    // Set a window height smaller than the panel's default height so clamping occurs.
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
       writable: true,
-      value: 380,
+      value: 300,
     });
 
     const { unmount } = await renderPanel(
@@ -285,7 +303,8 @@ describe('DockablePanel behaviour (real hook)', () => {
     await flushEffects();
 
     const bottomState = getPanelState('panel-bottom');
-    expect(bottomState.bottomSize.height).toBe(window.innerHeight - 150);
+    // The height is clamped to the content area height (fallback = window.innerHeight)
+    expect(bottomState.bottomSize.height).toBe(window.innerHeight);
 
     await unmount();
   });

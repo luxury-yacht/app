@@ -43,16 +43,26 @@ export const useDockablePanelContext = () => {
 
 let globalHostNode: HTMLElement | null = null;
 
+/** Resolve the `.content` element that panels are mounted inside. */
+function getContentContainer(): HTMLElement | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+  const el = document.querySelector('.content');
+  return el instanceof HTMLElement ? el : null;
+}
+
 function getOrCreateGlobalHost(): HTMLElement | null {
-  if (globalHostNode && document.body.contains(globalHostNode)) {
+  if (globalHostNode && globalHostNode.parentElement) {
     return globalHostNode;
   }
-  if (typeof document === 'undefined') {
+  const container = getContentContainer();
+  if (!container) {
     return null;
   }
   const node = document.createElement('div');
   node.className = 'dockable-panel-layer';
-  document.body.appendChild(node);
+  container.appendChild(node);
   globalHostNode = node;
   return globalHostNode;
 }
@@ -67,16 +77,9 @@ export const useDockablePanelHost = (): HTMLElement | null => {
 
 interface DockablePanelProviderProps {
   children: React.ReactNode;
-  // Optional: Offset for header/sidebar
-  topOffset?: number;
-  leftOffset?: number;
 }
 
-export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
-  children,
-  topOffset = 0,
-  leftOffset = 0,
-}) => {
+export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ children }) => {
   const [dockedPanels, setDockedPanels] = useState({
     right: [] as string[],
     bottom: [] as string[],
@@ -130,25 +133,25 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({
     if (typeof document === 'undefined') {
       return;
     }
+    const container = getContentContainer();
+    if (!container) {
+      return;
+    }
     const node = document.createElement('div');
     node.className = 'dockable-panel-layer';
-    node.style.top = `${topOffset}px`;
-    node.style.left = `${leftOffset}px`;
-    node.style.right = '0px';
-    node.style.bottom = '0px';
-    document.body.appendChild(node);
+    container.appendChild(node);
     setHostNode(node);
 
     return () => {
-      if (document.body.contains(node)) {
-        document.body.removeChild(node);
+      if (container.contains(node)) {
+        container.removeChild(node);
       }
       if (globalHostNode === node) {
         globalHostNode = null;
       }
       setHostNode(null);
     };
-  }, [topOffset, leftOffset]);
+  }, []);
 
   useLayoutEffect(() => {
     if (typeof document === 'undefined') {

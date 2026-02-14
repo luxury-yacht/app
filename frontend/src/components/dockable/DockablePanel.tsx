@@ -342,10 +342,10 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         style.width = `${maximizedRect.width}px`;
         style.height = `${maximizedRect.height}px`;
       } else {
-        style.top = 'var(--dockable-panel-top-offset)';
-        style.left = '0px';
-        style.width = '100vw';
-        style.height = 'calc(100vh - var(--dockable-panel-top-offset))';
+        style.top = '0';
+        style.left = '0';
+        style.width = '100%';
+        style.height = '100%';
       }
       style.right = 'auto';
       style.bottom = 'auto';
