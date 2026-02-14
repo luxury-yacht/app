@@ -364,9 +364,6 @@ class RefreshOrchestrator {
     scope: string,
     streaming: StreamingRegistration
   ): void {
-    if (this.authPaused) {
-      return;
-    }
     const normalizedScope = scope.trim();
     if (!normalizedScope) {
       return;
@@ -1190,9 +1187,6 @@ class RefreshOrchestrator {
     options: DomainFetchOptions,
     config: DomainRegistration<RefreshDomain>
   ): Promise<void> {
-    if (this.authPaused) {
-      return;
-    }
     const metricsOnly = Boolean(options.metricsOnly);
     // All domains are scoped — normalizeScope without allowEmpty.
     const normalizedScope = this.normalizeScope(scope);
@@ -1822,6 +1816,11 @@ class RefreshOrchestrator {
     this.inFlight.forEach((details, key) => {
       this.teardownInFlight(key, details);
     });
+    // Clear async streaming bookkeeping so stale entries from in-progress
+    // connections don't block restart when auth recovers.
+    this.pendingStreaming.clear();
+    this.cancelledStreaming.clear();
+    this.streamingReady.clear();
   };
 
   private handleClusterAuthRecovered = (payload: { clusterId: string }) => {
@@ -1837,9 +1836,14 @@ class RefreshOrchestrator {
     logInfo('[refresh] resuming — cluster auth recovered');
     this.incrementContextVersion();
     invalidateRefreshBaseURL();
+    // Suppress transient errors while the backend refresh subsystem reinitialises.
+    this.suppressNetworkErrors(6000);
     this.blockedStreaming.clear();
     this.lastMetricsRefreshAt.clear();
-    // Re-evaluate streaming for all enabled scoped domains so connections restart.
+    this.lastNotifiedErrors.clear();
+    // Restart streaming for all enabled scopes. The ensureRefreshBaseURL retry
+    // loop (30 attempts with backoff) naturally waits for the backend refresh
+    // subsystem to reinitialise after auth recovery.
     this.handleStreamingScopeChanges();
   };
 
