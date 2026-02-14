@@ -4,6 +4,8 @@
 
 ## Feature Ideas
 
+- Add browser inspect to view menu
+
 - Bottom-docked panel does not obscure sidebar
 
 - Multiple panels in the same location use tabs
