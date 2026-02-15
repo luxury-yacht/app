@@ -22,9 +22,8 @@ const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 const dropdownInstances = vi.hoisted(() => [] as Array<any>);
 
 vi.mock('@/components/dockable', () => ({
-  DockablePanel: ({ headerContent, children }: any) => (
+  DockablePanel: ({ children }: any) => (
     <div data-testid="dockable-panel">
-      <div data-testid="header">{headerContent}</div>
       <div data-testid="body">{children}</div>
     </div>
   ),

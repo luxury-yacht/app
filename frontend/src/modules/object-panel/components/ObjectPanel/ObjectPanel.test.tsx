@@ -141,9 +141,8 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ValuesTab', () => ({
 }));
 
 vi.mock('@/components/dockable', () => ({
-  DockablePanel: ({ children, headerContent }: any) => (
+  DockablePanel: ({ children }: any) => (
     <div>
-      <div data-testid="dockable-header">{headerContent}</div>
       <div data-testid="dockable-body">{children}</div>
     </div>
   ),

@@ -6,8 +6,6 @@
 
 - Add browser inspect to view menu
 
-- Bottom-docked panel does not obscure sidebar
-
 - Multiple panels in the same location use tabs
   - For example, two panels docked to bottom creates a tab per panel in the header
   - Diag Panel, Port Forwards OK

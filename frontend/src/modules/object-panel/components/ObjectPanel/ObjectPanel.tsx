@@ -613,14 +613,17 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
       <DockablePanel
         panelRef={panelScopeRef}
         panelId="object-panel"
-        title={`${objectData?.kindAlias || objectData?.kind || 'Object'}: ${objectData?.name || 'Unknown'}`}
+        title="Object Panel"
         isOpen={isOpen}
         defaultPosition="right"
         className="object-panel-dockable"
         allowMaximize
         maximizeTargetSelector=".content-body"
         onClose={close}
-        headerContent={
+        contentClassName="object-panel-body"
+      >
+        {/* Panel-specific controls toolbar (moved from header for tab support) */}
+        <div onMouseDown={(e) => e.stopPropagation()}>
           <ObjectPanelHeader
             navigationIndex={navigationIndex}
             navigationCount={navigationHistory.length}
@@ -629,9 +632,8 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
             kindAlias={objectData?.kindAlias ?? null}
             name={objectData?.name ?? null}
           />
-        }
-        contentClassName="object-panel-body"
-      >
+        </div>
+
         <ObjectPanelTabs
           tabs={availableTabs}
           activeTab={state.activeTab}
