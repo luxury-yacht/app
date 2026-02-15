@@ -439,13 +439,15 @@ body.dockable-panel-resizing-sw * {
   max-width: 160px;
 }
 
-.dockable-tab__kind-indicator {
+.dockable-tab__kind-indicator.kind-badge {
+  display: inline-block;
   width: 10px;
   height: 10px;
   min-width: 10px;
   min-height: 10px;
+  box-sizing: border-box;
   padding: 0;
-  border-radius: 3px;
+  border-radius: 6px;
   font-size: 0;
   line-height: 0;
   flex-shrink: 0;
