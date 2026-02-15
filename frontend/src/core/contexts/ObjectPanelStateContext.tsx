@@ -8,6 +8,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { clearPanelState } from '@/components/dockable/useDockablePanelState';
 
 /**
  * Generate a stable, unique panel ID from a Kubernetes object reference.
@@ -162,13 +163,19 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
         nextPanels.delete(panelId);
         return { openPanels: nextPanels };
       });
+      // Clear the dockable panel state so reopening gets fresh defaults
+      // instead of remembering the old dock position.
+      clearPanelState(panelId);
     },
     [updateActiveState]
   );
 
   const onCloseObjectPanel = useCallback(() => {
+    // Clear dockable state for every open object panel before closing.
+    const current = objectPanelStateByCluster[clusterKey] ?? DEFAULT_OBJECT_PANEL_STATE;
+    current.openPanels.forEach((_, panelId) => clearPanelState(panelId));
     updateActiveState(() => DEFAULT_OBJECT_PANEL_STATE);
-  }, [updateActiveState]);
+  }, [updateActiveState, objectPanelStateByCluster, clusterKey]);
 
   const value = useMemo(
     () => ({

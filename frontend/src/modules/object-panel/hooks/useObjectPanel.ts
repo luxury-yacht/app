@@ -67,7 +67,7 @@ export function useObjectPanel() {
     onCloseObjectPanel,
     hydrateClusterMeta,
   } = useObjectPanelState();
-  const { tabGroups, switchTab } = useDockablePanelContext();
+  const { tabGroups, focusPanel } = useDockablePanelContext();
 
   // Per-instance object data (only set when called inside an ObjectPanel tree).
   const { objectData, panelId: currentPanelId } = useCurrentObjectPanel();
@@ -88,13 +88,14 @@ export function useObjectPanel() {
       const enriched = hydrateClusterMeta(obj);
       const panelId = onRowClick(enriched);
 
-      // If the panel already exists in the dockable system, activate its tab.
+      // If the panel already exists in the dockable system, activate its tab
+      // and bring the panel to the front.
       const groupKey = getGroupForPanel(tabGroups, panelId);
       if (groupKey) {
-        switchTab(groupKey, panelId);
+        focusPanel(panelId);
       }
     },
-    [onRowClick, hydrateClusterMeta, tabGroups, switchTab]
+    [onRowClick, hydrateClusterMeta, tabGroups, focusPanel]
   );
 
   const close = useCallback(() => {

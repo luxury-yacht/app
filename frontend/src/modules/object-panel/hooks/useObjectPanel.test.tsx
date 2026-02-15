@@ -11,7 +11,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { ObjectPanelStateProvider } from '@/core/contexts/ObjectPanelStateContext';
 
 // Mock dockable panel context (replaces the old useDockablePanelState mock).
-const mockSwitchTab = vi.fn();
+const mockFocusPanel = vi.fn();
 vi.mock('@components/dockable', () => ({
   useDockablePanelContext: () => ({
     tabGroups: {
@@ -19,7 +19,7 @@ vi.mock('@components/dockable', () => ({
       bottom: { tabs: [], activeTab: null },
       floating: [],
     },
-    switchTab: mockSwitchTab,
+    focusPanel: mockFocusPanel,
   }),
 }));
 
@@ -80,7 +80,7 @@ describe('useObjectPanel', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    mockSwitchTab.mockClear();
+    mockFocusPanel.mockClear();
     if (!useObjectPanel || !closeObjectPanelGlobal) {
       throw new Error('Object panel hooks failed to load');
     }

@@ -94,6 +94,23 @@ function setPanelOpenState(panelId: string, isOpen: boolean) {
 }
 
 /**
+ * Bring a panel to the front by bumping its z-index.
+ * Used by the provider to focus a panel by ID from outside the component.
+ */
+export function focusPanelById(panelId: string) {
+  updatePanelState(panelId, { zIndex: ++globalZIndex });
+}
+
+/**
+ * Remove a panel's stored state entirely so it gets fresh defaults on reopen.
+ * Used when object panels are closed to prevent stale position memory.
+ */
+export function clearPanelState(panelId: string) {
+  panelStates.delete(panelId);
+  panelListeners.delete(panelId);
+}
+
+/**
  * @deprecated No longer used — panels now join tab groups instead of conflicting.
  * Retained for backward compatibility but never called internally.
  */
