@@ -22,8 +22,6 @@ interface DockableTabBarProps {
   activeTab: string | null;
   /** Called when the user clicks a tab to switch to it. */
   onTabClick: (panelId: string) => void;
-  /** Called when the user clicks a tab's close button. */
-  onTabClose: (panelId: string) => void;
   /** Identifier for the tab group (e.g. "bottom", "right"). */
   groupKey: string;
   // Drag support (optional -- when absent, drag is disabled)
@@ -69,7 +67,7 @@ function calculateInsertIndex(
   // When reordering within the same group, adjust the index to account
   // for the dragged tab's removal before insertion.
   if (draggedPanelId) {
-    const currentIndex = tabs.findIndex(t => t.panelId === draggedPanelId);
+    const currentIndex = tabs.findIndex((t) => t.panelId === draggedPanelId);
     if (currentIndex !== -1 && insertIndex > currentIndex) {
       insertIndex = Math.max(0, insertIndex - 1);
     }
@@ -81,8 +79,9 @@ function calculateInsertIndex(
 /**
  * DockableTabBar -- horizontal tab strip for grouped dockable panels.
  *
- * Close buttons are only rendered when there are multiple tabs; a single
- * tab cannot be closed from the tab bar (use the panel controls instead).
+ * Tabs are closed via the panel's existing close button (in the panel
+ * controls), which closes the active tab or the whole panel if it's
+ * the last tab.
  *
  * When drag props are provided, tabs can be reordered by dragging within
  * the same bar, moved to another group by dropping on its tab bar, or
@@ -92,7 +91,6 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   tabs,
   activeTab,
   onTabClick,
-  onTabClose,
   groupKey,
   dragState,
   onDragStateChange,
@@ -125,8 +123,6 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     (e: React.MouseEvent, panelId: string) => {
       // Only handle left mouse button.
       if (e.button !== 0) return;
-      // Don't start drag from the close button.
-      if ((e.target as HTMLElement).closest('.dockable-tab__close')) return;
       if (!dragEnabled) return;
 
       dragStartRef.current = {
@@ -279,12 +275,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       if (!dragState || !onDragStateChange || !barRef.current) return;
       if (dragState.sourceGroupKey === groupKey) return;
 
-      const insertIndex = calculateInsertIndex(
-        barRef.current,
-        e.clientX,
-        tabs,
-        null
-      );
+      const insertIndex = calculateInsertIndex(barRef.current, e.clientX, tabs, null);
 
       onDragStateChange({
         ...dragState,
@@ -304,9 +295,6 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       });
     }
   }, [dragState, onDragStateChange, groupKey]);
-
-  // Only show close buttons when there are multiple tabs.
-  const showClose = tabs.length > 1;
 
   // Determine if this bar is the current drop target.
   const isDropTarget = dragState?.dropTarget?.groupKey === groupKey;
@@ -336,10 +324,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
         return (
           <React.Fragment key={tab.panelId}>
             {showIndicatorBefore && (
-              <div
-                className="dockable-tab-bar__drop-indicator"
-                data-testid="drop-indicator"
-              />
+              <div className="dockable-tab-bar__drop-indicator" data-testid="drop-indicator" />
             )}
             <div
               className={`dockable-tab${isActive ? ' dockable-tab--active' : ''}${isDragging ? ' dockable-tab--dragging' : ''}`}
@@ -349,30 +334,13 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
               onMouseDown={(e) => handleTabMouseDown(e, tab.panelId)}
             >
               <span className="dockable-tab__label">{tab.title}</span>
-
-              {showClose && (
-                <button
-                  className="dockable-tab__close"
-                  aria-label={`Close ${tab.title}`}
-                  onClick={(e) => {
-                    // Prevent the tab click handler from also firing.
-                    e.stopPropagation();
-                    onTabClose(tab.panelId);
-                  }}
-                >
-                  {'\u00d7' /* multiplication sign, visually identical to x */}
-                </button>
-              )}
             </div>
           </React.Fragment>
         );
       })}
       {/* Drop indicator at the end if inserting after all tabs. */}
       {isDropTarget && dropInsertIndex === tabs.length && (
-        <div
-          className="dockable-tab-bar__drop-indicator"
-          data-testid="drop-indicator"
-        />
+        <div className="dockable-tab-bar__drop-indicator" data-testid="drop-indicator" />
       )}
     </div>
   );

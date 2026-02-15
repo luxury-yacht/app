@@ -3,8 +3,7 @@
  *
  * Test suite for DockableTabBar drag-and-drop behavior.
  * Covers drag initiation, cancel, reorder, cross-group move,
- * undock, drop indicator rendering, dragging opacity class,
- * and close button interaction during drag.
+ * undock, drop indicator rendering, and dragging opacity class.
  */
 
 import React from 'react';
@@ -54,16 +53,12 @@ const defaultTabs: TabInfo[] = [
 
 /** Simulate a mousedown on a DOM element at a given client position. */
 function fireMouseDown(el: HTMLElement, clientX: number, clientY: number) {
-  el.dispatchEvent(
-    new MouseEvent('mousedown', { clientX, clientY, button: 0, bubbles: true })
-  );
+  el.dispatchEvent(new MouseEvent('mousedown', { clientX, clientY, button: 0, bubbles: true }));
 }
 
 /** Simulate a mousemove on document at a given client position. */
 function fireMouseMove(clientX: number, clientY: number) {
-  document.dispatchEvent(
-    new MouseEvent('mousemove', { clientX, clientY, bubbles: true })
-  );
+  document.dispatchEvent(new MouseEvent('mousemove', { clientX, clientY, bubbles: true }));
 }
 
 /** Simulate a mouseup on document. */
@@ -91,8 +86,7 @@ describe('DockableTabBar drag-and-drop', () => {
         tabs={defaultTabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
-        groupKey="bottom"
+                groupKey="bottom"
         dragState={null}
         onDragStateChange={onDragStateChange}
         onReorderTab={vi.fn()}
@@ -157,8 +151,7 @@ describe('DockableTabBar drag-and-drop', () => {
         tabs={defaultTabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
-        groupKey="bottom"
+                groupKey="bottom"
         dragState={activeDragState}
         onDragStateChange={onDragStateChange}
         onReorderTab={onReorderTab}
@@ -211,8 +204,7 @@ describe('DockableTabBar drag-and-drop', () => {
         tabs={defaultTabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
-        groupKey="bottom"
+                groupKey="bottom"
         dragState={activeDragState}
         onDragStateChange={onDragStateChange}
         onReorderTab={onReorderTab}
@@ -260,8 +252,7 @@ describe('DockableTabBar drag-and-drop', () => {
         tabs={defaultTabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
-        groupKey="bottom"
+                groupKey="bottom"
         dragState={activeDragState}
         onDragStateChange={onDragStateChange}
         onReorderTab={vi.fn()}
@@ -310,8 +301,7 @@ describe('DockableTabBar drag-and-drop', () => {
         tabs={defaultTabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
-        groupKey="bottom"
+                groupKey="bottom"
         dragState={activeDragState}
         onDragStateChange={onDragStateChange}
         onReorderTab={vi.fn()}
@@ -356,8 +346,7 @@ describe('DockableTabBar drag-and-drop', () => {
         tabs={defaultTabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
-        groupKey="bottom"
+                groupKey="bottom"
         dragState={activeDragState}
         onDragStateChange={vi.fn()}
         onReorderTab={vi.fn()}
@@ -390,8 +379,7 @@ describe('DockableTabBar drag-and-drop', () => {
         tabs={defaultTabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
-        groupKey="bottom"
+                groupKey="bottom"
         dragState={activeDragState}
         onDragStateChange={vi.fn()}
         onReorderTab={vi.fn()}
@@ -425,8 +413,7 @@ describe('DockableTabBar drag-and-drop', () => {
         tabs={defaultTabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
-        groupKey="bottom"
+                groupKey="bottom"
         dragState={activeDragState}
         onDragStateChange={vi.fn()}
         onReorderTab={vi.fn()}
@@ -451,8 +438,7 @@ describe('DockableTabBar drag-and-drop', () => {
         tabs={defaultTabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
-        groupKey="bottom"
+                groupKey="bottom"
         dragState={null}
         onDragStateChange={vi.fn()}
         onReorderTab={vi.fn()}
@@ -468,57 +454,7 @@ describe('DockableTabBar drag-and-drop', () => {
   });
 
   // -----------------------------------------------------------------------
-  // 8. Close button click does NOT initiate drag
-  // -----------------------------------------------------------------------
-  it('does not initiate drag when close button is clicked', async () => {
-    const onDragStateChange = vi.fn();
-    const onTabClose = vi.fn();
-
-    const { host, unmount } = await renderTabBar(
-      <DockableTabBar
-        tabs={defaultTabs}
-        activeTab="p1"
-        onTabClick={vi.fn()}
-        onTabClose={onTabClose}
-        groupKey="bottom"
-        dragState={null}
-        onDragStateChange={onDragStateChange}
-        onReorderTab={vi.fn()}
-        onMoveToGroup={vi.fn()}
-        onUndockTab={vi.fn()}
-      />
-    );
-
-    // Find the close button on the second tab.
-    const closeButtons = host.querySelectorAll('.dockable-tab__close');
-    const secondCloseBtn = closeButtons[1] as HTMLButtonElement;
-
-    // Mousedown on the close button.
-    await act(async () => {
-      secondCloseBtn.dispatchEvent(
-        new MouseEvent('mousedown', { clientX: 150, clientY: 50, button: 0, bubbles: true })
-      );
-    });
-
-    // Move beyond threshold.
-    await act(async () => {
-      fireMouseMove(160, 50);
-    });
-
-    // Drag should NOT be initiated since mousedown was on the close button.
-    expect(onDragStateChange).not.toHaveBeenCalled();
-
-    // Click the close button -- should call onTabClose.
-    await act(async () => {
-      secondCloseBtn.click();
-    });
-    expect(onTabClose).toHaveBeenCalledWith('p2');
-
-    await unmount();
-  });
-
-  // -----------------------------------------------------------------------
-  // 9. Drag is disabled when drag props are not provided
+  // 8. Drag is disabled when drag props are not provided
   // -----------------------------------------------------------------------
   it('does not start drag when drag props are absent', async () => {
     const { host, unmount } = await renderTabBar(
@@ -526,8 +462,7 @@ describe('DockableTabBar drag-and-drop', () => {
         tabs={defaultTabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
-        groupKey="bottom"
+                groupKey="bottom"
         // No drag props provided.
       />
     );
@@ -550,7 +485,7 @@ describe('DockableTabBar drag-and-drop', () => {
   });
 
   // -----------------------------------------------------------------------
-  // 10. Drop indicator at end of tab list
+  // 9. Drop indicator at end of tab list
   // -----------------------------------------------------------------------
   it('renders drop indicator at the end when insertIndex equals tabs length', async () => {
     const activeDragState: TabDragState = {
@@ -565,8 +500,7 @@ describe('DockableTabBar drag-and-drop', () => {
         tabs={defaultTabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
-        groupKey="bottom"
+                groupKey="bottom"
         dragState={activeDragState}
         onDragStateChange={vi.fn()}
         onReorderTab={vi.fn()}

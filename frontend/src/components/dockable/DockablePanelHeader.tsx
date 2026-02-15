@@ -20,8 +20,6 @@ interface DockablePanelHeaderProps {
   activeTab?: string | null;
   /** Called when the user clicks a tab to switch to it. */
   onTabClick?: (panelId: string) => void;
-  /** Called when the user clicks a tab's close button. */
-  onTabClose?: (panelId: string) => void;
   /** Identifier for the tab group (e.g. "bottom", "right"). */
   groupKey?: string;
   onMouseDown: (event: React.MouseEvent) => void;
@@ -50,7 +48,6 @@ export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
   tabs,
   activeTab,
   onTabClick,
-  onTabClose,
   groupKey,
   onMouseDown,
   controls,
@@ -61,8 +58,7 @@ export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
   onUndockTab,
 }) => {
   // Render the tab bar when there are multiple tabs and all callbacks provided.
-  const showTabBar =
-    tabs && tabs.length > 1 && onTabClick && onTabClose && groupKey;
+  const showTabBar = tabs && tabs.length > 1 && onTabClick && groupKey;
 
   return (
     <div className="dockable-panel__header" onMouseDown={onMouseDown} role="banner">
@@ -72,7 +68,6 @@ export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
             tabs={tabs}
             activeTab={activeTab ?? null}
             onTabClick={onTabClick}
-            onTabClose={onTabClose}
             groupKey={groupKey}
             dragState={dragState}
             onDragStateChange={onDragStateChange}

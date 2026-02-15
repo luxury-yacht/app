@@ -2,8 +2,7 @@
  * frontend/src/components/dockable/DockableTabBar.test.tsx
  *
  * Test suite for DockableTabBar.
- * Covers rendering, active tab state, click handling, close button behavior,
- * and single-tab close button visibility.
+ * Covers rendering, active tab state, click handling, and event propagation.
  */
 
 import React from 'react';
@@ -57,7 +56,6 @@ describe('DockableTabBar', () => {
         tabs={tabs}
         activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
         groupKey="bottom"
       />
     );
@@ -87,7 +85,6 @@ describe('DockableTabBar', () => {
         tabs={tabs}
         activeTab="p2"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
         groupKey="bottom"
       />
     );
@@ -118,7 +115,6 @@ describe('DockableTabBar', () => {
         tabs={tabs}
         activeTab="p1"
         onTabClick={onTabClick}
-        onTabClose={vi.fn()}
         groupKey="bottom"
       />
     );
@@ -136,9 +132,7 @@ describe('DockableTabBar', () => {
     await unmount();
   });
 
-  it('calls onTabClose when the close button is clicked but NOT onTabClick', async () => {
-    const onTabClick = vi.fn();
-    const onTabClose = vi.fn();
+  it('does not render close buttons on tabs', async () => {
     const tabs: TabInfo[] = [
       { panelId: 'p1', title: 'Logs' },
       { panelId: 'p2', title: 'Events' },
@@ -148,48 +142,12 @@ describe('DockableTabBar', () => {
       <DockableTabBar
         tabs={tabs}
         activeTab="p1"
-        onTabClick={onTabClick}
-        onTabClose={onTabClose}
-        groupKey="bottom"
-      />
-    );
-
-    // Find the close button on the second tab.
-    const closeButtons = host.querySelectorAll('.dockable-tab__close');
-    expect(closeButtons.length).toBeGreaterThanOrEqual(1);
-
-    // Click the close button on the last tab.
-    const lastClose = closeButtons[closeButtons.length - 1] as HTMLButtonElement;
-    await act(async () => {
-      lastClose.click();
-    });
-
-    // onTabClose should fire, but onTabClick should NOT (stopPropagation).
-    expect(onTabClose).toHaveBeenCalledTimes(1);
-    expect(onTabClose).toHaveBeenCalledWith('p2');
-    expect(onTabClick).not.toHaveBeenCalled();
-
-    await unmount();
-  });
-
-  it('renders a single tab WITHOUT a close button', async () => {
-    const tabs: TabInfo[] = [{ panelId: 'p1', title: 'Logs' }];
-
-    const { host, unmount } = await renderTabBar(
-      <DockableTabBar
-        tabs={tabs}
-        activeTab="p1"
         onTabClick={vi.fn()}
-        onTabClose={vi.fn()}
         groupKey="bottom"
       />
     );
 
-    // Should render one tab.
-    const tabElements = host.querySelectorAll('.dockable-tab');
-    expect(tabElements).toHaveLength(1);
-
-    // Should NOT render any close button when there is only one tab.
+    // Tabs should never have close buttons (close is done via panel controls).
     const closeButtons = host.querySelectorAll('.dockable-tab__close');
     expect(closeButtons).toHaveLength(0);
 
@@ -209,7 +167,6 @@ describe('DockableTabBar', () => {
           tabs={tabs}
           activeTab="p1"
           onTabClick={vi.fn()}
-          onTabClose={vi.fn()}
           groupKey="bottom"
         />
       </div>

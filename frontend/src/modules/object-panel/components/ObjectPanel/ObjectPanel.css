@@ -1,10 +1,5 @@
 /* Object Details Flyout Styles */
 
-/* When docked right, position the panel below the gridtable filter bar */
-.object-panel-dockable.dockable-panel--right {
-  top: var(--gridtable-filter-bar-height, 0px);
-}
-
 .object-panel {
   position: absolute;
   top: 0;

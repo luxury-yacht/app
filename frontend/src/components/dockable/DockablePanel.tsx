@@ -132,10 +132,19 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   );
   const panelState = useDockablePanelState(panelId);
   const {
-    registerPanel, unregisterPanel, tabGroups, panelRegistrations,
-    switchTab, closeTab, panelContentRefsMap, notifyContentChange,
+    registerPanel,
+    unregisterPanel,
+    tabGroups,
+    panelRegistrations,
+    switchTab,
+    closeTab,
+    panelContentRefsMap,
+    notifyContentChange,
     subscribeContentChange,
-    dragState, setDragState, reorderTabInGroup, movePanelBetweenGroups,
+    dragState,
+    setDragState,
+    reorderTabInGroup,
+    movePanelBetweenGroups,
   } = useDockablePanelContext();
   const panelHostNode = useDockablePanelHost();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -155,8 +164,11 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   contentRef.current = children;
 
   useEffect(() => {
-    panelContentRefsMap.current.set(panelId, contentRef);
-    return () => { panelContentRefsMap.current.delete(panelId); };
+    const map = panelContentRefsMap.current;
+    map.set(panelId, contentRef);
+    return () => {
+      map.delete(panelId);
+    };
   }, [panelId, panelContentRefsMap]);
 
   const skipNextControlledSyncRef = useRef(false);
@@ -229,24 +241,53 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     };
   }, [panelId, panelState, onClose, isControlled]);
 
+  // Store registration props in a ref so the effect below can read current
+  // values without re-running on every prop change. We only want to
+  // re-register when panelId, isOpen, or position changes.
+  const registrationPropsRef = useRef({
+    title,
+    defaultSize,
+    allowMaximize,
+    maximizeTargetSelector,
+    className,
+    contentClassName,
+    onClose,
+    onPositionChange,
+    onMaximizeChange,
+    panelRef: forwardedPanelRef,
+  });
+  registrationPropsRef.current = {
+    title,
+    defaultSize,
+    allowMaximize,
+    maximizeTargetSelector,
+    className,
+    contentClassName,
+    onClose,
+    onPositionChange,
+    onMaximizeChange,
+    panelRef: forwardedPanelRef,
+  };
+
   useEffect(() => {
     if (!panelState.isOpen) {
       unregisterPanel(panelId);
       return;
     }
+    const rp = registrationPropsRef.current;
     registerPanel({
       panelId,
-      title,
+      title: rp.title,
       position: panelState.position,
-      defaultSize,
-      allowMaximize,
-      maximizeTargetSelector,
-      className,
-      contentClassName,
-      onClose,
-      onPositionChange,
-      onMaximizeChange,
-      panelRef: forwardedPanelRef,
+      defaultSize: rp.defaultSize,
+      allowMaximize: rp.allowMaximize,
+      maximizeTargetSelector: rp.maximizeTargetSelector,
+      className: rp.className,
+      contentClassName: rp.contentClassName,
+      onClose: rp.onClose,
+      onPositionChange: rp.onPositionChange,
+      onMaximizeChange: rp.onMaximizeChange,
+      panelRef: rp.panelRef,
     });
     return () => {
       unregisterPanel(panelId);
@@ -288,9 +329,19 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     }
   }, [panelState.position, onPositionChange]);
 
-  // Set CSS variables so .app-main can shrink the content area for docked panels
+  // -----------------------------------------------------------------------
+  // Tab group membership
+  // -----------------------------------------------------------------------
+  const groupKey: GroupKey | null = getGroupForPanel(tabGroups, panelId);
+  const groupInfo = groupKey ? getGroupTabs(tabGroups, groupKey) : null;
+  const isGroupLeader = groupInfo ? groupInfo.tabs[0] === panelId : true;
+  const groupTabCount = groupInfo?.tabs.length ?? 0;
+
+  // Set CSS variables so .app-main can shrink the content area for docked panels.
+  // Only the group leader sets these -- non-leaders must not touch the CSS variables,
+  // otherwise their cleanup resets the offset to 0px causing a visible flicker.
   useLayoutEffect(() => {
-    if (!panelState.isOpen || isMaximized) return;
+    if (!panelState.isOpen || isMaximized || !isGroupLeader) return;
 
     if (panelState.position === 'right') {
       document.documentElement.style.setProperty(
@@ -323,14 +374,9 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     panelState.size.width,
     panelState.size.height,
     isMaximized,
+    isGroupLeader,
+    groupTabCount,
   ]);
-
-  // -----------------------------------------------------------------------
-  // Tab group membership
-  // -----------------------------------------------------------------------
-  const groupKey: GroupKey | null = getGroupForPanel(tabGroups, panelId);
-  const groupInfo = groupKey ? getGroupTabs(tabGroups, groupKey) : null;
-  const isGroupLeader = groupInfo ? groupInfo.tabs[0] === panelId : true;
 
   // Content change notification -- non-leaders notify the leader to re-render
   // when their children change (e.g., logs streaming in while this panel is active tab).
@@ -343,17 +389,17 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   // Leader subscribes to content changes from non-leaders.
   const [, forceContentUpdate] = React.useReducer((x: number) => x + 1, 0);
   useEffect(() => {
-    if (isGroupLeader && groupInfo && groupInfo.tabs.length > 1) {
+    if (isGroupLeader && groupTabCount > 1) {
       return subscribeContentChange(forceContentUpdate);
     }
-  }, [isGroupLeader, groupInfo?.tabs.length, subscribeContentChange]);
+  }, [isGroupLeader, groupTabCount, subscribeContentChange]);
 
   // Build tab info for the header.
   const tabsForHeader: TabInfo[] = useMemo(() => {
     if (!groupInfo || groupInfo.tabs.length <= 1) {
       return [{ panelId, title }];
     }
-    return groupInfo.tabs.map(id => ({
+    return groupInfo.tabs.map((id) => ({
       panelId: id,
       title: panelRegistrations.get(id)?.title ?? id,
     }));
@@ -370,39 +416,51 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   // -----------------------------------------------------------------------
   // Tab drag callbacks -- forwarded to DockablePanelHeader / DockableTabBar
   // -----------------------------------------------------------------------
-  const handleDragStateChange = useCallback((state: TabDragState | null) => {
-    setDragState(state);
-  }, [setDragState]);
+  const handleDragStateChange = useCallback(
+    (state: TabDragState | null) => {
+      setDragState(state);
+    },
+    [setDragState]
+  );
 
-  const handleReorderTab = useCallback((panelId: string, newIndex: number) => {
-    if (groupKey) reorderTabInGroup(groupKey, panelId, newIndex);
-  }, [groupKey, reorderTabInGroup]);
+  const handleReorderTab = useCallback(
+    (panelId: string, newIndex: number) => {
+      if (groupKey) reorderTabInGroup(groupKey, panelId, newIndex);
+    },
+    [groupKey, reorderTabInGroup]
+  );
 
-  const handleMoveToGroup = useCallback((panelId: string, targetGroupKey: string, insertIndex?: number) => {
-    // For recognized docked positions or floating group IDs, delegate to the provider.
-    movePanelBetweenGroups(panelId, targetGroupKey, insertIndex);
-  }, [movePanelBetweenGroups]);
+  const handleMoveToGroup = useCallback(
+    (panelId: string, targetGroupKey: string, insertIndex?: number) => {
+      // For recognized docked positions or floating group IDs, delegate to the provider.
+      movePanelBetweenGroups(panelId, targetGroupKey, insertIndex);
+    },
+    [movePanelBetweenGroups]
+  );
 
-  const handleUndockTab = useCallback((panelId: string, _cursorX: number, _cursorY: number) => {
-    // Move the panel to a new floating group.
-    movePanelBetweenGroups(panelId, 'floating');
-  }, [movePanelBetweenGroups]);
+  const handleUndockTab = useCallback(
+    (panelId: string, _cursorX: number, _cursorY: number) => {
+      // Move the panel to a new floating group.
+      movePanelBetweenGroups(panelId, 'floating');
+    },
+    [movePanelBetweenGroups]
+  );
 
-  // Handle close -- closes the active tab, not always the leader.
+  // Handle close -- closes the active tab. Only closes the panel if it's the last tab.
   const handleClose = useCallback(() => {
     const activeId = groupInfo?.activeTab;
-    if (!activeId || activeId === panelId) {
-      // Closing the leader (or single panel)
+    if (!activeId || groupTabCount <= 1) {
+      // Last tab (or single panel) -- close the whole panel.
       if (isControlled) {
         skipNextControlledSyncRef.current = true;
       }
       panelState.setOpen(false);
       onClose?.();
     } else {
-      // Closing a non-leader active tab via provider
+      // Multiple tabs -- remove the active tab from the group.
       closeTab(activeId);
     }
-  }, [groupInfo, panelId, isControlled, panelState, onClose, closeTab]);
+  }, [groupInfo, groupTabCount, isControlled, panelState, onClose, closeTab]);
 
   // Handle docking changes
   const handleDock = useCallback(
@@ -505,7 +563,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         tabs={tabsForHeader.length > 1 ? tabsForHeader : undefined}
         activeTab={groupInfo?.activeTab ?? null}
         onTabClick={groupKey ? (id) => switchTab(groupKey, id) : undefined}
-        onTabClose={closeTab}
         groupKey={groupKey ?? panelId}
         onMouseDown={handleHeaderMouseDown}
         dragState={dragState}
@@ -528,7 +585,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       <div className="dockable-panel__content" role="main">
         {groupInfo && groupInfo.tabs.length > 1 ? (
           // Multi-tab: render each tab's content, showing only the active one.
-          groupInfo.tabs.map(tabId => {
+          groupInfo.tabs.map((tabId) => {
             const tabIsActive = tabId === groupInfo.activeTab;
             const tabContentRef = panelContentRefsMap.current.get(tabId);
             const tabContentClassName = panelRegistrations.get(tabId)?.contentClassName ?? '';

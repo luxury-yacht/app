@@ -55,17 +55,17 @@ function stripPanelFromAllGroups(state: TabGroupState, panelId: string): TabGrou
   // For docked groups, if the active tab was removed, pick the last tab or null.
   const rightActive =
     state.right.activeTab === panelId
-      ? rightTabs[rightTabs.length - 1] ?? null
+      ? (rightTabs[rightTabs.length - 1] ?? null)
       : rightTabs.includes(state.right.activeTab ?? '')
         ? state.right.activeTab
-        : rightTabs[rightTabs.length - 1] ?? null;
+        : (rightTabs[rightTabs.length - 1] ?? null);
 
   const bottomActive =
     state.bottom.activeTab === panelId
-      ? bottomTabs[bottomTabs.length - 1] ?? null
+      ? (bottomTabs[bottomTabs.length - 1] ?? null)
       : bottomTabs.includes(state.bottom.activeTab ?? '')
         ? state.bottom.activeTab
-        : bottomTabs[bottomTabs.length - 1] ?? null;
+        : (bottomTabs[bottomTabs.length - 1] ?? null);
 
   // For floating groups, remove the panel and destroy empty groups.
   const floating: FloatingTabGroup[] = [];
@@ -77,10 +77,10 @@ function stripPanelFromAllGroups(state: TabGroupState, panelId: string): TabGrou
     }
     const activeTab =
       group.activeTab === panelId
-        ? tabs[tabs.length - 1] ?? null
+        ? (tabs[tabs.length - 1] ?? null)
         : tabs.includes(group.activeTab ?? '')
           ? group.activeTab
-          : tabs[tabs.length - 1] ?? null;
+          : (tabs[tabs.length - 1] ?? null);
     floating.push({ ...group, tabs, activeTab });
   }
 
@@ -229,7 +229,11 @@ export function removePanelFromGroup(state: TabGroupState, panelId: string): Tab
  * Set the active tab within a specific group.
  * @param groupKey - 'right', 'bottom', or a floating groupId.
  */
-export function setActiveTab(state: TabGroupState, panelId: string, groupKey: GroupKey): TabGroupState {
+export function setActiveTab(
+  state: TabGroupState,
+  panelId: string,
+  groupKey: GroupKey
+): TabGroupState {
   if (groupKey === 'right' || groupKey === 'bottom') {
     return {
       ...state,

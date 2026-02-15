@@ -25,7 +25,7 @@
 
 /* Position variants */
 .dockable-panel--right {
-  top: 0;
+  top: var(--gridtable-filter-bar-height, 0px);
   right: 0;
   bottom: 0;
   border-left: 2px solid var(--color-border, #333);
@@ -467,7 +467,10 @@ body.dockable-panel-resizing-sw * {
   cursor: pointer;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
-  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background-color 0.15s;
   user-select: none;
   flex-shrink: 0;
 }
@@ -486,29 +489,6 @@ body.dockable-panel-resizing-sw * {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 160px;
-}
-
-.dockable-tab__close {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  border: none;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--color-text-tertiary, #666);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s, color 0.15s;
-}
-
-.dockable-tab__close:hover {
-  background: rgba(239 68 68 / 15%);
-  color: rgb(239 68 68);
 }
 
 /* Tab being dragged -- reduced opacity to indicate it is moving. */

@@ -46,11 +46,7 @@ interface DockablePanelContextValue {
     targetGroupKey: GroupKey | 'floating',
     insertIndex?: number
   ) => void;
-  addPanelToExistingFloatingGroup: (
-    panelId: string,
-    groupId: string,
-    insertIndex?: number
-  ) => void;
+  addPanelToExistingFloatingGroup: (panelId: string, groupId: string, insertIndex?: number) => void;
 
   // Drag state
   dragState: TabDragState | null;
@@ -59,7 +55,7 @@ interface DockablePanelContextValue {
   // Content registry -- allows the group leader to render other panels' body content.
   panelContentRefsMap: React.MutableRefObject<Map<string, React.MutableRefObject<React.ReactNode>>>;
   notifyContentChange: () => void;
-  subscribeContentChange: (fn: () => void) => (() => void);
+  subscribeContentChange: (fn: () => void) => () => void;
 
   // Legacy compat -- derived from tabGroups for backward compatibility
   dockedPanels: { right: string[]; bottom: string[] };
@@ -196,12 +192,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // -----------------------------------------------------------------------
   // reorderTabInGroup -- move a tab to a new index within the same group.
   // -----------------------------------------------------------------------
-  const reorderTabInGroup = useCallback(
-    (groupKey: GroupKey, panelId: string, newIndex: number) => {
-      setTabGroups((prev) => reorderTab(prev, groupKey, panelId, newIndex));
-    },
-    []
-  );
+  const reorderTabInGroup = useCallback((groupKey: GroupKey, panelId: string, newIndex: number) => {
+    setTabGroups((prev) => reorderTab(prev, groupKey, panelId, newIndex));
+  }, []);
 
   // -----------------------------------------------------------------------
   // movePanelBetweenGroups -- move a panel to a different group.
@@ -233,12 +226,14 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   const contentChangeListeners = useRef(new Set<() => void>());
 
   const notifyContentChange = useCallback(() => {
-    contentChangeListeners.current.forEach(fn => fn());
+    contentChangeListeners.current.forEach((fn) => fn());
   }, []);
 
   const subscribeContentChange = useCallback((fn: () => void) => {
     contentChangeListeners.current.add(fn);
-    return () => { contentChangeListeners.current.delete(fn); };
+    return () => {
+      contentChangeListeners.current.delete(fn);
+    };
   }, []);
 
   // -----------------------------------------------------------------------
