@@ -11,6 +11,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DockablePanel from './DockablePanel';
+import { DockablePanelProvider } from './DockablePanelProvider';
 import { getAllPanelStates, restorePanelStates, type DockPosition } from './useDockablePanelState';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 
@@ -785,6 +786,42 @@ describe('DockablePanel behaviour (real hook)', () => {
     expect(getPanelState('panel-side-a').isOpen).toBe(true);
     expect(getPanelState('panel-side-b').position).toBe('right');
     expect(getPanelState('panel-side-b').isOpen).toBe(true);
+
+    await unmount();
+  });
+
+  it('applies dock controls to the active tab when multiple tabs share a dock group', async () => {
+    const { unmount } = await renderPanel(
+      <DockablePanelProvider>
+        <div>
+          <DockablePanel panelId="panel-active-controls-a" defaultPosition="right" isOpen>
+            <div>panel A</div>
+          </DockablePanel>
+          <DockablePanel panelId="panel-active-controls-b" defaultPosition="right" isOpen>
+            <div>panel B</div>
+          </DockablePanel>
+        </div>
+      </DockablePanelProvider>
+    );
+
+    await flushEffects();
+
+    // Newest tab is active; docking should move that active tab only.
+    const dockBottomButton = document.querySelector(
+      'button[aria-label="Dock panel to bottom"]'
+    ) as HTMLButtonElement | null;
+    expect(dockBottomButton).toBeTruthy();
+
+    await act(async () => {
+      dockBottomButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await flushEffects();
+
+    expect(getPanelState('panel-active-controls-a').position).toBe('right');
+    expect(getPanelState('panel-active-controls-b').position).toBe('bottom');
+    expect(getPanelState('panel-active-controls-a').isOpen).toBe(true);
+    expect(getPanelState('panel-active-controls-b').isOpen).toBe(true);
 
     await unmount();
   });

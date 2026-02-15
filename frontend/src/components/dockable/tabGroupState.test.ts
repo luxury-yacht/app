@@ -413,6 +413,17 @@ describe('addPanelToFloatingGroup', () => {
     expect(next.floating[0].tabs).toContain('a');
   });
 
+  it('falls back to a new floating group when the target floating group is missing', () => {
+    let state = createInitialTabGroupState();
+    state = addPanelToGroup(state, 'a', 'right');
+
+    const next = addPanelToFloatingGroup(state, 'a', 'floating-missing');
+    expect(next.right.tabs).toEqual([]);
+    expect(next.floating).toHaveLength(1);
+    expect(next.floating[0].tabs).toEqual(['a']);
+    expect(next.floating[0].groupId).toBe('floating-1');
+  });
+
   it('does not mutate the original state', () => {
     let state = createInitialTabGroupState();
     state = addPanelToGroup(state, 'f1', 'floating');

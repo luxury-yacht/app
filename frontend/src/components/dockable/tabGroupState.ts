@@ -359,12 +359,15 @@ export function addPanelToFloatingGroup(
   // Strip from any existing location first.
   const cleaned = stripPanelFromAllGroups(state, panelId);
 
-  return {
+  let foundTargetGroup = false;
+
+  const nextState = {
     ...cleaned,
     floating: cleaned.floating.map((group) => {
       if (group.groupId !== groupId) {
         return group;
       }
+      foundTargetGroup = true;
       const newTabs = [...group.tabs];
       if (insertIndex !== undefined) {
         newTabs.splice(insertIndex, 0, panelId);
@@ -374,6 +377,14 @@ export function addPanelToFloatingGroup(
       return { ...group, tabs: newTabs, activeTab: panelId };
     }),
   };
+
+  // If the target floating group no longer exists (race during drag/drop),
+  // fall back to creating a new floating group instead of dropping the tab.
+  if (!foundTargetGroup) {
+    return addPanelToGroup(cleaned, panelId, 'floating');
+  }
+
+  return nextState;
 }
 
 // ---------------------------------------------------------------------------

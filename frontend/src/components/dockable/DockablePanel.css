@@ -309,59 +309,6 @@
     nwse-resize;
 }
 
-/* Animations */
-@keyframes dockablePanelSlideInFromRight {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes dockablePanelSlideInFromBottom {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-@keyframes dockablePanelFadeIn {
-  from {
-    opacity: 0;
-    transform: translate3d(
-        var(--dockable-panel-translate-x, 0px),
-        var(--dockable-panel-translate-y, 0px),
-        0
-      )
-      scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(
-        var(--dockable-panel-translate-x, 0px),
-        var(--dockable-panel-translate-y, 0px),
-        0
-      )
-      scale(1);
-  }
-}
-
-/* Apply animations only on first open, not on tab/leadership changes */
-.dockable-panel--animate-in.dockable-panel--right {
-  animation: dockablePanelSlideInFromRight 0.3s ease-out;
-}
-
-.dockable-panel--animate-in.dockable-panel--bottom {
-  animation: dockablePanelSlideInFromBottom 0.3s ease-out;
-}
-
-.dockable-panel--animate-in.dockable-panel--floating {
-  animation: dockablePanelFadeIn 0.2s ease-out;
-}
-
 /* Dragging state */
 .dockable-panel--dragging {
   cursor: move !important;

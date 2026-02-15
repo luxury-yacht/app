@@ -17,6 +17,8 @@ import React, {
 import { createPortal } from 'react-dom';
 import {
   registerPanelCloseHandler,
+  setPanelFloatingPositionById,
+  setPanelPositionById,
   unregisterPanelCloseHandler,
   useDockablePanelState,
   PanelCloseReason,
@@ -338,13 +340,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const isGroupLeader = groupInfo ? groupInfo.tabs[0] === panelId : true;
   const groupTabCount = groupInfo?.tabs.length ?? 0;
 
-  // Suppress the slide-in animation when this panel inherits group leadership
-  // (e.g. a sibling tab was closed). A brand-new panel won't have a groupKey
-  // on its first render (registration happens in useEffect, after render),
-  // so groupKey being non-null on first render means we're already in a group
-  // and the panel area is already visible — no animation needed.
-  const shouldAnimateRef = useRef(groupKey === null);
-
   // Set CSS variables so .app-main can shrink the content area for docked panels.
   // Only the group leader sets these -- non-leaders must not touch the CSS variables,
   // otherwise their cleanup resets the offset to 0px causing a visible flicker.
@@ -442,14 +437,24 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     (panelId: string, targetGroupKey: string, insertIndex?: number) => {
       // For recognized docked positions or floating group IDs, delegate to the provider.
       movePanelBetweenGroups(panelId, targetGroupKey, insertIndex);
+
+      // Keep standalone/no-provider usage working by updating panel state directly.
+      const targetPosition: DockPosition =
+        targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
+      setPanelPositionById(panelId, targetPosition);
     },
     [movePanelBetweenGroups]
   );
 
   const handleUndockTab = useCallback(
-    (panelId: string, _cursorX: number, _cursorY: number) => {
-      // Move the panel to a new floating group.
+    (panelId: string, cursorX: number, cursorY: number) => {
+      // Move the tab to a new floating group and place it near the drop cursor.
       movePanelBetweenGroups(panelId, 'floating');
+      setPanelPositionById(panelId, 'floating');
+      setPanelFloatingPositionById(panelId, {
+        x: cursorX - 72,
+        y: cursorY - 20,
+      });
     },
     [movePanelBetweenGroups]
   );
@@ -476,15 +481,23 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       if (isMaximized) {
         return;
       }
-      panelState.setPosition(position);
+
+      const activePanelId = groupInfo?.activeTab ?? panelId;
+      if (position === 'floating') {
+        movePanelBetweenGroups(activePanelId, 'floating');
+        setPanelPositionById(activePanelId, 'floating');
+        return;
+      }
+      movePanelBetweenGroups(activePanelId, position);
+      setPanelPositionById(activePanelId, position);
     },
-    [panelState, isMaximized]
+    [groupInfo, panelId, movePanelBetweenGroups, isMaximized]
   );
 
   // Memoize panel classes and styles
   const panelClassName = useMemo(() => {
     const classes = ['dockable-panel', `dockable-panel--${panelState.position}`, className];
-    if (shouldAnimateRef.current) classes.push('dockable-panel--animate-in');
+
     if (isDragging) classes.push('dockable-panel--dragging');
     if (isResizing) classes.push('dockable-panel--resizing');
     if (panelState.position === 'floating') classes.push('dockable-panel--floating');
@@ -544,152 +557,152 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   ]);
 
   if (!panelState.isOpen) return null;
+  if (!panelHostNode) return null;
 
-  // Non-leaders don't render -- the group leader renders their content.
-  if (!isGroupLeader) return null;
-
+  // Always render through a single createPortal so React reuses the DOM node
+  // when group leadership transfers between panels, avoiding a visible flash.
   const panelElement = (
     <div
       ref={setPanelRef}
       className={panelClassName}
-      style={panelStyle}
-      onMouseDownCapture={() => {
+      style={isGroupLeader ? panelStyle : { display: 'none' }}
+      onMouseDownCapture={isGroupLeader ? () => {
         // Capture phase ensures focus/tracking runs even when children
         // stop propagation (e.g. tab bar, object panel header).
         panelState.focus();
         if (groupKey) {
           setLastFocusedGroupKey(groupKey);
         }
-      }}
-      onMouseDown={(e) => {
+      } : undefined}
+      onMouseDown={isGroupLeader ? (e: React.MouseEvent) => {
         if (isMaximized) {
           return;
         }
         if (panelState.position === 'floating') {
           handleFloatingMouseDown(e);
         }
-      }}
-      onMouseMove={isMaximized ? undefined : handlePanelMouseMove}
+      } : undefined}
+      onMouseMove={isGroupLeader && !isMaximized ? handlePanelMouseMove : undefined}
       role="dialog"
       aria-label={activeTitle}
       aria-modal={panelState.position === 'floating'}
     >
-      <DockablePanelHeader
-        title={activeTitle}
-        tabs={tabsForHeader.length > 1 ? tabsForHeader : undefined}
-        activeTab={groupInfo?.activeTab ?? null}
-        onTabClick={groupKey ? (id) => switchTab(groupKey, id) : undefined}
-        groupKey={groupKey ?? panelId}
-        onMouseDown={handleHeaderMouseDown}
-        dragState={dragState}
-        onDragStateChange={handleDragStateChange}
-        onReorderTab={handleReorderTab}
-        onMoveToGroup={handleMoveToGroup}
-        onUndockTab={handleUndockTab}
-        controls={
-          <DockablePanelControls
-            position={panelState.position}
-            isMaximized={isMaximized}
-            allowMaximize={allowMaximize}
-            onDock={handleDock}
-            onToggleMaximize={toggleMaximize}
-            onClose={handleClose}
-          />
-        }
-      />
-
-      <div className="dockable-panel__content" role="main">
-        {groupInfo && groupInfo.tabs.length > 1 ? (
-          // Multi-tab: render each tab's content, showing only the active one.
-          groupInfo.tabs.map((tabId) => {
-            const tabIsActive = tabId === groupInfo.activeTab;
-            const tabContentRef = panelContentRefsMap.current.get(tabId);
-            const tabContentClassName = panelRegistrations.get(tabId)?.contentClassName ?? '';
-            return (
-              <div
-                key={tabId}
-                className={tabContentClassName}
-                style={{
-                  display: tabIsActive ? undefined : 'none',
-                  ...(tabIsActive ? { flex: 1, minHeight: 0 } : {}),
-                }}
-              >
-                {tabContentRef?.current}
-              </div>
-            );
-          })
-        ) : (
-          // Single tab or no group: render own content directly.
-          <div className={contentClassName} style={{ flex: 1, minHeight: 0 }}>
-            {children}
-          </div>
-        )}
-      </div>
-
-      {/* Resize handles */}
-      {!isMaximized && panelState.position === 'right' && (
-        <div
-          className="dockable-panel__resize-handle dockable-panel__resize-handle--left"
-          onMouseDown={(e) => handleMouseDownResize(e, 'w')}
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize panel width"
-          tabIndex={0}
-        />
-      )}
-      {!isMaximized && panelState.position === 'bottom' && (
-        <div
-          className="dockable-panel__resize-handle dockable-panel__resize-handle--top"
-          onMouseDown={(e) => handleMouseDownResize(e, 'n')}
-          role="separator"
-          aria-orientation="horizontal"
-          aria-label="Resize panel height"
-          tabIndex={0}
-        />
-      )}
-      {!isMaximized && panelState.position === 'floating' && (
+      {isGroupLeader && (
         <>
-          {/* Invisible resize zones for floating panels */}
-          <div
-            className="dockable-panel__resize-zone dockable-panel__resize-zone--top"
-            onMouseDown={(e) => handleMouseDownResize(e, 'n')}
+          <DockablePanelHeader
+            title={activeTitle}
+            tabs={tabsForHeader.length > 1 ? tabsForHeader : undefined}
+            activeTab={groupInfo?.activeTab ?? null}
+            onTabClick={groupKey ? (id) => switchTab(groupKey, id) : undefined}
+            groupKey={groupKey ?? panelId}
+            onMouseDown={handleHeaderMouseDown}
+            dragState={dragState}
+            onDragStateChange={handleDragStateChange}
+            onReorderTab={handleReorderTab}
+            onMoveToGroup={handleMoveToGroup}
+            onUndockTab={handleUndockTab}
+            controls={
+              <DockablePanelControls
+                position={panelState.position}
+                isMaximized={isMaximized}
+                allowMaximize={allowMaximize}
+                onDock={handleDock}
+                onToggleMaximize={toggleMaximize}
+                onClose={handleClose}
+              />
+            }
           />
-          <div
-            className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom"
-            onMouseDown={(e) => handleMouseDownResize(e, 's')}
-          />
-          <div
-            className="dockable-panel__resize-zone dockable-panel__resize-zone--left"
-            onMouseDown={(e) => handleMouseDownResize(e, 'w')}
-          />
-          <div
-            className="dockable-panel__resize-zone dockable-panel__resize-zone--right"
-            onMouseDown={(e) => handleMouseDownResize(e, 'e')}
-          />
-          <div
-            className="dockable-panel__resize-zone dockable-panel__resize-zone--top-left"
-            onMouseDown={(e) => handleMouseDownResize(e, 'nw')}
-          />
-          <div
-            className="dockable-panel__resize-zone dockable-panel__resize-zone--top-right"
-            onMouseDown={(e) => handleMouseDownResize(e, 'ne')}
-          />
-          <div
-            className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom-left"
-            onMouseDown={(e) => handleMouseDownResize(e, 'sw')}
-          />
-          <div
-            className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom-right"
-            onMouseDown={(e) => handleMouseDownResize(e, 'se')}
-          />
+
+          <div className="dockable-panel__content" role="main">
+            {groupInfo && groupInfo.tabs.length > 1 ? (
+              // Multi-tab: render each tab's content, showing only the active one.
+              groupInfo.tabs.map((tabId) => {
+                const tabIsActive = tabId === groupInfo.activeTab;
+                const tabContentRef = panelContentRefsMap.current.get(tabId);
+                const tabContentClassName = panelRegistrations.get(tabId)?.contentClassName ?? '';
+                return (
+                  <div
+                    key={tabId}
+                    className={tabContentClassName}
+                    style={{
+                      display: tabIsActive ? undefined : 'none',
+                      ...(tabIsActive ? { flex: 1, minHeight: 0 } : {}),
+                    }}
+                  >
+                    {tabContentRef?.current}
+                  </div>
+                );
+              })
+            ) : (
+              // Single tab or no group: render own content directly.
+              <div className={contentClassName} style={{ flex: 1, minHeight: 0 }}>
+                {children}
+              </div>
+            )}
+          </div>
+
+          {/* Resize handles */}
+          {!isMaximized && panelState.position === 'right' && (
+            <div
+              className="dockable-panel__resize-handle dockable-panel__resize-handle--left"
+              onMouseDown={(e) => handleMouseDownResize(e, 'w')}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize panel width"
+              tabIndex={0}
+            />
+          )}
+          {!isMaximized && panelState.position === 'bottom' && (
+            <div
+              className="dockable-panel__resize-handle dockable-panel__resize-handle--top"
+              onMouseDown={(e) => handleMouseDownResize(e, 'n')}
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize panel height"
+              tabIndex={0}
+            />
+          )}
+          {!isMaximized && panelState.position === 'floating' && (
+            <>
+              {/* Invisible resize zones for floating panels */}
+              <div
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--top"
+                onMouseDown={(e) => handleMouseDownResize(e, 'n')}
+              />
+              <div
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom"
+                onMouseDown={(e) => handleMouseDownResize(e, 's')}
+              />
+              <div
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--left"
+                onMouseDown={(e) => handleMouseDownResize(e, 'w')}
+              />
+              <div
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--right"
+                onMouseDown={(e) => handleMouseDownResize(e, 'e')}
+              />
+              <div
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--top-left"
+                onMouseDown={(e) => handleMouseDownResize(e, 'nw')}
+              />
+              <div
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--top-right"
+                onMouseDown={(e) => handleMouseDownResize(e, 'ne')}
+              />
+              <div
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom-left"
+                onMouseDown={(e) => handleMouseDownResize(e, 'sw')}
+              />
+              <div
+                className="dockable-panel__resize-zone dockable-panel__resize-zone--bottom-right"
+                onMouseDown={(e) => handleMouseDownResize(e, 'se')}
+              />
+            </>
+          )}
         </>
       )}
     </div>
   );
-
-  if (!panelHostNode) {
-    return null;
-  }
 
   return createPortal(panelElement, panelHostNode);
 };

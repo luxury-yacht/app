@@ -107,6 +107,11 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     startY: number;
     isDragging: boolean;
   } | null>(null);
+  const dragStateRef = useRef<TabDragState | null>(dragState ?? null);
+
+  useEffect(() => {
+    dragStateRef.current = dragState ?? null;
+  }, [dragState]);
 
   // Whether drag is enabled (all required callbacks are provided).
   const dragEnabled = !!(onDragStateChange && onReorderTab && onMoveToGroup && onUndockTab);
@@ -158,7 +163,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       // Update drag state with current cursor position.
       // Determine if cursor is over this tab bar to set drop target.
       const barRect = barRef.current?.getBoundingClientRect();
-      let dropTarget: TabDragState['dropTarget'] = null;
+      let dropTarget: TabDragState['dropTarget'] = dragStateRef.current?.dropTarget ?? null;
 
       if (barRect && barRef.current) {
         const isOverBar =
@@ -175,6 +180,10 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
             dragStart.panelId
           );
           dropTarget = { groupKey, insertIndex };
+        } else if (dropTarget?.groupKey === groupKey) {
+          // Only clear when the current target points at this source bar.
+          // Keep other-group targets so cross-group drops are stable.
+          dropTarget = null;
         }
       }
 

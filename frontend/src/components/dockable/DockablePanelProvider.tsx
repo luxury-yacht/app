@@ -17,7 +17,7 @@ import React, {
 } from 'react';
 import type { TabGroupState, TabDragState, GroupKey, PanelRegistration } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
-import { focusPanelById } from './useDockablePanelState';
+import { focusPanelById, setPanelPositionById } from './useDockablePanelState';
 import {
   createInitialTabGroupState,
   addPanelToGroup,
@@ -212,7 +212,24 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     panelRegistrationsRef.current.set(registration.panelId, registration);
 
     // Add the panel to the appropriate tab group.
-    setTabGroups((prev) => addPanelToGroup(prev, registration.panelId, registration.position));
+    setTabGroups((prev) => {
+      const currentGroup = getGroupForPanel(prev, registration.panelId);
+      const alreadyInDesiredGroup =
+        (registration.position === 'right' && currentGroup === 'right') ||
+        (registration.position === 'bottom' && currentGroup === 'bottom') ||
+        (registration.position === 'floating' &&
+          currentGroup !== null &&
+          currentGroup !== 'right' &&
+          currentGroup !== 'bottom');
+
+      // When group membership already matches the panel's dock position, avoid
+      // re-adding the tab so drag/drop insert order is preserved.
+      if (alreadyInDesiredGroup) {
+        return prev;
+      }
+
+      return addPanelToGroup(prev, registration.panelId, registration.position);
+    });
 
     // Bump the counter so consumers see the new registration.
     setRegistrationBump((n) => n + 1);
@@ -265,6 +282,11 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   const movePanelBetweenGroups = useCallback(
     (panelId: string, targetGroupKey: GroupKey | 'floating', insertIndex?: number) => {
       setTabGroups((prev) => movePanelToGroup(prev, panelId, targetGroupKey, insertIndex));
+
+      // Keep panel-state position aligned with tab-group destination.
+      const targetPosition: DockPosition =
+        targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
+      setPanelPositionById(panelId, targetPosition);
     },
     []
   );

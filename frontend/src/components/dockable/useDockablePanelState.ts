@@ -81,6 +81,19 @@ function updatePanelState(panelId: string, updates: Partial<PanelState>) {
   notifyListeners(panelId);
 }
 
+/**
+ * Clamp a floating position so the panel stays reachable inside the content area.
+ * Reused by both hook instance methods and provider-level tab move helpers.
+ */
+function clampFloatingPosition(position: { x: number; y: number }): { x: number; y: number } {
+  const minDistanceFromEdge = 50;
+  const content = getContentBounds();
+  return {
+    x: Math.max(0, Math.min(position.x, content.width - 200)),
+    y: Math.max(minDistanceFromEdge, Math.min(position.y, content.height - 100)),
+  };
+}
+
 // Set panel open state.
 // With tabs, opening a panel at an occupied position joins the tab group
 // instead of closing other panels (dock-conflict removed).
@@ -99,6 +112,21 @@ function setPanelOpenState(panelId: string, isOpen: boolean) {
  */
 export function focusPanelById(panelId: string) {
   updatePanelState(panelId, { zIndex: ++globalZIndex });
+}
+
+/**
+ * Set a panel's dock position by ID.
+ * Used by tab-group move operations so visual panel state stays aligned with group membership.
+ */
+export function setPanelPositionById(panelId: string, position: DockPosition) {
+  updatePanelState(panelId, { position });
+}
+
+/**
+ * Set a panel's floating position by ID with the same bounds validation used by the hook.
+ */
+export function setPanelFloatingPositionById(panelId: string, position: { x: number; y: number }) {
+  updatePanelState(panelId, { floatingPosition: clampFloatingPosition(position) });
 }
 
 /**
@@ -294,15 +322,7 @@ export function useDockablePanelState(panelId: string) {
   // Set floating position with validation
   const setFloatingPosition = useCallback(
     (position: { x: number; y: number }) => {
-      // Ensure minimum distance from edges to prevent panel from hiding
-      const minDistanceFromEdge = 50;
-      const content = getContentBounds();
-      const validatedPosition = {
-        x: Math.max(0, Math.min(position.x, content.width - 200)),
-        y: Math.max(minDistanceFromEdge, Math.min(position.y, content.height - 100)),
-      };
-
-      updatePanelState(panelId, { floatingPosition: validatedPosition });
+      updatePanelState(panelId, { floatingPosition: clampFloatingPosition(position) });
     },
     [panelId]
   );
