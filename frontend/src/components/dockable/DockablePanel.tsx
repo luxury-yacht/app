@@ -553,12 +553,15 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       ref={setPanelRef}
       className={panelClassName}
       style={panelStyle}
-      onMouseDown={(e) => {
+      onMouseDownCapture={() => {
+        // Capture phase ensures focus/tracking runs even when children
+        // stop propagation (e.g. tab bar, object panel header).
         panelState.focus();
-        // Track which group was most recently interacted with.
         if (groupKey) {
           setLastFocusedGroupKey(groupKey);
         }
+      }}
+      onMouseDown={(e) => {
         if (isMaximized) {
           return;
         }
