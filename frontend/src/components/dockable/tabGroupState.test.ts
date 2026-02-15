@@ -18,13 +18,7 @@ import {
   movePanelToGroup,
   addPanelToFloatingGroup,
   getGroupTabs,
-  resetGroupIdCounter,
 } from './tabGroupState';
-
-/** Reset the floating group ID counter before each test for deterministic IDs. */
-beforeEach(() => {
-  resetGroupIdCounter();
-});
 
 // ---------------------------------------------------------------------------
 // createInitialTabGroupState
@@ -105,7 +99,7 @@ describe('addPanelToGroup', () => {
     expect(next.floating[1].tabs).toEqual(['f2']);
   });
 
-  it('assigns deterministic IDs to floating groups after counter reset', () => {
+  it('assigns deterministic IDs to floating groups based on current state', () => {
     let next = addPanelToGroup(state, 'f1', 'floating');
     next = addPanelToGroup(next, 'f2', 'floating');
     expect(next.floating[0].groupId).toBe('floating-1');

@@ -31,6 +31,8 @@ import {
 } from './tabGroupState';
 
 interface DockablePanelContextValue {
+  // True only when a real provider is mounted (false for fallback defaults).
+  isProviderActive: boolean;
   // Tab group state
   tabGroups: TabGroupState;
 
@@ -40,6 +42,10 @@ interface DockablePanelContextValue {
   // Register/unregister panels -- called by DockablePanel components
   registerPanel: (registration: PanelRegistration) => void;
   unregisterPanel: (panelId: string) => void;
+  // Keep tab-group membership aligned with an open panel's current dock position.
+  syncPanelGroup: (panelId: string, position: DockPosition) => void;
+  // Remove tab-group membership for closed/unmounted panels.
+  removePanelFromGroups: (panelId: string) => void;
 
   // Tab actions
   switchTab: (groupKey: GroupKey, panelId: string) => void;
@@ -76,10 +82,13 @@ interface DockablePanelContextValue {
 }
 
 const defaultDockablePanelContext: DockablePanelContextValue = {
+  isProviderActive: false,
   tabGroups: createInitialTabGroupState(),
   panelRegistrations: new Map(),
   registerPanel: () => {},
   unregisterPanel: () => {},
+  syncPanelGroup: () => {},
+  removePanelFromGroups: () => {},
   switchTab: () => {},
   closeTab: () => {},
   reorderTabInGroup: () => {},
@@ -201,48 +210,54 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   }, []);
 
   // -----------------------------------------------------------------------
-  // registerPanel -- called by DockablePanel when it mounts / becomes open.
-  // Accepts a PanelRegistration object with panelId, position, title, etc.
+  // registerPanel stores panel metadata only.
+  // Group membership is handled by explicit tab-group actions.
   // -----------------------------------------------------------------------
   const registerPanel = useCallback((registration: PanelRegistration) => {
     // Store the registration metadata.
     panelRegistrationsRef.current.set(registration.panelId, registration);
-
-    // Add the panel to the appropriate tab group.
-    setTabGroups((prev) => {
-      const currentGroup = getGroupForPanel(prev, registration.panelId);
-      const alreadyInDesiredGroup =
-        (registration.position === 'right' && currentGroup === 'right') ||
-        (registration.position === 'bottom' && currentGroup === 'bottom') ||
-        (registration.position === 'floating' &&
-          currentGroup !== null &&
-          currentGroup !== 'right' &&
-          currentGroup !== 'bottom');
-
-      // When group membership already matches the panel's dock position, avoid
-      // re-adding the tab so drag/drop insert order is preserved.
-      if (alreadyInDesiredGroup) {
-        return prev;
-      }
-
-      return addPanelToGroup(prev, registration.panelId, registration.position);
-    });
 
     // Bump the counter so consumers see the new registration.
     setRegistrationBump((n) => n + 1);
   }, []);
 
   // -----------------------------------------------------------------------
-  // unregisterPanel -- called by DockablePanel when it unmounts / closes.
+  // unregisterPanel removes panel metadata only.
   // -----------------------------------------------------------------------
   const unregisterPanel = useCallback((panelId: string) => {
     panelRegistrationsRef.current.delete(panelId);
 
-    // Remove the panel from whichever tab group it belongs to.
-    setTabGroups((prev) => removePanelFromGroup(prev, panelId));
-
     // Bump the counter so consumers see the removal.
     setRegistrationBump((n) => n + 1);
+  }, []);
+
+  // -----------------------------------------------------------------------
+  // syncPanelGroup -- align one panel with its declared dock position.
+  // -----------------------------------------------------------------------
+  const syncPanelGroup = useCallback((panelId: string, position: DockPosition) => {
+    setTabGroups((prev) => {
+      const currentGroup = getGroupForPanel(prev, panelId);
+      const alreadyInDesiredGroup =
+        (position === 'right' && currentGroup === 'right') ||
+        (position === 'bottom' && currentGroup === 'bottom') ||
+        (position === 'floating' &&
+          currentGroup !== null &&
+          currentGroup !== 'right' &&
+          currentGroup !== 'bottom');
+
+      if (alreadyInDesiredGroup) {
+        return prev;
+      }
+
+      return addPanelToGroup(prev, panelId, position);
+    });
+  }, []);
+
+  // -----------------------------------------------------------------------
+  // removePanelFromGroups -- drop a panel from all groups when closing/unmounting.
+  // -----------------------------------------------------------------------
+  const removePanelFromGroups = useCallback((panelId: string) => {
+    setTabGroups((prev) => removePanelFromGroup(prev, panelId));
   }, []);
 
   // -----------------------------------------------------------------------
@@ -299,6 +314,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   const addPanelToExistingFloatingGroup = useCallback(
     (panelId: string, groupId: string, insertIndex?: number) => {
       setTabGroups((prev) => addPanelToFloatingGroup(prev, panelId, groupId, insertIndex));
+      setPanelPositionById(panelId, 'floating');
     },
     []
   );
@@ -338,10 +354,13 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   }, [tabGroups.right.tabs.length, tabGroups.bottom.tabs.length]);
 
   const value: DockablePanelContextValue = {
+    isProviderActive: true,
     tabGroups,
     panelRegistrations: panelRegistrationsRef.current,
     registerPanel,
     unregisterPanel,
+    syncPanelGroup,
+    removePanelFromGroups,
     switchTab,
     closeTab,
     reorderTabInGroup,

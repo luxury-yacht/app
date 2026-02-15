@@ -61,6 +61,8 @@ describe('DockablePanelProvider', () => {
       expect(ctx.getAdjustedDimensions()).toEqual({ rightOffset: 0, bottomOffset: 0 });
       // New API: registerPanel takes a PanelRegistration object.
       ctx.registerPanel({ panelId: 'test', title: 'Test', position: 'right' });
+      ctx.syncPanelGroup('test', 'right');
+      ctx.removePanelFromGroups('test');
       ctx.unregisterPanel('test');
       return null;
     };
@@ -90,6 +92,7 @@ describe('DockablePanelProvider', () => {
 
     await act(async () => {
       ctx.registerPanel({ panelId: 'panel-right', title: 'Right Panel', position: 'right' });
+      ctx.syncPanelGroup('panel-right', 'right');
       await Promise.resolve();
     });
     expect(contextRef.current!.dockedPanels.right).toEqual(['panel-right']);
@@ -106,6 +109,7 @@ describe('DockablePanelProvider', () => {
         title: 'Bottom Panel',
         position: 'bottom',
       });
+      contextRef.current!.syncPanelGroup('panel-bottom', 'bottom');
       await Promise.resolve();
     });
     expect(contextRef.current!.dockedPanels.bottom).toEqual(['panel-bottom']);
@@ -115,6 +119,7 @@ describe('DockablePanelProvider', () => {
     });
 
     await act(async () => {
+      contextRef.current!.removePanelFromGroups('panel-right');
       contextRef.current!.unregisterPanel('panel-right');
       await Promise.resolve();
     });
@@ -140,7 +145,7 @@ describe('DockablePanelProvider', () => {
     expect(document.querySelector('.dockable-panel-layer')).toBeNull();
   });
 
-  it('exposes tabGroups state that reflects registered panels', async () => {
+  it('exposes tabGroups state that reflects explicit group sync actions', async () => {
     const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
       current: null,
     };
@@ -168,6 +173,7 @@ describe('DockablePanelProvider', () => {
         title: 'Logs',
         position: 'right',
       });
+      contextRef.current!.syncPanelGroup('logs', 'right');
       await Promise.resolve();
     });
     expect(contextRef.current!.tabGroups.right.tabs).toEqual(['logs']);
@@ -180,6 +186,7 @@ describe('DockablePanelProvider', () => {
         title: 'Details',
         position: 'right',
       });
+      contextRef.current!.syncPanelGroup('details', 'right');
       await Promise.resolve();
     });
     expect(contextRef.current!.tabGroups.right.tabs).toEqual(['logs', 'details']);
@@ -195,6 +202,7 @@ describe('DockablePanelProvider', () => {
 
     // Unregister details.
     await act(async () => {
+      contextRef.current!.removePanelFromGroups('details');
       contextRef.current!.unregisterPanel('details');
       await Promise.resolve();
     });

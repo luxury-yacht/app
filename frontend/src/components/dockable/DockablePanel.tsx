@@ -140,8 +140,11 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   );
   const panelState = useDockablePanelState(panelId);
   const {
+    isProviderActive,
     registerPanel,
     unregisterPanel,
+    syncPanelGroup,
+    removePanelFromGroups,
     tabGroups,
     panelRegistrations,
     switchTab,
@@ -305,6 +308,21 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       unregisterPanel(panelId);
     };
   }, [panelId, panelState.isOpen, panelState.position, registerPanel, unregisterPanel]);
+
+  // Keep tab-group membership in sync with open/close and dock position.
+  useEffect(() => {
+    if (!panelState.isOpen) {
+      removePanelFromGroups(panelId);
+      return;
+    }
+    syncPanelGroup(panelId, panelState.position);
+  }, [panelId, panelState.isOpen, panelState.position, syncPanelGroup, removePanelFromGroups]);
+
+  useEffect(() => {
+    return () => {
+      removePanelFromGroups(panelId);
+    };
+  }, [panelId, removePanelFromGroups]);
 
   // Manage body class to disable hover effects during floating panel drag.
   useEffect(() => {
@@ -476,26 +494,28 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     (panelId: string, targetGroupKey: string, insertIndex?: number) => {
       // For recognized docked positions or floating group IDs, delegate to the provider.
       movePanelBetweenGroups(panelId, targetGroupKey, insertIndex);
-
-      // Keep standalone/no-provider usage working by updating panel state directly.
-      const targetPosition: DockPosition =
-        targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
-      setPanelPositionById(panelId, targetPosition);
+      if (!isProviderActive) {
+        const targetPosition: DockPosition =
+          targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
+        setPanelPositionById(panelId, targetPosition);
+      }
     },
-    [movePanelBetweenGroups]
+    [isProviderActive, movePanelBetweenGroups]
   );
 
   const handleUndockTab = useCallback(
     (panelId: string, cursorX: number, cursorY: number) => {
       // Move the tab to a new floating group and place it near the drop cursor.
       movePanelBetweenGroups(panelId, 'floating');
-      setPanelPositionById(panelId, 'floating');
+      if (!isProviderActive) {
+        setPanelPositionById(panelId, 'floating');
+      }
       setPanelFloatingPositionById(panelId, {
         x: cursorX - 72,
         y: cursorY - 20,
       });
     },
-    [movePanelBetweenGroups]
+    [isProviderActive, movePanelBetweenGroups]
   );
 
   // Handle close -- closes the active tab. Only closes the panel if it's the last tab.
@@ -539,17 +559,29 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
       if (position === 'floating') {
         movePanelBetweenGroups(activePanelId, 'floating');
-        setPanelPositionById(activePanelId, 'floating');
+        if (!isProviderActive) {
+          setPanelPositionById(activePanelId, 'floating');
+        }
         focusPanelById(focusTargetPanelId);
         return;
       }
 
       movePanelBetweenGroups(activePanelId, position);
-      setPanelPositionById(activePanelId, position);
+      if (!isProviderActive) {
+        setPanelPositionById(activePanelId, position);
+      }
       focusPanelById(focusTargetPanelId);
       setLastFocusedGroupKey(position);
     },
-    [groupInfo, panelId, tabGroups, movePanelBetweenGroups, isMaximized, setLastFocusedGroupKey]
+    [
+      groupInfo,
+      isProviderActive,
+      panelId,
+      tabGroups,
+      movePanelBetweenGroups,
+      isMaximized,
+      setLastFocusedGroupKey,
+    ]
   );
 
   // Memoize panel classes and styles

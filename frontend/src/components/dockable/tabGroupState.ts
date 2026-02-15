@@ -7,23 +7,31 @@
 
 import type { TabGroupState, FloatingTabGroup, GroupKey } from './tabGroupTypes';
 
-// ---------------------------------------------------------------------------
-// Internal counter for deterministic floating group IDs.
-// ---------------------------------------------------------------------------
-let floatingGroupIdCounter = 0;
-
 /**
- * Reset the floating group ID counter.
- * Used in tests to produce deterministic IDs.
+ * Generate a deterministic floating group ID from the current state.
+ * This stays pure so React StrictMode double-invocations cannot consume IDs.
  */
-export function resetGroupIdCounter(): void {
-  floatingGroupIdCounter = 0;
-}
+function nextFloatingGroupId(state: TabGroupState): string {
+  const usedIds = new Set(state.floating.map((group) => group.groupId));
+  let maxNumericSuffix = 0;
 
-/** Generate the next floating group ID. */
-function nextFloatingGroupId(): string {
-  floatingGroupIdCounter += 1;
-  return `floating-${floatingGroupIdCounter}`;
+  for (const group of state.floating) {
+    const match = /^floating-(\d+)$/.exec(group.groupId);
+    if (!match) {
+      continue;
+    }
+    const parsed = Number.parseInt(match[1], 10);
+    if (Number.isFinite(parsed)) {
+      maxNumericSuffix = Math.max(maxNumericSuffix, parsed);
+    }
+  }
+
+  let candidate = maxNumericSuffix + 1;
+  while (usedIds.has(`floating-${candidate}`)) {
+    candidate += 1;
+  }
+
+  return `floating-${candidate}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -162,7 +170,7 @@ export function addPanelToGroup(
 
   // floating: create a brand new floating group.
   const newGroup: FloatingTabGroup = {
-    groupId: nextFloatingGroupId(),
+    groupId: nextFloatingGroupId(cleaned),
     tabs: [panelId],
     activeTab: panelId,
   };
