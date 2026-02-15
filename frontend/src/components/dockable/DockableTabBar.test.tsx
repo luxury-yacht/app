@@ -35,6 +35,37 @@ const renderTabBar = async (ui: React.ReactElement) => {
   };
 };
 
+/**
+ * Provide deterministic scroll metrics for jsdom and expose a setter
+ * so tests can emulate horizontal scrolling.
+ */
+const mockTabBarMetrics = (tabBar: HTMLElement, scrollWidth: number, clientWidth: number) => {
+  let currentScrollLeft = 0;
+
+  Object.defineProperty(tabBar, 'scrollWidth', {
+    configurable: true,
+    get: () => scrollWidth,
+  });
+  Object.defineProperty(tabBar, 'clientWidth', {
+    configurable: true,
+    get: () => clientWidth,
+  });
+  Object.defineProperty(tabBar, 'scrollLeft', {
+    configurable: true,
+    get: () => currentScrollLeft,
+    set: (next: number) => {
+      currentScrollLeft = next;
+    },
+  });
+
+  return {
+    setScrollLeft: (next: number) => {
+      currentScrollLeft = next;
+    },
+    getScrollLeft: () => currentScrollLeft,
+  };
+};
+
 describe('DockableTabBar', () => {
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -176,6 +207,130 @@ describe('DockableTabBar', () => {
 
     // The parent should NOT receive the mousedown event.
     expect(parentMouseDown).not.toHaveBeenCalled();
+
+    await unmount();
+  });
+
+  it('shows overflow hints when tabs exceed available width', async () => {
+    const tabs: TabInfo[] = [
+      { panelId: 'p1', title: 'Logs' },
+      { panelId: 'p2', title: 'Events' },
+      { panelId: 'p3', title: 'Terminal' },
+    ];
+
+    const { host, unmount } = await renderTabBar(
+      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+    );
+
+    const tabBar = host.querySelector('.dockable-tab-bar') as HTMLElement;
+    const metrics = mockTabBarMetrics(tabBar, 360, 180);
+    Object.defineProperty(tabBar, 'scrollBy', {
+      configurable: true,
+      value: ({ left }: { left: number }) => {
+        metrics.setScrollLeft(Math.max(0, Math.min(180, metrics.getScrollLeft() + left)));
+        tabBar.dispatchEvent(new Event('scroll'));
+      },
+    });
+
+    // Start at the left edge: should only show right hint.
+    await act(async () => {
+      metrics.setScrollLeft(0);
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(
+      host.querySelector('.dockable-tab-bar__overflow-indicator--left')
+    ).toBeNull();
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--right')).toBeTruthy();
+
+    // Mid-scroll: both hints should show.
+    await act(async () => {
+      metrics.setScrollLeft(90);
+      tabBar.dispatchEvent(new Event('scroll'));
+    });
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--left')).toBeTruthy();
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--right')).toBeTruthy();
+
+    // At far right: should only show left hint.
+    await act(async () => {
+      metrics.setScrollLeft(180);
+      tabBar.dispatchEvent(new Event('scroll'));
+    });
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--left')).toBeTruthy();
+    expect(
+      host.querySelector('.dockable-tab-bar__overflow-indicator--right')
+    ).toBeNull();
+
+    await unmount();
+  });
+
+  it('scrolls tabs when overflow controls are clicked', async () => {
+    const tabs: TabInfo[] = [
+      { panelId: 'p1', title: 'Logs' },
+      { panelId: 'p2', title: 'Events' },
+      { panelId: 'p3', title: 'Terminal' },
+    ];
+
+    const { host, unmount } = await renderTabBar(
+      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+    );
+
+    const tabBar = host.querySelector('.dockable-tab-bar') as HTMLElement;
+    const metrics = mockTabBarMetrics(tabBar, 360, 180);
+    Object.defineProperty(tabBar, 'scrollBy', {
+      configurable: true,
+      value: ({ left }: { left: number }) => {
+        metrics.setScrollLeft(Math.max(0, Math.min(180, metrics.getScrollLeft() + left)));
+        tabBar.dispatchEvent(new Event('scroll'));
+      },
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    const rightControl = host.querySelector(
+      '.dockable-tab-bar__overflow-indicator--right'
+    ) as HTMLButtonElement;
+    expect(rightControl).toBeTruthy();
+
+    await act(async () => {
+      rightControl.click();
+    });
+    expect(metrics.getScrollLeft()).toBe(120);
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--left')).toBeTruthy();
+
+    const leftControl = host.querySelector(
+      '.dockable-tab-bar__overflow-indicator--left'
+    ) as HTMLButtonElement;
+    expect(leftControl).toBeTruthy();
+
+    await act(async () => {
+      leftControl.click();
+    });
+    expect(metrics.getScrollLeft()).toBe(0);
+
+    await unmount();
+  });
+
+  it('hides overflow hints when tabs fit in available width', async () => {
+    const tabs: TabInfo[] = [
+      { panelId: 'p1', title: 'Logs' },
+      { panelId: 'p2', title: 'Events' },
+    ];
+
+    const { host, unmount } = await renderTabBar(
+      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+    );
+
+    const tabBar = host.querySelector('.dockable-tab-bar') as HTMLElement;
+    mockTabBarMetrics(tabBar, 180, 180);
+
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--left')).toBeNull();
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--right')).toBeNull();
 
     await unmount();
   });

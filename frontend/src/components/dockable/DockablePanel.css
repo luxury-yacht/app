@@ -67,11 +67,12 @@
 
 /* Header */
 .dockable-panel__header {
+  --dockable-panel-header-padding-x: 0.5rem;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  padding: 0 0.5rem;
+  padding: 0 var(--dockable-panel-header-padding-x);
   background: var(--color-bg-secondary, #242424);
   border-bottom: 1px solid var(--color-border, #333);
   flex-shrink: 0;
@@ -388,6 +389,25 @@ body.dockable-panel-resizing-sw * {
 }
 
 /* Tab bar */
+.dockable-tab-bar-shell {
+  --dockable-tab-overflow-indicator-size: 32px;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.dockable-tab-bar-shell--has-left-overflow .dockable-tab-bar {
+  margin-left: calc(
+    var(--dockable-tab-overflow-indicator-size) - var(--dockable-panel-header-padding-x, 0px)
+  );
+}
+
+.dockable-tab-bar-shell--has-right-overflow .dockable-tab-bar {
+  margin-right: var(--dockable-tab-overflow-indicator-size);
+}
+
 .dockable-tab-bar {
   display: flex;
   align-items: stretch;
@@ -471,4 +491,50 @@ body.dockable-panel-resizing-sw * {
   flex-shrink: 0;
   align-self: stretch;
   border-radius: 1px;
+}
+
+.dockable-tab-bar__overflow-indicator {
+  position: absolute;
+  top: 50%;
+  width: var(--dockable-tab-overflow-indicator-size);
+  height: var(--dockable-tab-overflow-indicator-size);
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  color: var(--color-text-secondary, #999);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dockable-tab-bar__overflow-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dockable-tab-bar__overflow-indicator--left {
+  left: calc(-1 * var(--dockable-panel-header-padding-x, 0px));
+}
+
+.dockable-tab-bar__overflow-indicator--right {
+  right: 0;
+}
+
+.dockable-tab-bar__overflow-indicator:hover {
+  background: var(--color-bg-tertiary, rgb(255 255 255 / 10%));
+  color: var(--color-text, #fff);
+}
+
+.dockable-tab-bar__overflow-indicator:focus-visible {
+  outline: 1px solid var(--color-accent, #3b82f6);
+  outline-offset: -1px;
 }
