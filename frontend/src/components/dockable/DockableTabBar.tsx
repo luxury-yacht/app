@@ -192,7 +192,9 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       return;
     }
 
-    tabToReveal.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (typeof tabToReveal.scrollIntoView === 'function') {
+      tabToReveal.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
     updateOverflowHint();
   }, [tabs, activeTab, updateOverflowHint]);
 

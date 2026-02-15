@@ -17,6 +17,7 @@ import React, {
 import { createPortal } from 'react-dom';
 import {
   copyPanelLayoutState,
+  focusPanelById,
   registerPanelCloseHandler,
   setPanelFloatingPositionById,
   setPanelPositionById,
@@ -521,15 +522,34 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       }
 
       const activePanelId = groupInfo?.activeTab ?? panelId;
+      // Keep the destination group frontmost after moving tabs via panel controls.
+      // For docked destinations with existing tabs, the visible container is the
+      // stable group leader, not necessarily the moved tab's own panel state.
+      let focusTargetPanelId = activePanelId;
+      if (position === 'right' || position === 'bottom') {
+        const targetGroupInfo = getGroupTabs(tabGroups, position);
+        if (targetGroupInfo && targetGroupInfo.tabs.length > 0) {
+          const rememberedLeader = groupLeaderByKey.get(position);
+          focusTargetPanelId =
+            rememberedLeader && targetGroupInfo.tabs.includes(rememberedLeader)
+              ? rememberedLeader
+              : targetGroupInfo.tabs[0];
+        }
+      }
+
       if (position === 'floating') {
         movePanelBetweenGroups(activePanelId, 'floating');
         setPanelPositionById(activePanelId, 'floating');
+        focusPanelById(focusTargetPanelId);
         return;
       }
+
       movePanelBetweenGroups(activePanelId, position);
       setPanelPositionById(activePanelId, position);
+      focusPanelById(focusTargetPanelId);
+      setLastFocusedGroupKey(position);
     },
-    [groupInfo, panelId, movePanelBetweenGroups, isMaximized]
+    [groupInfo, panelId, tabGroups, movePanelBetweenGroups, isMaximized, setLastFocusedGroupKey]
   );
 
   // Memoize panel classes and styles

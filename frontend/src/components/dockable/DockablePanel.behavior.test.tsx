@@ -826,6 +826,52 @@ describe('DockablePanel behaviour (real hook)', () => {
     await unmount();
   });
 
+  it('brings the destination group to front when docking an active tab into an existing group', async () => {
+    const { unmount } = await renderPanel(
+      <DockablePanelProvider>
+        <div>
+          <DockablePanel panelId="panel-target-bottom" defaultPosition="bottom" isOpen>
+            <div>target bottom</div>
+          </DockablePanel>
+          <DockablePanel panelId="panel-source-right-a" defaultPosition="right" isOpen>
+            <div>source right A</div>
+          </DockablePanel>
+          <DockablePanel panelId="panel-source-right-b" defaultPosition="right" isOpen>
+            <div>source right B</div>
+          </DockablePanel>
+        </div>
+      </DockablePanelProvider>
+    );
+
+    await flushEffects();
+
+    const beforeMoveStates = getAllPanelStates();
+    expect(beforeMoveStates['panel-target-bottom'].zIndex).toBeLessThan(
+      beforeMoveStates['panel-source-right-a'].zIndex
+    );
+
+    // Right group's active tab is panel-source-right-b; docking should move it
+    // into the existing bottom group and bring that destination group forward.
+    const dockBottomButton = document.querySelector(
+      'button[aria-label="Dock panel to bottom"]'
+    ) as HTMLButtonElement | null;
+    expect(dockBottomButton).toBeTruthy();
+
+    await act(async () => {
+      dockBottomButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await flushEffects();
+
+    const afterMoveStates = getAllPanelStates();
+    expect(afterMoveStates['panel-source-right-b'].position).toBe('bottom');
+    expect(afterMoveStates['panel-target-bottom'].zIndex).toBeGreaterThan(
+      afterMoveStates['panel-source-right-a'].zIndex
+    );
+
+    await unmount();
+  });
+
   it('closes the active tab even when the panel has no explicit onClose handler', async () => {
     const { unmount } = await renderPanel(
       <DockablePanelProvider>
