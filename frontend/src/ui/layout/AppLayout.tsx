@@ -6,13 +6,13 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 // Assets
 import logo from '@assets/luxury-yacht-logo.png';
 import captainK8s from '@assets/captain-k8s-color.png';
 // App Stuff
 import '@/App.css';
 import { withLazyBoundary } from '@components/hoc/withLazyBoundary';
+import { DebugOverlay } from '@ui/layout/DebugOverlay';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
@@ -329,11 +329,7 @@ export const AppLayout: React.FC = () => {
         <CommandPalette commands={commands} />
         {isPanelDebugOverlayVisible && <PanelDebugOverlay />}
         {isFocusOverlayVisible && <KeyboardFocusOverlay />}
-        {isErrorOverlayVisible && (
-          <React.Suspense fallback={null}>
-            <DevTestErrorBoundaryLazy />
-          </React.Suspense>
-        )}
+        {isErrorOverlayVisible && <ErrorBoundaryDebugOverlay />}
       </div>
     </DockablePanelProvider>
   );
@@ -375,7 +371,6 @@ const describeFocusTarget = (element: Element | null): string => {
 };
 
 const KeyboardFocusOverlay: React.FC = () => {
-  const [sidebarElement, setSidebarElement] = useState<HTMLElement | null>(null);
   const [description, setDescription] = useState('No active element');
 
   useEffect(() => {
@@ -399,74 +394,20 @@ const KeyboardFocusOverlay: React.FC = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-
-    const existing = document.querySelector('.sidebar');
-    if (existing instanceof HTMLElement) {
-      setSidebarElement(existing);
-      return;
-    }
-
-    const observer = new MutationObserver(() => {
-      const sidebar = document.querySelector('.sidebar');
-      if (sidebar instanceof HTMLElement) {
-        setSidebarElement(sidebar);
-        observer.disconnect();
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, []);
-
-  if (!sidebarElement) {
-    return null;
-  }
-
-  return createPortal(
-    <div className="keyboard-focus-overlay">
-      <div className="keyboard-focus-overlay__label">Focus target</div>
-      <div className="keyboard-focus-overlay__value" title={description}>
-        {description}
+  return (
+    <DebugOverlay title="Keyboard Focus (Ctrl+Alt+K)" testId="keyboard-focus-overlay">
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Focus target</div>
+        <div className="debug-overlay__value" title={description}>
+          {description}
+        </div>
       </div>
-    </div>,
-    sidebarElement
+    </DebugOverlay>
   );
 };
 
 const PanelDebugOverlay: React.FC = () => {
-  const [sidebarElement, setSidebarElement] = useState<HTMLElement | null>(null);
   const { tabGroups, panelRegistrations } = useDockablePanelContext();
-
-  useEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-
-    const existing = document.querySelector('.sidebar');
-    if (existing instanceof HTMLElement) {
-      setSidebarElement(existing);
-      return;
-    }
-
-    const observer = new MutationObserver(() => {
-      const sidebar = document.querySelector('.sidebar');
-      if (sidebar instanceof HTMLElement) {
-        setSidebarElement(sidebar);
-        observer.disconnect();
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, []);
-
-  if (!sidebarElement) {
-    return null;
-  }
 
   const assignedGroupsByPanelId = new Map<string, string>();
   tabGroups.right.tabs.forEach((panelId) => assignedGroupsByPanelId.set(panelId, 'right'));
@@ -493,60 +434,113 @@ const PanelDebugOverlay: React.FC = () => {
     (panelId) => !panelRegistrations.has(panelId)
   );
 
-  return createPortal(
-    <div className="panel-debug-overlay" data-testid="panel-debug-overlay">
-      <div className="panel-debug-overlay__header">Panel Debug (Ctrl+Alt+P)</div>
-      <div className="panel-debug-overlay__section">
-        <div className="panel-debug-overlay__label">
-          Registered Panels ({registeredPanels.length})
-        </div>
-        <ul className="panel-debug-overlay__list">
-          {registeredPanels.map((registration) => (
-            <li key={registration.panelId}>
-              <span className="panel-debug-overlay__panel-title">{registration.title}</span>
-              <span className="panel-debug-overlay__panel-meta">
-                {' '}
-                [{registration.panelId}] in{' '}
-                {assignedGroupsByPanelId.get(registration.panelId) ?? 'unassigned'}
-              </span>
-            </li>
+  const groups = [
+    {
+      id: 'right',
+      label: 'right',
+      tabs: tabGroups.right.tabs,
+      activeTab: tabGroups.right.activeTab,
+    },
+    {
+      id: 'bottom',
+      label: 'bottom',
+      tabs: tabGroups.bottom.tabs,
+      activeTab: tabGroups.bottom.activeTab,
+    },
+    ...tabGroups.floating.map((group) => ({
+      id: `floating:${group.groupId}`,
+      label: `floating:${group.groupId}`,
+      tabs: group.tabs,
+      activeTab: group.activeTab,
+    })),
+  ];
+
+  return (
+    <DebugOverlay title="Panel Debug (Ctrl+Alt+P)" testId="panel-debug-overlay">
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Hierarchy ({registeredPanels.length} registered)</div>
+        <div className="panel-debug-tree">
+          {groups.map((group) => (
+            <div key={group.id} className="panel-debug-tree__group">
+              <div className="panel-debug-tree__group-header">
+                <span className="panel-debug-tree__group-name">{group.label}</span>
+                <span className="panel-debug-tree__group-count">{group.tabs.length}</span>
+              </div>
+              {group.tabs.length === 0 ? (
+                <div className="panel-debug-tree__empty">No tabs</div>
+              ) : (
+                <ul className="panel-debug-tree__tabs">
+                  {group.tabs.map((panelId) => {
+                    const registration = panelRegistrations.get(panelId);
+                    const tabTitle = registration?.title ?? panelId;
+                    const isActive = panelId === group.activeTab;
+                    return (
+                      <li key={panelId} className="panel-debug-tree__tab-item">
+                        <span className="panel-debug-tree__branch" aria-hidden="true">
+                          └
+                        </span>
+                        <div className="panel-debug-tree__tab-content">
+                          <div className="panel-debug-tree__tab-row">
+                            <span
+                              className={`panel-debug-tree__status-dot${isActive ? ' panel-debug-tree__status-dot--active' : ''}`}
+                              aria-hidden="true"
+                            />
+                            <span className="panel-debug-tree__tab-title" title={tabTitle}>
+                              {tabTitle}
+                            </span>
+                          </div>
+                          <div className="panel-debug-tree__tab-id" title={panelId}>
+                            {panelId}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
           ))}
-        </ul>
-      </div>
-      <div className="panel-debug-overlay__section">
-        <div className="panel-debug-overlay__label">
-          Groups
         </div>
-        <ul className="panel-debug-overlay__list">
-          <li>
-            right: [{tabGroups.right.tabs.join(', ')}] active={tabGroups.right.activeTab ?? 'none'}
-          </li>
-          <li>
-            bottom: [{tabGroups.bottom.tabs.join(', ')}] active={tabGroups.bottom.activeTab ?? 'none'}
-          </li>
-          {tabGroups.floating.map((group) => (
-            <li key={group.groupId}>
-              floating:{group.groupId}: [{group.tabs.join(', ')}] active={group.activeTab ?? 'none'}
-            </li>
-          ))}
-        </ul>
       </div>
-      <div className="panel-debug-overlay__section">
-        <div className="panel-debug-overlay__label">
-          Integrity
+      <div className="debug-overlay__section">
+        <div className="debug-overlay__label">Integrity</div>
+        <div className="panel-debug-tree__integrity-row">
+          <span>unassigned registered</span>
+          <strong>{ungroupedRegisteredPanels.length}</strong>
         </div>
-        <ul className="panel-debug-overlay__list">
-          <li>
-            unassigned registered panels ({ungroupedRegisteredPanels.length}):{' '}
-            {ungroupedRegisteredPanels.map((panel) => panel.panelId).join(', ') || 'none'}
-          </li>
-          <li>
-            unregistered grouped panels ({unregisteredGroupedPanelIds.length}):{' '}
-            {unregisteredGroupedPanelIds.join(', ') || 'none'}
-          </li>
-        </ul>
+        {ungroupedRegisteredPanels.length > 0 ? (
+          <ul className="panel-debug-tree__ids">
+            {ungroupedRegisteredPanels.map((panel) => (
+              <li key={panel.panelId} title={panel.panelId}>
+                {panel.panelId}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <div className="panel-debug-tree__integrity-row">
+          <span>unregistered grouped</span>
+          <strong>{unregisteredGroupedPanelIds.length}</strong>
+        </div>
+        {unregisteredGroupedPanelIds.length > 0 ? (
+          <ul className="panel-debug-tree__ids">
+            {unregisteredGroupedPanelIds.map((panelId) => (
+              <li key={panelId} title={panelId}>
+                {panelId}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
-    </div>,
-    sidebarElement
+    </DebugOverlay>
+  );
+};
+
+const ErrorBoundaryDebugOverlay: React.FC = () => {
+  return (
+    <DebugOverlay title="Error Boundary Tests (Ctrl+Alt+E)" testId="error-debug-overlay">
+      <React.Suspense fallback={<div className="debug-overlay__meta">Loading error tests...</div>}>
+        <DevTestErrorBoundaryLazy embedded />
+      </React.Suspense>
+    </DebugOverlay>
   );
 };
