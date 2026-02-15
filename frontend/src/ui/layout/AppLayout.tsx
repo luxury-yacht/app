@@ -327,9 +327,15 @@ export const AppLayout: React.FC = () => {
         </PanelErrorBoundary>
         <ErrorNotificationSystem />
         <CommandPalette commands={commands} />
-        {isPanelDebugOverlayVisible && <PanelDebugOverlay />}
-        {isFocusOverlayVisible && <KeyboardFocusOverlay />}
-        {isErrorOverlayVisible && <ErrorBoundaryDebugOverlay />}
+        {isPanelDebugOverlayVisible && (
+          <PanelDebugOverlay onClose={() => setIsPanelDebugOverlayVisible(false)} />
+        )}
+        {isFocusOverlayVisible && (
+          <KeyboardFocusOverlay onClose={() => setIsFocusOverlayVisible(false)} />
+        )}
+        {isErrorOverlayVisible && (
+          <ErrorBoundaryDebugOverlay onClose={() => setIsErrorOverlayVisible(false)} />
+        )}
       </div>
     </DockablePanelProvider>
   );
@@ -370,7 +376,12 @@ const describeFocusTarget = (element: Element | null): string => {
   return element.tagName.toLowerCase();
 };
 
-const KeyboardFocusOverlay: React.FC = () => {
+interface OverlayCloseProps {
+  // Each debug overlay is toggleable, so the shell gets a close callback.
+  onClose: () => void;
+}
+
+const KeyboardFocusOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
   const [description, setDescription] = useState('No active element');
 
   useEffect(() => {
@@ -395,7 +406,11 @@ const KeyboardFocusOverlay: React.FC = () => {
   }, []);
 
   return (
-    <DebugOverlay title="Keyboard Focus (Ctrl+Alt+K)" testId="keyboard-focus-overlay">
+    <DebugOverlay
+      title="Keyboard Focus (Ctrl+Alt+K)"
+      testId="keyboard-focus-overlay"
+      onClose={onClose}
+    >
       <div className="debug-overlay__section">
         <div className="debug-overlay__label">Focus target</div>
         <div className="debug-overlay__value" title={description}>
@@ -406,7 +421,7 @@ const KeyboardFocusOverlay: React.FC = () => {
   );
 };
 
-const PanelDebugOverlay: React.FC = () => {
+const PanelDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
   const { tabGroups, panelRegistrations } = useDockablePanelContext();
   const [focusedPanelId, setFocusedPanelId] = useState<string | null>(null);
 
@@ -498,7 +513,11 @@ const PanelDebugOverlay: React.FC = () => {
   ];
 
   return (
-    <DebugOverlay title="Panel Debug (Ctrl+Alt+P)" testId="panel-debug-overlay">
+    <DebugOverlay
+      title="Panel Debug (Ctrl+Alt+P)"
+      testId="panel-debug-overlay"
+      onClose={onClose}
+    >
       <div className="debug-overlay__section">
         <div className="debug-overlay__label">Hierarchy ({registeredPanels.length} registered)</div>
         <div className="panel-debug-tree">
@@ -580,9 +599,13 @@ const PanelDebugOverlay: React.FC = () => {
   );
 };
 
-const ErrorBoundaryDebugOverlay: React.FC = () => {
+const ErrorBoundaryDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
   return (
-    <DebugOverlay title="Error Boundary Tests (Ctrl+Alt+E)" testId="error-debug-overlay">
+    <DebugOverlay
+      title="Error Boundary Tests (Ctrl+Alt+E)"
+      testId="error-debug-overlay"
+      onClose={onClose}
+    >
       <React.Suspense fallback={<div className="debug-overlay__meta">Loading error tests...</div>}>
         <DevTestErrorBoundaryLazy embedded />
       </React.Suspense>

@@ -102,9 +102,13 @@ function Sidebar() {
   const sidebarSelection = viewState.sidebarSelection;
   const selectedNamespaceRef = useRef<HTMLDivElement>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const overlaySlotRef = useRef<HTMLDivElement>(null);
   const keyboardCursorIndexRef = useRef<number | null>(null);
   const [cursorPreview, setCursorPreview] = useState<SidebarCursorTarget | null>(null);
   const [pendingSelection, setPendingSelection] = useState<SidebarCursorTarget | null>(null);
+  const [hasOverlayContent, setHasOverlayContent] = useState(false);
+  const [overlayHeight, setOverlayHeight] = useState(400);
+  const [isOverlayResizing, setIsOverlayResizing] = useState(false);
   const pendingCommitRef = useRef<SidebarCursorTarget | null>(null);
   const keyboardActivationRef = useRef(false);
   const clearKeyboardPreview = useCallback(() => {
@@ -355,6 +359,50 @@ function Sidebar() {
   const showClusterLabels = namespaceGroups.length > 1;
   const showNamespaceLoading = namespaceLoading;
 
+  useEffect(() => {
+    const slot = overlaySlotRef.current;
+    if (!slot) {
+      return;
+    }
+
+    const updateOverlayPresence = () => {
+      setHasOverlayContent(slot.childElementCount > 0);
+    };
+
+    updateOverlayPresence();
+    const observer = new MutationObserver(updateOverlayPresence);
+    observer.observe(slot, { childList: true, subtree: false });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!isOverlayResizing) {
+      return;
+    }
+
+    const handleMouseMove = (event: MouseEvent) => {
+      const sidebarRect = sidebarRef.current?.getBoundingClientRect();
+      if (!sidebarRect) {
+        return;
+      }
+      const minHeight = 120;
+      const maxHeight = Math.max(minHeight, sidebarRect.height - 120);
+      const nextHeight = Math.round(sidebarRect.bottom - event.clientY);
+      setOverlayHeight(Math.max(minHeight, Math.min(maxHeight, nextHeight)));
+    };
+
+    const handleMouseUp = () => {
+      setIsOverlayResizing(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isOverlayResizing]);
+
   return (
     <div
       className={`sidebar ${isCollapsed ? 'collapsed' : ''} ${
@@ -566,6 +614,22 @@ function Sidebar() {
             </div>
           </>
         )}
+      </div>
+      <div
+        className={`sidebar-overlay-content${hasOverlayContent && !isCollapsed ? ' sidebar-overlay-content--visible' : ''}`}
+        style={{ height: `${overlayHeight}px` }}
+      >
+        <div
+          className="sidebar-overlay-resizer"
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize debug overlay"
+          onMouseDown={(event) => {
+            event.preventDefault();
+            setIsOverlayResizing(true);
+          }}
+        />
+        <div className="sidebar-overlay-slot" ref={overlaySlotRef} />
       </div>
     </div>
   );
