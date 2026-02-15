@@ -826,6 +826,40 @@ describe('DockablePanel behaviour (real hook)', () => {
     await unmount();
   });
 
+  it('closes the active tab even when the panel has no explicit onClose handler', async () => {
+    const { unmount } = await renderPanel(
+      <DockablePanelProvider>
+        <div>
+          <DockablePanel panelId="panel-close-fallback-a" defaultPosition="right">
+            <div>panel A</div>
+          </DockablePanel>
+          <DockablePanel panelId="panel-close-fallback-b" defaultPosition="right">
+            <div>panel B</div>
+          </DockablePanel>
+        </div>
+      </DockablePanelProvider>
+    );
+
+    await flushEffects();
+
+    const closeButton = document.querySelector(
+      'button[aria-label="Close panel"]'
+    ) as HTMLButtonElement | null;
+    expect(closeButton).toBeTruthy();
+
+    await act(async () => {
+      closeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await flushEffects();
+
+    // Most recently opened tab was active and should be closed.
+    expect(getPanelState('panel-close-fallback-b').isOpen).toBe(false);
+    expect(getPanelState('panel-close-fallback-a').isOpen).toBe(true);
+
+    await unmount();
+  });
+
   it('allows multiple floating panels to remain open simultaneously', async () => {
     const { unmount } = await renderPanel(
       <div>

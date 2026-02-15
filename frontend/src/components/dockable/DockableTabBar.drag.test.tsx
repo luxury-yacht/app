@@ -219,7 +219,7 @@ describe('DockableTabBar drag-and-drop', () => {
 
     await act(async () => {
       fireMouseDown(firstTab, 50, 50);
-      fireMouseMove(200, 50);
+      fireMouseMove(0, 0);
     });
 
     // Release -- drop target is same group.
@@ -480,6 +480,39 @@ describe('DockableTabBar drag-and-drop', () => {
     // No dragging class should be applied.
     const draggingTabs = host.querySelectorAll('.dockable-tab--dragging');
     expect(draggingTabs).toHaveLength(0);
+
+    await unmount();
+  });
+
+  it('commits a drag drop using internal ref state even before parent rerender', async () => {
+    const onReorderTab = vi.fn();
+    const onDragStateChange = vi.fn();
+
+    const { host, unmount } = await renderTabBar(
+      <DockableTabBar
+        tabs={defaultTabs}
+        activeTab="p1"
+        onTabClick={vi.fn()}
+        groupKey="bottom"
+        dragState={null}
+        onDragStateChange={onDragStateChange}
+        onReorderTab={onReorderTab}
+        onMoveToGroup={vi.fn()}
+        onUndockTab={vi.fn()}
+      />
+    );
+
+    const tabElements = host.querySelectorAll('.dockable-tab');
+    const firstTab = tabElements[0] as HTMLElement;
+
+    await act(async () => {
+      fireMouseDown(firstTab, -10, 0);
+      fireMouseMove(0, 0);
+      fireMouseUp();
+    });
+
+    expect(onReorderTab).toHaveBeenCalledWith('p1', expect.any(Number));
+    expect(onDragStateChange).toHaveBeenCalledWith(null);
 
     await unmount();
   });

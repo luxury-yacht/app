@@ -17,7 +17,7 @@ import React, {
 } from 'react';
 import type { TabGroupState, TabDragState, GroupKey, PanelRegistration } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
-import { focusPanelById, setPanelPositionById } from './useDockablePanelState';
+import { focusPanelById, setPanelOpenById, setPanelPositionById } from './useDockablePanelState';
 import {
   createInitialTabGroupState,
   addPanelToGroup,
@@ -191,17 +191,14 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   }, [lastFocusedGroupKey, tabGroups]);
 
   // Focus a panel by ID: activate its tab in the group and bring it to front.
-  const focusPanel = useCallback(
-    (panelId: string) => {
-      setTabGroups((prev) => {
-        const groupKey = getGroupForPanel(prev, panelId);
-        if (!groupKey) return prev;
-        return setActiveTab(prev, panelId, groupKey);
-      });
-      focusPanelById(panelId);
-    },
-    []
-  );
+  const focusPanel = useCallback((panelId: string) => {
+    setTabGroups((prev) => {
+      const groupKey = getGroupForPanel(prev, panelId);
+      if (!groupKey) return prev;
+      return setActiveTab(prev, panelId, groupKey);
+    });
+    focusPanelById(panelId);
+  }, []);
 
   // -----------------------------------------------------------------------
   // registerPanel -- called by DockablePanel when it mounts / becomes open.
@@ -265,8 +262,12 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     // Remove from the tab group.
     setTabGroups((prev) => removePanelFromGroup(prev, panelId));
 
-    // Fire the panel's onClose callback if it has one.
-    registration?.onClose?.();
+    // Prefer external close handler, but fall back to directly closing the panel.
+    if (registration?.onClose) {
+      registration.onClose();
+      return;
+    }
+    setPanelOpenById(panelId, false);
   }, []);
 
   // -----------------------------------------------------------------------

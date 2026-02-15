@@ -16,6 +16,7 @@ import React, {
 } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  copyPanelLayoutState,
   registerPanelCloseHandler,
   setPanelFloatingPositionById,
   setPanelPositionById,
@@ -88,6 +89,7 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
 
 // Track hover suppression across panels so one panel doesn't re-enable hover during another drag.
 let hoverSuppressionCount = 0;
+const groupLeaderByKey = new Map<string, string>();
 
 function updateGridTableHoverSuppression(shouldSuppress: boolean) {
   if (typeof document === 'undefined') {
@@ -337,8 +339,37 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   // -----------------------------------------------------------------------
   const groupKey: GroupKey | null = getGroupForPanel(tabGroups, panelId);
   const groupInfo = groupKey ? getGroupTabs(tabGroups, groupKey) : null;
-  const isGroupLeader = groupInfo ? groupInfo.tabs[0] === panelId : true;
+  const leaderPanelId = useMemo(() => {
+    if (!groupKey || !groupInfo || groupInfo.tabs.length === 0) {
+      return panelId;
+    }
+    const rememberedLeader = groupLeaderByKey.get(groupKey);
+    if (rememberedLeader && groupInfo.tabs.includes(rememberedLeader)) {
+      return rememberedLeader;
+    }
+    return groupInfo.tabs[0];
+  }, [groupKey, groupInfo, panelId]);
+  const isGroupLeader = groupInfo ? leaderPanelId === panelId : true;
   const groupTabCount = groupInfo?.tabs.length ?? 0;
+
+  // Keep one stable leader per group to avoid container jumps when tab order changes.
+  // If leadership transfers, clone layout geometry from prior leader to new leader.
+  useLayoutEffect(() => {
+    if (!groupKey || !groupInfo || groupInfo.tabs.length === 0) {
+      if (groupKey) {
+        groupLeaderByKey.delete(groupKey);
+      }
+      return;
+    }
+    if (!isGroupLeader) {
+      return;
+    }
+    const previousLeader = groupLeaderByKey.get(groupKey);
+    if (previousLeader && previousLeader !== panelId) {
+      copyPanelLayoutState(previousLeader, panelId);
+    }
+    groupLeaderByKey.set(groupKey, panelId);
+  }, [groupKey, groupInfo, isGroupLeader, panelId]);
 
   // Set CSS variables so .app-main can shrink the content area for docked panels.
   // Only the group leader sets these -- non-leaders must not touch the CSS variables,
@@ -566,22 +597,30 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       ref={setPanelRef}
       className={panelClassName}
       style={isGroupLeader ? panelStyle : { display: 'none' }}
-      onMouseDownCapture={isGroupLeader ? () => {
-        // Capture phase ensures focus/tracking runs even when children
-        // stop propagation (e.g. tab bar, object panel header).
-        panelState.focus();
-        if (groupKey) {
-          setLastFocusedGroupKey(groupKey);
-        }
-      } : undefined}
-      onMouseDown={isGroupLeader ? (e: React.MouseEvent) => {
-        if (isMaximized) {
-          return;
-        }
-        if (panelState.position === 'floating') {
-          handleFloatingMouseDown(e);
-        }
-      } : undefined}
+      onMouseDownCapture={
+        isGroupLeader
+          ? () => {
+              // Capture phase ensures focus/tracking runs even when children
+              // stop propagation (e.g. tab bar, object panel header).
+              panelState.focus();
+              if (groupKey) {
+                setLastFocusedGroupKey(groupKey);
+              }
+            }
+          : undefined
+      }
+      onMouseDown={
+        isGroupLeader
+          ? (e: React.MouseEvent) => {
+              if (isMaximized) {
+                return;
+              }
+              if (panelState.position === 'floating') {
+                handleFloatingMouseDown(e);
+              }
+            }
+          : undefined
+      }
       onMouseMove={isGroupLeader && !isMaximized ? handlePanelMouseMove : undefined}
       role="dialog"
       aria-label={activeTitle}

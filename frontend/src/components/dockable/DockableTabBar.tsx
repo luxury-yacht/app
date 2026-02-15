@@ -187,12 +187,14 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
         }
       }
 
-      onDragStateChange!({
+      const nextDragState: TabDragState = {
         panelId: dragStart.panelId,
         sourceGroupKey: groupKey,
         cursorPosition: { x: e.clientX, y: e.clientY },
         dropTarget,
-      });
+      };
+      dragStateRef.current = nextDragState;
+      onDragStateChange!(nextDragState);
     };
 
     document.addEventListener('mousemove', handleMouseMove);
@@ -207,21 +209,23 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
 
     const handleMouseUp = () => {
       const dragStart = dragStartRef.current;
+      const currentDragState = dragStateRef.current;
       dragStartRef.current = null;
 
-      if (!dragStart || !dragStart.isDragging || !dragState) {
+      if (!dragStart || !dragStart.isDragging || !currentDragState) {
         // No drag in progress -- clear any drag state.
         if (dragStart?.isDragging) {
+          dragStateRef.current = null;
           onDragStateChange!(null);
         }
         return;
       }
 
-      const { panelId, sourceGroupKey } = dragState;
+      const { panelId, sourceGroupKey } = currentDragState;
 
-      if (dragState.dropTarget) {
+      if (currentDragState.dropTarget) {
         // Drop on a tab bar.
-        const { groupKey: targetGroupKey, insertIndex } = dragState.dropTarget;
+        const { groupKey: targetGroupKey, insertIndex } = currentDragState.dropTarget;
         if (targetGroupKey === sourceGroupKey) {
           // Reorder within the same group.
           onReorderTab!(panelId, insertIndex);
@@ -234,23 +238,28 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
         const barRect = barRef.current?.getBoundingClientRect();
         if (barRect) {
           const verticalDistance = Math.min(
-            Math.abs(dragState.cursorPosition.y - barRect.top),
-            Math.abs(dragState.cursorPosition.y - barRect.bottom)
+            Math.abs(currentDragState.cursorPosition.y - barRect.top),
+            Math.abs(currentDragState.cursorPosition.y - barRect.bottom)
           );
           if (verticalDistance > UNDOCK_THRESHOLD) {
-            onUndockTab!(panelId, dragState.cursorPosition.x, dragState.cursorPosition.y);
+            onUndockTab!(
+              panelId,
+              currentDragState.cursorPosition.x,
+              currentDragState.cursorPosition.y
+            );
           }
           // Otherwise: cancel -- cursor is still near the bar.
         }
       }
 
       // Clear drag state.
+      dragStateRef.current = null;
       onDragStateChange!(null);
     };
 
     document.addEventListener('mouseup', handleMouseUp);
     return () => document.removeEventListener('mouseup', handleMouseUp);
-  }, [dragEnabled, dragState, onDragStateChange, onReorderTab, onMoveToGroup, onUndockTab]);
+  }, [dragEnabled, onDragStateChange, onReorderTab, onMoveToGroup, onUndockTab]);
 
   // -----------------------------------------------------------------------
   // Drop target detection -- other tab bars update the drop target when
@@ -259,8 +268,9 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   const handleBarMouseMove = useCallback(
     (e: React.MouseEvent) => {
       // Only respond when a drag is active and originates from a different group.
-      if (!dragState || !onDragStateChange || !barRef.current) return;
-      if (dragState.sourceGroupKey === groupKey) return;
+      const currentDragState = dragStateRef.current;
+      if (!currentDragState || !onDragStateChange || !barRef.current) return;
+      if (currentDragState.sourceGroupKey === groupKey) return;
 
       const insertIndex = calculateInsertIndex(
         barRef.current,
@@ -270,40 +280,48 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       );
 
       // Update the drop target to this bar.
-      onDragStateChange({
-        ...dragState,
+      const nextDragState = {
+        ...currentDragState,
         dropTarget: { groupKey, insertIndex },
-      });
+      };
+      dragStateRef.current = nextDragState;
+      onDragStateChange(nextDragState);
     },
-    [dragState, onDragStateChange, groupKey, tabs]
+    [onDragStateChange, groupKey, tabs]
   );
 
   const handleBarMouseEnter = useCallback(
     (e: React.MouseEvent) => {
       // Set drop target when entering this bar during a cross-group drag.
-      if (!dragState || !onDragStateChange || !barRef.current) return;
-      if (dragState.sourceGroupKey === groupKey) return;
+      const currentDragState = dragStateRef.current;
+      if (!currentDragState || !onDragStateChange || !barRef.current) return;
+      if (currentDragState.sourceGroupKey === groupKey) return;
 
       const insertIndex = calculateInsertIndex(barRef.current, e.clientX, tabs, null);
 
-      onDragStateChange({
-        ...dragState,
+      const nextDragState = {
+        ...currentDragState,
         dropTarget: { groupKey, insertIndex },
-      });
+      };
+      dragStateRef.current = nextDragState;
+      onDragStateChange(nextDragState);
     },
-    [dragState, onDragStateChange, groupKey, tabs]
+    [onDragStateChange, groupKey, tabs]
   );
 
   const handleBarMouseLeave = useCallback(() => {
     // Clear drop target if it was pointing at this bar.
-    if (!dragState || !onDragStateChange) return;
-    if (dragState.dropTarget?.groupKey === groupKey) {
-      onDragStateChange({
-        ...dragState,
+    const currentDragState = dragStateRef.current;
+    if (!currentDragState || !onDragStateChange) return;
+    if (currentDragState.dropTarget?.groupKey === groupKey) {
+      const nextDragState = {
+        ...currentDragState,
         dropTarget: null,
-      });
+      };
+      dragStateRef.current = nextDragState;
+      onDragStateChange(nextDragState);
     }
-  }, [dragState, onDragStateChange, groupKey]);
+  }, [onDragStateChange, groupKey]);
 
   // Determine if this bar is the current drop target.
   const isDropTarget = dragState?.dropTarget?.groupKey === groupKey;

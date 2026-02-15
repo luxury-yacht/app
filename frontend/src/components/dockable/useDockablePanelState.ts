@@ -130,6 +130,37 @@ export function setPanelFloatingPositionById(panelId: string, position: { x: num
 }
 
 /**
+ * Set a panel's open state by ID.
+ * Used by provider-level tab close flows as a fallback when no external onClose is provided.
+ */
+export function setPanelOpenById(panelId: string, isOpen: boolean) {
+  setPanelOpenState(panelId, isOpen);
+}
+
+/**
+ * Copy layout-related fields from one panel to another.
+ * Keeps tab-group container geometry stable when leadership transfers.
+ */
+export function copyPanelLayoutState(sourcePanelId: string, targetPanelId: string) {
+  if (sourcePanelId === targetPanelId) {
+    return;
+  }
+  const sourceState = panelStates.get(sourcePanelId);
+  if (!sourceState) {
+    return;
+  }
+  const targetState = getInitialState(targetPanelId);
+  updatePanelState(targetPanelId, {
+    position: sourceState.position,
+    floatingSize: { ...sourceState.floatingSize },
+    rightSize: { ...sourceState.rightSize },
+    bottomSize: { ...sourceState.bottomSize },
+    floatingPosition: { ...sourceState.floatingPosition },
+    zIndex: Math.max(targetState.zIndex, sourceState.zIndex),
+  });
+}
+
+/**
  * Remove a panel's stored state entirely so it gets fresh defaults on reopen.
  * Used when object panels are closed to prevent stale position memory.
  */
