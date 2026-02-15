@@ -12,6 +12,8 @@ import type { DockPosition } from './useDockablePanelState';
 export interface PanelRegistration {
   panelId: string;
   title: string;
+  /** Optional normalized kind class used for compact tab type indicators. */
+  tabKindClass?: string;
   position: DockPosition;
   defaultSize?: { width?: number; height?: number };
   allowMaximize?: boolean;

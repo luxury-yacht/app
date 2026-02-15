@@ -194,6 +194,9 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
 
   // Keep tab labels concise and consistent: object name only.
   const tabTitle = objectData?.name?.trim() || 'Object';
+  const tabKindClass = (objectData?.kind || objectData?.kindAlias || 'object')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 
   // Use reducer for state management
   const [state, dispatch] = useReducer(panelReducer, INITIAL_PANEL_STATE);
@@ -635,6 +638,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         isOpen={isOpen}
         defaultPosition={getLastFocusedPosition()}
         className="object-panel-dockable"
+        tabKindClass={tabKindClass}
         allowMaximize
         maximizeTargetSelector=".content-body"
         onClose={close}

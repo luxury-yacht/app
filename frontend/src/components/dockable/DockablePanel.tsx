@@ -66,6 +66,8 @@ interface DockablePanelProps {
   // Class names for styling
   className?: string;
   contentClassName?: string;
+  // Optional normalized kind class for rendering a compact tab indicator.
+  tabKindClass?: string;
 
   // Maximize support
   allowMaximize?: boolean;
@@ -121,6 +123,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     onPositionChange,
     className = '',
     contentClassName = '',
+    tabKindClass,
     allowMaximize = false,
     onMaximizeChange,
     maximizeTargetSelector = '.content-body',
@@ -256,6 +259,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     maximizeTargetSelector,
     className,
     contentClassName,
+    tabKindClass,
     onClose,
     onPositionChange,
     onMaximizeChange,
@@ -268,6 +272,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     maximizeTargetSelector,
     className,
     contentClassName,
+    tabKindClass,
     onClose,
     onPositionChange,
     onMaximizeChange,
@@ -289,6 +294,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       maximizeTargetSelector: rp.maximizeTargetSelector,
       className: rp.className,
       contentClassName: rp.contentClassName,
+      tabKindClass: rp.tabKindClass,
       onClose: rp.onClose,
       onPositionChange: rp.onPositionChange,
       onMaximizeChange: rp.onMaximizeChange,
@@ -430,14 +436,15 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
   // Build tab info for the header.
   const tabsForHeader: TabInfo[] = useMemo(() => {
-    if (!groupInfo || groupInfo.tabs.length <= 1) {
-      return [{ panelId, title }];
+    if (!groupInfo) {
+      return [{ panelId, title, kindClass: tabKindClass }];
     }
     return groupInfo.tabs.map((id) => ({
       panelId: id,
       title: panelRegistrations.get(id)?.title ?? id,
+      kindClass: panelRegistrations.get(id)?.tabKindClass,
     }));
-  }, [groupInfo, panelRegistrations, panelId, title]);
+  }, [groupInfo, panelRegistrations, panelId, title, tabKindClass]);
 
   // Title for the header when no tab bar shown (single tab).
   const activeTitle = useMemo(() => {

@@ -407,10 +407,11 @@ body.dockable-panel-resizing-sw * {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-secondary, #999);
+  min-width: 100px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
   cursor: pointer;
   white-space: nowrap;
   border-bottom: 2px solid transparent;
@@ -436,6 +437,18 @@ body.dockable-panel-resizing-sw * {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 160px;
+}
+
+.dockable-tab__kind-indicator {
+  width: 10px;
+  height: 10px;
+  min-width: 10px;
+  min-height: 10px;
+  padding: 0;
+  border-radius: 3px;
+  font-size: 0;
+  line-height: 0;
+  flex-shrink: 0;
 }
 
 /* Tab being dragged -- reduced opacity to indicate it is moving. */

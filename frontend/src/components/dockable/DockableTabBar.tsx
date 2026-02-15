@@ -13,6 +13,8 @@ import type { TabDragState } from './tabGroupTypes';
 export interface TabInfo {
   panelId: string;
   title: string;
+  /** Optional normalized kind class for compact tab indicators. */
+  kindClass?: string;
 }
 
 interface DockableTabBarProps {
@@ -360,6 +362,12 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
               onClick={() => onTabClick(tab.panelId)}
               onMouseDown={(e) => handleTabMouseDown(e, tab.panelId)}
             >
+              {tab.kindClass ? (
+                <span
+                  className={`dockable-tab__kind-indicator kind-badge ${tab.kindClass}`}
+                  aria-hidden="true"
+                />
+              ) : null}
               <span className="dockable-tab__label">{tab.title}</span>
             </div>
           </React.Fragment>
