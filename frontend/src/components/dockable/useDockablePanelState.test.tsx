@@ -171,11 +171,12 @@ describe('useDockablePanelState', () => {
     await hook.update((state) => state.setFloatingPosition({ x: -40, y: -10 }));
 
     expect(hook.current.floatingPosition.x).toBeGreaterThanOrEqual(0);
-    expect(hook.current.floatingPosition.y).toBeGreaterThanOrEqual(50);
+    expect(hook.current.floatingPosition.y).toBeGreaterThanOrEqual(0);
 
     await hook.update((state) => state.setFloatingPosition({ x: 2000, y: 2000 }));
-    expect(hook.current.floatingPosition.x).toBeLessThanOrEqual(600);
-    expect(hook.current.floatingPosition.y).toBeLessThanOrEqual(500);
+    // Default floating size is 600x400, so max top-left in an 800x600 viewport is 200x200.
+    expect(hook.current.floatingPosition.x).toBeLessThanOrEqual(200);
+    expect(hook.current.floatingPosition.y).toBeLessThanOrEqual(200);
 
     await hook.unmount();
   });

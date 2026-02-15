@@ -82,15 +82,20 @@ function updatePanelState(panelId: string, updates: Partial<PanelState>) {
 }
 
 /**
- * Clamp a floating position so the panel stays reachable inside the content area.
- * Reused by both hook instance methods and provider-level tab move helpers.
+ * Clamp a floating position so the full panel remains within the visible content area
+ * whenever possible. If the panel is larger than the content area, anchor at (0,0).
  */
-function clampFloatingPosition(position: { x: number; y: number }): { x: number; y: number } {
-  const minDistanceFromEdge = 50;
+function clampFloatingPosition(
+  position: { x: number; y: number },
+  panelSize: { width: number; height: number }
+): { x: number; y: number } {
   const content = getContentBounds();
+  const maxX = Math.max(0, content.width - panelSize.width);
+  const maxY = Math.max(0, content.height - panelSize.height);
+
   return {
-    x: Math.max(0, Math.min(position.x, content.width - 200)),
-    y: Math.max(minDistanceFromEdge, Math.min(position.y, content.height - 100)),
+    x: Math.max(0, Math.min(position.x, maxX)),
+    y: Math.max(0, Math.min(position.y, maxY)),
   };
 }
 
@@ -126,7 +131,10 @@ export function setPanelPositionById(panelId: string, position: DockPosition) {
  * Set a panel's floating position by ID with the same bounds validation used by the hook.
  */
 export function setPanelFloatingPositionById(panelId: string, position: { x: number; y: number }) {
-  updatePanelState(panelId, { floatingPosition: clampFloatingPosition(position) });
+  const currentState = getInitialState(panelId);
+  updatePanelState(panelId, {
+    floatingPosition: clampFloatingPosition(position, currentState.floatingSize),
+  });
 }
 
 /**
@@ -355,9 +363,11 @@ export function useDockablePanelState(panelId: string) {
   // Set floating position with validation
   const setFloatingPosition = useCallback(
     (position: { x: number; y: number }) => {
-      updatePanelState(panelId, { floatingPosition: clampFloatingPosition(position) });
+      updatePanelState(panelId, {
+        floatingPosition: clampFloatingPosition(position, localState.floatingSize),
+      });
     },
-    [panelId]
+    [panelId, localState.floatingSize]
   );
 
   // Set open state
