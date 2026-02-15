@@ -128,6 +128,44 @@ describe('DockableTabBar drag-and-drop', () => {
     await unmount();
   });
 
+  it('initiates drag for a single-tab bar', async () => {
+    const onDragStateChange = vi.fn();
+    const tabs: TabInfo[] = [{ panelId: 'only', title: 'Only tab' }];
+
+    const { host, unmount } = await renderTabBar(
+      <DockableTabBar
+        tabs={tabs}
+        activeTab="only"
+        onTabClick={vi.fn()}
+        groupKey="right"
+        dragState={null}
+        onDragStateChange={onDragStateChange}
+        onReorderTab={vi.fn()}
+        onMoveToGroup={vi.fn()}
+        onUndockTab={vi.fn()}
+      />
+    );
+
+    const tabElement = host.querySelector('.dockable-tab') as HTMLElement;
+    expect(tabElement).toBeTruthy();
+
+    await act(async () => {
+      fireMouseDown(tabElement, 100, 50);
+      fireMouseMove(110, 50);
+    });
+
+    expect(onDragStateChange).toHaveBeenCalledTimes(1);
+    const state = onDragStateChange.mock.calls[0][0] as TabDragState;
+    expect(state.panelId).toBe('only');
+    expect(state.sourceGroupKey).toBe('right');
+
+    await act(async () => {
+      fireMouseUp();
+    });
+
+    await unmount();
+  });
+
   // -----------------------------------------------------------------------
   // 2. Drag cancel -- mouseup near the bar without a drop target
   // -----------------------------------------------------------------------

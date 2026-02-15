@@ -190,7 +190,7 @@ describe('DockableTabBar', () => {
     await unmount();
   });
 
-  it('stops mousedown propagation on the tab bar container', async () => {
+  it('stops mousedown propagation when pressing a tab', async () => {
     const parentMouseDown = vi.fn();
     const tabs: TabInfo[] = [
       { panelId: 'p1', title: 'Logs' },
@@ -203,16 +203,40 @@ describe('DockableTabBar', () => {
       </div>
     );
 
-    // Dispatch a mousedown event on the tab bar container.
-    const tabBar = host.querySelector('.dockable-tab-bar') as HTMLDivElement;
-    expect(tabBar).toBeTruthy();
+    const tab = host.querySelector('.dockable-tab') as HTMLDivElement;
+    expect(tab).toBeTruthy();
 
     await act(async () => {
-      tabBar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      tab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
     });
 
     // The parent should NOT receive the mousedown event.
     expect(parentMouseDown).not.toHaveBeenCalled();
+
+    await unmount();
+  });
+
+  it('allows mousedown propagation from empty tab-bar space', async () => {
+    const parentMouseDown = vi.fn();
+    const tabs: TabInfo[] = [
+      { panelId: 'p1', title: 'Logs' },
+      { panelId: 'p2', title: 'Events' },
+    ];
+
+    const { host, unmount } = await renderTabBar(
+      <div onMouseDown={parentMouseDown}>
+        <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+      </div>
+    );
+
+    const tabBar = host.querySelector('.dockable-tab-bar') as HTMLDivElement;
+    expect(tabBar).toBeTruthy();
+
+    await act(async () => {
+      tabBar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+    });
+
+    expect(parentMouseDown).toHaveBeenCalledTimes(1);
 
     await unmount();
   });

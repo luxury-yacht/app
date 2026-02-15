@@ -200,17 +200,15 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
 
   // Whether drag is enabled (all required callbacks are provided).
   const dragEnabled = !!(onDragStateChange && onReorderTab && onMoveToGroup && onUndockTab);
-  // When only one tab exists, treat the tab strip like a title bar so
-  // floating panels can be dragged from the visible tab label.
-  const allowHeaderDragFromBar = tabs.length <= 1;
 
-  // Prevent mousedown from propagating to the panel header's drag handler.
+  // Allow header-drag from empty tab-bar space, but keep tab mousedown
+  // isolated so tab drag/reorder doesn't also trigger panel header drag.
   const handleBarMouseDown = useCallback((e: React.MouseEvent) => {
-    if (allowHeaderDragFromBar) {
-      return;
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    if (target?.closest('.dockable-tab')) {
+      e.stopPropagation();
     }
-    e.stopPropagation();
-  }, [allowHeaderDragFromBar]);
+  }, []);
 
   // Keep overflow controls clickable without triggering header drag handlers.
   const handleOverflowMouseDown = useCallback((e: React.MouseEvent) => {
@@ -260,7 +258,6 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     (e: React.MouseEvent, panelId: string) => {
       // Only handle left mouse button.
       if (e.button !== 0) return;
-      if (allowHeaderDragFromBar) return;
       if (!dragEnabled) return;
 
       dragStartRef.current = {
@@ -270,7 +267,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
         isDragging: false,
       };
     },
-    [allowHeaderDragFromBar, dragEnabled]
+    [dragEnabled]
   );
 
   // -----------------------------------------------------------------------
@@ -459,9 +456,10 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   // Determine if this bar is the current drop target.
   const isDropTarget = dragState?.dropTarget?.groupKey === groupKey;
   const dropInsertIndex = isDropTarget ? dragState!.dropTarget!.insertIndex : -1;
+  const isDragActive = Boolean(dragState);
 
   // Build className for the bar.
-  const barClassName = `dockable-tab-bar${isDropTarget ? ' dockable-tab-bar--drop-target' : ''}`;
+  const barClassName = `dockable-tab-bar${isDragActive ? ' dockable-tab-bar--drag-active' : ''}${isDropTarget ? ' dockable-tab-bar--drop-target' : ''}`;
 
   const shellClassName = `dockable-tab-bar-shell${overflowHint.left ? ' dockable-tab-bar-shell--has-left-overflow' : ''}${overflowHint.right ? ' dockable-tab-bar-shell--has-right-overflow' : ''}`;
 

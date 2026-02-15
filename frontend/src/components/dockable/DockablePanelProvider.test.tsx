@@ -210,4 +210,53 @@ describe('DockablePanelProvider', () => {
 
     await unmount();
   });
+
+  it('renders a cursor-following drag preview while a tab drag is active', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { container, unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'drag-tab',
+        title: 'Drag Tab',
+        position: 'right',
+        tabKindClass: 'pod',
+      });
+      contextRef.current!.setDragState({
+        panelId: 'drag-tab',
+        sourceGroupKey: 'right',
+        cursorPosition: { x: 100, y: 80 },
+        dropTarget: null,
+      });
+      await Promise.resolve();
+    });
+
+    const preview = container.querySelector('.dockable-tab-drag-preview') as HTMLDivElement | null;
+    expect(preview).toBeTruthy();
+    expect(preview?.textContent).toContain('Drag Tab');
+    expect(preview?.querySelector('.dockable-tab-drag-preview__kind.pod')).toBeTruthy();
+    expect(document.documentElement.style.getPropertyValue('--dockable-tab-drag-x')).toContain('114');
+    expect(document.documentElement.style.getPropertyValue('--dockable-tab-drag-y')).toContain('96');
+
+    await act(async () => {
+      contextRef.current!.setDragState(null);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector('.dockable-tab-drag-preview')).toBeNull();
+
+    await unmount();
+  });
 });

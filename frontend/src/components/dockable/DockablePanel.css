@@ -417,6 +417,7 @@ body.dockable-panel-resizing-sw * {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+  position: relative;
 }
 
 .dockable-tab-bar::-webkit-scrollbar {
@@ -475,22 +476,75 @@ body.dockable-panel-resizing-sw * {
 
 /* Tab being dragged -- reduced opacity to indicate it is moving. */
 .dockable-tab--dragging {
-  opacity: 0.4;
+  opacity: 0.65;
+  color: var(--color-text, #fff);
+  background: color-mix(in srgb, var(--color-accent, #3b82f6) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 72%, transparent);
+  cursor: grabbing;
 }
 
 /* Drop target highlight for drag-and-drop */
-.dockable-tab-bar--drop-target {
-  background: var(--color-accent-bg, rgba(59 130 246 / 10%));
-  outline: 1px dashed var(--color-accent, #3b82f6);
+.dockable-tab-bar--drag-active {
+  outline: 1px dashed color-mix(in srgb, var(--color-accent, #3b82f6) 55%, transparent);
   outline-offset: -1px;
 }
 
+.dockable-tab-bar--drop-target {
+  background: color-mix(in srgb, var(--color-accent, #3b82f6) 14%, transparent);
+  outline: 2px solid var(--color-accent, #3b82f6);
+  outline-offset: -1px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 45%, transparent);
+}
+
 .dockable-tab-bar__drop-indicator {
-  width: 2px;
+  width: 3px;
   background: var(--color-accent, #3b82f6);
   flex-shrink: 0;
   align-self: stretch;
-  border-radius: 1px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 50%, transparent);
+}
+
+/* Cursor-following preview for active tab drags. */
+.dockable-tab-drag-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform: translate3d(var(--dockable-tab-drag-x, -9999px), var(--dockable-tab-drag-y, -9999px), 0);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 260px;
+  padding: 0.4rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--color-accent, #3b82f6) 55%, var(--color-border));
+  background: color-mix(in srgb, var(--color-bg-secondary) 88%, black 12%);
+  color: var(--color-text);
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.2;
+  box-shadow:
+    0 9px 24px rgb(0 0 0 / 35%),
+    0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 30%, transparent);
+  pointer-events: none;
+  z-index: 10000;
+  white-space: nowrap;
+}
+
+.dockable-tab-drag-preview__kind.kind-badge {
+  width: 10px;
+  height: 10px;
+  min-width: 10px;
+  min-height: 10px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.dockable-tab-drag-preview__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dockable-tab-bar__overflow-indicator {

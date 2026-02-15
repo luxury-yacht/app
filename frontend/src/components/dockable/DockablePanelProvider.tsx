@@ -166,6 +166,33 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // Drag state for tab dragging (Phase 5).
   const [dragState, setDragState] = useState<TabDragState | null>(null);
 
+  // Keep CSS variables in sync so the drag preview can follow the cursor
+  // without relying on inline styles.
+  useLayoutEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const root = document.documentElement;
+    if (!dragState) {
+      root.style.removeProperty('--dockable-tab-drag-x');
+      root.style.removeProperty('--dockable-tab-drag-y');
+      return;
+    }
+    root.style.setProperty('--dockable-tab-drag-x', `${Math.round(dragState.cursorPosition.x + 14)}px`);
+    root.style.setProperty('--dockable-tab-drag-y', `${Math.round(dragState.cursorPosition.y + 16)}px`);
+  }, [dragState]);
+
+  useLayoutEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const root = document.documentElement;
+    return () => {
+      root.style.removeProperty('--dockable-tab-drag-x');
+      root.style.removeProperty('--dockable-tab-drag-y');
+    };
+  }, []);
+
   // Last-focused group -- tracks which panel group the user most recently interacted with.
   // New panels open in this group's dock position. Defaults to 'right' if null.
   const [lastFocusedGroupKey, setLastFocusedGroupKey] = useState<GroupKey | null>(null);
@@ -379,6 +406,12 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     getAdjustedDimensions,
   };
 
+  const dragPreviewRegistration = dragState
+    ? panelRegistrationsRef.current.get(dragState.panelId)
+    : null;
+  const dragPreviewTitle = dragPreviewRegistration?.title ?? dragState?.panelId ?? '';
+  const dragPreviewKindClass = dragPreviewRegistration?.tabKindClass;
+
   // -----------------------------------------------------------------------
   // Portal host node -- panels are rendered into this DOM element via portals.
   // -----------------------------------------------------------------------
@@ -428,6 +461,14 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     <DockablePanelContext.Provider value={value}>
       <DockablePanelHostContext.Provider value={hostNode}>
         {children}
+        {dragState ? (
+          <div className="dockable-tab-drag-preview" aria-hidden="true">
+            {dragPreviewKindClass ? (
+              <span className={`dockable-tab-drag-preview__kind kind-badge ${dragPreviewKindClass}`} />
+            ) : null}
+            <span className="dockable-tab-drag-preview__label">{dragPreviewTitle}</span>
+          </div>
+        ) : null}
       </DockablePanelHostContext.Provider>
     </DockablePanelContext.Provider>
   );
