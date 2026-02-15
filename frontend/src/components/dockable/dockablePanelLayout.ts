@@ -69,8 +69,12 @@ export function getPanelSizeConstraints(panel?: HTMLElement | null): PanelSizeCo
 
 /**
  * Return the bounding rect of the `.content` element in CSS-pixel space.
- * When the browser zoom is not 100%, divide by the zoomFactor so that all
- * coordinates stay in CSS pixels (consistent with panel size/position values).
+ *
+ * getBoundingClientRect() already returns CSS coordinates (zoom-adjusted),
+ * so no zoom conversion is needed — same pattern as Tooltip and ContextMenu.
+ * Only the window.innerWidth/Height fallback needs division by zoomFactor
+ * because those values are in unzoomed/visual coordinates.
+ *
  * Falls back to the full viewport if `.content` is not found (e.g. tests / SSR).
  */
 export interface ContentBounds {
@@ -86,15 +90,17 @@ export function getContentBounds(zoomFactor = 1): ContentBounds {
   }
   const el = document.querySelector('.content');
   if (el) {
+    // getBoundingClientRect values are already in CSS coordinate space —
+    // no zoom conversion needed (see ZoomContext docs).
     const rect = el.getBoundingClientRect();
     return {
-      left: rect.left / zoomFactor,
-      top: rect.top / zoomFactor,
-      width: rect.width / zoomFactor,
-      height: rect.height / zoomFactor,
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
     };
   }
-  // Fallback: use full viewport dimensions.
+  // Fallback: window dimensions are unzoomed, convert to CSS space.
   return {
     left: 0,
     top: 0,
