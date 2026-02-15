@@ -151,7 +151,9 @@ export function copyPanelLayoutState(sourcePanelId: string, targetPanelId: strin
   }
   const targetState = getInitialState(targetPanelId);
   updatePanelState(targetPanelId, {
-    position: sourceState.position,
+    // Copy geometry only; group membership controls dock position.
+    // Copying `position` here can race with tab-group moves and send tabs to
+    // unintended groups when leadership transfers during dock/float actions.
     floatingSize: { ...sourceState.floatingSize },
     rightSize: { ...sourceState.rightSize },
     bottomSize: { ...sourceState.bottomSize },
