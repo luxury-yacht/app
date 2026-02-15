@@ -200,11 +200,17 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
 
   // Whether drag is enabled (all required callbacks are provided).
   const dragEnabled = !!(onDragStateChange && onReorderTab && onMoveToGroup && onUndockTab);
+  // When only one tab exists, treat the tab strip like a title bar so
+  // floating panels can be dragged from the visible tab label.
+  const allowHeaderDragFromBar = tabs.length <= 1;
 
   // Prevent mousedown from propagating to the panel header's drag handler.
   const handleBarMouseDown = useCallback((e: React.MouseEvent) => {
+    if (allowHeaderDragFromBar) {
+      return;
+    }
     e.stopPropagation();
-  }, []);
+  }, [allowHeaderDragFromBar]);
 
   // Keep overflow controls clickable without triggering header drag handlers.
   const handleOverflowMouseDown = useCallback((e: React.MouseEvent) => {
@@ -254,6 +260,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     (e: React.MouseEvent, panelId: string) => {
       // Only handle left mouse button.
       if (e.button !== 0) return;
+      if (allowHeaderDragFromBar) return;
       if (!dragEnabled) return;
 
       dragStartRef.current = {
@@ -263,7 +270,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
         isDragging: false,
       };
     },
-    [dragEnabled]
+    [allowHeaderDragFromBar, dragEnabled]
   );
 
   // -----------------------------------------------------------------------

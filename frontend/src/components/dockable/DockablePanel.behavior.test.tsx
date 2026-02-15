@@ -462,6 +462,72 @@ describe('DockablePanel behaviour (real hook)', () => {
     await unmount();
   });
 
+  it('updates floating position when dragging from a single-tab title bar', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 1400,
+    });
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      writable: true,
+      value: 900,
+    });
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      cb(0);
+      return 1;
+    });
+    const cafSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+
+    const { unmount } = await renderPanel(
+      <DockablePanel panelId="panel-drag-single-tab" defaultPosition="floating" isOpen>
+        <div>panel</div>
+      </DockablePanel>
+    );
+
+    await flushEffects();
+    const panelElement = document.querySelector('.dockable-panel') as HTMLDivElement | null;
+    expect(panelElement).toBeTruthy();
+
+    Object.defineProperty(panelElement!, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        left: 300,
+        top: 180,
+        width: 500,
+        height: 320,
+        right: 800,
+        bottom: 500,
+      }),
+    });
+
+    const tabElement = document.querySelector('.dockable-tab') as HTMLDivElement | null;
+    expect(tabElement).toBeTruthy();
+
+    await act(async () => {
+      tabElement!.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, clientX: 350, clientY: 220 })
+      );
+    });
+    await act(async () => {
+      document.dispatchEvent(
+        new MouseEvent('mousemove', { bubbles: true, clientX: 720, clientY: 520 })
+      );
+    });
+    await act(async () => {
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+
+    await flushEffects();
+    const floatingState = getPanelState('panel-drag-single-tab').floatingPosition;
+    expect(floatingState.x).toBeGreaterThan(300);
+    expect(floatingState.y).toBeGreaterThan(180);
+
+    rafSpy.mockRestore();
+    cafSpy.mockRestore();
+    await unmount();
+  });
+
   it('resizes floating panel from the east edge', async () => {
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
