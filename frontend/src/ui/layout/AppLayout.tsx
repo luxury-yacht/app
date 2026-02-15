@@ -37,7 +37,7 @@ import { useCommandPaletteCommands } from '@ui/command-palette/CommandPaletteCom
 import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
 import { PanelErrorBoundary, RouteErrorBoundary } from '@components/errors';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
-import { DockablePanelProvider, useDockablePanelContext } from '@/components/dockable';
+import { DockablePanelProvider, getAllPanelStates, useDockablePanelContext } from '@/components/dockable';
 // Auth Failure Overlay
 import { AuthFailureOverlay } from '@/components/overlays/AuthFailureOverlay';
 
@@ -408,6 +408,48 @@ const KeyboardFocusOverlay: React.FC = () => {
 
 const PanelDebugOverlay: React.FC = () => {
   const { tabGroups, panelRegistrations } = useDockablePanelContext();
+  const [focusedPanelId, setFocusedPanelId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const resolveFocusedPanelId = () => {
+      const states = getAllPanelStates();
+      let nextFocusedPanelId: string | null = null;
+      let highestZIndex = Number.NEGATIVE_INFINITY;
+
+      Object.entries(states).forEach(([panelId, state]) => {
+        if (!state.isOpen) {
+          return;
+        }
+        if (state.zIndex > highestZIndex) {
+          highestZIndex = state.zIndex;
+          nextFocusedPanelId = panelId;
+        }
+      });
+
+      setFocusedPanelId((previous) =>
+        previous === nextFocusedPanelId ? previous : nextFocusedPanelId
+      );
+    };
+
+    const scheduleResolve = () => {
+      window.setTimeout(resolveFocusedPanelId, 0);
+    };
+
+    resolveFocusedPanelId();
+    window.addEventListener('focusin', scheduleResolve);
+    window.addEventListener('keydown', scheduleResolve);
+    document.addEventListener('mousedown', scheduleResolve, true);
+    document.addEventListener('click', scheduleResolve, true);
+    const intervalId = window.setInterval(resolveFocusedPanelId, 250);
+
+    return () => {
+      window.removeEventListener('focusin', scheduleResolve);
+      window.removeEventListener('keydown', scheduleResolve);
+      document.removeEventListener('mousedown', scheduleResolve, true);
+      document.removeEventListener('click', scheduleResolve, true);
+      window.clearInterval(intervalId);
+    };
+  }, []);
 
   const assignedGroupsByPanelId = new Map<string, string>();
   tabGroups.right.tabs.forEach((panelId) => assignedGroupsByPanelId.set(panelId, 'right'));
@@ -461,7 +503,10 @@ const PanelDebugOverlay: React.FC = () => {
         <div className="debug-overlay__label">Hierarchy ({registeredPanels.length} registered)</div>
         <div className="panel-debug-tree">
           {groups.map((group) => (
-            <div key={group.id} className="panel-debug-tree__group">
+            <div
+              key={group.id}
+              className={`panel-debug-tree__group${focusedPanelId && group.tabs.includes(focusedPanelId) ? ' panel-debug-tree__group--focused' : ''}`}
+            >
               <div className="panel-debug-tree__group-header">
                 <span className="panel-debug-tree__group-name">{group.label}</span>
                 <span className="panel-debug-tree__group-count">{group.tabs.length}</span>
