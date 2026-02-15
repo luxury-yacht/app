@@ -630,9 +630,13 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         <>
           <DockablePanelHeader
             title={activeTitle}
-            tabs={tabsForHeader.length > 1 ? tabsForHeader : undefined}
-            activeTab={groupInfo?.activeTab ?? null}
-            onTabClick={groupKey ? (id) => switchTab(groupKey, id) : undefined}
+            tabs={tabsForHeader}
+            activeTab={groupInfo?.activeTab ?? panelId}
+            onTabClick={(id) => {
+              if (groupKey) {
+                switchTab(groupKey, id);
+              }
+            }}
             groupKey={groupKey ?? panelId}
             onMouseDown={handleHeaderMouseDown}
             dragState={dragState}

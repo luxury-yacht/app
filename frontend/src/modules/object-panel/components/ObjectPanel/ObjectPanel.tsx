@@ -192,9 +192,8 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     closePanel(panelId);
   }, [closePanel, panelId]);
 
-  // Build a descriptive tab title: "Kind: name"
-  const displayKind = objectData?.kindAlias ?? objectData?.kind ?? 'Object';
-  const tabTitle = `${displayKind}: ${objectData?.name ?? ''}`;
+  // Keep tab labels concise and consistent: object name only.
+  const tabTitle = objectData?.name?.trim() || 'Object';
 
   // Use reducer for state management
   const [state, dispatch] = useReducer(panelReducer, INITIAL_PANEL_STATE);

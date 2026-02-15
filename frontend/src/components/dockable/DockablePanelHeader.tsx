@@ -14,7 +14,7 @@ import type { TabDragState } from './tabGroupTypes';
 
 interface DockablePanelHeaderProps {
   title: string;
-  /** Tabs to display in the header. When >1 tab and callbacks are provided, renders a tab bar. */
+  /** Tabs to display in the header. When provided, renders a tab bar. */
   tabs?: TabInfo[];
   /** The panelId of the currently active tab, or null. */
   activeTab?: string | null;
@@ -39,8 +39,8 @@ interface DockablePanelHeaderProps {
 
 /**
  * Panel header with title/tab-bar and the controls region.
- * Shows a tab bar when there are multiple tabs and the required callbacks
- * are provided; otherwise shows the title as a plain label.
+ * Shows a tab bar whenever tab data is available; otherwise shows the title
+ * as a plain label.
  * Drag props are forwarded to DockableTabBar when present.
  */
 export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
@@ -57,8 +57,9 @@ export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
   onMoveToGroup,
   onUndockTab,
 }) => {
-  // Render the tab bar when there are multiple tabs and all callbacks provided.
-  const showTabBar = tabs && tabs.length > 1 && onTabClick && groupKey;
+  // Render the tab bar whenever tabs are provided so single-tab and multi-tab
+  // groups share the same header structure.
+  const showTabBar = tabs && tabs.length > 0 && groupKey;
 
   return (
     <div className="dockable-panel__header" onMouseDown={onMouseDown} role="banner">
@@ -67,7 +68,7 @@ export const DockablePanelHeader: React.FC<DockablePanelHeaderProps> = ({
           <DockableTabBar
             tabs={tabs}
             activeTab={activeTab ?? null}
-            onTabClick={onTabClick}
+            onTabClick={onTabClick ?? (() => {})}
             groupKey={groupKey}
             dragState={dragState}
             onDragStateChange={onDragStateChange}
