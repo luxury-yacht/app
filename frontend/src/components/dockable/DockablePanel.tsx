@@ -31,7 +31,7 @@ import { DockablePanelHeader } from './DockablePanelHeader';
 import { useDockablePanelDragResize } from './useDockablePanelDragResize';
 import { useDockablePanelMaximize } from './useDockablePanelMaximize';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
-import { PANEL_DEFAULTS, getPanelSizeConstraints } from './dockablePanelLayout';
+import { PANEL_DEFAULTS, getContentBounds, getPanelSizeConstraints } from './dockablePanelLayout';
 import { getGroupForPanel, getGroupTabs } from './tabGroupState';
 import type { PanelSizeConstraints } from './dockablePanelLayout';
 import type { TabInfo } from './DockableTabBar';
@@ -505,14 +505,16 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
   const handleUndockTab = useCallback(
     (panelId: string, cursorX: number, cursorY: number) => {
-      // Move the tab to a new floating group and place it near the drop cursor.
+      // Move the tab to a new floating group and place its top-left corner
+      // at the drop cursor location.
       movePanelBetweenGroups(panelId, 'floating');
       if (!isProviderActive) {
         setPanelPositionById(panelId, 'floating');
       }
+      const contentBounds = getContentBounds();
       setPanelFloatingPositionById(panelId, {
-        x: cursorX - 72,
-        y: cursorY - 20,
+        x: cursorX - contentBounds.left,
+        y: cursorY - contentBounds.top,
       });
     },
     [isProviderActive, movePanelBetweenGroups]
