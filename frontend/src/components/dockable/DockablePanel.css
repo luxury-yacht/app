@@ -349,16 +349,16 @@
   }
 }
 
-/* Apply animations on mount */
-.dockable-panel--right {
+/* Apply animations only on first open, not on tab/leadership changes */
+.dockable-panel--animate-in.dockable-panel--right {
   animation: dockablePanelSlideInFromRight 0.3s ease-out;
 }
 
-.dockable-panel--bottom {
+.dockable-panel--animate-in.dockable-panel--bottom {
   animation: dockablePanelSlideInFromBottom 0.3s ease-out;
 }
 
-.dockable-panel--floating {
+.dockable-panel--animate-in.dockable-panel--floating {
   animation: dockablePanelFadeIn 0.2s ease-out;
 }
 

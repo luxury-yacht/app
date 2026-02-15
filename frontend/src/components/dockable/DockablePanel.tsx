@@ -338,6 +338,13 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const isGroupLeader = groupInfo ? groupInfo.tabs[0] === panelId : true;
   const groupTabCount = groupInfo?.tabs.length ?? 0;
 
+  // Suppress the slide-in animation when this panel inherits group leadership
+  // (e.g. a sibling tab was closed). A brand-new panel won't have a groupKey
+  // on its first render (registration happens in useEffect, after render),
+  // so groupKey being non-null on first render means we're already in a group
+  // and the panel area is already visible — no animation needed.
+  const shouldAnimateRef = useRef(groupKey === null);
+
   // Set CSS variables so .app-main can shrink the content area for docked panels.
   // Only the group leader sets these -- non-leaders must not touch the CSS variables,
   // otherwise their cleanup resets the offset to 0px causing a visible flicker.
@@ -477,6 +484,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   // Memoize panel classes and styles
   const panelClassName = useMemo(() => {
     const classes = ['dockable-panel', `dockable-panel--${panelState.position}`, className];
+    if (shouldAnimateRef.current) classes.push('dockable-panel--animate-in');
     if (isDragging) classes.push('dockable-panel--dragging');
     if (isResizing) classes.push('dockable-panel--resizing');
     if (panelState.position === 'floating') classes.push('dockable-panel--floating');
