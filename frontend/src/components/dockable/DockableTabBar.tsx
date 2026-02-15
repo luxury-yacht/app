@@ -112,6 +112,8 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     isDragging: boolean;
   } | null>(null);
   const dragStateRef = useRef<TabDragState | null>(dragState ?? null);
+  const previousTabIdsRef = useRef<string[]>(tabs.map((tab) => tab.panelId));
+  const previousActiveTabRef = useRef<string | null>(activeTab ?? null);
   const [overflowHint, setOverflowHint] = useState({ left: false, right: false });
 
   useEffect(() => {
@@ -157,6 +159,42 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       resizeObserver?.disconnect();
     };
   }, [tabs, updateOverflowHint]);
+
+  useLayoutEffect(() => {
+    const bar = barRef.current;
+    const nextTabIds = tabs.map((tab) => tab.panelId);
+    const previousTabIds = previousTabIdsRef.current;
+    const previousActiveTab = previousActiveTabRef.current;
+    const addedTabIds = nextTabIds.filter((panelId) => !previousTabIds.includes(panelId));
+    let tabToRevealId: string | null = null;
+
+    if (addedTabIds.length > 0) {
+      // Prefer revealing the active tab when it's newly added; otherwise reveal
+      // the last added tab so new tabs are always visible on creation.
+      tabToRevealId =
+        activeTab && addedTabIds.includes(activeTab) ? activeTab : addedTabIds[addedTabIds.length - 1];
+    } else if (activeTab && previousActiveTab !== activeTab && nextTabIds.includes(activeTab)) {
+      // Existing tab selection changed -- ensure the newly active tab is visible.
+      tabToRevealId = activeTab;
+    }
+
+    previousTabIdsRef.current = nextTabIds;
+    previousActiveTabRef.current = activeTab ?? null;
+
+    if (!bar || !tabToRevealId) {
+      return;
+    }
+
+    const tabToReveal = Array.from(bar.querySelectorAll<HTMLElement>('.dockable-tab')).find(
+      (tabElement) => tabElement.dataset.panelId === tabToRevealId
+    );
+    if (!tabToReveal) {
+      return;
+    }
+
+    tabToReveal.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    updateOverflowHint();
+  }, [tabs, activeTab, updateOverflowHint]);
 
   // Whether drag is enabled (all required callbacks are provided).
   const dragEnabled = !!(onDragStateChange && onReorderTab && onMoveToGroup && onUndockTab);
@@ -446,6 +484,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
                 className={`dockable-tab${isActive ? ' dockable-tab--active' : ''}${isDragging ? ' dockable-tab--dragging' : ''}`}
                 role="tab"
                 aria-selected={isActive}
+                data-panel-id={tab.panelId}
                 onClick={() => onTabClick(tab.panelId)}
                 onMouseDown={(e) => handleTabMouseDown(e, tab.panelId)}
               >

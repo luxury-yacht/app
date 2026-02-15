@@ -26,6 +26,12 @@ const renderTabBar = async (ui: React.ReactElement) => {
   return {
     host,
     root,
+    rerender: async (newUi: React.ReactElement) => {
+      await act(async () => {
+        root.render(newUi);
+        await Promise.resolve();
+      });
+    },
     unmount: async () => {
       await act(async () => {
         root.unmount();
@@ -333,5 +339,92 @@ describe('DockableTabBar', () => {
     expect(host.querySelector('.dockable-tab-bar__overflow-indicator--right')).toBeNull();
 
     await unmount();
+  });
+
+  it('auto-scrolls to reveal a newly added tab', async () => {
+    const initialTabs: TabInfo[] = [
+      { panelId: 'p1', title: 'Logs' },
+      { panelId: 'p2', title: 'Events' },
+    ];
+    const tabsWithNew: TabInfo[] = [
+      { panelId: 'p1', title: 'Logs' },
+      { panelId: 'p2', title: 'Events' },
+      { panelId: 'p3', title: 'Terminal' },
+    ];
+
+    const scrollIntoViewMock = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoViewMock,
+    });
+
+    try {
+      const { rerender, unmount } = await renderTabBar(
+        <DockableTabBar tabs={initialTabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+      );
+
+      await act(async () => {
+        await rerender(
+          <DockableTabBar
+            tabs={tabsWithNew}
+            activeTab="p3"
+            onTabClick={vi.fn()}
+            groupKey="bottom"
+          />
+        );
+      });
+
+      expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
+      const revealedTab = scrollIntoViewMock.mock.instances[0] as HTMLElement;
+      expect(revealedTab.dataset.panelId).toBe('p3');
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+
+      await unmount();
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    }
+  });
+
+  it('auto-scrolls to reveal an existing tab when it becomes active', async () => {
+    const tabs: TabInfo[] = [
+      { panelId: 'p1', title: 'Logs' },
+      { panelId: 'p2', title: 'Events' },
+      { panelId: 'p3', title: 'Terminal' },
+    ];
+
+    const scrollIntoViewMock = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoViewMock,
+    });
+
+    try {
+      const { rerender, unmount } = await renderTabBar(
+        <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+      );
+
+      await act(async () => {
+        await rerender(
+          <DockableTabBar tabs={tabs} activeTab="p3" onTabClick={vi.fn()} groupKey="bottom" />
+        );
+      });
+
+      expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
+      const revealedTab = scrollIntoViewMock.mock.instances[0] as HTMLElement;
+      expect(revealedTab.dataset.panelId).toBe('p3');
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+
+      await unmount();
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+        configurable: true,
+        value: originalScrollIntoView,
+      });
+    }
   });
 });

@@ -37,7 +37,7 @@ import { useCommandPaletteCommands } from '@ui/command-palette/CommandPaletteCom
 import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
 import { PanelErrorBoundary, RouteErrorBoundary } from '@components/errors';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
-import { DockablePanelProvider } from '@/components/dockable';
+import { DockablePanelProvider, useDockablePanelContext } from '@/components/dockable';
 // Auth Failure Overlay
 import { AuthFailureOverlay } from '@/components/overlays/AuthFailureOverlay';
 
@@ -79,6 +79,7 @@ export const AppLayout: React.FC = () => {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isFocusOverlayVisible, setIsFocusOverlayVisible] = useState(false);
   const [isErrorOverlayVisible, setIsErrorOverlayVisible] = useState(false);
+  const [isPanelDebugOverlayVisible, setIsPanelDebugOverlayVisible] = useState(false);
   const hasActiveClusters = kubeconfig.selectedClusterIds.length > 0;
   const handleAboutClose = () => {
     viewState.setIsAboutOpen(false);
@@ -86,13 +87,16 @@ export const AppLayout: React.FC = () => {
 
   useEffect(() => {
     const handleDebugShortcut = (event: KeyboardEvent) => {
-      const isCtrlOrCmd = event.ctrlKey || event.metaKey;
-      if (!isCtrlOrCmd || !event.shiftKey) {
+      const key = event.key.toLowerCase();
+      const isCtrlAlt = event.ctrlKey && event.altKey;
+      if (!isCtrlAlt) {
         return;
       }
 
-      const key = event.key.toLowerCase();
-      if (key === 'k') {
+      if (key === 'p') {
+        event.preventDefault();
+        setIsPanelDebugOverlayVisible((prev) => !prev);
+      } else if (key === 'k') {
         event.preventDefault();
         setIsFocusOverlayVisible((prev) => !prev);
       } else if (key === 'e') {
@@ -323,6 +327,7 @@ export const AppLayout: React.FC = () => {
         </PanelErrorBoundary>
         <ErrorNotificationSystem />
         <CommandPalette commands={commands} />
+        {isPanelDebugOverlayVisible && <PanelDebugOverlay />}
         {isFocusOverlayVisible && <KeyboardFocusOverlay />}
         {isErrorOverlayVisible && (
           <React.Suspense fallback={null}>
@@ -426,6 +431,120 @@ const KeyboardFocusOverlay: React.FC = () => {
       <div className="keyboard-focus-overlay__label">Focus target</div>
       <div className="keyboard-focus-overlay__value" title={description}>
         {description}
+      </div>
+    </div>,
+    sidebarElement
+  );
+};
+
+const PanelDebugOverlay: React.FC = () => {
+  const [sidebarElement, setSidebarElement] = useState<HTMLElement | null>(null);
+  const { tabGroups, panelRegistrations } = useDockablePanelContext();
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+
+    const existing = document.querySelector('.sidebar');
+    if (existing instanceof HTMLElement) {
+      setSidebarElement(existing);
+      return;
+    }
+
+    const observer = new MutationObserver(() => {
+      const sidebar = document.querySelector('.sidebar');
+      if (sidebar instanceof HTMLElement) {
+        setSidebarElement(sidebar);
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
+
+  if (!sidebarElement) {
+    return null;
+  }
+
+  const assignedGroupsByPanelId = new Map<string, string>();
+  tabGroups.right.tabs.forEach((panelId) => assignedGroupsByPanelId.set(panelId, 'right'));
+  tabGroups.bottom.tabs.forEach((panelId) => assignedGroupsByPanelId.set(panelId, 'bottom'));
+  tabGroups.floating.forEach((group) => {
+    group.tabs.forEach((panelId) =>
+      assignedGroupsByPanelId.set(panelId, `floating:${group.groupId}`)
+    );
+  });
+
+  const registeredPanels = Array.from(panelRegistrations.values()).sort((a, b) =>
+    a.title.localeCompare(b.title)
+  );
+  const ungroupedRegisteredPanels = registeredPanels.filter(
+    (registration) => !assignedGroupsByPanelId.has(registration.panelId)
+  );
+
+  const groupedPanelIds = [
+    ...tabGroups.right.tabs,
+    ...tabGroups.bottom.tabs,
+    ...tabGroups.floating.flatMap((group) => group.tabs),
+  ];
+  const unregisteredGroupedPanelIds = groupedPanelIds.filter(
+    (panelId) => !panelRegistrations.has(panelId)
+  );
+
+  return createPortal(
+    <div className="panel-debug-overlay" data-testid="panel-debug-overlay">
+      <div className="panel-debug-overlay__header">Panel Debug (Ctrl+Alt+P)</div>
+      <div className="panel-debug-overlay__section">
+        <div className="panel-debug-overlay__label">
+          Registered Panels ({registeredPanels.length})
+        </div>
+        <ul className="panel-debug-overlay__list">
+          {registeredPanels.map((registration) => (
+            <li key={registration.panelId}>
+              <span className="panel-debug-overlay__panel-title">{registration.title}</span>
+              <span className="panel-debug-overlay__panel-meta">
+                {' '}
+                [{registration.panelId}] in{' '}
+                {assignedGroupsByPanelId.get(registration.panelId) ?? 'unassigned'}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="panel-debug-overlay__section">
+        <div className="panel-debug-overlay__label">
+          Groups
+        </div>
+        <ul className="panel-debug-overlay__list">
+          <li>
+            right: [{tabGroups.right.tabs.join(', ')}] active={tabGroups.right.activeTab ?? 'none'}
+          </li>
+          <li>
+            bottom: [{tabGroups.bottom.tabs.join(', ')}] active={tabGroups.bottom.activeTab ?? 'none'}
+          </li>
+          {tabGroups.floating.map((group) => (
+            <li key={group.groupId}>
+              floating:{group.groupId}: [{group.tabs.join(', ')}] active={group.activeTab ?? 'none'}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="panel-debug-overlay__section">
+        <div className="panel-debug-overlay__label">
+          Integrity
+        </div>
+        <ul className="panel-debug-overlay__list">
+          <li>
+            unassigned registered panels ({ungroupedRegisteredPanels.length}):{' '}
+            {ungroupedRegisteredPanels.map((panel) => panel.panelId).join(', ') || 'none'}
+          </li>
+          <li>
+            unregistered grouped panels ({unregisteredGroupedPanelIds.length}):{' '}
+            {unregisteredGroupedPanelIds.join(', ') || 'none'}
+          </li>
+        </ul>
       </div>
     </div>,
     sidebarElement

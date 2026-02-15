@@ -354,3 +354,61 @@ body.sidebar-resizing * {
   text-overflow: ellipsis;
   color: var(--color-text);
 }
+
+.panel-debug-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: color-mix(in srgb, var(--color-bg-secondary) 92%, black 8%);
+  border-right: 1px solid var(--color-border);
+  color: var(--color-text);
+  overflow-y: auto;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.panel-debug-overlay__header {
+  font-family: var(--font-family-display, var(--font-family-base));
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.panel-debug-overlay__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.panel-debug-overlay__label {
+  color: var(--color-text-tertiary);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.panel-debug-overlay__list {
+  margin: 0;
+  padding-left: 1rem;
+  font-family: var(--font-family-mono, monospace);
+  word-break: break-word;
+}
+
+.panel-debug-overlay__panel-title {
+  color: var(--color-text);
+}
+
+.panel-debug-overlay__panel-meta {
+  color: var(--color-text-secondary);
+}
+
+.sidebar.collapsed .panel-debug-overlay {
+  display: none;
+}
