@@ -52,12 +52,7 @@ describe('DockableTabBar', () => {
     ];
 
     const { host, unmount } = await renderTabBar(
-      <DockableTabBar
-        tabs={tabs}
-        activeTab="p1"
-        onTabClick={vi.fn()}
-        groupKey="bottom"
-      />
+      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
     );
 
     // Each tab should have a label span with the correct text.
@@ -81,12 +76,7 @@ describe('DockableTabBar', () => {
     ];
 
     const { host, unmount } = await renderTabBar(
-      <DockableTabBar
-        tabs={tabs}
-        activeTab="p2"
-        onTabClick={vi.fn()}
-        groupKey="bottom"
-      />
+      <DockableTabBar tabs={tabs} activeTab="p2" onTabClick={vi.fn()} groupKey="bottom" />
     );
 
     const tabElements = host.querySelectorAll('.dockable-tab');
@@ -111,12 +101,7 @@ describe('DockableTabBar', () => {
     ];
 
     const { host, unmount } = await renderTabBar(
-      <DockableTabBar
-        tabs={tabs}
-        activeTab="p1"
-        onTabClick={onTabClick}
-        groupKey="bottom"
-      />
+      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={onTabClick} groupKey="bottom" />
     );
 
     const tabElements = host.querySelectorAll('.dockable-tab');
@@ -139,12 +124,7 @@ describe('DockableTabBar', () => {
     ];
 
     const { host, unmount } = await renderTabBar(
-      <DockableTabBar
-        tabs={tabs}
-        activeTab="p1"
-        onTabClick={vi.fn()}
-        groupKey="bottom"
-      />
+      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
     );
 
     // Tabs should never have close buttons (close is done via panel controls).
@@ -163,12 +143,7 @@ describe('DockableTabBar', () => {
 
     const { host, unmount } = await renderTabBar(
       <div onMouseDown={parentMouseDown}>
-        <DockableTabBar
-          tabs={tabs}
-          activeTab="p1"
-          onTabClick={vi.fn()}
-          groupKey="bottom"
-        />
+        <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
       </div>
     );
 

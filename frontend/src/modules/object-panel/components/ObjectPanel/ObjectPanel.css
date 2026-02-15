@@ -25,51 +25,6 @@
   position: relative;
 }
 
-.object-panel-navigation {
-  padding-right: 15px;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.object-panel-nav-controls {
-  position: absolute;
-  left: 45px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  gap: 4px;
-}
-
-.object-panel-nav-button {
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-size: 16px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--border-radius-sm);
-  transition: all 0.2s;
-}
-
-.object-panel-nav-button:hover:not(:disabled) {
-  background-color: var(--color-bg-tertiary);
-  border-color: var(--color-accent);
-}
-
-.object-panel-nav-button:active:not(:disabled) {
-  transform: scale(0.95);
-}
-
-.object-panel-nav-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  color: var(--color-text-tertiary);
-}
-
 .object-panel-title {
   display: flex;
   align-items: center;
@@ -198,54 +153,10 @@
   padding: 0 10px;
 }
 
-.nav-controls {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.nav-button {
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-size: 16px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--border-radius-sm);
-  transition: all 0.2s;
-  flex-shrink: 0;
-}
-
-.nav-button:hover:not(:disabled) {
-  background-color: var(--color-bg-tertiary);
-  border-color: var(--color-accent);
-}
-
-.nav-button:active:not(:disabled) {
-  transform: scale(0.95);
-}
-
-.nav-button:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  color: var(--color-text-tertiary);
-}
-
-.nav-position {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  white-space: nowrap;
-}
-
 .object-panel-info {
   display: flex;
   align-items: center;
+  padding-left: 0.5rem;
   gap: 8px;
   flex: 1;
   min-width: 0;

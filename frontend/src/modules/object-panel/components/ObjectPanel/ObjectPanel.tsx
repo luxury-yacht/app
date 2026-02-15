@@ -2,7 +2,9 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx
  *
  * UI component for ObjectPanel.
- * Handles rendering and interactions for the object panel feature.
+ * Each instance renders a single object as a dockable tab.
+ * Accepts objectRef and panelId as props; uses CurrentObjectPanelContext
+ * so child components can access the correct object data.
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
@@ -10,9 +12,10 @@ import ConfirmationModal from '@components/modals/ConfirmationModal';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import { types } from '@wailsjs/go/models';
 import { TriggerCronJob, SuspendCronJob } from '@wailsjs/go/backend/App';
-import { DockablePanel } from '@/components/dockable';
+import { DockablePanel, useDockablePanelContext } from '@/components/dockable';
 import { errorHandler } from '@utils/errorHandler';
-import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';
+import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
 import { evaluateNamespacePermissions } from '@/core/capabilities';
 import './ObjectPanel.css';
 import '@shared/components/tabs/Tabs/Tabs.css';
@@ -36,9 +39,11 @@ import type {
   PanelState,
   ViewType,
 } from '@modules/object-panel/components/ObjectPanel/types';
+import type { KubernetesObjectReference } from '@/types/view-state';
 import { useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
+import { getGroupForPanel, getGroupTabs } from '@/components/dockable/tabGroupState';
 
 // Tab configuration
 type DetailsSnapshotProps = Pick<
@@ -159,14 +164,37 @@ function panelReducer(state: PanelState, action: PanelAction): PanelState {
 // ============================================================================
 // COMPONENT PROPS
 // ============================================================================
-interface ObjectPanelProps {}
+interface ObjectPanelProps {
+  /** Unique panel ID derived from the object identity. */
+  panelId: string;
+  /** The Kubernetes object reference this panel displays. */
+  objectRef: KubernetesObjectReference;
+}
 
 // ============================================================================
 // MAIN COMPONENT
 // ============================================================================
-function ObjectPanel({}: ObjectPanelProps = {}) {
-  const objectPanel = useObjectPanel();
-  const { isOpen, objectData, navigationHistory, navigationIndex, navigate, close } = objectPanel;
+function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
+  const objectData = objectRef;
+  const { closePanel } = useObjectPanelState();
+  const { tabGroups } = useDockablePanelContext();
+
+  // Determine whether this tab is active within its group (for polling control).
+  const groupKey = getGroupForPanel(tabGroups, panelId);
+  const groupInfo = groupKey ? getGroupTabs(tabGroups, groupKey) : null;
+  const isActiveTab = groupInfo ? groupInfo.activeTab === panelId : true;
+
+  // This panel is always "open" while it exists in the render tree.
+  const isOpen = true;
+
+  // Close handler removes this panel from the context.
+  const close = useCallback(() => {
+    closePanel(panelId);
+  }, [closePanel, panelId]);
+
+  // Build a descriptive tab title: "Kind: name"
+  const displayKind = objectData?.kindAlias ?? objectData?.kind ?? 'Object';
+  const tabTitle = `${displayKind}: ${objectData?.name ?? ''}`;
 
   // Use reducer for state management
   const [state, dispatch] = useReducer(panelReducer, INITIAL_PANEL_STATE);
@@ -204,12 +232,13 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
     workloadKindApiNames: WORKLOAD_KIND_API_NAMES,
   });
 
+  // Only poll when this tab is active in its group (Step 8: active-tab-only polling).
   const { detailPayload, detailsLoading, detailsError, fetchResourceDetails } =
     useObjectPanelRefresh({
       detailScope,
       objectKind,
       objectData,
-      isOpen,
+      isOpen: isOpen && isActiveTab,
       resourceDeleted: state.resourceDeleted,
     });
 
@@ -267,9 +296,6 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
     isHelmRelease,
     isEvent,
     isOpen,
-    navigationIndex,
-    navigationHistoryLength: navigationHistory.length,
-    navigate,
     dispatch,
     close,
     currentTab: state.activeTab,
@@ -338,13 +364,6 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
       dispatch({ type: 'SET_ACTION_LOADING', payload: false });
     }
   }, [objectData, detailPayload, dispatch, fetchResourceDetails]);
-
-  // Reset state when panel closes
-  useEffect(() => {
-    if (!isOpen) {
-      dispatch({ type: 'RESET_STATE' });
-    }
-  }, [isOpen]);
 
   const handleTabSelect = useCallback(
     (tab: ViewType) => {
@@ -572,7 +591,7 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
   useKeyboardNavigationScope({
     ref: panelScopeRef,
     priority: KeyboardScopePriority.OBJECT_PANEL,
-    disabled: !isOpen,
+    disabled: !isActiveTab,
     allowNativeSelector: '.object-panel-body *',
     onNavigate: ({ direction }) => {
       const items = getFocusableElements();
@@ -605,15 +624,15 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
     },
   });
 
-  // Don't render if no object data
-  if (!objectData) return null;
+  // Memoize the per-instance context value so child components get the correct objectData.
+  const currentObjectPanelValue = useMemo(() => ({ objectData, panelId }), [objectData, panelId]);
 
   return (
-    <>
+    <CurrentObjectPanelContext.Provider value={currentObjectPanelValue}>
       <DockablePanel
         panelRef={panelScopeRef}
-        panelId="object-panel"
-        title="Object Panel"
+        panelId={panelId}
+        title={tabTitle}
         isOpen={isOpen}
         defaultPosition="right"
         className="object-panel-dockable"
@@ -622,12 +641,9 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
         onClose={close}
         contentClassName="object-panel-body"
       >
-        {/* Panel-specific controls toolbar (moved from header for tab support) */}
+        {/* Kind badge + name toolbar */}
         <div onMouseDown={(e) => e.stopPropagation()}>
           <ObjectPanelHeader
-            navigationIndex={navigationIndex}
-            navigationCount={navigationHistory.length}
-            onNavigate={navigate}
             kind={objectData?.kind ?? null}
             kindAlias={objectData?.kindAlias ?? null}
             name={objectData?.name ?? null}
@@ -679,7 +695,7 @@ function ObjectPanel({}: ObjectPanelProps = {}) {
         onConfirm={() => handleAction('delete', 'showDeleteConfirm')}
         onCancel={closeDeleteConfirm}
       />
-    </>
+    </CurrentObjectPanelContext.Provider>
   );
 }
 

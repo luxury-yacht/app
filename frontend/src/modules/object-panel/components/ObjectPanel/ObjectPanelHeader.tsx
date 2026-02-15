@@ -1,30 +1,17 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelHeader.tsx
  *
- * UI component for ObjectPanelHeader.
- * Handles rendering and interactions for the object panel feature.
+ * In-body toolbar showing the kind badge and object name.
+ * Navigation arrows have been removed — tabs replace the navigation UX.
  */
 
 interface ObjectPanelHeaderProps {
-  navigationIndex: number;
-  navigationCount: number;
-  onNavigate: (index: number) => void;
   kind: string | null;
   kindAlias: string | null;
   name: string | null;
 }
 
-export function ObjectPanelHeader({
-  navigationIndex,
-  navigationCount,
-  onNavigate,
-  kind,
-  kindAlias,
-  name,
-}: ObjectPanelHeaderProps) {
-  const canNavigateBackward = navigationIndex > 0;
-  const canNavigateForward = navigationIndex < navigationCount - 1;
-
+export function ObjectPanelHeader({ kind, kindAlias, name }: ObjectPanelHeaderProps) {
   const sanitizedKindClass = (kind || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
   const displayKind = kindAlias || kind || 'Object';
@@ -32,38 +19,6 @@ export function ObjectPanelHeader({
 
   return (
     <div className="object-panel-header">
-      <div className="object-panel-navigation">
-        <button
-          className="nav-button"
-          type="button"
-          disabled={!canNavigateBackward}
-          onClick={() => {
-            if (canNavigateBackward) {
-              onNavigate(navigationIndex - 1);
-            }
-          }}
-          title="Previous object (←)"
-          data-object-panel-focusable="true"
-          tabIndex={-1}
-        >
-          ←
-        </button>
-        <button
-          className="nav-button"
-          type="button"
-          disabled={!canNavigateForward}
-          onClick={() => {
-            if (canNavigateForward) {
-              onNavigate(navigationIndex + 1);
-            }
-          }}
-          title="Next object (→)"
-          data-object-panel-focusable="true"
-          tabIndex={-1}
-        >
-          →
-        </button>
-      </div>
       <div className="object-panel-info">
         <span className={`kind-badge ${sanitizedKindClass}`} title={kindTitle}>
           {displayKind}

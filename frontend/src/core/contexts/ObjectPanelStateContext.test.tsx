@@ -12,11 +12,13 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { ObjectPanelStateProvider, useObjectPanelState } from './ObjectPanelStateContext';
 
 let mockClusterId = 'cluster-a';
+let mockClusterName = 'Cluster A';
 let mockClusterIds = ['cluster-a', 'cluster-b'];
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedClusterId: mockClusterId,
+    selectedClusterName: mockClusterName,
     selectedClusterIds: mockClusterIds,
   }),
 }));
@@ -41,6 +43,7 @@ describe('ObjectPanelStateContext', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     mockClusterId = 'cluster-a';
+    mockClusterName = 'Cluster A';
     mockClusterIds = ['cluster-a', 'cluster-b'];
     stateRef.current = null;
   });
@@ -65,30 +68,45 @@ describe('ObjectPanelStateContext', () => {
   it('keeps object panel state isolated per cluster tab', async () => {
     await renderProvider();
 
+    // Open a panel in cluster-a.
     act(() => {
       stateRef.current?.onRowClick({ kind: 'Pod', name: 'api', namespace: 'default' });
     });
     expect(stateRef.current?.showObjectPanel).toBe(true);
-    expect(stateRef.current?.selectedObject?.name).toBe('api');
+    expect(stateRef.current?.openPanels.size).toBeGreaterThan(0);
 
+    // The opened panel should contain the object we clicked on.
+    const panelEntries = Array.from(stateRef.current?.openPanels.values() ?? []);
+    expect(panelEntries[0]?.name).toBe('api');
+
+    // Switch to cluster-b. Its state should be empty and independent.
     mockClusterId = 'cluster-b';
+    mockClusterName = 'Cluster B';
     await renderProvider();
     expect(stateRef.current?.showObjectPanel).toBe(false);
-    expect(stateRef.current?.selectedObject).toBeNull();
+    expect(stateRef.current?.openPanels.size).toBe(0);
 
+    // Open a different panel in cluster-b.
     act(() => {
       stateRef.current?.onRowClick({ kind: 'Deployment', name: 'web', namespace: 'default' });
     });
-    expect(stateRef.current?.selectedObject?.name).toBe('web');
+    expect(stateRef.current?.openPanels.size).toBeGreaterThan(0);
+    const clusterBEntries = Array.from(stateRef.current?.openPanels.values() ?? []);
+    expect(clusterBEntries[0]?.name).toBe('web');
 
+    // Switch back to cluster-a. Its original state should still be intact.
     mockClusterId = 'cluster-a';
+    mockClusterName = 'Cluster A';
     await renderProvider();
     expect(stateRef.current?.showObjectPanel).toBe(true);
-    expect(stateRef.current?.selectedObject?.name).toBe('api');
+    const clusterAEntries = Array.from(stateRef.current?.openPanels.values() ?? []);
+    expect(clusterAEntries[0]?.name).toBe('api');
   });
 
   it('clears object panel state when a tab is closed', async () => {
+    // Start on cluster-b and open a panel.
     mockClusterId = 'cluster-b';
+    mockClusterName = 'Cluster B';
     await renderProvider();
 
     act(() => {
@@ -96,15 +114,19 @@ describe('ObjectPanelStateContext', () => {
     });
     expect(stateRef.current?.showObjectPanel).toBe(true);
 
+    // Remove cluster-b from the active tabs (simulates closing the tab).
     mockClusterIds = ['cluster-a'];
     mockClusterId = 'cluster-a';
+    mockClusterName = 'Cluster A';
     await renderProvider();
 
+    // Re-add cluster-b. Its state should have been cleaned up.
     mockClusterIds = ['cluster-a', 'cluster-b'];
     mockClusterId = 'cluster-b';
+    mockClusterName = 'Cluster B';
     await renderProvider();
 
     expect(stateRef.current?.showObjectPanel).toBe(false);
-    expect(stateRef.current?.selectedObject).toBeNull();
+    expect(stateRef.current?.openPanels.size).toBe(0);
   });
 });

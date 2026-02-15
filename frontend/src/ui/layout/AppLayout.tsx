@@ -15,6 +15,7 @@ import '@/App.css';
 import { withLazyBoundary } from '@components/hoc/withLazyBoundary';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
 import { eventBus } from '@/core/events';
 // Content Components
 import AppHeader from '@ui/layout/AppHeader';
@@ -58,10 +59,10 @@ const AppLogsPanel = withLazyBoundary(
   () => import('@/components/content/AppLogsPanel/AppLogsPanel'),
   'Loading app logs panel...'
 );
-const ObjectPanel = withLazyBoundary(
-  () => import('@modules/object-panel/components/ObjectPanel/ObjectPanel'),
-  'Loading object panel...'
-);
+// ObjectPanel is imported eagerly because panels are only rendered on-demand
+// (when openPanels has entries). A lazy boundary would flash a loading spinner
+// on the first click before the chunk loads.
+import ObjectPanel from '@modules/object-panel/components/ObjectPanel/ObjectPanel';
 const PortForwardsPanel = withLazyBoundary(
   () => import('@modules/port-forward').then((m) => ({ default: m.PortForwardsPanel })),
   'Loading port forwards panel...'
@@ -73,6 +74,7 @@ export const AppLayout: React.FC = () => {
   const namespace = useNamespace();
   const viewState = useViewState();
   const kubeconfig = useKubeconfig();
+  const { openPanels, closePanel } = useObjectPanelState();
   const commands = useCommandPaletteCommands();
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [isFocusOverlayVisible, setIsFocusOverlayVisible] = useState(false);
@@ -290,12 +292,15 @@ export const AppLayout: React.FC = () => {
           <DiagnosticsPanel isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
         </PanelErrorBoundary>
 
-        <PanelErrorBoundary
-          onClose={() => viewState.setShowObjectPanel(false)}
-          panelName="object-details"
-        >
-          <ObjectPanel />
-        </PanelErrorBoundary>
+        {Array.from(openPanels.entries()).map(([panelId, objectRef]) => (
+          <PanelErrorBoundary
+            key={panelId}
+            onClose={() => closePanel(panelId)}
+            panelName="object-details"
+          >
+            <ObjectPanel panelId={panelId} objectRef={objectRef} />
+          </PanelErrorBoundary>
+        ))}
 
         <PanelErrorBoundary onClose={() => viewState.setIsSettingsOpen(false)} panelName="settings">
           <SettingsModal

@@ -145,6 +145,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     setDragState,
     reorderTabInGroup,
     movePanelBetweenGroups,
+    setLastFocusedGroupKey,
   } = useDockablePanelContext();
   const panelHostNode = useDockablePanelHost();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -546,6 +547,10 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       style={panelStyle}
       onMouseDown={(e) => {
         panelState.focus();
+        // Track which group was most recently interacted with.
+        if (groupKey) {
+          setLastFocusedGroupKey(groupKey);
+        }
         if (isMaximized) {
           return;
         }

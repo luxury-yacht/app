@@ -3,33 +3,74 @@
  *
  * Hook for useObjectPanel.
  * Combines dockable panel UI state with object panel business logic from context.
- * Also provides a global function to close the panel from outside React components.
+ * Supports the multi-panel model: each object opens as its own tab.
+ *
+ * Also provides CurrentObjectPanelContext so child components inside an ObjectPanel
+ * instance can access the correct objectData for their specific panel.
  */
-import { useCallback, useEffect, useRef } from 'react';
-import { useDockablePanelState } from '@components/dockable';
+import { createContext, useContext, useCallback, useEffect, useRef } from 'react';
+import { useDockablePanelContext } from '@components/dockable';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
 import type { KubernetesObjectReference } from '@/types/view-state';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { getGroupForPanel } from '@/components/dockable/tabGroupState';
+
+// ---------------------------------------------------------------------------
+// CurrentObjectPanelContext
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-instance context provided by each ObjectPanel so its children
+ * (e.g., Overview components) can access the correct objectData
+ * without relying on a single global selected object.
+ */
+interface CurrentObjectPanelContextValue {
+  objectData: KubernetesObjectReference | null;
+  panelId: string | null;
+}
+
+export const CurrentObjectPanelContext = createContext<CurrentObjectPanelContextValue>({
+  objectData: null,
+  panelId: null,
+});
+
+/**
+ * Read the current panel's object data. Only meaningful inside a <ObjectPanel> tree.
+ * Falls back to null when used outside an ObjectPanel.
+ */
+export const useCurrentObjectPanel = () => useContext(CurrentObjectPanelContext);
+
+// ---------------------------------------------------------------------------
+// closeObjectPanelGlobal
+// ---------------------------------------------------------------------------
 
 // Callback ref for closeObjectPanelGlobal to use
 let closeCallback: (() => void) | null = null;
 
+// ---------------------------------------------------------------------------
+// useObjectPanel
+// ---------------------------------------------------------------------------
+
 /**
- * Hook for controlling the object panel.
- * Combines dockable panel UI state with object panel business logic from context.
+ * Hook for controlling the object panel system.
+ * In the multi-panel model, this hook provides:
+ * - openWithObject: opens a new tab (or activates existing) for a given object
+ * - close: closes the current panel (when used inside an ObjectPanel)
+ * - objectData: the object for the current panel context (when inside an ObjectPanel)
+ * - openPanels: all open panels from context
  */
 export function useObjectPanel() {
-  const panelState = useDockablePanelState('object-panel');
   const {
-    selectedObject,
-    navigationHistory,
-    navigationIndex,
-    onRowClick,
-    onCloseObjectPanel,
-    onNavigate,
     showObjectPanel,
+    openPanels,
+    onRowClick,
+    closePanel,
+    onCloseObjectPanel,
+    hydrateClusterMeta,
   } = useObjectPanelState();
-  const { selectedClusterId, selectedClusterName } = useKubeconfig();
+  const { tabGroups, switchTab } = useDockablePanelContext();
+
+  // Per-instance object data (only set when called inside an ObjectPanel tree).
+  const { objectData, panelId: currentPanelId } = useCurrentObjectPanel();
 
   // Keep the close callback updated for closeObjectPanelGlobal
   const closeRef = useRef(onCloseObjectPanel);
@@ -42,43 +83,40 @@ export function useObjectPanel() {
     };
   }, []);
 
-  // Sync context visibility with dockable panel
-  useEffect(() => {
-    if (showObjectPanel !== panelState.isOpen) {
-      panelState.setOpen(showObjectPanel);
-    }
-  }, [showObjectPanel, panelState]);
-
   const openWithObject = useCallback(
     (obj: KubernetesObjectReference) => {
-      const clusterId = obj.clusterId?.trim() || selectedClusterId?.trim() || undefined;
-      const clusterName = obj.clusterName?.trim() || selectedClusterName?.trim() || undefined;
-      const enriched = clusterId || clusterName ? { ...obj, clusterId, clusterName } : obj;
-      onRowClick(enriched);
-      panelState.setOpen(true);
+      const enriched = hydrateClusterMeta(obj);
+      const panelId = onRowClick(enriched);
+
+      // If the panel already exists in the dockable system, activate its tab.
+      const groupKey = getGroupForPanel(tabGroups, panelId);
+      if (groupKey) {
+        switchTab(groupKey, panelId);
+      }
     },
-    [onRowClick, panelState, selectedClusterId, selectedClusterName]
+    [onRowClick, hydrateClusterMeta, tabGroups, switchTab]
   );
 
   const close = useCallback(() => {
-    onCloseObjectPanel();
-    panelState.setOpen(false);
-  }, [onCloseObjectPanel, panelState]);
-
-  const navigate = useCallback(
-    (index: number) => {
-      onNavigate(index);
-    },
-    [onNavigate]
-  );
+    if (currentPanelId) {
+      // Close just this panel.
+      closePanel(currentPanelId);
+    } else {
+      // No panel context -- close all panels (legacy behavior).
+      onCloseObjectPanel();
+    }
+  }, [currentPanelId, closePanel, onCloseObjectPanel]);
 
   return {
-    ...panelState,
-    objectData: selectedObject,
-    navigationHistory,
-    navigationIndex,
+    // Object data for the current panel instance (null outside an ObjectPanel tree).
+    objectData,
+    // Whether any object panel is open.
+    isOpen: showObjectPanel,
+    // All open panels.
+    openPanels,
+    // Open or activate a tab for an object.
     openWithObject,
-    navigate,
+    // Close the current panel (or all panels if outside ObjectPanel tree).
     close,
   };
 }

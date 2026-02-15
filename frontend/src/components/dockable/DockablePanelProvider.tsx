@@ -16,6 +16,7 @@ import React, {
   useRef,
 } from 'react';
 import type { TabGroupState, TabDragState, GroupKey, PanelRegistration } from './tabGroupTypes';
+import type { DockPosition } from './useDockablePanelState';
 import {
   createInitialTabGroupState,
   addPanelToGroup,
@@ -57,6 +58,12 @@ interface DockablePanelContextValue {
   notifyContentChange: () => void;
   subscribeContentChange: (fn: () => void) => () => void;
 
+  // Last-focused group -- tracks which panel group was most recently interacted with,
+  // so new panels (e.g. object tabs) can open in the same group.
+  lastFocusedGroupKey: GroupKey | null;
+  setLastFocusedGroupKey: (key: GroupKey) => void;
+  getLastFocusedPosition: () => DockPosition;
+
   // Legacy compat -- derived from tabGroups for backward compatibility
   dockedPanels: { right: string[]; bottom: string[] };
   getAdjustedDimensions: () => { rightOffset: number; bottomOffset: number };
@@ -77,6 +84,9 @@ const defaultDockablePanelContext: DockablePanelContextValue = {
   panelContentRefsMap: { current: new Map() },
   notifyContentChange: () => {},
   subscribeContentChange: () => () => {},
+  lastFocusedGroupKey: null,
+  setLastFocusedGroupKey: () => {},
+  getLastFocusedPosition: () => 'right',
   dockedPanels: { right: [], bottom: [] },
   getAdjustedDimensions: () => ({ rightOffset: 0, bottomOffset: 0 }),
 };
@@ -139,6 +149,19 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
 
   // Drag state for tab dragging (Phase 5).
   const [dragState, setDragState] = useState<TabDragState | null>(null);
+
+  // Last-focused group -- tracks which panel group the user most recently interacted with.
+  // New panels open in this group's dock position. Defaults to 'right' if null.
+  const [lastFocusedGroupKey, setLastFocusedGroupKey] = useState<GroupKey | null>(null);
+
+  /** Map the last-focused group key to a DockPosition for new panels. */
+  const getLastFocusedPosition = useCallback((): DockPosition => {
+    if (!lastFocusedGroupKey) return 'right';
+    if (lastFocusedGroupKey === 'right') return 'right';
+    if (lastFocusedGroupKey === 'bottom') return 'bottom';
+    // Any other key is a floating group ID.
+    return 'floating';
+  }, [lastFocusedGroupKey]);
 
   // -----------------------------------------------------------------------
   // registerPanel -- called by DockablePanel when it mounts / becomes open.
@@ -266,6 +289,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     panelContentRefsMap,
     notifyContentChange,
     subscribeContentChange,
+    lastFocusedGroupKey,
+    setLastFocusedGroupKey,
+    getLastFocusedPosition,
     dockedPanels,
     getAdjustedDimensions,
   };
