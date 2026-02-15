@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DockablePanel,
   DockablePanelProvider,
+  DockableTabBar,
   getAllPanelStates,
   restorePanelStates,
   useDockablePanelContext,
@@ -25,6 +26,7 @@ import {
   getAllPanelStates as rawGetAll,
   restorePanelStates as rawRestore,
 } from './useDockablePanelState';
+import { DockableTabBar as RawDockableTabBar } from './DockableTabBar';
 
 describe('components/dockable index exports', () => {
   it('re-exports DockablePanel and provider utilities', () => {
@@ -37,5 +39,14 @@ describe('components/dockable index exports', () => {
     expect(useDockablePanelState).toBe(rawUseState);
     expect(getAllPanelStates).toBe(rawGetAll);
     expect(restorePanelStates).toBe(rawRestore);
+  });
+
+  it('re-exports tab bar and tab group types', () => {
+    // Runtime exports
+    expect(DockableTabBar).toBeDefined();
+    expect(DockableTabBar).toBe(RawDockableTabBar);
+
+    // Type-only exports are verified by TypeScript compilation
+    // (TabInfo, PanelRegistration, TabGroupState, GroupKey, TabDragState)
   });
 });

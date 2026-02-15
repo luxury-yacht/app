@@ -439,3 +439,94 @@ body.dockable-panel-resizing-sw * {
     box-shadow: 0 10px 50px rgb(0 0 0 / 70%);
   }
 }
+
+/* Tab bar */
+.dockable-tab-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.dockable-tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.dockable-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary, #999);
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s, background-color 0.15s;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.dockable-tab:hover {
+  color: var(--color-text, #fff);
+  background: var(--color-bg-tertiary, rgba(255 255 255 / 5%));
+}
+
+.dockable-tab--active {
+  color: var(--color-text, #fff);
+  border-bottom-color: var(--color-accent, #3b82f6);
+}
+
+.dockable-tab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.dockable-tab__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-text-tertiary, #666);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.dockable-tab__close:hover {
+  background: rgba(239 68 68 / 15%);
+  color: rgb(239 68 68);
+}
+
+/* Tab being dragged -- reduced opacity to indicate it is moving. */
+.dockable-tab--dragging {
+  opacity: 0.4;
+}
+
+/* Drop target highlight for drag-and-drop */
+.dockable-tab-bar--drop-target {
+  background: var(--color-accent-bg, rgba(59 130 246 / 10%));
+  outline: 1px dashed var(--color-accent, #3b82f6);
+  outline-offset: -1px;
+}
+
+.dockable-tab-bar__drop-indicator {
+  width: 2px;
+  background: var(--color-accent, #3b82f6);
+  flex-shrink: 0;
+  align-self: stretch;
+  border-radius: 1px;
+}

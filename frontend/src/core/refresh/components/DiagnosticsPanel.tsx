@@ -2153,13 +2153,6 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       allowMaximize
       maximizeTargetSelector=".content-body"
       onClose={onClose}
-      headerContent={
-        <div className="diagnostics-header-content">
-          <div className="diagnostics-header-info">
-            <span className="diagnostics-title">Diagnostics</span>
-          </div>
-        </div>
-      }
       contentClassName="diagnostics-content"
       className="diagnostics-panel"
     >

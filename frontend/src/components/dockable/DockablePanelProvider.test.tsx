@@ -59,7 +59,8 @@ describe('DockablePanelProvider', () => {
       const ctx = useDockablePanelContext();
       expect(ctx.dockedPanels).toEqual({ right: [], bottom: [] });
       expect(ctx.getAdjustedDimensions()).toEqual({ rightOffset: 0, bottomOffset: 0 });
-      ctx.registerPanel('test', 'right');
+      // New API: registerPanel takes a PanelRegistration object.
+      ctx.registerPanel({ panelId: 'test', title: 'Test', position: 'right' });
       ctx.unregisterPanel('test');
       return null;
     };
@@ -88,7 +89,7 @@ describe('DockablePanelProvider', () => {
     expect(ctx.getAdjustedDimensions()).toEqual({ rightOffset: 0, bottomOffset: 0 });
 
     await act(async () => {
-      ctx.registerPanel('panel-right', 'right');
+      ctx.registerPanel({ panelId: 'panel-right', title: 'Right Panel', position: 'right' });
       await Promise.resolve();
     });
     expect(contextRef.current!.dockedPanels.right).toEqual(['panel-right']);
@@ -100,7 +101,11 @@ describe('DockablePanelProvider', () => {
     // individual DockablePanel instances, not the provider.
 
     await act(async () => {
-      contextRef.current!.registerPanel('panel-bottom', 'bottom');
+      contextRef.current!.registerPanel({
+        panelId: 'panel-bottom',
+        title: 'Bottom Panel',
+        position: 'bottom',
+      });
       await Promise.resolve();
     });
     expect(contextRef.current!.dockedPanels.bottom).toEqual(['panel-bottom']);
@@ -133,5 +138,68 @@ describe('DockablePanelProvider', () => {
 
     await unmount();
     expect(document.querySelector('.dockable-panel-layer')).toBeNull();
+  });
+
+  it('exposes tabGroups state that reflects registered panels', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    // Initially empty.
+    expect(contextRef.current!.tabGroups.right.tabs).toEqual([]);
+    expect(contextRef.current!.tabGroups.bottom.tabs).toEqual([]);
+    expect(contextRef.current!.tabGroups.floating).toEqual([]);
+
+    // Register a right panel.
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'logs',
+        title: 'Logs',
+        position: 'right',
+      });
+      await Promise.resolve();
+    });
+    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['logs']);
+    expect(contextRef.current!.tabGroups.right.activeTab).toBe('logs');
+
+    // Register a second right panel.
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'details',
+        title: 'Details',
+        position: 'right',
+      });
+      await Promise.resolve();
+    });
+    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['logs', 'details']);
+    // Most recently added panel becomes active.
+    expect(contextRef.current!.tabGroups.right.activeTab).toBe('details');
+
+    // switchTab to logs.
+    await act(async () => {
+      contextRef.current!.switchTab('right', 'logs');
+      await Promise.resolve();
+    });
+    expect(contextRef.current!.tabGroups.right.activeTab).toBe('logs');
+
+    // Unregister details.
+    await act(async () => {
+      contextRef.current!.unregisterPanel('details');
+      await Promise.resolve();
+    });
+    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['logs']);
+
+    await unmount();
   });
 });

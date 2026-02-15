@@ -752,7 +752,7 @@ describe('DockablePanel behaviour (real hook)', () => {
     errorSpy.mockRestore();
   });
 
-  it('closes other panels docked on the same side before docking a new panel', async () => {
+  it('allows panels docked on the same side to coexist as tabs', async () => {
     const { unmount } = await renderPanel(
       <div>
         <DockablePanel panelId="panel-side-a" defaultPosition="right" isOpen>
@@ -781,7 +781,8 @@ describe('DockablePanel behaviour (real hook)', () => {
 
     await flushEffects();
 
-    expect(getPanelState('panel-side-a').isOpen).toBe(false);
+    // With tabs, both panels stay open and coexist in the right group.
+    expect(getPanelState('panel-side-a').isOpen).toBe(true);
     expect(getPanelState('panel-side-b').position).toBe('right');
     expect(getPanelState('panel-side-b').isOpen).toBe(true);
 
@@ -808,7 +809,7 @@ describe('DockablePanel behaviour (real hook)', () => {
     await unmount();
   });
 
-  it('keeps only the most recently opened panel docked on the bottom edge', async () => {
+  it('allows multiple panels docked on the bottom edge to coexist as tabs', async () => {
     const { unmount } = await renderPanel(
       <div>
         <DockablePanel panelId="panel-bottom-a" defaultPosition="bottom" isOpen>
@@ -822,7 +823,8 @@ describe('DockablePanel behaviour (real hook)', () => {
 
     await flushEffects();
 
-    expect(getPanelState('panel-bottom-a').isOpen).toBe(false);
+    // With tabs, both panels stay open and coexist in the bottom group.
+    expect(getPanelState('panel-bottom-a').isOpen).toBe(true);
     expect(getPanelState('panel-bottom-a').position).toBe('bottom');
     expect(getPanelState('panel-bottom-b').isOpen).toBe(true);
     expect(getPanelState('panel-bottom-b').position).toBe('bottom');
@@ -830,7 +832,7 @@ describe('DockablePanel behaviour (real hook)', () => {
     await unmount();
   });
 
-  it('closes an existing bottom-docked panel when a controlled panel opens there', async () => {
+  it('keeps an existing bottom-docked panel open when a controlled panel opens there (tab coexistence)', async () => {
     const Host: React.FC<{ diagnosticsOpen: boolean }> = ({ diagnosticsOpen }) => (
       <>
         <DockablePanel panelId="panel-bottom-existing" defaultPosition="bottom" isOpen>
@@ -855,7 +857,8 @@ describe('DockablePanel behaviour (real hook)', () => {
     await rerender(<Host diagnosticsOpen />);
     await flushEffects();
 
-    expect(getPanelState('panel-bottom-existing').isOpen).toBe(false);
+    // With tabs, both panels stay open and coexist in the bottom group.
+    expect(getPanelState('panel-bottom-existing').isOpen).toBe(true);
     expect(getPanelState('panel-bottom-controlled').isOpen).toBe(true);
 
     await unmount();

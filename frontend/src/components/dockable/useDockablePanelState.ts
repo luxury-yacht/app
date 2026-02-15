@@ -81,12 +81,10 @@ function updatePanelState(panelId: string, updates: Partial<PanelState>) {
   notifyListeners(panelId);
 }
 
-// Set panel open state with dock conflict handling
+// Set panel open state.
+// With tabs, opening a panel at an occupied position joins the tab group
+// instead of closing other panels (dock-conflict removed).
 function setPanelOpenState(panelId: string, isOpen: boolean) {
-  const currentState = getInitialState(panelId);
-  if (isOpen && (currentState.position === 'right' || currentState.position === 'bottom')) {
-    closeDockedPanels(currentState.position, panelId);
-  }
   updatePanelState(panelId, isOpen ? { isOpen: true, zIndex: ++globalZIndex } : { isOpen });
   if (panelId === 'app-logs') {
     import('../../../wailsjs/go/backend/App').then(({ SetLogsPanelVisible }) => {
@@ -95,7 +93,10 @@ function setPanelOpenState(panelId: string, isOpen: boolean) {
   }
 }
 
-// Close all panels docked at a specific position, except for an optional panel ID
+/**
+ * @deprecated No longer used — panels now join tab groups instead of conflicting.
+ * Retained for backward compatibility but never called internally.
+ */
 export function closeDockedPanels(position: DockPosition, exceptPanelId?: string) {
   if (position === 'floating') {
     return;
@@ -192,10 +193,6 @@ export function useDockablePanelState(panelId: string) {
         const defaultSize = options.size || {};
         const finalIsOpen = options.isOpen ?? localState.isOpen;
         const targetPosition = options.position ?? localState.position;
-
-        if (finalIsOpen && (targetPosition === 'right' || targetPosition === 'bottom')) {
-          closeDockedPanels(targetPosition, panelId);
-        }
 
         updatePanelState(panelId, {
           position: targetPosition,
