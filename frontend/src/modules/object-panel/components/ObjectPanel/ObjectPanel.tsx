@@ -177,7 +177,7 @@ interface ObjectPanelProps {
 function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   const objectData = objectRef;
   const { closePanel } = useObjectPanelState();
-  const { tabGroups } = useDockablePanelContext();
+  const { tabGroups, getLastFocusedPosition } = useDockablePanelContext();
 
   // Determine whether this tab is active within its group (for polling control).
   const groupKey = getGroupForPanel(tabGroups, panelId);
@@ -634,7 +634,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         panelId={panelId}
         title={tabTitle}
         isOpen={isOpen}
-        defaultPosition="right"
+        defaultPosition={getLastFocusedPosition()}
         className="object-panel-dockable"
         allowMaximize
         maximizeTargetSelector=".content-body"
