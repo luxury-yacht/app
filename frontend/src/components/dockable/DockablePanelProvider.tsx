@@ -178,8 +178,14 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       root.style.removeProperty('--dockable-tab-drag-y');
       return;
     }
-    root.style.setProperty('--dockable-tab-drag-x', `${Math.round(dragState.cursorPosition.x + 14)}px`);
-    root.style.setProperty('--dockable-tab-drag-y', `${Math.round(dragState.cursorPosition.y + 16)}px`);
+    root.style.setProperty(
+      '--dockable-tab-drag-x',
+      `${Math.round(dragState.cursorPosition.x + 14)}px`
+    );
+    root.style.setProperty(
+      '--dockable-tab-drag-y',
+      `${Math.round(dragState.cursorPosition.y + 16)}px`
+    );
   }, [dragState]);
 
   useLayoutEffect(() => {
@@ -194,13 +200,21 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   }, []);
 
   // Last-focused group -- tracks which panel group the user most recently interacted with.
-  // New panels open in this group's dock position. Defaults to 'right' if null.
-  const [lastFocusedGroupKey, setLastFocusedGroupKey] = useState<GroupKey | null>(null);
+  // Keep both state (for rendering) and a ref (for same-tick reads in callbacks).
+  const [lastFocusedGroupKey, setLastFocusedGroupKeyState] = useState<GroupKey | null>(null);
+  const lastFocusedGroupKeyRef = useRef<GroupKey | null>(null);
+  // When a tab is moved to a *new* floating group, the final group key
+  // is only known after tabGroups updates. Track the moved panel id so we
+  // can resolve and store the focused floating group in an effect.
+  const pendingFocusPanelIdRef = useRef<string | null>(null);
+  const setLastFocusedGroupKey = useCallback((key: GroupKey) => {
+    lastFocusedGroupKeyRef.current = key;
+    setLastFocusedGroupKeyState(key);
+  }, []);
 
-  /** Map the last-focused group key to a DockPosition for new panels.
-   *  If the focused group still has tabs, use its position.
-   *  Otherwise scan for any group with open tabs so new panels join it.
-   *  Falls back to 'right' only when no panels are open at all. */
+  /** Map the currently focused group to a DockPosition for new panels.
+   *  New object panels should follow focus. If no valid focused group exists,
+   *  default to right-docked placement. */
   const getLastFocusedPosition = useCallback((): DockPosition => {
     // Helper: map a group key to a DockPosition.
     const keyToPosition = (key: GroupKey): DockPosition => {
@@ -210,31 +224,47 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     };
 
     // If we have a valid last-focused group with tabs, use it.
-    if (lastFocusedGroupKey) {
-      const group = getGroupTabs(tabGroups, lastFocusedGroupKey);
+    const focusedGroupKey = lastFocusedGroupKeyRef.current;
+    if (focusedGroupKey) {
+      const group = getGroupTabs(tabGroups, focusedGroupKey);
       if (group && group.tabs.length > 0) {
-        return keyToPosition(lastFocusedGroupKey);
+        return keyToPosition(focusedGroupKey);
       }
     }
 
-    // No valid focused group — find any group that has open tabs.
-    if (tabGroups.right.tabs.length > 0) return 'right';
-    if (tabGroups.bottom.tabs.length > 0) return 'bottom';
-    if (tabGroups.floating.length > 0 && tabGroups.floating[0].tabs.length > 0) return 'floating';
-
-    // Nothing open — default to right.
+    // No valid focused group — default to right.
     return 'right';
-  }, [lastFocusedGroupKey, tabGroups]);
+  }, [tabGroups]);
 
   // Focus a panel by ID: activate its tab in the group and bring it to front.
-  const focusPanel = useCallback((panelId: string) => {
-    setTabGroups((prev) => {
-      const groupKey = getGroupForPanel(prev, panelId);
-      if (!groupKey) return prev;
-      return setActiveTab(prev, panelId, groupKey);
-    });
-    focusPanelById(panelId);
-  }, []);
+  const focusPanel = useCallback(
+    (panelId: string) => {
+      const focusedGroupKey = getGroupForPanel(tabGroups, panelId);
+      if (focusedGroupKey) {
+        setLastFocusedGroupKey(focusedGroupKey);
+      }
+      setTabGroups((prev) => {
+        const groupKey = getGroupForPanel(prev, panelId);
+        if (!groupKey) return prev;
+        return setActiveTab(prev, panelId, groupKey);
+      });
+      focusPanelById(panelId);
+    },
+    [tabGroups, setLastFocusedGroupKey]
+  );
+
+  useLayoutEffect(() => {
+    const pendingPanelId = pendingFocusPanelIdRef.current;
+    if (!pendingPanelId) {
+      return;
+    }
+    const resolvedGroupKey = getGroupForPanel(tabGroups, pendingPanelId);
+    if (!resolvedGroupKey) {
+      return;
+    }
+    pendingFocusPanelIdRef.current = null;
+    setLastFocusedGroupKey(resolvedGroupKey);
+  }, [tabGroups, setLastFocusedGroupKey]);
 
   // -----------------------------------------------------------------------
   // registerPanel stores panel metadata only.
@@ -274,6 +304,18 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
 
       if (alreadyInDesiredGroup) {
         return prev;
+      }
+
+      if (position === 'floating') {
+        const focusedGroupKey = lastFocusedGroupKeyRef.current;
+        if (focusedGroupKey && focusedGroupKey !== 'right' && focusedGroupKey !== 'bottom') {
+          const focusedFloatingGroup = getGroupTabs(prev, focusedGroupKey);
+          // When a floating panel group is focused, new floating panels should
+          // join that group as tabs instead of creating another floating window.
+          if (focusedFloatingGroup && focusedFloatingGroup.tabs.length > 0) {
+            return addPanelToFloatingGroup(prev, panelId, focusedGroupKey);
+          }
+        }
       }
 
       return addPanelToGroup(prev, panelId, position);
@@ -326,12 +368,21 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     (panelId: string, targetGroupKey: GroupKey | 'floating', insertIndex?: number) => {
       setTabGroups((prev) => movePanelToGroup(prev, panelId, targetGroupKey, insertIndex));
 
+      if (targetGroupKey === 'floating') {
+        // New floating group id is generated during the tabGroups update;
+        // resolve it in the layout effect above.
+        pendingFocusPanelIdRef.current = panelId;
+      } else {
+        pendingFocusPanelIdRef.current = null;
+        setLastFocusedGroupKey(targetGroupKey);
+      }
+
       // Keep panel-state position aligned with tab-group destination.
       const targetPosition: DockPosition =
         targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
       setPanelPositionById(panelId, targetPosition);
     },
-    []
+    [setLastFocusedGroupKey]
   );
 
   // -----------------------------------------------------------------------
@@ -464,7 +515,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
         {dragState ? (
           <div className="dockable-tab-drag-preview" aria-hidden="true">
             {dragPreviewKindClass ? (
-              <span className={`dockable-tab-drag-preview__kind kind-badge ${dragPreviewKindClass}`} />
+              <span
+                className={`dockable-tab-drag-preview__kind kind-badge ${dragPreviewKindClass}`}
+              />
             ) : null}
             <span className="dockable-tab-drag-preview__label">{dragPreviewTitle}</span>
           </div>

@@ -37,7 +37,11 @@ import { useCommandPaletteCommands } from '@ui/command-palette/CommandPaletteCom
 import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
 import { PanelErrorBoundary, RouteErrorBoundary } from '@components/errors';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
-import { DockablePanelProvider, getAllPanelStates, useDockablePanelContext } from '@/components/dockable';
+import {
+  DockablePanelProvider,
+  getAllPanelStates,
+  useDockablePanelContext,
+} from '@/components/dockable';
 // Auth Failure Overlay
 import { AuthFailureOverlay } from '@/components/overlays/AuthFailureOverlay';
 
@@ -513,11 +517,7 @@ const PanelDebugOverlay: React.FC<OverlayCloseProps> = ({ onClose }) => {
   ];
 
   return (
-    <DebugOverlay
-      title="Panel Debug (Ctrl+Alt+P)"
-      testId="panel-debug-overlay"
-      onClose={onClose}
-    >
+    <DebugOverlay title="Panel Debug (Ctrl+Alt+P)" testId="panel-debug-overlay" onClose={onClose}>
       <div className="debug-overlay__section">
         <div className="debug-overlay__label">Hierarchy ({registeredPanels.length} registered)</div>
         <div className="panel-debug-tree">

@@ -510,7 +510,11 @@ body.dockable-panel-resizing-sw * {
   position: fixed;
   top: 0;
   left: 0;
-  transform: translate3d(var(--dockable-tab-drag-x, -9999px), var(--dockable-tab-drag-y, -9999px), 0);
+  transform: translate3d(
+    var(--dockable-tab-drag-x, -9999px),
+    var(--dockable-tab-drag-y, -9999px),
+    0
+  );
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;

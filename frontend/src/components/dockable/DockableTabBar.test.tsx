@@ -267,9 +267,7 @@ describe('DockableTabBar', () => {
       metrics.setScrollLeft(0);
       window.dispatchEvent(new Event('resize'));
     });
-    expect(
-      host.querySelector('.dockable-tab-bar__overflow-indicator--left')
-    ).toBeNull();
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--left')).toBeNull();
     expect(host.querySelector('.dockable-tab-bar__overflow-indicator--right')).toBeTruthy();
 
     // Mid-scroll: both hints should show.
@@ -286,9 +284,7 @@ describe('DockableTabBar', () => {
       tabBar.dispatchEvent(new Event('scroll'));
     });
     expect(host.querySelector('.dockable-tab-bar__overflow-indicator--left')).toBeTruthy();
-    expect(
-      host.querySelector('.dockable-tab-bar__overflow-indicator--right')
-    ).toBeNull();
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--right')).toBeNull();
 
     await unmount();
   });

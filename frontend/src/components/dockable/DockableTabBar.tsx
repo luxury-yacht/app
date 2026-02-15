@@ -151,9 +151,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       left: maxScrollLeft > 1 && bar.scrollLeft > 1,
       right: maxScrollLeft > 1 && bar.scrollLeft < maxScrollLeft - 1,
     };
-    setOverflowHint((prev) =>
-      prev.left === next.left && prev.right === next.right ? prev : next
-    );
+    setOverflowHint((prev) => (prev.left === next.left && prev.right === next.right ? prev : next));
   }, []);
 
   useLayoutEffect(() => {
@@ -169,9 +167,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     window.addEventListener('resize', handleResize);
     // Track element size changes (e.g. panel resize) that do not emit window resize.
     const resizeObserver =
-      typeof ResizeObserver !== 'undefined'
-        ? new ResizeObserver(() => updateOverflowHint())
-        : null;
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => updateOverflowHint()) : null;
     resizeObserver?.observe(bar);
     return () => {
       bar.removeEventListener('scroll', handleScroll);
@@ -192,7 +188,9 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       // Prefer revealing the active tab when it's newly added; otherwise reveal
       // the last added tab so new tabs are always visible on creation.
       tabToRevealId =
-        activeTab && addedTabIds.includes(activeTab) ? activeTab : addedTabIds[addedTabIds.length - 1];
+        activeTab && addedTabIds.includes(activeTab)
+          ? activeTab
+          : addedTabIds[addedTabIds.length - 1];
     } else if (activeTab && previousActiveTab !== activeTab && nextTabIds.includes(activeTab)) {
       // Existing tab selection changed -- ensure the newly active tab is visible.
       tabToRevealId = activeTab;
@@ -335,8 +333,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
           // This avoids race conditions where source-bar mousemove can briefly
           // overwrite a target-bar dropTarget with null between React updates.
           const hoveredElement =
-            typeof document !== 'undefined' &&
-            typeof document.elementFromPoint === 'function'
+            typeof document !== 'undefined' && typeof document.elementFromPoint === 'function'
               ? document.elementFromPoint(e.clientX, e.clientY)
               : null;
           const hoveredBar = hoveredElement?.closest<HTMLElement>('.dockable-tab-bar');

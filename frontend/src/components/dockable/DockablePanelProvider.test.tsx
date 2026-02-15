@@ -247,8 +247,12 @@ describe('DockablePanelProvider', () => {
     expect(preview).toBeTruthy();
     expect(preview?.textContent).toContain('Drag Tab');
     expect(preview?.querySelector('.dockable-tab-drag-preview__kind.pod')).toBeTruthy();
-    expect(document.documentElement.style.getPropertyValue('--dockable-tab-drag-x')).toContain('114');
-    expect(document.documentElement.style.getPropertyValue('--dockable-tab-drag-y')).toContain('96');
+    expect(document.documentElement.style.getPropertyValue('--dockable-tab-drag-x')).toContain(
+      '114'
+    );
+    expect(document.documentElement.style.getPropertyValue('--dockable-tab-drag-y')).toContain(
+      '96'
+    );
 
     await act(async () => {
       contextRef.current!.setDragState(null);
@@ -256,6 +260,142 @@ describe('DockablePanelProvider', () => {
     });
 
     expect(container.querySelector('.dockable-tab-drag-preview')).toBeNull();
+
+    await unmount();
+  });
+
+  it('adds new floating panels to the focused floating group', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'float-a',
+        title: 'Float A',
+        position: 'floating',
+      });
+      contextRef.current!.syncPanelGroup('float-a', 'floating');
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
+    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['float-a']);
+
+    await act(async () => {
+      contextRef.current!.setLastFocusedGroupKey('floating-1');
+      contextRef.current!.registerPanel({
+        panelId: 'float-b',
+        title: 'Float B',
+        position: 'floating',
+      });
+      contextRef.current!.syncPanelGroup('float-b', 'floating');
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
+    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['float-a', 'float-b']);
+    expect(contextRef.current!.tabGroups.floating[0].activeTab).toBe('float-b');
+
+    await unmount();
+  });
+
+  it('returns right as default open position when no focused group exists', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'float-a',
+        title: 'Float A',
+        position: 'floating',
+      });
+      contextRef.current!.syncPanelGroup('float-a', 'floating');
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.getLastFocusedPosition()).toBe('right');
+
+    await act(async () => {
+      contextRef.current!.setLastFocusedGroupKey('floating-1');
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.getLastFocusedPosition()).toBe('floating');
+
+    await unmount();
+  });
+
+  it('keeps focus on moved floating panel so the next open joins that floating panel', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'obj-a',
+        title: 'Object A',
+        position: 'right',
+      });
+      contextRef.current!.syncPanelGroup('obj-a', 'right');
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      contextRef.current!.movePanelBetweenGroups('obj-a', 'floating');
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.getLastFocusedPosition()).toBe('floating');
+    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
+    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['obj-a']);
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'obj-b',
+        title: 'Object B',
+        position: contextRef.current!.getLastFocusedPosition(),
+      });
+      contextRef.current!.syncPanelGroup('obj-b', contextRef.current!.getLastFocusedPosition());
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
+    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['obj-a', 'obj-b']);
 
     await unmount();
   });
