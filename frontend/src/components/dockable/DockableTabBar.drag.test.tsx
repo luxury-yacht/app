@@ -319,6 +319,97 @@ describe('DockableTabBar drag-and-drop', () => {
     await unmount();
   });
 
+  it('moves to another group when hovering a different tab bar before mouseup', async () => {
+    const onMoveToGroup = vi.fn();
+    const onReorderTab = vi.fn();
+    const onUndockTab = vi.fn();
+
+    const Host: React.FC = () => {
+      const [dragState, setDragState] = React.useState<TabDragState | null>(null);
+      return (
+        <div>
+          <DockableTabBar
+            tabs={defaultTabs}
+            activeTab="p1"
+            onTabClick={vi.fn()}
+            groupKey="bottom"
+            dragState={dragState}
+            onDragStateChange={setDragState}
+            onReorderTab={onReorderTab}
+            onMoveToGroup={onMoveToGroup}
+            onUndockTab={onUndockTab}
+          />
+          <DockableTabBar
+            tabs={[
+              { panelId: 'r1', title: 'Right 1' },
+              { panelId: 'r2', title: 'Right 2' },
+            ]}
+            activeTab="r1"
+            onTabClick={vi.fn()}
+            groupKey="right"
+            dragState={dragState}
+            onDragStateChange={setDragState}
+            onReorderTab={vi.fn()}
+            onMoveToGroup={vi.fn()}
+            onUndockTab={vi.fn()}
+          />
+        </div>
+      );
+    };
+
+    const { host, unmount } = await renderTabBar(<Host />);
+
+    const bars = host.querySelectorAll('.dockable-tab-bar');
+    const sourceBar = bars[0] as HTMLElement;
+    const targetBar = bars[1] as HTMLElement;
+    const sourceTab = sourceBar.querySelector('.dockable-tab') as HTMLElement;
+    expect(sourceTab).toBeTruthy();
+    expect(targetBar).toBeTruthy();
+
+    Object.defineProperty(sourceBar, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 0, top: 0, right: 220, bottom: 30, width: 220, height: 30 }),
+    });
+    Object.defineProperty(targetBar, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({ left: 300, top: 0, right: 520, bottom: 30, width: 220, height: 30 }),
+    });
+
+    const originalElementFromPoint = document.elementFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: (x: number, y: number) => {
+        if (y >= 0 && y <= 30 && x >= 300 && x <= 520) {
+          return targetBar;
+        }
+        if (y >= 0 && y <= 30 && x >= 0 && x <= 220) {
+          return sourceBar;
+        }
+        return null;
+      },
+    });
+
+    await act(async () => {
+      fireMouseDown(sourceTab, 100, 10);
+      fireMouseMove(315, 12);
+    });
+
+    await act(async () => {
+      fireMouseUp();
+    });
+
+    expect(onMoveToGroup).toHaveBeenCalled();
+    expect(onMoveToGroup).toHaveBeenCalledWith('p1', 'right', expect.any(Number));
+    expect(onReorderTab).not.toHaveBeenCalled();
+    expect(onUndockTab).not.toHaveBeenCalled();
+
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: originalElementFromPoint,
+    });
+    await unmount();
+  });
+
   // -----------------------------------------------------------------------
   // 5. Undock -- mouseup far from source bar with no drop target
   // -----------------------------------------------------------------------

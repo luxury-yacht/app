@@ -81,6 +81,26 @@ function calculateInsertIndex(
 }
 
 /**
+ * Calculate insertion index from rendered tab elements only.
+ * Used for cross-group hover detection where we don't have target group tab data in props.
+ */
+function calculateInsertIndexFromBarElement(barElement: HTMLElement, cursorX: number): number {
+  const tabElements = barElement.querySelectorAll<HTMLElement>('.dockable-tab');
+  let insertIndex = tabElements.length;
+
+  for (let i = 0; i < tabElements.length; i++) {
+    const rect = tabElements[i].getBoundingClientRect();
+    const midX = rect.left + rect.width / 2;
+    if (cursorX < midX) {
+      insertIndex = i;
+      break;
+    }
+  }
+
+  return insertIndex;
+}
+
+/**
  * DockableTabBar -- horizontal tab strip for grouped dockable panels.
  *
  * Tabs are closed via the panel's existing close button (in the panel
@@ -310,10 +330,28 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
             dragStart.panelId
           );
           dropTarget = { groupKey, insertIndex };
-        } else if (dropTarget?.groupKey === groupKey) {
-          // Only clear when the current target points at this source bar.
-          // Keep other-group targets so cross-group drops are stable.
-          dropTarget = null;
+        } else {
+          // Resolve cross-group target directly from the hovered tab bar.
+          // This avoids race conditions where source-bar mousemove can briefly
+          // overwrite a target-bar dropTarget with null between React updates.
+          const hoveredElement =
+            typeof document !== 'undefined' &&
+            typeof document.elementFromPoint === 'function'
+              ? document.elementFromPoint(e.clientX, e.clientY)
+              : null;
+          const hoveredBar = hoveredElement?.closest<HTMLElement>('.dockable-tab-bar');
+          const hoveredGroupKey = hoveredBar?.dataset.groupKey ?? null;
+
+          if (hoveredBar && hoveredGroupKey && hoveredGroupKey !== groupKey) {
+            dropTarget = {
+              groupKey: hoveredGroupKey,
+              insertIndex: calculateInsertIndexFromBarElement(hoveredBar, e.clientX),
+            };
+          } else if (dropTarget?.groupKey === groupKey) {
+            // Only clear when the current target points at this source bar.
+            // Keep other-group targets so cross-group drops remain stable.
+            dropTarget = null;
+          }
         }
       }
 
@@ -468,6 +506,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       <div
         ref={barRef}
         className={barClassName}
+        data-group-key={groupKey}
         onMouseDown={handleBarMouseDown}
         onMouseMove={handleBarMouseMove}
         onMouseEnter={handleBarMouseEnter}
