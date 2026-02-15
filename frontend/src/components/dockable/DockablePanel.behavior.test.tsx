@@ -643,10 +643,12 @@ describe('DockablePanel behaviour (real hook)', () => {
   });
 
   it('resizes a bottom-docked panel when dragging the top handle', async () => {
+    // Use a height larger than the default panel height so the drag can
+    // increase the panel size without being clamped by the content bounds.
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
       writable: true,
-      value: 600,
+      value: 900,
     });
 
     const { unmount } = await renderPanel(

@@ -170,7 +170,7 @@ describe('useDockablePanelState', () => {
     await hook.update((state) => state.setPosition('floating'));
     await hook.update((state) => state.setFloatingPosition({ x: -40, y: -10 }));
 
-    expect(hook.current.floatingPosition.x).toBeGreaterThanOrEqual(50);
+    expect(hook.current.floatingPosition.x).toBeGreaterThanOrEqual(0);
     expect(hook.current.floatingPosition.y).toBeGreaterThanOrEqual(50);
 
     await hook.update((state) => state.setFloatingPosition({ x: 2000, y: 2000 }));

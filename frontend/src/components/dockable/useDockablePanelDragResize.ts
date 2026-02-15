@@ -299,7 +299,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       if (isDragging && currentPanelState.position === 'floating') {
         const minDistanceFromEdge = LAYOUT.MIN_EDGE_DISTANCE;
         const newX = Math.max(
-          minDistanceFromEdge,
+          0,
           Math.min(content.width - currentPanelState.size.width, mouseX - dragOffset.x)
         );
         const newY = Math.max(

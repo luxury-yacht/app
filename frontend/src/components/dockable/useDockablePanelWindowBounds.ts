@@ -121,8 +121,8 @@ export function useWindowBoundsConstraint(
           }
 
           // Ensure panel stays within left edge.
-          if (currentPosition.x < LAYOUT.MIN_EDGE_DISTANCE) {
-            newPosition.x = LAYOUT.MIN_EDGE_DISTANCE;
+          if (currentPosition.x < 0) {
+            newPosition.x = 0;
             needsUpdate = true;
           }
 

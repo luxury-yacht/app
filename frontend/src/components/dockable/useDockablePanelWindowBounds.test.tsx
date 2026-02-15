@@ -146,7 +146,7 @@ describe('useWindowBoundsConstraint', () => {
     });
 
     expect(panelState.setSize).toHaveBeenCalledWith({ width: 700, height: 500 });
-    expect(panelState.setFloatingPosition).toHaveBeenCalledWith({ x: 50, y: 50 });
+    expect(panelState.setFloatingPosition).toHaveBeenCalledWith({ x: 0, y: 50 });
 
     await unmount();
   });

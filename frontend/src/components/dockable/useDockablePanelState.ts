@@ -284,18 +284,9 @@ export function useDockablePanelState(panelId: string) {
       const minDistanceFromEdge = 50;
       const content = getContentBounds();
       const validatedPosition = {
-        x: Math.max(minDistanceFromEdge, Math.min(position.x, content.width - 200)),
+        x: Math.max(0, Math.min(position.x, content.width - 200)),
         y: Math.max(minDistanceFromEdge, Math.min(position.y, content.height - 100)),
       };
-
-      // Never allow position to be at 0,0 or very close to it
-      if (validatedPosition.x < minDistanceFromEdge && validatedPosition.y < minDistanceFromEdge) {
-        // Reset to center if somehow we get invalid coordinates
-        const defaultFloatingWidth = 600;
-        const defaultFloatingHeight = 400;
-        validatedPosition.x = Math.max(100, (content.width - defaultFloatingWidth) / 2);
-        validatedPosition.y = Math.max(100, (content.height - defaultFloatingHeight) / 2);
-      }
 
       updatePanelState(panelId, { floatingPosition: validatedPosition });
     },
