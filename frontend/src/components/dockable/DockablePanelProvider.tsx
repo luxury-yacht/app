@@ -83,8 +83,8 @@ interface DockablePanelContextValue {
 
   // Content registry -- allows the group leader to render other panels' body content.
   panelContentRefsMap: React.MutableRefObject<Map<string, React.MutableRefObject<React.ReactNode>>>;
-  notifyContentChange: () => void;
-  subscribeContentChange: (fn: () => void) => () => void;
+  notifyContentChange: (groupKey: GroupKey) => void;
+  subscribeContentChange: (groupKey: GroupKey, fn: () => void) => () => void;
   // Runtime refs currently shared across panels in this provider.
   groupLeaderByKeyRef: React.MutableRefObject<Map<string, string>>;
   updateGridTableHoverSuppression: (shouldSuppress: boolean) => void;
@@ -623,16 +623,28 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // access it without requiring a re-render of the provider.
   // -----------------------------------------------------------------------
   const panelContentRefsMap = useRef(new Map<string, React.MutableRefObject<React.ReactNode>>());
-  const contentChangeListeners = useRef(new Set<() => void>());
+  const contentChangeListeners = useRef(new Map<GroupKey, Set<() => void>>());
 
-  const notifyContentChange = useCallback(() => {
-    contentChangeListeners.current.forEach((fn) => fn());
+  const notifyContentChange = useCallback((groupKey: GroupKey) => {
+    const listeners = contentChangeListeners.current.get(groupKey);
+    if (!listeners) {
+      return;
+    }
+    listeners.forEach((fn) => fn());
   }, []);
 
-  const subscribeContentChange = useCallback((fn: () => void) => {
-    contentChangeListeners.current.add(fn);
+  const subscribeContentChange = useCallback((groupKey: GroupKey, fn: () => void) => {
+    const listenersByGroup = contentChangeListeners.current;
+    if (!listenersByGroup.has(groupKey)) {
+      listenersByGroup.set(groupKey, new Set());
+    }
+    const listeners = listenersByGroup.get(groupKey)!;
+    listeners.add(fn);
     return () => {
-      contentChangeListeners.current.delete(fn);
+      listeners.delete(fn);
+      if (listeners.size === 0) {
+        listenersByGroup.delete(groupKey);
+      }
     };
   }, []);
 

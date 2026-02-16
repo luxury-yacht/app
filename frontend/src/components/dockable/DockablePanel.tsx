@@ -359,6 +359,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     return groupInfo.tabs[0];
   }, [groupKey, groupInfo, panelId, groupLeaderByKeyRef]);
   const isGroupLeader = groupInfo ? leaderPanelId === panelId : true;
+  const isActiveTab = groupInfo ? groupInfo.activeTab === panelId : true;
   const groupTabCount = groupInfo?.tabs.length ?? 0;
 
   // Keep one stable leader per group to avoid container jumps when tab order changes.
@@ -421,21 +422,22 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     groupTabCount,
   ]);
 
-  // Content change notification -- non-leaders notify the leader to re-render
-  // when their children change (e.g., logs streaming in while this panel is active tab).
+  // Content change notification:
+  // only the active non-leader tab notifies its own group leader.
+  // This preserves streaming updates without cascading across all leaders/groups.
   useEffect(() => {
-    if (!isGroupLeader) {
-      notifyContentChange();
+    if (!isGroupLeader && isActiveTab && groupKey) {
+      notifyContentChange(groupKey);
     }
   });
 
   // Leader subscribes to content changes from non-leaders.
   const [, forceContentUpdate] = React.useReducer((x: number) => x + 1, 0);
   useEffect(() => {
-    if (isGroupLeader && groupTabCount > 1) {
-      return subscribeContentChange(forceContentUpdate);
+    if (isGroupLeader && groupTabCount > 1 && groupKey) {
+      return subscribeContentChange(groupKey, forceContentUpdate);
     }
-  }, [isGroupLeader, groupTabCount, subscribeContentChange]);
+  }, [isGroupLeader, groupTabCount, groupKey, subscribeContentChange]);
 
   // Build tab info for the header.
   const tabsForHeader: TabInfo[] = useMemo(() => {
