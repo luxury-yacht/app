@@ -7,6 +7,10 @@ This document explains how dockable panels work in Luxury Yacht, with emphasis o
 The dockable system described here is implemented in:
 
 - `frontend/src/components/dockable/*`
+  - Core components: `DockablePanel.tsx`, `DockablePanelProvider.tsx`, `DockableTabBar.tsx`, `DockablePanelHeader.tsx`, `DockablePanelControls.tsx`
+  - State: `panelLayoutStore.ts`, `useDockablePanelState.ts`, `tabGroupState.ts`, `tabGroupTypes.ts`
+  - Interaction hooks: `useDockablePanelDragResize.ts`, `useDockablePanelMaximize.ts`, `useDockablePanelWindowBounds.ts`
+  - Layout helpers: `dockablePanelLayout.ts`
 - Object panel integration points in:
   - `frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx`
   - `frontend/src/modules/object-panel/hooks/useObjectPanel.ts`
@@ -94,7 +98,7 @@ Do not assume floating IDs are sequential in UI time; they are state-derived and
 A non-obvious but important behavior in `DockablePanel.tsx`:
 
 - Each panel instance still exists, but only one panel per group is the visible **group leader**.
-- `groupLeaderByKey` keeps a stable leader to prevent visual container jumping when tab order changes.
+- `groupLeaderByKeyRef` keeps a stable leader to prevent visual container jumping when tab order changes.
 - If leadership changes, layout state is copied from previous leader (`copyPanelLayoutState`) to prevent geometry flicker.
 - Non-leader panels are hidden (`display: none`), but their content is rendered through leader-managed content refs.
 - Group-leader tracking and shared hover-suppression counters are provider-owned runtime refs (not module-level globals), scoped to the active `DockablePanelProvider`.
@@ -174,10 +178,13 @@ Primary tests live in:
 
 - `frontend/src/components/dockable/tabGroupState.test.ts`
 - `frontend/src/components/dockable/DockablePanelProvider.test.tsx`
+- `frontend/src/components/dockable/DockablePanel.test.tsx`
+- `frontend/src/components/dockable/DockablePanel.behavior.test.tsx`
 - `frontend/src/components/dockable/DockableTabBar.test.tsx`
 - `frontend/src/components/dockable/DockableTabBar.drag.test.tsx`
-- `frontend/src/components/dockable/DockablePanel.behavior.test.tsx`
+- `frontend/src/components/dockable/DockablePanelControls.test.tsx`
 - `frontend/src/components/dockable/useDockablePanelState.test.tsx`
+- `frontend/src/components/dockable/useDockablePanelWindowBounds.test.tsx`
 
 For object open routing/focus interactions, also validate:
 
