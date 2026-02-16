@@ -2,33 +2,7 @@
 
 ## Issues
 
-✅ Tab consistency:
-
-I want the same height and basic visual style on all tabs
-
-- ✅ Same height
-- ✅ Same underline active style
-- ✅ Same text family and size
-- ✅ Same foreground and background colors
-- ✅ Subtle visual line separator between tabs, similar to the separators for the SegmentedButton component
-
-For Cluster and Dockable panel tabs
-
-- ✅ Show X on hover to close the tab
-- ✅ Min and max width set in CSS
-- ✅ Truncate text as necessary
-- ✅ Uppercase text
-
-For Dockable Panel tabs only
-
-- ✅ Keep the Kind Indicator as it, do not change the styling
-
-For Object Panel tabs only
-
-- ✅ Width determined by content, never truncate
-- ✅ Not closeable, no X on hover
-
-✅ IMPORTANT! Move as much of the style definitions as possible into a shared CSS file at styles/components/tabs.css
+Hide the shell connection controls when a shell is active.
 
 Unrelated:
 Components in two different places. `src/components` and `src/shared/components`. Why?

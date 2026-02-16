@@ -618,7 +618,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
 
   const placeholderMessage = useMemo(() => {
     if (mode === 'debug') {
-      return 'Select a debug image, container, and shell, then click Debug to start a debug session. Debug containers persist until the pod is deleted.';
+      return 'Select a debug image, target container, and shell, then click Debug to start a debug session. Debug containers persist until the pod is deleted.';
     }
     if (status === 'connecting') {
       return 'Connecting shell session...';
