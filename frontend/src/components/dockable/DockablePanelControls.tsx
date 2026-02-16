@@ -36,7 +36,7 @@ interface DockAction {
   target: DockPosition;
   title: string;
   ariaLabel: string;
-  icon: React.ReactNode;
+  renderIcon: () => React.ReactNode;
 }
 
 const dockActionsByPosition: Record<DockPosition, DockAction[]> = {
@@ -45,13 +45,13 @@ const dockActionsByPosition: Record<DockPosition, DockAction[]> = {
       target: 'bottom',
       title: 'Dock to bottom',
       ariaLabel: 'Dock panel to bottom',
-      icon: <DockBottomIcon width={20} height={20} />,
+      renderIcon: () => <DockBottomIcon width={20} height={20} />,
     },
     {
       target: 'right',
       title: 'Dock to right',
       ariaLabel: 'Dock panel to right side',
-      icon: <DockRightIcon width={20} height={20} />,
+      renderIcon: () => <DockRightIcon width={20} height={20} />,
     },
   ],
   right: [
@@ -59,13 +59,13 @@ const dockActionsByPosition: Record<DockPosition, DockAction[]> = {
       target: 'bottom',
       title: 'Dock to bottom',
       ariaLabel: 'Dock panel to bottom',
-      icon: <DockBottomIcon width={20} height={20} />,
+      renderIcon: () => <DockBottomIcon width={20} height={20} />,
     },
     {
       target: 'floating',
       title: 'Float panel',
       ariaLabel: 'Undock panel to floating window',
-      icon: <FloatPanelIcon width={20} height={20} />,
+      renderIcon: () => <FloatPanelIcon width={20} height={20} />,
     },
   ],
   bottom: [
@@ -73,13 +73,13 @@ const dockActionsByPosition: Record<DockPosition, DockAction[]> = {
       target: 'right',
       title: 'Dock to right',
       ariaLabel: 'Dock panel to right side',
-      icon: <DockRightIcon width={20} height={20} />,
+      renderIcon: () => <DockRightIcon width={20} height={20} />,
     },
     {
       target: 'floating',
       title: 'Float panel',
       ariaLabel: 'Undock panel to floating window',
-      icon: <FloatPanelIcon width={20} height={20} />,
+      renderIcon: () => <FloatPanelIcon width={20} height={20} />,
     },
   ],
 };
@@ -107,7 +107,7 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
             title={action.title}
             aria-label={action.ariaLabel}
           >
-            {action.icon}
+            {action.renderIcon()}
           </button>
         ))}
       {allowMaximize && (

@@ -83,7 +83,9 @@ export function unregisterPanelCloseHandler(
 
 export function useDockablePanelState(panelId: string) {
   const store = usePanelLayoutStoreContext();
-  const [localState, setLocalState] = useState<PanelLayoutState>(() => store.getInitialState(panelId));
+  const [localState, setLocalState] = useState<PanelLayoutState>(() =>
+    store.getInitialState(panelId)
+  );
 
   useEffect(() => {
     setLocalState(store.getInitialState(panelId));

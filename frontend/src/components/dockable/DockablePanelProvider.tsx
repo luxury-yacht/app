@@ -203,11 +203,12 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   const tabGroupsRef = useRef<TabGroupState>(tabGroups);
   tabGroupsRef.current = tabGroups;
 
-  // Panel registrations stored in a ref so that adding/removing registrations
-  // doesn't cause the whole tree to re-render. A bump counter forces a
-  // re-render when we need consumers to see updated registrations.
+  // Panel registrations are stored in a ref for callback access and mirrored
+  // into snapshot state to notify context consumers when metadata changes.
   const panelRegistrationsRef = useRef<Map<string, PanelRegistration>>(new Map());
-  const [registrationBump, setRegistrationBump] = useState(0);
+  const [panelRegistrationsSnapshot, setPanelRegistrationsSnapshot] = useState<
+    Map<string, PanelRegistration>
+  >(() => new Map());
 
   // Drag state for tab dragging (Phase 5).
   const [dragState, setDragStateState] = useState<TabDragState | null>(null);
@@ -372,9 +373,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   const registerPanel = useCallback((registration: PanelRegistration) => {
     // Store the registration metadata.
     panelRegistrationsRef.current.set(registration.panelId, registration);
-
-    // Bump the counter so consumers see the new registration.
-    setRegistrationBump((n) => n + 1);
+    setPanelRegistrationsSnapshot(new Map(panelRegistrationsRef.current));
   }, []);
 
   // -----------------------------------------------------------------------
@@ -382,9 +381,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // -----------------------------------------------------------------------
   const unregisterPanel = useCallback((panelId: string) => {
     panelRegistrationsRef.current.delete(panelId);
-
-    // Bump the counter so consumers see the removal.
-    setRegistrationBump((n) => n + 1);
+    setPanelRegistrationsSnapshot(new Map(panelRegistrationsRef.current));
   }, []);
 
   // -----------------------------------------------------------------------
@@ -695,7 +692,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   const value: DockablePanelContextValue = useMemo(
     () => ({
       tabGroups,
-      panelRegistrations: panelRegistrationsRef.current,
+      panelRegistrations: panelRegistrationsSnapshot,
       registerPanel,
       unregisterPanel,
       syncPanelGroup,
@@ -721,7 +718,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     }),
     [
       tabGroups,
-      registrationBump,
+      panelRegistrationsSnapshot,
       registerPanel,
       unregisterPanel,
       syncPanelGroup,
