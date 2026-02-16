@@ -46,7 +46,9 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   const barRef = useRef<HTMLDivElement>(null);
   const previousTabIdsRef = useRef<string[]>(tabs.map((tab) => tab.panelId));
   const previousActiveTabRef = useRef<string | null>(activeTab ?? null);
-  const [overflowHint, setOverflowHint] = useState({ left: false, right: false });
+  const [overflowHint, setOverflowHint] = useState({
+    left: false, right: false, leftCount: 0, rightCount: 0,
+  });
 
   useEffect(() => {
     registerTabBarElement(groupKey, barRef.current);
@@ -61,20 +63,49 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     if (!bar) {
       return;
     }
-    if (bar.clientWidth <= 0) {
-      setOverflowHint((prev) => (prev.left || prev.right ? { left: false, right: false } : prev));
-      return;
-    }
-    if (bar.clientWidth < MIN_OVERFLOW_HINT_WIDTH) {
-      setOverflowHint((prev) => (prev.left || prev.right ? { left: false, right: false } : prev));
+    if (bar.clientWidth <= 0 || bar.clientWidth < MIN_OVERFLOW_HINT_WIDTH) {
+      setOverflowHint((prev) =>
+        prev.left || prev.right
+          ? { left: false, right: false, leftCount: 0, rightCount: 0 }
+          : prev
+      );
       return;
     }
     const maxScrollLeft = Math.max(0, bar.scrollWidth - bar.clientWidth);
-    const next = {
-      left: maxScrollLeft > 1 && bar.scrollLeft > 1,
-      right: maxScrollLeft > 1 && bar.scrollLeft < maxScrollLeft - 1,
-    };
-    setOverflowHint((prev) => (prev.left === next.left && prev.right === next.right ? prev : next));
+    const hasOverflow = maxScrollLeft > 1;
+    const hasLeft = hasOverflow && bar.scrollLeft > 1;
+    const hasRight = hasOverflow && bar.scrollLeft < maxScrollLeft - 1;
+
+    // Count fully hidden tabs on each side (partially visible tabs are not counted).
+    // The sticky overflow indicators (position: sticky) visually cover part of the
+    // scrollable area, so a tab whose entire width falls behind an indicator is
+    // considered fully hidden even though it's still inside the scroll viewport.
+    let leftCount = 0;
+    let rightCount = 0;
+    if (hasLeft || hasRight) {
+      const indicatorSize = parseFloat(
+        getComputedStyle(bar.parentElement ?? bar)
+          .getPropertyValue('--dockable-tab-overflow-indicator-size') || '32'
+      );
+      const tabEls = bar.querySelectorAll<HTMLElement>('[role="tab"]');
+      const barLeft = bar.scrollLeft;
+      const barRight = barLeft + bar.clientWidth;
+      const leftEdge = hasLeft ? barLeft + indicatorSize : barLeft;
+      const rightEdge = hasRight ? barRight - indicatorSize : barRight;
+      for (const tab of tabEls) {
+        const tabLeft = tab.offsetLeft;
+        const tabRight = tabLeft + tab.offsetWidth;
+        if (tabRight <= leftEdge + 1) leftCount++;
+        if (tabLeft >= rightEdge - 1) rightCount++;
+      }
+    }
+
+    const next = { left: hasLeft, right: hasRight, leftCount, rightCount };
+    setOverflowHint((prev) =>
+      prev.left === next.left && prev.right === next.right &&
+      prev.leftCount === next.leftCount && prev.rightCount === next.rightCount
+        ? prev : next
+    );
   }, []);
 
   useLayoutEffect(() => {
@@ -285,10 +316,13 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
           <button
             type="button"
             className="dockable-tab-bar__overflow-indicator dockable-tab-bar__overflow-indicator--left"
-            aria-label="Scroll tabs left"
+            aria-label={`Scroll tabs left${overflowHint.leftCount > 0 ? ` (${overflowHint.leftCount} hidden)` : ''}`}
             onMouseDown={handleOverflowMouseDown}
             onClick={handleScrollLeftClick}
           >
+            {overflowHint.leftCount > 0 && (
+              <span className="dockable-tab-bar__overflow-count">{overflowHint.leftCount}</span>
+            )}
             <svg
               className="dockable-tab-bar__overflow-icon"
               viewBox="0 0 12 12"
@@ -351,7 +385,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
           <button
             type="button"
             className="dockable-tab-bar__overflow-indicator dockable-tab-bar__overflow-indicator--right"
-            aria-label="Scroll tabs right"
+            aria-label={`Scroll tabs right${overflowHint.rightCount > 0 ? ` (${overflowHint.rightCount} hidden)` : ''}`}
             onMouseDown={handleOverflowMouseDown}
             onClick={handleScrollRightClick}
           >
@@ -363,6 +397,9 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
             >
               <path d="M4.5 2.5L7.5 6L4.5 9.5" stroke="currentColor" strokeWidth="1.6" />
             </svg>
+            {overflowHint.rightCount > 0 && (
+              <span className="dockable-tab-bar__overflow-count">{overflowHint.rightCount}</span>
+            )}
           </button>
         )}
       </div>

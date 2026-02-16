@@ -555,6 +555,17 @@ body.dockable-panel-resizing-sw * {
   stroke-linejoin: round;
 }
 
+.dockable-tab-bar__overflow-count {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--color-text-tertiary);
+}
+
+.dockable-tab-bar__overflow-indicator:hover .dockable-tab-bar__overflow-count {
+  color: var(--color-text-secondary);
+}
+
 .dockable-tab-bar__overflow-indicator--left {
   left: 0;
 }

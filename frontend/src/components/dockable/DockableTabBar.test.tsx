@@ -485,7 +485,7 @@ describe('DockableTabBar', () => {
     tabBar.querySelectorAll = ((selector: string) => {
       const result = origQuerySelectorAll(selector);
       if (selector === '.tab-item') {
-        result.forEach((el: HTMLElement, i: number) => {
+        result.forEach((el: Element, i: number) => {
           Object.defineProperty(el, 'offsetLeft', { configurable: true, get: () => i * 120 });
           Object.defineProperty(el, 'offsetWidth', { configurable: true, get: () => 120 });
         });
