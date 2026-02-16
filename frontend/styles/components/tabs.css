@@ -98,13 +98,13 @@
 }
 
 .tab-item__close:hover {
-  color: var(--color-text);
-  background-color: var(--color-bg-secondary);
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 12%, var(--color-bg-tertiary));
 }
 
 .tab-item__close svg {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
 }
 
 /* Focus-visible styles for accessibility */
