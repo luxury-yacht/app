@@ -219,6 +219,11 @@ describe('ActiveSessionsPanel', () => {
       }),
       'shell'
     );
+
+    const shellStatusIcon = document.querySelector(
+      '.as-section .as-pf-status-slot .pf-status-icon.pf-status-active'
+    );
+    expect(shellStatusIcon).toBeTruthy();
   });
 
   it('switches cluster first, then opens the pod panel for cross-cluster shell sessions', async () => {
@@ -324,7 +329,6 @@ describe('ActiveSessionsPanel', () => {
     expect(document.body.textContent).toContain('cluster:');
     expect(document.body.textContent).toContain('namespace:');
     expect(document.body.textContent).toContain('pod:');
-    expect(document.body.textContent).toContain('container:');
     expect(document.body.textContent).toContain('ports:');
     expect(document.body.textContent).toContain('8080:18080');
 

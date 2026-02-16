@@ -155,17 +155,26 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       onTrigger?.();
     };
 
-    // Build port forward target from object data
-    const portForwardTarget: PortForwardTarget | null = object
-      ? {
-          kind: object.kind,
-          name: object.name,
-          namespace: object.namespace || '',
-          clusterId: object.clusterId || '',
-          clusterName: object.clusterName || '',
-          ports: [],
-        }
-      : null;
+    // Build a stable port-forward target to avoid unnecessary modal resets.
+    const portForwardTarget: PortForwardTarget | null = useMemo(() => {
+      if (!object) {
+        return null;
+      }
+      return {
+        kind: object.kind,
+        name: object.name,
+        namespace: object.namespace || '',
+        clusterId: object.clusterId || '',
+        clusterName: object.clusterName || '',
+        ports: [],
+      };
+    }, [
+      object?.kind,
+      object?.name,
+      object?.namespace,
+      object?.clusterId,
+      object?.clusterName,
+    ]);
 
     return (
       <>

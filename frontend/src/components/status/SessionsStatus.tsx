@@ -10,9 +10,6 @@ import { usePortForwardStatus } from '@modules/port-forward/hooks/usePortForward
 import { useShellSessionStatus } from '@modules/shell-session/hooks/useShellSessionStatus';
 import { useActiveSessionsPanel } from '@modules/active-session';
 
-const pluralize = (count: number, singular: string, plural: string): string =>
-  `${count} ${count === 1 ? singular : plural}`;
-
 const SessionsStatus: React.FC = () => {
   const shell = useShellSessionStatus();
   const portForwards = usePortForwardStatus();
@@ -29,40 +26,20 @@ const SessionsStatus: React.FC = () => {
     return 'degraded';
   }, [totalCount, totalHealthy, totalUnhealthy]);
 
-  const message = useMemo(() => {
-    if (totalCount === 0) {
-      return 'No active sessions';
-    }
+  const message = useMemo(
+    () => (
+      <>
+        <div>Shell Sessions: {shell.totalCount}</div>
+        <div>Port Forwards: {portForwards.totalCount}</div>
+      </>
+    ),
+    [portForwards.totalCount, shell.totalCount]
+  );
 
-    if (shell.totalCount === 0) {
-      if (portForwards.unhealthyCount === 0) {
-        return `${pluralize(portForwards.totalCount, 'port forward', 'port forwards')} active`;
-      }
-      if (portForwards.healthyCount === 0) {
-        return `All ${pluralize(portForwards.totalCount, 'port forward', 'port forwards')} unhealthy`;
-      }
-      return `${portForwards.unhealthyCount} of ${pluralize(portForwards.totalCount, 'port forward', 'port forwards')} unhealthy`;
-    }
-
-    if (portForwards.totalCount === 0) {
-      return `${pluralize(shell.totalCount, 'shell session', 'shell sessions')} active`;
-    }
-
-    const details = [
-      pluralize(shell.totalCount, 'shell session', 'shell sessions'),
-      pluralize(portForwards.totalCount, 'port forward', 'port forwards'),
-    ];
-    if (portForwards.unhealthyCount > 0) {
-      details.push(`${pluralize(portForwards.unhealthyCount, 'unhealthy port forward', 'unhealthy port forwards')}`);
-    }
-    return `${pluralize(totalCount, 'session', 'sessions')} active (${details.join(', ')})`;
-  }, [
-    portForwards.healthyCount,
-    portForwards.totalCount,
-    portForwards.unhealthyCount,
-    shell.totalCount,
-    totalCount,
-  ]);
+  const messageAria = useMemo(
+    () => `Shell Sessions: ${shell.totalCount}. Port Forwards: ${portForwards.totalCount}.`,
+    [portForwards.totalCount, shell.totalCount]
+  );
 
   const handleAction = useCallback(() => {
     activeSessionsPanel.setOpen(true);
@@ -75,7 +52,7 @@ const SessionsStatus: React.FC = () => {
       message={message}
       actionLabel={totalCount > 0 ? 'Manage' : undefined}
       onAction={totalCount > 0 ? handleAction : undefined}
-      ariaLabel={`Sessions: ${message}`}
+      ariaLabel={`Sessions: ${messageAria}`}
     />
   );
 };

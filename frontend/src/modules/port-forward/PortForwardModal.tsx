@@ -73,9 +73,14 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
   // Fetched ports stored in local state (not mutating the target prop)
   const [fetchedPorts, setFetchedPorts] = useState<ContainerPort[]>([]);
 
-  // Create a stable key to track when the target actually changes
+  // Create stable keys so same-value re-renders do not reinitialize/fetch.
+  const portsKey = target
+    ? target.ports
+        .map((port) => `${port.port}:${port.name || ''}:${port.protocol || ''}`)
+        .join('|')
+    : '';
   const targetKey = target
-    ? `${target.clusterId}:${target.namespace}:${target.kind}:${target.name}`
+    ? `${target.clusterId}:${target.namespace}:${target.kind}:${target.name}:${portsKey}`
     : '';
 
   // Handle Escape key to close modal
@@ -94,10 +99,13 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
 
   // Reset form state when target changes, fetch ports if not provided
   useEffect(() => {
-    if (!target) return;
+    if (!target) {
+      return;
+    }
 
     setError(null);
     setFetchedPorts([]);
+    let cancelled = false;
 
     // If ports provided in target, use them directly
     if (target.ports.length > 0) {
@@ -119,6 +127,9 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
     import('@wailsjs/go/backend/App').then(({ GetTargetPorts }) => {
       GetTargetPorts(target.clusterId, target.namespace, target.kind, target.name)
         .then((ports) => {
+          if (cancelled) {
+            return;
+          }
           if (ports && ports.length > 0) {
             // Store fetched ports in local state
             const mappedPorts = ports.map((p) => ({
@@ -137,17 +148,25 @@ const PortForwardModal = ({ target, onClose, onStarted }: PortForwardModalProps)
           }
         })
         .catch((err) => {
+          if (cancelled) {
+            return;
+          }
           console.warn('Failed to fetch target ports:', err);
           // Allow manual entry if fetch fails
           setContainerPort(0);
           setLocalPort(0);
         })
         .finally(() => {
-          setIsLoadingPorts(false);
+          if (!cancelled) {
+            setIsLoadingPorts(false);
+          }
         });
     });
-    // targetKey provides stable identity tracking; target included for linter compliance
-  }, [target, targetKey]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [targetKey]);
 
   // Update local port when container port changes
   const handleContainerPortChange = useCallback((port: number) => {

@@ -79,6 +79,14 @@
   color: var(--color-text-secondary);
 }
 
+.as-shell-session {
+  align-items: flex-start;
+}
+
+.as-shell-actions {
+  margin-top: 2px;
+}
+
 .as-pf-session {
   align-items: flex-start;
 }
@@ -103,6 +111,8 @@
   margin-top: 2px;
 }
 
+.as-shell-actions .ss-attach-button,
+.as-shell-actions .ss-stop-button,
 .as-pf-connect-button,
 .as-pf-actions .ss-stop-button {
   min-width: 62px;

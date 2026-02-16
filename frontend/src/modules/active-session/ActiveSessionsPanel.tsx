@@ -31,6 +31,7 @@ interface ShellSessionInfo {
   podName: string;
   container: string;
   command?: string[];
+  status?: string;
   startedAt?: string | { time?: string };
 }
 
@@ -40,7 +41,6 @@ interface PortForwardSession {
   clusterName: string;
   namespace: string;
   podName: string;
-  container?: string;
   containerPort: number;
   localPort: number;
   targetKind: string;
@@ -386,6 +386,7 @@ function ActiveSessionsPanel() {
                   sortedShellSessions.map((session) => {
                     const isStopping = stoppingShellIds.has(session.sessionId);
                     const isAttaching = attachingId === session.sessionId;
+                    const status = session.status || 'active';
                     const shellPath = (session.command && session.command[0]) || '/bin/sh';
                     const fields = [
                       { label: 'cluster', value: session.clusterName || session.clusterId || '-' },
@@ -395,11 +396,14 @@ function ActiveSessionsPanel() {
                       { label: 'shell', value: shellPath },
                     ];
                     return (
-                      <div key={session.sessionId} className="ss-session-item">
+                      <div key={session.sessionId} className="ss-session-item as-shell-session">
                         <div className="ss-session-main">
-                          <div className="ss-session-fields">
-                            {fields.map((field) => (
-                              <div key={field.label} className="ss-field-row">
+                          <div className="ss-session-fields as-pf-fields">
+                            {fields.map((field, index) => (
+                              <div key={field.label} className="ss-field-row as-pf-field-row">
+                                <span className="as-pf-status-slot" aria-hidden={index !== 0}>
+                                  {index === 0 ? renderPortForwardStatusIcon(status) : null}
+                                </span>
                                 <span className="ss-field-label">{field.label}:</span>
                                 <span className="ss-field-value" title={field.value}>
                                   {field.value}
@@ -408,7 +412,7 @@ function ActiveSessionsPanel() {
                             ))}
                           </div>
                         </div>
-                        <div className="ss-session-actions">
+                        <div className="ss-session-actions as-shell-actions">
                           <button
                             className="button generic ss-attach-button"
                             onClick={() => handleAttach(session)}
@@ -450,7 +454,6 @@ function ActiveSessionsPanel() {
                       { label: 'cluster', value: session.clusterName || session.clusterId || '-' },
                       { label: 'namespace', value: session.namespace || '-' },
                       { label: 'pod', value: session.podName || '-' },
-                      { label: 'container', value: session.container || '-' },
                       { label: 'ports', value: `${session.containerPort}:${session.localPort}` },
                     ];
                     return (
