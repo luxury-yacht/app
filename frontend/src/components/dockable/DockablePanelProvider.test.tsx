@@ -156,6 +156,47 @@ describe('DockablePanelProvider', () => {
     await unmount();
   });
 
+  it('applies preferred group only for initial sync', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'panel-a',
+        title: 'Panel A',
+        position: 'right',
+      });
+      contextRef.current!.syncPanelGroup('panel-a', 'right');
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.tabGroups.right.tabs).toContain('panel-a');
+    expect(contextRef.current!.tabGroups.bottom.tabs).not.toContain('panel-a');
+
+    await act(async () => {
+      // Preferred group should be ignored after the panel is already grouped.
+      contextRef.current!.syncPanelGroup('panel-a', 'right', 'bottom');
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.tabGroups.right.tabs).toContain('panel-a');
+    expect(contextRef.current!.tabGroups.bottom.tabs).not.toContain('panel-a');
+
+    await unmount();
+  });
+
   it('renders a cursor-following drag preview while a tab drag is active', async () => {
     const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
       current: null,

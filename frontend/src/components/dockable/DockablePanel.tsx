@@ -289,14 +289,11 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       removePanelFromGroups(panelId);
       return;
     }
-    const currentGroup = getGroupForPanel(tabGroups, panelId);
-    const preferredGroupKey = currentGroup ? undefined : defaultGroupKey;
-    syncPanelGroup(panelId, panelState.position, preferredGroupKey);
+    syncPanelGroup(panelId, panelState.position, defaultGroupKey);
   }, [
     panelId,
     panelState.isOpen,
     panelState.position,
-    tabGroups,
     defaultGroupKey,
     syncPanelGroup,
     removePanelFromGroups,

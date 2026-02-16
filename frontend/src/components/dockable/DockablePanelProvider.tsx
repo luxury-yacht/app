@@ -379,8 +379,11 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
         const currentGroup = getGroupForPanel(prev, panelId);
         const isCurrentFloating =
           currentGroup !== null && currentGroup !== 'right' && currentGroup !== 'bottom';
-        let targetGroupKey: GroupKey | 'floating' = preferredGroupKey ?? position;
-        if (!preferredGroupKey && position === 'floating') {
+        // `preferredGroupKey` is only an initial placement hint.
+        // Once grouped, follow the panel position + focus routing rules.
+        const effectivePreferredGroupKey = currentGroup === null ? preferredGroupKey : undefined;
+        let targetGroupKey: GroupKey | 'floating' = effectivePreferredGroupKey ?? position;
+        if (!effectivePreferredGroupKey && position === 'floating') {
           if (isCurrentFloating) {
             // Keep already-floating panels in their current floating group.
             // This prevents unrelated tab-group updates from collapsing
