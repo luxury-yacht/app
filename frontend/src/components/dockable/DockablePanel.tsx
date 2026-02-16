@@ -173,7 +173,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     isDragging,
     isResizing,
     handleHeaderMouseDown,
-    handlePanelMouseMove,
     handleMouseDownResize,
     handleFloatingMouseDown,
   } = useDockablePanelDragResize({
@@ -610,7 +609,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
             }
           : undefined
       }
-      onMouseMove={isGroupLeader && !isMaximized ? handlePanelMouseMove : undefined}
       role="dialog"
       aria-label={activeTitle}
       aria-modal={panelState.position === 'floating'}

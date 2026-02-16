@@ -417,35 +417,6 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     flushSizeUpdate,
   ]);
 
-  // Handle cursor style for floating panels
-  const [cursorStyle, setCursorStyle] = useState<string>('default');
-  const cursorStyleRef = useRef(cursorStyle);
-
-  const handlePanelMouseMove = useCallback(
-    (e: ReactMouseEvent) => {
-      if (isMaximized || panelState.position !== 'floating' || isDragging || isResizing) return;
-
-      const direction = getResizeDirection(e);
-      const cursors: { [key: string]: string } = {
-        n: 'ns-resize',
-        s: 'ns-resize',
-        e: 'ew-resize',
-        w: 'ew-resize',
-        ne: 'nesw-resize',
-        sw: 'nesw-resize',
-        nw: 'nwse-resize',
-        se: 'nwse-resize',
-      };
-
-      const nextCursor = cursors[direction] || 'default';
-      if (cursorStyleRef.current !== nextCursor) {
-        cursorStyleRef.current = nextCursor;
-        setCursorStyle(nextCursor);
-      }
-    },
-    [panelState.position, isDragging, isResizing, getResizeDirection, isMaximized]
-  );
-
   const handleHeaderMouseDown = useCallback(
     (e: ReactMouseEvent) => {
       if (panelState.position === 'floating') {
@@ -463,9 +434,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
   return {
     isDragging,
     isResizing,
-    cursorStyle,
     handleHeaderMouseDown,
-    handlePanelMouseMove,
     handleMouseDownResize,
     handleFloatingMouseDown,
   };
