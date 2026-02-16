@@ -15,6 +15,7 @@ import React, {
   useEffect,
   useLayoutEffect,
   useRef,
+  useMemo,
 } from 'react';
 import type { TabGroupState, TabDragState, GroupKey, PanelRegistration } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
@@ -206,7 +207,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // doesn't cause the whole tree to re-render. A bump counter forces a
   // re-render when we need consumers to see updated registrations.
   const panelRegistrationsRef = useRef<Map<string, PanelRegistration>>(new Map());
-  const [, setRegistrationBump] = useState(0);
+  const [registrationBump, setRegistrationBump] = useState(0);
 
   // Drag state for tab dragging (Phase 5).
   const [dragState, setDragStateState] = useState<TabDragState | null>(null);
@@ -691,32 +692,58 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
     }
   }, []);
 
-  const value: DockablePanelContextValue = {
-    tabGroups,
-    panelRegistrations: panelRegistrationsRef.current,
-    registerPanel,
-    unregisterPanel,
-    syncPanelGroup,
-    removePanelFromGroups,
-    switchTab,
-    closeTab,
-    reorderTabInGroup,
-    movePanelBetweenGroups,
-    movePanelBetweenGroupsAndFocus,
-    dragState,
-    startTabDrag,
-    registerTabBarElement,
-    panelContentRefsMap,
-    notifyContentChange,
-    subscribeContentChange,
-    groupLeaderByKeyRef,
-    updateGridTableHoverSuppression,
-    lastFocusedGroupKey,
-    setLastFocusedGroupKey,
-    getPreferredOpenGroupKey,
-    getLastFocusedPosition,
-    focusPanel,
-  };
+  const value: DockablePanelContextValue = useMemo(
+    () => ({
+      tabGroups,
+      panelRegistrations: panelRegistrationsRef.current,
+      registerPanel,
+      unregisterPanel,
+      syncPanelGroup,
+      removePanelFromGroups,
+      switchTab,
+      closeTab,
+      reorderTabInGroup,
+      movePanelBetweenGroups,
+      movePanelBetweenGroupsAndFocus,
+      dragState,
+      startTabDrag,
+      registerTabBarElement,
+      panelContentRefsMap,
+      notifyContentChange,
+      subscribeContentChange,
+      groupLeaderByKeyRef,
+      updateGridTableHoverSuppression,
+      lastFocusedGroupKey,
+      setLastFocusedGroupKey,
+      getPreferredOpenGroupKey,
+      getLastFocusedPosition,
+      focusPanel,
+    }),
+    [
+      tabGroups,
+      registrationBump,
+      registerPanel,
+      unregisterPanel,
+      syncPanelGroup,
+      removePanelFromGroups,
+      switchTab,
+      closeTab,
+      reorderTabInGroup,
+      movePanelBetweenGroups,
+      movePanelBetweenGroupsAndFocus,
+      dragState,
+      startTabDrag,
+      registerTabBarElement,
+      notifyContentChange,
+      subscribeContentChange,
+      updateGridTableHoverSuppression,
+      lastFocusedGroupKey,
+      setLastFocusedGroupKey,
+      getPreferredOpenGroupKey,
+      getLastFocusedPosition,
+      focusPanel,
+    ]
+  );
 
   const dragPreviewRegistration = dragState
     ? panelRegistrationsRef.current.get(dragState.panelId)
