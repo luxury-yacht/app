@@ -20,3 +20,6 @@ export {
   restorePanelStates,
 } from './useDockablePanelState';
 export { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
+export { DockableTabBar } from './DockableTabBar';
+export type { TabInfo } from './DockableTabBar';
+export type { PanelRegistration, TabGroupState, GroupKey, TabDragState } from './tabGroupTypes';

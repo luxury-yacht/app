@@ -8,7 +8,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { ObjectPanelHeader } from './ObjectPanelHeader';
 
@@ -23,9 +23,6 @@ describe('ObjectPanelHeader', () => {
     });
   };
 
-  const getNavButtons = () =>
-    Array.from(container.querySelectorAll<HTMLButtonElement>('.nav-button'));
-
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
@@ -39,57 +36,22 @@ describe('ObjectPanelHeader', () => {
     container.remove();
   });
 
-  it('disables navigation buttons at boundaries', async () => {
-    const onNavigate = vi.fn();
+  it('renders kind badge and object name', async () => {
     await renderComponent({
-      navigationIndex: 0,
-      navigationCount: 1,
-      onNavigate,
-      kind: 'Deployment',
-      kindAlias: null,
-      name: 'api',
-    });
-
-    const [previous, next] = getNavButtons();
-    expect(previous?.disabled).toBe(true);
-    expect(next?.disabled).toBe(true);
-
-    act(() => {
-      previous?.click();
-      next?.click();
-    });
-    expect(onNavigate).not.toHaveBeenCalled();
-  });
-
-  it('navigates backward and forward when possible', async () => {
-    const onNavigate = vi.fn();
-    await renderComponent({
-      navigationIndex: 1,
-      navigationCount: 3,
-      onNavigate,
       kind: 'Pod',
-      kindAlias: 'Workload',
+      kindAlias: null,
       name: 'worker-1',
     });
 
-    const [previous, next] = getNavButtons();
-    expect(previous?.disabled).toBe(false);
-    expect(next?.disabled).toBe(false);
+    const badge = container.querySelector('.kind-badge');
+    const name = container.querySelector('.object-name');
 
-    act(() => {
-      previous?.click();
-      next?.click();
-    });
-
-    expect(onNavigate).toHaveBeenNthCalledWith(1, 0);
-    expect(onNavigate).toHaveBeenNthCalledWith(2, 2);
+    expect(badge?.textContent).toBe('Pod');
+    expect(name?.textContent).toBe('worker-1');
   });
 
   it('sanitizes the kind class and renders alias with title', async () => {
     await renderComponent({
-      navigationIndex: 0,
-      navigationCount: 2,
-      onNavigate: () => {},
       kind: 'Deployment@Beta',
       kindAlias: 'Workload',
       name: 'api',

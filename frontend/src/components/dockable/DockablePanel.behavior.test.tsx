@@ -11,7 +11,9 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import DockablePanel from './DockablePanel';
+import { DockablePanelProvider } from './DockablePanelProvider';
 import { getAllPanelStates, restorePanelStates, type DockPosition } from './useDockablePanelState';
+import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
@@ -23,13 +25,38 @@ const removePanelLayers = () => {
   document.querySelectorAll('.dockable-panel-layer').forEach((node) => node.remove());
 };
 
+const ensureContentElement = () => {
+  if (!document.querySelector('.content')) {
+    const el = document.createElement('div');
+    el.className = 'content';
+    document.body.appendChild(el);
+    // JSDOM doesn't do layout, so mock getBoundingClientRect to return realistic dimensions.
+    el.getBoundingClientRect = () =>
+      DOMRect.fromRect({
+        x: 0,
+        y: 0,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+  }
+};
+
 const renderPanel = async (element: React.ReactElement) => {
+  ensureContentElement();
   const host = document.createElement('div');
   document.body.appendChild(host);
   const root = ReactDOM.createRoot(host);
 
   await act(async () => {
-    root.render(<ZoomProvider>{element}</ZoomProvider>);
+    const wrapped =
+      element.type === DockablePanelProvider ? (
+        <ZoomProvider>{element}</ZoomProvider>
+      ) : (
+        <DockablePanelProvider>
+          <ZoomProvider>{element}</ZoomProvider>
+        </DockablePanelProvider>
+      );
+    root.render(wrapped);
     await Promise.resolve();
   });
 
@@ -37,7 +64,15 @@ const renderPanel = async (element: React.ReactElement) => {
     host,
     rerender: async (nextElement: React.ReactElement) => {
       await act(async () => {
-        root.render(<ZoomProvider>{nextElement}</ZoomProvider>);
+        const wrapped =
+          nextElement.type === DockablePanelProvider ? (
+            <ZoomProvider>{nextElement}</ZoomProvider>
+          ) : (
+            <DockablePanelProvider>
+              <ZoomProvider>{nextElement}</ZoomProvider>
+            </DockablePanelProvider>
+          );
+        root.render(wrapped);
         await Promise.resolve();
       });
     },
@@ -59,6 +94,7 @@ describe('DockablePanel behaviour (real hook)', () => {
   });
 
   beforeEach(() => {
+    setActivePanelLayoutStore(createPanelLayoutStore());
     restorePanelStates({});
     vi.useRealTimers();
   });
@@ -76,6 +112,7 @@ describe('DockablePanel behaviour (real hook)', () => {
       value: originalInnerHeight,
     });
     vi.useRealTimers();
+    setActivePanelLayoutStore(createPanelLayoutStore());
   });
 
   const getPanelState = (panelId: string) => {
@@ -259,10 +296,11 @@ describe('DockablePanel behaviour (real hook)', () => {
 
   it('clamps bottom-docked height based on window resize bounds', async () => {
     vi.useFakeTimers();
+    // Set a window height smaller than the panel's default height so clamping occurs.
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
       writable: true,
-      value: 380,
+      value: 300,
     });
 
     const { unmount } = await renderPanel(
@@ -285,7 +323,8 @@ describe('DockablePanel behaviour (real hook)', () => {
     await flushEffects();
 
     const bottomState = getPanelState('panel-bottom');
-    expect(bottomState.bottomSize.height).toBe(window.innerHeight - 150);
+    // The height is clamped to the content area height (fallback = window.innerHeight)
+    expect(bottomState.bottomSize.height).toBe(window.innerHeight);
 
     await unmount();
   });
@@ -624,10 +663,12 @@ describe('DockablePanel behaviour (real hook)', () => {
   });
 
   it('resizes a bottom-docked panel when dragging the top handle', async () => {
+    // Use a height larger than the default panel height so the drag can
+    // increase the panel size without being clamped by the content bounds.
     Object.defineProperty(window, 'innerHeight', {
       configurable: true,
       writable: true,
-      value: 600,
+      value: 900,
     });
 
     const { unmount } = await renderPanel(
@@ -731,7 +772,7 @@ describe('DockablePanel behaviour (real hook)', () => {
     errorSpy.mockRestore();
   });
 
-  it('closes other panels docked on the same side before docking a new panel', async () => {
+  it('allows panels docked on the same side to coexist as tabs', async () => {
     const { unmount } = await renderPanel(
       <div>
         <DockablePanel panelId="panel-side-a" defaultPosition="right" isOpen>
@@ -760,9 +801,126 @@ describe('DockablePanel behaviour (real hook)', () => {
 
     await flushEffects();
 
-    expect(getPanelState('panel-side-a').isOpen).toBe(false);
+    // With tabs, both panels stay open and coexist in the right group.
+    expect(getPanelState('panel-side-a').isOpen).toBe(true);
     expect(getPanelState('panel-side-b').position).toBe('right');
     expect(getPanelState('panel-side-b').isOpen).toBe(true);
+
+    await unmount();
+  });
+
+  it('applies dock controls to the active tab when multiple tabs share a dock group', async () => {
+    const { unmount } = await renderPanel(
+      <DockablePanelProvider>
+        <div>
+          <DockablePanel panelId="panel-active-controls-a" defaultPosition="right" isOpen>
+            <div>panel A</div>
+          </DockablePanel>
+          <DockablePanel panelId="panel-active-controls-b" defaultPosition="right" isOpen>
+            <div>panel B</div>
+          </DockablePanel>
+        </div>
+      </DockablePanelProvider>
+    );
+
+    await flushEffects();
+
+    // Newest tab is active; docking should move that active tab only.
+    const dockBottomButton = document.querySelector(
+      'button[aria-label="Dock panel to bottom"]'
+    ) as HTMLButtonElement | null;
+    expect(dockBottomButton).toBeTruthy();
+
+    await act(async () => {
+      dockBottomButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await flushEffects();
+
+    expect(getPanelState('panel-active-controls-a').position).toBe('right');
+    expect(getPanelState('panel-active-controls-b').position).toBe('bottom');
+    expect(getPanelState('panel-active-controls-a').isOpen).toBe(true);
+    expect(getPanelState('panel-active-controls-b').isOpen).toBe(true);
+
+    await unmount();
+  });
+
+  it('brings the destination group to front when docking an active tab into an existing group', async () => {
+    const { unmount } = await renderPanel(
+      <DockablePanelProvider>
+        <div>
+          <DockablePanel panelId="panel-target-bottom" defaultPosition="bottom" isOpen>
+            <div>target bottom</div>
+          </DockablePanel>
+          <DockablePanel panelId="panel-source-right-a" defaultPosition="right" isOpen>
+            <div>source right A</div>
+          </DockablePanel>
+          <DockablePanel panelId="panel-source-right-b" defaultPosition="right" isOpen>
+            <div>source right B</div>
+          </DockablePanel>
+        </div>
+      </DockablePanelProvider>
+    );
+
+    await flushEffects();
+
+    const beforeMoveStates = getAllPanelStates();
+    expect(beforeMoveStates['panel-target-bottom'].zIndex).toBeLessThan(
+      beforeMoveStates['panel-source-right-a'].zIndex
+    );
+
+    // Right group's active tab is panel-source-right-b; docking should move it
+    // into the existing bottom group and bring that destination group forward.
+    const dockBottomButton = document.querySelector(
+      'button[aria-label="Dock panel to bottom"]'
+    ) as HTMLButtonElement | null;
+    expect(dockBottomButton).toBeTruthy();
+
+    await act(async () => {
+      dockBottomButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await flushEffects();
+
+    const afterMoveStates = getAllPanelStates();
+    expect(afterMoveStates['panel-source-right-b'].position).toBe('bottom');
+    expect(afterMoveStates['panel-target-bottom'].zIndex).toBeGreaterThan(
+      afterMoveStates['panel-source-right-a'].zIndex
+    );
+
+    await unmount();
+  });
+
+  it('closes the active tab even when the panel has no explicit onClose handler', async () => {
+    const { unmount } = await renderPanel(
+      <DockablePanelProvider>
+        <div>
+          <DockablePanel panelId="panel-close-fallback-a" defaultPosition="right">
+            <div>panel A</div>
+          </DockablePanel>
+          <DockablePanel panelId="panel-close-fallback-b" defaultPosition="right">
+            <div>panel B</div>
+          </DockablePanel>
+        </div>
+      </DockablePanelProvider>
+    );
+
+    await flushEffects();
+
+    const closeButton = document.querySelector(
+      'button[aria-label="Close panel"]'
+    ) as HTMLButtonElement | null;
+    expect(closeButton).toBeTruthy();
+
+    await act(async () => {
+      closeButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    await flushEffects();
+
+    // Most recently opened tab was active and should be closed.
+    expect(getPanelState('panel-close-fallback-b').isOpen).toBe(false);
+    expect(getPanelState('panel-close-fallback-a').isOpen).toBe(true);
 
     await unmount();
   });
@@ -787,7 +945,7 @@ describe('DockablePanel behaviour (real hook)', () => {
     await unmount();
   });
 
-  it('keeps only the most recently opened panel docked on the bottom edge', async () => {
+  it('allows multiple panels docked on the bottom edge to coexist as tabs', async () => {
     const { unmount } = await renderPanel(
       <div>
         <DockablePanel panelId="panel-bottom-a" defaultPosition="bottom" isOpen>
@@ -801,7 +959,8 @@ describe('DockablePanel behaviour (real hook)', () => {
 
     await flushEffects();
 
-    expect(getPanelState('panel-bottom-a').isOpen).toBe(false);
+    // With tabs, both panels stay open and coexist in the bottom group.
+    expect(getPanelState('panel-bottom-a').isOpen).toBe(true);
     expect(getPanelState('panel-bottom-a').position).toBe('bottom');
     expect(getPanelState('panel-bottom-b').isOpen).toBe(true);
     expect(getPanelState('panel-bottom-b').position).toBe('bottom');
@@ -809,7 +968,7 @@ describe('DockablePanel behaviour (real hook)', () => {
     await unmount();
   });
 
-  it('closes an existing bottom-docked panel when a controlled panel opens there', async () => {
+  it('keeps an existing bottom-docked panel open when a controlled panel opens there (tab coexistence)', async () => {
     const Host: React.FC<{ diagnosticsOpen: boolean }> = ({ diagnosticsOpen }) => (
       <>
         <DockablePanel panelId="panel-bottom-existing" defaultPosition="bottom" isOpen>
@@ -834,7 +993,8 @@ describe('DockablePanel behaviour (real hook)', () => {
     await rerender(<Host diagnosticsOpen />);
     await flushEffects();
 
-    expect(getPanelState('panel-bottom-existing').isOpen).toBe(false);
+    // With tabs, both panels stay open and coexist in the bottom group.
+    expect(getPanelState('panel-bottom-existing').isOpen).toBe(true);
     expect(getPanelState('panel-bottom-controlled').isOpen).toBe(true);
 
     await unmount();

@@ -32,7 +32,6 @@ describe('useObjectPanelTabs', () => {
   let root: ReactDOM.Root;
   const resultRef: { current: ReturnType<typeof useObjectPanelTabs> | null } = { current: null };
   const dispatchMock = vi.fn();
-  const navigateMock = vi.fn();
   const closeMock = vi.fn();
 
   const baseCapabilities: ComputedCapabilities = {
@@ -63,9 +62,6 @@ describe('useObjectPanelTabs', () => {
       isHelmRelease: false,
       isEvent: false,
       isOpen: true,
-      navigationIndex: 0,
-      navigationHistoryLength: 1,
-      navigate: navigateMock,
       dispatch: dispatchMock as React.Dispatch<PanelAction>,
       close: closeMock,
       currentTab: 'details' as ViewType,
@@ -95,7 +91,6 @@ describe('useObjectPanelTabs', () => {
     root = ReactDOM.createRoot(container);
     resultRef.current = null;
     dispatchMock.mockClear();
-    navigateMock.mockClear();
     closeMock.mockClear();
     hoistedShortcuts.useShortcut.mockClear();
   });
@@ -174,11 +169,11 @@ describe('useObjectPanelTabs', () => {
     expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_ACTIVE_TAB', payload: 'details' });
   });
 
-  it('registers shortcut handlers for navigation and tab switching', async () => {
-    await renderHook({ navigationHistoryLength: 2 });
+  it('registers shortcut handlers for tab switching', async () => {
+    await renderHook();
     const shortcutCalls = hoistedShortcuts.useShortcut.mock.calls;
     const keys = shortcutCalls.map(([config]) => (config as { key: string }).key);
-    expect(keys).toEqual(['Escape', 'ArrowLeft', 'ArrowRight', '1', '2', '3', '4', '5']);
+    expect(keys).toEqual(['Escape', '1', '2', '3', '4', '5']);
   });
 
   it('excludes logs tab and disables related shortcut when logs capability is absent', async () => {
@@ -215,22 +210,6 @@ describe('useObjectPanelTabs', () => {
     expect(closeMock).toHaveBeenCalledTimes(1);
   });
 
-  it('navigates between history entries via arrow shortcuts', async () => {
-    await renderHook({ navigationHistoryLength: 3, navigationIndex: 1 });
-
-    const leftShortcut = hoistedShortcuts.useShortcut.mock.calls.find(
-      ([config]) => (config as { key: string }).key === 'ArrowLeft'
-    )?.[0] as { handler: () => boolean };
-    expect(leftShortcut.handler()).toBe(true);
-    expect(navigateMock).toHaveBeenCalledWith(0);
-
-    const rightShortcut = hoistedShortcuts.useShortcut.mock.calls.find(
-      ([config]) => (config as { key: string }).key === 'ArrowRight'
-    )?.[0] as { handler: () => boolean };
-    expect(rightShortcut.handler()).toBe(true);
-    expect(navigateMock).toHaveBeenCalledWith(2);
-  });
-
   it('ignores tab shortcuts when the panel is closed', async () => {
     await renderHook({ isOpen: false });
     const detailsShortcut = hoistedShortcuts.useShortcut.mock.calls.find(
@@ -256,17 +235,5 @@ describe('useObjectPanelTabs', () => {
 
     expect(shortcutByKey('4').handler()).toBe(true);
     expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_ACTIVE_TAB', payload: 'yaml' });
-  });
-
-  it('returns false for navigation shortcuts when already at the boundary', async () => {
-    await renderHook({ navigationHistoryLength: 1, navigationIndex: 0 });
-    const shortcutByKey = (key: string) =>
-      hoistedShortcuts.useShortcut.mock.calls.find(
-        ([config]) => (config as { key: string }).key === key
-      )?.[0] as { handler: () => boolean };
-
-    expect(shortcutByKey('ArrowLeft').handler()).toBe(false);
-    expect(shortcutByKey('ArrowRight').handler()).toBe(false);
-    expect(navigateMock).not.toHaveBeenCalled();
   });
 });

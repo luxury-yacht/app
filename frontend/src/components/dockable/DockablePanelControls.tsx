@@ -32,6 +32,58 @@ interface DockablePanelControlsProps {
   onClose: () => void;
 }
 
+interface DockAction {
+  target: DockPosition;
+  title: string;
+  ariaLabel: string;
+  icon: React.ReactNode;
+}
+
+const dockActionsByPosition: Record<DockPosition, DockAction[]> = {
+  floating: [
+    {
+      target: 'bottom',
+      title: 'Dock to bottom',
+      ariaLabel: 'Dock panel to bottom',
+      icon: <DockBottomIcon width={20} height={20} />,
+    },
+    {
+      target: 'right',
+      title: 'Dock to right',
+      ariaLabel: 'Dock panel to right side',
+      icon: <DockRightIcon width={20} height={20} />,
+    },
+  ],
+  right: [
+    {
+      target: 'bottom',
+      title: 'Dock to bottom',
+      ariaLabel: 'Dock panel to bottom',
+      icon: <DockBottomIcon width={20} height={20} />,
+    },
+    {
+      target: 'floating',
+      title: 'Float panel',
+      ariaLabel: 'Undock panel to floating window',
+      icon: <FloatPanelIcon width={20} height={20} />,
+    },
+  ],
+  bottom: [
+    {
+      target: 'right',
+      title: 'Dock to right',
+      ariaLabel: 'Dock panel to right side',
+      icon: <DockRightIcon width={20} height={20} />,
+    },
+    {
+      target: 'floating',
+      title: 'Float panel',
+      ariaLabel: 'Undock panel to floating window',
+      icon: <FloatPanelIcon width={20} height={20} />,
+    },
+  ],
+};
+
 // Control buttons for docking, maximizing, and closing the panel.
 export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
   position,
@@ -41,71 +93,23 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
   onToggleMaximize,
   onClose,
 }) => {
+  const dockActions = dockActionsByPosition[position];
+
   return (
     <div className="dockable-panel__controls" onMouseDown={(e) => e.stopPropagation()}>
-      {/* When floating, show bottom and right buttons */}
-      {!isMaximized && position === 'floating' && (
-        <>
+      {/* Dock-position controls are data-driven; order stays position-specific. */}
+      {!isMaximized &&
+        dockActions.map((action) => (
           <button
+            key={`${position}-${action.target}`}
             className="dockable-panel__control-btn"
-            onClick={() => onDock('bottom')}
-            title="Dock to bottom"
-            aria-label="Dock panel to bottom"
+            onClick={() => onDock(action.target)}
+            title={action.title}
+            aria-label={action.ariaLabel}
           >
-            <DockBottomIcon width={20} height={20} />
+            {action.icon}
           </button>
-          <button
-            className="dockable-panel__control-btn"
-            onClick={() => onDock('right')}
-            title="Dock to right"
-            aria-label="Dock panel to right side"
-          >
-            <DockRightIcon width={20} height={20} />
-          </button>
-        </>
-      )}
-      {/* When docked right, show bottom and float buttons */}
-      {!isMaximized && position === 'right' && (
-        <>
-          <button
-            className="dockable-panel__control-btn"
-            onClick={() => onDock('bottom')}
-            title="Dock to bottom"
-            aria-label="Dock panel to bottom"
-          >
-            <DockBottomIcon width={20} height={20} />
-          </button>
-          <button
-            className="dockable-panel__control-btn"
-            onClick={() => onDock('floating')}
-            title="Float panel"
-            aria-label="Undock panel to floating window"
-          >
-            <FloatPanelIcon width={20} height={20} />
-          </button>
-        </>
-      )}
-      {/* When docked bottom, show right and float buttons */}
-      {!isMaximized && position === 'bottom' && (
-        <>
-          <button
-            className="dockable-panel__control-btn"
-            onClick={() => onDock('right')}
-            title="Dock to right"
-            aria-label="Dock panel to right side"
-          >
-            <DockRightIcon width={20} height={20} />
-          </button>
-          <button
-            className="dockable-panel__control-btn"
-            onClick={() => onDock('floating')}
-            title="Float panel"
-            aria-label="Undock panel to floating window"
-          >
-            <FloatPanelIcon width={20} height={20} />
-          </button>
-        </>
-      )}
+        ))}
       {allowMaximize && (
         <button
           className="dockable-panel__control-btn"

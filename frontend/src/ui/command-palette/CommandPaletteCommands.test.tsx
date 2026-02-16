@@ -10,6 +10,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useCommandPaletteCommands, type Command } from './CommandPaletteCommands';
 import type { types } from '@wailsjs/go/models';
+import { DockablePanelProvider } from '@components/dockable/DockablePanelProvider';
 
 const { mocks } = vi.hoisted(() => ({
   mocks: {
@@ -99,7 +100,11 @@ const renderHook = () => {
   };
 
   act(() => {
-    root.render(<HookHost />);
+    root.render(
+      <DockablePanelProvider>
+        <HookHost />
+      </DockablePanelProvider>
+    );
   });
 
   return {

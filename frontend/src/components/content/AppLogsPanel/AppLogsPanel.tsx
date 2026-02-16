@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
-import { GetLogs, ClearLogs } from '@wailsjs/go/backend/App';
+import { GetLogs, ClearLogs, SetLogsPanelVisible } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useShortcut, useKeyboardNavigationScope } from '@ui/shortcuts';
@@ -61,6 +61,13 @@ function AppLogsPanel() {
 
   // Separate ref to track auto-scroll without causing re-renders
   const isAutoScrollRef = useRef(isAutoScroll);
+
+  // Keep backend log-stream visibility aligned with this panel's open state.
+  useEffect(() => {
+    SetLogsPanelVisible(panelState.isOpen).catch((error) => {
+      errorHandler.handle(error, { action: 'setLogsPanelVisible' });
+    });
+  }, [panelState.isOpen]);
 
   // Update ref when state changes
   useEffect(() => {
@@ -500,87 +507,84 @@ function AppLogsPanel() {
       allowMaximize
       maximizeTargetSelector=".content-body"
       onClose={() => panelState.setOpen(false)}
-      headerContent={
-        <div className="app-logs-panel-header-content">
-          <div className="app-logs-panel-title">
-            <h3>Application Logs</h3>
-            <span className="app-logs-count">
-              {showFilteredCount ? `(${filteredLogs.length} / ${logs.length})` : `(${logs.length})`}
-            </span>
-          </div>
-
-          <div className="app-logs-panel-controls" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="app-logs-filter-group">
-              <input
-                type="text"
-                className="app-logs-text-filter"
-                placeholder="Filter logs..."
-                value={textFilter}
-                onChange={(e) => setTextFilter(e.target.value)}
-                title="Filter by text (searches message and source)"
-                ref={textFilterInputRef}
-              />
-              {textFilter && (
-                <button
-                  className="app-logs-filter-clear"
-                  onClick={() => setTextFilter('')}
-                  title="Clear filter"
-                  aria-label="Clear filter"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-
-            <Dropdown
-              options={LOG_LEVEL_OPTIONS}
-              value={logLevelFilter}
-              onChange={handleLogLevelDropdownChange}
-              multiple
-              size="small"
-              ariaLabel="Filter by log level"
-              dropdownClassName="dropdown-filter-menu"
-              renderOption={renderLogLevelOption}
-              renderValue={() => 'Log Levels'}
-            />
-
-            <Dropdown
-              options={componentOptions}
-              value={componentFilter}
-              onChange={handleComponentDropdownChange}
-              multiple
-              size="small"
-              ariaLabel="Filter by component"
-              dropdownClassName="dropdown-filter-menu"
-              renderOption={renderComponentOption}
-              renderValue={() => 'Components'}
-            />
-
-            <label className="app-logs-auto-scroll">
-              <input
-                type="checkbox"
-                checked={isAutoScroll}
-                onChange={(e) => setIsAutoScroll(e.target.checked)}
-              />
-              Auto-scroll
-            </label>
-
-            <button
-              className="app-logs-button"
-              onClick={handleCopyToClipboard}
-              title="Copy logs to clipboard"
-            >
-              Copy
-            </button>
-
-            <button className="app-logs-button" onClick={handleClearLogs} title="Clear logs">
-              Clear
-            </button>
-          </div>
-        </div>
-      }
       contentClassName="app-logs-panel-content"
     >
+      {/* Panel-specific controls toolbar (moved from header for tab support) */}
+      <div className="app-logs-panel-toolbar" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="app-logs-panel-controls">
+          <span className="app-logs-count">
+            {showFilteredCount ? `(${filteredLogs.length} / ${logs.length})` : `(${logs.length})`}
+          </span>
+
+          <div className="app-logs-filter-group">
+            <input
+              type="text"
+              className="app-logs-text-filter"
+              placeholder="Filter logs..."
+              value={textFilter}
+              onChange={(e) => setTextFilter(e.target.value)}
+              title="Filter by text (searches message and source)"
+              ref={textFilterInputRef}
+            />
+            {textFilter && (
+              <button
+                className="app-logs-filter-clear"
+                onClick={() => setTextFilter('')}
+                title="Clear filter"
+                aria-label="Clear filter"
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          <Dropdown
+            options={LOG_LEVEL_OPTIONS}
+            value={logLevelFilter}
+            onChange={handleLogLevelDropdownChange}
+            multiple
+            size="small"
+            ariaLabel="Filter by log level"
+            dropdownClassName="dropdown-filter-menu"
+            renderOption={renderLogLevelOption}
+            renderValue={() => 'Log Levels'}
+          />
+
+          <Dropdown
+            options={componentOptions}
+            value={componentFilter}
+            onChange={handleComponentDropdownChange}
+            multiple
+            size="small"
+            ariaLabel="Filter by component"
+            dropdownClassName="dropdown-filter-menu"
+            renderOption={renderComponentOption}
+            renderValue={() => 'Components'}
+          />
+
+          <label className="app-logs-auto-scroll">
+            <input
+              type="checkbox"
+              checked={isAutoScroll}
+              onChange={(e) => setIsAutoScroll(e.target.checked)}
+            />
+            Auto-scroll
+          </label>
+
+          <button
+            className="app-logs-button"
+            onClick={handleCopyToClipboard}
+            title="Copy logs to clipboard"
+          >
+            Copy
+          </button>
+
+          <button className="app-logs-button" onClick={handleClearLogs} title="Clear logs">
+            Clear
+          </button>
+        </div>
+      </div>
+
       <div
         ref={logsContainerRef}
         className="app-logs-container selectable"

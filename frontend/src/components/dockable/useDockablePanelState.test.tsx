@@ -5,20 +5,6 @@
  * Covers key behaviors and edge cases for useDockablePanelState.
  */
 
-import { vi } from 'vitest';
-
-const setLogsPanelVisible = vi.fn();
-
-vi.mock('../../../wailsjs/go/backend/App', () => ({
-  __esModule: true,
-  SetLogsPanelVisible: (...args: unknown[]) => setLogsPanelVisible(...args),
-}));
-
-vi.mock('../../../wailsjs/go/backend/App.js', () => ({
-  __esModule: true,
-  SetLogsPanelVisible: (...args: unknown[]) => setLogsPanelVisible(...args),
-}));
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
@@ -29,6 +15,7 @@ import {
   getAllPanelStates,
   restorePanelStates,
 } from './useDockablePanelState';
+import { DockablePanelProvider } from './DockablePanelProvider';
 
 type HookResult = ReturnType<typeof useDockablePanelState>;
 
@@ -52,7 +39,11 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
   };
 
   await act(async () => {
-    root.render(<HookConsumer id={panelId} />);
+    root.render(
+      <DockablePanelProvider>
+        <HookConsumer id={panelId} />
+      </DockablePanelProvider>
+    );
     await Promise.resolve();
   });
 
@@ -71,7 +62,11 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
     },
     rerender: async () => {
       await act(async () => {
-        root.render(<HookConsumer id={panelId} />);
+        root.render(
+          <DockablePanelProvider>
+            <HookConsumer id={panelId} />
+          </DockablePanelProvider>
+        );
         await Promise.resolve();
       });
     },
@@ -87,20 +82,12 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
 describe('useDockablePanelState', () => {
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-    (window as any).go = {
-      backend: {
-        App: {
-          SetLogsPanelVisible: (...args: unknown[]) => setLogsPanelVisible(...args),
-        },
-      },
-    };
   });
 
   const originalInnerWidth = window.innerWidth;
   const originalInnerHeight = window.innerHeight;
 
   afterEach(() => {
-    setLogsPanelVisible.mockReset();
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
       value: originalInnerWidth,
@@ -109,13 +96,6 @@ describe('useDockablePanelState', () => {
       configurable: true,
       value: originalInnerHeight,
     });
-    (window as any).go = {
-      backend: {
-        App: {
-          SetLogsPanelVisible: (...args: unknown[]) => setLogsPanelVisible(...args),
-        },
-      },
-    };
   });
 
   it('initializes panel state with provided defaults', async () => {
@@ -170,18 +150,19 @@ describe('useDockablePanelState', () => {
     await hook.update((state) => state.setPosition('floating'));
     await hook.update((state) => state.setFloatingPosition({ x: -40, y: -10 }));
 
-    expect(hook.current.floatingPosition.x).toBeGreaterThanOrEqual(50);
-    expect(hook.current.floatingPosition.y).toBeGreaterThanOrEqual(50);
+    expect(hook.current.floatingPosition.x).toBeGreaterThanOrEqual(0);
+    expect(hook.current.floatingPosition.y).toBeGreaterThanOrEqual(0);
 
     await hook.update((state) => state.setFloatingPosition({ x: 2000, y: 2000 }));
-    expect(hook.current.floatingPosition.x).toBeLessThanOrEqual(600);
-    expect(hook.current.floatingPosition.y).toBeLessThanOrEqual(500);
+    // Default floating size is 600x400, so max top-left in an 800x600 viewport is 200x200.
+    expect(hook.current.floatingPosition.x).toBeLessThanOrEqual(200);
+    expect(hook.current.floatingPosition.y).toBeLessThanOrEqual(200);
 
     await hook.unmount();
   });
 
-  it('notifies backend visibility when toggling the app-logs panel', async () => {
-    const hook = await renderHook('app-logs');
+  it('toggles panel open state', async () => {
+    const hook = await renderHook('dockable-toggle');
 
     await hook.update(async (state) => {
       state.setOpen(true);

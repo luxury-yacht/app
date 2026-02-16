@@ -45,7 +45,12 @@ const AsyncErrorComponent: React.FC = () => {
  * Test component to verify error boundaries are working
  * This component should only be shown in development
  */
-const TestErrorBoundary: React.FC = () => {
+interface TestErrorBoundaryProps {
+  /** When true, render inside the shared debug overlay shell instead of fixed-positioning. */
+  embedded?: boolean;
+}
+
+const TestErrorBoundary: React.FC<TestErrorBoundaryProps> = ({ embedded = false }) => {
   const [errorType, setErrorType] = useState<string | null>(null);
   const [showAsyncError, setShowAsyncError] = useState(false);
 
@@ -90,17 +95,22 @@ const TestErrorBoundary: React.FC = () => {
 
   return (
     <div
-      style={{
-        position: 'fixed',
-        bottom: '20px',
-        left: '20px',
-        zIndex: 10000,
-        background: 'rgba(255, 0, 0, 0.1)',
-        border: '2px dashed red',
-        padding: '10px',
-        borderRadius: '4px',
-        maxWidth: '250px',
-      }}
+      className={embedded ? 'test-error-boundary--embedded' : undefined}
+      style={
+        embedded
+          ? undefined
+          : {
+              position: 'fixed',
+              bottom: '20px',
+              left: '20px',
+              zIndex: 10000,
+              background: 'rgba(255, 0, 0, 0.1)',
+              border: '2px dashed red',
+              padding: '10px',
+              borderRadius: '4px',
+              maxWidth: '250px',
+            }
+      }
     >
       <h4 style={{ margin: '0 0 10px 0', color: 'red', fontSize: '12px' }}>
         🧪 Error Boundary Tests (Dev)

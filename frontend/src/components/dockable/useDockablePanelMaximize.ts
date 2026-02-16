@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { DockPosition } from './useDockablePanelState';
-import { getDockablePanelTopOffset } from './dockablePanelLayout';
+import { getContentBounds } from './dockablePanelLayout';
 
 interface DockablePanelState {
   position: DockPosition;
@@ -74,18 +74,28 @@ export function useDockablePanelMaximize(options: DockablePanelMaximizeOptions) 
       const target = maximizeTargetRef.current ?? resolveMaximizeTarget();
       if (target) {
         maximizeTargetRef.current = target;
-        setMaximizedRect(target.getBoundingClientRect());
+        // Convert target's viewport rect to content-relative coordinates
+        const targetRect = target.getBoundingClientRect();
+        const contentEl = document.querySelector('.content');
+        if (contentEl) {
+          const contentRect = contentEl.getBoundingClientRect();
+          setMaximizedRect(
+            new DOMRect(
+              targetRect.left - contentRect.left,
+              targetRect.top - contentRect.top,
+              targetRect.width,
+              targetRect.height
+            )
+          );
+        } else {
+          setMaximizedRect(targetRect);
+        }
         return;
       }
 
-      const headerHeight = getDockablePanelTopOffset(panelRef?.current);
-      const rect = new DOMRect(
-        0,
-        headerHeight,
-        window.innerWidth,
-        Math.max(0, window.innerHeight - headerHeight)
-      );
-      setMaximizedRect(rect);
+      // Fallback: fill the entire content area
+      const content = getContentBounds();
+      setMaximizedRect(new DOMRect(0, 0, content.width, content.height));
     };
 
     maximizeTargetRef.current = resolveMaximizeTarget();

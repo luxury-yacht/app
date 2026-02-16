@@ -11,6 +11,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ShellTab from './ShellTab';
+import { DockablePanelProvider } from '@components/dockable/DockablePanelProvider';
 
 const wailsMocks = vi.hoisted(() => ({
   StartShellSession: vi.fn(),
@@ -212,7 +213,11 @@ describe('ShellTab', () => {
       ...props,
     };
     await act(async () => {
-      root.render(<ShellTab {...finalProps} />);
+      root.render(
+        <DockablePanelProvider>
+          <ShellTab {...finalProps} />
+        </DockablePanelProvider>
+      );
     });
     await flushAsync();
     return finalProps;

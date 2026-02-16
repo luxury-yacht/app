@@ -44,6 +44,7 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 import { AppLayout } from '@ui/layout/AppLayout';
 import { useAppLogsPanel } from '@/components/content/AppLogsPanel/AppLogsPanel';
 import { usePortForwardsPanel } from '@modules/port-forward';
+import { DockablePanelProvider } from '@components/dockable';
 
 // Error Boundary
 import { AppErrorBoundary } from '@/components/errors';
@@ -277,7 +278,9 @@ function App() {
                 <div className="app-window-frame">
                   <div className="app">
                     <KubernetesProvider>
-                      <AppContent />
+                      <DockablePanelProvider>
+                        <AppContent />
+                      </DockablePanelProvider>
                     </KubernetesProvider>
                   </div>
                 </div>

@@ -62,6 +62,7 @@
   flex-direction: column;
   overflow: hidden;
   min-height: 0; /* Important for nested flex containers */
+  position: relative; /* Containing block for absolutely-positioned dockable panels */
 }
 
 /* main content body */

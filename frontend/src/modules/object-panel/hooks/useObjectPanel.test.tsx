@@ -2,7 +2,7 @@
  * frontend/src/modules/object-panel/hooks/useObjectPanel.test.tsx
  *
  * Test suite for useObjectPanel.
- * Covers key behaviors and edge cases for useObjectPanel.
+ * Covers key behaviors for the multi-tab object panel system.
  */
 
 import ReactDOM from 'react-dom/client';
@@ -10,41 +10,33 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ObjectPanelStateProvider } from '@/core/contexts/ObjectPanelStateContext';
 
-const setOpenMock = vi.fn();
-
-type MockPanelState = ReturnType<typeof createPanelState>;
-
-const createPanelState = () => {
-  const state = {
-    position: 'right' as const,
-    floatingSize: { width: 600, height: 400 },
-    rightSize: { width: 400, height: 300 },
-    bottomSize: { width: 400, height: 300 },
-    floatingPosition: { x: 0, y: 0 },
-    isOpen: false,
-    isInitialized: true,
-    zIndex: 1,
-    initialize: vi.fn(),
-    setOpen: vi.fn((open: boolean) => {
-      state.isOpen = open;
-      setOpenMock(open);
-    }),
-    setPosition: vi.fn(),
-    setSize: vi.fn(),
-    getCurrentSize: vi.fn(() => ({ width: 400, height: 300 })),
-  };
-  return state;
-};
-
-let panelState: MockPanelState = createPanelState();
-const mockUseDockablePanelState = vi.fn(() => panelState);
-
+// Mock dockable panel context (replaces the old useDockablePanelState mock).
+const mockFocusPanel = vi.fn();
 vi.mock('@components/dockable', () => ({
-  useDockablePanelState: mockUseDockablePanelState,
+  useDockablePanelContext: () => ({
+    tabGroups: {
+      right: { tabs: [], activeTab: null },
+      bottom: { tabs: [], activeTab: null },
+      floating: [],
+    },
+    focusPanel: mockFocusPanel,
+  }),
+}));
+
+// Mock tab group state helper used by the hook to find existing panels.
+vi.mock('@/components/dockable/tabGroupState', () => ({
+  getGroupForPanel: () => null,
 }));
 
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
-  useKubeconfig: () => ({ selectedClusterId: 'test-cluster', selectedClusterName: 'test' }),
+  useKubeconfig: () => ({
+    selectedClusterId: 'test-cluster',
+    selectedClusterName: 'test',
+  }),
+}));
+
+vi.mock('@/components/dockable/useDockablePanelState', () => ({
+  clearPanelState: vi.fn(),
 }));
 
 beforeAll(() => {
@@ -64,6 +56,12 @@ describe('useObjectPanel', () => {
     return null;
   }
 
+  /**
+   * Wraps the test component with ObjectPanelStateProvider so that
+   * useObjectPanelState() is available. Note: we intentionally do NOT
+   * wrap with CurrentObjectPanelContext, so objectData will be null
+   * (matching the "outside an ObjectPanel tree" scenario).
+   */
   function WrappedTestComponent() {
     return (
       <ObjectPanelStateProvider>
@@ -86,9 +84,7 @@ describe('useObjectPanel', () => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
-    setOpenMock.mockClear();
-    panelState = createPanelState();
-    mockUseDockablePanelState.mockImplementation(() => panelState);
+    mockFocusPanel.mockClear();
     if (!useObjectPanel || !closeObjectPanelGlobal) {
       throw new Error('Object panel hooks failed to load');
     }
@@ -102,79 +98,75 @@ describe('useObjectPanel', () => {
     container.remove();
   });
 
-  it('opens the panel with object details and records history', async () => {
+  it('opens the panel with object details', () => {
     const pod = { kind: 'Pod', name: 'api', namespace: 'default' };
-    const expectedPod = { ...pod, clusterId: 'test-cluster', clusterName: 'test' };
 
     act(() => {
       hookResult.openWithObject(pod);
     });
 
-    expect(setOpenMock).toHaveBeenCalledWith(true);
+    // objectData is null because we are outside a CurrentObjectPanelContext tree.
+    expect(hookResult.objectData).toBeNull();
     expect(hookResult.isOpen).toBe(true);
-    expect(hookResult.objectData).toEqual(expectedPod);
-    expect(hookResult.navigationHistory).toEqual([expectedPod]);
-    expect(hookResult.navigationIndex).toBe(0);
+    expect(hookResult.openPanels.size).toBe(1);
+
+    // Verify the stored object has enriched cluster metadata.
+    const entries = Array.from(hookResult.openPanels.values());
+    expect(entries[0]).toEqual({
+      ...pod,
+      clusterId: 'test-cluster',
+      clusterName: 'test',
+    });
   });
 
-  it('navigates backward through the object history', async () => {
-    const first = { kind: 'Deployment', name: 'api', namespace: 'default' };
-    const second = { kind: 'Pod', name: 'api-123', namespace: 'default' };
-    const expectedFirst = { ...first, clusterId: 'test-cluster', clusterName: 'test' };
-    const expectedSecond = { ...second, clusterId: 'test-cluster', clusterName: 'test' };
+  it('activates existing tab instead of duplicating', () => {
+    const pod = { kind: 'Pod', name: 'api', namespace: 'default' };
 
     act(() => {
-      hookResult.openWithObject(first);
+      hookResult.openWithObject(pod);
     });
 
     act(() => {
-      hookResult.openWithObject(second);
+      hookResult.openWithObject(pod);
     });
 
-    expect(hookResult.navigationHistory).toEqual([expectedFirst, expectedSecond]);
-    expect(hookResult.navigationIndex).toBe(1);
-
-    act(() => {
-      hookResult.navigate(0);
-    });
-
-    expect(hookResult.objectData).toEqual(expectedFirst);
-    expect(hookResult.navigationIndex).toBe(0);
+    // Opening the same object twice should not create a second panel entry.
+    expect(hookResult.openPanels.size).toBe(1);
   });
 
-  it('closes the panel and clears stored state', async () => {
+  it('closes all panels via close()', () => {
     const resource = { kind: 'ConfigMap', name: 'settings', namespace: 'default' };
 
     act(() => {
       hookResult.openWithObject(resource);
     });
 
+    expect(hookResult.isOpen).toBe(true);
+
     act(() => {
       hookResult.close();
     });
 
-    expect(setOpenMock).toHaveBeenLastCalledWith(false);
+    // Without CurrentObjectPanelContext, close() falls through to onCloseObjectPanel
+    // which clears all panels.
     expect(hookResult.isOpen).toBe(false);
-    expect(hookResult.objectData).toBeNull();
-    expect(hookResult.navigationHistory).toEqual([]);
-    expect(hookResult.navigationIndex).toBe(-1);
+    expect(hookResult.openPanels.size).toBe(0);
   });
 
-  it('closeObjectPanelGlobal closes the panel', async () => {
+  it('closeObjectPanelGlobal closes all panels', () => {
     const resource = { kind: 'Secret', name: 'credentials', namespace: 'default' };
-    const expectedResource = { ...resource, clusterId: 'test-cluster', clusterName: 'test' };
 
     act(() => {
       hookResult.openWithObject(resource);
     });
 
-    expect(hookResult.objectData).toEqual(expectedResource);
+    expect(hookResult.openPanels.size).toBe(1);
 
     act(() => {
       closeObjectPanelGlobal();
     });
 
-    expect(hookResult.objectData).toBeNull();
-    expect(hookResult.navigationHistory).toEqual([]);
+    expect(hookResult.openPanels.size).toBe(0);
+    expect(hookResult.isOpen).toBe(false);
   });
 });

@@ -6,6 +6,7 @@
  */
 
 import ReactDOM from 'react-dom/client';
+import { createContext } from 'react';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -20,7 +21,6 @@ type PanelTestOptions = {
   kind: string;
   name: string;
   namespace?: string;
-  isOpen?: boolean;
   clusterId?: string;
   capabilityOverrides?: Record<string, CapabilityState>;
   logPermission?: { allowed: boolean; pending: boolean };
@@ -47,7 +47,7 @@ const {
   valuesTabPropsRef: { current: null as any },
 }));
 
-const mockUseObjectPanel = vi.fn();
+const mockClosePanel = vi.fn();
 const mockUseCapabilities = vi.fn();
 const mockUseUserPermission = vi.fn();
 const mockEvaluateNamespacePermissions = vi.fn();
@@ -83,8 +83,46 @@ const mockApp = {
 
 const defaultClusterId = 'alpha:ctx';
 
+// Mock useObjectPanelState to provide closePanel
+vi.mock('@/core/contexts/ObjectPanelStateContext', () => ({
+  useObjectPanelState: () => ({
+    closePanel: mockClosePanel,
+    openPanels: new Map(),
+    showObjectPanel: true,
+    onRowClick: vi.fn(),
+    onCloseObjectPanel: vi.fn(),
+    setShowObjectPanel: vi.fn(),
+    hydrateClusterMeta: vi.fn((d: any) => d),
+  }),
+}));
+
+// Mock dockable to provide both DockablePanel and useDockablePanelContext
+vi.mock('@/components/dockable', () => ({
+  DockablePanel: ({ children }: any) => (
+    <div>
+      <div data-testid="dockable-body">{children}</div>
+    </div>
+  ),
+  useDockablePanelContext: () => ({
+    tabGroups: {
+      right: { tabs: [], activeTab: null },
+      bottom: { tabs: [], activeTab: null },
+      floating: [],
+    },
+    switchTab: vi.fn(),
+    getPreferredOpenGroupKey: () => 'right',
+  }),
+}));
+
+// Mock tabGroupState helpers
+vi.mock('@/components/dockable/tabGroupState', () => ({
+  getGroupForPanel: () => null,
+  getGroupTabs: () => null,
+}));
+
+// Mock CurrentObjectPanelContext from useObjectPanel
 vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
-  useObjectPanel: () => mockUseObjectPanel(),
+  CurrentObjectPanelContext: createContext({ objectData: null, panelId: null }),
 }));
 
 vi.mock('@components/modals/ConfirmationModal', () => ({
@@ -138,15 +176,6 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Helm/ValuesTab', () => ({
     valuesTabPropsRef.current = props;
     return <div data-testid="values-tab" />;
   },
-}));
-
-vi.mock('@/components/dockable', () => ({
-  DockablePanel: ({ children, headerContent }: any) => (
-    <div>
-      <div data-testid="dockable-header">{headerContent}</div>
-      <div data-testid="dockable-body">{children}</div>
-    </div>
-  ),
 }));
 
 vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
@@ -240,7 +269,7 @@ describe('ObjectPanel tab availability', () => {
     mockRefreshOrchestrator.fetchScopedDomain.mockResolvedValue(undefined);
 
     mockUseRefreshWatcher.mockClear();
-    mockUseObjectPanel.mockReset();
+    mockClosePanel.mockReset();
 
     ctx = {} as RenderContext;
     ctx.container = document.createElement('div');
@@ -256,42 +285,38 @@ describe('ObjectPanel tab availability', () => {
     vi.clearAllMocks();
   });
 
+  /**
+   * Helper to build a panelId matching the format used by objectPanelId():
+   * obj:{clusterId}:{kind}:{namespace}:{name}
+   */
+  function buildPanelId(
+    clusterId: string,
+    kind: string,
+    namespace?: string,
+    name?: string
+  ): string {
+    return `obj:${clusterId}:${kind.toLowerCase()}:${namespace ?? '_'}:${name ?? ''}`;
+  }
+
   const renderObjectPanel = async (options: PanelTestOptions) => {
     const clusterId = options.clusterId ?? defaultClusterId;
-    const navigationHistory = [
-      {
-        kind: options.kind,
-        name: options.name,
-        namespace: options.namespace,
-        kindAlias: options.kind,
-        clusterId,
-      },
-    ];
-
-    const closeMock = vi.fn();
-    const navigateMock = vi.fn();
-
-    mockUseObjectPanel.mockReturnValue({
-      isOpen: options.isOpen ?? true,
-      objectData: navigationHistory[0],
-      navigationHistory,
-      navigationIndex: 0,
-      navigate: navigateMock,
-      close: closeMock,
-    });
+    const panelId = buildPanelId(clusterId, options.kind, options.namespace, options.name);
+    const objectRef = {
+      kind: options.kind,
+      name: options.name,
+      namespace: options.namespace,
+      kindAlias: options.kind,
+      clusterId,
+    };
 
     capabilityStateMap = options.capabilityOverrides ?? {};
     currentLogPermission = options.logPermission ?? { allowed: true, pending: false };
     currentScopedDomain = options.scopedDomain ?? { data: null, status: 'idle', error: null };
 
     await act(async () => {
-      ctx.root.render(<ObjectPanel />);
+      ctx.root.render(<ObjectPanel panelId={panelId} objectRef={objectRef} />);
       await Promise.resolve();
     });
-    const lastCall = mockUseObjectPanel.mock.results.length
-      ? mockUseObjectPanel.mock.results[mockUseObjectPanel.mock.results.length - 1]?.value
-      : null;
-    return lastCall ?? { close: closeMock, navigate: navigateMock };
   };
 
   const getTabLabels = () =>
@@ -383,7 +408,7 @@ describe('ObjectPanel tab availability', () => {
   });
 
   it('confirms deletion through modal and calls backend delete', async () => {
-    const panelState = await renderObjectPanel({
+    await renderObjectPanel({
       kind: 'Pod',
       name: 'api',
       namespace: 'team-a',
@@ -403,7 +428,7 @@ describe('ObjectPanel tab availability', () => {
     });
 
     expect(mockApp.DeletePod).toHaveBeenCalledWith('alpha:ctx', 'team-a', 'api');
-    expect(panelState.close).toHaveBeenCalled();
+    expect(mockClosePanel).toHaveBeenCalled();
   });
 
   it('scales workloads when onScaleClick is triggered', async () => {

@@ -1,38 +1,58 @@
 /**
  * frontend/src/core/contexts/ObjectPanelStateContext.tsx
  *
- * Manages object panel state including visibility, selected object, and navigation history.
- * Provides context for components to access and modify object panel state.
+ * Manages object panel state for multi-tab object panels.
+ * Each opened object gets its own tab with a unique panelId derived from its identity.
+ * Provides context for components to open, close, and track open object panels.
  */
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
-import type { KubernetesObjectReference, NavigationHistoryEntry } from '@/types/view-state';
+import type { KubernetesObjectReference } from '@/types/view-state';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { clearPanelState } from '@/components/dockable/useDockablePanelState';
+
+/**
+ * Generate a stable, unique panel ID from a Kubernetes object reference.
+ * Format: obj:{clusterId}:{kind}:{namespace}:{name}
+ */
+export function objectPanelId(ref: KubernetesObjectReference): string {
+  const c = ref.clusterId?.trim() ?? '';
+  const k = (ref.kind ?? '').toLowerCase();
+  const ns = ref.namespace?.trim() ?? '_';
+  const n = ref.name?.trim() ?? '';
+  return `obj:${c}:${k}:${ns}:${n}`;
+}
 
 interface ObjectPanelState {
-  showObjectPanel: boolean;
-  selectedObject: KubernetesObjectReference | null;
-  navigationHistory: NavigationHistoryEntry[];
-  navigationIndex: number;
+  // Map of panelId → objectRef for all open object panels
+  openPanels: Map<string, KubernetesObjectReference>;
 }
 
 const DEFAULT_OBJECT_PANEL_STATE: ObjectPanelState = {
-  showObjectPanel: false,
-  selectedObject: null,
-  navigationHistory: [],
-  navigationIndex: -1,
+  openPanels: new Map(),
 };
 
 interface ObjectPanelStateContextType {
+  // Derived: true if any object panel is open
   showObjectPanel: boolean;
-  selectedObject: KubernetesObjectReference | null;
-  navigationHistory: NavigationHistoryEntry[];
-  navigationIndex: number;
+  // The full map of open panels
+  openPanels: Map<string, KubernetesObjectReference>;
 
-  setShowObjectPanel: (show: boolean) => void;
-  setSelectedObject: (obj: KubernetesObjectReference | null) => void;
-  onRowClick: (data: KubernetesObjectReference) => void;
+  // Open/activate a panel for the given object reference.
+  // If the object is already open, activates the existing tab.
+  // Returns the panelId for the object.
+  onRowClick: (data: KubernetesObjectReference) => string;
+
+  // Close a single object panel by its panelId.
+  closePanel: (panelId: string) => void;
+
+  // Close all object panels (backward compat).
   onCloseObjectPanel: () => void;
-  onNavigate: (index: number) => void;
+
+  // When set to false, closes all panels.
+  setShowObjectPanel: (show: boolean) => void;
+
+  // Hydrate cluster metadata onto an object reference.
+  hydrateClusterMeta: (data: KubernetesObjectReference) => KubernetesObjectReference;
 }
 
 const ObjectPanelStateContext = createContext<ObjectPanelStateContextType | undefined>(undefined);
@@ -61,7 +81,8 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   >({});
   const clusterKey = selectedClusterId || '__default__';
   const activeState = objectPanelStateByCluster[clusterKey] ?? DEFAULT_OBJECT_PANEL_STATE;
-  const { showObjectPanel, selectedObject, navigationHistory, navigationIndex } = activeState;
+  const { openPanels } = activeState;
+  const showObjectPanel = openPanels.size > 0;
 
   const updateActiveState = useCallback(
     (updater: (prev: ObjectPanelState) => ObjectPanelState) => {
@@ -77,6 +98,7 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
     [clusterKey]
   );
 
+  // Clean up state for removed cluster tabs.
   useEffect(() => {
     setObjectPanelStateByCluster((prev) => {
       if (activeClusterIds.length === 0) {
@@ -111,69 +133,71 @@ export const ObjectPanelStateProvider: React.FC<ObjectPanelStateProviderProps> =
   );
 
   const onRowClick = useCallback(
-    (data: KubernetesObjectReference) => {
+    (data: KubernetesObjectReference): string => {
       const enriched = hydrateClusterMeta(data);
+      const panelId = objectPanelId(enriched);
+
       updateActiveState((prev) => {
-        const nextHistory = [
-          ...prev.navigationHistory.slice(0, prev.navigationIndex + 1),
-          enriched,
-        ];
-        return {
-          showObjectPanel: true,
-          selectedObject: enriched,
-          navigationHistory: nextHistory,
-          navigationIndex: nextHistory.length - 1,
-        };
+        // If panel already exists, no state change needed (activation handled by dockable system).
+        if (prev.openPanels.has(panelId)) {
+          return prev;
+        }
+        // Add new panel to the map.
+        const nextPanels = new Map(prev.openPanels);
+        nextPanels.set(panelId, enriched);
+        return { openPanels: nextPanels };
       });
+
+      return panelId;
     },
     [hydrateClusterMeta, updateActiveState]
   );
 
-  const onCloseObjectPanel = useCallback(() => {
-    updateActiveState(() => DEFAULT_OBJECT_PANEL_STATE);
-  }, [updateActiveState]);
-
-  const onNavigate = useCallback(
-    (index: number) => {
-      if (index >= 0 && index < navigationHistory.length) {
-        updateActiveState((prev) => ({
-          ...prev,
-          navigationIndex: index,
-          selectedObject: prev.navigationHistory[index] ?? null,
-        }));
-      }
+  const closePanel = useCallback(
+    (panelId: string) => {
+      updateActiveState((prev) => {
+        if (!prev.openPanels.has(panelId)) {
+          return prev;
+        }
+        const nextPanels = new Map(prev.openPanels);
+        nextPanels.delete(panelId);
+        return { openPanels: nextPanels };
+      });
+      // Clear the dockable panel state so reopening gets fresh defaults
+      // instead of remembering the old dock position.
+      clearPanelState(panelId);
     },
-    [navigationHistory, updateActiveState]
+    [updateActiveState]
   );
+
+  const onCloseObjectPanel = useCallback(() => {
+    // Clear dockable state for every open object panel before closing.
+    const current = objectPanelStateByCluster[clusterKey] ?? DEFAULT_OBJECT_PANEL_STATE;
+    current.openPanels.forEach((_, panelId) => clearPanelState(panelId));
+    updateActiveState(() => DEFAULT_OBJECT_PANEL_STATE);
+  }, [updateActiveState, objectPanelStateByCluster, clusterKey]);
 
   const value = useMemo(
     () => ({
       showObjectPanel,
-      selectedObject,
-      navigationHistory,
-      navigationIndex,
-      setShowObjectPanel: (show: boolean) => {
-        updateActiveState((prev) => ({ ...prev, showObjectPanel: show }));
-      },
-      setSelectedObject: (obj: KubernetesObjectReference | null) => {
-        updateActiveState((prev) => ({
-          ...prev,
-          selectedObject: obj ? hydrateClusterMeta(obj) : null,
-        }));
-      },
+      openPanels,
       onRowClick,
+      closePanel,
       onCloseObjectPanel,
-      onNavigate,
+      setShowObjectPanel: (show: boolean) => {
+        if (!show) {
+          updateActiveState(() => DEFAULT_OBJECT_PANEL_STATE);
+        }
+      },
+      hydrateClusterMeta,
     }),
     [
       showObjectPanel,
-      selectedObject,
-      navigationHistory,
-      navigationIndex,
-      hydrateClusterMeta,
+      openPanels,
       onRowClick,
+      closePanel,
       onCloseObjectPanel,
-      onNavigate,
+      hydrateClusterMeta,
       updateActiveState,
     ]
   );

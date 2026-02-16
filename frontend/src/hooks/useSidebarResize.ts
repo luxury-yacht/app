@@ -22,7 +22,7 @@ export function useSidebarResize({
   onWidthChange,
   onResizeEnd,
   minWidth = 200,
-  maxWidth = 600,
+  maxWidth = 500,
 }: SidebarResizeOptions): void {
   const [isResizing, setIsResizing] = useState(false);
 

@@ -1,7 +1,7 @@
 /* DockablePanel Component Styles */
 
 .dockable-panel-layer {
-  position: fixed;
+  position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 999;
@@ -12,13 +12,12 @@
 }
 
 .dockable-panel {
-  position: fixed;
+  position: absolute;
   background: var(--color-bg, #1a1a1a);
   border: 1px solid var(--color-border, #333);
   display: flex;
   flex-direction: column;
   z-index: 1000;
-  --dockable-panel-top-offset: var(--app-header-height);
   --dockable-panel-min-width: 150;
   --dockable-panel-min-height: 50;
   transition: none; /* We'll handle animations separately */
@@ -26,12 +25,12 @@
 
 /* Position variants */
 .dockable-panel--right {
-  top: var(--dockable-panel-top-offset);
+  top: var(--gridtable-filter-bar-height, 0px);
   right: 0;
   bottom: 0;
   border-left: 2px solid var(--color-border, #333);
   border-right: none;
-  max-height: calc(100vh - var(--dockable-panel-top-offset));
+  max-height: 100%;
   overflow: visible;
 }
 
@@ -68,11 +67,12 @@
 
 /* Header */
 .dockable-panel__header {
+  --dockable-panel-header-padding-x: 0.5rem;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  padding: 0 0.5rem;
+  padding: 0 var(--dockable-panel-header-padding-x);
   background: var(--color-bg-secondary, #242424);
   border-bottom: 1px solid var(--color-border, #333);
   flex-shrink: 0;
@@ -310,59 +310,6 @@
     nwse-resize;
 }
 
-/* Animations */
-@keyframes dockablePanelSlideInFromRight {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes dockablePanelSlideInFromBottom {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
-}
-
-@keyframes dockablePanelFadeIn {
-  from {
-    opacity: 0;
-    transform: translate3d(
-        var(--dockable-panel-translate-x, 0px),
-        var(--dockable-panel-translate-y, 0px),
-        0
-      )
-      scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translate3d(
-        var(--dockable-panel-translate-x, 0px),
-        var(--dockable-panel-translate-y, 0px),
-        0
-      )
-      scale(1);
-  }
-}
-
-/* Apply animations on mount */
-.dockable-panel--right {
-  animation: dockablePanelSlideInFromRight 0.3s ease-out;
-}
-
-.dockable-panel--bottom {
-  animation: dockablePanelSlideInFromBottom 0.3s ease-out;
-}
-
-.dockable-panel--floating {
-  animation: dockablePanelFadeIn 0.2s ease-out;
-}
-
 /* Dragging state */
 .dockable-panel--dragging {
   cursor: move !important;
@@ -439,4 +386,213 @@ body.dockable-panel-resizing-sw * {
   .dockable-panel--floating {
     box-shadow: 0 10px 50px rgb(0 0 0 / 70%);
   }
+}
+
+/* Tab bar */
+.dockable-tab-bar-shell {
+  --dockable-tab-overflow-indicator-size: 32px;
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.dockable-tab-bar-shell--has-left-overflow .dockable-tab-bar {
+  margin-left: calc(
+    var(--dockable-tab-overflow-indicator-size) - var(--dockable-panel-header-padding-x, 0px)
+  );
+}
+
+.dockable-tab-bar-shell--has-right-overflow .dockable-tab-bar {
+  margin-right: var(--dockable-tab-overflow-indicator-size);
+}
+
+.dockable-tab-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  position: relative;
+}
+
+.dockable-tab-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.dockable-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 100px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition:
+    color 0.15s,
+    border-color 0.15s,
+    background-color 0.15s;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.dockable-tab:hover {
+  color: var(--color-text, #fff);
+  background: var(--color-bg-tertiary, rgba(255 255 255 / 5%));
+}
+
+.dockable-tab--active {
+  color: var(--color-text, #fff);
+  border-bottom-color: var(--color-accent, #3b82f6);
+}
+
+.dockable-tab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+
+.dockable-tab__kind-indicator.kind-badge {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  min-width: 10px;
+  min-height: 10px;
+  box-sizing: border-box;
+  padding: 0;
+  border-radius: 6px;
+  font-size: 0;
+  line-height: 0;
+  flex-shrink: 0;
+}
+
+/* Tab being dragged -- reduced opacity to indicate it is moving. */
+.dockable-tab--dragging {
+  opacity: 0.65;
+  color: var(--color-text, #fff);
+  background: color-mix(in srgb, var(--color-accent, #3b82f6) 18%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 72%, transparent);
+  cursor: grabbing;
+}
+
+/* Drop target highlight for drag-and-drop */
+.dockable-tab-bar--drag-active {
+  outline: 1px dashed color-mix(in srgb, var(--color-accent, #3b82f6) 55%, transparent);
+  outline-offset: -1px;
+}
+
+.dockable-tab-bar--drop-target {
+  background: color-mix(in srgb, var(--color-accent, #3b82f6) 14%, transparent);
+  outline: 2px solid var(--color-accent, #3b82f6);
+  outline-offset: -1px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 45%, transparent);
+}
+
+.dockable-tab-bar__drop-indicator {
+  width: 3px;
+  background: var(--color-accent, #3b82f6);
+  flex-shrink: 0;
+  align-self: stretch;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 50%, transparent);
+}
+
+/* Cursor-following preview for active tab drags. */
+.dockable-tab-drag-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform: translate3d(
+    var(--dockable-tab-drag-x, -9999px),
+    var(--dockable-tab-drag-y, -9999px),
+    0
+  );
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 260px;
+  padding: 0.4rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--color-accent, #3b82f6) 55%, var(--color-border));
+  background: color-mix(in srgb, var(--color-bg-secondary) 88%, black 12%);
+  color: var(--color-text);
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.2;
+  box-shadow:
+    0 9px 24px rgb(0 0 0 / 35%),
+    0 0 0 1px color-mix(in srgb, var(--color-accent, #3b82f6) 30%, transparent);
+  pointer-events: none;
+  z-index: 10000;
+  white-space: nowrap;
+}
+
+.dockable-tab-drag-preview__kind.kind-badge {
+  width: 10px;
+  height: 10px;
+  min-width: 10px;
+  min-height: 10px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.dockable-tab-drag-preview__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dockable-tab-bar__overflow-indicator {
+  position: absolute;
+  top: 50%;
+  width: var(--dockable-tab-overflow-indicator-size);
+  height: var(--dockable-tab-overflow-indicator-size);
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  color: var(--color-text-secondary, #999);
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.dockable-tab-bar__overflow-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dockable-tab-bar__overflow-indicator--left {
+  left: calc(-1 * var(--dockable-panel-header-padding-x, 0px));
+}
+
+.dockable-tab-bar__overflow-indicator--right {
+  right: 0;
+}
+
+.dockable-tab-bar__overflow-indicator:hover {
+  background: var(--color-bg-tertiary, rgb(255 255 255 / 10%));
+  color: var(--color-text, #fff);
+}
+
+.dockable-tab-bar__overflow-indicator:focus-visible {
+  outline: 1px solid var(--color-accent, #3b82f6);
+  outline-offset: -1px;
 }

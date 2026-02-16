@@ -94,7 +94,10 @@ describe('useWindowBoundsConstraint', () => {
       writable: true,
       value: originalInnerHeight,
     });
-    document.body.innerHTML = '';
+    // Clean up all children from body
+    while (document.body.firstChild) {
+      document.body.removeChild(document.body.firstChild);
+    }
   });
 
   const createPanelState = (overrides: Partial<PanelStateOptions>) => {
@@ -143,7 +146,7 @@ describe('useWindowBoundsConstraint', () => {
     });
 
     expect(panelState.setSize).toHaveBeenCalledWith({ width: 700, height: 500 });
-    expect(panelState.setFloatingPosition).toHaveBeenCalledWith({ x: 50, y: 50 });
+    expect(panelState.setFloatingPosition).toHaveBeenCalledWith({ x: 0, y: 50 });
 
     await unmount();
   });
@@ -171,7 +174,8 @@ describe('useWindowBoundsConstraint', () => {
       vi.runAllTimers();
     });
 
-    expect(panelState.setSize).toHaveBeenCalledWith({ width: 750, height: 320 });
+    // maxWidth = content.width (falls back to window.innerWidth = 1000 in JSDOM)
+    expect(panelState.setSize).toHaveBeenCalledWith({ width: 1000, height: 320 });
 
     await unmount();
   });
@@ -199,7 +203,8 @@ describe('useWindowBoundsConstraint', () => {
       vi.runAllTimers();
     });
 
-    expect(panelState.setSize).toHaveBeenCalledWith({ width: 360, height: 650 });
+    // maxHeight = content.height (falls back to window.innerHeight = 800 in JSDOM)
+    expect(panelState.setSize).toHaveBeenCalledWith({ width: 360, height: 800 });
 
     await unmount();
   });

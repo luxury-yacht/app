@@ -25,7 +25,6 @@ import React, {
   useRef,
 } from 'react';
 import type { ViewType, NamespaceViewType, ClusterViewType } from '@/types/navigation/views';
-import { getObjectKind, getObjectName, getObjectNamespace } from '@/types/view-state';
 import { refreshOrchestrator } from '@/core/refresh';
 import { eventBus } from '@/core/events';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -271,9 +270,10 @@ const NavigationStateProvider: React.FC<NavigationStateProviderProps> = ({ child
  */
 const RefreshSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { viewType, activeNamespaceTab, activeClusterTab } = useNavigationState();
-  const { showObjectPanel, selectedObject } = useObjectPanelState();
+  const { showObjectPanel } = useObjectPanelState();
 
   // Single writer for view/object-panel refresh context updates.
+  // Individual object panel refresh is managed per-instance via useObjectPanelRefresh.
   useEffect(() => {
     refreshOrchestrator.updateContext({
       currentView: viewType,
@@ -281,12 +281,12 @@ const RefreshSyncProvider: React.FC<{ children: React.ReactNode }> = ({ children
       activeClusterView: activeClusterTab ?? undefined,
       objectPanel: {
         isOpen: showObjectPanel,
-        objectKind: getObjectKind(selectedObject),
-        objectName: getObjectName(selectedObject),
-        objectNamespace: getObjectNamespace(selectedObject),
+        objectKind: undefined,
+        objectName: undefined,
+        objectNamespace: undefined,
       },
     });
-  }, [viewType, activeNamespaceTab, activeClusterTab, showObjectPanel, selectedObject]);
+  }, [viewType, activeNamespaceTab, activeClusterTab, showObjectPanel]);
 
   return <>{children}</>;
 };

@@ -24,9 +24,6 @@ interface UseObjectPanelTabsArgs {
   isHelmRelease: boolean;
   isEvent: boolean;
   isOpen: boolean;
-  navigationIndex: number;
-  navigationHistoryLength: number;
-  navigate: (index: number) => void;
   dispatch: React.Dispatch<PanelAction>;
   close: () => void;
   currentTab: ViewType;
@@ -42,9 +39,6 @@ export const useObjectPanelTabs = ({
   isHelmRelease,
   isEvent,
   isOpen,
-  navigationIndex,
-  navigationHistoryLength,
-  navigate,
   dispatch,
   close,
   currentTab,
@@ -120,38 +114,6 @@ export const useObjectPanelTabs = ({
     enabled: isOpen,
     view: 'global',
     priority: isOpen ? KeyboardShortcutPriority.OBJECT_PANEL_ESCAPE : 0,
-  });
-
-  useShortcut({
-    key: 'ArrowLeft',
-    handler: () => {
-      if (isOpen && navigationIndex > 0) {
-        navigate(navigationIndex - 1);
-        return true;
-      }
-      return false;
-    },
-    description: 'Navigate to previous object',
-    category: 'Object Panel',
-    enabled: isOpen && navigationIndex > 0,
-    view: 'global',
-    priority: isOpen ? 20 : 0,
-  });
-
-  useShortcut({
-    key: 'ArrowRight',
-    handler: () => {
-      if (isOpen && navigationIndex < navigationHistoryLength - 1) {
-        navigate(navigationIndex + 1);
-        return true;
-      }
-      return false;
-    },
-    description: 'Navigate to next object',
-    category: 'Object Panel',
-    enabled: isOpen && navigationIndex < navigationHistoryLength - 1,
-    view: 'global',
-    priority: isOpen ? 20 : 0,
   });
 
   useShortcut({
