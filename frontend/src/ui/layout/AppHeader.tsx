@@ -9,7 +9,7 @@ import React from 'react';
 import KubeconfigSelector from '@shared/components/KubeconfigSelector';
 import ConnectivityStatus from '@components/status/ConnectivityStatus';
 import MetricsStatus from '@components/status/MetricsStatus';
-import PortForwardStatus from '@components/status/PortForwardStatus';
+import SessionsStatus from '@components/status/SessionsStatus';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { WindowToggleMaximise } from '@wailsjs/runtime/runtime';
 import { SettingsIcon } from '@shared/components/icons/MenuIcons';
@@ -72,7 +72,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
         <div className="status-indicators">
           <ConnectivityStatus />
           <MetricsStatus />
-          <PortForwardStatus />
+          <SessionsStatus />
         </div>
         <KubeconfigSelector />
         <button

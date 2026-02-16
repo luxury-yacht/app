@@ -8,16 +8,37 @@
 
 .shell-tab__toolbar {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.5rem;
+  align-items: flex-start;
   padding: 10px;
 }
 
 .shell-tab__controls {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.shell-tab__controls-row {
+  display: flex;
   align-items: center;
   gap: 0.5rem;
+  width: 100%;
+}
+
+.shell-tab__controls-row--primary {
+  flex-wrap: wrap;
+}
+
+.shell-tab__controls-row--secondary {
+  flex-wrap: wrap;
+}
+
+.shell-tab__mode-toggle .segmented-button__option {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.8rem;
+  min-height: 26px;
 }
 
 .shell-tab__control {

@@ -16,6 +16,7 @@ type (
 	LogFetchResponse                      = types.LogFetchResponse
 	ShellSessionRequest                   = types.ShellSessionRequest
 	ShellSession                          = types.ShellSession
+	ShellSessionInfo                      = types.ShellSessionInfo
 	DebugContainerRequest                 = types.DebugContainerRequest
 	DebugContainerResponse                = types.DebugContainerResponse
 	ShellOutputEvent                      = types.ShellOutputEvent

@@ -89,25 +89,55 @@ func (a *App) SetLogsPanelVisible(visible bool) {
 	}
 }
 
-func (a *App) TogglePortForwardsPanel() error {
+func (a *App) ToggleActiveSessionsPanel() error {
 	if a.Ctx == nil {
 		return fmt.Errorf("application context not available")
 	}
 
-	a.portForwardsPanelVisible = !a.portForwardsPanelVisible
-	a.logger.Info("Port forwards panel toggled", "App")
-	a.emitEvent("toggle-port-forwards")
+	a.activeSessionsPanelVisible = !a.activeSessionsPanelVisible
+	a.logger.Info("Active sessions panel toggled", "App")
+	a.emitEvent("toggle-active-sessions")
 	a.UpdateMenu()
 	return nil
 }
 
-func (a *App) IsPortForwardsPanelVisible() bool {
-	return a.portForwardsPanelVisible
+func (a *App) IsActiveSessionsPanelVisible() bool {
+	return a.activeSessionsPanelVisible
 }
 
-func (a *App) SetPortForwardsPanelVisible(visible bool) {
-	if a.portForwardsPanelVisible != visible {
-		a.portForwardsPanelVisible = visible
+func (a *App) SetActiveSessionsPanelVisible(visible bool) {
+	if a.activeSessionsPanelVisible != visible {
+		a.activeSessionsPanelVisible = visible
 		a.UpdateMenu()
 	}
+}
+
+// TogglePortForwardsPanel is kept for backwards compatibility and now toggles Active Sessions.
+func (a *App) TogglePortForwardsPanel() error {
+	return a.ToggleActiveSessionsPanel()
+}
+
+// IsPortForwardsPanelVisible is kept for backwards compatibility and mirrors Active Sessions.
+func (a *App) IsPortForwardsPanelVisible() bool {
+	return a.IsActiveSessionsPanelVisible()
+}
+
+// SetPortForwardsPanelVisible is kept for backwards compatibility and updates Active Sessions.
+func (a *App) SetPortForwardsPanelVisible(visible bool) {
+	a.SetActiveSessionsPanelVisible(visible)
+}
+
+// ToggleShellSessionsPanel is kept for backwards compatibility and now toggles Active Sessions.
+func (a *App) ToggleShellSessionsPanel() error {
+	return a.ToggleActiveSessionsPanel()
+}
+
+// IsShellSessionsPanelVisible is kept for backwards compatibility and mirrors Active Sessions.
+func (a *App) IsShellSessionsPanelVisible() bool {
+	return a.IsActiveSessionsPanelVisible()
+}
+
+// SetShellSessionsPanelVisible is kept for backwards compatibility and updates Active Sessions.
+func (a *App) SetShellSessionsPanelVisible(visible bool) {
+	a.SetActiveSessionsPanelVisible(visible)
 }

@@ -10,6 +10,7 @@ import { createContext } from 'react';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
 
 type CapabilityState = {
   allowed: boolean;
@@ -32,6 +33,7 @@ const {
   restartModalPropsRef,
   deleteModalPropsRef,
   logViewerPropsRef,
+  shellTabPropsRef,
   eventsTabPropsRef,
   yamlTabPropsRef,
   manifestTabPropsRef,
@@ -41,6 +43,7 @@ const {
   restartModalPropsRef: { current: null as any },
   deleteModalPropsRef: { current: null as any },
   logViewerPropsRef: { current: null as any },
+  shellTabPropsRef: { current: null as any },
   eventsTabPropsRef: { current: null as any },
   yamlTabPropsRef: { current: null as any },
   manifestTabPropsRef: { current: null as any },
@@ -150,6 +153,13 @@ vi.mock('@modules/object-panel/components/ObjectPanel/Logs/LogViewer', () => ({
   },
 }));
 
+vi.mock('@modules/object-panel/components/ObjectPanel/Shell/ShellTab', () => ({
+  default: (props: any) => {
+    shellTabPropsRef.current = props;
+    return <div data-testid="shell-tab" />;
+  },
+}));
+
 vi.mock('@modules/object-panel/components/ObjectPanel/Events/EventsTab', () => ({
   default: (props: any) => {
     eventsTabPropsRef.current = props;
@@ -255,6 +265,7 @@ describe('ObjectPanel tab availability', () => {
     restartModalPropsRef.current = null;
     deleteModalPropsRef.current = null;
     logViewerPropsRef.current = null;
+    shellTabPropsRef.current = null;
     eventsTabPropsRef.current = null;
     yamlTabPropsRef.current = null;
     manifestTabPropsRef.current = null;
@@ -628,6 +639,21 @@ describe('ObjectPanel tab availability', () => {
       isActive: true,
       clusterId: defaultClusterId,
     });
+  });
+
+  it('applies a pre-mount tab request so shell opens as the active tab', async () => {
+    const panelId = buildPanelId(defaultClusterId, 'Pod', 'team-a', 'api');
+    requestObjectPanelTab(panelId, 'shell');
+
+    await renderObjectPanel({
+      kind: 'Pod',
+      name: 'api',
+      namespace: 'team-a',
+    });
+
+    const shellButton = getTabButton('Shell');
+    expect(shellButton).toBeTruthy();
+    expect(shellButton?.classList.contains('active')).toBe(true);
   });
 
   it('activates events tab content and passes through object data', async () => {

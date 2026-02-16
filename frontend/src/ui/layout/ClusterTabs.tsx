@@ -11,7 +11,11 @@ import {
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import { GetClusterPortForwardCount, StopClusterPortForwards } from '@wailsjs/go/backend/App';
+import {
+  GetClusterPortForwardCount,
+  StopClusterPortForwards,
+  StopClusterShellSessions,
+} from '@wailsjs/go/backend/App';
 import ConfirmationModal from '@components/modals/ConfirmationModal';
 import './ClusterTabs.css';
 
@@ -156,6 +160,13 @@ const ClusterTabs: React.FC = () => {
         console.warn('Failed to check cluster port forward count:', err);
       }
 
+      // Stop tracked shell sessions for this cluster before closing.
+      try {
+        await StopClusterShellSessions(selection);
+      } catch (err) {
+        console.warn('Failed to stop cluster shell sessions:', err);
+      }
+
       // No active port forwards, proceed directly with closing.
       const nextSelections = selectedKubeconfigs.filter((config) => config !== selection);
       void setSelectedKubeconfigs(nextSelections);
@@ -172,6 +183,11 @@ const ClusterTabs: React.FC = () => {
       await StopClusterPortForwards(closeConfirm.clusterId);
     } catch (err) {
       console.warn('Failed to stop cluster port forwards:', err);
+    }
+    try {
+      await StopClusterShellSessions(closeConfirm.clusterId);
+    } catch (err) {
+      console.warn('Failed to stop cluster shell sessions:', err);
     }
 
     // Close the tab.

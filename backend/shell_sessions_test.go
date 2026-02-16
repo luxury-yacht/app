@@ -2,8 +2,11 @@ package backend
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"strings"
 	"testing"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -37,13 +40,19 @@ func TestShellEventWriterEmits(t *testing.T) {
 		}
 	}
 
-	writer := &shellEventWriter{app: app, sessionID: "s1", clusterID: "cluster1", stream: "stdout"}
+	sess := &shellSession{}
+	writer := &shellEventWriter{
+		app: app, sessionID: "s1", clusterID: "cluster1", stream: "stdout", session: sess,
+	}
 	n, err := writer.Write([]byte("hello"))
 	if err != nil || n != len("hello") {
 		t.Fatalf("write failed: %v", err)
 	}
 	if len(events) != 1 || events[0].Data != "hello" || events[0].Stream != "stdout" || events[0].ClusterID != "cluster1" {
 		t.Fatalf("unexpected events %+v", events)
+	}
+	if backlog := sess.snapshotBacklog(); backlog != "hello" {
+		t.Fatalf("unexpected backlog %q", backlog)
 	}
 }
 
@@ -120,6 +129,102 @@ func TestShellSessionMissingGuards(t *testing.T) {
 	}
 }
 
+func TestListShellSessionsAndClusterCount(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	now := time.Now()
+	app.shellSessions = map[string]*shellSession{
+		"s1": {
+			id:          "s1",
+			clusterID:   "cluster-a",
+			clusterName: "cluster-a-name",
+			namespace:   "ns-a",
+			podName:     "pod-a",
+			container:   "app",
+			command:     []string{"/bin/sh"},
+			startedAt:   now.Add(-2 * time.Minute),
+		},
+		"s2": {
+			id:          "s2",
+			clusterID:   "cluster-b",
+			clusterName: "cluster-b-name",
+			namespace:   "ns-b",
+			podName:     "pod-b",
+			container:   "debug",
+			command:     []string{"/bin/bash"},
+			startedAt:   now.Add(-1 * time.Minute),
+		},
+	}
+
+	sessions := app.ListShellSessions()
+	if len(sessions) != 2 {
+		t.Fatalf("expected 2 sessions, got %d", len(sessions))
+	}
+	if sessions[0].SessionID != "s1" || sessions[1].SessionID != "s2" {
+		t.Fatalf("expected sessions sorted by startedAt, got %+v", sessions)
+	}
+	if sessions[0].ClusterName != "cluster-a-name" {
+		t.Fatalf("unexpected cluster name: %+v", sessions[0])
+	}
+	if count := app.GetClusterShellSessionCount("cluster-a"); count != 1 {
+		t.Fatalf("expected cluster-a count 1, got %d", count)
+	}
+	if count := app.GetClusterShellSessionCount("cluster-b"); count != 1 {
+		t.Fatalf("expected cluster-b count 1, got %d", count)
+	}
+}
+
+func TestStopClusterShellSessions(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	app.Ctx = context.Background()
+	app.shellSessions = map[string]*shellSession{
+		"s1": {id: "s1", clusterID: "cluster-a"},
+		"s2": {id: "s2", clusterID: "cluster-a"},
+		"s3": {id: "s3", clusterID: "cluster-b"},
+	}
+
+	statusEvents := make([]ShellStatusEvent, 0)
+	listEvents := make([][]ShellSessionInfo, 0)
+	app.eventEmitter = func(_ context.Context, name string, args ...interface{}) {
+		if len(args) != 1 {
+			return
+		}
+		switch name {
+		case shellStatusEventName:
+			if ev, ok := args[0].(ShellStatusEvent); ok {
+				statusEvents = append(statusEvents, ev)
+			}
+		case shellListEventName:
+			if ev, ok := args[0].([]ShellSessionInfo); ok {
+				listEvents = append(listEvents, ev)
+			}
+		}
+	}
+
+	if err := app.StopClusterShellSessions("cluster-a"); err != nil {
+		t.Fatalf("StopClusterShellSessions error: %v", err)
+	}
+	if app.getShellSession("s1") != nil || app.getShellSession("s2") != nil {
+		t.Fatalf("expected cluster-a sessions removed")
+	}
+	if app.getShellSession("s3") == nil {
+		t.Fatalf("expected cluster-b session to remain")
+	}
+	if len(statusEvents) != 2 {
+		t.Fatalf("expected 2 status events, got %d", len(statusEvents))
+	}
+	for _, ev := range statusEvents {
+		if ev.Status != "closed" || ev.Reason != "cluster disconnected" || ev.ClusterID != "cluster-a" {
+			t.Fatalf("unexpected status event: %+v", ev)
+		}
+	}
+	if len(listEvents) != 1 {
+		t.Fatalf("expected 1 list event, got %d", len(listEvents))
+	}
+	if len(listEvents[0]) != 1 || listEvents[0][0].SessionID != "s3" {
+		t.Fatalf("unexpected list payload: %+v", listEvents[0])
+	}
+}
+
 func TestHasContainer(t *testing.T) {
 	containers := []corev1.Container{
 		{Name: "a"},
@@ -169,6 +274,50 @@ func TestEmitShellEventsGuards(t *testing.T) {
 	app.emitShellStatus("id", "cluster1", "open", "reason")
 	if calls != 2 {
 		t.Fatalf("expected 2 events emitted, got %d", calls)
+	}
+}
+
+func TestShellSessionBacklogIsBounded(t *testing.T) {
+	sess := &shellSession{}
+	for i := 0; i < 100; i++ {
+		chunk := fmt.Sprintf("[%03d]%s", i, strings.Repeat("x", 4090))
+		sess.appendBacklog(chunk)
+	}
+
+	backlog := sess.snapshotBacklog()
+	if len(backlog) == 0 {
+		t.Fatalf("expected backlog data")
+	}
+	if len(backlog) > shellOutputBacklogMaxBytes {
+		t.Fatalf("expected bounded backlog <= %d, got %d", shellOutputBacklogMaxBytes, len(backlog))
+	}
+	if strings.Contains(backlog, "[000]") {
+		t.Fatalf("expected oldest chunks to be evicted")
+	}
+	if !strings.Contains(backlog, "[099]") {
+		t.Fatalf("expected newest chunk to be retained")
+	}
+}
+
+func TestGetShellSessionBacklog(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+	sess := &shellSession{id: "s1"}
+	sess.appendBacklog("line-1\n")
+	sess.appendBacklog("line-2\n")
+	app.shellSessions = map[string]*shellSession{
+		"s1": sess,
+	}
+
+	backlog, err := app.GetShellSessionBacklog("s1")
+	if err != nil {
+		t.Fatalf("GetShellSessionBacklog error: %v", err)
+	}
+	if backlog != "line-1\nline-2\n" {
+		t.Fatalf("unexpected backlog: %q", backlog)
+	}
+
+	if _, err := app.GetShellSessionBacklog("missing"); err == nil {
+		t.Fatalf("expected error for missing shell session")
 	}
 }
 

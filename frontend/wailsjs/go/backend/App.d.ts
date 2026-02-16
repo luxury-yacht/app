@@ -67,6 +67,8 @@ export function GetClusterRole(arg1:string,arg2:string):Promise<types.ClusterRol
 
 export function GetClusterRoleBinding(arg1:string,arg2:string):Promise<types.ClusterRoleBindingDetails>;
 
+export function GetClusterShellSessionCount(arg1:string):Promise<number>;
+
 export function GetClusterTabOrder():Promise<Array<string>>;
 
 export function GetConfigMap(arg1:string,arg2:string,arg3:string):Promise<types.ConfigMapDetails>;
@@ -143,6 +145,8 @@ export function GetService(arg1:string,arg2:string,arg3:string):Promise<types.Se
 
 export function GetServiceAccount(arg1:string,arg2:string,arg3:string):Promise<types.ServiceAccountDetails>;
 
+export function GetShellSessionBacklog(arg1:string):Promise<string>;
+
 export function GetStatefulSet(arg1:string,arg2:string,arg3:string):Promise<types.StatefulSetDetails>;
 
 export function GetStorageClass(arg1:string,arg2:string):Promise<types.StorageClassDetails>;
@@ -161,17 +165,23 @@ export function GetZoomLevel():Promise<number>;
 
 export function InitializeForTesting(arg1:context.Context,arg2:kubernetes.Interface):Promise<void>;
 
+export function IsActiveSessionsPanelVisible():Promise<boolean>;
+
 export function IsDiagnosticsPanelVisible():Promise<boolean>;
 
 export function IsLogsPanelVisible():Promise<boolean>;
 
 export function IsPortForwardsPanelVisible():Promise<boolean>;
 
+export function IsShellSessionsPanelVisible():Promise<boolean>;
+
 export function IsSidebarVisible():Promise<boolean>;
 
 export function IsWorkloadHPAManaged(arg1:string,arg2:string,arg3:string,arg4:string):Promise<boolean>;
 
 export function ListPortForwards():Promise<Array<backend.PortForwardSession>>;
+
+export function ListShellSessions():Promise<Array<types.ShellSessionInfo>>;
 
 export function LoadWindowSettings():Promise<types.WindowSettings>;
 
@@ -203,6 +213,8 @@ export function SendShellInput(arg1:string,arg2:string):Promise<void>;
 
 export function SetAccentColor(arg1:string,arg2:string):Promise<void>;
 
+export function SetActiveSessionsPanelVisible(arg1:boolean):Promise<void>;
+
 export function SetApiExtensionsClient(arg1:clientset.Interface):Promise<void>;
 
 export function SetAutoRefreshEnabled(arg1:boolean):Promise<void>;
@@ -233,6 +245,8 @@ export function SetRestConfig(arg1:rest.Config):Promise<void>;
 
 export function SetSelectedKubeconfigs(arg1:Array<string>):Promise<void>;
 
+export function SetShellSessionsPanelVisible(arg1:boolean):Promise<void>;
+
 export function SetSidebarVisible(arg1:boolean):Promise<void>;
 
 export function SetTheme(arg1:string):Promise<void>;
@@ -253,9 +267,13 @@ export function Startup(arg1:context.Context):Promise<void>;
 
 export function StopClusterPortForwards(arg1:string):Promise<void>;
 
+export function StopClusterShellSessions(arg1:string):Promise<void>;
+
 export function StopPortForward(arg1:string):Promise<void>;
 
 export function SuspendCronJob(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
+
+export function ToggleActiveSessionsPanel():Promise<void>;
 
 export function ToggleDiagnosticsPanel():Promise<void>;
 
@@ -264,6 +282,8 @@ export function ToggleLogsPanel():Promise<void>;
 export function ToggleObjectDiff():Promise<void>;
 
 export function TogglePortForwardsPanel():Promise<void>;
+
+export function ToggleShellSessionsPanel():Promise<void>;
 
 export function ToggleSidebar():Promise<void>;
 

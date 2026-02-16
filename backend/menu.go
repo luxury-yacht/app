@@ -217,16 +217,16 @@ func createViewMenu(appMenu *menu.Menu, app *App) {
 		}()
 	})
 
-	// Dynamic Port Forwards panel menu item text
-	portForwardsText := "Show Port Forwards Panel"
-	if app.IsPortForwardsPanelVisible() {
-		portForwardsText = "Hide Port Forwards Panel"
+	// Dynamic Active Sessions panel menu item text
+	activeSessionsText := "Show Active Sessions Panel"
+	if app.IsActiveSessionsPanelVisible() {
+		activeSessionsText = "Hide Active Sessions Panel"
 	}
 
-	viewMenu.AddText(portForwardsText, keys.Combo("f", keys.ShiftKey, keys.CmdOrCtrlKey), func(_ *menu.CallbackData) {
+	viewMenu.AddText(activeSessionsText, keys.Combo("s", keys.ShiftKey, keys.CmdOrCtrlKey), func(_ *menu.CallbackData) {
 		go func() {
-			if err := app.TogglePortForwardsPanel(); err != nil {
-				println("Failed to toggle port forwards panel:", err.Error())
+			if err := app.ToggleActiveSessionsPanel(); err != nil {
+				println("Failed to toggle active sessions panel:", err.Error())
 			}
 		}()
 	})

@@ -3,7 +3,7 @@
  *
  * Shared status indicator component.
  * Renders a colored dot with a hover tooltip that appears below.
- * All three header indicators (Connectivity, Metrics, Port Forwards) use this.
+ * Header indicators (Connectivity, Metrics, Sessions) use this.
  */
 
 import React from 'react';

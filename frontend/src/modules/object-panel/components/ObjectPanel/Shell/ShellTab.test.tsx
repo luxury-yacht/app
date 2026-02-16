@@ -17,6 +17,8 @@ const wailsMocks = vi.hoisted(() => ({
   StartShellSession: vi.fn(),
   CreateDebugContainer: vi.fn(),
   GetPodContainers: vi.fn(),
+  GetShellSessionBacklog: vi.fn(),
+  ListShellSessions: vi.fn(),
   SendShellInput: vi.fn(),
   ResizeShellSession: vi.fn(),
   CloseShellSession: vi.fn(),
@@ -190,6 +192,8 @@ describe('ShellTab', () => {
       podName: 'pod-1',
     });
     wailsMocks.GetPodContainers.mockResolvedValue([]);
+    wailsMocks.GetShellSessionBacklog.mockResolvedValue('');
+    wailsMocks.ListShellSessions.mockResolvedValue([]);
     wailsMocks.SendShellInput.mockResolvedValue(undefined);
     wailsMocks.ResizeShellSession.mockResolvedValue(undefined);
     wailsMocks.CloseShellSession.mockResolvedValue(undefined);
@@ -252,6 +256,7 @@ describe('ShellTab', () => {
     expect(clipboardAddonMocks.ClipboardAddon).toHaveBeenCalled();
     expect(terminal?.loadAddon).toHaveBeenCalledWith(clipboardAddonMocks.instances[0]);
 
+    await flushAsync();
     emitEvent('object-shell:status', { sessionId: 'sess-1', status: 'open' });
     await flushAsync();
 
@@ -329,7 +334,7 @@ describe('ShellTab', () => {
     expect(wailsMocks.SendShellInput).toHaveBeenCalledWith('sess-1', 'ls\n');
   });
 
-  it('closes the shell session when the component unmounts', async () => {
+  it('detaches without closing the shell session when the component unmounts', async () => {
     await renderShellTab();
     clickConnectButton();
     await flushAsync();
@@ -338,7 +343,50 @@ describe('ShellTab', () => {
       root.unmount();
     });
 
-    expect(wailsMocks.CloseShellSession).toHaveBeenCalledWith('sess-1');
+    expect(wailsMocks.CloseShellSession).not.toHaveBeenCalled();
+  });
+
+  it('reattaches to an existing tracked shell session for the same pod', async () => {
+    wailsMocks.ListShellSessions.mockResolvedValue([
+      {
+        sessionId: 'existing-1',
+        clusterId: 'alpha:ctx',
+        clusterName: 'alpha',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+        command: ['/bin/sh'],
+      },
+    ]);
+
+    await renderShellTab();
+    await flushAsync();
+
+    const connectBtn = container.querySelector('.shell-tab__button') as HTMLButtonElement;
+    expect(connectBtn.textContent).toContain('Disconnect');
+    expect(wailsMocks.StartShellSession).not.toHaveBeenCalled();
+  });
+
+  it('replays buffered output when reattaching to a tracked session', async () => {
+    wailsMocks.ListShellSessions.mockResolvedValue([
+      {
+        sessionId: 'existing-1',
+        clusterId: 'alpha:ctx',
+        clusterName: 'alpha',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+        command: ['/bin/sh'],
+      },
+    ]);
+    wailsMocks.GetShellSessionBacklog.mockResolvedValue('prior output\r\n$ ');
+
+    await renderShellTab();
+    await flushAsync();
+
+    expect(wailsMocks.GetShellSessionBacklog).toHaveBeenCalledWith('existing-1');
+    const terminal = getLatestTerminal();
+    expect(terminal?.write).toHaveBeenCalledWith('prior output\r\n$ ');
   });
 
   it('renders mode toggle with Shell and Debug options', async () => {

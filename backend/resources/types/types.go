@@ -116,6 +116,18 @@ type ShellSession struct {
 	Containers []string `json:"containers"`
 }
 
+// ShellSessionInfo describes a tracked shell exec session.
+type ShellSessionInfo struct {
+	SessionID   string      `json:"sessionId"`
+	ClusterID   string      `json:"clusterId"`
+	ClusterName string      `json:"clusterName"`
+	Namespace   string      `json:"namespace"`
+	PodName     string      `json:"podName"`
+	Container   string      `json:"container"`
+	Command     []string    `json:"command"`
+	StartedAt   metav1.Time `json:"startedAt"`
+}
+
 // DebugContainerRequest describes the parameters for creating an ephemeral debug container.
 type DebugContainerRequest struct {
 	Namespace       string `json:"namespace"`
