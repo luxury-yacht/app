@@ -169,6 +169,20 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     panelRef,
   });
 
+  // Resolve the correct min constraints for the current dock mode.
+  const resolvedMinWidth =
+    panelState.position === 'right'
+      ? constraints.right.minWidth
+      : panelState.position === 'floating'
+        ? constraints.floating.minWidth
+        : 0;
+  const resolvedMinHeight =
+    panelState.position === 'bottom'
+      ? constraints.bottom.minHeight
+      : panelState.position === 'floating'
+        ? constraints.floating.minHeight
+        : 0;
+
   const {
     isDragging,
     isResizing,
@@ -178,10 +192,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   } = useDockablePanelDragResize({
     panelState,
     panelRef,
-    safeMinWidth: constraints.minWidth,
-    safeMinHeight: constraints.minHeight,
-    safeMaxWidth: constraints.maxWidth,
-    safeMaxHeight: constraints.maxHeight,
+    safeMinWidth: resolvedMinWidth,
+    safeMinHeight: resolvedMinHeight,
     isMaximized,
   });
 
@@ -326,8 +338,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
   // Handle window resize to keep panels within bounds
   useWindowBoundsConstraint(panelState, {
-    minWidth: constraints.minWidth,
-    minHeight: constraints.minHeight,
+    minWidth: resolvedMinWidth,
+    minHeight: resolvedMinHeight,
     isResizing,
     isMaximized,
     panelRef,

@@ -25,8 +25,6 @@ interface DockablePanelDragResizeOptions {
   panelRef: RefObject<HTMLDivElement | null>;
   safeMinWidth: number;
   safeMinHeight: number;
-  safeMaxWidth?: number;
-  safeMaxHeight?: number;
   isMaximized: boolean;
 }
 
@@ -39,8 +37,6 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     panelRef,
     safeMinWidth,
     safeMinHeight,
-    safeMaxWidth,
-    safeMaxHeight,
     isMaximized,
   } = options;
   const { zoomLevel } = useZoom();
@@ -319,17 +315,15 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
 
         if (currentPanelState.position === 'right') {
           // For right-docked panels, dragging left (negative deltaX) increases width
-          const maxAvailableWidth = content.width;
           newWidth = Math.max(
             safeMinWidth,
-            Math.min(safeMaxWidth || maxAvailableWidth, resizeStart.width - deltaX)
+            Math.min(content.width, resizeStart.width - deltaX)
           );
         } else if (currentPanelState.position === 'bottom') {
           // For bottom-docked panels, dragging up (negative deltaY) increases height
-          const maxAvailableHeight = content.height;
           newHeight = Math.max(
             safeMinHeight,
-            Math.min(safeMaxHeight || maxAvailableHeight, resizeStart.height - deltaY)
+            Math.min(content.height, resizeStart.height - deltaY)
           );
         } else if (currentPanelState.position === 'floating') {
           // Handle multi-directional resizing for floating panels
@@ -338,13 +332,13 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
             const maxAllowedWidth = content.width - resizeStart.left;
             newWidth = Math.max(
               safeMinWidth,
-              Math.min(safeMaxWidth || maxAllowedWidth, resizeStart.width + deltaX)
+              Math.min(maxAllowedWidth, resizeStart.width + deltaX)
             );
           }
           if (resizeDirection.includes('w')) {
             const proposedWidth = resizeStart.width - deltaX;
             if (proposedWidth >= safeMinWidth) {
-              newWidth = Math.min(safeMaxWidth || content.width, proposedWidth);
+              newWidth = Math.min(content.width, proposedWidth);
               newLeft = Math.max(0, resizeStart.left + deltaX); // Don't go beyond left edge
               // Adjust width if we hit the left edge
               if (resizeStart.left + deltaX < 0) {
@@ -358,13 +352,13 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
             const maxAvailableHeight = content.height - resizeStart.top;
             newHeight = Math.max(
               safeMinHeight,
-              Math.min(safeMaxHeight || maxAvailableHeight, resizeStart.height + deltaY)
+              Math.min(maxAvailableHeight, resizeStart.height + deltaY)
             );
           }
           if (resizeDirection.includes('n')) {
             const proposedHeight = resizeStart.height - deltaY;
             if (proposedHeight >= safeMinHeight) {
-              newHeight = Math.min(safeMaxHeight || content.height, proposedHeight);
+              newHeight = Math.min(content.height, proposedHeight);
               // Don't allow dragging above the top of the content area.
               newTop = Math.max(0, resizeStart.top + deltaY);
               // Adjust height if we hit the top edge.
@@ -409,8 +403,6 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     resizeStart,
     safeMinWidth,
     safeMinHeight,
-    safeMaxWidth,
-    safeMaxHeight,
     scheduleFloatingPosition,
     scheduleSizeUpdate,
     flushDragPosition,
