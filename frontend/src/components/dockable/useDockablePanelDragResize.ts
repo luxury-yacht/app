@@ -409,18 +409,13 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     flushSizeUpdate,
   ]);
 
+  // Header clicks always start a drag — resize is handled by the dedicated
+  // CSS resize-zone overlay divs which sit above the header at z-index 10.
   const handleHeaderMouseDown = useCallback(
     (e: ReactMouseEvent) => {
-      if (panelState.position === 'floating') {
-        const direction = getResizeDirection(e);
-        if (!direction) {
-          handleMouseDownDrag(e);
-        }
-        return;
-      }
       handleMouseDownDrag(e);
     },
-    [panelState.position, getResizeDirection, handleMouseDownDrag]
+    [handleMouseDownDrag]
   );
 
   return {

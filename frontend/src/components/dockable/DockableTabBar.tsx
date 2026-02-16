@@ -199,6 +199,8 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       if (e.button !== 0) {
         return;
       }
+      // Prevent the header's drag handler from firing when clicking a tab.
+      e.stopPropagation();
       startTabDrag(panelId, groupKey, e.clientX, e.clientY);
     },
     [groupKey, startTabDrag]
