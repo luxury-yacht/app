@@ -339,6 +339,33 @@ describe('DockableTabBar', () => {
     await unmount();
   });
 
+  it('renders overflow controls inside the tab-bar container', async () => {
+    const tabs: TabInfo[] = [
+      { panelId: 'p1', title: 'Logs' },
+      { panelId: 'p2', title: 'Events' },
+      { panelId: 'p3', title: 'Terminal' },
+    ];
+
+    const { host, unmount } = await renderTabBar(
+      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+    );
+
+    const tabBar = host.querySelector('.dockable-tab-bar') as HTMLElement;
+    mockTabBarMetrics(tabBar, 360, 180);
+
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    const rightControl = host.querySelector(
+      '.dockable-tab-bar__overflow-indicator--right'
+    ) as HTMLElement;
+    expect(rightControl).toBeTruthy();
+    expect(rightControl.closest('.dockable-tab-bar')).toBe(tabBar);
+
+    await unmount();
+  });
+
   it('hides overflow hints when tabs fit in available width', async () => {
     const tabs: TabInfo[] = [
       { panelId: 'p1', title: 'Logs' },
@@ -358,6 +385,55 @@ describe('DockableTabBar', () => {
 
     expect(host.querySelector('.dockable-tab-bar__overflow-indicator--left')).toBeNull();
     expect(host.querySelector('.dockable-tab-bar__overflow-indicator--right')).toBeNull();
+
+    await unmount();
+  });
+
+  it('hides overflow hints when the tab strip has no usable width', async () => {
+    const tabs: TabInfo[] = [
+      { panelId: 'p1', title: 'Logs' },
+      { panelId: 'p2', title: 'Events' },
+      { panelId: 'p3', title: 'Terminal' },
+    ];
+
+    const { host, unmount } = await renderTabBar(
+      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+    );
+
+    const tabBar = host.querySelector('.dockable-tab-bar') as HTMLElement;
+    mockTabBarMetrics(tabBar, 360, 0);
+
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--left')).toBeNull();
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--right')).toBeNull();
+
+    await unmount();
+  });
+
+  it('keeps tab content and overflow controls rendered when panel width is narrow', async () => {
+    const tabs: TabInfo[] = [
+      { panelId: 'p1', title: 'Logs' },
+      { panelId: 'p2', title: 'Events' },
+      { panelId: 'p3', title: 'Terminal' },
+    ];
+
+    const { host, unmount } = await renderTabBar(
+      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+    );
+
+    const tabBar = host.querySelector('.dockable-tab-bar') as HTMLElement;
+    mockTabBarMetrics(tabBar, 360, 80);
+
+    await act(async () => {
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    expect(host.querySelectorAll('.dockable-tab')).toHaveLength(3);
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--left')).toBeNull();
+    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--right')).toBeTruthy();
 
     await unmount();
   });

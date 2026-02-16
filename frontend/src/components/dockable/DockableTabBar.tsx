@@ -29,6 +29,8 @@ interface DockableTabBarProps {
 
 /** Horizontal pixels to move the tab strip for each overflow control click. */
 const TAB_SCROLL_STEP = 120;
+/** Minimum tab-strip width required before overflow controls are useful. */
+const MIN_OVERFLOW_HINT_WIDTH = 2;
 
 /**
  * DockableTabBar -- horizontal tab strip for grouped dockable panels.
@@ -57,6 +59,14 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   const updateOverflowHint = useCallback(() => {
     const bar = barRef.current;
     if (!bar) {
+      return;
+    }
+    if (bar.clientWidth <= 0) {
+      setOverflowHint((prev) => (prev.left || prev.right ? { left: false, right: false } : prev));
+      return;
+    }
+    if (bar.clientWidth < MIN_OVERFLOW_HINT_WIDTH) {
+      setOverflowHint((prev) => (prev.left || prev.right ? { left: false, right: false } : prev));
       return;
     }
     const maxScrollLeft = Math.max(0, bar.scrollWidth - bar.clientWidth);
@@ -133,7 +143,10 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   // isolated so tab drag/reorder doesn't also trigger panel header drag.
   const handleBarMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target instanceof HTMLElement ? e.target : null;
-    if (target?.closest('.dockable-tab')) {
+    if (
+      target?.closest('.dockable-tab') ||
+      target?.closest('.dockable-tab-bar__overflow-indicator')
+    ) {
       e.stopPropagation();
     }
   }, []);
@@ -195,11 +208,10 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   const dropInsertIndex = isDropTarget ? dragState!.dropTarget!.insertIndex : -1;
   const isDragActive = Boolean(dragState);
 
-  const barClassName = `dockable-tab-bar${isDragActive ? ' dockable-tab-bar--drag-active' : ''}${isDropTarget ? ' dockable-tab-bar--drop-target' : ''}`;
-  const shellClassName = `dockable-tab-bar-shell${overflowHint.left ? ' dockable-tab-bar-shell--has-left-overflow' : ''}${overflowHint.right ? ' dockable-tab-bar-shell--has-right-overflow' : ''}`;
+  const barClassName = `dockable-tab-bar${isDragActive ? ' dockable-tab-bar--drag-active' : ''}${isDropTarget ? ' dockable-tab-bar--drop-target' : ''}${overflowHint.left ? ' dockable-tab-bar--has-left-overflow' : ''}${overflowHint.right ? ' dockable-tab-bar--has-right-overflow' : ''}`;
 
   return (
-    <div className={shellClassName}>
+    <div className="dockable-tab-bar-shell">
       <div
         ref={barRef}
         className={barClassName}
@@ -208,6 +220,24 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
         role="tablist"
         aria-label={`${groupKey} panel tabs`}
       >
+        {overflowHint.left && (
+          <button
+            type="button"
+            className="dockable-tab-bar__overflow-indicator dockable-tab-bar__overflow-indicator--left"
+            aria-label="Scroll tabs left"
+            onMouseDown={handleOverflowMouseDown}
+            onClick={handleScrollLeftClick}
+          >
+            <svg
+              className="dockable-tab-bar__overflow-icon"
+              viewBox="0 0 12 12"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path d="M7.5 2.5L4.5 6L7.5 9.5" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
+          </button>
+        )}
         {tabs.map((tab, index) => {
           const isActive = tab.panelId === activeTab;
           const isDragging = dragState?.panelId === tab.panelId;
@@ -240,43 +270,25 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
         {isDropTarget && dropInsertIndex === tabs.length && (
           <div className="dockable-tab-bar__drop-indicator" data-testid="drop-indicator" />
         )}
+        {overflowHint.right && (
+          <button
+            type="button"
+            className="dockable-tab-bar__overflow-indicator dockable-tab-bar__overflow-indicator--right"
+            aria-label="Scroll tabs right"
+            onMouseDown={handleOverflowMouseDown}
+            onClick={handleScrollRightClick}
+          >
+            <svg
+              className="dockable-tab-bar__overflow-icon"
+              viewBox="0 0 12 12"
+              fill="none"
+              aria-hidden="true"
+            >
+              <path d="M4.5 2.5L7.5 6L4.5 9.5" stroke="currentColor" strokeWidth="1.6" />
+            </svg>
+          </button>
+        )}
       </div>
-      {overflowHint.left && (
-        <button
-          type="button"
-          className="dockable-tab-bar__overflow-indicator dockable-tab-bar__overflow-indicator--left"
-          aria-label="Scroll tabs left"
-          onMouseDown={handleOverflowMouseDown}
-          onClick={handleScrollLeftClick}
-        >
-          <svg
-            className="dockable-tab-bar__overflow-icon"
-            viewBox="0 0 12 12"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path d="M7.5 2.5L4.5 6L7.5 9.5" stroke="currentColor" strokeWidth="1.6" />
-          </svg>
-        </button>
-      )}
-      {overflowHint.right && (
-        <button
-          type="button"
-          className="dockable-tab-bar__overflow-indicator dockable-tab-bar__overflow-indicator--right"
-          aria-label="Scroll tabs right"
-          onMouseDown={handleOverflowMouseDown}
-          onClick={handleScrollRightClick}
-        >
-          <svg
-            className="dockable-tab-bar__overflow-icon"
-            viewBox="0 0 12 12"
-            fill="none"
-            aria-hidden="true"
-          >
-            <path d="M4.5 2.5L7.5 6L4.5 9.5" stroke="currentColor" strokeWidth="1.6" />
-          </svg>
-        </button>
-      )}
     </div>
   );
 };

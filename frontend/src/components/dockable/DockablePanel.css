@@ -399,16 +399,6 @@ body.dockable-panel-resizing-sw * {
   align-items: stretch;
 }
 
-.dockable-tab-bar-shell--has-left-overflow .dockable-tab-bar {
-  margin-left: calc(
-    var(--dockable-tab-overflow-indicator-size) - var(--dockable-panel-header-padding-x, 0px)
-  );
-}
-
-.dockable-tab-bar-shell--has-right-overflow .dockable-tab-bar {
-  margin-right: var(--dockable-tab-overflow-indicator-size);
-}
-
 .dockable-tab-bar {
   display: flex;
   align-items: stretch;
@@ -474,6 +464,8 @@ body.dockable-panel-resizing-sw * {
   box-sizing: border-box;
   padding: 0;
   border-radius: 6px;
+  background-color: currentColor !important;
+  border-color: currentColor !important;
   font-size: 0;
   line-height: 0;
   flex-shrink: 0;
@@ -548,6 +540,8 @@ body.dockable-panel-resizing-sw * {
   box-sizing: border-box;
   border-radius: 6px;
   padding: 0;
+  background-color: currentColor !important;
+  border-color: currentColor !important;
   flex-shrink: 0;
 }
 
@@ -557,20 +551,22 @@ body.dockable-panel-resizing-sw * {
 }
 
 .dockable-tab-bar__overflow-indicator {
-  position: absolute;
-  top: 50%;
+  position: sticky;
+  top: 0;
   width: var(--dockable-tab-overflow-indicator-size);
-  height: var(--dockable-tab-overflow-indicator-size);
-  transform: translateY(-50%);
+  height: 100%;
+  flex: 0 0 var(--dockable-tab-overflow-indicator-size);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2;
+  align-self: stretch;
+  z-index: 3;
   color: var(--color-text-secondary, #999);
   margin: 0;
   padding: 0;
   border: none;
-  background: transparent;
+  border-radius: 6px;
+  background: var(--color-bg-secondary, #242424);
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -584,10 +580,11 @@ body.dockable-panel-resizing-sw * {
 }
 
 .dockable-tab-bar__overflow-indicator--left {
-  left: calc(-1 * var(--dockable-panel-header-padding-x, 0px));
+  left: 0;
 }
 
 .dockable-tab-bar__overflow-indicator--right {
+  margin-left: auto;
   right: 0;
 }
 
