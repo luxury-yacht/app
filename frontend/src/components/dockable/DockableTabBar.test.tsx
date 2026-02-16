@@ -155,7 +155,7 @@ describe('DockableTabBar', () => {
     await unmount();
   });
 
-  it('does not render close buttons on tabs', async () => {
+  it('renders close buttons on each tab (hidden by default via CSS)', async () => {
     const tabs: TabInfo[] = [
       { panelId: 'p1', title: 'Logs' },
       { panelId: 'p2', title: 'Events' },
@@ -165,9 +165,9 @@ describe('DockableTabBar', () => {
       <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
     );
 
-    // Tabs should never have close buttons (close is done via panel controls).
+    // Each tab should have a close button (visibility is CSS-controlled on hover).
     const closeButtons = host.querySelectorAll('.dockable-tab__close');
-    expect(closeButtons).toHaveLength(0);
+    expect(closeButtons).toHaveLength(2);
 
     await unmount();
   });

@@ -308,3 +308,7 @@
 .diagnostics-tabs {
   padding: 0.35rem 0.5rem 0;
 }
+
+.diagnostics-tabs .tab-item {
+  text-transform: uppercase;
+}

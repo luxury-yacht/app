@@ -1,76 +1,15 @@
+/* Cluster tab strip — layout-specific overrides.
+   Base tab styles live in styles/components/tabs.css */
+
 .cluster-tabs {
-  display: flex;
-  align-items: center;
-  gap: 2px;
   padding: 0 6px;
-  min-height: 26px;
-  background: var(--color-bg-secondary);
-  border-bottom: 1px solid var(--color-border);
   overflow-x: auto;
   grid-column: 1 / -1;
   grid-row: 2;
   /* --wails-draggable: none; */
 }
 
-.cluster-tab {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--color-bg-tertiary);
-  border: 1px solid var(--color-border);
-  border-bottom: none;
-  border-radius: 8px 8px 0 0;
-  color: var(--color-text-secondary);
-  margin-bottom: -1px;
-  /* --wails-draggable: none; */
-}
-
-.cluster-tab__button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: none;
-  /* --wails-draggable: none; */
-}
-
-.cluster-tab__label {
-  white-space: nowrap;
-}
-
-.cluster-tab__close {
-  border: none;
-  background: none;
-  color: var(--color-text-tertiary);
-  cursor: pointer;
-  font-size: 12px;
-  padding: 0 6px 0 2px;
-  --wails-draggable: none;
-}
-
-.cluster-tab__close:hover {
-  color: var(--color-text);
-}
-
-.cluster-tab__button:focus-visible,
-.cluster-tab__close:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 1px;
-}
-
-.cluster-tab--active {
-  background: var(--color-bg-tertiary);
-  color: var(--color-text);
-  border-color: var(--color-border);
-  border-bottom: 1px solid var(--color-text-secondary);
-}
-
+/* Drag states */
 .cluster-tab--dragging {
   opacity: 0.6;
 }

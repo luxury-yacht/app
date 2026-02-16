@@ -43,10 +43,10 @@ describe('ObjectPanelTabs', () => {
       root.render(<ObjectPanelTabs tabs={tabs} activeTab="logs" onSelect={vi.fn()} />);
     });
 
-    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('.tab'));
+    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('.tab-item'));
     expect(buttons).toHaveLength(3);
-    expect(buttons[1].classList.contains('active')).toBe(true);
-    expect(buttons[0].classList.contains('active')).toBe(false);
+    expect(buttons[1].classList.contains('tab-item--active')).toBe(true);
+    expect(buttons[0].classList.contains('tab-item--active')).toBe(false);
   });
 
   it('invokes onSelect when a tab is clicked', async () => {
@@ -55,7 +55,7 @@ describe('ObjectPanelTabs', () => {
       root.render(<ObjectPanelTabs tabs={tabs} activeTab="details" onSelect={onSelect} />);
     });
 
-    const logsButton = container.querySelectorAll<HTMLButtonElement>('.tab')[1];
+    const logsButton = container.querySelectorAll<HTMLButtonElement>('.tab-item')[1];
     await act(async () => {
       logsButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });

@@ -80,7 +80,7 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfig = 'a';
     await renderTabs();
 
-    const labels = Array.from(container.querySelectorAll('.cluster-tab__label')).map((node) =>
+    const labels = Array.from(container.querySelectorAll('.tab-item__label')).map((node) =>
       (node as HTMLElement).textContent?.trim()
     );
     expect(labels).toEqual(['b', 'a', 'c']);
@@ -92,7 +92,7 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfig = 'a';
     await renderTabs();
 
-    const labels = Array.from(container.querySelectorAll('.cluster-tab__label')).map((node) =>
+    const labels = Array.from(container.querySelectorAll('.tab-item__label')).map((node) =>
       (node as HTMLElement).textContent?.trim()
     );
     expect(labels).toEqual(['b', 'a']);
@@ -103,8 +103,8 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfig = 'a';
     await renderTabs();
 
-    const buttons = Array.from(container.querySelectorAll('.cluster-tab__button'));
-    const target = buttons.find((button) => button.textContent?.trim() === 'b') as
+    const buttons = Array.from(container.querySelectorAll('.tab-item'));
+    const target = buttons.find((button) => button.textContent?.trim().startsWith('b')) as
       | HTMLButtonElement
       | undefined;
     expect(target).toBeTruthy();
@@ -121,11 +121,11 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfig = 'a';
     await renderTabs();
 
-    const tabs = Array.from(container.querySelectorAll('.cluster-tab'));
+    const tabs = Array.from(container.querySelectorAll('.tab-item'));
     const targetTab = tabs.find((tab) =>
-      tab.querySelector('.cluster-tab__label')?.textContent?.includes('b')
+      tab.querySelector('.tab-item__label')?.textContent?.includes('b')
     );
-    const closeButton = targetTab?.querySelector('.cluster-tab__close') as HTMLButtonElement;
+    const closeButton = targetTab?.querySelector('.tab-item__close') as HTMLElement;
 
     expect(closeButton).toBeTruthy();
     await act(async () => {
@@ -147,7 +147,7 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfig = '/kube/alpha:dev';
     await renderTabs();
 
-    const labels = Array.from(container.querySelectorAll('.cluster-tab__label')).map((node) =>
+    const labels = Array.from(container.querySelectorAll('.tab-item__label')).map((node) =>
       (node as HTMLElement).textContent?.trim()
     );
     // "dev" appears twice, so those tabs should show filename:context (alpha:dev, beta:dev).

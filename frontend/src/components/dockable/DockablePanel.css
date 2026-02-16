@@ -399,54 +399,27 @@ body.dockable-panel-resizing-sw * {
   align-items: stretch;
 }
 
+/* Dockable tab bar overrides — extends .tab-strip from styles/components/tabs.css */
 .dockable-tab-bar {
-  display: flex;
-  align-items: stretch;
   height: 100%;
-  gap: 0;
   flex: 1;
   min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
   position: relative;
+  border-bottom: none;
 }
 
 .dockable-tab-bar::-webkit-scrollbar {
   display: none;
 }
 
+/* Dockable tab overrides — base tab styles live in styles/components/tabs.css */
 .dockable-tab {
-  display: flex;
-  align-items: center;
-  height: 100%;
-  box-sizing: border-box;
-  gap: 6px;
-  min-width: 100px;
-  padding: 0 8px;
-  margin: 0;
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  transition:
-    color 0.15s,
-    border-color 0.15s,
-    background-color 0.15s;
   user-select: none;
   flex-shrink: 0;
-}
-
-.dockable-tab:hover {
-  color: var(--color-text, #fff);
-  background: var(--color-bg-tertiary, rgba(255 255 255 / 5%));
-}
-
-.dockable-tab--active {
-  color: var(--color-text-secondary);
-  border-bottom-color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
 .dockable-tab__label {

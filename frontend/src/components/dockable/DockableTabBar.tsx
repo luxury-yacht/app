@@ -7,6 +7,7 @@
 
 import React, { useCallback, useRef, useLayoutEffect, useState, useEffect } from 'react';
 import { useDockablePanelContext } from './DockablePanelProvider';
+import { CloseIcon } from '@shared/components/icons/MenuIcons';
 
 /** Describes a single tab in the bar. */
 export interface TabInfo {
@@ -42,7 +43,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   onTabClick,
   groupKey,
 }) => {
-  const { dragState, startTabDrag, registerTabBarElement } = useDockablePanelContext();
+  const { dragState, startTabDrag, registerTabBarElement, closeTab } = useDockablePanelContext();
   const barRef = useRef<HTMLDivElement>(null);
   const previousTabIdsRef = useRef<string[]>(tabs.map((tab) => tab.panelId));
   const previousActiveTabRef = useRef<string | null>(activeTab ?? null);
@@ -126,7 +127,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       return;
     }
 
-    const tabToReveal = Array.from(bar.querySelectorAll<HTMLElement>('.dockable-tab')).find(
+    const tabToReveal = Array.from(bar.querySelectorAll<HTMLElement>('.tab-item')).find(
       (tabElement) => tabElement.dataset.panelId === tabToRevealId
     );
     if (!tabToReveal) {
@@ -144,7 +145,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   const handleBarMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target instanceof HTMLElement ? e.target : null;
     if (
-      target?.closest('.dockable-tab') ||
+      target?.closest('.tab-item') ||
       target?.closest('.dockable-tab-bar__overflow-indicator')
     ) {
       e.stopPropagation();
@@ -203,12 +204,21 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     [groupKey, startTabDrag]
   );
 
+  // Handle close button click — removes the tab from the group.
+  const handleCloseTab = useCallback(
+    (e: React.MouseEvent, panelId: string) => {
+      e.stopPropagation();
+      closeTab(panelId);
+    },
+    [closeTab]
+  );
+
   // Determine if this bar is the current drop target.
   const isDropTarget = dragState?.dropTarget?.groupKey === groupKey;
   const dropInsertIndex = isDropTarget ? dragState!.dropTarget!.insertIndex : -1;
   const isDragActive = Boolean(dragState);
 
-  const barClassName = `dockable-tab-bar${isDragActive ? ' dockable-tab-bar--drag-active' : ''}${isDropTarget ? ' dockable-tab-bar--drop-target' : ''}${overflowHint.left ? ' dockable-tab-bar--has-left-overflow' : ''}${overflowHint.right ? ' dockable-tab-bar--has-right-overflow' : ''}`;
+  const barClassName = `tab-strip dockable-tab-bar${isDragActive ? ' dockable-tab-bar--drag-active' : ''}${isDropTarget ? ' dockable-tab-bar--drop-target' : ''}${overflowHint.left ? ' dockable-tab-bar--has-left-overflow' : ''}${overflowHint.right ? ' dockable-tab-bar--has-right-overflow' : ''}`;
 
   return (
     <div className="dockable-tab-bar-shell">
@@ -249,7 +259,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
                 <div className="dockable-tab-bar__drop-indicator" data-testid="drop-indicator" />
               )}
               <div
-                className={`dockable-tab${isActive ? ' dockable-tab--active' : ''}${isDragging ? ' dockable-tab--dragging' : ''}`}
+                className={`tab-item tab-item--closeable dockable-tab${isActive ? ' tab-item--active dockable-tab--active' : ''}${isDragging ? ' dockable-tab--dragging' : ''}`}
                 role="tab"
                 aria-selected={isActive}
                 data-panel-id={tab.panelId}
@@ -263,6 +273,22 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
                   />
                 ) : null}
                 <span className="dockable-tab__label">{tab.title}</span>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className="tab-item__close dockable-tab__close"
+                  onClick={(e) => handleCloseTab(e, tab.panelId)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation();
+                      closeTab(tab.panelId);
+                    }
+                  }}
+                  aria-label={`Close ${tab.title}`}
+                  title={`Close ${tab.title}`}
+                >
+                  <CloseIcon width={10} height={10} />
+                </span>
               </div>
             </React.Fragment>
           );

@@ -331,12 +331,12 @@ describe('ObjectPanel tab availability', () => {
   };
 
   const getTabLabels = () =>
-    Array.from(ctx.container.querySelectorAll('.tabs .tab')).map((button) =>
+    Array.from(ctx.container.querySelectorAll('.tab-strip .tab-item')).map((button) =>
       button.textContent?.trim()
     );
 
   const getTabButton = (label: string) =>
-    Array.from(ctx.container.querySelectorAll<HTMLButtonElement>('.tabs .tab')).find(
+    Array.from(ctx.container.querySelectorAll<HTMLButtonElement>('.tab-strip .tab-item')).find(
       (button) => button.textContent?.trim() === label
     );
 
@@ -653,7 +653,7 @@ describe('ObjectPanel tab availability', () => {
 
     const shellButton = getTabButton('Shell');
     expect(shellButton).toBeTruthy();
-    expect(shellButton?.classList.contains('active')).toBe(true);
+    expect(shellButton?.classList.contains('tab-item--active')).toBe(true);
   });
 
   it('activates events tab content and passes through object data', async () => {
