@@ -6,7 +6,6 @@
  */
 
 import React from 'react';
-import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import '../shared.css';
 import './DetailsTabContainers.css';
 
@@ -24,9 +23,6 @@ interface ContainersProps {
 }
 
 function Containers({ containers = [], initContainers = [] }: ContainersProps) {
-  const { sectionStates, setSectionExpanded } = useDetailsSectionContext();
-  const expanded = sectionStates.containers;
-
   // Helper function to split image into name and tag
   const parseImage = (image: string) => {
     const lastColonIndex = image.lastIndexOf(':');
@@ -59,55 +55,49 @@ function Containers({ containers = [], initContainers = [] }: ContainersProps) {
 
   return (
     <div className="object-panel-section">
-      <div
-        className={`object-panel-section-title collapsible${!expanded ? ' collapsed' : ''}`}
-        onClick={() => setSectionExpanded('containers', !expanded)}
-      >
-        <span className="collapse-icon">{expanded ? '▼' : '▶'}</span>
+      <div className="object-panel-section-title">
         Containers
       </div>
-      {expanded && (
-        <div className="object-panel-section-grid">
-          {allContainers.map((container, index) => (
-            <React.Fragment key={`${container.type}-${container.name}-${index}`}>
-              <div className="containers-item">
-                <span className="containers-label">Type</span>
-                <span className="containers-value">{container.type}</span>
-              </div>
+      <div className="object-panel-section-grid">
+        {allContainers.map((container, index) => (
+          <React.Fragment key={`${container.type}-${container.name}-${index}`}>
+            <div className="containers-item">
+              <span className="containers-label">Type</span>
+              <span className="containers-value">{container.type}</span>
+            </div>
 
-              <div className="containers-item">
-                <span className="containers-label">Name</span>
-                <span className="containers-value">{container.name}</span>
-              </div>
+            <div className="containers-item">
+              <span className="containers-label">Name</span>
+              <span className="containers-value">{container.name}</span>
+            </div>
 
-              <div className="containers-item containers-item-full">
-                <span className="containers-label">Image Name</span>
-                <span className="containers-value" title={container.image}>
-                  {parseImage(container.image).name}
-                </span>
-              </div>
+            <div className="containers-item containers-item-full">
+              <span className="containers-label">Image Name</span>
+              <span className="containers-value" title={container.image}>
+                {parseImage(container.image).name}
+              </span>
+            </div>
 
-              <div className="containers-item containers-item-full">
-                <span className="containers-label">Image Tag</span>
-                <span className="containers-value containers-tag">
-                  {parseImage(container.image).tag}
-                </span>
-              </div>
+            <div className="containers-item containers-item-full">
+              <span className="containers-label">Image Tag</span>
+              <span className="containers-value containers-tag">
+                {parseImage(container.image).tag}
+              </span>
+            </div>
 
-              {index < allContainers.length - 1 && (
-                <div
-                  className="containers-item containers-item-full"
-                  style={{
-                    borderBottom: '1px solid var(--border-color)',
-                    paddingBottom: '0.5rem',
-                    marginBottom: '0.5rem',
-                  }}
-                ></div>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-      )}
+            {index < allContainers.length - 1 && (
+              <div
+                className="containers-item containers-item-full"
+                style={{
+                  borderBottom: '1px solid var(--border-color)',
+                  paddingBottom: '0.5rem',
+                  marginBottom: '0.5rem',
+                }}
+              ></div>
+            )}
+          </React.Fragment>
+        ))}
+      </div>
     </div>
   );
 }

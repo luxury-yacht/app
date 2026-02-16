@@ -231,24 +231,6 @@
   flex: 1;
 }
 
-.object-panel-section-title.collapsible {
-  cursor: pointer;
-  user-select: none;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.object-panel-section-title.collapsible:hover {
-  opacity: 0.8;
-}
-
-.object-panel-section-title.collapsible.collapsed {
-  border-bottom: none;
-  margin-bottom: 0;
-  padding-bottom: 0;
-}
-
 .object-panel-section-header .button.small {
   padding: 0.25rem 0.75rem;
   font-size: 0.875rem;

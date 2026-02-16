@@ -5,12 +5,7 @@
  * Handles rendering and interactions for the object panel feature.
  */
 
-import React, { useMemo, useCallback } from 'react';
-import {
-  DetailsSectionProvider,
-  useDetailsSectionContext,
-} from '@/core/contexts/ObjectPanelDetailsSectionContext';
-import { useShortcut } from '@ui/shortcuts';
+import React, { useMemo } from 'react';
 import Overview from '@modules/object-panel/components/ObjectPanel/Details/Overview';
 import Utilization from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization';
 import Containers from '@modules/object-panel/components/ObjectPanel/Details/DetailsTabContainers';
@@ -25,10 +20,8 @@ import { useUtilizationData, useHasUtilization } from './useUtilizationData';
 
 export type { DetailsTabProps } from './detailsTabTypes';
 
-// Inner component that has access to DetailsSectionContext
 const DetailsTabContent: React.FC<DetailsTabProps> = ({
   objectData,
-  isActive = false,
   // Workloads
   podDetails,
   deploymentDetails,
@@ -172,83 +165,6 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
     nodeDetails,
   });
 
-  const { sectionStates, setSectionExpanded } = useDetailsSectionContext();
-
-  // Shortcut to toggle Overview section with 'O' key
-  useShortcut({
-    key: 'o',
-    handler: useCallback(() => {
-      if (!isActive) return false;
-      setSectionExpanded('overview', !sectionStates.overview);
-      return true;
-    }, [isActive, sectionStates.overview, setSectionExpanded]),
-    description: 'Toggle Overview section',
-    category: 'Object Panel',
-    enabled: true,
-    view: 'global',
-    priority: 20,
-  });
-
-  // Shortcut to toggle Utilization (Resource) section with 'R' key
-  useShortcut({
-    key: 'r',
-    handler: useCallback(() => {
-      if (!isActive) return false;
-      setSectionExpanded('utilization', !sectionStates.utilization);
-      return true;
-    }, [isActive, sectionStates.utilization, setSectionExpanded]),
-    description: 'Toggle Resource (Utilization) section',
-    category: 'Object Panel',
-    enabled: true,
-    view: 'global',
-    priority: 20,
-  });
-
-  // Shortcut to toggle Containers section with 'C' key
-  useShortcut({
-    key: 'c',
-    handler: useCallback(() => {
-      if (!isActive) return false;
-      setSectionExpanded('containers', !sectionStates.containers);
-      return true;
-    }, [isActive, sectionStates.containers, setSectionExpanded]),
-    description: 'Toggle Containers section',
-    category: 'Object Panel',
-    enabled: true,
-    view: 'global',
-    priority: 20,
-  });
-
-  // Shortcut to toggle Data section with 'D' key
-  useShortcut({
-    key: 'd',
-    handler: useCallback(() => {
-      if (!isActive) return false;
-      setSectionExpanded('data', !sectionStates.data);
-      return true;
-    }, [isActive, sectionStates.data, setSectionExpanded]),
-    description: 'Toggle Data section',
-    category: 'Object Panel',
-    enabled: true,
-    view: 'global',
-    priority: 20,
-  });
-
-  // Shortcut to toggle Pods section with 'P' key
-  useShortcut({
-    key: 'p',
-    handler: useCallback(() => {
-      if (!isActive) return false;
-      setSectionExpanded('nodePods', !sectionStates.nodePods);
-      return true;
-    }, [isActive, sectionStates.nodePods, setSectionExpanded]),
-    description: 'Toggle Pods section',
-    category: 'Object Panel',
-    enabled: true,
-    view: 'global',
-    priority: 20,
-  });
-
   return (
     <div className="object-panel-tab-content">
       {/* Deleted Resource Warning */}
@@ -383,13 +299,8 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
   );
 };
 
-// Wrapper component that provides the context
 const DetailsTab: React.FC<DetailsTabProps> = (props) => {
-  return (
-    <DetailsSectionProvider>
-      <DetailsTabContent {...props} />
-    </DetailsSectionProvider>
-  );
+  return <DetailsTabContent {...props} />;
 };
 
 export default DetailsTab;

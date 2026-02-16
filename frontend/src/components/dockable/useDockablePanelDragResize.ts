@@ -345,6 +345,10 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
                 newWidth = resizeStart.width + resizeStart.left;
                 newLeft = 0;
               }
+            } else {
+              // Clamp at minimum width; pin the right edge in place.
+              newWidth = safeMinWidth;
+              newLeft = resizeStart.left + resizeStart.width - safeMinWidth;
             }
           }
           if (resizeDirection.includes('s')) {
@@ -365,6 +369,10 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
               if (resizeStart.top + deltaY < 0) {
                 newHeight = resizeStart.height + resizeStart.top;
               }
+            } else {
+              // Clamp at minimum height; pin the bottom edge in place.
+              newHeight = safeMinHeight;
+              newTop = resizeStart.top + resizeStart.height - safeMinHeight;
             }
           }
         }

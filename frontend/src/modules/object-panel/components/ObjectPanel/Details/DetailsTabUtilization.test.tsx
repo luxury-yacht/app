@@ -8,7 +8,6 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { DetailsSectionProvider } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import Utilization from './DetailsTabUtilization';
 
 vi.mock('@shared/components/ResourceBar', () => ({
@@ -17,12 +16,12 @@ vi.mock('@shared/components/ResourceBar', () => ({
 }));
 
 describe('DetailsTabUtilization', () => {
-  const renderWithProvider = async (ui: React.ReactElement) => {
+  const render = async (ui: React.ReactElement) => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
     await act(async () => {
-      root.render(<DetailsSectionProvider>{ui}</DetailsSectionProvider>);
+      root.render(ui);
       await Promise.resolve();
     });
     return {
@@ -35,7 +34,7 @@ describe('DetailsTabUtilization', () => {
   };
 
   it('renders CPU and Memory utilization details', async () => {
-    const { container, cleanup } = await renderWithProvider(
+    const { container, cleanup } = await render(
       <Utilization
         cpu={{ usage: '200m', request: '100m', limit: '400m', allocatable: '800m' }}
         memory={{ usage: '1Gi', request: '512Mi', limit: '2Gi', allocatable: '4Gi' }}
@@ -51,7 +50,7 @@ describe('DetailsTabUtilization', () => {
   });
 
   it('shows allocatable row for node metrics mode', async () => {
-    const { container, cleanup } = await renderWithProvider(
+    const { container, cleanup } = await render(
       <Utilization cpu={{ usage: '2', allocatable: '4' }} mode="nodeMetrics" />
     );
 
@@ -60,22 +59,8 @@ describe('DetailsTabUtilization', () => {
   });
 
   it('displays empty state when no utilization data is provided', async () => {
-    const { container, cleanup } = await renderWithProvider(<Utilization />);
+    const { container, cleanup } = await render(<Utilization />);
     expect(container.textContent).toContain('No resource utilization data available');
-    cleanup();
-  });
-
-  it('toggles section collapsed state when header is clicked', async () => {
-    const { container, cleanup } = await renderWithProvider(
-      <Utilization cpu={{ usage: '100m', request: '50m', limit: '200m' }} />
-    );
-
-    expect(container.textContent).toContain('CPU');
-    const header = container.querySelector('.object-panel-section-title')!;
-    await act(async () => {
-      header.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(container.textContent).not.toContain('CPU');
     cleanup();
   });
 });
