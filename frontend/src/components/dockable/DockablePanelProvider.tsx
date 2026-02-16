@@ -185,6 +185,9 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
 
   // Tab group state -- the primary model for which panels live where.
   const [tabGroups, setTabGroups] = useState<TabGroupState>(() => createInitialTabGroupState());
+  // Keep latest tabGroups available to stable callbacks without recreating them.
+  const tabGroupsRef = useRef<TabGroupState>(tabGroups);
+  tabGroupsRef.current = tabGroups;
 
   // Panel registrations stored in a ref so that adding/removing registrations
   // doesn't cause the whole tree to re-render. A bump counter forces a
@@ -321,7 +324,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // Focus a panel by ID: activate its tab in the group and bring it to front.
   const focusPanel = useCallback(
     (panelId: string) => {
-      const focusedGroupKey = getGroupForPanel(tabGroups, panelId);
+      const focusedGroupKey = getGroupForPanel(tabGroupsRef.current, panelId);
       if (focusedGroupKey) {
         setLastFocusedGroupKey(focusedGroupKey);
       }
@@ -332,7 +335,7 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
       });
       focusPanelById(panelId);
     },
-    [tabGroups, setLastFocusedGroupKey]
+    [setLastFocusedGroupKey]
   );
 
   useLayoutEffect(() => {
