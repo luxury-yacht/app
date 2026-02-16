@@ -68,33 +68,38 @@
   opacity: 0;
 }
 
-/* Close button (hidden by default, shown on hover) */
+/* Close button — overlays the right side of the tab on hover */
 .tab-item__close {
+  position: absolute;
+  right: 0px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  padding: 0;
+  height: 100%;
+  padding: 0 8px;
   border: none;
-  border-radius: 3px;
-  background: none;
+  background: var(--color-bg-tertiary);
   color: var(--color-text-tertiary);
   cursor: pointer;
   opacity: 0;
-  transition: opacity var(--duration-fast) var(--ease-out),
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
     color var(--duration-fast) var(--ease-out),
     background-color var(--duration-fast) var(--ease-out);
-  flex-shrink: 0;
+  z-index: 1;
 }
 
 .tab-item:hover .tab-item__close {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .tab-item__close:hover {
   color: var(--color-text);
-  background-color: var(--color-bg-tertiary);
+  background-color: var(--color-bg-secondary);
 }
 
 .tab-item__close svg {
