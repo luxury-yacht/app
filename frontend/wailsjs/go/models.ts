@@ -1435,6 +1435,40 @@ export namespace types {
 	        this.name = source["name"];
 	    }
 	}
+	export class DebugContainerRequest {
+	    namespace: string;
+	    podName: string;
+	    image: string;
+	    targetContainer?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DebugContainerRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.namespace = source["namespace"];
+	        this.podName = source["podName"];
+	        this.image = source["image"];
+	        this.targetContainer = source["targetContainer"];
+	    }
+	}
+	export class DebugContainerResponse {
+	    containerName: string;
+	    podName: string;
+	    namespace: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DebugContainerResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.containerName = source["containerName"];
+	        this.podName = source["podName"];
+	        this.namespace = source["namespace"];
+	    }
+	}
 	export class ReplicaSetSummary {
 	    name: string;
 	    revision: string;

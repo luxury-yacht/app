@@ -32,7 +32,7 @@ describe('ObjectPanel constants', () => {
   });
 
   it('defines capability presets for key resource kinds', () => {
-    expect(RESOURCE_CAPABILITIES.pod).toMatchObject({ logs: true, delete: true });
+    expect(RESOURCE_CAPABILITIES.pod).toMatchObject({ logs: true, delete: true, debug: true });
     expect(RESOURCE_CAPABILITIES.deployment).toMatchObject({ scale: true, restart: true });
     expect(RESOURCE_CAPABILITIES.secret).toMatchObject({ delete: true });
   });

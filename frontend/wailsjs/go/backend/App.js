@@ -30,6 +30,10 @@ export function CordonNode(arg1, arg2) {
   return window['go']['backend']['App']['CordonNode'](arg1, arg2);
 }
 
+export function CreateDebugContainer(arg1, arg2) {
+  return window['go']['backend']['App']['CreateDebugContainer'](arg1, arg2);
+}
+
 export function CreateVersionedEndpoint(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['CreateVersionedEndpoint'](arg1, arg2, arg3, arg4);
 }

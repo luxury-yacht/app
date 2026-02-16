@@ -51,6 +51,7 @@ const createDefaultCapabilityStates = (): CapabilityStates => ({
   restart: createCapabilityState(),
   scale: createCapabilityState(),
   shell: createCapabilityState(),
+  debug: createCapabilityState(),
 });
 
 const computeCapabilityDescriptors = (
@@ -196,6 +197,20 @@ const computeCapabilityDescriptors = (
     );
   }
 
+  if (featureSupport.debug) {
+    add(
+      {
+        id: 'debug-ephemeral',
+        verb: 'update',
+        resourceKind: 'Pod',
+        namespace,
+        name: resourceName,
+        subresource: 'ephemeralcontainers',
+      },
+      'debug'
+    );
+  }
+
   if (featureSupport.manifest) {
     add(
       {
@@ -286,6 +301,7 @@ export const useObjectPanelCapabilities = ({
       restart: getCapabilityState(capabilityDescriptorInfo.idMap.restart),
       scale: getCapabilityState(capabilityDescriptorInfo.idMap.scale),
       shell: getCapabilityState(capabilityDescriptorInfo.idMap.shell),
+      debug: getCapabilityState(capabilityDescriptorInfo.idMap.debug),
     };
   }, [capabilityDescriptorInfo.idMap, capabilitiesEnabled, getCapabilityState]);
 
@@ -323,9 +339,11 @@ export const useObjectPanelCapabilities = ({
       scale: capabilityStates.scale.reason,
       editYaml: capabilityStates.editYaml.reason,
       shell: capabilityStates.shell.reason,
+      debug: capabilityStates.debug.reason,
     }),
     [
       capabilityStates.delete.reason,
+      capabilityStates.debug.reason,
       capabilityStates.editYaml.reason,
       capabilityStates.restart.reason,
       capabilityStates.scale.reason,

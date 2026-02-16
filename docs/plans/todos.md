@@ -36,7 +36,7 @@
 - Customize Cluster Overview
   - from a predefined set of widgets
 
-- Ephemeral debug containers
+- ✅ Ephemeral debug containers
   - kubectl debug
 
 - ArgoCD integration to show drift

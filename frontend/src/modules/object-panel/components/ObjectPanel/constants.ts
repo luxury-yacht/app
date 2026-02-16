@@ -21,7 +21,7 @@ export const WORKLOAD_KIND_API_NAMES: Record<string, string> = {
 
 export const RESOURCE_CAPABILITIES: Record<string, ResourceCapability> = {
   // Workloads
-  pod: { logs: true, delete: true, shell: true },
+  pod: { logs: true, delete: true, shell: true, debug: true },
   deployment: { logs: true, restart: true, scale: true, delete: true },
   daemonset: { logs: true, restart: true, delete: true },
   statefulset: { logs: true, restart: true, scale: true, delete: true },

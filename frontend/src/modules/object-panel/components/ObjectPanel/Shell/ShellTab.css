@@ -41,6 +41,15 @@
   cursor: pointer;
 }
 
+.shell-tab__debug-button {
+  border: 1px solid var(--color-border, #cbd5f5);
+  background: var(--color-surface-secondary, #f1f5f9);
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
 .shell-tab__badge {
   display: inline-flex;
   align-items: center;
@@ -71,6 +80,23 @@
   border-radius: 4px;
   background: var(--color-surface-warning, #fff4db);
   color: var(--color-text, #1f2933);
+}
+
+.shell-tab__custom-image-input {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  border: 1px solid var(--color-border, #cbd5f5);
+  border-radius: 4px;
+  background: var(--color-bg, #ffffff);
+  color: var(--color-text, #1f2933);
+  min-width: 140px;
+}
+
+.shell-tab__debug-warning {
+  font-size: 11px;
+  color: var(--color-text-secondary, #64748b);
+  padding: 0 12px 8px 12px;
 }
 
 .shell-tab__terminal-wrapper {

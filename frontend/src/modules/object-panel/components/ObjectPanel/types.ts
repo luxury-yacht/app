@@ -21,6 +21,7 @@ export type ResourceCapability = {
   scale?: boolean;
   edit?: boolean;
   shell?: boolean;
+  debug?: boolean;
   trigger?: boolean;
   suspend?: boolean;
 };
@@ -34,6 +35,7 @@ export type FeatureSupport = {
   scale: boolean;
   edit: boolean;
   shell: boolean;
+  debug: boolean;
   trigger: boolean;
   suspend: boolean;
 };
@@ -61,6 +63,7 @@ export type CapabilityIdMap = {
   restart?: string;
   scale?: string;
   shell?: string;
+  debug?: string;
 };
 
 export type CapabilityState = {
@@ -78,6 +81,7 @@ export type CapabilityStates = {
   restart: CapabilityState;
   scale: CapabilityState;
   shell: CapabilityState;
+  debug: CapabilityState;
 };
 
 export type CapabilityReasons = {
@@ -86,6 +90,7 @@ export type CapabilityReasons = {
   scale?: string;
   editYaml?: string;
   shell?: string;
+  debug?: string;
 };
 
 export const createEmptyCapabilityIdMap = (): CapabilityIdMap => ({
@@ -98,6 +103,7 @@ export const createEmptyCapabilityIdMap = (): CapabilityIdMap => ({
   restart: undefined,
   scale: undefined,
   shell: undefined,
+  debug: undefined,
 });
 
 export type ViewType =

@@ -133,6 +133,19 @@ func TestHasContainer(t *testing.T) {
 	}
 }
 
+func TestHasEphemeralContainer(t *testing.T) {
+	containers := []corev1.EphemeralContainer{
+		{EphemeralContainerCommon: corev1.EphemeralContainerCommon{Name: "debug-a"}},
+		{EphemeralContainerCommon: corev1.EphemeralContainerCommon{Name: "debug-b"}},
+	}
+	if !hasEphemeralContainer(containers, "debug-a") {
+		t.Fatalf("expected ephemeral container debug-a to be found")
+	}
+	if hasEphemeralContainer(containers, "missing") {
+		t.Fatalf("unexpected match for missing ephemeral container")
+	}
+}
+
 func TestEmitShellEventsGuards(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	app.Ctx = context.Background()

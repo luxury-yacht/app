@@ -232,13 +232,14 @@ describe('ObjectPanelContent', () => {
     renderContent({
       activeTab: 'shell',
       capabilities: { ...baseProps.capabilities, hasShell: true },
-      capabilityReasons: { shell: 'reason' },
+      capabilityReasons: { shell: 'reason', debug: 'debug-reason' },
     });
     expect(hoistedRefs.shellTabProps.current).toMatchObject({
       namespace: 'team-a',
       resourceName: 'api',
       isActive: true,
       disabledReason: 'reason',
+      debugDisabledReason: 'debug-reason',
       availableContainers: [],
     });
   });

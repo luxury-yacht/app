@@ -15,6 +15,8 @@ import { DockablePanelProvider } from '@components/dockable/DockablePanelProvide
 
 const wailsMocks = vi.hoisted(() => ({
   StartShellSession: vi.fn(),
+  CreateDebugContainer: vi.fn(),
+  GetPodContainers: vi.fn(),
   SendShellInput: vi.fn(),
   ResizeShellSession: vi.fn(),
   CloseShellSession: vi.fn(),
@@ -182,6 +184,12 @@ describe('ShellTab', () => {
       command: ['/bin/sh'],
       containers: ['app'],
     });
+    wailsMocks.CreateDebugContainer.mockResolvedValue({
+      containerName: 'debug-abc12345',
+      namespace: 'team-a',
+      podName: 'pod-1',
+    });
+    wailsMocks.GetPodContainers.mockResolvedValue([]);
     wailsMocks.SendShellInput.mockResolvedValue(undefined);
     wailsMocks.ResizeShellSession.mockResolvedValue(undefined);
     wailsMocks.CloseShellSession.mockResolvedValue(undefined);
@@ -209,6 +217,7 @@ describe('ShellTab', () => {
       availableContainers: [],
       isActive: true,
       disabledReason: undefined,
+      debugDisabledReason: undefined,
       clusterId: 'alpha:ctx',
       ...props,
     };
@@ -330,5 +339,155 @@ describe('ShellTab', () => {
     });
 
     expect(wailsMocks.CloseShellSession).toHaveBeenCalledWith('sess-1');
+  });
+
+  it('renders mode toggle with Shell and Debug options', async () => {
+    await renderShellTab();
+    const toggle = container.querySelector('.segmented-button');
+    expect(toggle).not.toBeNull();
+    const options = container.querySelectorAll('.segmented-button__option');
+    expect(options).toHaveLength(2);
+    expect(options[0].textContent).toBe('Shell');
+    expect(options[1].textContent).toBe('Debug');
+  });
+
+  it('shows debug controls when Debug mode is selected', async () => {
+    await renderShellTab();
+    const options = container.querySelectorAll('.segmented-button__option');
+    act(() => {
+      (options[1] as HTMLButtonElement).click();
+    });
+    await flushAsync();
+
+    const debugButton = container.querySelector('.shell-tab__debug-button');
+    expect(debugButton).not.toBeNull();
+    expect(debugButton?.textContent).toBe('Debug');
+  });
+
+  it('calls CreateDebugContainer on debug action', async () => {
+    await renderShellTab({ availableContainers: ['app'] });
+
+    const modeOptions = container.querySelectorAll('.segmented-button__option');
+    act(() => {
+      (modeOptions[1] as HTMLButtonElement).click();
+    });
+    await flushAsync();
+
+    const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
+    await act(async () => {
+      debugBtn.click();
+      await flushAsync();
+    });
+
+    expect(wailsMocks.CreateDebugContainer).toHaveBeenCalledWith('alpha:ctx', {
+      namespace: 'team-a',
+      podName: 'pod-1',
+      image: 'busybox:latest',
+      targetContainer: 'app',
+    });
+  });
+
+  it('shows error when CreateDebugContainer fails', async () => {
+    wailsMocks.CreateDebugContainer.mockRejectedValue(new Error('ephemeral containers not supported'));
+    await renderShellTab({ availableContainers: ['app'] });
+
+    const modeOptions = container.querySelectorAll('.segmented-button__option');
+    act(() => {
+      (modeOptions[1] as HTMLButtonElement).click();
+    });
+    await flushAsync();
+
+    const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
+    await act(async () => {
+      debugBtn.click();
+      await flushAsync();
+    });
+
+    expect(wailsMocks.CreateDebugContainer).toHaveBeenCalled();
+    const terminal = getLatestTerminal();
+    expect(terminal?.writeln).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to create debug container')
+    );
+  });
+
+  it('shows custom image input when Custom... is selected', async () => {
+    await renderShellTab({ availableContainers: ['app'] });
+
+    const modeOptions = container.querySelectorAll('.segmented-button__option');
+    act(() => {
+      (modeOptions[1] as HTMLButtonElement).click();
+    });
+    await flushAsync();
+
+    let customInput = container.querySelector('.shell-tab__custom-image-input');
+    expect(customInput).toBeNull();
+
+    const selects = container.querySelectorAll('select');
+    act(() => {
+      const imageSelect = selects[0] as HTMLSelectElement;
+      imageSelect.value = '__custom__';
+      imageSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flushAsync();
+
+    customInput = container.querySelector('.shell-tab__custom-image-input');
+    expect(customInput).not.toBeNull();
+  });
+
+  it('disables Debug button and shows reason when debug capability is denied', async () => {
+    await renderShellTab({
+      availableContainers: ['app'],
+      debugDisabledReason: 'Missing permission: update pods/ephemeralcontainers',
+    });
+
+    const modeOptions = container.querySelectorAll('.segmented-button__option');
+    act(() => {
+      (modeOptions[1] as HTMLButtonElement).click();
+    });
+    await flushAsync();
+
+    const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
+    expect(debugBtn).not.toBeNull();
+    expect(debugBtn.disabled).toBe(true);
+
+    const warning = container.querySelector('.shell-tab__debug-warning');
+    expect(warning).not.toBeNull();
+    expect(warning?.textContent).toContain('Missing permission');
+  });
+
+  it('disables Debug button when shell access is denied', async () => {
+    await renderShellTab({
+      availableContainers: ['app'],
+      disabledReason: 'Missing permission: create pods/exec',
+    });
+
+    const modeOptions = container.querySelectorAll('.segmented-button__option');
+    act(() => {
+      (modeOptions[1] as HTMLButtonElement).click();
+    });
+    await flushAsync();
+
+    const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
+    expect(debugBtn).not.toBeNull();
+    expect(debugBtn.disabled).toBe(true);
+
+    await act(async () => {
+      debugBtn.click();
+      await flushAsync();
+    });
+    expect(wailsMocks.CreateDebugContainer).not.toHaveBeenCalled();
+  });
+
+  it('includes debug containers in shell dropdown from backend container discovery', async () => {
+    wailsMocks.GetPodContainers.mockResolvedValue(['init-a (init)', 'app', 'debug-abc (debug)']);
+    await renderShellTab();
+    await flushAsync();
+
+    const selects = container.querySelectorAll('select');
+    const containerSelect = selects[0] as HTMLSelectElement;
+    const values = Array.from(containerSelect.options).map((option) => option.value);
+    expect(values).toContain('app');
+    expect(values).toContain('debug-abc');
+    expect(values).not.toContain('init-a');
   });
 });

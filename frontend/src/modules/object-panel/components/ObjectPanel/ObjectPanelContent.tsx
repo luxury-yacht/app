@@ -254,6 +254,7 @@ export function ObjectPanelContent({
             resourceName={objectData?.name || ''}
             isActive={isPanelOpen && activeTab === 'shell'}
             disabledReason={capabilityReasons.shell}
+            debugDisabledReason={capabilityReasons.debug}
             availableContainers={availableContainers}
             clusterId={objectData?.clusterId ?? null}
           />

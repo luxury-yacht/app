@@ -189,6 +189,28 @@ func TestPodContainersSuccess(t *testing.T) {
 	require.Equal(t, []string{"init (init)", "app"}, containers)
 }
 
+func TestPodContainersIncludesEphemeral(t *testing.T) {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{Name: "demo", Namespace: "default"},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+			EphemeralContainers: []corev1.EphemeralContainer{
+				{EphemeralContainerCommon: corev1.EphemeralContainerCommon{Name: "debug-abc"}},
+			},
+		},
+	}
+	client := fake.NewClientset(pod)
+
+	service := NewService(common.Dependencies{
+		Context:          context.Background(),
+		KubernetesClient: client,
+	})
+
+	containers, err := service.PodContainers("default", "demo")
+	require.NoError(t, err)
+	require.Equal(t, []string{"app", "debug-abc (debug)"}, containers)
+}
+
 func TestResolveTargetPodsDeployment(t *testing.T) {
 	deployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: "web", Namespace: "default"},

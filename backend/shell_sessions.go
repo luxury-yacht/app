@@ -168,15 +168,20 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pod: %w", err)
 	}
-	if len(pod.Spec.Containers) == 0 {
+	if len(pod.Spec.Containers) == 0 && len(pod.Spec.EphemeralContainers) == 0 {
 		return nil, fmt.Errorf("pod has no containers available for exec")
 	}
 
 	container := req.Container
 	if container == "" {
-		container = pod.Spec.Containers[0].Name
+		if len(pod.Spec.Containers) > 0 {
+			container = pod.Spec.Containers[0].Name
+		} else {
+			// Pods normally have regular containers, but allow ephemeral-only fallback.
+			container = pod.Spec.EphemeralContainers[0].Name
+		}
 	}
-	if !hasContainer(pod.Spec.Containers, container) {
+	if !hasContainer(pod.Spec.Containers, container) && !hasEphemeralContainer(pod.Spec.EphemeralContainers, container) {
 		return nil, fmt.Errorf("container %q not found in pod %s", container, req.PodName)
 	}
 
@@ -269,8 +274,11 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 
 	a.emitShellStatus(sessionID, clusterID, "open", "")
 
-	containers := make([]string, 0, len(pod.Spec.Containers))
+	containers := make([]string, 0, len(pod.Spec.Containers)+len(pod.Spec.EphemeralContainers))
 	for _, c := range pod.Spec.Containers {
+		containers = append(containers, c.Name)
+	}
+	for _, c := range pod.Spec.EphemeralContainers {
 		containers = append(containers, c.Name)
 	}
 
@@ -365,6 +373,15 @@ func (a *App) emitShellStatus(sessionID, clusterID, status, reason string) {
 }
 
 func hasContainer(containers []corev1.Container, name string) bool {
+	for _, c := range containers {
+		if c.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func hasEphemeralContainer(containers []corev1.EphemeralContainer, name string) bool {
 	for _, c := range containers {
 		if c.Name == name {
 			return true
