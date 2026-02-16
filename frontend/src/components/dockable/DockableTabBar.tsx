@@ -133,8 +133,23 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
       return;
     }
 
-    if (typeof tabToReveal.scrollIntoView === 'function') {
-      tabToReveal.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // scrollIntoView doesn't account for the sticky overflow indicators, so
+    // calculate the scroll position manually to clear the indicator width.
+    const indicatorSize = parseFloat(
+      getComputedStyle(bar.parentElement ?? bar)
+        .getPropertyValue('--dockable-tab-overflow-indicator-size') || '32'
+    );
+    const elLeft = tabToReveal.offsetLeft;
+    const elRight = elLeft + tabToReveal.offsetWidth;
+    const barLeft = bar.scrollLeft;
+    const barRight = barLeft + bar.clientWidth;
+
+    if (elRight > barRight - indicatorSize) {
+      const target = elRight - bar.clientWidth + indicatorSize;
+      typeof bar.scrollTo === 'function' ? bar.scrollTo({ left: target }) : (bar.scrollLeft = target);
+    } else if (elLeft < barLeft + indicatorSize) {
+      const target = Math.max(0, elLeft - indicatorSize);
+      typeof bar.scrollTo === 'function' ? bar.scrollTo({ left: target }) : (bar.scrollLeft = target);
     }
     updateOverflowHint();
   }, [tabs, activeTab, updateOverflowHint]);

@@ -471,41 +471,44 @@ describe('DockableTabBar', () => {
       { panelId: 'p3', title: 'Terminal' },
     ];
 
-    const scrollIntoViewMock = vi.fn();
-    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      configurable: true,
-      value: scrollIntoViewMock,
+    const { host, rerender, unmount } = await renderTabBar(
+      <DockableTabBar tabs={initialTabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+    );
+
+    // 3 tabs × 120px = 360px total, 180px visible, indicator 32px.
+    const tabBar = host.querySelector('.dockable-tab-bar') as HTMLElement;
+    const metrics = mockTabBarMetrics(tabBar, 360, 180);
+
+    // Mock layout on the tab bar so that when the layout effect queries tabs
+    // during rerender, each tab reports the correct position.
+    const origQuerySelectorAll = tabBar.querySelectorAll.bind(tabBar);
+    tabBar.querySelectorAll = ((selector: string) => {
+      const result = origQuerySelectorAll(selector);
+      if (selector === '.tab-item') {
+        result.forEach((el: HTMLElement, i: number) => {
+          Object.defineProperty(el, 'offsetLeft', { configurable: true, get: () => i * 120 });
+          Object.defineProperty(el, 'offsetWidth', { configurable: true, get: () => 120 });
+        });
+      }
+      return result;
+    }) as typeof tabBar.querySelectorAll;
+
+    await act(async () => {
+      await rerender(
+        <DockableTabBar
+          tabs={tabsWithNew}
+          activeTab="p3"
+          onTabClick={vi.fn()}
+          groupKey="bottom"
+        />
+      );
     });
 
-    try {
-      const { rerender, unmount } = await renderTabBar(
-        <DockableTabBar tabs={initialTabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
-      );
+    // Tab p3 (offsetLeft 240, width 120) right edge 360 > barRight (180) - 32.
+    // scrollLeft = 360 - 180 + 32 = 212.
+    expect(metrics.getScrollLeft()).toBe(212);
 
-      await act(async () => {
-        await rerender(
-          <DockableTabBar
-            tabs={tabsWithNew}
-            activeTab="p3"
-            onTabClick={vi.fn()}
-            groupKey="bottom"
-          />
-        );
-      });
-
-      expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
-      const revealedTab = scrollIntoViewMock.mock.instances[0] as HTMLElement;
-      expect(revealedTab.dataset.panelId).toBe('p3');
-      expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
-
-      await unmount();
-    } finally {
-      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-        configurable: true,
-        value: originalScrollIntoView,
-      });
-    }
+    await unmount();
   });
 
   it('auto-scrolls to reveal an existing tab when it becomes active', async () => {
@@ -515,35 +518,29 @@ describe('DockableTabBar', () => {
       { panelId: 'p3', title: 'Terminal' },
     ];
 
-    const scrollIntoViewMock = vi.fn();
-    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-      configurable: true,
-      value: scrollIntoViewMock,
+    const { host, rerender, unmount } = await renderTabBar(
+      <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+    );
+
+    const tabBar = host.querySelector('.dockable-tab-bar') as HTMLElement;
+    const metrics = mockTabBarMetrics(tabBar, 360, 180);
+
+    // Mock tab layout.
+    const tabEls = tabBar.querySelectorAll<HTMLElement>('[role="tab"]');
+    tabEls.forEach((el, i) => {
+      Object.defineProperty(el, 'offsetLeft', { configurable: true, get: () => i * 120 });
+      Object.defineProperty(el, 'offsetWidth', { configurable: true, get: () => 120 });
     });
 
-    try {
-      const { rerender, unmount } = await renderTabBar(
-        <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
+    await act(async () => {
+      await rerender(
+        <DockableTabBar tabs={tabs} activeTab="p3" onTabClick={vi.fn()} groupKey="bottom" />
       );
+    });
 
-      await act(async () => {
-        await rerender(
-          <DockableTabBar tabs={tabs} activeTab="p3" onTabClick={vi.fn()} groupKey="bottom" />
-        );
-      });
+    // Tab p3 right edge (360) > barRight (180) - 32 → scrolls to 360 - 180 + 32 = 212.
+    expect(metrics.getScrollLeft()).toBe(212);
 
-      expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
-      const revealedTab = scrollIntoViewMock.mock.instances[0] as HTMLElement;
-      expect(revealedTab.dataset.panelId).toBe('p3');
-      expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
-
-      await unmount();
-    } finally {
-      Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
-        configurable: true,
-        value: originalScrollIntoView,
-      });
-    }
+    await unmount();
   });
 });
