@@ -13,6 +13,7 @@ import {
   type PanelLayoutState,
 } from './panelLayoutStore';
 import { getContentBounds } from './dockablePanelLayout';
+import { usePanelLayoutStoreContext } from './panelLayoutStoreContext';
 
 interface InitializeOptions {
   position?: DockPosition;
@@ -81,12 +82,10 @@ export function unregisterPanelCloseHandler(
 }
 
 export function useDockablePanelState(panelId: string) {
-  const [localState, setLocalState] = useState<PanelLayoutState>(() =>
-    getActivePanelLayoutStore().getInitialState(panelId)
-  );
+  const store = usePanelLayoutStoreContext();
+  const [localState, setLocalState] = useState<PanelLayoutState>(() => store.getInitialState(panelId));
 
   useEffect(() => {
-    const store = getActivePanelLayoutStore();
     setLocalState(store.getInitialState(panelId));
 
     const unsubscribe = store.subscribe(panelId, () => {
@@ -117,7 +116,7 @@ export function useDockablePanelState(panelId: string) {
     });
 
     return unsubscribe;
-  }, [panelId]);
+  }, [panelId, store]);
 
   const initialize = useCallback(
     (options: InitializeOptions) => {
@@ -128,7 +127,7 @@ export function useDockablePanelState(panelId: string) {
       const finalIsOpen = options.isOpen ?? localState.isOpen;
       const targetPosition = options.position ?? localState.position;
 
-      getActivePanelLayoutStore().updateState(panelId, {
+      store.updateState(panelId, {
         position: targetPosition,
         floatingSize: {
           width: defaultSize.width ?? localState.floatingSize.width,
@@ -150,14 +149,14 @@ export function useDockablePanelState(panelId: string) {
         isInitialized: true,
       });
     },
-    [panelId, localState]
+    [panelId, localState, store]
   );
 
   const setPosition = useCallback(
     (position: DockPosition) => {
-      getActivePanelLayoutStore().setPanelPositionById(panelId, position);
+      store.setPanelPositionById(panelId, position);
     },
-    [panelId]
+    [panelId, store]
   );
 
   const setSize = useCallback(
@@ -174,9 +173,9 @@ export function useDockablePanelState(panelId: string) {
           updates.bottomSize = { width: localState.bottomSize.width, height: size.height };
           break;
       }
-      getActivePanelLayoutStore().updateState(panelId, updates);
+      store.updateState(panelId, updates);
     },
-    [panelId, localState.position, localState.rightSize.height, localState.bottomSize.width]
+    [panelId, localState.position, localState.rightSize.height, localState.bottomSize.width, store]
   );
 
   const getCurrentSize = useCallback(() => {
@@ -194,16 +193,16 @@ export function useDockablePanelState(panelId: string) {
 
   const setFloatingPosition = useCallback(
     (position: { x: number; y: number }) => {
-      getActivePanelLayoutStore().setPanelFloatingPositionById(panelId, position);
+      store.setPanelFloatingPositionById(panelId, position);
     },
-    [panelId]
+    [panelId, store]
   );
 
   const setOpen = useCallback(
     (isOpen: boolean) => {
-      getActivePanelLayoutStore().setPanelOpenById(panelId, isOpen);
+      store.setPanelOpenById(panelId, isOpen);
     },
-    [panelId]
+    [panelId, store]
   );
 
   const toggle = useCallback(() => {
@@ -211,8 +210,8 @@ export function useDockablePanelState(panelId: string) {
   }, [localState.isOpen, setOpen]);
 
   const focus = useCallback(() => {
-    getActivePanelLayoutStore().focusPanelById(panelId);
-  }, [panelId]);
+    store.focusPanelById(panelId);
+  }, [panelId, store]);
 
   const reset = useCallback(() => {
     const defaultFloatingWidth = 600;
@@ -221,7 +220,7 @@ export function useDockablePanelState(panelId: string) {
     const centerX = Math.max(100, (content.width - defaultFloatingWidth) / 2);
     const centerY = Math.max(100, (content.height - defaultFloatingHeight) / 2);
 
-    getActivePanelLayoutStore().updateState(panelId, {
+    store.updateState(panelId, {
       position: 'right',
       floatingSize: { width: defaultFloatingWidth, height: defaultFloatingHeight },
       rightSize: { width: 400, height: 300 },
@@ -231,7 +230,7 @@ export function useDockablePanelState(panelId: string) {
       isInitialized: false,
       zIndex: localState.zIndex + 1,
     });
-  }, [panelId, localState.zIndex]);
+  }, [panelId, localState.zIndex, store]);
 
   return useMemo(
     () => ({

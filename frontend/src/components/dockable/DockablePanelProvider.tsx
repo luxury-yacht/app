@@ -24,8 +24,13 @@ import {
   setPanelOpenById,
   setPanelPositionById,
 } from './useDockablePanelState';
-import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
+import {
+  createPanelLayoutStore,
+  getActivePanelLayoutStore,
+  setActivePanelLayoutStore,
+} from './panelLayoutStore';
 import { getContentBounds } from './dockablePanelLayout';
+import { PanelLayoutStoreContext } from './panelLayoutStoreContext';
 import {
   createInitialTabGroupState,
   addPanelToGroup,
@@ -180,8 +185,16 @@ interface DockablePanelProviderProps {
 export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ children }) => {
   // Provider-scoped panel layout store (Phase 3 migration).
   const panelLayoutStoreRef = useRef(createPanelLayoutStore());
-  // Ensure child hooks resolve this provider's layout store during render.
-  setActivePanelLayoutStore(panelLayoutStoreRef.current);
+  const previousActiveStoreRef = useRef(getActivePanelLayoutStore());
+
+  // Bridge imperative helper call sites to this provider's store after commit.
+  useLayoutEffect(() => {
+    previousActiveStoreRef.current = getActivePanelLayoutStore();
+    setActivePanelLayoutStore(panelLayoutStoreRef.current);
+    return () => {
+      setActivePanelLayoutStore(previousActiveStoreRef.current);
+    };
+  }, []);
 
   // Tab group state -- the primary model for which panels live where.
   const [tabGroups, setTabGroups] = useState<TabGroupState>(() => createInitialTabGroupState());
@@ -754,20 +767,22 @@ export const DockablePanelProvider: React.FC<DockablePanelProviderProps> = ({ ch
   // The cleanup effect above removes them when the provider unmounts.
 
   return (
-    <DockablePanelContext.Provider value={value}>
-      <DockablePanelHostContext.Provider value={hostNode}>
-        {children}
-        {dragState ? (
-          <div className="dockable-tab-drag-preview" aria-hidden="true">
-            {dragPreviewKindClass ? (
-              <span
-                className={`dockable-tab-drag-preview__kind kind-badge ${dragPreviewKindClass}`}
-              />
-            ) : null}
-            <span className="dockable-tab-drag-preview__label">{dragPreviewTitle}</span>
-          </div>
-        ) : null}
-      </DockablePanelHostContext.Provider>
-    </DockablePanelContext.Provider>
+    <PanelLayoutStoreContext.Provider value={panelLayoutStoreRef.current}>
+      <DockablePanelContext.Provider value={value}>
+        <DockablePanelHostContext.Provider value={hostNode}>
+          {children}
+          {dragState ? (
+            <div className="dockable-tab-drag-preview" aria-hidden="true">
+              {dragPreviewKindClass ? (
+                <span
+                  className={`dockable-tab-drag-preview__kind kind-badge ${dragPreviewKindClass}`}
+                />
+              ) : null}
+              <span className="dockable-tab-drag-preview__label">{dragPreviewTitle}</span>
+            </div>
+          ) : null}
+        </DockablePanelHostContext.Provider>
+      </DockablePanelContext.Provider>
+    </PanelLayoutStoreContext.Provider>
   );
 };

@@ -2,8 +2,6 @@
  * panelLayoutStore.ts
  *
  * Store implementation for dockable panel runtime layout state.
- * A default global store is provided for compatibility, while
- * DockablePanelProvider can install a provider-scoped active store.
  */
 
 import { getContentBounds } from './dockablePanelLayout';
@@ -191,15 +189,13 @@ export function createPanelLayoutStore(): PanelLayoutStore {
   };
 }
 
-let activePanelLayoutStore: PanelLayoutStore | null = null;
+// Compatibility singleton for imperative call sites that are not hook-based.
+let activePanelLayoutStore: PanelLayoutStore = createPanelLayoutStore();
 
 export function getActivePanelLayoutStore(): PanelLayoutStore {
-  if (!activePanelLayoutStore) {
-    throw new Error('Dockable panel layout store is unavailable without DockablePanelProvider');
-  }
   return activePanelLayoutStore;
 }
 
-export function setActivePanelLayoutStore(store: PanelLayoutStore | null) {
+export function setActivePanelLayoutStore(store: PanelLayoutStore) {
   activePanelLayoutStore = store;
 }

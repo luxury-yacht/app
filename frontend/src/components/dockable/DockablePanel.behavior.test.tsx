@@ -112,7 +112,7 @@ describe('DockablePanel behaviour (real hook)', () => {
       value: originalInnerHeight,
     });
     vi.useRealTimers();
-    setActivePanelLayoutStore(null);
+    setActivePanelLayoutStore(createPanelLayoutStore());
   });
 
   const getPanelState = (panelId: string) => {
