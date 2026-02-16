@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react';
-import { GetLogs, ClearLogs } from '@wailsjs/go/backend/App';
+import { GetLogs, ClearLogs, SetLogsPanelVisible } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useShortcut, useKeyboardNavigationScope } from '@ui/shortcuts';
@@ -61,6 +61,13 @@ function AppLogsPanel() {
 
   // Separate ref to track auto-scroll without causing re-renders
   const isAutoScrollRef = useRef(isAutoScroll);
+
+  // Keep backend log-stream visibility aligned with this panel's open state.
+  useEffect(() => {
+    SetLogsPanelVisible(panelState.isOpen).catch((error) => {
+      errorHandler.handle(error, { action: 'setLogsPanelVisible' });
+    });
+  }, [panelState.isOpen]);
 
   // Update ref when state changes
   useEffect(() => {

@@ -108,11 +108,6 @@ export function createPanelLayoutStore(): PanelLayoutStore {
 
   const setPanelOpenState = (panelId: string, isOpen: boolean) => {
     updateState(panelId, isOpen ? { isOpen: true, zIndex: ++zIndexCounter } : { isOpen });
-    if (panelId === 'app-logs') {
-      import('../../../wailsjs/go/backend/App').then(({ SetLogsPanelVisible }) => {
-        SetLogsPanelVisible(isOpen);
-      });
-    }
   };
 
   return {

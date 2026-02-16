@@ -5,20 +5,6 @@
  * Covers key behaviors and edge cases for useDockablePanelState.
  */
 
-import { vi } from 'vitest';
-
-const setLogsPanelVisible = vi.fn();
-
-vi.mock('../../../wailsjs/go/backend/App', () => ({
-  __esModule: true,
-  SetLogsPanelVisible: (...args: unknown[]) => setLogsPanelVisible(...args),
-}));
-
-vi.mock('../../../wailsjs/go/backend/App.js', () => ({
-  __esModule: true,
-  SetLogsPanelVisible: (...args: unknown[]) => setLogsPanelVisible(...args),
-}));
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
@@ -96,20 +82,12 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
 describe('useDockablePanelState', () => {
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
-    (window as any).go = {
-      backend: {
-        App: {
-          SetLogsPanelVisible: (...args: unknown[]) => setLogsPanelVisible(...args),
-        },
-      },
-    };
   });
 
   const originalInnerWidth = window.innerWidth;
   const originalInnerHeight = window.innerHeight;
 
   afterEach(() => {
-    setLogsPanelVisible.mockReset();
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
       value: originalInnerWidth,
@@ -118,13 +96,6 @@ describe('useDockablePanelState', () => {
       configurable: true,
       value: originalInnerHeight,
     });
-    (window as any).go = {
-      backend: {
-        App: {
-          SetLogsPanelVisible: (...args: unknown[]) => setLogsPanelVisible(...args),
-        },
-      },
-    };
   });
 
   it('initializes panel state with provided defaults', async () => {
@@ -190,8 +161,8 @@ describe('useDockablePanelState', () => {
     await hook.unmount();
   });
 
-  it('notifies backend visibility when toggling the app-logs panel', async () => {
-    const hook = await renderHook('app-logs');
+  it('toggles panel open state', async () => {
+    const hook = await renderHook('dockable-toggle');
 
     await hook.update(async (state) => {
       state.setOpen(true);

@@ -149,12 +149,6 @@ export function useDockablePanelState(panelId: string) {
         isOpen: finalIsOpen,
         isInitialized: true,
       });
-
-      if (panelId === 'app-logs') {
-        import('../../../wailsjs/go/backend/App').then(({ SetLogsPanelVisible }) => {
-          SetLogsPanelVisible(finalIsOpen);
-        });
-      }
     },
     [panelId, localState]
   );

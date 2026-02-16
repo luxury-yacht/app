@@ -16,6 +16,7 @@ const panelStateMock = vi.hoisted(() => ({
 
 const getLogsMock = vi.hoisted(() => vi.fn());
 const clearLogsMock = vi.hoisted(() => vi.fn());
+const setLogsPanelVisibleMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const useShortcutMock = vi.hoisted(() => vi.fn());
 const useKeyboardNavigationScopeMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
@@ -50,6 +51,7 @@ vi.mock('@ui/shortcuts', () => ({
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetLogs: (...args: unknown[]) => getLogsMock(...args),
   ClearLogs: (...args: unknown[]) => clearLogsMock(...args),
+  SetLogsPanelVisible: (...args: unknown[]) => setLogsPanelVisibleMock(...args),
 }));
 
 vi.mock('@utils/errorHandler', () => ({
@@ -71,6 +73,12 @@ const renderPanel = async () => {
   return {
     container,
     root,
+    rerender: async () => {
+      await act(async () => {
+        root.render(<AppLogsPanel />);
+        await Promise.resolve();
+      });
+    },
     cleanup: () => {
       act(() => root.unmount());
       container.remove();
@@ -99,6 +107,8 @@ beforeEach(() => {
   useKeyboardNavigationScopeMock.mockClear();
   getLogsMock.mockReset();
   clearLogsMock.mockReset();
+  setLogsPanelVisibleMock.mockReset();
+  setLogsPanelVisibleMock.mockResolvedValue(undefined);
   errorHandlerMock.handle.mockReset();
   dropdownInstances.length = 0;
   (window as any).runtime = {
@@ -119,6 +129,21 @@ afterAll(() => {
 });
 
 describe('AppLogsPanel', () => {
+  it('syncs backend visibility when open state changes', async () => {
+    vi.useFakeTimers();
+    getLogsMock.mockResolvedValue([]);
+
+    panelStateMock.isOpen = true;
+    const { rerender, cleanup } = await renderPanel();
+    expect(setLogsPanelVisibleMock).toHaveBeenLastCalledWith(true);
+
+    panelStateMock.isOpen = false;
+    await rerender();
+    expect(setLogsPanelVisibleMock).toHaveBeenLastCalledWith(false);
+
+    cleanup();
+  });
+
   it('loads logs when opened and renders entries', async () => {
     vi.useFakeTimers();
     getLogsMock.mockResolvedValue([
