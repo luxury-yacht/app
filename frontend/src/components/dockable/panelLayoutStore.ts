@@ -65,7 +65,7 @@ function clampFloatingPosition(
 export function createPanelLayoutStore(): PanelLayoutStore {
   const panelStates = new Map<string, PanelLayoutState>();
   const panelListeners = new Map<string, Set<PanelListener>>();
-  const panelCloseHandlers = new Map<string, (reason: PanelCloseReason) => void>();
+  const panelCloseHandlers = new Map<string, Set<(reason: PanelCloseReason) => void>>();
   let zIndexCounter = 1000;
 
   const getInitialState = (panelId: string): PanelLayoutState => {
@@ -163,13 +163,21 @@ export function createPanelLayoutStore(): PanelLayoutStore {
     clearPanelState: (panelId: string) => {
       panelStates.delete(panelId);
       panelListeners.delete(panelId);
+      panelCloseHandlers.delete(panelId);
     },
     registerPanelCloseHandler: (panelId: string, handler: (reason: PanelCloseReason) => void) => {
-      panelCloseHandlers.set(panelId, handler);
+      if (!panelCloseHandlers.has(panelId)) {
+        panelCloseHandlers.set(panelId, new Set());
+      }
+      panelCloseHandlers.get(panelId)!.add(handler);
     },
     unregisterPanelCloseHandler: (panelId: string, handler: (reason: PanelCloseReason) => void) => {
-      const existing = panelCloseHandlers.get(panelId);
-      if (existing === handler) {
+      const handlers = panelCloseHandlers.get(panelId);
+      if (!handlers) {
+        return;
+      }
+      handlers.delete(handler);
+      if (handlers.size === 0) {
         panelCloseHandlers.delete(panelId);
       }
     },
