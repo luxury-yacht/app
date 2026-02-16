@@ -29,7 +29,6 @@ interface DockableTabBarProps {
 }
 
 /** Horizontal pixels to move the tab strip for each overflow control click. */
-const TAB_SCROLL_STEP = 120;
 /** Minimum tab-strip width required before overflow controls are useful. */
 const MIN_OVERFLOW_HINT_WIDTH = 2;
 
@@ -157,40 +156,75 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     e.stopPropagation();
   }, []);
 
-  const scrollTabBarBy = useCallback(
-    (delta: number) => {
+  // Scroll one tab at a time. direction: -1 = left, 1 = right.
+  // Accounts for the sticky overflow indicator width (32px) that visually
+  // covers part of the scrollable area.
+  const scrollToNextTab = useCallback(
+    (direction: -1 | 1) => {
       const bar = barRef.current;
-      if (!bar) {
-        return;
+      if (!bar) return;
+
+      const tabEls = bar.querySelectorAll<HTMLElement>('[role="tab"]');
+      if (tabEls.length === 0) return;
+
+      // The sticky overflow indicators cover part of the visible area.
+      const indicatorSize = parseFloat(
+        getComputedStyle(bar.parentElement ?? bar)
+          .getPropertyValue('--dockable-tab-overflow-indicator-size') || '32'
+      );
+
+      const barLeft = bar.scrollLeft;
+      const barRight = barLeft + bar.clientWidth;
+      let target: HTMLElement | null = null;
+
+      if (direction === 1) {
+        // Find the first tab whose right edge is hidden (past visible area
+        // minus the right indicator).
+        for (const tab of tabEls) {
+          if (tab.offsetLeft + tab.offsetWidth > barRight - indicatorSize + 1) {
+            target = tab;
+            break;
+          }
+        }
+      } else {
+        // Find the last tab whose left edge is hidden (before visible area
+        // plus the left indicator).
+        for (let i = tabEls.length - 1; i >= 0; i--) {
+          if (tabEls[i].offsetLeft < barLeft + indicatorSize - 1) {
+            target = tabEls[i];
+            break;
+          }
+        }
       }
 
-      if (typeof bar.scrollBy === 'function') {
-        bar.scrollBy({ left: delta, behavior: 'smooth' });
-        // Smooth scrolling updates asynchronously; re-evaluate after animation start.
-        window.setTimeout(() => updateOverflowHint(), 120);
-        return;
-      }
+      if (!target) return;
 
-      bar.scrollLeft += delta;
-      updateOverflowHint();
+      // Scroll so the target tab clears the sticky indicator on the arrival side.
+      const scrollTarget =
+        direction === 1
+          ? target.offsetLeft + target.offsetWidth - bar.clientWidth + indicatorSize
+          : target.offsetLeft - indicatorSize;
+
+      bar.scrollTo({ left: Math.max(0, scrollTarget), behavior: 'smooth' });
+      // The scroll event listener on the bar will update overflow hints automatically.
     },
-    [updateOverflowHint]
+    []
   );
 
   const handleScrollLeftClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      scrollTabBarBy(-TAB_SCROLL_STEP);
+      scrollToNextTab(-1);
     },
-    [scrollTabBarBy]
+    [scrollToNextTab]
   );
 
   const handleScrollRightClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      scrollTabBarBy(TAB_SCROLL_STEP);
+      scrollToNextTab(1);
     },
-    [scrollTabBarBy]
+    [scrollToNextTab]
   );
 
   const handleTabMouseDown = useCallback(

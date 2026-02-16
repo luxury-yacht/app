@@ -301,12 +301,22 @@ describe('DockableTabBar', () => {
       <DockableTabBar tabs={tabs} activeTab="p1" onTabClick={vi.fn()} groupKey="bottom" />
     );
 
+    // 3 tabs × 120px each = 360px total, 180px visible.
+    // Indicator size defaults to 32px when CSS variable isn't available.
     const tabBar = host.querySelector('.dockable-tab-bar') as HTMLElement;
     const metrics = mockTabBarMetrics(tabBar, 360, 180);
-    Object.defineProperty(tabBar, 'scrollBy', {
+
+    // Mock layout for each tab element so scrollToNextTab can find offscreen tabs.
+    const tabEls = tabBar.querySelectorAll<HTMLElement>('[role="tab"]');
+    tabEls.forEach((el, i) => {
+      Object.defineProperty(el, 'offsetLeft', { configurable: true, get: () => i * 120 });
+      Object.defineProperty(el, 'offsetWidth', { configurable: true, get: () => 120 });
+    });
+
+    Object.defineProperty(tabBar, 'scrollTo', {
       configurable: true,
       value: ({ left }: { left: number }) => {
-        metrics.setScrollLeft(Math.max(0, Math.min(180, metrics.getScrollLeft() + left)));
+        metrics.setScrollLeft(Math.max(0, Math.min(180, left)));
         tabBar.dispatchEvent(new Event('scroll'));
       },
     });
@@ -320,17 +330,29 @@ describe('DockableTabBar', () => {
     ) as HTMLButtonElement;
     expect(rightControl).toBeTruthy();
 
+    // Click right: first tab partially hidden behind the 32px right indicator.
+    // Tab 1 right edge (240) > barRight (180) - 32 + 1 = 149 → target.
+    // scrollTo = 120 + 120 - 180 + 32 = 92.
     await act(async () => {
       rightControl.click();
     });
-    expect(metrics.getScrollLeft()).toBe(120);
-    expect(host.querySelector('.dockable-tab-bar__overflow-indicator--left')).toBeTruthy();
+    expect(metrics.getScrollLeft()).toBe(92);
 
     const leftControl = host.querySelector(
       '.dockable-tab-bar__overflow-indicator--left'
     ) as HTMLButtonElement;
     expect(leftControl).toBeTruthy();
 
+    // Click left: both tab 0 and tab 1 are behind the left indicator.
+    // Last (rightmost) hidden tab is tab 1 (offsetLeft 120 < 92 + 32 - 1 = 123).
+    // scrollTo = max(0, 120 - 32) = 88.
+    await act(async () => {
+      leftControl.click();
+    });
+    expect(metrics.getScrollLeft()).toBe(88);
+
+    // Click left again: tab 0 (offsetLeft 0 < 88 + 32 - 1 = 119) → target.
+    // scrollTo = max(0, 0 - 32) = 0.
     await act(async () => {
       leftControl.click();
     });
