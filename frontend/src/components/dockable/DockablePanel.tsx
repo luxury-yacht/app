@@ -468,21 +468,23 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     return title;
   }, [groupInfo, panelRegistrations, panelId, title]);
 
-  // Handle close -- closes the active tab. Only closes the panel if it's the last tab.
+  // Handle close -- closes all tabs in the group and the panel itself.
   const handleClose = useCallback(() => {
-    const activeId = groupInfo?.activeTab;
-    if (!activeId || groupTabCount <= 1) {
-      // Last tab (or single panel) -- close the whole panel.
-      if (isControlled) {
-        skipNextControlledSyncRef.current = true;
+    // Close every other tab in the group first.
+    if (groupInfo) {
+      for (const tabId of groupInfo.tabs) {
+        if (tabId !== panelId) {
+          closeTab(tabId);
+        }
       }
-      panelState.setOpen(false);
-      onClose?.();
-    } else {
-      // Multiple tabs -- remove the active tab from the group.
-      closeTab(activeId);
     }
-  }, [groupInfo, groupTabCount, isControlled, panelState, onClose, closeTab]);
+    // Close this panel (the leader / last remaining tab).
+    if (isControlled) {
+      skipNextControlledSyncRef.current = true;
+    }
+    panelState.setOpen(false);
+    onClose?.();
+  }, [groupInfo, panelId, isControlled, panelState, onClose, closeTab]);
 
   // Handle docking changes
   const handleDock = useCallback(

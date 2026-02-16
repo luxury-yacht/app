@@ -127,8 +127,8 @@ export const DockablePanelControls: React.FC<DockablePanelControlsProps> = ({
       <button
         className="dockable-panel__control-btn dockable-panel__control-btn--close"
         onClick={onClose}
-        title="Close panel"
-        aria-label="Close panel"
+        title="Close all tabs in this panel"
+        aria-label="Close all tabs in this panel"
       >
         <CloseIcon />
       </button>

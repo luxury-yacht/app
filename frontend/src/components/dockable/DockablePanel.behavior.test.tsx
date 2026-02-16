@@ -554,7 +554,7 @@ describe('DockablePanel behaviour (real hook)', () => {
     await flushEffects();
 
     const closeButton = document.querySelector(
-      "[aria-label='Close panel']"
+      "[aria-label='Close all tabs in this panel']"
     ) as HTMLButtonElement | null;
     expect(closeButton).toBeTruthy();
 
@@ -891,7 +891,7 @@ describe('DockablePanel behaviour (real hook)', () => {
     await unmount();
   });
 
-  it('closes the active tab even when the panel has no explicit onClose handler', async () => {
+  it('closes all tabs when the panel close button is clicked', async () => {
     const { unmount } = await renderPanel(
       <DockablePanelProvider>
         <div>
@@ -908,7 +908,7 @@ describe('DockablePanel behaviour (real hook)', () => {
     await flushEffects();
 
     const closeButton = document.querySelector(
-      'button[aria-label="Close panel"]'
+      'button[aria-label="Close all tabs in this panel"]'
     ) as HTMLButtonElement | null;
     expect(closeButton).toBeTruthy();
 
@@ -918,9 +918,9 @@ describe('DockablePanel behaviour (real hook)', () => {
 
     await flushEffects();
 
-    // Most recently opened tab was active and should be closed.
+    // Panel close button closes all tabs, not just the active one.
     expect(getPanelState('panel-close-fallback-b').isOpen).toBe(false);
-    expect(getPanelState('panel-close-fallback-a').isOpen).toBe(true);
+    expect(getPanelState('panel-close-fallback-a').isOpen).toBe(false);
 
     await unmount();
   });
