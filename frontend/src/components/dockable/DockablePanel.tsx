@@ -571,7 +571,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       style['--dockable-panel-translate-y'] = `${roundedY}px`;
     } else if (panelState.position === 'right') {
       style.width = `${panelState.size.width}px`;
-      style.height = '100%';
+      // Height is determined by CSS top/bottom positioning, not an explicit value.
+      // Setting height: 100% here would overflow the bottom by the top offset.
     } else if (panelState.position === 'bottom') {
       style.height = `${panelState.size.height}px`;
       style.width = '100%';
