@@ -1,27 +1,18 @@
 /**
  * useDockablePanelState.ts
  *
- * Hook to manage the state of dockable panels, including position, size, open state, and z-index.
- * Supports floating, right-docked, and bottom-docked positions with independent sizes.
- * Handles initialization, state updates, and conflict resolution when docking panels.
+ * Hook and compatibility exports for dockable panel runtime state.
+ * Runtime storage is delegated to the active panel layout store.
  */
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
+import {
+  getActivePanelLayoutStore,
+  type DockPosition,
+  type PanelCloseReason,
+  type PanelLayoutState,
+} from './panelLayoutStore';
 import { getContentBounds } from './dockablePanelLayout';
-
-export type DockPosition = 'right' | 'bottom' | 'floating';
-
-interface PanelState {
-  position: DockPosition;
-  // Separate sizes for each position
-  floatingSize: { width: number; height: number };
-  rightSize: { width: number; height: number };
-  bottomSize: { width: number; height: number };
-  floatingPosition: { x: number; y: number };
-  isOpen: boolean;
-  isInitialized: boolean;
-  zIndex: number;
-}
 
 interface InitializeOptions {
   position?: DockPosition;
@@ -30,305 +21,154 @@ interface InitializeOptions {
   isOpen?: boolean;
 }
 
-// Reasons for panel closure
-// 'dock-conflict' indicates the panel was closed due to another panel docking in the same position
-// 'external' indicates the panel was closed by an external action (e.g., user clicking close)
-export type PanelCloseReason = 'dock-conflict' | 'external';
-
-// Global state store for all panels
-const panelStates = new Map<string, PanelState>();
-const panelListeners = new Map<string, Set<() => void>>();
-let globalZIndex = 1000;
-const panelCloseHandlers = new Map<string, (reason: PanelCloseReason) => void>();
-
-// Get or create initial state for a panel
-function getInitialState(panelId: string): PanelState {
-  if (!panelStates.has(panelId)) {
-    // Center the floating panel within the content area by default
-    const defaultFloatingWidth = 600;
-    const defaultFloatingHeight = 400;
-    const content = getContentBounds();
-    const centerX = Math.max(100, (content.width - defaultFloatingWidth) / 2);
-    const centerY = Math.max(100, (content.height - defaultFloatingHeight) / 2);
-
-    panelStates.set(panelId, {
-      position: 'right',
-      floatingSize: { width: defaultFloatingWidth, height: defaultFloatingHeight },
-      rightSize: { width: 400, height: 300 },
-      bottomSize: { width: 400, height: 300 },
-      floatingPosition: { x: centerX, y: centerY },
-      isOpen: false,
-      isInitialized: false,
-      zIndex: globalZIndex++,
-    });
-  }
-  return panelStates.get(panelId)!;
-}
-
-// Notify all listeners for a panel
-function notifyListeners(panelId: string) {
-  const listeners = panelListeners.get(panelId);
-  if (listeners) {
-    listeners.forEach((listener) => listener());
-  }
-}
-
-// Update state for a panel
-function updatePanelState(panelId: string, updates: Partial<PanelState>) {
-  const currentState = getInitialState(panelId);
-  const newState = { ...currentState, ...updates };
-  panelStates.set(panelId, newState);
-  notifyListeners(panelId);
-}
-
-/**
- * Clamp a floating position so the full panel remains within the visible content area
- * whenever possible. If the panel is larger than the content area, anchor at (0,0).
- */
-function clampFloatingPosition(
-  position: { x: number; y: number },
-  panelSize: { width: number; height: number }
-): { x: number; y: number } {
-  const content = getContentBounds();
-  const maxX = Math.max(0, content.width - panelSize.width);
-  const maxY = Math.max(0, content.height - panelSize.height);
-
-  return {
-    x: Math.max(0, Math.min(position.x, maxX)),
-    y: Math.max(0, Math.min(position.y, maxY)),
-  };
-}
-
-// Set panel open state.
-// With tabs, opening a panel at an occupied position joins the tab group
-// instead of closing other panels (dock-conflict removed).
-function setPanelOpenState(panelId: string, isOpen: boolean) {
-  updatePanelState(panelId, isOpen ? { isOpen: true, zIndex: ++globalZIndex } : { isOpen });
-  if (panelId === 'app-logs') {
-    import('../../../wailsjs/go/backend/App').then(({ SetLogsPanelVisible }) => {
-      SetLogsPanelVisible(isOpen);
-    });
-  }
-}
+export type { DockPosition, PanelCloseReason };
 
 /**
  * Bring a panel to the front by bumping its z-index.
- * Used by the provider to focus a panel by ID from outside the component.
+ * Used by provider-level focus actions.
  */
 export function focusPanelById(panelId: string) {
-  updatePanelState(panelId, { zIndex: ++globalZIndex });
+  getActivePanelLayoutStore().focusPanelById(panelId);
 }
 
 /**
  * Set a panel's dock position by ID.
- * Used by tab-group move operations so visual panel state stays aligned with group membership.
  */
 export function setPanelPositionById(panelId: string, position: DockPosition) {
-  updatePanelState(panelId, { position });
+  getActivePanelLayoutStore().setPanelPositionById(panelId, position);
 }
 
 /**
- * Set a panel's floating position by ID with the same bounds validation used by the hook.
+ * Set a panel's floating position by ID.
  */
 export function setPanelFloatingPositionById(panelId: string, position: { x: number; y: number }) {
-  const currentState = getInitialState(panelId);
-  updatePanelState(panelId, {
-    floatingPosition: clampFloatingPosition(position, currentState.floatingSize),
-  });
+  getActivePanelLayoutStore().setPanelFloatingPositionById(panelId, position);
 }
 
 /**
  * Set a panel's open state by ID.
- * Used by provider-level tab close flows as a fallback when no external onClose is provided.
  */
 export function setPanelOpenById(panelId: string, isOpen: boolean) {
-  setPanelOpenState(panelId, isOpen);
+  getActivePanelLayoutStore().setPanelOpenById(panelId, isOpen);
 }
 
 /**
  * Copy layout-related fields from one panel to another.
- * Keeps tab-group container geometry stable when leadership transfers.
  */
 export function copyPanelLayoutState(sourcePanelId: string, targetPanelId: string) {
-  if (sourcePanelId === targetPanelId) {
-    return;
-  }
-  const sourceState = panelStates.get(sourcePanelId);
-  if (!sourceState) {
-    return;
-  }
-  const targetState = getInitialState(targetPanelId);
-  updatePanelState(targetPanelId, {
-    // Copy geometry only; group membership controls dock position.
-    // Copying `position` here can race with tab-group moves and send tabs to
-    // unintended groups when leadership transfers during dock/float actions.
-    floatingSize: { ...sourceState.floatingSize },
-    rightSize: { ...sourceState.rightSize },
-    bottomSize: { ...sourceState.bottomSize },
-    floatingPosition: { ...sourceState.floatingPosition },
-    zIndex: Math.max(targetState.zIndex, sourceState.zIndex),
-  });
+  getActivePanelLayoutStore().copyPanelLayoutState(sourcePanelId, targetPanelId);
 }
 
 /**
- * Remove a panel's stored state entirely so it gets fresh defaults on reopen.
- * Used when object panels are closed to prevent stale position memory.
+ * Remove a panel's stored state entirely.
  */
 export function clearPanelState(panelId: string) {
-  panelStates.delete(panelId);
-  panelListeners.delete(panelId);
-}
-
-/**
- * @deprecated No longer used — panels now join tab groups instead of conflicting.
- * Retained for backward compatibility but never called internally.
- */
-export function closeDockedPanels(position: DockPosition, exceptPanelId?: string) {
-  if (position === 'floating') {
-    return;
-  }
-  panelStates.forEach((state, id) => {
-    if (id === exceptPanelId) {
-      return;
-    }
-    if (state.position === position && state.isOpen) {
-      const closeHandler = panelCloseHandlers.get(id);
-      if (closeHandler) {
-        closeHandler('dock-conflict');
-        return;
-      }
-      setPanelOpenState(id, false);
-    }
-  });
+  getActivePanelLayoutStore().clearPanelState(panelId);
 }
 
 export function registerPanelCloseHandler(
   panelId: string,
   handler: (reason: PanelCloseReason) => void
 ) {
-  panelCloseHandlers.set(panelId, handler);
+  getActivePanelLayoutStore().registerPanelCloseHandler(panelId, handler);
 }
 
 export function unregisterPanelCloseHandler(
   panelId: string,
   handler: (reason: PanelCloseReason) => void
 ) {
-  const existing = panelCloseHandlers.get(panelId);
-  if (existing === handler) {
-    panelCloseHandlers.delete(panelId);
-  }
+  getActivePanelLayoutStore().unregisterPanelCloseHandler(panelId, handler);
 }
 
 export function useDockablePanelState(panelId: string) {
-  // Use local state that syncs with global state
-  const [localState, setLocalState] = useState<PanelState>(() => getInitialState(panelId));
+  const [localState, setLocalState] = useState<PanelLayoutState>(() =>
+    getActivePanelLayoutStore().getInitialState(panelId)
+  );
 
-  // Subscribe to state changes
   useEffect(() => {
-    // Update local state on mount with current global state
-    setLocalState(getInitialState(panelId));
+    const store = getActivePanelLayoutStore();
+    setLocalState(store.getInitialState(panelId));
 
-    const listener = () => {
-      // Only update if the state actually changed
-      const newState = panelStates.get(panelId);
-      if (newState) {
-        setLocalState((prevState) => {
-          // Check if state actually changed to prevent unnecessary re-renders
-          const hasChanged =
-            prevState.position !== newState.position ||
-            prevState.isOpen !== newState.isOpen ||
-            prevState.floatingSize.width !== newState.floatingSize.width ||
-            prevState.floatingSize.height !== newState.floatingSize.height ||
-            prevState.rightSize.width !== newState.rightSize.width ||
-            prevState.rightSize.height !== newState.rightSize.height ||
-            prevState.bottomSize.width !== newState.bottomSize.width ||
-            prevState.bottomSize.height !== newState.bottomSize.height ||
-            prevState.floatingPosition.x !== newState.floatingPosition.x ||
-            prevState.floatingPosition.y !== newState.floatingPosition.y ||
-            prevState.isInitialized !== newState.isInitialized ||
-            prevState.zIndex !== newState.zIndex;
-
-          if (hasChanged) {
-            return { ...newState };
-          }
-          return prevState;
-        });
+    const unsubscribe = store.subscribe(panelId, () => {
+      const newState = store.getState(panelId);
+      if (!newState) {
+        return;
       }
-    };
+      setLocalState((prevState) => {
+        const hasChanged =
+          prevState.position !== newState.position ||
+          prevState.isOpen !== newState.isOpen ||
+          prevState.floatingSize.width !== newState.floatingSize.width ||
+          prevState.floatingSize.height !== newState.floatingSize.height ||
+          prevState.rightSize.width !== newState.rightSize.width ||
+          prevState.rightSize.height !== newState.rightSize.height ||
+          prevState.bottomSize.width !== newState.bottomSize.width ||
+          prevState.bottomSize.height !== newState.bottomSize.height ||
+          prevState.floatingPosition.x !== newState.floatingPosition.x ||
+          prevState.floatingPosition.y !== newState.floatingPosition.y ||
+          prevState.isInitialized !== newState.isInitialized ||
+          prevState.zIndex !== newState.zIndex;
 
-    if (!panelListeners.has(panelId)) {
-      panelListeners.set(panelId, new Set());
-    }
-    panelListeners.get(panelId)!.add(listener);
-
-    return () => {
-      const listeners = panelListeners.get(panelId);
-      if (listeners) {
-        listeners.delete(listener);
-        if (listeners.size === 0) {
-          panelListeners.delete(panelId);
+        if (hasChanged) {
+          return { ...newState };
         }
-      }
-    };
+        return prevState;
+      });
+    });
+
+    return unsubscribe;
   }, [panelId]);
 
-  // Initialize panel
   const initialize = useCallback(
     (options: InitializeOptions) => {
-      if (!localState.isInitialized) {
-        const defaultSize = options.size || {};
-        const finalIsOpen = options.isOpen ?? localState.isOpen;
-        const targetPosition = options.position ?? localState.position;
+      if (localState.isInitialized) {
+        return;
+      }
+      const defaultSize = options.size || {};
+      const finalIsOpen = options.isOpen ?? localState.isOpen;
+      const targetPosition = options.position ?? localState.position;
 
-        updatePanelState(panelId, {
-          position: targetPosition,
-          // Initialize all position sizes with the provided size or defaults
-          floatingSize: {
-            width: defaultSize.width ?? localState.floatingSize.width,
-            height: defaultSize.height ?? localState.floatingSize.height,
-          },
-          rightSize: {
-            width: defaultSize.width ?? localState.rightSize.width,
-            height: localState.rightSize.height, // Height doesn't matter for right dock
-          },
-          bottomSize: {
-            width: localState.bottomSize.width, // Width doesn't matter for bottom dock
-            height: defaultSize.height ?? localState.bottomSize.height,
-          },
-          floatingPosition: {
-            x: options.floatingPosition?.x ?? localState.floatingPosition.x,
-            y: options.floatingPosition?.y ?? localState.floatingPosition.y,
-          },
-          isOpen: finalIsOpen,
-          isInitialized: true,
+      getActivePanelLayoutStore().updateState(panelId, {
+        position: targetPosition,
+        floatingSize: {
+          width: defaultSize.width ?? localState.floatingSize.width,
+          height: defaultSize.height ?? localState.floatingSize.height,
+        },
+        rightSize: {
+          width: defaultSize.width ?? localState.rightSize.width,
+          height: localState.rightSize.height,
+        },
+        bottomSize: {
+          width: localState.bottomSize.width,
+          height: defaultSize.height ?? localState.bottomSize.height,
+        },
+        floatingPosition: {
+          x: options.floatingPosition?.x ?? localState.floatingPosition.x,
+          y: options.floatingPosition?.y ?? localState.floatingPosition.y,
+        },
+        isOpen: finalIsOpen,
+        isInitialized: true,
+      });
+
+      if (panelId === 'app-logs') {
+        import('../../../wailsjs/go/backend/App').then(({ SetLogsPanelVisible }) => {
+          SetLogsPanelVisible(finalIsOpen);
         });
-
-        // Sync initial state with backend for app-logs panel
-        if (panelId === 'app-logs') {
-          import('../../../wailsjs/go/backend/App').then(({ SetLogsPanelVisible }) => {
-            SetLogsPanelVisible(finalIsOpen);
-          });
-        }
       }
     },
     [panelId, localState]
   );
 
-  // Set position
   const setPosition = useCallback(
     (position: DockPosition) => {
-      // Just update the position, keeping the floating position intact for when we return to floating
-      updatePanelState(panelId, { position });
+      getActivePanelLayoutStore().setPanelPositionById(panelId, position);
     },
     [panelId]
   );
 
-  // Set size for current position
   const setSize = useCallback(
     (size: { width: number; height: number }) => {
-      const updates: Partial<PanelState> = {};
-
-      // Update the size for the current position only
+      const updates: Partial<PanelLayoutState> = {};
       switch (localState.position) {
         case 'floating':
           updates.floatingSize = size;
@@ -340,13 +180,11 @@ export function useDockablePanelState(panelId: string) {
           updates.bottomSize = { width: localState.bottomSize.width, height: size.height };
           break;
       }
-
-      updatePanelState(panelId, updates);
+      getActivePanelLayoutStore().updateState(panelId, updates);
     },
     [panelId, localState.position, localState.rightSize.height, localState.bottomSize.width]
   );
 
-  // Get current size based on position
   const getCurrentSize = useCallback(() => {
     switch (localState.position) {
       case 'floating':
@@ -360,36 +198,28 @@ export function useDockablePanelState(panelId: string) {
     }
   }, [localState.position, localState.floatingSize, localState.rightSize, localState.bottomSize]);
 
-  // Set floating position with validation
   const setFloatingPosition = useCallback(
     (position: { x: number; y: number }) => {
-      updatePanelState(panelId, {
-        floatingPosition: clampFloatingPosition(position, localState.floatingSize),
-      });
-    },
-    [panelId, localState.floatingSize]
-  );
-
-  // Set open state
-  const setOpen = useCallback(
-    (isOpen: boolean) => {
-      setPanelOpenState(panelId, isOpen);
+      getActivePanelLayoutStore().setPanelFloatingPositionById(panelId, position);
     },
     [panelId]
   );
 
-  // Toggle open state
+  const setOpen = useCallback(
+    (isOpen: boolean) => {
+      getActivePanelLayoutStore().setPanelOpenById(panelId, isOpen);
+    },
+    [panelId]
+  );
+
   const toggle = useCallback(() => {
-    const newState = !localState.isOpen;
-    setOpen(newState);
+    setOpen(!localState.isOpen);
   }, [localState.isOpen, setOpen]);
 
-  // Focus panel (bring to front)
   const focus = useCallback(() => {
-    updatePanelState(panelId, { zIndex: ++globalZIndex });
+    getActivePanelLayoutStore().focusPanelById(panelId);
   }, [panelId]);
 
-  // Reset to defaults
   const reset = useCallback(() => {
     const defaultFloatingWidth = 600;
     const defaultFloatingHeight = 400;
@@ -397,7 +227,7 @@ export function useDockablePanelState(panelId: string) {
     const centerX = Math.max(100, (content.width - defaultFloatingWidth) / 2);
     const centerY = Math.max(100, (content.height - defaultFloatingHeight) / 2);
 
-    updatePanelState(panelId, {
+    getActivePanelLayoutStore().updateState(panelId, {
       position: 'right',
       floatingSize: { width: defaultFloatingWidth, height: defaultFloatingHeight },
       rightSize: { width: 400, height: 300 },
@@ -405,16 +235,14 @@ export function useDockablePanelState(panelId: string) {
       floatingPosition: { x: centerX, y: centerY },
       isOpen: false,
       isInitialized: false,
-      zIndex: globalZIndex++,
+      zIndex: localState.zIndex + 1,
     });
-  }, [panelId]);
+  }, [panelId, localState.zIndex]);
 
-  // Memoize the return object to prevent unnecessary re-renders
   return useMemo(
     () => ({
-      // State
       position: localState.position,
-      size: getCurrentSize(), // Get current size based on position
+      size: getCurrentSize(),
       floatingSize: localState.floatingSize,
       rightSize: localState.rightSize,
       bottomSize: localState.bottomSize,
@@ -422,8 +250,6 @@ export function useDockablePanelState(panelId: string) {
       isOpen: localState.isOpen,
       isInitialized: localState.isInitialized,
       zIndex: localState.zIndex,
-
-      // Actions
       initialize,
       setPosition,
       setSize,
@@ -448,19 +274,10 @@ export function useDockablePanelState(panelId: string) {
   );
 }
 
-// Export a function to get all panel states (useful for debugging or persistence)
-export function getAllPanelStates(): Record<string, PanelState> {
-  const states: Record<string, PanelState> = {};
-  panelStates.forEach((state, id) => {
-    states[id] = { ...state };
-  });
-  return states;
+export function getAllPanelStates(): Record<string, PanelLayoutState> {
+  return getActivePanelLayoutStore().getAllPanelStates();
 }
 
-// Export a function to restore panel states (useful for persistence)
-export function restorePanelStates(states: Record<string, PanelState>) {
-  Object.entries(states).forEach(([id, state]) => {
-    panelStates.set(id, { ...state });
-    notifyListeners(id);
-  });
+export function restorePanelStates(states: Record<string, PanelLayoutState>) {
+  getActivePanelLayoutStore().restorePanelStates(states);
 }

@@ -11,6 +11,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { DockableTabBar, TabInfo } from './DockableTabBar';
+import { DockablePanelProvider } from './DockablePanelProvider';
 
 /** Helper to render a React element into a fresh DOM host. */
 const renderTabBar = async (ui: React.ReactElement) => {
@@ -19,7 +20,7 @@ const renderTabBar = async (ui: React.ReactElement) => {
   const root = ReactDOM.createRoot(host);
 
   await act(async () => {
-    root.render(ui);
+    root.render(<DockablePanelProvider>{ui}</DockablePanelProvider>);
     await Promise.resolve();
   });
 
@@ -28,7 +29,7 @@ const renderTabBar = async (ui: React.ReactElement) => {
     root,
     rerender: async (newUi: React.ReactElement) => {
       await act(async () => {
-        root.render(newUi);
+        root.render(<DockablePanelProvider>{newUi}</DockablePanelProvider>);
         await Promise.resolve();
       });
     },

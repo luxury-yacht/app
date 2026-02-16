@@ -37,11 +37,7 @@ import { useCommandPaletteCommands } from '@ui/command-palette/CommandPaletteCom
 import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
 import { PanelErrorBoundary, RouteErrorBoundary } from '@components/errors';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
-import {
-  DockablePanelProvider,
-  getAllPanelStates,
-  useDockablePanelContext,
-} from '@/components/dockable';
+import { getAllPanelStates, useDockablePanelContext } from '@/components/dockable';
 // Auth Failure Overlay
 import { AuthFailureOverlay } from '@/components/overlays/AuthFailureOverlay';
 
@@ -186,85 +182,74 @@ export const AppLayout: React.FC = () => {
   };
 
   return (
-    <DockablePanelProvider>
-      <div className="app-container">
-        <AppHeader
-          contentTitle={getContentTitle()}
-          onAboutClick={() => viewState.setIsAboutOpen(true)}
-        />
-        <ClusterTabs />
+    <div className="app-container">
+      <AppHeader
+        contentTitle={getContentTitle()}
+        onAboutClick={() => viewState.setIsAboutOpen(true)}
+      />
+      <ClusterTabs />
 
-        <main className={`app-main ${hasActiveClusters ? '' : 'app-main-inactive'}`}>
-          <Sidebar />
-          {viewState.isSidebarVisible && (
-            <div
-              className="sidebar-resizer"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                viewState.setIsResizing(true);
-              }}
-            />
-          )}
+      <main className={`app-main ${hasActiveClusters ? '' : 'app-main-inactive'}`}>
+        <Sidebar />
+        {viewState.isSidebarVisible && (
+          <div
+            className="sidebar-resizer"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              viewState.setIsResizing(true);
+            }}
+          />
+        )}
 
-          <div className="content">
-            <div className="content-body">
-              {hasActiveClusters ? (
-                viewState.viewType === 'cluster' ? (
-                  viewState.activeClusterTab === 'browse' ? (
-                    <RouteErrorBoundary routeName="browse">
-                      <div className="view-content">
-                        <BrowseView />
-                      </div>
+        <div className="content">
+          <div className="content-body">
+            {hasActiveClusters ? (
+              viewState.viewType === 'cluster' ? (
+                viewState.activeClusterTab === 'browse' ? (
+                  <RouteErrorBoundary routeName="browse">
+                    <div className="view-content">
+                      <BrowseView />
+                    </div>
+                  </RouteErrorBoundary>
+                ) : (
+                  <RouteErrorBoundary routeName="cluster">
+                    <ClusterResourcesProvider activeView={viewState.activeClusterTab}>
+                      <ClusterResourcesManager
+                        activeTab={viewState.activeClusterTab}
+                        onTabChange={(tab: string) =>
+                          viewState.setActiveClusterView(tab as ClusterViewType)
+                        }
+                      />
+                    </ClusterResourcesProvider>
+                  </RouteErrorBoundary>
+                )
+              ) : viewState.viewType === 'namespace' ? (
+                namespace.selectedNamespace ? (
+                  isAllNamespaces(namespace.selectedNamespace) ? (
+                    <RouteErrorBoundary routeName="namespace-all">
+                      <NamespaceResourcesProvider
+                        namespace={namespace.selectedNamespace}
+                        activeView={viewState.activeNamespaceTab}
+                      >
+                        <AllNamespacesView activeTab={viewState.activeNamespaceTab} />
+                      </NamespaceResourcesProvider>
                     </RouteErrorBoundary>
                   ) : (
-                    <RouteErrorBoundary routeName="cluster">
-                      <ClusterResourcesProvider activeView={viewState.activeClusterTab}>
-                        <ClusterResourcesManager
-                          activeTab={viewState.activeClusterTab}
-                          onTabChange={(tab: string) =>
-                            viewState.setActiveClusterView(tab as ClusterViewType)
+                    <RouteErrorBoundary routeName="namespace">
+                      <NamespaceResourcesProvider
+                        namespace={namespace.selectedNamespace}
+                        activeView={viewState.activeNamespaceTab}
+                      >
+                        <NamespaceResourcesManager
+                          namespace={namespace.selectedNamespace}
+                          activeTab={viewState.activeNamespaceTab}
+                          onTabChange={(tab: NamespaceViewType) =>
+                            viewState.setActiveNamespaceTab(tab)
                           }
                         />
-                      </ClusterResourcesProvider>
+                      </NamespaceResourcesProvider>
                     </RouteErrorBoundary>
                   )
-                ) : viewState.viewType === 'namespace' ? (
-                  namespace.selectedNamespace ? (
-                    isAllNamespaces(namespace.selectedNamespace) ? (
-                      <RouteErrorBoundary routeName="namespace-all">
-                        <NamespaceResourcesProvider
-                          namespace={namespace.selectedNamespace}
-                          activeView={viewState.activeNamespaceTab}
-                        >
-                          <AllNamespacesView activeTab={viewState.activeNamespaceTab} />
-                        </NamespaceResourcesProvider>
-                      </RouteErrorBoundary>
-                    ) : (
-                      <RouteErrorBoundary routeName="namespace">
-                        <NamespaceResourcesProvider
-                          namespace={namespace.selectedNamespace}
-                          activeView={viewState.activeNamespaceTab}
-                        >
-                          <NamespaceResourcesManager
-                            namespace={namespace.selectedNamespace}
-                            activeTab={viewState.activeNamespaceTab}
-                            onTabChange={(tab: NamespaceViewType) =>
-                              viewState.setActiveNamespaceTab(tab)
-                            }
-                          />
-                        </NamespaceResourcesProvider>
-                      </RouteErrorBoundary>
-                    )
-                  ) : (
-                    <div className="welcome">
-                      <img src={captainK8s} alt="Captain K8s" className="captain-k8s" />
-                      <img src={logo} alt="Luxury Yacht" className="welcome-logo" />
-                    </div>
-                  )
-                ) : viewState.viewType === 'overview' ? (
-                  <RouteErrorBoundary routeName="cluster-overview">
-                    <ClusterOverview clusterContext={kubeconfig.selectedKubeconfig || 'Default'} />
-                  </RouteErrorBoundary>
                 ) : (
                   <div className="welcome">
                     <img src={captainK8s} alt="Captain K8s" className="welcome-logo" />
@@ -273,75 +258,86 @@ export const AppLayout: React.FC = () => {
                     <p>Select a view from the sidebar to get started</p>
                   </div>
                 )
-              ) : null}
+              ) : viewState.viewType === 'overview' ? (
+                <RouteErrorBoundary routeName="cluster-overview">
+                  <ClusterOverview clusterContext={kubeconfig.selectedKubeconfig || 'Default'} />
+                </RouteErrorBoundary>
+              ) : (
+                <div className="welcome">
+                  <img src={captainK8s} alt="Captain K8s" className="welcome-logo" />
+                  <img src={logo} alt="Luxury Yacht" className="welcome-logo" />
+
+                  <p>Select a view from the sidebar to get started</p>
+                </div>
+              )
+            ) : null}
+          </div>
+        </div>
+        {!hasActiveClusters && (
+          <div className="no-active-clusters-overlay" role="status">
+            {/* Block interactions and loading when no clusters are active. */}
+            <div className="no-active-clusters-message">
+              No active clusters. Select a cluster from the kubeconfig dropdown.
             </div>
           </div>
-          {!hasActiveClusters && (
-            <div className="no-active-clusters-overlay" role="status">
-              {/* Block interactions and loading when no clusters are active. */}
-              <div className="no-active-clusters-message">
-                No active clusters. Select a cluster from the kubeconfig dropdown.
-              </div>
-            </div>
-          )}
-          {/* Per-cluster auth failure overlay - blocks sidebar and content when active cluster has auth error */}
-          {hasActiveClusters && <AuthFailureOverlay />}
-        </main>
+        )}
+        {/* Per-cluster auth failure overlay - blocks sidebar and content when active cluster has auth error */}
+        {hasActiveClusters && <AuthFailureOverlay />}
+      </main>
 
-        <PanelErrorBoundary onClose={() => {}} panelName="app-logs">
-          <AppLogsPanel />
-        </PanelErrorBoundary>
+      <PanelErrorBoundary onClose={() => {}} panelName="app-logs">
+        <AppLogsPanel />
+      </PanelErrorBoundary>
 
-        <PanelErrorBoundary onClose={() => {}} panelName="port-forwards">
-          <PortForwardsPanel />
-        </PanelErrorBoundary>
+      <PanelErrorBoundary onClose={() => {}} panelName="port-forwards">
+        <PortForwardsPanel />
+      </PanelErrorBoundary>
 
-        <PanelErrorBoundary onClose={() => setShowDiagnostics(false)} panelName="diagnostics">
-          <DiagnosticsPanel isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
-        </PanelErrorBoundary>
+      <PanelErrorBoundary onClose={() => setShowDiagnostics(false)} panelName="diagnostics">
+        <DiagnosticsPanel isOpen={showDiagnostics} onClose={() => setShowDiagnostics(false)} />
+      </PanelErrorBoundary>
 
-        {Array.from(openPanels.entries()).map(([panelId, objectRef]) => (
-          <PanelErrorBoundary
-            key={panelId}
-            onClose={() => closePanel(panelId)}
-            panelName="object-details"
-          >
-            <ObjectPanel panelId={panelId} objectRef={objectRef} />
-          </PanelErrorBoundary>
-        ))}
-
-        <PanelErrorBoundary onClose={() => viewState.setIsSettingsOpen(false)} panelName="settings">
-          <SettingsModal
-            isOpen={viewState.isSettingsOpen}
-            onClose={() => viewState.setIsSettingsOpen(false)}
-          />
-        </PanelErrorBoundary>
-
-        <PanelErrorBoundary onClose={handleAboutClose} panelName="about">
-          <AboutModal isOpen={viewState.isAboutOpen} onClose={handleAboutClose} />
-        </PanelErrorBoundary>
+      {Array.from(openPanels.entries()).map(([panelId, objectRef]) => (
         <PanelErrorBoundary
-          onClose={() => viewState.setIsObjectDiffOpen(false)}
-          panelName="object-diff"
+          key={panelId}
+          onClose={() => closePanel(panelId)}
+          panelName="object-details"
         >
-          <ObjectDiffModal
-            isOpen={viewState.isObjectDiffOpen}
-            onClose={() => viewState.setIsObjectDiffOpen(false)}
-          />
+          <ObjectPanel panelId={panelId} objectRef={objectRef} />
         </PanelErrorBoundary>
-        <ErrorNotificationSystem />
-        <CommandPalette commands={commands} />
-        {isPanelDebugOverlayVisible && (
-          <PanelDebugOverlay onClose={() => setIsPanelDebugOverlayVisible(false)} />
-        )}
-        {isFocusOverlayVisible && (
-          <KeyboardFocusOverlay onClose={() => setIsFocusOverlayVisible(false)} />
-        )}
-        {isErrorOverlayVisible && (
-          <ErrorBoundaryDebugOverlay onClose={() => setIsErrorOverlayVisible(false)} />
-        )}
-      </div>
-    </DockablePanelProvider>
+      ))}
+
+      <PanelErrorBoundary onClose={() => viewState.setIsSettingsOpen(false)} panelName="settings">
+        <SettingsModal
+          isOpen={viewState.isSettingsOpen}
+          onClose={() => viewState.setIsSettingsOpen(false)}
+        />
+      </PanelErrorBoundary>
+
+      <PanelErrorBoundary onClose={handleAboutClose} panelName="about">
+        <AboutModal isOpen={viewState.isAboutOpen} onClose={handleAboutClose} />
+      </PanelErrorBoundary>
+      <PanelErrorBoundary
+        onClose={() => viewState.setIsObjectDiffOpen(false)}
+        panelName="object-diff"
+      >
+        <ObjectDiffModal
+          isOpen={viewState.isObjectDiffOpen}
+          onClose={() => viewState.setIsObjectDiffOpen(false)}
+        />
+      </PanelErrorBoundary>
+      <ErrorNotificationSystem />
+      <CommandPalette commands={commands} />
+      {isPanelDebugOverlayVisible && (
+        <PanelDebugOverlay onClose={() => setIsPanelDebugOverlayVisible(false)} />
+      )}
+      {isFocusOverlayVisible && (
+        <KeyboardFocusOverlay onClose={() => setIsFocusOverlayVisible(false)} />
+      )}
+      {isErrorOverlayVisible && (
+        <ErrorBoundaryDebugOverlay onClose={() => setIsErrorOverlayVisible(false)} />
+      )}
+    </div>
   );
 };
 

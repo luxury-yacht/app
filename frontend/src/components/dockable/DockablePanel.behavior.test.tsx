@@ -13,6 +13,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import DockablePanel from './DockablePanel';
 import { DockablePanelProvider } from './DockablePanelProvider';
 import { getAllPanelStates, restorePanelStates, type DockPosition } from './useDockablePanelState';
+import { createPanelLayoutStore, setActivePanelLayoutStore } from './panelLayoutStore';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
@@ -47,7 +48,15 @@ const renderPanel = async (element: React.ReactElement) => {
   const root = ReactDOM.createRoot(host);
 
   await act(async () => {
-    root.render(<ZoomProvider>{element}</ZoomProvider>);
+    const wrapped =
+      element.type === DockablePanelProvider ? (
+        <ZoomProvider>{element}</ZoomProvider>
+      ) : (
+        <DockablePanelProvider>
+          <ZoomProvider>{element}</ZoomProvider>
+        </DockablePanelProvider>
+      );
+    root.render(wrapped);
     await Promise.resolve();
   });
 
@@ -55,7 +64,15 @@ const renderPanel = async (element: React.ReactElement) => {
     host,
     rerender: async (nextElement: React.ReactElement) => {
       await act(async () => {
-        root.render(<ZoomProvider>{nextElement}</ZoomProvider>);
+        const wrapped =
+          nextElement.type === DockablePanelProvider ? (
+            <ZoomProvider>{nextElement}</ZoomProvider>
+          ) : (
+            <DockablePanelProvider>
+              <ZoomProvider>{nextElement}</ZoomProvider>
+            </DockablePanelProvider>
+          );
+        root.render(wrapped);
         await Promise.resolve();
       });
     },
@@ -77,6 +94,7 @@ describe('DockablePanel behaviour (real hook)', () => {
   });
 
   beforeEach(() => {
+    setActivePanelLayoutStore(createPanelLayoutStore());
     restorePanelStates({});
     vi.useRealTimers();
   });
@@ -94,6 +112,7 @@ describe('DockablePanel behaviour (real hook)', () => {
       value: originalInnerHeight,
     });
     vi.useRealTimers();
+    setActivePanelLayoutStore(null);
   });
 
   const getPanelState = (panelId: string) => {

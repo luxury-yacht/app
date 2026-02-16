@@ -110,7 +110,7 @@ vi.mock('@/components/dockable', () => ({
       floating: [],
     },
     switchTab: vi.fn(),
-    getLastFocusedPosition: () => 'right',
+    getPreferredOpenGroupKey: () => 'right',
   }),
 }));
 

@@ -11,6 +11,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import DockablePanel from './DockablePanel';
+import { DockablePanelProvider } from './DockablePanelProvider';
 import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
@@ -41,7 +42,15 @@ const renderPanel = async (ui: React.ReactElement) => {
   const root = ReactDOM.createRoot(container);
 
   await act(async () => {
-    root.render(<ZoomProvider>{ui}</ZoomProvider>);
+    const wrapped =
+      ui.type === DockablePanelProvider ? (
+        <ZoomProvider>{ui}</ZoomProvider>
+      ) : (
+        <DockablePanelProvider>
+          <ZoomProvider>{ui}</ZoomProvider>
+        </DockablePanelProvider>
+      );
+    root.render(wrapped);
     await Promise.resolve();
   });
 

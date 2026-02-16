@@ -17,10 +17,7 @@ import React, {
 import { createPortal } from 'react-dom';
 import {
   copyPanelLayoutState,
-  focusPanelById,
   registerPanelCloseHandler,
-  setPanelFloatingPositionById,
-  setPanelPositionById,
   unregisterPanelCloseHandler,
   useDockablePanelState,
   PanelCloseReason,
@@ -31,11 +28,11 @@ import { DockablePanelHeader } from './DockablePanelHeader';
 import { useDockablePanelDragResize } from './useDockablePanelDragResize';
 import { useDockablePanelMaximize } from './useDockablePanelMaximize';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
-import { PANEL_DEFAULTS, getContentBounds, getPanelSizeConstraints } from './dockablePanelLayout';
+import { PANEL_DEFAULTS, getPanelSizeConstraints } from './dockablePanelLayout';
 import { getGroupForPanel, getGroupTabs } from './tabGroupState';
 import type { PanelSizeConstraints } from './dockablePanelLayout';
 import type { TabInfo } from './DockableTabBar';
-import type { GroupKey, TabDragState } from './tabGroupTypes';
+import type { GroupKey } from './tabGroupTypes';
 import type { DockPosition } from './useDockablePanelState';
 import './DockablePanel.css';
 
@@ -53,6 +50,8 @@ interface DockablePanelProps {
 
   // Optional initial position
   defaultPosition?: DockPosition;
+  // Optional initial group key target used during first tab-group sync.
+  defaultGroupKey?: GroupKey | 'floating';
 
   // Optional initial size (defaults to Object Panel dimensions)
   defaultSize?: { width?: number; height?: number };
@@ -90,35 +89,13 @@ function assignRef<T>(ref: React.Ref<T> | undefined, value: T | null) {
   }
 }
 
-// Track hover suppression across panels so one panel doesn't re-enable hover during another drag.
-let hoverSuppressionCount = 0;
-const groupLeaderByKey = new Map<string, string>();
-
-function updateGridTableHoverSuppression(shouldSuppress: boolean) {
-  if (typeof document === 'undefined') {
-    return;
-  }
-  if (shouldSuppress) {
-    if (hoverSuppressionCount === 0) {
-      document.body.classList.add('gridtable-disable-hover');
-    }
-    hoverSuppressionCount += 1;
-    return;
-  }
-  if (hoverSuppressionCount > 0) {
-    hoverSuppressionCount -= 1;
-    if (hoverSuppressionCount === 0) {
-      document.body.classList.remove('gridtable-disable-hover');
-    }
-  }
-}
-
 const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   const {
     panelId,
     children,
     title = 'Panel',
     defaultPosition = 'right',
+    defaultGroupKey,
     defaultSize = { width: PANEL_DEFAULTS.DEFAULT_WIDTH, height: PANEL_DEFAULTS.DEFAULT_HEIGHT },
     onClose,
     onPositionChange,
@@ -140,7 +117,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   );
   const panelState = useDockablePanelState(panelId);
   const {
-    isProviderActive,
     registerPanel,
     unregisterPanel,
     syncPanelGroup,
@@ -152,10 +128,9 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     panelContentRefsMap,
     notifyContentChange,
     subscribeContentChange,
-    dragState,
-    setDragState,
-    reorderTabInGroup,
-    movePanelBetweenGroups,
+    groupLeaderByKeyRef,
+    updateGridTableHoverSuppression,
+    movePanelBetweenGroupsAndFocus,
     setLastFocusedGroupKey,
   } = useDockablePanelContext();
   const panelHostNode = useDockablePanelHost();
@@ -315,8 +290,18 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       removePanelFromGroups(panelId);
       return;
     }
-    syncPanelGroup(panelId, panelState.position);
-  }, [panelId, panelState.isOpen, panelState.position, syncPanelGroup, removePanelFromGroups]);
+    const currentGroup = getGroupForPanel(tabGroups, panelId);
+    const preferredGroupKey = currentGroup ? undefined : defaultGroupKey;
+    syncPanelGroup(panelId, panelState.position, preferredGroupKey);
+  }, [
+    panelId,
+    panelState.isOpen,
+    panelState.position,
+    tabGroups,
+    defaultGroupKey,
+    syncPanelGroup,
+    removePanelFromGroups,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -332,7 +317,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     }
     hoverSuppressionRef.current = shouldSuppress;
     updateGridTableHoverSuppression(shouldSuppress);
-  }, [isDragging, panelState.position]);
+  }, [isDragging, panelState.position, updateGridTableHoverSuppression]);
 
   useEffect(() => {
     return () => {
@@ -341,7 +326,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
         updateGridTableHoverSuppression(false);
       }
     };
-  }, []);
+  }, [updateGridTableHoverSuppression]);
 
   // Handle window resize to keep panels within bounds
   useWindowBoundsConstraint(panelState, {
@@ -368,12 +353,12 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     if (!groupKey || !groupInfo || groupInfo.tabs.length === 0) {
       return panelId;
     }
-    const rememberedLeader = groupLeaderByKey.get(groupKey);
+    const rememberedLeader = groupLeaderByKeyRef.current.get(groupKey);
     if (rememberedLeader && groupInfo.tabs.includes(rememberedLeader)) {
       return rememberedLeader;
     }
     return groupInfo.tabs[0];
-  }, [groupKey, groupInfo, panelId]);
+  }, [groupKey, groupInfo, panelId, groupLeaderByKeyRef]);
   const isGroupLeader = groupInfo ? leaderPanelId === panelId : true;
   const groupTabCount = groupInfo?.tabs.length ?? 0;
 
@@ -382,19 +367,19 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   useLayoutEffect(() => {
     if (!groupKey || !groupInfo || groupInfo.tabs.length === 0) {
       if (groupKey) {
-        groupLeaderByKey.delete(groupKey);
+        groupLeaderByKeyRef.current.delete(groupKey);
       }
       return;
     }
     if (!isGroupLeader) {
       return;
     }
-    const previousLeader = groupLeaderByKey.get(groupKey);
+    const previousLeader = groupLeaderByKeyRef.current.get(groupKey);
     if (previousLeader && previousLeader !== panelId) {
       copyPanelLayoutState(previousLeader, panelId);
     }
-    groupLeaderByKey.set(groupKey, panelId);
-  }, [groupKey, groupInfo, isGroupLeader, panelId]);
+    groupLeaderByKeyRef.current.set(groupKey, panelId);
+  }, [groupKey, groupInfo, isGroupLeader, panelId, groupLeaderByKeyRef]);
 
   // Set CSS variables so .app-main can shrink the content area for docked panels.
   // Only the group leader sets these -- non-leaders must not touch the CSS variables,
@@ -473,53 +458,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     return title;
   }, [groupInfo, panelRegistrations, panelId, title]);
 
-  // -----------------------------------------------------------------------
-  // Tab drag callbacks -- forwarded to DockablePanelHeader / DockableTabBar
-  // -----------------------------------------------------------------------
-  const handleDragStateChange = useCallback(
-    (state: TabDragState | null) => {
-      setDragState(state);
-    },
-    [setDragState]
-  );
-
-  const handleReorderTab = useCallback(
-    (panelId: string, newIndex: number) => {
-      if (groupKey) reorderTabInGroup(groupKey, panelId, newIndex);
-    },
-    [groupKey, reorderTabInGroup]
-  );
-
-  const handleMoveToGroup = useCallback(
-    (panelId: string, targetGroupKey: string, insertIndex?: number) => {
-      // For recognized docked positions or floating group IDs, delegate to the provider.
-      movePanelBetweenGroups(panelId, targetGroupKey, insertIndex);
-      if (!isProviderActive) {
-        const targetPosition: DockPosition =
-          targetGroupKey === 'right' || targetGroupKey === 'bottom' ? targetGroupKey : 'floating';
-        setPanelPositionById(panelId, targetPosition);
-      }
-    },
-    [isProviderActive, movePanelBetweenGroups]
-  );
-
-  const handleUndockTab = useCallback(
-    (panelId: string, cursorX: number, cursorY: number) => {
-      // Move the tab to a new floating group and place its top-left corner
-      // at the drop cursor location.
-      movePanelBetweenGroups(panelId, 'floating');
-      if (!isProviderActive) {
-        setPanelPositionById(panelId, 'floating');
-      }
-      const contentBounds = getContentBounds();
-      setPanelFloatingPositionById(panelId, {
-        x: cursorX - contentBounds.left,
-        y: cursorY - contentBounds.top,
-      });
-    },
-    [isProviderActive, movePanelBetweenGroups]
-  );
-
   // Handle close -- closes the active tab. Only closes the panel if it's the last tab.
   const handleClose = useCallback(() => {
     const activeId = groupInfo?.activeTab;
@@ -551,7 +489,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       if (position === 'right' || position === 'bottom') {
         const targetGroupInfo = getGroupTabs(tabGroups, position);
         if (targetGroupInfo && targetGroupInfo.tabs.length > 0) {
-          const rememberedLeader = groupLeaderByKey.get(position);
+          const rememberedLeader = groupLeaderByKeyRef.current.get(position);
           focusTargetPanelId =
             rememberedLeader && targetGroupInfo.tabs.includes(rememberedLeader)
               ? rememberedLeader
@@ -560,29 +498,19 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       }
 
       if (position === 'floating') {
-        movePanelBetweenGroups(activePanelId, 'floating');
-        if (!isProviderActive) {
-          setPanelPositionById(activePanelId, 'floating');
-        }
-        focusPanelById(focusTargetPanelId);
+        movePanelBetweenGroupsAndFocus(activePanelId, 'floating', undefined, focusTargetPanelId);
         return;
       }
 
-      movePanelBetweenGroups(activePanelId, position);
-      if (!isProviderActive) {
-        setPanelPositionById(activePanelId, position);
-      }
-      focusPanelById(focusTargetPanelId);
-      setLastFocusedGroupKey(position);
+      movePanelBetweenGroupsAndFocus(activePanelId, position, undefined, focusTargetPanelId);
     },
     [
       groupInfo,
-      isProviderActive,
       panelId,
       tabGroups,
-      movePanelBetweenGroups,
+      groupLeaderByKeyRef,
+      movePanelBetweenGroupsAndFocus,
       isMaximized,
-      setLastFocusedGroupKey,
     ]
   );
 
@@ -700,11 +628,6 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
             }}
             groupKey={groupKey ?? panelId}
             onMouseDown={handleHeaderMouseDown}
-            dragState={dragState}
-            onDragStateChange={handleDragStateChange}
-            onReorderTab={handleReorderTab}
-            onMoveToGroup={handleMoveToGroup}
-            onUndockTab={handleUndockTab}
             controls={
               <DockablePanelControls
                 position={panelState.position}

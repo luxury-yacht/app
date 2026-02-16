@@ -44,6 +44,7 @@ import { useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { getGroupForPanel, getGroupTabs } from '@/components/dockable/tabGroupState';
+import type { DockPosition } from '@/components/dockable';
 
 // Tab configuration
 type DetailsSnapshotProps = Pick<
@@ -177,7 +178,12 @@ interface ObjectPanelProps {
 function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   const objectData = objectRef;
   const { closePanel } = useObjectPanelState();
-  const { tabGroups, getLastFocusedPosition } = useDockablePanelContext();
+  const { tabGroups, getPreferredOpenGroupKey } = useDockablePanelContext();
+  const openTargetGroupKey = getPreferredOpenGroupKey('right');
+  const openTargetPosition: DockPosition =
+    openTargetGroupKey === 'right' || openTargetGroupKey === 'bottom'
+      ? openTargetGroupKey
+      : 'floating';
 
   // Determine whether this tab is active within its group (for polling control).
   const groupKey = getGroupForPanel(tabGroups, panelId);
@@ -636,7 +642,8 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         panelId={panelId}
         title={tabTitle}
         isOpen={isOpen}
-        defaultPosition={getLastFocusedPosition()}
+        defaultPosition={openTargetPosition}
+        defaultGroupKey={openTargetGroupKey}
         className="object-panel-dockable"
         tabKindClass={tabKindClass}
         allowMaximize

@@ -35,6 +35,10 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   }),
 }));
 
+vi.mock('@/components/dockable/useDockablePanelState', () => ({
+  clearPanelState: vi.fn(),
+}));
+
 beforeAll(() => {
   (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 });

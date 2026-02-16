@@ -29,6 +29,7 @@ import {
   getAllPanelStates,
   restorePanelStates,
 } from './useDockablePanelState';
+import { DockablePanelProvider } from './DockablePanelProvider';
 
 type HookResult = ReturnType<typeof useDockablePanelState>;
 
@@ -52,7 +53,11 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
   };
 
   await act(async () => {
-    root.render(<HookConsumer id={panelId} />);
+    root.render(
+      <DockablePanelProvider>
+        <HookConsumer id={panelId} />
+      </DockablePanelProvider>
+    );
     await Promise.resolve();
   });
 
@@ -71,7 +76,11 @@ const renderHook = async (panelId: string): Promise<HookHarness> => {
     },
     rerender: async () => {
       await act(async () => {
-        root.render(<HookConsumer id={panelId} />);
+        root.render(
+          <DockablePanelProvider>
+            <HookConsumer id={panelId} />
+          </DockablePanelProvider>
+        );
         await Promise.resolve();
       });
     },

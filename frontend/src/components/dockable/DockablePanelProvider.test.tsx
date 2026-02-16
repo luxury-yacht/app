@@ -11,6 +11,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { DockablePanelProvider, useDockablePanelContext } from './DockablePanelProvider';
+import { DockableTabBar } from './DockableTabBar';
 
 const render = async (element: React.ReactElement) => {
   const container = document.createElement('div');
@@ -33,6 +34,23 @@ const render = async (element: React.ReactElement) => {
   };
 };
 
+const setRect = (element: Element, left: number, right: number, top = 0, bottom = 28) => {
+  Object.defineProperty(element, 'getBoundingClientRect', {
+    configurable: true,
+    value: () => ({
+      x: left,
+      y: top,
+      left,
+      right,
+      top,
+      bottom,
+      width: right - left,
+      height: bottom - top,
+      toJSON: () => ({}),
+    }),
+  });
+};
+
 describe('DockablePanelProvider', () => {
   beforeAll(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -50,82 +68,9 @@ describe('DockablePanelProvider', () => {
     while (document.body.firstChild) {
       document.body.removeChild(document.body.firstChild);
     }
+    Reflect.deleteProperty(document, 'elementFromPoint');
     document.documentElement.style.removeProperty('--dock-right-offset');
     document.documentElement.style.removeProperty('--dock-bottom-offset');
-  });
-
-  it('provides no-op defaults when used without a provider', () => {
-    const TestConsumer: React.FC = () => {
-      const ctx = useDockablePanelContext();
-      expect(ctx.dockedPanels).toEqual({ right: [], bottom: [] });
-      expect(ctx.getAdjustedDimensions()).toEqual({ rightOffset: 0, bottomOffset: 0 });
-      // New API: registerPanel takes a PanelRegistration object.
-      ctx.registerPanel({ panelId: 'test', title: 'Test', position: 'right' });
-      ctx.syncPanelGroup('test', 'right');
-      ctx.removePanelFromGroups('test');
-      ctx.unregisterPanel('test');
-      return null;
-    };
-
-    void render(<TestConsumer />);
-  });
-
-  it('tracks registered panels and exposes adjusted dimensions', async () => {
-    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
-      current: null,
-    };
-
-    const Consumer: React.FC = () => {
-      contextRef.current = useDockablePanelContext();
-      return null;
-    };
-
-    const { unmount } = await render(
-      <DockablePanelProvider>
-        <Consumer />
-      </DockablePanelProvider>
-    );
-
-    const ctx = contextRef.current!;
-    expect(ctx.dockedPanels.right).toEqual([]);
-    expect(ctx.getAdjustedDimensions()).toEqual({ rightOffset: 0, bottomOffset: 0 });
-
-    await act(async () => {
-      ctx.registerPanel({ panelId: 'panel-right', title: 'Right Panel', position: 'right' });
-      ctx.syncPanelGroup('panel-right', 'right');
-      await Promise.resolve();
-    });
-    expect(contextRef.current!.dockedPanels.right).toEqual(['panel-right']);
-    expect(contextRef.current!.getAdjustedDimensions()).toEqual({
-      rightOffset: 400,
-      bottomOffset: 0,
-    });
-    // CSS variables (--dock-right-offset, --dock-bottom-offset) are set by
-    // individual DockablePanel instances, not the provider.
-
-    await act(async () => {
-      contextRef.current!.registerPanel({
-        panelId: 'panel-bottom',
-        title: 'Bottom Panel',
-        position: 'bottom',
-      });
-      contextRef.current!.syncPanelGroup('panel-bottom', 'bottom');
-      await Promise.resolve();
-    });
-    expect(contextRef.current!.dockedPanels.bottom).toEqual(['panel-bottom']);
-    expect(contextRef.current!.getAdjustedDimensions()).toEqual({
-      rightOffset: 400,
-      bottomOffset: 300,
-    });
-
-    await act(async () => {
-      contextRef.current!.removePanelFromGroups('panel-right');
-      contextRef.current!.unregisterPanel('panel-right');
-      await Promise.resolve();
-    });
-    expect(contextRef.current!.dockedPanels.right).toEqual([]);
-
-    await unmount();
   });
 
   it('creates a shared host layer inside .content', async () => {
@@ -234,12 +179,14 @@ describe('DockablePanelProvider', () => {
         position: 'right',
         tabKindClass: 'pod',
       });
-      contextRef.current!.setDragState({
-        panelId: 'drag-tab',
-        sourceGroupKey: 'right',
-        cursorPosition: { x: 100, y: 80 },
-        dropTarget: null,
+      contextRef.current!.startTabDrag('drag-tab', 'right', 100, 80);
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: () => null,
       });
+      document.dispatchEvent(
+        new MouseEvent('mousemove', { bubbles: true, clientX: 110, clientY: 80 })
+      );
       await Promise.resolve();
     });
 
@@ -248,14 +195,16 @@ describe('DockablePanelProvider', () => {
     expect(preview?.textContent).toContain('Drag Tab');
     expect(preview?.querySelector('.dockable-tab-drag-preview__kind.pod')).toBeTruthy();
     expect(document.documentElement.style.getPropertyValue('--dockable-tab-drag-x')).toContain(
-      '114'
+      '124'
     );
     expect(document.documentElement.style.getPropertyValue('--dockable-tab-drag-y')).toContain(
       '96'
     );
 
     await act(async () => {
-      contextRef.current!.setDragState(null);
+      document.dispatchEvent(
+        new MouseEvent('mouseup', { bubbles: true, clientX: 110, clientY: 80 })
+      );
       await Promise.resolve();
     });
 
@@ -311,6 +260,65 @@ describe('DockablePanelProvider', () => {
     await unmount();
   });
 
+  it('keeps an already-floating panel in its own group during subsequent syncs', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'float-a',
+        title: 'Float A',
+        position: 'floating',
+      });
+      contextRef.current!.syncPanelGroup('float-a', 'floating');
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'right-b',
+        title: 'Right B',
+        position: 'right',
+      });
+      contextRef.current!.syncPanelGroup('right-b', 'right');
+      contextRef.current!.setLastFocusedGroupKey('floating-1');
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      contextRef.current!.movePanelBetweenGroups('right-b', 'floating');
+      await Promise.resolve();
+    });
+
+    // Existing floating panel should remain in floating-1 even after another
+    // tab is moved to a new floating group and this panel re-syncs.
+    await act(async () => {
+      contextRef.current!.syncPanelGroup('float-a', 'floating');
+      await Promise.resolve();
+    });
+
+    const floatingGroups = contextRef.current!.tabGroups.floating;
+    expect(floatingGroups).toHaveLength(2);
+    expect(floatingGroups[0].groupId).toBe('floating-1');
+    expect(floatingGroups[0].tabs).toEqual(['float-a']);
+    expect(floatingGroups[1].groupId).toBe('floating-2');
+    expect(floatingGroups[1].tabs).toEqual(['right-b']);
+
+    await unmount();
+  });
+
   it('returns right as default open position when no focused group exists', async () => {
     const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
       current: null,
@@ -345,6 +353,40 @@ describe('DockablePanelProvider', () => {
     });
 
     expect(contextRef.current!.getLastFocusedPosition()).toBe('floating');
+
+    await unmount();
+  });
+
+  it('resolves preferred open target group key from focus with fallback', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    expect(contextRef.current!.getPreferredOpenGroupKey('bottom')).toBe('bottom');
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'float-a',
+        title: 'Float A',
+        position: 'floating',
+      });
+      contextRef.current!.syncPanelGroup('float-a', 'floating');
+      contextRef.current!.setLastFocusedGroupKey('floating-1');
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.getPreferredOpenGroupKey('right')).toBe('floating-1');
 
     await unmount();
   });
@@ -397,6 +439,235 @@ describe('DockablePanelProvider', () => {
     expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
     expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['obj-a', 'obj-b']);
 
+    await unmount();
+  });
+
+  it('moves and focuses via the centralized movePanelBetweenGroupsAndFocus command', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      contextRef.current = useDockablePanelContext();
+      return null;
+    };
+
+    const { unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'obj-a',
+        title: 'Object A',
+        position: 'right',
+      });
+      contextRef.current!.syncPanelGroup('obj-a', 'right');
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      contextRef.current!.movePanelBetweenGroupsAndFocus('obj-a', 'floating');
+      await Promise.resolve();
+    });
+
+    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
+    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['obj-a']);
+    expect(contextRef.current!.getLastFocusedPosition()).toBe('floating');
+
+    await unmount();
+  });
+
+  it('moves a tab between groups through the provider drag controller', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      const ctx = useDockablePanelContext();
+      contextRef.current = ctx;
+      const bottomTabs = ctx.tabGroups.bottom.tabs.map((panelId) => ({
+        panelId,
+        title: ctx.panelRegistrations.get(panelId)?.title ?? panelId,
+      }));
+      const rightTabs = ctx.tabGroups.right.tabs.map((panelId) => ({
+        panelId,
+        title: ctx.panelRegistrations.get(panelId)?.title ?? panelId,
+      }));
+      return (
+        <>
+          <DockableTabBar
+            tabs={bottomTabs}
+            activeTab={ctx.tabGroups.bottom.activeTab}
+            onTabClick={() => {}}
+            groupKey="bottom"
+          />
+          <DockableTabBar
+            tabs={rightTabs}
+            activeTab={ctx.tabGroups.right.activeTab}
+            onTabClick={() => {}}
+            groupKey="right"
+          />
+        </>
+      );
+    };
+
+    const { container, unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'bottom-a',
+        title: 'Bottom A',
+        position: 'bottom',
+      });
+      contextRef.current!.syncPanelGroup('bottom-a', 'bottom');
+      contextRef.current!.registerPanel({
+        panelId: 'bottom-b',
+        title: 'Bottom B',
+        position: 'bottom',
+      });
+      contextRef.current!.syncPanelGroup('bottom-b', 'bottom');
+      contextRef.current!.registerPanel({
+        panelId: 'right-a',
+        title: 'Right A',
+        position: 'right',
+      });
+      contextRef.current!.syncPanelGroup('right-a', 'right');
+      await Promise.resolve();
+    });
+
+    const bars = container.querySelectorAll('.dockable-tab-bar');
+    const bottomBar = bars[0] as HTMLElement;
+    const rightBar = bars[1] as HTMLElement;
+    const bottomTabs = bottomBar.querySelectorAll('.dockable-tab');
+    const rightTabs = rightBar.querySelectorAll('.dockable-tab');
+    const draggedTab = bottomTabs[0] as HTMLElement;
+
+    setRect(bottomBar, 0, 320, 0, 30);
+    setRect(rightBar, 400, 720, 0, 30);
+    setRect(bottomTabs[0], 0, 120, 0, 30);
+    setRect(bottomTabs[1], 120, 240, 0, 30);
+    setRect(rightTabs[0], 400, 520, 0, 30);
+
+    const originalElementFromPoint = (
+      document as Document & {
+        elementFromPoint?: (x: number, y: number) => Element | null;
+      }
+    ).elementFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: (x: number) => (x >= 380 ? rightBar : bottomBar),
+    });
+
+    await act(async () => {
+      draggedTab.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 20, clientY: 12 })
+      );
+      document.dispatchEvent(
+        new MouseEvent('mousemove', { bubbles: true, clientX: 470, clientY: 12 })
+      );
+      document.dispatchEvent(
+        new MouseEvent('mouseup', { bubbles: true, clientX: 470, clientY: 12 })
+      );
+    });
+
+    expect(contextRef.current!.tabGroups.bottom.tabs).toEqual(['bottom-b']);
+    expect(contextRef.current!.tabGroups.right.tabs).toEqual(['right-a', 'bottom-a']);
+
+    if (originalElementFromPoint) {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: originalElementFromPoint,
+      });
+    } else {
+      Reflect.deleteProperty(document, 'elementFromPoint');
+    }
+    await unmount();
+  });
+
+  it('undocks a tab through the provider drag controller when dropped away from tab bars', async () => {
+    const contextRef: { current: ReturnType<typeof useDockablePanelContext> | null } = {
+      current: null,
+    };
+
+    const Consumer: React.FC = () => {
+      const ctx = useDockablePanelContext();
+      contextRef.current = ctx;
+      const bottomTabs = ctx.tabGroups.bottom.tabs.map((panelId) => ({
+        panelId,
+        title: ctx.panelRegistrations.get(panelId)?.title ?? panelId,
+      }));
+      return (
+        <DockableTabBar
+          tabs={bottomTabs}
+          activeTab={ctx.tabGroups.bottom.activeTab}
+          onTabClick={() => {}}
+          groupKey="bottom"
+        />
+      );
+    };
+
+    const { container, unmount } = await render(
+      <DockablePanelProvider>
+        <Consumer />
+      </DockablePanelProvider>
+    );
+
+    await act(async () => {
+      contextRef.current!.registerPanel({
+        panelId: 'bottom-a',
+        title: 'Bottom A',
+        position: 'bottom',
+      });
+      contextRef.current!.syncPanelGroup('bottom-a', 'bottom');
+      await Promise.resolve();
+    });
+
+    const bottomBar = container.querySelector('.dockable-tab-bar') as HTMLElement;
+    const draggedTab = container.querySelector('.dockable-tab') as HTMLElement;
+    setRect(bottomBar, 0, 320, 0, 24);
+    setRect(draggedTab, 0, 120, 0, 24);
+
+    const originalElementFromPoint = (
+      document as Document & {
+        elementFromPoint?: (x: number, y: number) => Element | null;
+      }
+    ).elementFromPoint;
+    Object.defineProperty(document, 'elementFromPoint', {
+      configurable: true,
+      value: () => null,
+    });
+
+    await act(async () => {
+      draggedTab.dispatchEvent(
+        new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 20, clientY: 10 })
+      );
+      document.dispatchEvent(
+        new MouseEvent('mousemove', { bubbles: true, clientX: 220, clientY: 220 })
+      );
+      document.dispatchEvent(
+        new MouseEvent('mouseup', { bubbles: true, clientX: 220, clientY: 220 })
+      );
+    });
+
+    expect(contextRef.current!.tabGroups.bottom.tabs).toEqual([]);
+    expect(contextRef.current!.tabGroups.floating).toHaveLength(1);
+    expect(contextRef.current!.tabGroups.floating[0].tabs).toEqual(['bottom-a']);
+
+    if (originalElementFromPoint) {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: originalElementFromPoint,
+      });
+    } else {
+      Reflect.deleteProperty(document, 'elementFromPoint');
+    }
     await unmount();
   });
 });
