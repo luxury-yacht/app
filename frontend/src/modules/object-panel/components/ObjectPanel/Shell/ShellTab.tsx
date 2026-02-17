@@ -164,6 +164,46 @@ const ShellTab: React.FC<ShellTabProps> = ({
     };
   }, []);
 
+  const applyTerminalTheme = useCallback(() => {
+    const terminal = terminalRef.current as
+      | (Terminal & {
+          options?: {
+            theme?: {
+              background?: string;
+              foreground?: string;
+              cursor?: string;
+              selectionBackground?: string;
+              scrollbarSliderBackground?: string;
+              scrollbarSliderHoverBackground?: string;
+              scrollbarSliderActiveBackground?: string;
+              overviewRulerBorder?: string;
+            };
+            overviewRuler?: { width?: number };
+          };
+          refresh?: (start: number, end: number) => void;
+        })
+      | null;
+    if (!terminal || !terminal.options) {
+      return;
+    }
+
+    const theme = resolveThemeColors();
+    terminal.options.theme = {
+      background: theme.background,
+      foreground: theme.foreground,
+      cursor: theme.cursor,
+      selectionBackground: theme.selectionBackground,
+      scrollbarSliderBackground: theme.scrollbarSlider,
+      scrollbarSliderHoverBackground: theme.scrollbarSliderHover,
+      scrollbarSliderActiveBackground: theme.scrollbarSliderActive,
+      overviewRulerBorder: theme.overviewRulerBorder,
+    };
+    terminal.options.overviewRuler = {
+      width: theme.scrollbarWidth,
+    };
+    terminal.refresh?.(0, Math.max(0, terminal.rows - 1));
+  }, [resolveThemeColors]);
+
   const ensureTerminal = useCallback(() => {
     if (terminalRef.current || !terminalContainerRef.current) {
       return;
@@ -282,6 +322,20 @@ const ShellTab: React.FC<ShellTabProps> = ({
       disposeTerminal();
     };
   }, [disposeTerminal]);
+
+  useEffect(() => {
+    const checkTheme = () => {
+      applyTerminalTheme();
+    };
+
+    const observer = new MutationObserver(checkTheme);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'class'],
+    });
+
+    return () => observer.disconnect();
+  }, [applyTerminalTheme]);
 
   useEffect(() => {
     if (!terminalReady || !isActive) {

@@ -122,7 +122,6 @@
 .shell-tab__terminal-wrapper {
   position: relative;
   flex: 1;
-  /* min-height: 260px; */
 }
 
 .shell-tab__terminal {
