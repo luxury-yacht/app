@@ -16,41 +16,49 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.5rem;
-  width: 100%;
+  gap: 0.6rem;
+  width: min(100%, 640px);
 }
 
-.shell-tab__controls-row {
-  display: flex;
+.shell-tab__debug-toggle {
+  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  width: 100%;
-}
-
-.shell-tab__controls-row--primary {
-  flex-wrap: wrap;
-}
-
-.shell-tab__controls-row--secondary {
-  flex-wrap: wrap;
-}
-
-.shell-tab__mode-toggle .segmented-button__option {
-  padding: 0.25rem 0.6rem;
-  font-size: 0.8rem;
-  min-height: 26px;
-}
-
-.shell-tab__control {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
   font-weight: 500;
+  color: var(--color-text, #1f2933);
+  cursor: pointer;
 }
 
-.shell-tab__control select {
-  font-size: 0.875rem;
-  padding: 0.15rem 0.35rem;
+.shell-tab__debug-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.shell-tab__controls-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: max-content minmax(240px, 1fr);
+  gap: 0.5rem 0.75rem;
+  align-items: center;
+}
+
+.shell-tab__control-label {
+  font-weight: 500;
+  color: var(--color-text, #1f2933);
+  white-space: nowrap;
+}
+
+.shell-tab__control-input {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  gap: 0.4rem;
+}
+
+.shell-tab__control-input .dropdown {
+  align-self: flex-start;
 }
 
 .shell-tab__button {
@@ -60,6 +68,7 @@
   border-radius: 4px;
   font-size: 0.8rem;
   cursor: pointer;
+  align-self: flex-start;
 }
 
 .shell-tab__debug-button {
@@ -69,31 +78,7 @@
   border-radius: 4px;
   font-size: 0.8rem;
   cursor: pointer;
-}
-
-.shell-tab__badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  background: var(--color-surface-muted, #e2e8f0);
-  color: var(--color-text, #0f172a);
-}
-
-.shell-tab__badge--open {
-  background: #0f9d58;
-  color: #fff;
-}
-
-.shell-tab__badge--pending {
-  background: #fbbf24;
-  color: #1f2933;
-}
-
-.shell-tab__badge--error {
-  background: #ef4444;
-  color: #fff;
+  align-self: flex-start;
 }
 
 .shell-tab__notice {
@@ -111,6 +96,7 @@
   border-radius: 4px;
   background: var(--color-bg, #ffffff);
   color: var(--color-text, #1f2933);
+  width: 100%;
   min-width: 140px;
 }
 
@@ -155,4 +141,15 @@
 
 .shell-tab__terminal .xterm-viewport {
   background-color: transparent;
+}
+
+@media (max-width: 640px) {
+  .shell-tab__controls {
+    width: 100%;
+  }
+
+  .shell-tab__controls-grid {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
 }

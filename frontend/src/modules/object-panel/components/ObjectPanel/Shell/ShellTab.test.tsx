@@ -119,12 +119,18 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
     value = '',
     onChange,
     options = [],
+    ariaLabel,
   }: {
     value?: string;
     onChange?: (value: string) => void;
     options?: Array<{ value: string; label: string }>;
+    ariaLabel?: string;
   }) => (
-    <select value={value} onChange={(event) => onChange?.(event.target.value)}>
+    <select
+      value={value}
+      aria-label={ariaLabel}
+      onChange={(event) => onChange?.(event.target.value)}
+    >
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
@@ -211,6 +217,17 @@ describe('ShellTab', () => {
     expect(button).toBeTruthy();
     act(() => {
       button?.click();
+    });
+  };
+
+  const setDebugContainerEnabled = (enabled: boolean) => {
+    const checkbox = container.querySelector<HTMLInputElement>('#shell-tab-debug-toggle');
+    expect(checkbox).toBeTruthy();
+    if (checkbox?.checked === enabled) {
+      return;
+    }
+    act(() => {
+      checkbox?.click();
     });
   };
 
@@ -362,8 +379,8 @@ describe('ShellTab', () => {
     await renderShellTab();
     await flushAsync();
 
-    const connectBtn = container.querySelector('.shell-tab__button') as HTMLButtonElement;
-    expect(connectBtn.textContent).toContain('Disconnect');
+    expect(container.querySelector('.shell-tab__controls')).toBeNull();
+    expect(container.querySelector('#shell-tab-debug-toggle')).toBeNull();
     expect(wailsMocks.StartShellSession).not.toHaveBeenCalled();
   });
 
@@ -389,36 +406,26 @@ describe('ShellTab', () => {
     expect(terminal?.write).toHaveBeenCalledWith('prior output\r\n$ ');
   });
 
-  it('renders mode toggle with Shell and Debug options', async () => {
+  it('renders a debug checkbox toggle', async () => {
     await renderShellTab();
-    const toggle = container.querySelector('.segmented-button');
+    const toggle = container.querySelector<HTMLInputElement>('#shell-tab-debug-toggle');
     expect(toggle).not.toBeNull();
-    const options = container.querySelectorAll('.segmented-button__option');
-    expect(options).toHaveLength(2);
-    expect(options[0].textContent).toBe('Shell');
-    expect(options[1].textContent).toBe('Debug');
+    expect(toggle?.checked).toBe(false);
   });
 
-  it('shows debug controls when Debug mode is selected', async () => {
+  it('shows debug controls when debug container toggle is enabled', async () => {
     await renderShellTab();
-    const options = container.querySelectorAll('.segmented-button__option');
-    act(() => {
-      (options[1] as HTMLButtonElement).click();
-    });
+    setDebugContainerEnabled(true);
     await flushAsync();
 
     const debugButton = container.querySelector('.shell-tab__debug-button');
     expect(debugButton).not.toBeNull();
-    expect(debugButton?.textContent).toBe('Debug');
+    expect(debugButton?.textContent).toBe('Start Debug Container');
   });
 
   it('calls CreateDebugContainer on debug action', async () => {
     await renderShellTab({ availableContainers: ['app'] });
-
-    const modeOptions = container.querySelectorAll('.segmented-button__option');
-    act(() => {
-      (modeOptions[1] as HTMLButtonElement).click();
-    });
+    setDebugContainerEnabled(true);
     await flushAsync();
 
     const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
@@ -436,13 +443,11 @@ describe('ShellTab', () => {
   });
 
   it('shows error when CreateDebugContainer fails', async () => {
-    wailsMocks.CreateDebugContainer.mockRejectedValue(new Error('ephemeral containers not supported'));
+    wailsMocks.CreateDebugContainer.mockRejectedValue(
+      new Error('ephemeral containers not supported')
+    );
     await renderShellTab({ availableContainers: ['app'] });
-
-    const modeOptions = container.querySelectorAll('.segmented-button__option');
-    act(() => {
-      (modeOptions[1] as HTMLButtonElement).click();
-    });
+    setDebugContainerEnabled(true);
     await flushAsync();
 
     const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
@@ -460,11 +465,7 @@ describe('ShellTab', () => {
 
   it('shows custom image input when Custom... is selected', async () => {
     await renderShellTab({ availableContainers: ['app'] });
-
-    const modeOptions = container.querySelectorAll('.segmented-button__option');
-    act(() => {
-      (modeOptions[1] as HTMLButtonElement).click();
-    });
+    setDebugContainerEnabled(true);
     await flushAsync();
 
     let customInput = container.querySelector('.shell-tab__custom-image-input');
@@ -487,11 +488,7 @@ describe('ShellTab', () => {
       availableContainers: ['app'],
       debugDisabledReason: 'Missing permission: update pods/ephemeralcontainers',
     });
-
-    const modeOptions = container.querySelectorAll('.segmented-button__option');
-    act(() => {
-      (modeOptions[1] as HTMLButtonElement).click();
-    });
+    setDebugContainerEnabled(true);
     await flushAsync();
 
     const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
@@ -508,11 +505,7 @@ describe('ShellTab', () => {
       availableContainers: ['app'],
       disabledReason: 'Missing permission: create pods/exec',
     });
-
-    const modeOptions = container.querySelectorAll('.segmented-button__option');
-    act(() => {
-      (modeOptions[1] as HTMLButtonElement).click();
-    });
+    setDebugContainerEnabled(true);
     await flushAsync();
 
     const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
@@ -524,6 +517,17 @@ describe('ShellTab', () => {
       await flushAsync();
     });
     expect(wailsMocks.CreateDebugContainer).not.toHaveBeenCalled();
+  });
+
+  it('hides controls while a shell session is active', async () => {
+    await renderShellTab();
+    clickConnectButton();
+    await flushAsync();
+    emitEvent('object-shell:status', { sessionId: 'sess-1', status: 'open' });
+    await flushAsync();
+
+    expect(container.querySelector('.shell-tab__controls')).toBeNull();
+    expect(container.querySelector('#shell-tab-debug-toggle')).toBeNull();
   });
 
   it('includes debug containers in shell dropdown from backend container discovery', async () => {

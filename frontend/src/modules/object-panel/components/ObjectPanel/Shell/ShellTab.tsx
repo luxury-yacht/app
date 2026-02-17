@@ -24,7 +24,6 @@ import {
 import { types } from '@wailsjs/go/models';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import SegmentedButton from '@shared/components/SegmentedButton';
 import { useDockablePanelState } from '@/components/dockable';
 import './ShellTab.css';
 
@@ -61,9 +60,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
   availableContainers,
   clusterId,
 }) => {
+  const shellDropdownMenuClassName = 'shell-tab__dropdown-menu';
   const panelState = useDockablePanelState('object-panel');
   const [session, setSession] = useState<types.ShellSession | null>(null);
-  const [mode, setMode] = useState<'shell' | 'debug'>('shell');
+  const [startDebugContainer, setStartDebugContainer] = useState(false);
   const [status, setStatus] = useState<ShellStatus>('idle');
   const [containerOverride, setContainerOverride] = useState<string | null>(null);
   const [commandOverride, setCommandOverride] = useState<string>('/bin/sh');
@@ -260,15 +260,6 @@ const ShellTab: React.FC<ShellTabProps> = ({
     },
     [writeToTerminal]
   );
-
-  const closeSession = useCallback((sessionId: string | null) => {
-    if (!sessionId) {
-      return;
-    }
-    void CloseShellSession(sessionId).catch(() => {
-      /* ignore */
-    });
-  }, []);
 
   const initiateConnection = useCallback(() => {
     setStatusReason(null);
@@ -473,19 +464,6 @@ const ShellTab: React.FC<ShellTabProps> = ({
     void attachLatestTrackedSession();
   }, [attachLatestTrackedSession, isActive, refreshContainers]);
 
-  const handleDisconnect = useCallback(() => {
-    if (!sessionIdRef.current) {
-      return;
-    }
-    const currentId = sessionIdRef.current;
-    sessionIdRef.current = null;
-    closeSession(currentId);
-    setSession(null);
-    setStatus('closed');
-    setStatusReason('Disconnected by user.');
-    disposeTerminal();
-  }, [closeSession, disposeTerminal]);
-
   const containerOptions = useMemo<DropdownOption[]>(() => {
     const merged = new Set<string>();
     availableContainers.forEach((name) => {
@@ -584,8 +562,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
         image: resolvedDebugImage,
         targetContainer: debugTarget || containerOptions[0]?.value || '',
       });
-      // Switch back to shell mode, target the new container, and connect.
-      setMode('shell');
+      // Revert to default shell controls, target the new container, and connect.
+      setStartDebugContainer(false);
       setContainerOverride(response.containerName);
       void refreshContainers();
       setTimeout(() => {
@@ -617,8 +595,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
   ]);
 
   const placeholderMessage = useMemo(() => {
-    if (mode === 'debug') {
-      return 'Select a debug image, target container, and shell, then click Debug to start a debug session. Debug containers persist until the pod is deleted.';
+    if (startDebugContainer) {
+      return 'Select a debug image, target container, and shell, then click Start Debug Container. Debug containers persist until the pod is deleted.';
     }
     if (status === 'connecting') {
       return 'Connecting shell session...';
@@ -632,119 +610,129 @@ const ShellTab: React.FC<ShellTabProps> = ({
       return statusReason || 'Shell session closed. Press Connect to start a new session.';
     }
     return 'Select a container and shell, then click Connect to start a session.';
-  }, [mode, status, statusReason]);
-
-  const overridesDisabled = status === 'open';
+  }, [startDebugContainer, status, statusReason]);
+  const hasActiveSession = status === 'open' || status === 'connecting';
 
   return (
     <div className="object-panel-shell-tab">
-      <div className="shell-tab__toolbar">
-        <div className="shell-tab__controls">
-          <div className="shell-tab__controls-row shell-tab__controls-row--primary">
-            <SegmentedButton
-              options={[
-                { value: 'shell' as const, label: 'Shell' },
-                { value: 'debug' as const, label: 'Debug' },
-              ]}
-              value={mode}
-              onChange={setMode}
-              size="small"
-              className="shell-tab__mode-toggle"
-            />
-            {mode === 'debug' && (
-              <>
-                <Dropdown
-                  options={debugImageOptions}
-                  value={debugImage}
-                  onChange={handleDebugImageChange}
-                  size="compact"
-                  placeholder="Select image"
-                  ariaLabel="Debug container image"
-                />
-                {debugImage === '__custom__' && (
-                  <input
-                    className="shell-tab__custom-image-input"
-                    type="text"
-                    value={customImage}
-                    onChange={(event) => setCustomImage(event.target.value)}
-                    placeholder="image:tag"
-                    aria-label="Custom debug image"
-                  />
-                )}
-              </>
-            )}
-          </div>
-          <div className="shell-tab__controls-row shell-tab__controls-row--secondary">
-            {mode === 'shell' ? (
-              <>
-                <Dropdown
-                  options={containerOptions}
-                  value={activeContainer || containerOptions[0]?.value || ''}
-                  onChange={handleContainerChange}
-                  disabled={overridesDisabled}
-                  size="compact"
-                  placeholder="Containers unavailable"
-                  ariaLabel="Shell container selector"
-                />
-                <Dropdown
-                  options={shellOptions}
-                  value={commandOverride}
-                  onChange={handleShellChange}
-                  disabled={overridesDisabled}
-                  size="compact"
-                  placeholder="Select shell"
-                  ariaLabel="Shell command selector"
-                />
-                <button
-                  type="button"
-                  className="button generic shell-tab__button"
-                  onClick={status === 'open' ? handleDisconnect : handleReconnect}
-                  disabled={status === 'connecting'}
-                >
-                  {status === 'open'
-                    ? 'Disconnect'
-                    : status === 'connecting'
-                      ? 'Connecting...'
-                      : 'Connect'}
-                </button>
-              </>
-            ) : (
-              <>
-                <Dropdown
-                  options={containerOptions}
-                  value={debugTarget || containerOptions[0]?.value || ''}
-                  onChange={handleDebugTargetChange}
-                  size="compact"
-                  placeholder="Target container"
-                  ariaLabel="Target container for process sharing"
-                />
-                <Dropdown
-                  options={shellOptions}
-                  value={commandOverride}
-                  onChange={handleShellChange}
-                  size="compact"
-                  placeholder="Select shell"
-                  ariaLabel="Shell command selector"
-                />
-                <button
-                  type="button"
-                  className="button generic shell-tab__debug-button"
-                  onClick={handleDebug}
-                  disabled={
-                    debugCreating ||
+      {!hasActiveSession && (
+        <div className="shell-tab__toolbar">
+          <div className="shell-tab__controls">
+            <label className="shell-tab__debug-toggle" htmlFor="shell-tab-debug-toggle">
+              <input
+                id="shell-tab-debug-toggle"
+                type="checkbox"
+                checked={startDebugContainer}
+                onChange={(event) => setStartDebugContainer(event.target.checked)}
+              />
+              <span>Start a debug container</span>
+            </label>
+            <div className="shell-tab__controls-grid">
+              {startDebugContainer ? (
+                <>
+                  <div className="shell-tab__control-label">Debug Image:</div>
+                  <div className="shell-tab__control-input">
+                    <Dropdown
+                      options={debugImageOptions}
+                      value={debugImage}
+                      onChange={handleDebugImageChange}
+                      size="compact"
+                      dropdownClassName={shellDropdownMenuClassName}
+                      placeholder="Select image"
+                      ariaLabel="Debug container image"
+                    />
+                    {debugImage === '__custom__' && (
+                      <input
+                        className="shell-tab__custom-image-input"
+                        type="text"
+                        value={customImage}
+                        onChange={(event) => setCustomImage(event.target.value)}
+                        placeholder="image:tag"
+                        aria-label="Custom debug image"
+                      />
+                    )}
+                  </div>
+                  <div className="shell-tab__control-label">Target Container:</div>
+                  <div className="shell-tab__control-input">
+                    <Dropdown
+                      options={containerOptions}
+                      value={debugTarget || containerOptions[0]?.value || ''}
+                      onChange={handleDebugTargetChange}
+                      size="compact"
+                      dropdownClassName={shellDropdownMenuClassName}
+                      placeholder="Target container"
+                      ariaLabel="Target container for process sharing"
+                    />
+                  </div>
+                  <div className="shell-tab__control-label">Shell:</div>
+                  <div className="shell-tab__control-input">
+                    <Dropdown
+                      options={shellOptions}
+                      value={commandOverride}
+                      onChange={handleShellChange}
+                      size="compact"
+                      dropdownClassName={shellDropdownMenuClassName}
+                      placeholder="Select shell"
+                      ariaLabel="Shell command selector"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="shell-tab__control-label">Container:</div>
+                  <div className="shell-tab__control-input">
+                    <Dropdown
+                      options={containerOptions}
+                      value={activeContainer || containerOptions[0]?.value || ''}
+                      onChange={handleContainerChange}
+                      size="compact"
+                      dropdownClassName={shellDropdownMenuClassName}
+                      placeholder="Containers unavailable"
+                      ariaLabel="Shell container selector"
+                    />
+                  </div>
+                  <div className="shell-tab__control-label">Shell:</div>
+                  <div className="shell-tab__control-input">
+                    <Dropdown
+                      options={shellOptions}
+                      value={commandOverride}
+                      onChange={handleShellChange}
+                      size="compact"
+                      dropdownClassName={shellDropdownMenuClassName}
+                      placeholder="Select shell"
+                      ariaLabel="Shell command selector"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+            <button
+              type="button"
+              className={`button generic ${
+                startDebugContainer ? 'shell-tab__debug-button' : 'shell-tab__button'
+              }`}
+              onClick={startDebugContainer ? handleDebug : handleReconnect}
+              disabled={
+                startDebugContainer
+                  ? debugCreating ||
                     !resolvedDebugImage ||
                     !!debugDisabledReason ||
                     !!disabledReason
-                  }
-                >
-                  {debugCreating ? 'Creating...' : 'Debug'}
-                </button>
-              </>
-            )}
+                  : status === 'connecting'
+              }
+            >
+              {startDebugContainer
+                ? debugCreating
+                  ? 'Creating...'
+                  : 'Start Debug Container'
+                : status === 'connecting'
+                  ? 'Connecting...'
+                  : 'Connect'}
+            </button>
           </div>
         </div>
-      </div>
-      {mode === 'debug' && debugDisabledReason && (
+      )}
+      {startDebugContainer && !hasActiveSession && debugDisabledReason && (
         <div className="shell-tab__debug-warning">
           <>
             Debug unavailable: <span>{debugDisabledReason}</span>
