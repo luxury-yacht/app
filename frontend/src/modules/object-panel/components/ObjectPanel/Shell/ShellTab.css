@@ -140,12 +140,71 @@
 }
 
 .shell-tab__terminal .xterm {
-  padding: 0 0.5rem;
+  padding: 0;
   height: 100%;
+  box-sizing: border-box;
 }
 
 .shell-tab__terminal .xterm-viewport {
   background-color: transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.shell-tab__terminal .xterm-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.shell-tab__terminal .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.shell-tab__terminal .xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg);
+  border-radius: 10px;
+}
+
+.shell-tab__terminal .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover-bg);
+}
+
+.shell-tab__terminal .xterm-viewport::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar {
+  background: transparent !important;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .shadow {
+  display: none !important;
+}
+
+.shell-tab__terminal .xterm .xterm-decoration-overview-ruler {
+  display: none !important;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.vertical {
+  width: var(--scrollbar-width) !important;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.horizontal {
+  height: var(--scrollbar-height) !important;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider {
+  background: var(--scrollbar-thumb-bg) !important;
+  border-radius: 10px;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider:hover {
+  background: var(--scrollbar-thumb-hover-bg) !important;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider.active {
+  background: var(--scrollbar-thumb-hover-bg) !important;
 }
 
 @media (max-width: 640px) {
