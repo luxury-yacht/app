@@ -114,6 +114,11 @@ vi.mock('@xterm/addon-clipboard', () => ({
   ClipboardAddon: clipboardAddonMocks.ClipboardAddon,
 }));
 
+// Mock ZoomContext to return a stable 100% zoom (needed by Tooltip)
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
+}));
+
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
   Dropdown: ({
     value = '',
