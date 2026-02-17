@@ -2,9 +2,6 @@
 
 ## Issues
 
-Hide the shell connection controls when a shell is active.
-
-Unrelated:
 Components in two different places. `src/components` and `src/shared/components`. Why?
 
 ## Feature Ideas

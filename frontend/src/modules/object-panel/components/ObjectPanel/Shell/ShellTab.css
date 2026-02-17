@@ -140,7 +140,7 @@
 }
 
 .shell-tab__terminal .xterm {
-  padding: 0;
+  padding-left: 0.5rem;
   height: 100%;
   box-sizing: border-box;
 }

@@ -362,7 +362,6 @@ function ActiveSessionsPanel() {
       title="Active Sessions"
       isOpen={panelState.isOpen}
       defaultPosition="right"
-      defaultSize={{ width: 380, height: 460 }}
       onClose={() => panelState.setOpen(false)}
       contentClassName="as-panel-content"
     >
