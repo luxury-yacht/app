@@ -269,7 +269,6 @@ describe('ShellTab', () => {
 
     const terminal = getLatestTerminal();
     expect(terminal).toBeTruthy();
-    expect(terminal?.writeln).toHaveBeenCalledWith(expect.stringContaining('Connecting'));
     expect(clipboardAddonMocks.ClipboardAddon).toHaveBeenCalled();
     expect(terminal?.loadAddon).toHaveBeenCalledWith(clipboardAddonMocks.instances[0]);
 
@@ -510,6 +509,48 @@ describe('ShellTab', () => {
 
     expect(container.textContent).toContain('Connection failed');
     expect(container.textContent).toContain('exec: "/bin/sh": file not found');
+  });
+
+  it('keeps the first connection error visible if a closed status follows', async () => {
+    await renderShellTab();
+
+    clickConnectButton();
+    await flushAsync();
+    await flushAsync();
+
+    emitEvent('object-shell:status', {
+      sessionId: 'sess-1',
+      status: 'error',
+      reason: 'exec: "/bin/sh": file not found',
+    });
+    emitEvent('object-shell:status', {
+      sessionId: 'sess-1',
+      status: 'closed',
+      reason: 'Session closed.',
+    });
+    await flushAsync();
+
+    expect(container.textContent).toContain('Connection failed');
+    expect(container.textContent).toContain('exec: "/bin/sh": file not found');
+  });
+
+  it('shows a connection error when session closes immediately without an explicit reason', async () => {
+    await renderShellTab();
+
+    clickConnectButton();
+    await flushAsync();
+    await flushAsync();
+
+    emitEvent('object-shell:output', {
+      sessionId: 'sess-1',
+      stream: 'stderr',
+      data: 'exec: "/bin/bash": file not found\r\n',
+    });
+    emitEvent('object-shell:status', { sessionId: 'sess-1', status: 'closed', reason: '' });
+    await flushAsync();
+
+    expect(container.textContent).toContain('Connection failed');
+    expect(container.textContent).toContain('exec: "/bin/bash": file not found');
   });
 
   it('shows custom image input when Custom... is selected', async () => {

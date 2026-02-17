@@ -87,6 +87,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const terminalDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
   const pendingReplayRef = useRef<PendingReplayState | null>(null);
+  const sessionOpenedAtRef = useRef<number | null>(null);
+  const sessionOutputBufferRef = useRef('');
   const skipNextResizeRef = useRef(false);
   const renderedSessionIdRef = useRef<string | null>(null);
   const attachInFlightRef = useRef(false);
@@ -295,10 +297,43 @@ const ShellTab: React.FC<ShellTabProps> = ({
       if (!entry?.data) {
         return;
       }
+      const combined = `${sessionOutputBufferRef.current}${entry.data}`;
+      sessionOutputBufferRef.current =
+        combined.length > 4000 ? combined.slice(combined.length - 4000) : combined;
       writeToTerminal(entry.data);
     },
     [writeToTerminal]
   );
+
+  const deriveConnectionFailureReason = useCallback((fallbackReason?: string) => {
+    const normalizedFallback = fallbackReason?.trim();
+    if (normalizedFallback) {
+      return normalizedFallback;
+    }
+
+    const normalizedOutput = sessionOutputBufferRef.current
+      .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+      .replace(/\r/g, '\n');
+    const lines = normalizedOutput
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    if (lines.length === 0) {
+      return 'Shell command failed to start in the selected container.';
+    }
+
+    for (let index = lines.length - 1; index >= 0; index -= 1) {
+      const line = lines[index];
+      if (
+        /not found|no such file|exec failed|executable file|permission denied|exit code/i.test(line)
+      ) {
+        return line;
+      }
+    }
+
+    return lines[lines.length - 1];
+  }, []);
 
   const trimBacklogOverlap = useCallback((backlog: string, bufferedOutput: string) => {
     if (!backlog || !bufferedOutput) {
@@ -317,13 +352,15 @@ const ShellTab: React.FC<ShellTabProps> = ({
     pendingReplayRef.current = null;
     renderedSessionIdRef.current = null;
     skipNextResizeRef.current = false;
+    sessionOpenedAtRef.current = null;
+    sessionOutputBufferRef.current = '';
     setStatusReason(null);
     ensureTerminal();
     terminalRef.current?.reset();
-    writeLine('\r\n\x1b[90mConnecting...\x1b[0m');
+    statusRef.current = 'connecting';
     setStatus('connecting');
     setReconnectToken((token) => token + 1);
-  }, [ensureTerminal, writeLine]);
+  }, [ensureTerminal]);
 
   const lastTargetRef = useRef<{ namespace: string; resourceName: string } | null>(null);
 
@@ -332,7 +369,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
       lastTargetRef.current = null;
       pendingReplayRef.current = null;
       sessionIdRef.current = null;
+      sessionOpenedAtRef.current = null;
+      sessionOutputBufferRef.current = '';
       setSession(null);
+      statusRef.current = 'idle';
       setStatus('idle');
       setStatusReason(null);
       disposeTerminal();
@@ -342,7 +382,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
     if (previous && (previous.namespace !== namespace || previous.resourceName !== resourceName)) {
       pendingReplayRef.current = null;
       sessionIdRef.current = null;
+      sessionOpenedAtRef.current = null;
+      sessionOutputBufferRef.current = '';
       setSession(null);
+      statusRef.current = 'idle';
       setStatus('idle');
       setStatusReason(null);
       disposeTerminal();
@@ -370,12 +413,18 @@ const ShellTab: React.FC<ShellTabProps> = ({
           return;
         }
         sessionIdRef.current = shellSession.sessionId;
+        sessionOpenedAtRef.current = Date.now();
         setSession(shellSession);
+        statusRef.current = 'open';
         setStatus('open');
         setStatusReason(null);
       } catch (error) {
         if (!cancelled) {
           const reason = error instanceof Error ? error.message : String(error);
+          sessionIdRef.current = null;
+          sessionOpenedAtRef.current = null;
+          setSession(null);
+          statusRef.current = 'error';
           setStatus('error');
           setStatusReason(reason);
           disposeTerminal();
@@ -418,6 +467,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
       }
       if (evt.status === 'error') {
         pendingReplayRef.current = null;
+        sessionOpenedAtRef.current = null;
+        statusRef.current = 'error';
         setStatus('error');
         setStatusReason(evt.reason || 'Shell session failed.');
         sessionIdRef.current = null;
@@ -425,14 +476,33 @@ const ShellTab: React.FC<ShellTabProps> = ({
         disposeTerminal();
       } else if (evt.status === 'closed' || evt.status === 'timeout') {
         pendingReplayRef.current = null;
-        setStatus('closed');
-        setStatusReason(evt.reason || 'Session closed.');
+        const previousStatus = statusRef.current;
+        const closedTooSoon =
+          previousStatus === 'connecting' ||
+          (previousStatus === 'open' &&
+            sessionOpenedAtRef.current !== null &&
+            Date.now() - sessionOpenedAtRef.current < 1500);
         sessionIdRef.current = null;
+        sessionOpenedAtRef.current = null;
         setSession(null);
         disposeTerminal();
+        if (statusRef.current === 'error') {
+          return;
+        }
+        if (closedTooSoon) {
+          statusRef.current = 'error';
+          setStatus('error');
+          setStatusReason(deriveConnectionFailureReason(evt.reason));
+          return;
+        }
+        statusRef.current = 'closed';
+        setStatus('closed');
+        setStatusReason(evt.reason || 'Session closed.');
       } else if (evt.status === 'open') {
+        sessionOpenedAtRef.current = Date.now();
         ensureTerminal();
         writeLine('\x1b[32mConnected\x1b[0m\r\n');
+        statusRef.current = 'open';
         setStatus('open');
         setStatusReason(null);
       }
@@ -442,7 +512,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       offOutput();
       offStatus();
     };
-  }, [appendOutput, disposeTerminal, ensureTerminal, writeLine]);
+  }, [appendOutput, deriveConnectionFailureReason, disposeTerminal, ensureTerminal, writeLine]);
 
   useEffect(() => {
     if (!isActive || !terminalReady) {
