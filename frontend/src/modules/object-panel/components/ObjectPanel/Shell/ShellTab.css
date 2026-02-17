@@ -24,8 +24,9 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  font-size: 0.8rem;
   font-weight: 500;
-  color: var(--color-text, #1f2933);
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -44,8 +45,9 @@
 }
 
 .shell-tab__control-label {
+  font-size: 0.8rem;
   font-weight: 500;
-  color: var(--color-text, #1f2933);
+  color: var(--color-text-secondary);
   white-space: nowrap;
 }
 
@@ -62,8 +64,8 @@
 }
 
 .shell-tab__button {
-  border: 1px solid var(--color-border, #cbd5f5);
-  background: var(--color-surface-secondary, #f1f5f9);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-secondary);
   padding: 0.25rem 0.6rem;
   border-radius: 4px;
   font-size: 0.8rem;
@@ -72,8 +74,8 @@
 }
 
 .shell-tab__debug-button {
-  border: 1px solid var(--color-border, #cbd5f5);
-  background: var(--color-surface-secondary, #f1f5f9);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-secondary);
   padding: 0.25rem 0.6rem;
   border-radius: 4px;
   font-size: 0.8rem;
@@ -84,25 +86,25 @@
 .shell-tab__notice {
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
-  background: var(--color-surface-warning, #fff4db);
-  color: var(--color-text, #1f2933);
+  background: var(--color-surface-warning);
+  color: var(--color-text);
 }
 
 .shell-tab__custom-image-input {
   height: 26px;
   padding: 0 8px;
   font-size: 12px;
-  border: 1px solid var(--color-border, #cbd5f5);
+  border: 1px solid var(--color-border);
   border-radius: 4px;
-  background: var(--color-bg, #ffffff);
-  color: var(--color-text, #1f2933);
+  background: var(--color-bg);
+  color: var(--color-text);
   width: 100%;
   min-width: 140px;
 }
 
 .shell-tab__debug-warning {
   font-size: 11px;
-  color: var(--color-text-secondary, #64748b);
+  color: var(--color-text-secondary);
   padding: 0 12px 8px 12px;
 }
 
@@ -124,14 +126,6 @@
 
 .shell-tab__terminal--hidden {
   display: none;
-}
-
-.shell-tab__terminal-placeholder {
-  position: absolute;
-  background: var(--color-bg);
-  color: var(--color-text-secondary);
-  display: flex;
-  padding: 1rem;
 }
 
 .shell-tab__terminal .xterm {

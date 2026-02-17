@@ -40,6 +40,10 @@
   justify-self: end;
 }
 
+.object-diff-field .dropdown {
+  justify-self: start;
+}
+
 .object-diff-selector-header {
   display: flex;
   align-items: center;

@@ -594,23 +594,6 @@ const ShellTab: React.FC<ShellTabProps> = ({
     writeLine,
   ]);
 
-  const placeholderMessage = useMemo(() => {
-    if (startDebugContainer) {
-      return 'Select a debug image, target container, and shell, then click Start Debug Container. Debug containers persist until the pod is deleted.';
-    }
-    if (status === 'connecting') {
-      return 'Connecting shell session...';
-    }
-    if (status === 'error') {
-      return (
-        statusReason || 'Shell session failed. Adjust the settings and press Connect to retry.'
-      );
-    }
-    if (status === 'closed') {
-      return statusReason || 'Shell session closed. Press Connect to start a new session.';
-    }
-    return 'Select a container and shell, then click Connect to start a session.';
-  }, [startDebugContainer, status, statusReason]);
   const hasActiveSession = status === 'open' || status === 'connecting';
 
   return (
@@ -724,7 +707,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
               {startDebugContainer
                 ? debugCreating
                   ? 'Creating...'
-                  : 'Start Debug Container'
+                  : 'Start'
                 : status === 'connecting'
                   ? 'Connecting...'
                   : 'Connect'}
@@ -747,11 +730,6 @@ const ShellTab: React.FC<ShellTabProps> = ({
       )}
 
       <div className="shell-tab__terminal-wrapper" onClick={() => terminalRef.current?.focus()}>
-        {!terminalReady && (
-          <div className="shell-tab__terminal-placeholder" aria-live="polite">
-            {placeholderMessage}
-          </div>
-        )}
         <div
           className={`shell-tab__terminal${terminalReady ? '' : ' shell-tab__terminal--hidden'}`}
           ref={terminalContainerRef}

@@ -420,7 +420,7 @@ describe('ShellTab', () => {
 
     const debugButton = container.querySelector('.shell-tab__debug-button');
     expect(debugButton).not.toBeNull();
-    expect(debugButton?.textContent).toBe('Start Debug Container');
+    expect(debugButton?.textContent).toBe('Start');
   });
 
   it('calls CreateDebugContainer on debug action', async () => {
