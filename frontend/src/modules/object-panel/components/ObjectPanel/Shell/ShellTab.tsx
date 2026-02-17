@@ -73,6 +73,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const [status, setStatus] = useState<ShellStatus>('idle');
   const [containerOverride, setContainerOverride] = useState<string | null>(null);
   const [commandOverride, setCommandOverride] = useState<string>('/bin/sh');
+  const [customShell, setCustomShell] = useState('');
+  const resolvedShell = commandOverride === '__custom__' ? customShell.trim() : commandOverride;
   const [debugImage, setDebugImage] = useState('busybox:latest');
   const [customImage, setCustomImage] = useState('');
   const [debugTarget, setDebugTarget] = useState<string | null>(null);
@@ -460,7 +462,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
           namespace,
           podName: resourceName,
           container: containerOverride ?? undefined,
-          command: commandOverride ? [commandOverride] : undefined,
+          command: resolvedShell ? [resolvedShell] : undefined,
         });
         if (cancelled) {
           // If a superseding connect was started before this one returned, clean up this session.
@@ -492,7 +494,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       cancelled = true;
     };
   }, [
-    commandOverride,
+    resolvedShell,
     containerOverride,
     disposeTerminal,
     isActive,
@@ -722,6 +724,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     () => [
       { value: '/bin/sh', label: '/bin/sh' },
       { value: '/bin/bash', label: '/bin/bash' },
+      { value: '__custom__', label: 'Custom...' },
     ],
     []
   );
@@ -903,6 +906,16 @@ const ShellTab: React.FC<ShellTabProps> = ({
                       placeholder="Select shell"
                       ariaLabel="Shell command selector"
                     />
+                    {commandOverride === '__custom__' && (
+                      <input
+                        className="shell-tab__custom-image-input"
+                        type="text"
+                        value={customShell}
+                        onChange={(event) => setCustomShell(event.target.value)}
+                        placeholder="/path/to/shell"
+                        aria-label="Custom shell path"
+                      />
+                    )}
                   </div>
                 </>
               ) : (
@@ -930,6 +943,16 @@ const ShellTab: React.FC<ShellTabProps> = ({
                       placeholder="Select shell"
                       ariaLabel="Shell command selector"
                     />
+                    {commandOverride === '__custom__' && (
+                      <input
+                        className="shell-tab__custom-image-input"
+                        type="text"
+                        value={customShell}
+                        onChange={(event) => setCustomShell(event.target.value)}
+                        placeholder="/path/to/shell"
+                        aria-label="Custom shell path"
+                      />
+                    )}
                   </div>
                 </>
               )}

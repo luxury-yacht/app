@@ -41,7 +41,7 @@
   display: grid;
   grid-template-columns: max-content minmax(240px, 1fr);
   gap: 0.5rem 0.75rem;
-  align-items: center;
+  align-items: start;
 }
 
 .shell-tab__control-label {
@@ -49,6 +49,8 @@
   font-weight: 500;
   color: var(--color-text-secondary);
   white-space: nowrap;
+  /* Align with the first line of the adjacent dropdown */
+  padding-top: 0.3rem;
 }
 
 .shell-tab__control-input {
