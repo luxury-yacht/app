@@ -10,6 +10,7 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
+import Tooltip from '@shared/components/Tooltip';
 import { EventsOn } from '@wailsjs/runtime/runtime';
 import {
   CloseShellSession,
@@ -840,6 +841,19 @@ const ShellTab: React.FC<ShellTabProps> = ({
                 onChange={(event) => setStartDebugContainer(event.target.checked)}
               />
               <span>Start a debug container</span>
+              <Tooltip
+                content={
+                  <>
+                    Use a debug (ephemeral) container to troubleshoot a running pod when the
+                    existing containers have no shell.
+                    <br />
+                    <br />
+                    Debug containers persist for the lifetime of the pod and cannot be removed
+                    except by deleting the pod.
+                  </>
+                }
+                placement="bottom"
+              />
             </label>
             <div className="shell-tab__controls-grid">
               {startDebugContainer ? (

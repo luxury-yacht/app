@@ -268,9 +268,9 @@
   --modal-scroll-thumb-hover: var(--color-base-400);
 
   /* Tooltips */
-  --tooltip-bg: var(--color-base-800);
-  --tooltip-text: var(--color-base-100);
-  --tooltip-border: var(--color-base-700);
+  --tooltip-bg: var(--color-base-100);
+  --tooltip-text: var(--color-base-800);
+  --tooltip-border: var(--color-base-200);
   --tooltip-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 
   /* Editor content shared tokens */
