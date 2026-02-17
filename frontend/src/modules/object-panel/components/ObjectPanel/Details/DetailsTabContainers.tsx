@@ -55,9 +55,7 @@ function Containers({ containers = [], initContainers = [] }: ContainersProps) {
 
   return (
     <div className="object-panel-section">
-      <div className="object-panel-section-title">
-        Containers
-      </div>
+      <div className="object-panel-section-title">Containers</div>
       <div className="object-panel-section-grid">
         {allContainers.map((container, index) => (
           <React.Fragment key={`${container.type}-${container.name}-${index}`}>

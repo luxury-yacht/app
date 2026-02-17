@@ -47,7 +47,10 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   const previousTabIdsRef = useRef<string[]>(tabs.map((tab) => tab.panelId));
   const previousActiveTabRef = useRef<string | null>(activeTab ?? null);
   const [overflowHint, setOverflowHint] = useState({
-    left: false, right: false, leftCount: 0, rightCount: 0,
+    left: false,
+    right: false,
+    leftCount: 0,
+    rightCount: 0,
   });
 
   useEffect(() => {
@@ -65,9 +68,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     }
     if (bar.clientWidth <= 0 || bar.clientWidth < MIN_OVERFLOW_HINT_WIDTH) {
       setOverflowHint((prev) =>
-        prev.left || prev.right
-          ? { left: false, right: false, leftCount: 0, rightCount: 0 }
-          : prev
+        prev.left || prev.right ? { left: false, right: false, leftCount: 0, rightCount: 0 } : prev
       );
       return;
     }
@@ -84,8 +85,9 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     let rightCount = 0;
     if (hasLeft || hasRight) {
       const indicatorSize = parseFloat(
-        getComputedStyle(bar.parentElement ?? bar)
-          .getPropertyValue('--dockable-tab-overflow-indicator-size') || '32'
+        getComputedStyle(bar.parentElement ?? bar).getPropertyValue(
+          '--dockable-tab-overflow-indicator-size'
+        ) || '32'
       );
       const tabEls = bar.querySelectorAll<HTMLElement>('[role="tab"]');
       const barLeft = bar.scrollLeft;
@@ -102,9 +104,12 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
 
     const next = { left: hasLeft, right: hasRight, leftCount, rightCount };
     setOverflowHint((prev) =>
-      prev.left === next.left && prev.right === next.right &&
-      prev.leftCount === next.leftCount && prev.rightCount === next.rightCount
-        ? prev : next
+      prev.left === next.left &&
+      prev.right === next.right &&
+      prev.leftCount === next.leftCount &&
+      prev.rightCount === next.rightCount
+        ? prev
+        : next
     );
   }, []);
 
@@ -167,8 +172,9 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
     // scrollIntoView doesn't account for the sticky overflow indicators, so
     // calculate the scroll position manually to clear the indicator width.
     const indicatorSize = parseFloat(
-      getComputedStyle(bar.parentElement ?? bar)
-        .getPropertyValue('--dockable-tab-overflow-indicator-size') || '32'
+      getComputedStyle(bar.parentElement ?? bar).getPropertyValue(
+        '--dockable-tab-overflow-indicator-size'
+      ) || '32'
     );
     const elLeft = tabToReveal.offsetLeft;
     const elRight = elLeft + tabToReveal.offsetWidth;
@@ -177,10 +183,14 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
 
     if (elRight > barRight - indicatorSize) {
       const target = elRight - bar.clientWidth + indicatorSize;
-      typeof bar.scrollTo === 'function' ? bar.scrollTo({ left: target }) : (bar.scrollLeft = target);
+      typeof bar.scrollTo === 'function'
+        ? bar.scrollTo({ left: target })
+        : (bar.scrollLeft = target);
     } else if (elLeft < barLeft + indicatorSize) {
       const target = Math.max(0, elLeft - indicatorSize);
-      typeof bar.scrollTo === 'function' ? bar.scrollTo({ left: target }) : (bar.scrollLeft = target);
+      typeof bar.scrollTo === 'function'
+        ? bar.scrollTo({ left: target })
+        : (bar.scrollLeft = target);
     }
     updateOverflowHint();
   }, [tabs, activeTab, updateOverflowHint]);
@@ -189,10 +199,7 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   // isolated so tab drag/reorder doesn't also trigger panel header drag.
   const handleBarMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target instanceof HTMLElement ? e.target : null;
-    if (
-      target?.closest('.tab-item') ||
-      target?.closest('.dockable-tab-bar__overflow-indicator')
-    ) {
+    if (target?.closest('.tab-item') || target?.closest('.dockable-tab-bar__overflow-indicator')) {
       e.stopPropagation();
     }
   }, []);
@@ -205,57 +212,55 @@ export const DockableTabBar: React.FC<DockableTabBarProps> = ({
   // Scroll one tab at a time. direction: -1 = left, 1 = right.
   // Accounts for the sticky overflow indicator width (32px) that visually
   // covers part of the scrollable area.
-  const scrollToNextTab = useCallback(
-    (direction: -1 | 1) => {
-      const bar = barRef.current;
-      if (!bar) return;
+  const scrollToNextTab = useCallback((direction: -1 | 1) => {
+    const bar = barRef.current;
+    if (!bar) return;
 
-      const tabEls = bar.querySelectorAll<HTMLElement>('[role="tab"]');
-      if (tabEls.length === 0) return;
+    const tabEls = bar.querySelectorAll<HTMLElement>('[role="tab"]');
+    if (tabEls.length === 0) return;
 
-      // The sticky overflow indicators cover part of the visible area.
-      const indicatorSize = parseFloat(
-        getComputedStyle(bar.parentElement ?? bar)
-          .getPropertyValue('--dockable-tab-overflow-indicator-size') || '32'
-      );
+    // The sticky overflow indicators cover part of the visible area.
+    const indicatorSize = parseFloat(
+      getComputedStyle(bar.parentElement ?? bar).getPropertyValue(
+        '--dockable-tab-overflow-indicator-size'
+      ) || '32'
+    );
 
-      const barLeft = bar.scrollLeft;
-      const barRight = barLeft + bar.clientWidth;
-      let target: HTMLElement | null = null;
+    const barLeft = bar.scrollLeft;
+    const barRight = barLeft + bar.clientWidth;
+    let target: HTMLElement | null = null;
 
-      if (direction === 1) {
-        // Find the first tab whose right edge is hidden (past visible area
-        // minus the right indicator).
-        for (const tab of tabEls) {
-          if (tab.offsetLeft + tab.offsetWidth > barRight - indicatorSize + 1) {
-            target = tab;
-            break;
-          }
-        }
-      } else {
-        // Find the last tab whose left edge is hidden (before visible area
-        // plus the left indicator).
-        for (let i = tabEls.length - 1; i >= 0; i--) {
-          if (tabEls[i].offsetLeft < barLeft + indicatorSize - 1) {
-            target = tabEls[i];
-            break;
-          }
+    if (direction === 1) {
+      // Find the first tab whose right edge is hidden (past visible area
+      // minus the right indicator).
+      for (const tab of tabEls) {
+        if (tab.offsetLeft + tab.offsetWidth > barRight - indicatorSize + 1) {
+          target = tab;
+          break;
         }
       }
+    } else {
+      // Find the last tab whose left edge is hidden (before visible area
+      // plus the left indicator).
+      for (let i = tabEls.length - 1; i >= 0; i--) {
+        if (tabEls[i].offsetLeft < barLeft + indicatorSize - 1) {
+          target = tabEls[i];
+          break;
+        }
+      }
+    }
 
-      if (!target) return;
+    if (!target) return;
 
-      // Scroll so the target tab clears the sticky indicator on the arrival side.
-      const scrollTarget =
-        direction === 1
-          ? target.offsetLeft + target.offsetWidth - bar.clientWidth + indicatorSize
-          : target.offsetLeft - indicatorSize;
+    // Scroll so the target tab clears the sticky indicator on the arrival side.
+    const scrollTarget =
+      direction === 1
+        ? target.offsetLeft + target.offsetWidth - bar.clientWidth + indicatorSize
+        : target.offsetLeft - indicatorSize;
 
-      bar.scrollTo({ left: Math.max(0, scrollTarget), behavior: 'smooth' });
-      // The scroll event listener on the bar will update overflow hints automatically.
-    },
-    []
-  );
+    bar.scrollTo({ left: Math.max(0, scrollTarget), behavior: 'smooth' });
+    // The scroll event listener on the bar will update overflow hints automatically.
+  }, []);
 
   const handleScrollLeftClick = useCallback(
     (e: React.MouseEvent) => {

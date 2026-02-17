@@ -216,14 +216,16 @@ describe('useObjectPanelCapabilities', () => {
   });
 
   it('surfaces debug-denied reason when ephemeralcontainers permission is denied', async () => {
-    const capabilityStateMap: Record<string, { allowed: boolean; pending: boolean; reason?: string }> =
-      {
-        'debug-ephemeral': {
-          allowed: false,
-          pending: false,
-          reason: 'Forbidden: pods/ephemeralcontainers',
-        },
-      };
+    const capabilityStateMap: Record<
+      string,
+      { allowed: boolean; pending: boolean; reason?: string }
+    > = {
+      'debug-ephemeral': {
+        allowed: false,
+        pending: false,
+        reason: 'Forbidden: pods/ephemeralcontainers',
+      },
+    };
 
     mockUseCapabilities.mockImplementation(() => ({
       getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },

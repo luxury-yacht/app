@@ -336,7 +336,9 @@ describe('ActiveSessionsPanel', () => {
     expect(connectButton).toBeTruthy();
     expect(connectButton.disabled).toBe(false);
 
-    const stopButton = document.querySelector('.as-pf-actions .ss-stop-button') as HTMLButtonElement;
+    const stopButton = document.querySelector(
+      '.as-pf-actions .ss-stop-button'
+    ) as HTMLButtonElement;
     expect(stopButton).toBeTruthy();
     expect(stopButton.textContent).toBe('Stop');
 

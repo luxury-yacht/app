@@ -140,6 +140,8 @@ describe('Overview component', () => {
     await renderComponent({ kind: 'Pod', objectKind: 'pod', name: 'api' });
 
     expect(container.querySelector('[data-testid="overview-content"]')).not.toBeNull();
-    expect(container.querySelector('.object-panel-section-title')?.textContent).toContain('Overview');
+    expect(container.querySelector('.object-panel-section-title')?.textContent).toContain(
+      'Overview'
+    );
   });
 });

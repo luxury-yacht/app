@@ -141,7 +141,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
       };
     }
     const styles = getComputedStyle(container);
-    const rawScrollbarWidth = Number.parseInt(styles.getPropertyValue('--scrollbar-width').trim(), 10);
+    const rawScrollbarWidth = Number.parseInt(
+      styles.getPropertyValue('--scrollbar-width').trim(),
+      10
+    );
     const scrollbarWidth = Number.isFinite(rawScrollbarWidth) ? rawScrollbarWidth : 6;
     return {
       background: styles.getPropertyValue('--shell-terminal-bg').trim() || '#060b18',
@@ -149,8 +152,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
       cursor: styles.getPropertyValue('--shell-terminal-cursor').trim() || '#22d3ee',
       selectionBackground:
         styles.getPropertyValue('--shell-terminal-selection').trim() || '#1d4ed844',
-      scrollbarSlider:
-        styles.getPropertyValue('--scrollbar-thumb-bg').trim() || '#64748b66',
+      scrollbarSlider: styles.getPropertyValue('--scrollbar-thumb-bg').trim() || '#64748b66',
       scrollbarSliderHover:
         styles.getPropertyValue('--scrollbar-thumb-hover-bg').trim() || '#64748b99',
       scrollbarSliderActive:
@@ -806,16 +808,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
                     !resolvedDebugImage ||
                     !!debugDisabledReason ||
                     !!disabledReason
-                  : status === 'connecting'
+                  : false
               }
             >
-              {startDebugContainer
-                ? debugCreating
-                  ? 'Creating...'
-                  : 'Start'
-                : status === 'connecting'
-                  ? 'Connecting...'
-                  : 'Connect'}
+              {startDebugContainer ? (debugCreating ? 'Creating...' : 'Start') : 'Connect'}
             </button>
           </div>
         </div>

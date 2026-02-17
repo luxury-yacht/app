@@ -495,12 +495,7 @@ describe('DockableTabBar', () => {
 
     await act(async () => {
       await rerender(
-        <DockableTabBar
-          tabs={tabsWithNew}
-          activeTab="p3"
-          onTabClick={vi.fn()}
-          groupKey="bottom"
-        />
+        <DockableTabBar tabs={tabsWithNew} activeTab="p3" onTabClick={vi.fn()} groupKey="bottom" />
       );
     });
 

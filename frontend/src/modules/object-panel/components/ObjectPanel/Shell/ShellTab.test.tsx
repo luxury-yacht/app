@@ -418,7 +418,7 @@ describe('ShellTab', () => {
         command: ['/bin/sh'],
       },
     ]);
-    let resolveBacklog: ((value: string) => void) | null = null;
+    let resolveBacklog: (value: string) => void = () => {};
     const backlogPromise = new Promise<string>((resolve) => {
       resolveBacklog = resolve;
     });
@@ -430,7 +430,7 @@ describe('ShellTab', () => {
 
     emitEvent('object-shell:output', { sessionId: 'existing-1', stream: 'stdout', data: '# ' });
     await flushAsync();
-    resolveBacklog?.('# ');
+    resolveBacklog('# ');
     await act(async () => {
       await backlogPromise;
       await flushAsync();

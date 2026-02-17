@@ -12,7 +12,11 @@ import {
   StopPortForward,
 } from '@wailsjs/go/backend/App';
 import { BrowserOpenURL, EventsOn } from '@wailsjs/runtime/runtime';
-import { DockablePanel, useDockablePanelContext, useDockablePanelState } from '@/components/dockable';
+import {
+  DockablePanel,
+  useDockablePanelContext,
+  useDockablePanelState,
+} from '@/components/dockable';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -108,7 +112,9 @@ function ActiveSessionsPanel() {
     targetClusterId: string;
   } | null>(null);
   const previousTotalCountRef = useRef(0);
-  const restoreActiveTabRef = useRef<{ groupKey: 'right' | 'bottom'; panelId: string } | null>(null);
+  const restoreActiveTabRef = useRef<{ groupKey: 'right' | 'bottom'; panelId: string } | null>(
+    null
+  );
 
   const loadSessions = useCallback(async () => {
     try {
@@ -228,21 +234,24 @@ function ActiveSessionsPanel() {
       setPortForwards(list || []);
     });
 
-    const cancelPortForwardStatus = EventsOn('portforward:status', (event: PortForwardStatusEvent) => {
-      setPortForwards((prev) =>
-        prev.map((session) =>
-          session.id === event.sessionId
-            ? {
-                ...session,
-                status: event.status,
-                statusReason: event.statusReason,
-                ...(event.localPort !== undefined && { localPort: event.localPort }),
-                ...(event.podName !== undefined && { podName: event.podName }),
-              }
-            : session
-        )
-      );
-    });
+    const cancelPortForwardStatus = EventsOn(
+      'portforward:status',
+      (event: PortForwardStatusEvent) => {
+        setPortForwards((prev) =>
+          prev.map((session) =>
+            session.id === event.sessionId
+              ? {
+                  ...session,
+                  status: event.status,
+                  statusReason: event.statusReason,
+                  ...(event.localPort !== undefined && { localPort: event.localPort }),
+                  ...(event.podName !== undefined && { podName: event.podName }),
+                }
+              : session
+          )
+        );
+      }
+    );
 
     return () => {
       cancelShellList();
@@ -329,7 +338,9 @@ function ActiveSessionsPanel() {
   }, [pendingAttach, shellSessions]);
 
   const sortedShellSessions = useMemo(() => {
-    return [...shellSessions].sort((a, b) => parseTimestamp(b.startedAt) - parseTimestamp(a.startedAt));
+    return [...shellSessions].sort(
+      (a, b) => parseTimestamp(b.startedAt) - parseTimestamp(a.startedAt)
+    );
   }, [shellSessions]);
 
   const sortedPortForwards = useMemo(() => {
@@ -475,7 +486,10 @@ function ActiveSessionsPanel() {
                             ))}
                           </div>
                           {session.statusReason && (
-                            <div className="pf-session-reason as-pf-reason" title={session.statusReason}>
+                            <div
+                              className="pf-session-reason as-pf-reason"
+                              title={session.statusReason}
+                            >
                               {session.statusReason}
                             </div>
                           )}

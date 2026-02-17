@@ -82,9 +82,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
   return (
     <div className="object-panel-section">
       <div className="object-panel-section-header">
-        <div className="object-panel-section-title">
-          Overview
-        </div>
+        <div className="object-panel-section-title">Overview</div>
         <div className="object-panel-section-actions">
           <ActionsMenu
             object={actionObject}

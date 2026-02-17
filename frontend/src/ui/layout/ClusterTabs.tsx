@@ -258,7 +258,12 @@ const ClusterTabs: React.FC = () => {
 
   return (
     <>
-      <div ref={tabsRef} className="tab-strip cluster-tabs" role="tablist" aria-label="Cluster tabs">
+      <div
+        ref={tabsRef}
+        className="tab-strip cluster-tabs"
+        role="tablist"
+        aria-label="Cluster tabs"
+      >
         {orderedTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isDragging = tab.id === draggingId;

@@ -152,9 +152,7 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, usage, data, t
 const Utilization: React.FC<UtilizationProps> = ({ cpu, memory, pods, mode = 'podMetrics' }) => {
   return (
     <div className="object-panel-section">
-      <div className="object-panel-section-title">
-        Resource Utilization
-      </div>
+      <div className="object-panel-section-title">Resource Utilization</div>
 
       <div className="utilization-content">
         {cpu || memory || pods ? (

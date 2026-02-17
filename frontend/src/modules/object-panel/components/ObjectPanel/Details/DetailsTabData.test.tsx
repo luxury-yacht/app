@@ -85,9 +85,7 @@ describe('DetailsTabData', () => {
   it('copies values to clipboard and shows feedback', async () => {
     vi.useFakeTimers();
 
-    const { container, cleanup } = await render(
-      <DataSection data={{ token: 'abc123' }} />
-    );
+    const { container, cleanup } = await render(<DataSection data={{ token: 'abc123' }} />);
 
     const value = container.querySelector('.data-value')!;
     await act(async () => {

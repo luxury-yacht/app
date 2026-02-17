@@ -145,9 +145,7 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
                   >
                     {value}
                   </pre>
-                  {copiedKey === `binary-${key}` && (
-                    <span className="copy-feedback">Copied!</span>
-                  )}
+                  {copiedKey === `binary-${key}` && <span className="copy-feedback">Copied!</span>}
                 </div>
               </div>
             ))}

@@ -36,8 +36,8 @@ export const PANEL_DEFAULTS = {
 
 /** Per-dock-mode minimum size constraints. */
 export interface PanelSizeConstraints {
-  right:    { minWidth: number };
-  bottom:   { minHeight: number };
+  right: { minWidth: number };
+  bottom: { minHeight: number };
   floating: { minWidth: number; minHeight: number };
 }
 
@@ -48,9 +48,12 @@ export interface PanelSizeConstraints {
 export function getPanelSizeConstraints(panel?: HTMLElement | null): PanelSizeConstraints {
   if (typeof document === 'undefined' || !panel) {
     return {
-      right:    { minWidth: PANEL_DEFAULTS.RIGHT_MIN_WIDTH },
-      bottom:   { minHeight: PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT },
-      floating: { minWidth: PANEL_DEFAULTS.FLOATING_MIN_WIDTH, minHeight: PANEL_DEFAULTS.FLOATING_MIN_HEIGHT },
+      right: { minWidth: PANEL_DEFAULTS.RIGHT_MIN_WIDTH },
+      bottom: { minHeight: PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT },
+      floating: {
+        minWidth: PANEL_DEFAULTS.FLOATING_MIN_WIDTH,
+        minHeight: PANEL_DEFAULTS.FLOATING_MIN_HEIGHT,
+      },
     };
   }
   const style = getComputedStyle(panel);
@@ -69,7 +72,8 @@ export function getPanelSizeConstraints(panel?: HTMLElement | null): PanelSizeCo
     },
     floating: {
       minWidth: readOpt('--dockable-panel-floating-min-width') ?? PANEL_DEFAULTS.FLOATING_MIN_WIDTH,
-      minHeight: readOpt('--dockable-panel-floating-min-height') ?? PANEL_DEFAULTS.FLOATING_MIN_HEIGHT,
+      minHeight:
+        readOpt('--dockable-panel-floating-min-height') ?? PANEL_DEFAULTS.FLOATING_MIN_HEIGHT,
     },
   };
 }

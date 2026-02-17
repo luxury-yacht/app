@@ -33,13 +33,7 @@ interface DockablePanelDragResizeOptions {
  * Handle drag/resize interactions and cursor updates for dockable panels.
  */
 export function useDockablePanelDragResize(options: DockablePanelDragResizeOptions) {
-  const {
-    panelState,
-    panelRef,
-    safeMinWidth,
-    safeMinHeight,
-    isMaximized,
-  } = options;
+  const { panelState, panelRef, safeMinWidth, safeMinHeight, isMaximized } = options;
   const panelStateRef = useRef(panelState);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -307,10 +301,7 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
 
         if (currentPanelState.position === 'right') {
           // For right-docked panels, dragging left (negative deltaX) increases width
-          newWidth = Math.max(
-            safeMinWidth,
-            Math.min(content.width, resizeStart.width - deltaX)
-          );
+          newWidth = Math.max(safeMinWidth, Math.min(content.width, resizeStart.width - deltaX));
         } else if (currentPanelState.position === 'bottom') {
           // For bottom-docked panels, dragging up (negative deltaY) increases height
           newHeight = Math.max(
