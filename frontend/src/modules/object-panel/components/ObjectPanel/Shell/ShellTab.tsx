@@ -51,6 +51,11 @@ interface ShellStatusEvent {
   reason?: string;
 }
 
+interface PendingReplayState {
+  sessionId: string;
+  bufferedOutput: string[];
+}
+
 const ShellTab: React.FC<ShellTabProps> = ({
   namespace,
   resourceName,
@@ -81,6 +86,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
   const terminalContainerRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const terminalDataDisposableRef = useRef<{ dispose: () => void } | null>(null);
+  const pendingReplayRef = useRef<PendingReplayState | null>(null);
+  const skipNextResizeRef = useRef(false);
+  const renderedSessionIdRef = useRef<string | null>(null);
+  const attachInFlightRef = useRef(false);
   const [terminalReady, setTerminalReady] = useState(false);
   const resolvedClusterId = clusterId?.trim() ?? '';
   const writeToTerminal = useCallback((text: string) => {
@@ -111,6 +120,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
     if (terminalContainerRef.current) {
       terminalContainerRef.current.innerHTML = '';
     }
+    renderedSessionIdRef.current = null;
+    skipNextResizeRef.current = false;
     setTerminalReady(false);
   }, []);
 
@@ -223,6 +234,10 @@ const ShellTab: React.FC<ShellTabProps> = ({
     const resizeObserver = new ResizeObserver(() => {
       fitAddon.fit();
       if (sessionIdRef.current && statusRef.current === 'open') {
+        if (skipNextResizeRef.current) {
+          skipNextResizeRef.current = false;
+          return;
+        }
         void ResizeShellSession(sessionIdRef.current, terminal.cols, terminal.rows).catch(() => {
           /* ignore */
         });
@@ -261,7 +276,23 @@ const ShellTab: React.FC<ShellTabProps> = ({
     [writeToTerminal]
   );
 
+  const trimBacklogOverlap = useCallback((backlog: string, bufferedOutput: string) => {
+    if (!backlog || !bufferedOutput) {
+      return bufferedOutput;
+    }
+    const maxOverlap = Math.min(backlog.length, bufferedOutput.length);
+    for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+      if (backlog.endsWith(bufferedOutput.slice(0, overlap))) {
+        return bufferedOutput.slice(overlap);
+      }
+    }
+    return bufferedOutput;
+  }, []);
+
   const initiateConnection = useCallback(() => {
+    pendingReplayRef.current = null;
+    renderedSessionIdRef.current = null;
+    skipNextResizeRef.current = false;
     setStatusReason(null);
     ensureTerminal();
     terminalRef.current?.reset();
@@ -275,6 +306,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
   useEffect(() => {
     if (!namespace || !resourceName) {
       lastTargetRef.current = null;
+      pendingReplayRef.current = null;
       sessionIdRef.current = null;
       setSession(null);
       setStatus('idle');
@@ -284,6 +316,7 @@ const ShellTab: React.FC<ShellTabProps> = ({
     }
     const previous = lastTargetRef.current;
     if (previous && (previous.namespace !== namespace || previous.resourceName !== resourceName)) {
+      pendingReplayRef.current = null;
       sessionIdRef.current = null;
       setSession(null);
       setStatus('idle');
@@ -346,6 +379,12 @@ const ShellTab: React.FC<ShellTabProps> = ({
       if (!evt || !sessionIdRef.current || evt.sessionId !== sessionIdRef.current) {
         return;
       }
+      const pendingReplay = pendingReplayRef.current;
+      if (pendingReplay && pendingReplay.sessionId === evt.sessionId) {
+        pendingReplay.bufferedOutput.push(evt.data);
+        return;
+      }
+      renderedSessionIdRef.current = evt.sessionId;
       appendOutput(evt);
     });
 
@@ -354,12 +393,14 @@ const ShellTab: React.FC<ShellTabProps> = ({
         return;
       }
       if (evt.status === 'error') {
+        pendingReplayRef.current = null;
         setStatus('error');
         setStatusReason(evt.reason || 'Shell session failed.');
         sessionIdRef.current = null;
         setSession(null);
         disposeTerminal();
       } else if (evt.status === 'closed' || evt.status === 'timeout') {
+        pendingReplayRef.current = null;
         setStatus('closed');
         setStatusReason(evt.reason || 'Session closed.');
         sessionIdRef.current = null;
@@ -414,9 +455,16 @@ const ShellTab: React.FC<ShellTabProps> = ({
   }, [namespace, resourceName, resolvedClusterId]);
 
   const attachLatestTrackedSession = useCallback(async () => {
-    if (!namespace || !resourceName || !resolvedClusterId || sessionIdRef.current) {
+    if (
+      !namespace ||
+      !resourceName ||
+      !resolvedClusterId ||
+      sessionIdRef.current ||
+      attachInFlightRef.current
+    ) {
       return;
     }
+    attachInFlightRef.current = true;
     try {
       const sessions = await ListShellSessions();
       const matching = sessions.filter(
@@ -430,6 +478,9 @@ const ShellTab: React.FC<ShellTabProps> = ({
       }
       const latest = matching[matching.length - 1];
       sessionIdRef.current = latest.sessionId;
+      // Reattach should not immediately send a resize event because many shells
+      // redraw the prompt, which duplicates the backlog tail prompt.
+      skipNextResizeRef.current = true;
       setSession({
         sessionId: latest.sessionId,
         namespace: latest.namespace,
@@ -442,19 +493,49 @@ const ShellTab: React.FC<ShellTabProps> = ({
       setStatus('open');
       setStatusReason(null);
       ensureTerminal();
+      if (renderedSessionIdRef.current === latest.sessionId && terminalRef.current) {
+        pendingReplayRef.current = null;
+        return;
+      }
+      pendingReplayRef.current = {
+        sessionId: latest.sessionId,
+        bufferedOutput: [],
+      };
+      let backlog = '';
       try {
         // Replay buffered output captured while this tab was detached.
-        const backlog = await GetShellSessionBacklog(latest.sessionId);
+        backlog = await GetShellSessionBacklog(latest.sessionId);
         if (backlog) {
+          renderedSessionIdRef.current = latest.sessionId;
           writeToTerminal(backlog);
         }
       } catch {
         // Ignore replay failures; user can continue with live output.
+      } finally {
+        const replayState = pendingReplayRef.current;
+        if (replayState && replayState.sessionId === latest.sessionId) {
+          const bufferedOutput = replayState.bufferedOutput.join('');
+          const replayRemainder = trimBacklogOverlap(backlog, bufferedOutput);
+          if (replayRemainder) {
+            renderedSessionIdRef.current = latest.sessionId;
+            writeToTerminal(replayRemainder);
+          }
+          pendingReplayRef.current = null;
+        }
       }
     } catch {
       // Ignore attach failures; user can still start a new session.
+    } finally {
+      attachInFlightRef.current = false;
     }
-  }, [ensureTerminal, namespace, resourceName, resolvedClusterId, writeToTerminal]);
+  }, [
+    ensureTerminal,
+    namespace,
+    resourceName,
+    resolvedClusterId,
+    trimBacklogOverlap,
+    writeToTerminal,
+  ]);
 
   useEffect(() => {
     if (!isActive) {
@@ -595,6 +676,8 @@ const ShellTab: React.FC<ShellTabProps> = ({
   ]);
 
   const hasActiveSession = status === 'open' || status === 'connecting';
+  const connectionErrorMessage =
+    status === 'error' ? statusReason || 'Shell session failed.' : null;
 
   return (
     <div className="object-panel-shell-tab">
@@ -720,6 +803,11 @@ const ShellTab: React.FC<ShellTabProps> = ({
           <>
             Debug unavailable: <span>{debugDisabledReason}</span>
           </>
+        </div>
+      )}
+      {connectionErrorMessage && (
+        <div className="shell-tab__connection-error" role="status" aria-live="polite">
+          Connection failed: <span>{connectionErrorMessage}</span>
         </div>
       )}
 

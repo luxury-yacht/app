@@ -406,6 +406,41 @@ describe('ShellTab', () => {
     expect(terminal?.write).toHaveBeenCalledWith('prior output\r\n$ ');
   });
 
+  it('deduplicates replay overlap when live output arrives during backlog replay', async () => {
+    wailsMocks.ListShellSessions.mockResolvedValue([
+      {
+        sessionId: 'existing-1',
+        clusterId: 'alpha:ctx',
+        clusterName: 'alpha',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+        command: ['/bin/sh'],
+      },
+    ]);
+    let resolveBacklog: ((value: string) => void) | null = null;
+    const backlogPromise = new Promise<string>((resolve) => {
+      resolveBacklog = resolve;
+    });
+    wailsMocks.GetShellSessionBacklog.mockReturnValue(backlogPromise);
+
+    await renderShellTab();
+    await flushAsync();
+    expect(wailsMocks.GetShellSessionBacklog).toHaveBeenCalledWith('existing-1');
+
+    emitEvent('object-shell:output', { sessionId: 'existing-1', stream: 'stdout', data: '# ' });
+    await flushAsync();
+    resolveBacklog?.('# ');
+    await act(async () => {
+      await backlogPromise;
+      await flushAsync();
+    });
+
+    const terminal = getLatestTerminal();
+    const promptWrites = terminal?.write.mock.calls.filter((args) => args[0] === '# ') ?? [];
+    expect(promptWrites).toHaveLength(1);
+  });
+
   it('renders a debug checkbox toggle', async () => {
     await renderShellTab();
     const toggle = container.querySelector<HTMLInputElement>('#shell-tab-debug-toggle');
@@ -461,6 +496,20 @@ describe('ShellTab', () => {
     expect(terminal?.writeln).toHaveBeenCalledWith(
       expect.stringContaining('Failed to create debug container')
     );
+    expect(container.textContent).toContain('Connection failed');
+    expect(container.textContent).toContain('ephemeral containers not supported');
+  });
+
+  it('shows shell connection failure reason when start fails', async () => {
+    wailsMocks.StartShellSession.mockRejectedValue(new Error('exec: "/bin/sh": file not found'));
+    await renderShellTab();
+
+    clickConnectButton();
+    await flushAsync();
+    await flushAsync();
+
+    expect(container.textContent).toContain('Connection failed');
+    expect(container.textContent).toContain('exec: "/bin/sh": file not found');
   });
 
   it('shows custom image input when Custom... is selected', async () => {
