@@ -736,7 +736,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
 
   // Helper functions
   const getActualContainerName = (displayName: string) => {
-    return displayName.replace(' (init)', '');
+    return displayName.replace(' (init)', '').replace(' (debug)', '');
   };
 
   // Check if logs can be parsed as JSON

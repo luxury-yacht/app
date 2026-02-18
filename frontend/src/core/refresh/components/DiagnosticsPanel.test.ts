@@ -655,7 +655,7 @@ describe('DiagnosticsPanel component', () => {
     expect(logPrimary?.textContent).toContain('Sessions: 1');
     expect(logPrimary?.textContent).toContain('Delivered: 9');
 
-    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab');
+    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab-item');
     await act(async () => {
       tabButtons[1].click();
       await Promise.resolve();
@@ -809,7 +809,7 @@ describe('DiagnosticsPanel component', () => {
     await flushAsync();
     await flushAsync();
 
-    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab');
+    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab-item');
     await act(async () => {
       tabButtons[1].click();
       await Promise.resolve();
@@ -1041,7 +1041,7 @@ describe('DiagnosticsPanel component', () => {
       await Promise.resolve();
     });
 
-    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab');
+    const tabButtons = rendered.container.querySelectorAll<HTMLButtonElement>('.tab-item');
     await act(async () => {
       // Skip the new streams tab to reach capability checks.
       tabButtons[2].click();

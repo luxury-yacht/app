@@ -43,7 +43,7 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 // App components
 import { AppLayout } from '@ui/layout/AppLayout';
 import { useAppLogsPanel } from '@/components/content/AppLogsPanel/AppLogsPanel';
-import { usePortForwardsPanel } from '@modules/port-forward';
+import { useActiveSessionsPanel } from '@modules/active-session';
 import { DockablePanelProvider } from '@components/dockable';
 
 // Error Boundary
@@ -60,7 +60,7 @@ import { useSidebarResize } from '@/hooks/useSidebarResize';
 function AppContent() {
   const viewState = useViewState();
   const appLogsPanel = useAppLogsPanel();
-  const portForwardsPanel = usePortForwardsPanel();
+  const activeSessionsPanel = useActiveSessionsPanel();
   const connectionStatus = useConnectionStatus();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
 
@@ -184,9 +184,9 @@ function AppContent() {
     appLogsPanel.toggle();
   }, [appLogsPanel]);
 
-  const handleTogglePortForwardsPanel = useCallback(() => {
-    portForwardsPanel.setOpen(!portForwardsPanel.isOpen);
-  }, [portForwardsPanel]);
+  const handleToggleActiveSessionsPanel = useCallback(() => {
+    activeSessionsPanel.setOpen(!activeSessionsPanel.isOpen);
+  }, [activeSessionsPanel]);
 
   const handleToggleDiagnostics = useCallback(() => {
     eventBus.emit('view:toggle-diagnostics');
@@ -204,7 +204,7 @@ function AppContent() {
     onToggleAppLogs: handleToggleAppLogsPanel,
     onToggleDiagnostics: handleToggleDiagnostics,
     onToggleObjectDiff: handleToggleObjectDiff,
-    onTogglePortForwards: handleTogglePortForwardsPanel,
+    onToggleActiveSessions: handleToggleActiveSessionsPanel,
   });
 
   // Handle sidebar resize
@@ -253,7 +253,7 @@ function AppContent() {
         onToggleObjectDiff={() => viewState.setIsObjectDiffOpen(!viewState.isObjectDiffOpen)}
         onRefresh={handleManualRefresh}
         onToggleDiagnostics={handleToggleDiagnostics}
-        onTogglePortForwards={handleTogglePortForwardsPanel}
+        onToggleActiveSessions={handleToggleActiveSessionsPanel}
         viewType={viewState.viewType}
         isLogsPanelOpen={appLogsPanel.isOpen}
         isObjectPanelOpen={viewState.showObjectPanel}

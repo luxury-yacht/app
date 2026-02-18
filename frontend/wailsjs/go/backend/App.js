@@ -30,6 +30,10 @@ export function CordonNode(arg1, arg2) {
   return window['go']['backend']['App']['CordonNode'](arg1, arg2);
 }
 
+export function CreateDebugContainer(arg1, arg2) {
+  return window['go']['backend']['App']['CreateDebugContainer'](arg1, arg2);
+}
+
 export function CreateVersionedEndpoint(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['CreateVersionedEndpoint'](arg1, arg2, arg3, arg4);
 }
@@ -108,6 +112,10 @@ export function GetClusterRole(arg1, arg2) {
 
 export function GetClusterRoleBinding(arg1, arg2) {
   return window['go']['backend']['App']['GetClusterRoleBinding'](arg1, arg2);
+}
+
+export function GetClusterShellSessionCount(arg1) {
+  return window['go']['backend']['App']['GetClusterShellSessionCount'](arg1);
 }
 
 export function GetClusterTabOrder() {
@@ -262,6 +270,10 @@ export function GetServiceAccount(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetServiceAccount'](arg1, arg2, arg3);
 }
 
+export function GetShellSessionBacklog(arg1) {
+  return window['go']['backend']['App']['GetShellSessionBacklog'](arg1);
+}
+
 export function GetStatefulSet(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetStatefulSet'](arg1, arg2, arg3);
 }
@@ -298,6 +310,10 @@ export function InitializeForTesting(arg1, arg2) {
   return window['go']['backend']['App']['InitializeForTesting'](arg1, arg2);
 }
 
+export function IsActiveSessionsPanelVisible() {
+  return window['go']['backend']['App']['IsActiveSessionsPanelVisible']();
+}
+
 export function IsDiagnosticsPanelVisible() {
   return window['go']['backend']['App']['IsDiagnosticsPanelVisible']();
 }
@@ -310,6 +326,10 @@ export function IsPortForwardsPanelVisible() {
   return window['go']['backend']['App']['IsPortForwardsPanelVisible']();
 }
 
+export function IsShellSessionsPanelVisible() {
+  return window['go']['backend']['App']['IsShellSessionsPanelVisible']();
+}
+
 export function IsSidebarVisible() {
   return window['go']['backend']['App']['IsSidebarVisible']();
 }
@@ -320,6 +340,10 @@ export function IsWorkloadHPAManaged(arg1, arg2, arg3, arg4) {
 
 export function ListPortForwards() {
   return window['go']['backend']['App']['ListPortForwards']();
+}
+
+export function ListShellSessions() {
+  return window['go']['backend']['App']['ListShellSessions']();
 }
 
 export function LoadWindowSettings() {
@@ -382,6 +406,10 @@ export function SetAccentColor(arg1, arg2) {
   return window['go']['backend']['App']['SetAccentColor'](arg1, arg2);
 }
 
+export function SetActiveSessionsPanelVisible(arg1) {
+  return window['go']['backend']['App']['SetActiveSessionsPanelVisible'](arg1);
+}
+
 export function SetApiExtensionsClient(arg1) {
   return window['go']['backend']['App']['SetApiExtensionsClient'](arg1);
 }
@@ -442,6 +470,10 @@ export function SetSelectedKubeconfigs(arg1) {
   return window['go']['backend']['App']['SetSelectedKubeconfigs'](arg1);
 }
 
+export function SetShellSessionsPanelVisible(arg1) {
+  return window['go']['backend']['App']['SetShellSessionsPanelVisible'](arg1);
+}
+
 export function SetSidebarVisible(arg1) {
   return window['go']['backend']['App']['SetSidebarVisible'](arg1);
 }
@@ -482,12 +514,20 @@ export function StopClusterPortForwards(arg1) {
   return window['go']['backend']['App']['StopClusterPortForwards'](arg1);
 }
 
+export function StopClusterShellSessions(arg1) {
+  return window['go']['backend']['App']['StopClusterShellSessions'](arg1);
+}
+
 export function StopPortForward(arg1) {
   return window['go']['backend']['App']['StopPortForward'](arg1);
 }
 
 export function SuspendCronJob(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['SuspendCronJob'](arg1, arg2, arg3, arg4);
+}
+
+export function ToggleActiveSessionsPanel() {
+  return window['go']['backend']['App']['ToggleActiveSessionsPanel']();
 }
 
 export function ToggleDiagnosticsPanel() {
@@ -504,6 +544,10 @@ export function ToggleObjectDiff() {
 
 export function TogglePortForwardsPanel() {
   return window['go']['backend']['App']['TogglePortForwardsPanel']();
+}
+
+export function ToggleShellSessionsPanel() {
+  return window['go']['backend']['App']['ToggleShellSessionsPanel']();
 }
 
 export function ToggleSidebar() {

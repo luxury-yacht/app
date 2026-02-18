@@ -10,12 +10,6 @@
   color: var(--color-text);
 }
 
-.collapse-icon {
-  font-size: 0.8em;
-  display: inline-block;
-  transition: transform 0.2s;
-}
-
 /* Shared link style for clickable objects */
 .object-panel-link {
   color: var(--color-object-panel-link);

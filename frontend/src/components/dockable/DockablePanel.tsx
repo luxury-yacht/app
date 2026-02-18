@@ -169,6 +169,20 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     panelRef,
   });
 
+  // Resolve the correct min constraints for the current dock mode.
+  const resolvedMinWidth =
+    panelState.position === 'right'
+      ? constraints.right.minWidth
+      : panelState.position === 'floating'
+        ? constraints.floating.minWidth
+        : 0;
+  const resolvedMinHeight =
+    panelState.position === 'bottom'
+      ? constraints.bottom.minHeight
+      : panelState.position === 'floating'
+        ? constraints.floating.minHeight
+        : 0;
+
   const {
     isDragging,
     isResizing,
@@ -178,10 +192,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
   } = useDockablePanelDragResize({
     panelState,
     panelRef,
-    safeMinWidth: constraints.minWidth,
-    safeMinHeight: constraints.minHeight,
-    safeMaxWidth: constraints.maxWidth,
-    safeMaxHeight: constraints.maxHeight,
+    safeMinWidth: resolvedMinWidth,
+    safeMinHeight: resolvedMinHeight,
     isMaximized,
   });
 
@@ -326,8 +338,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
 
   // Handle window resize to keep panels within bounds
   useWindowBoundsConstraint(panelState, {
-    minWidth: constraints.minWidth,
-    minHeight: constraints.minHeight,
+    minWidth: resolvedMinWidth,
+    minHeight: resolvedMinHeight,
     isResizing,
     isMaximized,
     panelRef,
@@ -456,21 +468,23 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     return title;
   }, [groupInfo, panelRegistrations, panelId, title]);
 
-  // Handle close -- closes the active tab. Only closes the panel if it's the last tab.
+  // Handle close -- closes all tabs in the group and the panel itself.
   const handleClose = useCallback(() => {
-    const activeId = groupInfo?.activeTab;
-    if (!activeId || groupTabCount <= 1) {
-      // Last tab (or single panel) -- close the whole panel.
-      if (isControlled) {
-        skipNextControlledSyncRef.current = true;
+    // Close every other tab in the group first.
+    if (groupInfo) {
+      for (const tabId of groupInfo.tabs) {
+        if (tabId !== panelId) {
+          closeTab(tabId);
+        }
       }
-      panelState.setOpen(false);
-      onClose?.();
-    } else {
-      // Multiple tabs -- remove the active tab from the group.
-      closeTab(activeId);
     }
-  }, [groupInfo, groupTabCount, isControlled, panelState, onClose, closeTab]);
+    // Close this panel (the leader / last remaining tab).
+    if (isControlled) {
+      skipNextControlledSyncRef.current = true;
+    }
+    panelState.setOpen(false);
+    onClose?.();
+  }, [groupInfo, panelId, isControlled, panelState, onClose, closeTab]);
 
   // Handle docking changes
   const handleDock = useCallback(
@@ -559,7 +573,8 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       style['--dockable-panel-translate-y'] = `${roundedY}px`;
     } else if (panelState.position === 'right') {
       style.width = `${panelState.size.width}px`;
-      style.height = '100%';
+      // Height is determined by CSS top/bottom positioning, not an explicit value.
+      // Setting height: 100% here would overflow the bottom by the top offset.
     } else if (panelState.position === 'bottom') {
       style.height = `${panelState.size.height}px`;
       style.width = '100%';

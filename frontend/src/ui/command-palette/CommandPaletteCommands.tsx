@@ -19,7 +19,7 @@ import { clearAllGridTableState } from '@shared/components/tables/persistence/gr
 import { eventBus } from '@/core/events';
 import { isMacPlatform } from '@/utils/platform';
 import { getUseShortResourceNames, setUseShortResourceNames } from '@/core/settings/appPreferences';
-import { usePortForwardsPanel } from '@modules/port-forward';
+import { useActiveSessionsPanel } from '@modules/active-session';
 
 export interface Command {
   id: string;
@@ -46,7 +46,7 @@ export function useCommandPaletteCommands() {
   const { theme } = useTheme();
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
   const { toggle: toggleAutoRefresh } = useAutoRefresh();
-  const portForwardsPanel = usePortForwardsPanel();
+  const activeSessionsPanel = useActiveSessionsPanel();
 
   const openClusterTab = useCallback(
     (tab: ClusterViewType) => {
@@ -148,15 +148,15 @@ export function useCommandPaletteCommands() {
         shortcut: ['⇧', '⌃', 'L'],
       },
       {
-        id: 'toggle-port-forwards',
-        label: 'Port Forwards Panel',
-        description: 'Toggle port forwards panel',
+        id: 'toggle-active-sessions',
+        label: 'Active Sessions Panel',
+        description: 'Toggle active sessions panel',
         category: 'Application',
         action: () => {
-          portForwardsPanel.toggle();
+          activeSessionsPanel.toggle();
         },
-        keywords: ['port', 'forward', 'tunnel', 'kubectl'],
-        shortcut: isMacPlatform() ? ['⇧', '⌘', 'F'] : ['⇧', 'Ctrl', 'F'],
+        keywords: ['sessions', 'active', 'shell', 'port', 'forward', 'exec', 'terminal'],
+        shortcut: isMacPlatform() ? ['⇧', '⌘', 'S'] : ['⇧', 'Ctrl', 'S'],
       },
       {
         id: 'toggle-diagnostics',
@@ -397,7 +397,7 @@ export function useCommandPaletteCommands() {
       zoomOut,
       resetZoom,
       zoomLevel,
-      portForwardsPanel,
+      activeSessionsPanel,
     ]
   );
 

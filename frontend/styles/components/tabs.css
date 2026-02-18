@@ -1,0 +1,135 @@
+/* ==========================================================================
+   Shared Tab Styles
+   ==========================================================================
+   Provides consistent tab-strip and tab-item classes across the app.
+   Per-context overrides (layout, drag states, overflow) remain in their
+   respective component CSS files.
+   ========================================================================== */
+
+/* Tab strip container */
+.tab-strip {
+  display: flex;
+  align-items: stretch;
+  background-color: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* Individual tab item */
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--tab-height, 32px);
+  padding: 0 0.6rem;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+/* Active tab state */
+.tab-item--active {
+  border-bottom-color: var(--color-text-secondary);
+}
+
+/* Hover state */
+.tab-item:hover {
+  color: var(--color-text);
+  background-color: var(--color-bg-tertiary);
+}
+
+/* Separator between tabs (hidden adjacent to active or hovered tabs) */
+.tab-item:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 25%;
+  height: 50%;
+  width: 1px;
+  background-color: var(--color-border);
+  opacity: 1;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+/* Hide separator next to active or hovered tab */
+.tab-item--active::after,
+.tab-item:hover::after,
+.tab-item:has(+ .tab-item--active)::after,
+.tab-item:has(+ .tab-item:hover)::after {
+  opacity: 0;
+}
+
+/* Close button — small badge in the upper-right corner, visible on hover */
+.tab-item__close {
+  position: absolute;
+  right: 1px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out);
+  z-index: 1;
+}
+
+.tab-item:hover .tab-item__close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tab-item__close:hover {
+  color: var(--color-error);
+}
+
+.tab-item__close svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Focus-visible styles for accessibility */
+.tab-item:focus-visible,
+.tab-item__close:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* Closeable tab modifier — constrains width and enables truncation */
+.tab-item--closeable {
+  min-width: 80px;
+  max-width: 200px;
+  padding-right: 1.2rem;
+}
+
+.tab-item--closeable .tab-item__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Shared view content wrapper -- standard layout for all gridtable views.
+   Provides the positioning context for the absolute-positioned gridtable-container. */
+.view-content {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}

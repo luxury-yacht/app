@@ -140,6 +140,21 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       }
     }, [isOpen]);
 
+    // Build a stable port-forward target to avoid unnecessary modal resets.
+    const portForwardTarget: PortForwardTarget | null = useMemo(() => {
+      if (!object) {
+        return null;
+      }
+      return {
+        kind: object.kind,
+        name: object.name,
+        namespace: object.namespace || '',
+        clusterId: object.clusterId || '',
+        clusterName: object.clusterName || '',
+        ports: [],
+      };
+    }, [object]);
+
     // Don't render if no actions available
     if (menuItems.length === 0) {
       return null;
@@ -154,18 +169,6 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
       setShowTriggerConfirm(false);
       onTrigger?.();
     };
-
-    // Build port forward target from object data
-    const portForwardTarget: PortForwardTarget | null = object
-      ? {
-          kind: object.kind,
-          name: object.name,
-          namespace: object.namespace || '',
-          clusterId: object.clusterId || '',
-          clusterName: object.clusterName || '',
-          ports: [],
-        }
-      : null;
 
     return (
       <>

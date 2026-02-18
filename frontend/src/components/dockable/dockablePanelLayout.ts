@@ -24,32 +24,36 @@ export const LAYOUT = {
   RESIZE_DEBOUNCE_MS: 100,
 } as const;
 
-/** Default panel size constraints (matches Object Panel values). */
+/** Default panel size and per-dock-mode min constraints. */
 export const PANEL_DEFAULTS = {
   DEFAULT_WIDTH: 700,
   DEFAULT_HEIGHT: 600,
-  MIN_WIDTH: 500,
-  MIN_HEIGHT: 400,
+  RIGHT_MIN_WIDTH: 450,
+  BOTTOM_MIN_HEIGHT: 200,
+  FLOATING_MIN_WIDTH: 450,
+  FLOATING_MIN_HEIGHT: 200,
 } as const;
 
+/** Per-dock-mode minimum size constraints. */
 export interface PanelSizeConstraints {
-  minWidth: number;
-  minHeight: number;
-  maxWidth: number | undefined;
-  maxHeight: number | undefined;
+  right: { minWidth: number };
+  bottom: { minHeight: number };
+  floating: { minWidth: number; minHeight: number };
 }
 
 /**
- * Read size-constraint CSS custom properties from a panel element.
+ * Read per-dock-mode size-constraint CSS custom properties from a panel element.
  * Falls back to PANEL_DEFAULTS when the element is unavailable (JSDOM / SSR).
  */
 export function getPanelSizeConstraints(panel?: HTMLElement | null): PanelSizeConstraints {
   if (typeof document === 'undefined' || !panel) {
     return {
-      minWidth: PANEL_DEFAULTS.MIN_WIDTH,
-      minHeight: PANEL_DEFAULTS.MIN_HEIGHT,
-      maxWidth: undefined,
-      maxHeight: undefined,
+      right: { minWidth: PANEL_DEFAULTS.RIGHT_MIN_WIDTH },
+      bottom: { minHeight: PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT },
+      floating: {
+        minWidth: PANEL_DEFAULTS.FLOATING_MIN_WIDTH,
+        minHeight: PANEL_DEFAULTS.FLOATING_MIN_HEIGHT,
+      },
     };
   }
   const style = getComputedStyle(panel);
@@ -60,10 +64,17 @@ export function getPanelSizeConstraints(panel?: HTMLElement | null): PanelSizeCo
     return Number.isFinite(parsed) ? parsed : undefined;
   };
   return {
-    minWidth: readOpt('--dockable-panel-min-width') ?? PANEL_DEFAULTS.MIN_WIDTH,
-    minHeight: readOpt('--dockable-panel-min-height') ?? PANEL_DEFAULTS.MIN_HEIGHT,
-    maxWidth: readOpt('--dockable-panel-max-width'),
-    maxHeight: readOpt('--dockable-panel-max-height'),
+    right: {
+      minWidth: readOpt('--dockable-panel-right-min-width') ?? PANEL_DEFAULTS.RIGHT_MIN_WIDTH,
+    },
+    bottom: {
+      minHeight: readOpt('--dockable-panel-bottom-min-height') ?? PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT,
+    },
+    floating: {
+      minWidth: readOpt('--dockable-panel-floating-min-width') ?? PANEL_DEFAULTS.FLOATING_MIN_WIDTH,
+      minHeight:
+        readOpt('--dockable-panel-floating-min-height') ?? PANEL_DEFAULTS.FLOATING_MIN_HEIGHT,
+    },
   };
 }
 

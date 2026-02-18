@@ -33,6 +33,8 @@ export const MAX_SATURATION = 20;
 
 // Maximum lightness offset in percentage points when brightness is at ±50.
 // brightness * (MAX_BRIGHTNESS_OFFSET / 50) gives the actual offset.
+// Also duplicated in index.html inline script for FOUC prevention.
+/** @lintignore */
 export const MAX_BRIGHTNESS_OFFSET = 10;
 
 // Per-theme localStorage keys for FOUC prevention bridge.

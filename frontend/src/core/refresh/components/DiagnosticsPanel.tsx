@@ -2156,9 +2156,9 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       contentClassName="diagnostics-content"
       className="diagnostics-panel"
     >
-      <div className="tabs diagnostics-tabs">
+      <div className="tab-strip diagnostics-tabs">
         <button
-          className={`tab ${activeTab === 'refresh-domains' ? 'active' : ''}`}
+          className={`tab-item${activeTab === 'refresh-domains' ? ' tab-item--active' : ''}`}
           onClick={() => setActiveTab('refresh-domains')}
           data-diagnostics-focusable="true"
           tabIndex={-1}
@@ -2166,7 +2166,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           REFRESH DOMAINS
         </button>
         <button
-          className={`tab ${activeTab === 'streams' ? 'active' : ''}`}
+          className={`tab-item${activeTab === 'streams' ? ' tab-item--active' : ''}`}
           onClick={() => setActiveTab('streams')}
           data-diagnostics-focusable="true"
           tabIndex={-1}
@@ -2174,7 +2174,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           STREAMS
         </button>
         <button
-          className={`tab ${activeTab === 'capability-checks' ? 'active' : ''}`}
+          className={`tab-item${activeTab === 'capability-checks' ? ' tab-item--active' : ''}`}
           onClick={() => setActiveTab('capability-checks')}
           data-diagnostics-focusable="true"
           tabIndex={-1}
@@ -2182,7 +2182,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
           CAPABILITIES CHECKS
         </button>
         <button
-          className={`tab ${activeTab === 'effective-permissions' ? 'active' : ''}`}
+          className={`tab-item${activeTab === 'effective-permissions' ? ' tab-item--active' : ''}`}
           onClick={() => setActiveTab('effective-permissions')}
           data-diagnostics-focusable="true"
           tabIndex={-1}

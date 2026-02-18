@@ -8,75 +8,122 @@
 
 .shell-tab__toolbar {
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 0.5rem;
+  align-items: flex-start;
   padding: 10px;
 }
 
 .shell-tab__controls {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+  width: min(100%, 640px);
+}
+
+.shell-tab__debug-toggle {
+  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.shell-tab__control {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  font-size: 0.8rem;
   font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
 }
 
-.shell-tab__control select {
-  font-size: 0.875rem;
-  padding: 0.15rem 0.35rem;
+.shell-tab__debug-toggle input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.shell-tab__controls-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: max-content minmax(240px, 1fr);
+  gap: 0.5rem 0.75rem;
+  align-items: start;
+}
+
+.shell-tab__control-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  /* Align with the first line of the adjacent dropdown */
+  padding-top: 0.3rem;
+}
+
+.shell-tab__control-input {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  gap: 0.4rem;
+}
+
+.shell-tab__control-input .dropdown {
+  align-self: flex-start;
 }
 
 .shell-tab__button {
-  border: 1px solid var(--color-border, #cbd5f5);
-  background: var(--color-surface-secondary, #f1f5f9);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-secondary);
   padding: 0.25rem 0.6rem;
   border-radius: 4px;
   font-size: 0.8rem;
   cursor: pointer;
+  align-self: flex-start;
 }
 
-.shell-tab__badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  background: var(--color-surface-muted, #e2e8f0);
-  color: var(--color-text, #0f172a);
-}
-
-.shell-tab__badge--open {
-  background: #0f9d58;
-  color: #fff;
-}
-
-.shell-tab__badge--pending {
-  background: #fbbf24;
-  color: #1f2933;
-}
-
-.shell-tab__badge--error {
-  background: #ef4444;
-  color: #fff;
+.shell-tab__debug-button {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-secondary);
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  align-self: flex-start;
 }
 
 .shell-tab__notice {
   padding: 0.5rem 0.75rem;
   border-radius: 4px;
-  background: var(--color-surface-warning, #fff4db);
-  color: var(--color-text, #1f2933);
+  background: var(--color-surface-warning);
+  color: var(--color-text);
+}
+
+.shell-tab__custom-image-input {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  width: 100%;
+  min-width: 140px;
+}
+
+.shell-tab__debug-warning {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  padding: 0 12px 8px 12px;
+}
+
+.shell-tab__connection-error {
+  margin: 0 10px 8px;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--color-error-border);
+  border-radius: 4px;
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+  font-size: 0.8rem;
+  line-height: 1.3;
 }
 
 .shell-tab__terminal-wrapper {
   position: relative;
   flex: 1;
-  min-height: 260px;
 }
 
 .shell-tab__terminal {
@@ -93,19 +140,82 @@
   display: none;
 }
 
-.shell-tab__terminal-placeholder {
-  position: absolute;
-  background: var(--color-bg);
-  color: var(--color-text-secondary);
-  display: flex;
-  padding: 1rem;
-}
-
 .shell-tab__terminal .xterm {
-  padding: 0 0.5rem;
+  padding-top: 0.5rem;
+  padding-left: 0.5rem;
   height: 100%;
+  box-sizing: border-box;
 }
 
 .shell-tab__terminal .xterm-viewport {
   background-color: transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.shell-tab__terminal .xterm-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.shell-tab__terminal .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.shell-tab__terminal .xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg);
+  border-radius: 10px;
+}
+
+.shell-tab__terminal .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover-bg);
+}
+
+.shell-tab__terminal .xterm-viewport::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar {
+  background: transparent !important;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .shadow {
+  display: none !important;
+}
+
+.shell-tab__terminal .xterm .xterm-decoration-overview-ruler {
+  display: none !important;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.vertical {
+  width: var(--scrollbar-width) !important;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar.horizontal {
+  height: var(--scrollbar-height) !important;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider {
+  background: var(--scrollbar-thumb-bg) !important;
+  border-radius: 10px;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider:hover {
+  background: var(--scrollbar-thumb-hover-bg) !important;
+}
+
+.shell-tab__terminal .xterm .xterm-scrollable-element > .scrollbar > .slider.active {
+  background: var(--scrollbar-thumb-hover-bg) !important;
+}
+
+@media (max-width: 640px) {
+  .shell-tab__controls {
+    width: 100%;
+  }
+
+  .shell-tab__controls-grid {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
 }

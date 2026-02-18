@@ -15,6 +15,10 @@ import { DockablePanelProvider } from '@components/dockable/DockablePanelProvide
 
 const wailsMocks = vi.hoisted(() => ({
   StartShellSession: vi.fn(),
+  CreateDebugContainer: vi.fn(),
+  GetPodContainers: vi.fn(),
+  GetShellSessionBacklog: vi.fn(),
+  ListShellSessions: vi.fn(),
   SendShellInput: vi.fn(),
   ResizeShellSession: vi.fn(),
   CloseShellSession: vi.fn(),
@@ -110,17 +114,28 @@ vi.mock('@xterm/addon-clipboard', () => ({
   ClipboardAddon: clipboardAddonMocks.ClipboardAddon,
 }));
 
+// Mock ZoomContext to return a stable 100% zoom (needed by Tooltip)
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({ zoomLevel: 100 }),
+}));
+
 vi.mock('@shared/components/dropdowns/Dropdown', () => ({
   Dropdown: ({
     value = '',
     onChange,
     options = [],
+    ariaLabel,
   }: {
     value?: string;
     onChange?: (value: string) => void;
     options?: Array<{ value: string; label: string }>;
+    ariaLabel?: string;
   }) => (
-    <select value={value} onChange={(event) => onChange?.(event.target.value)}>
+    <select
+      value={value}
+      aria-label={ariaLabel}
+      onChange={(event) => onChange?.(event.target.value)}
+    >
       {options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
@@ -182,6 +197,14 @@ describe('ShellTab', () => {
       command: ['/bin/sh'],
       containers: ['app'],
     });
+    wailsMocks.CreateDebugContainer.mockResolvedValue({
+      containerName: 'debug-abc12345',
+      namespace: 'team-a',
+      podName: 'pod-1',
+    });
+    wailsMocks.GetPodContainers.mockResolvedValue([]);
+    wailsMocks.GetShellSessionBacklog.mockResolvedValue('');
+    wailsMocks.ListShellSessions.mockResolvedValue([]);
     wailsMocks.SendShellInput.mockResolvedValue(undefined);
     wailsMocks.ResizeShellSession.mockResolvedValue(undefined);
     wailsMocks.CloseShellSession.mockResolvedValue(undefined);
@@ -202,6 +225,17 @@ describe('ShellTab', () => {
     });
   };
 
+  const setDebugContainerEnabled = (enabled: boolean) => {
+    const checkbox = container.querySelector<HTMLInputElement>('#shell-tab-debug-toggle');
+    expect(checkbox).toBeTruthy();
+    if (checkbox?.checked === enabled) {
+      return;
+    }
+    act(() => {
+      checkbox?.click();
+    });
+  };
+
   const renderShellTab = async (props?: Partial<React.ComponentProps<typeof ShellTab>>) => {
     const finalProps: React.ComponentProps<typeof ShellTab> = {
       namespace: 'team-a',
@@ -209,6 +243,7 @@ describe('ShellTab', () => {
       availableContainers: [],
       isActive: true,
       disabledReason: undefined,
+      debugDisabledReason: undefined,
       clusterId: 'alpha:ctx',
       ...props,
     };
@@ -239,10 +274,10 @@ describe('ShellTab', () => {
 
     const terminal = getLatestTerminal();
     expect(terminal).toBeTruthy();
-    expect(terminal?.writeln).toHaveBeenCalledWith(expect.stringContaining('Connecting'));
     expect(clipboardAddonMocks.ClipboardAddon).toHaveBeenCalled();
     expect(terminal?.loadAddon).toHaveBeenCalledWith(clipboardAddonMocks.instances[0]);
 
+    await flushAsync();
     emitEvent('object-shell:status', { sessionId: 'sess-1', status: 'open' });
     await flushAsync();
 
@@ -320,7 +355,7 @@ describe('ShellTab', () => {
     expect(wailsMocks.SendShellInput).toHaveBeenCalledWith('sess-1', 'ls\n');
   });
 
-  it('closes the shell session when the component unmounts', async () => {
+  it('detaches without closing the shell session when the component unmounts', async () => {
     await renderShellTab();
     clickConnectButton();
     await flushAsync();
@@ -329,6 +364,277 @@ describe('ShellTab', () => {
       root.unmount();
     });
 
-    expect(wailsMocks.CloseShellSession).toHaveBeenCalledWith('sess-1');
+    expect(wailsMocks.CloseShellSession).not.toHaveBeenCalled();
+  });
+
+  it('reattaches to an existing tracked shell session for the same pod', async () => {
+    wailsMocks.ListShellSessions.mockResolvedValue([
+      {
+        sessionId: 'existing-1',
+        clusterId: 'alpha:ctx',
+        clusterName: 'alpha',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+        command: ['/bin/sh'],
+      },
+    ]);
+
+    await renderShellTab();
+    await flushAsync();
+
+    expect(container.querySelector('.shell-tab__controls')).toBeNull();
+    expect(container.querySelector('#shell-tab-debug-toggle')).toBeNull();
+    expect(wailsMocks.StartShellSession).not.toHaveBeenCalled();
+  });
+
+  it('replays buffered output when reattaching to a tracked session', async () => {
+    wailsMocks.ListShellSessions.mockResolvedValue([
+      {
+        sessionId: 'existing-1',
+        clusterId: 'alpha:ctx',
+        clusterName: 'alpha',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+        command: ['/bin/sh'],
+      },
+    ]);
+    wailsMocks.GetShellSessionBacklog.mockResolvedValue('prior output\r\n$ ');
+
+    await renderShellTab();
+    await flushAsync();
+
+    expect(wailsMocks.GetShellSessionBacklog).toHaveBeenCalledWith('existing-1');
+    const terminal = getLatestTerminal();
+    expect(terminal?.write).toHaveBeenCalledWith('prior output\r\n$ ');
+  });
+
+  it('deduplicates replay overlap when live output arrives during backlog replay', async () => {
+    wailsMocks.ListShellSessions.mockResolvedValue([
+      {
+        sessionId: 'existing-1',
+        clusterId: 'alpha:ctx',
+        clusterName: 'alpha',
+        namespace: 'team-a',
+        podName: 'pod-1',
+        container: 'app',
+        command: ['/bin/sh'],
+      },
+    ]);
+    let resolveBacklog: (value: string) => void = () => {};
+    const backlogPromise = new Promise<string>((resolve) => {
+      resolveBacklog = resolve;
+    });
+    wailsMocks.GetShellSessionBacklog.mockReturnValue(backlogPromise);
+
+    await renderShellTab();
+    await flushAsync();
+    expect(wailsMocks.GetShellSessionBacklog).toHaveBeenCalledWith('existing-1');
+
+    emitEvent('object-shell:output', { sessionId: 'existing-1', stream: 'stdout', data: '# ' });
+    await flushAsync();
+    resolveBacklog('# ');
+    await act(async () => {
+      await backlogPromise;
+      await flushAsync();
+    });
+
+    const terminal = getLatestTerminal();
+    const promptWrites = terminal?.write.mock.calls.filter((args) => args[0] === '# ') ?? [];
+    expect(promptWrites).toHaveLength(1);
+  });
+
+  it('renders a debug checkbox toggle', async () => {
+    await renderShellTab();
+    const toggle = container.querySelector<HTMLInputElement>('#shell-tab-debug-toggle');
+    expect(toggle).not.toBeNull();
+    expect(toggle?.checked).toBe(false);
+  });
+
+  it('shows debug controls when debug container toggle is enabled', async () => {
+    await renderShellTab();
+    setDebugContainerEnabled(true);
+    await flushAsync();
+
+    const debugButton = container.querySelector('.shell-tab__debug-button');
+    expect(debugButton).not.toBeNull();
+    expect(debugButton?.textContent).toBe('Start');
+  });
+
+  it('calls CreateDebugContainer on debug action', async () => {
+    await renderShellTab({ availableContainers: ['app'] });
+    setDebugContainerEnabled(true);
+    await flushAsync();
+
+    const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
+    await act(async () => {
+      debugBtn.click();
+      await flushAsync();
+    });
+
+    expect(wailsMocks.CreateDebugContainer).toHaveBeenCalledWith('alpha:ctx', {
+      namespace: 'team-a',
+      podName: 'pod-1',
+      image: 'busybox:latest',
+      targetContainer: 'app',
+    });
+  });
+
+  it('shows error when CreateDebugContainer fails', async () => {
+    wailsMocks.CreateDebugContainer.mockRejectedValue(
+      new Error('ephemeral containers not supported')
+    );
+    await renderShellTab({ availableContainers: ['app'] });
+    setDebugContainerEnabled(true);
+    await flushAsync();
+
+    const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
+    await act(async () => {
+      debugBtn.click();
+      await flushAsync();
+    });
+
+    expect(wailsMocks.CreateDebugContainer).toHaveBeenCalled();
+    const terminal = getLatestTerminal();
+    expect(terminal?.writeln).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to create debug container')
+    );
+    expect(container.textContent).toContain('Connection failed');
+    expect(container.textContent).toContain('ephemeral containers not supported');
+  });
+
+  it('shows shell connection failure reason when start fails', async () => {
+    wailsMocks.StartShellSession.mockRejectedValue(new Error('exec: "/bin/sh": file not found'));
+    await renderShellTab();
+
+    clickConnectButton();
+    await flushAsync();
+    await flushAsync();
+
+    expect(container.textContent).toContain('Connection failed');
+    expect(container.textContent).toContain('exec: "/bin/sh": file not found');
+  });
+
+  it('keeps the first connection error visible if a closed status follows', async () => {
+    await renderShellTab();
+
+    clickConnectButton();
+    await flushAsync();
+    await flushAsync();
+
+    emitEvent('object-shell:status', {
+      sessionId: 'sess-1',
+      status: 'error',
+      reason: 'exec: "/bin/sh": file not found',
+    });
+    emitEvent('object-shell:status', {
+      sessionId: 'sess-1',
+      status: 'closed',
+      reason: 'Session closed.',
+    });
+    await flushAsync();
+
+    expect(container.textContent).toContain('Connection failed');
+    expect(container.textContent).toContain('exec: "/bin/sh": file not found');
+  });
+
+  it('shows a connection error when session closes immediately without an explicit reason', async () => {
+    await renderShellTab();
+
+    clickConnectButton();
+    await flushAsync();
+    await flushAsync();
+
+    emitEvent('object-shell:output', {
+      sessionId: 'sess-1',
+      stream: 'stderr',
+      data: 'exec: "/bin/bash": file not found\r\n',
+    });
+    emitEvent('object-shell:status', { sessionId: 'sess-1', status: 'closed', reason: '' });
+    await flushAsync();
+
+    expect(container.textContent).toContain('Connection failed');
+    expect(container.textContent).toContain('exec: "/bin/bash": file not found');
+  });
+
+  it('shows custom image input when Custom... is selected', async () => {
+    await renderShellTab({ availableContainers: ['app'] });
+    setDebugContainerEnabled(true);
+    await flushAsync();
+
+    let customInput = container.querySelector('.shell-tab__custom-image-input');
+    expect(customInput).toBeNull();
+
+    const selects = container.querySelectorAll('select');
+    act(() => {
+      const imageSelect = selects[0] as HTMLSelectElement;
+      imageSelect.value = '__custom__';
+      imageSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    await flushAsync();
+
+    customInput = container.querySelector('.shell-tab__custom-image-input');
+    expect(customInput).not.toBeNull();
+  });
+
+  it('disables Debug button and shows reason when debug capability is denied', async () => {
+    await renderShellTab({
+      availableContainers: ['app'],
+      debugDisabledReason: 'Missing permission: update pods/ephemeralcontainers',
+    });
+    setDebugContainerEnabled(true);
+    await flushAsync();
+
+    const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
+    expect(debugBtn).not.toBeNull();
+    expect(debugBtn.disabled).toBe(true);
+
+    const warning = container.querySelector('.shell-tab__debug-warning');
+    expect(warning).not.toBeNull();
+    expect(warning?.textContent).toContain('Missing permission');
+  });
+
+  it('disables Debug button when shell access is denied', async () => {
+    await renderShellTab({
+      availableContainers: ['app'],
+      disabledReason: 'Missing permission: create pods/exec',
+    });
+    setDebugContainerEnabled(true);
+    await flushAsync();
+
+    const debugBtn = container.querySelector('.shell-tab__debug-button') as HTMLButtonElement;
+    expect(debugBtn).not.toBeNull();
+    expect(debugBtn.disabled).toBe(true);
+
+    await act(async () => {
+      debugBtn.click();
+      await flushAsync();
+    });
+    expect(wailsMocks.CreateDebugContainer).not.toHaveBeenCalled();
+  });
+
+  it('hides controls while a shell session is active', async () => {
+    await renderShellTab();
+    clickConnectButton();
+    await flushAsync();
+    emitEvent('object-shell:status', { sessionId: 'sess-1', status: 'open' });
+    await flushAsync();
+
+    expect(container.querySelector('.shell-tab__controls')).toBeNull();
+    expect(container.querySelector('#shell-tab-debug-toggle')).toBeNull();
+  });
+
+  it('includes debug containers in shell dropdown from backend container discovery', async () => {
+    wailsMocks.GetPodContainers.mockResolvedValue(['init-a (init)', 'app', 'debug-abc (debug)']);
+    await renderShellTab();
+    await flushAsync();
+
+    const selects = container.querySelectorAll('select');
+    const containerSelect = selects[0] as HTMLSelectElement;
+    const values = Array.from(containerSelect.options).map((option) => option.value);
+    expect(values).toContain('app');
+    expect(values).toContain('debug-abc');
+    expect(values).not.toContain('init-a');
   });
 });

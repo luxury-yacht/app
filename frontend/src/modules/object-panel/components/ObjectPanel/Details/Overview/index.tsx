@@ -6,7 +6,6 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { overviewRegistry } from './registry';
 import { ActionsMenu } from '@shared/components/kubernetes/ActionsMenu';
@@ -35,9 +34,7 @@ interface GenericOverviewProps {
 type OverviewProps = GenericOverviewProps;
 
 const Overview: React.FC<OverviewProps> = (props) => {
-  const { sectionStates, setSectionExpanded } = useDetailsSectionContext();
   const { objectData } = useObjectPanel();
-  const expanded = sectionStates.overview;
 
   // Get cluster info from objectData (the source of truth for the current object)
   const clusterId = objectData?.clusterId || '';
@@ -85,13 +82,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
   return (
     <div className="object-panel-section">
       <div className="object-panel-section-header">
-        <div
-          className={`object-panel-section-title collapsible${!expanded ? ' collapsed' : ''}`}
-          onClick={() => setSectionExpanded('overview', !expanded)}
-        >
-          <span className="collapse-icon">{expanded ? '▼' : '▶'}</span>
-          Overview
-        </div>
+        <div className="object-panel-section-title">Overview</div>
         <div className="object-panel-section-actions">
           <ActionsMenu
             object={actionObject}
@@ -107,7 +98,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
         </div>
       </div>
 
-      {expanded && <div className="object-panel-section-grid">{renderOverviewContent()}</div>}
+      <div className="object-panel-section-grid">{renderOverviewContent()}</div>
     </div>
   );
 };

@@ -52,6 +52,7 @@ describe('useObjectPanelCapabilities', () => {
     scale: true,
     edit: true,
     shell: false,
+    debug: false,
     trigger: false,
     suspend: false,
   };
@@ -164,6 +165,7 @@ describe('useObjectPanelCapabilities', () => {
         scale: false,
         edit: false,
         shell: false,
+        debug: false,
         trigger: false,
         suspend: false,
       },
@@ -188,6 +190,7 @@ describe('useObjectPanelCapabilities', () => {
       scale: undefined,
       editYaml: undefined,
       shell: undefined,
+      debug: undefined,
     });
   });
 
@@ -210,5 +213,56 @@ describe('useObjectPanelCapabilities', () => {
     });
 
     expect(result.capabilities.hasShell).toBe(true);
+  });
+
+  it('surfaces debug-denied reason when ephemeralcontainers permission is denied', async () => {
+    const capabilityStateMap: Record<
+      string,
+      { allowed: boolean; pending: boolean; reason?: string }
+    > = {
+      'debug-ephemeral': {
+        allowed: false,
+        pending: false,
+        reason: 'Forbidden: pods/ephemeralcontainers',
+      },
+    };
+
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
+    }));
+    mockUseUserPermission.mockReturnValue(null);
+
+    const result = await renderHook({
+      objectData: { kind: 'Pod', name: 'demo', namespace: 'team-a', clusterId: 'c1' },
+      objectKind: 'pod',
+      detailScope: 'team-a:pod:demo',
+      featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
+      workloadKindApiNames,
+    });
+
+    expect(result.capabilityStates.debug.allowed).toBe(false);
+    expect(result.capabilityReasons.debug).toBe('Forbidden: pods/ephemeralcontainers');
+  });
+
+  it('allows debug when ephemeralcontainers permission is granted', async () => {
+    const capabilityStateMap: Record<string, { allowed: boolean; pending: boolean }> = {
+      'debug-ephemeral': { allowed: true, pending: false },
+    };
+
+    mockUseCapabilities.mockImplementation(() => ({
+      getState: (id: string) => capabilityStateMap[id] ?? { allowed: false, pending: false },
+    }));
+    mockUseUserPermission.mockReturnValue(null);
+
+    const result = await renderHook({
+      objectData: { kind: 'Pod', name: 'demo', namespace: 'team-a', clusterId: 'c1' },
+      objectKind: 'pod',
+      detailScope: 'team-a:pod:demo',
+      featureSupport: { ...baseFeatureSupport, shell: true, debug: true },
+      workloadKindApiNames,
+    });
+
+    expect(result.capabilityStates.debug.allowed).toBe(true);
+    expect(result.capabilityReasons.debug).toBeUndefined();
   });
 });

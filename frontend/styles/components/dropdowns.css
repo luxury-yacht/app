@@ -178,13 +178,13 @@
 }
 
 .dropdown-option.selected {
-  background-color: var(--color-accent);
-  color: #fff;
+  background-color: var(--color-bg-tertiary, rgba(255, 255, 255, 0.05));
+  color: var(--color-text);
 }
 
 .dropdown-option.selected:hover {
-  background-color: var(--color-accent-hover);
-  color: #fff;
+  background-color: var(--color-bg-tertiary, rgba(255, 255, 255, 0.05));
+  color: var(--color-text);
 }
 
 .dropdown-option.disabled {

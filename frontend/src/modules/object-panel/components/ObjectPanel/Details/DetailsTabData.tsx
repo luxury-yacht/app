@@ -6,7 +6,6 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import DetailsTabDataErrorBoundary from './DetailsTabDataErrorBoundary';
 import { useShortcut } from '@ui/shortcuts';
 import '../shared.css';
@@ -19,8 +18,6 @@ interface DataSectionProps {
 }
 
 const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecret = false }) => {
-  const { sectionStates, setSectionExpanded } = useDetailsSectionContext();
-  const expanded = sectionStates.data;
   const [showDecoded, setShowDecoded] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -80,7 +77,7 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
   useShortcut({
     key: 's',
     handler: () => {
-      if (isSecret && expanded) {
+      if (isSecret) {
         setShowDecoded((prev) => !prev);
         return true;
       }
@@ -90,7 +87,7 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
     category: 'Object Panel',
     enabled: hasData, // Only active when data is available
     view: 'global',
-    priority: isSecret && expanded ? 20 : 0,
+    priority: isSecret ? 20 : 0,
   });
 
   if (!hasData) {
@@ -100,15 +97,11 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
   return (
     <div className="object-panel-section">
       <div className="data-section-header">
-        <div
-          className={`object-panel-section-title collapsible${!expanded ? ' collapsed' : ''}`}
-          onClick={() => setSectionExpanded('data', !expanded)}
-        >
-          <span className="collapse-icon">{expanded ? '▼' : '▶'}</span>
+        <div className="object-panel-section-title">
           Data
           {totalCount > 0 && <span className="metadata-count">({totalCount})</span>}
         </div>
-        {isSecret && expanded && (
+        {isSecret && (
           <button
             className="button danger small"
             onClick={() => setShowDecoded(!showDecoded)}
@@ -118,51 +111,47 @@ const DataSectionInner: React.FC<DataSectionProps> = ({ data, binaryData, isSecr
           </button>
         )}
       </div>
-      {expanded && (
-        <div className="object-panel-section-grid">
-          {displayData && dataCount > 0 && (
-            <>
-              {Object.entries(displayData).map(([key, value]) => (
-                <div key={key} className="data-item">
-                  <span className="data-label">{key}</span>
-                  <div className="data-value-container">
-                    <pre
-                      className={`data-value ${copiedKey === key ? 'copied' : ''}`}
-                      onClick={() => handleCopyValue(key, value)}
-                      title="Click to copy"
-                    >
-                      {value}
-                    </pre>
-                    {copiedKey === key && <span className="copy-feedback">Copied</span>}
-                  </div>
+      <div className="object-panel-section-grid">
+        {displayData && dataCount > 0 && (
+          <>
+            {Object.entries(displayData).map(([key, value]) => (
+              <div key={key} className="data-item">
+                <span className="data-label">{key}</span>
+                <div className="data-value-container">
+                  <pre
+                    className={`data-value ${copiedKey === key ? 'copied' : ''}`}
+                    onClick={() => handleCopyValue(key, value)}
+                    title="Click to copy"
+                  >
+                    {value}
+                  </pre>
+                  {copiedKey === key && <span className="copy-feedback">Copied</span>}
                 </div>
-              ))}
-            </>
-          )}
-          {binaryData && binaryCount > 0 && (
-            <>
-              {dataCount > 0 && <div className="data-section-divider">Binary Data</div>}
-              {Object.entries(binaryData).map(([key, value]) => (
-                <div key={`binary-${key}`} className="data-item">
-                  <span className="data-label">{key}</span>
-                  <div className="data-value-container">
-                    <pre
-                      className={`data-value binary-data ${copiedKey === `binary-${key}` ? 'copied' : ''}`}
-                      onClick={() => handleCopyValue(`binary-${key}`, value)}
-                      title="Click to copy"
-                    >
-                      {value}
-                    </pre>
-                    {copiedKey === `binary-${key}` && (
-                      <span className="copy-feedback">Copied!</span>
-                    )}
-                  </div>
+              </div>
+            ))}
+          </>
+        )}
+        {binaryData && binaryCount > 0 && (
+          <>
+            {dataCount > 0 && <div className="data-section-divider">Binary Data</div>}
+            {Object.entries(binaryData).map(([key, value]) => (
+              <div key={`binary-${key}`} className="data-item">
+                <span className="data-label">{key}</span>
+                <div className="data-value-container">
+                  <pre
+                    className={`data-value binary-data ${copiedKey === `binary-${key}` ? 'copied' : ''}`}
+                    onClick={() => handleCopyValue(`binary-${key}`, value)}
+                    title="Click to copy"
+                  >
+                    {value}
+                  </pre>
+                  {copiedKey === `binary-${key}` && <span className="copy-feedback">Copied!</span>}
                 </div>
-              ))}
-            </>
-          )}
-        </div>
-      )}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
     </div>
   );
 };

@@ -91,6 +91,9 @@ func (s *Service) PodContainers(namespace, podName string) ([]string, error) {
 	for _, c := range pod.Spec.Containers {
 		containers = append(containers, c.Name)
 	}
+	for _, c := range pod.Spec.EphemeralContainers {
+		containers = append(containers, c.Name+" (debug)")
+	}
 	return containers, nil
 }
 

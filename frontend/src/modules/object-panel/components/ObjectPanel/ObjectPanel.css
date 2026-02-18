@@ -20,7 +20,7 @@
   display: flex;
   align-items: center;
   padding: 10px 0px;
-  border-bottom: 1px solid var(--color-border);
+  background-color: var(--color-bg-secondary);
   flex-shrink: 0;
   position: relative;
 }
@@ -74,9 +74,11 @@
   color: var(--color-text);
 }
 
-/* Tabs use the shared styles from tabs.css */
-.object-panel .tab {
+/* Tabs use the shared styles from styles/components/tabs.css */
+.object-panel .tab-item,
+.object-panel-body .tab-item {
   cursor: pointer;
+  text-transform: uppercase;
 }
 
 /* Make the panel body a flex container */
@@ -88,7 +90,7 @@
 }
 
 /* Tabs should not scroll - fixed at top */
-.object-panel-body > .tabs {
+.object-panel-body > .tab-strip {
   flex-shrink: 0;
 }
 

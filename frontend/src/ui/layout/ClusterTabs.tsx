@@ -11,8 +11,13 @@ import {
   setClusterTabOrder,
   subscribeClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
-import { GetClusterPortForwardCount, StopClusterPortForwards } from '@wailsjs/go/backend/App';
+import {
+  GetClusterPortForwardCount,
+  StopClusterPortForwards,
+  StopClusterShellSessions,
+} from '@wailsjs/go/backend/App';
 import ConfirmationModal from '@components/modals/ConfirmationModal';
+import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import './ClusterTabs.css';
 
 const ordersMatch = (left: string[], right: string[]) =>
@@ -156,6 +161,13 @@ const ClusterTabs: React.FC = () => {
         console.warn('Failed to check cluster port forward count:', err);
       }
 
+      // Stop tracked shell sessions for this cluster before closing.
+      try {
+        await StopClusterShellSessions(selection);
+      } catch (err) {
+        console.warn('Failed to stop cluster shell sessions:', err);
+      }
+
       // No active port forwards, proceed directly with closing.
       const nextSelections = selectedKubeconfigs.filter((config) => config !== selection);
       void setSelectedKubeconfigs(nextSelections);
@@ -172,6 +184,11 @@ const ClusterTabs: React.FC = () => {
       await StopClusterPortForwards(closeConfirm.clusterId);
     } catch (err) {
       console.warn('Failed to stop cluster port forwards:', err);
+    }
+    try {
+      await StopClusterShellSessions(closeConfirm.clusterId);
+    } catch (err) {
+      console.warn('Failed to stop cluster shell sessions:', err);
     }
 
     // Close the tab.
@@ -241,15 +258,34 @@ const ClusterTabs: React.FC = () => {
 
   return (
     <>
-      <div ref={tabsRef} className="cluster-tabs" role="tablist" aria-label="Cluster tabs">
+      <div
+        ref={tabsRef}
+        className="tab-strip cluster-tabs"
+        role="tablist"
+        aria-label="Cluster tabs"
+      >
         {orderedTabs.map((tab) => {
           const isActive = tab.id === activeTabId;
           const isDragging = tab.id === draggingId;
           const isDropTarget = tab.id === dropTargetId && tab.id !== draggingId;
           return (
-            <div
+            <button
               key={tab.id}
-              className={`cluster-tab${isActive ? ' cluster-tab--active' : ''}${isDragging ? ' cluster-tab--dragging' : ''}${isDropTarget ? ' cluster-tab--drop-target' : ''}`}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              className={`tab-item tab-item--closeable${isActive ? ' tab-item--active' : ''}${isDragging ? ' cluster-tab--dragging' : ''}${isDropTarget ? ' cluster-tab--drop-target' : ''}`}
+              onClick={() => handleTabClick(tab.selection)}
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', tab.id);
+                setDraggingId(tab.id);
+              }}
+              onDragEnd={() => {
+                setDraggingId(null);
+                setDropTargetId(null);
+              }}
               onDragOver={(event) => {
                 if (!draggingId) {
                   return;
@@ -265,40 +301,29 @@ const ClusterTabs: React.FC = () => {
                 handleDrop(tab.id);
               }}
             >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                className="cluster-tab__button"
-                onClick={() => handleTabClick(tab.selection)}
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.effectAllowed = 'move';
-                  event.dataTransfer.setData('text/plain', tab.id);
-                  setDraggingId(tab.id);
-                }}
-                onDragEnd={() => {
-                  setDraggingId(null);
-                  setDropTargetId(null);
-                }}
-              >
-                <span className="cluster-tab__label" title={tab.label}>
-                  {tab.label}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="cluster-tab__close"
+              <span className="tab-item__label" title={tab.label}>
+                {tab.label}
+              </span>
+              <span
+                role="button"
+                tabIndex={0}
+                className="tab-item__close"
                 onClick={(event) => {
                   event.stopPropagation();
                   handleCloseTab(tab.selection);
                 }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.stopPropagation();
+                    handleCloseTab(tab.selection);
+                  }
+                }}
                 aria-label={`Close ${tab.label}`}
                 title={`Close ${tab.label}`}
               >
-                x
-              </button>
-            </div>
+                <CloseIcon width={10} height={10} />
+              </span>
+            </button>
           );
         })}
       </div>

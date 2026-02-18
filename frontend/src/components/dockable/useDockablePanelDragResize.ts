@@ -9,7 +9,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent, RefObject } from 'react';
 import type { DockPosition } from './useDockablePanelState';
 import { LAYOUT, getContentBounds } from './dockablePanelLayout';
-import { useZoom, getZoomAwareViewport } from '@core/contexts/ZoomContext';
+// Note: clientX/clientY and getBoundingClientRect() are already in CSS coordinates,
+// so no zoom conversion is needed for drag/resize (see ZoomContext docs).
 
 interface DockablePanelState {
   position: DockPosition;
@@ -25,8 +26,6 @@ interface DockablePanelDragResizeOptions {
   panelRef: RefObject<HTMLDivElement | null>;
   safeMinWidth: number;
   safeMinHeight: number;
-  safeMaxWidth?: number;
-  safeMaxHeight?: number;
   isMaximized: boolean;
 }
 
@@ -34,17 +33,7 @@ interface DockablePanelDragResizeOptions {
  * Handle drag/resize interactions and cursor updates for dockable panels.
  */
 export function useDockablePanelDragResize(options: DockablePanelDragResizeOptions) {
-  const {
-    panelState,
-    panelRef,
-    safeMinWidth,
-    safeMinHeight,
-    safeMaxWidth,
-    safeMaxHeight,
-    isMaximized,
-  } = options;
-  const { zoomLevel } = useZoom();
-  const zoomLevelRef = useRef(zoomLevel);
+  const { panelState, panelRef, safeMinWidth, safeMinHeight, isMaximized } = options;
   const panelStateRef = useRef(panelState);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -64,11 +53,6 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     panelStateRef.current = panelState;
   }, [panelState]);
 
-  useEffect(() => {
-    // Keep the latest zoom level for global event handlers without re-binding them.
-    zoomLevelRef.current = zoomLevel;
-  }, [zoomLevel]);
-
   // Handle dragging for floating panels
   const handleMouseDownDrag = useCallback(
     (e: ReactMouseEvent) => {
@@ -78,16 +62,16 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       const rect = panelRef.current?.getBoundingClientRect();
       if (!rect) return;
 
-      // Convert to CSS coordinates for consistency with mouse move handler
-      const viewport = getZoomAwareViewport(zoomLevel);
+      // clientX/clientY and getBoundingClientRect() are already in CSS coordinates —
+      // no zoom conversion needed (see ZoomContext docs).
       setIsDragging(true);
       setDragOffset({
-        x: (e.clientX - rect.left) / viewport.zoomFactor,
-        y: (e.clientY - rect.top) / viewport.zoomFactor,
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
       });
       e.preventDefault();
     },
-    [panelState.position, panelRef, isMaximized, zoomLevel]
+    [panelState.position, panelRef, isMaximized]
   );
 
   // Handle resizing
@@ -95,22 +79,21 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     (e: ReactMouseEvent, direction: string) => {
       if (isMaximized) return;
       e.stopPropagation();
-      // Convert mouse position to content-relative CSS coordinates
-      const viewport = getZoomAwareViewport(zoomLevel);
-      const content = getContentBounds(viewport.zoomFactor);
+      // clientX/clientY are already in CSS coordinates — no zoom conversion needed.
+      const content = getContentBounds();
       setIsResizing(true);
       setResizeDirection(direction);
       setResizeStart({
         width: panelState.size.width,
         height: panelState.size.height,
-        x: e.clientX / viewport.zoomFactor - content.left,
-        y: e.clientY / viewport.zoomFactor - content.top,
+        x: e.clientX - content.left,
+        y: e.clientY - content.top,
         left: panelState.floatingPosition.x,
         top: panelState.floatingPosition.y,
       });
       e.preventDefault();
     },
-    [panelState.size, panelState.floatingPosition, isMaximized, zoomLevel]
+    [panelState.size, panelState.floatingPosition, isMaximized]
   );
 
   // Detect resize edge for floating panels
@@ -289,12 +272,11 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
       // Don't update position if panel is not open (prevents race conditions during close)
       if (!currentPanelState.isOpen) return;
 
-      // Get zoom-aware viewport dimensions (in CSS pixels)
-      const viewport = getZoomAwareViewport(zoomLevelRef.current);
-      // Get content bounds and convert mouse coordinates to content-relative CSS space
-      const content = getContentBounds(viewport.zoomFactor);
-      const mouseX = e.clientX / viewport.zoomFactor - content.left;
-      const mouseY = e.clientY / viewport.zoomFactor - content.top;
+      // clientX/clientY and getContentBounds() are already in CSS coordinates —
+      // no zoom conversion needed (see ZoomContext docs).
+      const content = getContentBounds();
+      const mouseX = e.clientX - content.left;
+      const mouseY = e.clientY - content.top;
 
       if (isDragging && currentPanelState.position === 'floating') {
         const minDistanceFromEdge = LAYOUT.MIN_EDGE_DISTANCE;
@@ -319,17 +301,12 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
 
         if (currentPanelState.position === 'right') {
           // For right-docked panels, dragging left (negative deltaX) increases width
-          const maxAvailableWidth = content.width;
-          newWidth = Math.max(
-            safeMinWidth,
-            Math.min(safeMaxWidth || maxAvailableWidth, resizeStart.width - deltaX)
-          );
+          newWidth = Math.max(safeMinWidth, Math.min(content.width, resizeStart.width - deltaX));
         } else if (currentPanelState.position === 'bottom') {
           // For bottom-docked panels, dragging up (negative deltaY) increases height
-          const maxAvailableHeight = content.height;
           newHeight = Math.max(
             safeMinHeight,
-            Math.min(safeMaxHeight || maxAvailableHeight, resizeStart.height - deltaY)
+            Math.min(content.height, resizeStart.height - deltaY)
           );
         } else if (currentPanelState.position === 'floating') {
           // Handle multi-directional resizing for floating panels
@@ -338,19 +315,23 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
             const maxAllowedWidth = content.width - resizeStart.left;
             newWidth = Math.max(
               safeMinWidth,
-              Math.min(safeMaxWidth || maxAllowedWidth, resizeStart.width + deltaX)
+              Math.min(maxAllowedWidth, resizeStart.width + deltaX)
             );
           }
           if (resizeDirection.includes('w')) {
             const proposedWidth = resizeStart.width - deltaX;
             if (proposedWidth >= safeMinWidth) {
-              newWidth = Math.min(safeMaxWidth || content.width, proposedWidth);
+              newWidth = Math.min(content.width, proposedWidth);
               newLeft = Math.max(0, resizeStart.left + deltaX); // Don't go beyond left edge
               // Adjust width if we hit the left edge
               if (resizeStart.left + deltaX < 0) {
                 newWidth = resizeStart.width + resizeStart.left;
                 newLeft = 0;
               }
+            } else {
+              // Clamp at minimum width; pin the right edge in place.
+              newWidth = safeMinWidth;
+              newLeft = resizeStart.left + resizeStart.width - safeMinWidth;
             }
           }
           if (resizeDirection.includes('s')) {
@@ -358,19 +339,23 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
             const maxAvailableHeight = content.height - resizeStart.top;
             newHeight = Math.max(
               safeMinHeight,
-              Math.min(safeMaxHeight || maxAvailableHeight, resizeStart.height + deltaY)
+              Math.min(maxAvailableHeight, resizeStart.height + deltaY)
             );
           }
           if (resizeDirection.includes('n')) {
             const proposedHeight = resizeStart.height - deltaY;
             if (proposedHeight >= safeMinHeight) {
-              newHeight = Math.min(safeMaxHeight || content.height, proposedHeight);
+              newHeight = Math.min(content.height, proposedHeight);
               // Don't allow dragging above the top of the content area.
               newTop = Math.max(0, resizeStart.top + deltaY);
               // Adjust height if we hit the top edge.
               if (resizeStart.top + deltaY < 0) {
                 newHeight = resizeStart.height + resizeStart.top;
               }
+            } else {
+              // Clamp at minimum height; pin the bottom edge in place.
+              newHeight = safeMinHeight;
+              newTop = resizeStart.top + resizeStart.height - safeMinHeight;
             }
           }
         }
@@ -409,26 +394,19 @@ export function useDockablePanelDragResize(options: DockablePanelDragResizeOptio
     resizeStart,
     safeMinWidth,
     safeMinHeight,
-    safeMaxWidth,
-    safeMaxHeight,
     scheduleFloatingPosition,
     scheduleSizeUpdate,
     flushDragPosition,
     flushSizeUpdate,
   ]);
 
+  // Header clicks always start a drag — resize is handled by the dedicated
+  // CSS resize-zone overlay divs which sit above the header at z-index 10.
   const handleHeaderMouseDown = useCallback(
     (e: ReactMouseEvent) => {
-      if (panelState.position === 'floating') {
-        const direction = getResizeDirection(e);
-        if (!direction) {
-          handleMouseDownDrag(e);
-        }
-        return;
-      }
       handleMouseDownDrag(e);
     },
-    [panelState.position, getResizeDirection, handleMouseDownDrag]
+    [handleMouseDownDrag]
   );
 
   return {

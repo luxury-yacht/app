@@ -11,13 +11,6 @@ import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Overview from './index';
 
-const setSectionExpandedMock = vi.fn();
-const useDetailsSectionContextMock = vi.fn();
-
-vi.mock('@/core/contexts/ObjectPanelDetailsSectionContext', () => ({
-  useDetailsSectionContext: (...args: unknown[]) => useDetailsSectionContextMock(...args),
-}));
-
 const renderComponentMock = vi.fn();
 const getResourceCapabilitiesMock = vi.fn();
 
@@ -61,16 +54,9 @@ describe('Overview component', () => {
   };
 
   beforeEach(() => {
-    setSectionExpandedMock.mockReset();
-    useDetailsSectionContextMock.mockReset();
     renderComponentMock.mockReset();
     getResourceCapabilitiesMock.mockReset();
     actionsMenuMock.mockClear();
-
-    useDetailsSectionContextMock.mockReturnValue({
-      sectionStates: { overview: true },
-      setSectionExpanded: setSectionExpandedMock,
-    });
 
     renderComponentMock.mockReturnValue(<div data-testid="overview-content">Overview body</div>);
     getResourceCapabilitiesMock.mockReturnValue({ restart: true, scale: false, delete: true });
@@ -150,22 +136,12 @@ describe('Overview component', () => {
     });
   });
 
-  it('toggles overview section when header is clicked and hides content when collapsed', async () => {
-    useDetailsSectionContextMock.mockReturnValue({
-      sectionStates: { overview: false },
-      setSectionExpanded: setSectionExpandedMock,
-    });
-
+  it('always renders overview content', async () => {
     await renderComponent({ kind: 'Pod', objectKind: 'pod', name: 'api' });
 
-    expect(container.querySelector('[data-testid="overview-content"]')).toBeNull();
-
-    const headerToggle = container.querySelector('.object-panel-section-title');
-    expect(headerToggle).not.toBeNull();
-    act(() => {
-      headerToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    expect(setSectionExpandedMock).toHaveBeenCalledWith('overview', true);
+    expect(container.querySelector('[data-testid="overview-content"]')).not.toBeNull();
+    expect(container.querySelector('.object-panel-section-title')?.textContent).toContain(
+      'Overview'
+    );
   });
 });

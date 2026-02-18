@@ -8,7 +8,6 @@
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DetailsSectionProvider } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import DataSection from './DetailsTabData';
 
 vi.mock('@ui/shortcuts', () => ({
@@ -16,12 +15,12 @@ vi.mock('@ui/shortcuts', () => ({
   useSearchShortcutTarget: () => undefined,
 }));
 
-const renderWithProvider = async (ui: React.ReactElement) => {
+const render = async (ui: React.ReactElement) => {
   const container = document.createElement('div');
   document.body.appendChild(container);
   const root = ReactDOM.createRoot(container);
   await act(async () => {
-    root.render(<DetailsSectionProvider>{ui}</DetailsSectionProvider>);
+    root.render(ui);
     await Promise.resolve();
   });
   return {
@@ -50,7 +49,7 @@ describe('DetailsTabData', () => {
   });
 
   it('renders config map data with counts', async () => {
-    const { container, cleanup } = await renderWithProvider(
+    const { container, cleanup } = await render(
       <DataSection data={{ key1: 'value1', key2: 'value2' }} binaryData={{ file: 'YmFzZTY0' }} />
     );
 
@@ -62,7 +61,7 @@ describe('DetailsTabData', () => {
   });
 
   it('toggles secret decode state and displays decoded values', async () => {
-    const { container, cleanup } = await renderWithProvider(
+    const { container, cleanup } = await render(
       <DataSection data={{ password: 'super-secret' }} isSecret />
     );
 
@@ -86,9 +85,7 @@ describe('DetailsTabData', () => {
   it('copies values to clipboard and shows feedback', async () => {
     vi.useFakeTimers();
 
-    const { container, cleanup } = await renderWithProvider(
-      <DataSection data={{ token: 'abc123' }} />
-    );
+    const { container, cleanup } = await render(<DataSection data={{ token: 'abc123' }} />);
 
     const value = container.querySelector('.data-value')!;
     await act(async () => {

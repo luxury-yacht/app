@@ -8,7 +8,6 @@
 import type { ResourceCapability } from './types';
 import type { ObjectDetailsRefresherName } from '@/core/refresh/refresherTypes';
 
-export const MIN_PANEL_WIDTH = 500;
 export const CLUSTER_SCOPE = '__cluster__';
 export const INACTIVE_SCOPE = '__inactive__';
 
@@ -21,7 +20,7 @@ export const WORKLOAD_KIND_API_NAMES: Record<string, string> = {
 
 export const RESOURCE_CAPABILITIES: Record<string, ResourceCapability> = {
   // Workloads
-  pod: { logs: true, delete: true, shell: true },
+  pod: { logs: true, delete: true, shell: true, debug: true },
   deployment: { logs: true, restart: true, scale: true, delete: true },
   daemonset: { logs: true, restart: true, delete: true },
   statefulset: { logs: true, restart: true, scale: true, delete: true },

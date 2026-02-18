@@ -3,7 +3,7 @@
  *
  * Shared status indicator component.
  * Renders a colored dot with a hover tooltip that appears below.
- * All three header indicators (Connectivity, Metrics, Port Forwards) use this.
+ * Header indicators (Connectivity, Metrics, Sessions) use this.
  */
 
 import React from 'react';
@@ -19,7 +19,7 @@ export interface StatusIndicatorProps {
   /** Popover title (e.g., "Connectivity"). */
   title: string;
   /** Popover status message (e.g., "Connected"). */
-  message: string;
+  message: React.ReactNode;
   /** Optional action button label (e.g., "Refresh"). Omit to hide the button. */
   actionLabel?: string;
   /** Called when the action button is clicked. */

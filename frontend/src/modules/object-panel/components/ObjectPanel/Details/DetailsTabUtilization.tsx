@@ -6,7 +6,6 @@
  */
 
 import React from 'react';
-import { useDetailsSectionContext } from '@/core/contexts/ObjectPanelDetailsSectionContext';
 import ResourceBar from '@shared/components/ResourceBar';
 import ResourceBarErrorBoundary from '@shared/components/errors/ResourceBarErrorBoundary';
 import {
@@ -151,48 +150,37 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, usage, data, t
 };
 
 const Utilization: React.FC<UtilizationProps> = ({ cpu, memory, pods, mode = 'podMetrics' }) => {
-  const { sectionStates, setSectionExpanded } = useDetailsSectionContext();
-  const expanded = sectionStates.utilization;
-
   return (
     <div className="object-panel-section">
-      <div
-        className={`object-panel-section-title collapsible${!expanded ? ' collapsed' : ''}`}
-        onClick={() => setSectionExpanded('utilization', !expanded)}
-      >
-        <span className="collapse-icon">{expanded ? '▼' : '▶'}</span>
-        Resource Utilization
+      <div className="object-panel-section-title">Resource Utilization</div>
+
+      <div className="utilization-content">
+        {cpu || memory || pods ? (
+          <div className="utilization-resources-grid">
+            {cpu && (
+              <ResourceSection
+                title="CPU"
+                usage={cpu.usage || 'not set'}
+                data={cpu}
+                type="cpu"
+                mode={mode}
+              />
+            )}
+
+            {memory && (
+              <ResourceSection
+                title="Memory"
+                usage={memory.usage || 'not set'}
+                data={memory}
+                type="memory"
+                mode={mode}
+              />
+            )}
+          </div>
+        ) : (
+          <div className="utilization-empty">No resource utilization data available</div>
+        )}
       </div>
-
-      {expanded && (
-        <div className="utilization-content">
-          {cpu || memory || pods ? (
-            <div className="utilization-resources-grid">
-              {cpu && (
-                <ResourceSection
-                  title="CPU"
-                  usage={cpu.usage || 'not set'}
-                  data={cpu}
-                  type="cpu"
-                  mode={mode}
-                />
-              )}
-
-              {memory && (
-                <ResourceSection
-                  title="Memory"
-                  usage={memory.usage || 'not set'}
-                  data={memory}
-                  type="memory"
-                  mode={mode}
-                />
-              )}
-            </div>
-          ) : (
-            <div className="utilization-empty">No resource utilization data available</div>
-          )}
-        </div>
-      )}
     </div>
   );
 };

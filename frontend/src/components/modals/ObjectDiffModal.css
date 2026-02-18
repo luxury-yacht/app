@@ -41,7 +41,7 @@
 }
 
 .object-diff-field .dropdown {
-  width: 100%;
+  justify-self: start;
 }
 
 .object-diff-selector-header {

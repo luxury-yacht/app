@@ -376,4 +376,42 @@ describe('PortForwardModal', () => {
 
     vi.useRealTimers();
   });
+
+  it('does not re-fetch or reset when re-rendered with a new target object for the same resource', async () => {
+    vi.useFakeTimers();
+
+    getTargetPortsMock.mockResolvedValue([{ port: 3000, name: 'api', protocol: 'TCP' }]);
+
+    const targetWithoutPorts: PortForwardTarget = {
+      ...mockTarget,
+      ports: [],
+    };
+
+    await renderModal({ target: targetWithoutPorts });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    expect(getTargetPortsMock).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toContain('3000');
+    expect(document.body.textContent).toContain('(api)');
+
+    await act(async () => {
+      root.render(
+        <PortForwardModal
+          target={{ ...targetWithoutPorts }}
+          onClose={mockOnClose}
+          onStarted={mockOnStarted}
+        />
+      );
+      await Promise.resolve();
+    });
+
+    expect(getTargetPortsMock).toHaveBeenCalledTimes(1);
+    expect(document.body.textContent).toContain('3000');
+    expect(document.body.textContent).toContain('(api)');
+
+    vi.useRealTimers();
+  });
 });

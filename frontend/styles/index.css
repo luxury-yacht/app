@@ -13,6 +13,7 @@
 @import "./components/dropdowns.css";
 @import "./components/inputs.css";
 @import "./components/search-input.css";
+@import "./components/tabs.css";
 @import "./components/tooltips.css";
 /* Overrides */
 @import "./overrides/codemirror.css";

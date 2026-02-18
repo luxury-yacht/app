@@ -1435,6 +1435,40 @@ export namespace types {
 	        this.name = source["name"];
 	    }
 	}
+	export class DebugContainerRequest {
+	    namespace: string;
+	    podName: string;
+	    image: string;
+	    targetContainer?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DebugContainerRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.namespace = source["namespace"];
+	        this.podName = source["podName"];
+	        this.image = source["image"];
+	        this.targetContainer = source["targetContainer"];
+	    }
+	}
+	export class DebugContainerResponse {
+	    containerName: string;
+	    podName: string;
+	    namespace: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DebugContainerResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.containerName = source["containerName"];
+	        this.podName = source["podName"];
+	        this.namespace = source["namespace"];
+	    }
+	}
 	export class ReplicaSetSummary {
 	    name: string;
 	    revision: string;
@@ -3734,6 +3768,50 @@ export namespace types {
 	        this.command = source["command"];
 	        this.containers = source["containers"];
 	    }
+	}
+	export class ShellSessionInfo {
+	    sessionId: string;
+	    clusterId: string;
+	    clusterName: string;
+	    namespace: string;
+	    podName: string;
+	    container: string;
+	    command: string[];
+	    startedAt: v1.Time;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShellSessionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sessionId = source["sessionId"];
+	        this.clusterId = source["clusterId"];
+	        this.clusterName = source["clusterName"];
+	        this.namespace = source["namespace"];
+	        this.podName = source["podName"];
+	        this.container = source["container"];
+	        this.command = source["command"];
+	        this.startedAt = this.convertValues(source["startedAt"], v1.Time);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ShellSessionRequest {
 	    namespace: string;

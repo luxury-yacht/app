@@ -210,7 +210,9 @@ describe('DockablePanelControls', () => {
     );
 
     // Click the close control to verify the callback wiring.
-    const closeButton = host.querySelector('[aria-label="Close panel"]') as HTMLButtonElement;
+    const closeButton = host.querySelector(
+      '[aria-label="Close all tabs in this panel"]'
+    ) as HTMLButtonElement;
     expect(closeButton).toBeTruthy();
 
     await act(async () => {

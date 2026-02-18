@@ -2,6 +2,8 @@
 
 ## Issues
 
+Components in two different places. `src/components` and `src/shared/components`. Why?
+
 ## Feature Ideas
 
 - Transfer files to/from pods
@@ -36,7 +38,7 @@
 - Customize Cluster Overview
   - from a predefined set of widgets
 
-- Ephemeral debug containers
+- ✅ Ephemeral debug containers
   - kubectl debug
 
 - ArgoCD integration to show drift

@@ -8,7 +8,7 @@
  * Also provides CurrentObjectPanelContext so child components inside an ObjectPanel
  * instance can access the correct objectData for their specific panel.
  */
-import { createContext, useContext, useCallback, useEffect, useRef } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { useDockablePanelContext } from '@components/dockable';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
 import type { KubernetesObjectReference } from '@/types/view-state';
@@ -33,11 +33,8 @@ export const CurrentObjectPanelContext = createContext<CurrentObjectPanelContext
   panelId: null,
 });
 
-/**
- * Read the current panel's object data. Only meaningful inside a <ObjectPanel> tree.
- * Falls back to null when used outside an ObjectPanel.
- */
-export const useCurrentObjectPanel = () => useContext(CurrentObjectPanelContext);
+// Read the current panel's object data. Only meaningful inside a <ObjectPanel> tree.
+const useCurrentObjectPanel = () => useContext(CurrentObjectPanelContext);
 
 // ---------------------------------------------------------------------------
 // closeObjectPanelGlobal

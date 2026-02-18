@@ -17,6 +17,11 @@ import { errorHandler } from '@utils/errorHandler';
 import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
 import { evaluateNamespacePermissions } from '@/core/capabilities';
+import {
+  clearRequestedObjectPanelTab,
+  getRequestedObjectPanelTab,
+  subscribeObjectPanelTabRequests,
+} from '@modules/object-panel/objectPanelTabRequests';
 import './ObjectPanel.css';
 import '@shared/components/tabs/Tabs/Tabs.css';
 import { useObjectPanelKind } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelKind';
@@ -379,6 +384,36 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     },
     [dispatch]
   );
+
+  const applyRequestedTab = useCallback(
+    (requestedTab?: ViewType) => {
+      if (!requestedTab) {
+        return;
+      }
+      const isAvailable = availableTabs.some((tab) => tab.id === requestedTab);
+      if (!isAvailable) {
+        return;
+      }
+      if (state.activeTab !== requestedTab) {
+        dispatch({ type: 'SET_ACTIVE_TAB', payload: requestedTab });
+      }
+      clearRequestedObjectPanelTab(panelId);
+    },
+    [availableTabs, panelId, state.activeTab]
+  );
+
+  useEffect(() => {
+    applyRequestedTab(getRequestedObjectPanelTab(panelId));
+  }, [applyRequestedTab, panelId]);
+
+  useEffect(() => {
+    return subscribeObjectPanelTabRequests((targetPanelId, requestedTab) => {
+      if (targetPanelId !== panelId) {
+        return;
+      }
+      applyRequestedTab(requestedTab);
+    });
+  }, [applyRequestedTab, panelId]);
 
   // Extract details props for DetailsTab - provide all required props with defaults
   const detailsProps = useMemo<DetailsSnapshotProps>(() => {

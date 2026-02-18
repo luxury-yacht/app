@@ -99,7 +99,9 @@ describe('DockablePanel', () => {
     const layer = document.querySelector('.dockable-panel-layer');
     expect(layer).toBeTruthy();
 
-    const closeButton = layer!.querySelector('[aria-label="Close panel"]') as HTMLButtonElement;
+    const closeButton = layer!.querySelector(
+      '[aria-label="Close all tabs in this panel"]'
+    ) as HTMLButtonElement;
     expect(closeButton).toBeTruthy();
 
     act(() => {

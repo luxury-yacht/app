@@ -47,7 +47,7 @@ interface PortForwardStatusEvent {
  * Hook to access the port forwards panel state.
  * Use this from other components to open/close the panel.
  */
-export function usePortForwardsPanel() {
+function usePortForwardsPanel() {
   return useDockablePanelState('port-forwards');
 }
 

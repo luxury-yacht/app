@@ -20,13 +20,13 @@ interface ObjectPanelTabsProps {
 
 export function ObjectPanelTabs({ tabs, activeTab, onSelect }: ObjectPanelTabsProps) {
   return (
-    <div className="tabs">
+    <div className="tab-strip">
       {tabs.map((tab) => {
         const isActive = activeTab === (tab.id as ViewType);
         return (
           <button
             key={tab.id}
-            className={`tab ${isActive ? 'active' : ''}`}
+            className={`tab-item${isActive ? ' tab-item--active' : ''}`}
             onClick={() => onSelect(tab.id as ViewType)}
             type="button"
             data-object-panel-focusable="true"

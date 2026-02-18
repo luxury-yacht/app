@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,12 +21,16 @@ import (
 const (
 	shellOutputEventName = "object-shell:output"
 	shellStatusEventName = "object-shell:status"
+	shellListEventName   = "object-shell:list"
 
 	// shellIdleTimeout is the duration of inactivity after which a shell session is terminated.
 	shellIdleTimeout = 30 * time.Minute
 
 	// shellMaxDuration is the maximum lifetime of a shell session regardless of activity.
 	shellMaxDuration = 8 * time.Hour
+
+	// shellOutputBacklogMaxBytes bounds replay memory used per shell session.
+	shellOutputBacklogMaxBytes = 256 * 1024
 )
 
 var (
@@ -33,20 +39,26 @@ var (
 )
 
 type shellSession struct {
-	id        string
-	clusterID string
-	namespace string
-	podName   string
-	container string
-	stdin     *io.PipeWriter
-	stdinR    *io.PipeReader
-	sizeQueue *terminalSizeQueue
-	cancel    context.CancelFunc
-	once      sync.Once
+	id          string
+	clusterID   string
+	clusterName string
+	namespace   string
+	podName     string
+	container   string
+	command     []string
+	stdin       *io.PipeWriter
+	stdinR      *io.PipeReader
+	sizeQueue   *terminalSizeQueue
+	cancel      context.CancelFunc
+	once        sync.Once
 
 	activityMu   sync.Mutex
 	lastActivity time.Time
 	startedAt    time.Time
+
+	backlogMu    sync.Mutex
+	backlog      []string
+	backlogBytes int
 }
 
 // touchActivity updates the last activity timestamp.
@@ -66,6 +78,39 @@ func (s *shellSession) idleDuration() time.Duration {
 // totalDuration returns how long the session has been running.
 func (s *shellSession) totalDuration() time.Duration {
 	return time.Since(s.startedAt)
+}
+
+// appendBacklog stores output for replay while enforcing a bounded memory cap.
+func (s *shellSession) appendBacklog(data string) {
+	if data == "" {
+		return
+	}
+	s.backlogMu.Lock()
+	defer s.backlogMu.Unlock()
+
+	s.backlog = append(s.backlog, data)
+	s.backlogBytes += len(data)
+
+	for s.backlogBytes > shellOutputBacklogMaxBytes && len(s.backlog) > 0 {
+		dropped := s.backlog[0]
+		s.backlog = s.backlog[1:]
+		s.backlogBytes -= len(dropped)
+	}
+}
+
+// snapshotBacklog returns the session's buffered output in stream order.
+func (s *shellSession) snapshotBacklog() string {
+	s.backlogMu.Lock()
+	defer s.backlogMu.Unlock()
+	if len(s.backlog) == 0 || s.backlogBytes <= 0 {
+		return ""
+	}
+	var builder strings.Builder
+	builder.Grow(s.backlogBytes)
+	for _, chunk := range s.backlog {
+		builder.WriteString(chunk)
+	}
+	return builder.String()
 }
 
 func (s *shellSession) Close() {
@@ -132,10 +177,12 @@ func (w *shellEventWriter) Write(p []byte) (int, error) {
 	if len(p) == 0 || w.app == nil {
 		return len(p), nil
 	}
+	chunk := string(p)
 	if w.session != nil {
 		w.session.touchActivity()
+		w.session.appendBacklog(chunk)
 	}
-	w.app.emitShellOutput(w.sessionID, w.clusterID, w.stream, string(p))
+	w.app.emitShellOutput(w.sessionID, w.clusterID, w.stream, chunk)
 	return len(p), nil
 }
 
@@ -168,15 +215,20 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pod: %w", err)
 	}
-	if len(pod.Spec.Containers) == 0 {
+	if len(pod.Spec.Containers) == 0 && len(pod.Spec.EphemeralContainers) == 0 {
 		return nil, fmt.Errorf("pod has no containers available for exec")
 	}
 
 	container := req.Container
 	if container == "" {
-		container = pod.Spec.Containers[0].Name
+		if len(pod.Spec.Containers) > 0 {
+			container = pod.Spec.Containers[0].Name
+		} else {
+			// Pods normally have regular containers, but allow ephemeral-only fallback.
+			container = pod.Spec.EphemeralContainers[0].Name
+		}
 	}
-	if !hasContainer(pod.Spec.Containers, container) {
+	if !hasContainer(pod.Spec.Containers, container) && !hasEphemeralContainer(pod.Spec.EphemeralContainers, container) {
 		return nil, fmt.Errorf("container %q not found in pod %s", container, req.PodName)
 	}
 
@@ -228,9 +280,11 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 	sess := &shellSession{
 		id:           sessionID,
 		clusterID:    clusterID,
+		clusterName:  deps.ClusterName,
 		namespace:    req.Namespace,
 		podName:      req.PodName,
 		container:    container,
+		command:      append([]string(nil), command...),
 		stdin:        stdinWriter,
 		stdinR:       stdinReader,
 		sizeQueue:    sizeQueue,
@@ -238,10 +292,14 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 		startedAt:    now,
 		lastActivity: now,
 	}
+	if sess.clusterName == "" {
+		sess.clusterName = clusterID
+	}
 
 	a.shellSessionsMu.Lock()
 	a.shellSessions[sessionID] = sess
 	a.shellSessionsMu.Unlock()
+	a.emitShellList()
 
 	// Start timeout monitor goroutine
 	go a.monitorShellTimeout(sessionCtx, sess)
@@ -249,7 +307,9 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 	go func() {
 		defer func() {
 			sess.Close()
-			a.removeShellSession(sessionID)
+			if a.removeShellSession(sessionID) != nil {
+				a.emitShellList()
+			}
 		}()
 
 		streamErr := executor.StreamWithContext(sessionCtx, remotecommand.StreamOptions{
@@ -269,8 +329,11 @@ func (a *App) StartShellSession(clusterID string, req ShellSessionRequest) (*She
 
 	a.emitShellStatus(sessionID, clusterID, "open", "")
 
-	containers := make([]string, 0, len(pod.Spec.Containers))
+	containers := make([]string, 0, len(pod.Spec.Containers)+len(pod.Spec.EphemeralContainers))
 	for _, c := range pod.Spec.Containers {
+		containers = append(containers, c.Name)
+	}
+	for _, c := range pod.Spec.EphemeralContainers {
 		containers = append(containers, c.Name)
 	}
 
@@ -321,7 +384,78 @@ func (a *App) CloseShellSession(sessionID string) error {
 	}
 	sess.Close()
 	a.emitShellStatus(sessionID, sess.clusterID, "closed", "terminated")
+	a.emitShellList()
 	return nil
+}
+
+// ListShellSessions returns all active shell exec sessions.
+func (a *App) ListShellSessions() []ShellSessionInfo {
+	a.shellSessionsMu.Lock()
+	defer a.shellSessionsMu.Unlock()
+
+	sessions := make([]ShellSessionInfo, 0, len(a.shellSessions))
+	for _, sess := range a.shellSessions {
+		sessions = append(sessions, ShellSessionInfo{
+			SessionID:   sess.id,
+			ClusterID:   sess.clusterID,
+			ClusterName: sess.clusterName,
+			Namespace:   sess.namespace,
+			PodName:     sess.podName,
+			Container:   sess.container,
+			Command:     append([]string(nil), sess.command...),
+			StartedAt:   metav1.NewTime(sess.startedAt),
+		})
+	}
+
+	sort.Slice(sessions, func(i, j int) bool {
+		return sessions[i].StartedAt.Before(&sessions[j].StartedAt)
+	})
+	return sessions
+}
+
+// GetClusterShellSessionCount returns the number of active shell sessions for a cluster.
+func (a *App) GetClusterShellSessionCount(clusterID string) int {
+	a.shellSessionsMu.Lock()
+	defer a.shellSessionsMu.Unlock()
+
+	count := 0
+	for _, sess := range a.shellSessions {
+		if sess.clusterID == clusterID {
+			count++
+		}
+	}
+	return count
+}
+
+// StopClusterShellSessions terminates all shell sessions for a specific cluster.
+func (a *App) StopClusterShellSessions(clusterID string) error {
+	a.shellSessionsMu.Lock()
+	toStop := make([]*shellSession, 0)
+	for _, sess := range a.shellSessions {
+		if sess.clusterID == clusterID {
+			toStop = append(toStop, sess)
+			delete(a.shellSessions, sess.id)
+		}
+	}
+	a.shellSessionsMu.Unlock()
+
+	for _, sess := range toStop {
+		sess.Close()
+		a.emitShellStatus(sess.id, sess.clusterID, "closed", "cluster disconnected")
+	}
+	if len(toStop) > 0 {
+		a.emitShellList()
+	}
+	return nil
+}
+
+// GetShellSessionBacklog returns buffered shell output for replaying on reattach.
+func (a *App) GetShellSessionBacklog(sessionID string) (string, error) {
+	sess := a.getShellSession(sessionID)
+	if sess == nil {
+		return "", fmt.Errorf("shell session %q not found", sessionID)
+	}
+	return sess.snapshotBacklog(), nil
 }
 
 func (a *App) getShellSession(sessionID string) *shellSession {
@@ -364,7 +498,20 @@ func (a *App) emitShellStatus(sessionID, clusterID, status, reason string) {
 	})
 }
 
+func (a *App) emitShellList() {
+	a.emitEvent(shellListEventName, a.ListShellSessions())
+}
+
 func hasContainer(containers []corev1.Container, name string) bool {
+	for _, c := range containers {
+		if c.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func hasEphemeralContainer(containers []corev1.EphemeralContainer, name string) bool {
 	for _, c := range containers {
 		if c.Name == name {
 			return true
@@ -409,4 +556,5 @@ func (a *App) terminateShellWithReason(sessionID, status, reason string) {
 	}
 	sess.Close()
 	a.emitShellStatus(sessionID, sess.clusterID, status, reason)
+	a.emitShellList()
 }

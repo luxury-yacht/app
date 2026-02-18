@@ -206,7 +206,6 @@ describe('DetailsTab', () => {
       canRestart: true,
       onScale: expect.any(Function),
     });
-    expect(useShortcutMock).toHaveBeenCalledWith(expect.objectContaining({ key: 'o' }));
     cleanup();
   });
 
