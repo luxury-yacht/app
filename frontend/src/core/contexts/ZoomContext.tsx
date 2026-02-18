@@ -72,15 +72,6 @@ export const useZoom = () => {
   return context;
 };
 
-/**
- * Hook that provides zoom-aware viewport dimensions.
- * Combines useZoom with getZoomAwareViewport for convenient use in components.
- */
-export const useZoomAwareViewport = (): ZoomAwareViewport => {
-  const { zoomLevel } = useZoom();
-  return getZoomAwareViewport(zoomLevel);
-};
-
 interface ZoomProviderProps {
   children: ReactNode;
 }

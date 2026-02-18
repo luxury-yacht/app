@@ -31,7 +31,7 @@ interface ShellSessionInfo {
   startedAt?: string | { time?: string };
 }
 
-export function useShellSessionsPanel() {
+function useShellSessionsPanel() {
   return useDockablePanelState('shell-sessions');
 }
 

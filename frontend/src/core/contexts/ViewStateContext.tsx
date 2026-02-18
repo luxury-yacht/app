@@ -36,7 +36,7 @@ import { ModalStateProvider, useModalState } from './ModalStateContext';
 
 // Re-export types for backwards compatibility
 export type { ViewType, NamespaceViewType, ClusterViewType };
-export type { KubernetesObjectReference, NavigationHistoryEntry } from '@/types/view-state';
+export type { KubernetesObjectReference } from '@/types/view-state';
 export type { SidebarSelectionType } from './SidebarStateContext';
 
 /**
