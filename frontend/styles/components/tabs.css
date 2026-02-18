@@ -68,17 +68,17 @@
   opacity: 0;
 }
 
-/* Close button — overlays the right side of the tab on hover */
+/* Close button — small badge in the upper-right corner, visible on hover */
 .tab-item__close {
   position: absolute;
-  right: 0px;
+  right: 1px;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  padding: 0 8px;
+  width: 16px;
+  height: 16px;
   border: none;
   background: var(--color-bg-tertiary);
   color: var(--color-text-tertiary);
@@ -99,7 +99,6 @@
 
 .tab-item__close:hover {
   color: var(--color-error);
-  background: color-mix(in srgb, var(--color-error) 12%, var(--color-bg-tertiary));
 }
 
 .tab-item__close svg {
@@ -118,6 +117,7 @@
 .tab-item--closeable {
   min-width: 80px;
   max-width: 200px;
+  padding-right: 1.2rem;
 }
 
 .tab-item--closeable .tab-item__label {
