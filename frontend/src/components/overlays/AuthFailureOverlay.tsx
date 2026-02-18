@@ -108,5 +108,3 @@ export const AuthFailureOverlay: React.FC = () => {
     </div>
   );
 };
-
-export default AuthFailureOverlay;
