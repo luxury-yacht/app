@@ -12,18 +12,7 @@
     {
       "files": "*.css",
       "options": {
-        "printWidth": 100,
-        "tabWidth": 2,
-        "useTabs": false,
         "singleQuote": false
-      }
-    },
-    {
-      "files": "*.json",
-      "options": {
-        "printWidth": 100,
-        "tabWidth": 2,
-        "useTabs": false
       }
     }
   ]
