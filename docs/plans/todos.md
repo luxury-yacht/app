@@ -38,9 +38,6 @@ Components in two different places. `src/components` and `src/shared/components`
 - Customize Cluster Overview
   - from a predefined set of widgets
 
-- ✅ Ephemeral debug containers
-  - kubectl debug
-
 - ArgoCD integration to show drift
   - Would need permission to query the argo API
 
