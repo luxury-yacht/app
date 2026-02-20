@@ -56,7 +56,6 @@
       "@hooks/*": ["src/hooks/*"],
       "@types/*": ["src/types/*"],
       "@utils/*": ["src/utils/*"],
-      "@components/*": ["src/components/*"],
       "@contexts/*": ["src/core/contexts/*"],
       "@assets/*": ["src/assets/*"],
       "@wailsjs/*": ["wailsjs/*"]

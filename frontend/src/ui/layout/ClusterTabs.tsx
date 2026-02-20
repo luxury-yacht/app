@@ -16,7 +16,7 @@ import {
   StopClusterPortForwards,
   StopClusterShellSessions,
 } from '@wailsjs/go/backend/App';
-import ConfirmationModal from '@components/modals/ConfirmationModal';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import './ClusterTabs.css';
 

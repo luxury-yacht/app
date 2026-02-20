@@ -12,11 +12,7 @@ import {
   StopPortForward,
 } from '@wailsjs/go/backend/App';
 import { BrowserOpenURL, EventsOn } from '@wailsjs/runtime/runtime';
-import {
-  DockablePanel,
-  useDockablePanelContext,
-  useDockablePanelState,
-} from '@/components/dockable';
+import { DockablePanel, useDockablePanelContext, useDockablePanelState } from '@ui/dockable';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';

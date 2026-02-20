@@ -4,7 +4,7 @@
  * Styles for the shared ScaleModal component.
  */
 
-@import "@components/modals/modals.css";
+@import "@ui/modals/modals.css";
 
 .scale-modal {
   min-width: 320px;

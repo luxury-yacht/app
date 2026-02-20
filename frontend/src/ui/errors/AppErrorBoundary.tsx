@@ -6,7 +6,7 @@
  */
 
 import React, { ReactNode } from 'react';
-import { ErrorBoundary } from '../ErrorBoundary';
+import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 
 interface AppErrorBoundaryProps {
   children: ReactNode;

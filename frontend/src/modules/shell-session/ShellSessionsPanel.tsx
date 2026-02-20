@@ -7,11 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CloseShellSession, ListShellSessions } from '@wailsjs/go/backend/App';
 import { EventsOn } from '@wailsjs/runtime/runtime';
-import {
-  DockablePanel,
-  useDockablePanelContext,
-  useDockablePanelState,
-} from '@/components/dockable';
+import { DockablePanel, useDockablePanelContext, useDockablePanelState } from '@ui/dockable';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';

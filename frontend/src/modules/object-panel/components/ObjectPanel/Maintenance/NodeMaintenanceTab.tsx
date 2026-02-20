@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CordonNode, DrainNode, DeleteNode, UncordonNode } from '@wailsjs/go/backend/App';
 import { types } from '@wailsjs/go/models';
-import ConfirmationModal from '@components/modals/ConfirmationModal';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
 import type { NodeMaintenanceSnapshotPayload } from '@/core/refresh/types';
 import { useCapabilities, type CapabilityDescriptor } from '@/core/capabilities';

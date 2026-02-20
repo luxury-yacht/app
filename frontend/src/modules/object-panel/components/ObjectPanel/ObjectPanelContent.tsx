@@ -19,7 +19,7 @@ import ShellTab from '@modules/object-panel/components/ObjectPanel/Shell/ShellTa
 import { NodeMaintenanceTab } from '@modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab';
 import { PodsTab } from '@modules/object-panel/components/ObjectPanel/Pods/PodsTab';
 import type { ObjectPanelPodsState } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods';
-import { ErrorBoundary } from '@/components/errors/ErrorBoundary';
+import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 
 import type {
   CapabilityReasons,

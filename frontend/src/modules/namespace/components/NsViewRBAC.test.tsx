@@ -46,7 +46,7 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => ({ openWithObject: openWithObjectMock }),
 }));
 
-vi.mock('@components/modals/ConfirmationModal', () => ({
+vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   default: (props: any) => {
     confirmationPropsRef.current = props;
     return null;

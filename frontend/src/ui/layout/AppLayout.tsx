@@ -11,7 +11,7 @@ import logo from '@assets/luxury-yacht-logo.png';
 import captainK8s from '@assets/captain-k8s-color.png';
 // App Stuff
 import '@/App.css';
-import { withLazyBoundary } from '@components/hoc/withLazyBoundary';
+import { withLazyBoundary } from '@shared/utils/react/withLazyBoundary';
 import { DebugOverlay } from '@ui/layout/DebugOverlay';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -35,28 +35,25 @@ import { CommandPalette } from '@ui/command-palette/CommandPalette';
 import { useCommandPaletteCommands } from '@ui/command-palette/CommandPaletteCommands';
 // Error Handling
 import { ErrorNotificationSystem } from '@shared/components/errors/ErrorNotificationSystem';
-import { PanelErrorBoundary, RouteErrorBoundary } from '@components/errors';
+import { PanelErrorBoundary, RouteErrorBoundary } from '@ui/errors';
 import { DiagnosticsPanel } from '@/core/refresh/components/DiagnosticsPanel';
-import { getAllPanelStates, useDockablePanelContext } from '@/components/dockable';
+import { getAllPanelStates, useDockablePanelContext } from '@ui/dockable';
 // Auth Failure Overlay
-import { AuthFailureOverlay } from '@/components/overlays/AuthFailureOverlay';
+import { AuthFailureOverlay } from '@ui/overlays/AuthFailureOverlay';
 
 const Sidebar = withLazyBoundary(() => import('@ui/layout/Sidebar'), 'Loading sidebar...');
 
 const SettingsModal = withLazyBoundary(
-  () => import('@/components/modals/SettingsModal'),
+  () => import('@ui/modals/SettingsModal'),
   'Loading settings...'
 );
-const AboutModal = withLazyBoundary(
-  () => import('@/components/modals/AboutModal'),
-  'Loading about...'
-);
+const AboutModal = withLazyBoundary(() => import('@ui/modals/AboutModal'), 'Loading about...');
 const ObjectDiffModal = withLazyBoundary(
-  () => import('@/components/modals/ObjectDiffModal'),
+  () => import('@ui/modals/ObjectDiffModal'),
   'Loading diff viewer...'
 );
 const AppLogsPanel = withLazyBoundary(
-  () => import('@/components/content/AppLogsPanel/AppLogsPanel'),
+  () => import('@ui/panels/app-logs/AppLogsPanel'),
   'Loading app logs panel...'
 );
 // ObjectPanel is imported eagerly because panels are only rendered on-demand
@@ -68,7 +65,7 @@ const ActiveSessionsPanel = withLazyBoundary(
   'Loading active sessions panel...'
 );
 
-const DevTestErrorBoundaryLazy = React.lazy(() => import('@components/errors/TestErrorBoundary'));
+const DevTestErrorBoundaryLazy = React.lazy(() => import('@ui/errors/TestErrorBoundary'));
 
 export const AppLayout: React.FC = () => {
   const namespace = useNamespace();

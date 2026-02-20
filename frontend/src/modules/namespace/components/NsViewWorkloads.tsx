@@ -17,7 +17,7 @@ import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import React, { useCallback, useMemo, useState } from 'react';
-import ConfirmationModal from '@components/modals/ConfirmationModal';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import ScaleModal from '@shared/components/modals/ScaleModal';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';

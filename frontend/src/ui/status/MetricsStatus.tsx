@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import StatusIndicator, { type StatusState } from './StatusIndicator';
+import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
 import { useClusterMetricsAvailability } from '@/core/refresh/hooks/useMetricsAvailability';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 

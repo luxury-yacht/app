@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ListPortForwards, StopPortForward } from '@wailsjs/go/backend/App';
 import { EventsOn, BrowserOpenURL } from '@wailsjs/runtime/runtime';
-import { DockablePanel, useDockablePanelState } from '@/components/dockable';
+import { DockablePanel, useDockablePanelState } from '@ui/dockable';
 import { errorHandler } from '@utils/errorHandler';
 import './PortForwardsPanel.css';
 

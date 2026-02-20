@@ -5,7 +5,7 @@
  */
 
 import React, { useCallback, useMemo } from 'react';
-import StatusIndicator, { type StatusState } from './StatusIndicator';
+import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
 import { usePortForwardStatus } from '@modules/port-forward/hooks/usePortForwardStatus';
 import { useShellSessionStatus } from '@modules/shell-session/hooks/useShellSessionStatus';
 import { useActiveSessionsPanel } from '@modules/active-session';

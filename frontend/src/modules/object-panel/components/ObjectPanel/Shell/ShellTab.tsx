@@ -25,7 +25,7 @@ import {
 import { types } from '@wailsjs/go/models';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { useDockablePanelState } from '@/components/dockable';
+import { useDockablePanelState } from '@ui/dockable';
 import './ShellTab.css';
 
 interface ShellTabProps {

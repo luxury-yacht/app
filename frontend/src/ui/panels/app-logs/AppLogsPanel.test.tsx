@@ -22,7 +22,7 @@ const useKeyboardNavigationScopeMock = vi.hoisted(() => vi.fn());
 const errorHandlerMock = vi.hoisted(() => ({ handle: vi.fn() }));
 const dropdownInstances = vi.hoisted(() => [] as Array<any>);
 
-vi.mock('@/components/dockable', () => ({
+vi.mock('@ui/dockable', () => ({
   DockablePanel: ({ children }: any) => (
     <div data-testid="dockable-panel">
       <div data-testid="body">{children}</div>

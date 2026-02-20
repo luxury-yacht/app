@@ -6,7 +6,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import Settings from '../content/Settings';
+import Settings from '@ui/settings/Settings';
 import { useShortcut, useKeyboardContext, useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';

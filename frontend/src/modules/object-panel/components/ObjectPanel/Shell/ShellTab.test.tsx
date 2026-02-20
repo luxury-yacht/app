@@ -11,7 +11,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ShellTab from './ShellTab';
-import { DockablePanelProvider } from '@components/dockable/DockablePanelProvider';
+import { DockablePanelProvider } from '@ui/dockable/DockablePanelProvider';
 
 const wailsMocks = vi.hoisted(() => ({
   StartShellSession: vi.fn(),

@@ -91,7 +91,7 @@ vi.mock('@/hooks/useTableSort', () => ({
   useTableSort: (...args: unknown[]) => useTableSortMock(...(args as [])),
 }));
 
-vi.mock('@components/modals/ConfirmationModal', () => ({
+vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   default: (props: any) => {
     confirmationPropsRef.current = props;
     return null;

@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ListShellSessions } from '@wailsjs/go/backend/App';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import type { StatusState } from '@/components/status/StatusIndicator';
+import type { StatusState } from '@shared/components/status/StatusIndicator';
 
 interface ShellSessionInfo {
   sessionId: string;

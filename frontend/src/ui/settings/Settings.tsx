@@ -50,7 +50,7 @@ import {
   setGridTablePersistenceMode,
   type GridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
-import ConfirmationModal from '@components/modals/ConfirmationModal';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 

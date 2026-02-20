@@ -262,5 +262,5 @@ Key test files:
 | `backend/cluster_auth.go`                                 | Auth state change handlers        |
 | `backend/app_heartbeat.go`                                | Periodic health checks            |
 | `frontend/src/core/contexts/AuthErrorContext.tsx`         | React context for auth state      |
-| `frontend/src/components/overlays/AuthFailureOverlay.tsx` | Auth failure UI                   |
+| `frontend/src/ui/overlays/AuthFailureOverlay.tsx` | Auth failure UI                   |
 | `frontend/src/hooks/useAuthErrorHandler.ts`               | Auth event handling hook          |

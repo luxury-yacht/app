@@ -7,7 +7,7 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import StatusIndicator, { type StatusState } from './StatusIndicator';
+import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
 import { refreshOrchestrator } from '@/core/refresh';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 import { useAuthError, useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';

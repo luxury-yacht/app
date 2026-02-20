@@ -7,7 +7,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './DiagnosticsPanel.css';
-import { DockablePanel } from '@components/dockable';
+import { DockablePanel } from '@ui/dockable';
 import { useRefreshState, useRefreshScopedDomainEntries, type DomainSnapshotState } from '../store';
 import type {
   RefreshDomain,
