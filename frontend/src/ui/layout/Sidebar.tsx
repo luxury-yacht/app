@@ -312,8 +312,10 @@ function Sidebar() {
 
   const handleClusterViewSelect = (view: ClusterViewType) => {
     setPendingSelection({ kind: 'cluster-view', view });
-    viewState.setViewType('cluster');
+    // Set activeClusterView BEFORE setViewType so the orchestrator context
+    // has the correct view when triggerManualRefreshForContext() fires.
     viewState.setActiveClusterView(view);
+    viewState.setViewType('cluster');
     viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
   };
 

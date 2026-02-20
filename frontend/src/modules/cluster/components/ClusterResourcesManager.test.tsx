@@ -45,7 +45,10 @@ const {
     loadMocks: loadMap,
     cancelMocks: cancelMap,
     viewPropsRef: { current: null as any },
-    permissionState: new Map<string, { allowed: boolean; pending: boolean; reason?: string }>(),
+    permissionState: new Map<
+      string,
+      { allowed: boolean; pending: boolean; reason?: string; entry?: { status: string } }
+    >(),
   };
 });
 
@@ -135,7 +138,12 @@ describe('ClusterResourcesManager', () => {
   });
 
   it('respects permission denials and avoids loading', async () => {
-    permissionState.set('Event:list', { allowed: false, pending: false, reason: 'forbidden' });
+    permissionState.set('Event:list', {
+      allowed: false,
+      pending: false,
+      reason: 'forbidden',
+      entry: { status: 'ready' },
+    });
     await renderManager('events');
 
     const props = viewPropsRef.current;

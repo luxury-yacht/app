@@ -97,8 +97,14 @@ export function ClusterResourcesManager({
     permissionClusterId
   );
 
+  // Only surface a permission message when the backend definitively denied
+  // access (status === 'ready').  Errors (e.g. "cluster not active" during
+  // initial activation) are transient and should not be shown as denials.
   const permissionToMessage = (permission?: PermissionStatus): string | null => {
     if (!permission || permission.pending || permission.allowed) {
+      return null;
+    }
+    if (permission.entry?.status !== 'ready') {
       return null;
     }
     return permission.reason || 'Insufficient permissions';
