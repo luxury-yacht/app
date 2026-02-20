@@ -267,9 +267,13 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
     permissionClusterId
   );
 
+  // Only treat a permission as denied when the backend has given a definitive
+  // "not allowed" answer (status === 'ready').  Errors (e.g. "cluster not
+  // active" during initial activation) must NOT be treated as denials — they
+  // mean "we don't know yet", and the view should proceed to load data.
   const isPermissionDenied = useCallback(
     (permission?: PermissionStatus | null): boolean =>
-      Boolean(permission && !permission.pending && !permission.allowed),
+      Boolean(permission && permission.entry?.status === 'ready' && !permission.allowed),
     []
   );
 
@@ -461,7 +465,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
         return;
       }
       const scope = getScopeForDomain(nextDomain);
-      if (nextDomain !== 'nodes' && domainPermissionDenied[nextDomain]) {
+      if (domainPermissionDenied[nextDomain]) {
         refreshOrchestrator.setScopedDomainEnabled(nextDomain, scope, false);
         activeClusterRefresherRef.current = null;
         return;
