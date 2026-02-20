@@ -273,11 +273,7 @@ export const ClusterResourcesProvider: React.FC<ClusterResourcesProviderProps> =
   // mean "we don't know yet", and the view should proceed to load data.
   const isPermissionDenied = useCallback(
     (permission?: PermissionStatus | null): boolean =>
-      Boolean(
-        permission &&
-          permission.entry?.status === 'ready' &&
-          !permission.allowed
-      ),
+      Boolean(permission && permission.entry?.status === 'ready' && !permission.allowed),
     []
   );
 
