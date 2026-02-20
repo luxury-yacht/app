@@ -58,7 +58,7 @@ const panelStateMock = vi.hoisted(() => ({
   setFloatingPosition: vi.fn(),
 }));
 
-vi.mock('@/components/dockable', () => ({
+vi.mock('@ui/dockable', () => ({
   DockablePanel: ({ children, title }: { children: React.ReactNode; title: string }) => (
     <div data-testid="dockable-panel" data-title={title}>
       {children}

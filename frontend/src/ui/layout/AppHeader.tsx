@@ -7,9 +7,9 @@
 
 import React from 'react';
 import KubeconfigSelector from '@shared/components/KubeconfigSelector';
-import ConnectivityStatus from '@components/status/ConnectivityStatus';
-import MetricsStatus from '@components/status/MetricsStatus';
-import SessionsStatus from '@components/status/SessionsStatus';
+import ConnectivityStatus from '@ui/status/ConnectivityStatus';
+import MetricsStatus from '@ui/status/MetricsStatus';
+import SessionsStatus from '@ui/status/SessionsStatus';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { WindowToggleMaximise } from '@wailsjs/runtime/runtime';
 import { SettingsIcon } from '@shared/components/icons/MenuIcons';

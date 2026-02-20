@@ -6,7 +6,7 @@ This document explains how dockable panels work in Luxury Yacht, with emphasis o
 
 The dockable system described here is implemented in:
 
-- `frontend/src/components/dockable/*`
+- `frontend/src/ui/dockable/*`
   - Core components: `DockablePanel.tsx`, `DockablePanelProvider.tsx`, `DockableTabBar.tsx`, `DockablePanelHeader.tsx`, `DockablePanelControls.tsx`
   - State: `panelLayoutStore.ts`, `useDockablePanelState.ts`, `tabGroupState.ts`, `tabGroupTypes.ts`
   - Interaction hooks: `useDockablePanelDragResize.ts`, `useDockablePanelMaximize.ts`, `useDockablePanelWindowBounds.ts`
@@ -176,15 +176,15 @@ Object panel close paths call `clearPanelState(panelId)` so reopening gets clean
 
 Primary tests live in:
 
-- `frontend/src/components/dockable/tabGroupState.test.ts`
-- `frontend/src/components/dockable/DockablePanelProvider.test.tsx`
-- `frontend/src/components/dockable/DockablePanel.test.tsx`
-- `frontend/src/components/dockable/DockablePanel.behavior.test.tsx`
-- `frontend/src/components/dockable/DockableTabBar.test.tsx`
-- `frontend/src/components/dockable/DockableTabBar.drag.test.tsx`
-- `frontend/src/components/dockable/DockablePanelControls.test.tsx`
-- `frontend/src/components/dockable/useDockablePanelState.test.tsx`
-- `frontend/src/components/dockable/useDockablePanelWindowBounds.test.tsx`
+- `frontend/src/ui/dockable/tabGroupState.test.ts`
+- `frontend/src/ui/dockable/DockablePanelProvider.test.tsx`
+- `frontend/src/ui/dockable/DockablePanel.test.tsx`
+- `frontend/src/ui/dockable/DockablePanel.behavior.test.tsx`
+- `frontend/src/ui/dockable/DockableTabBar.test.tsx`
+- `frontend/src/ui/dockable/DockableTabBar.drag.test.tsx`
+- `frontend/src/ui/dockable/DockablePanelControls.test.tsx`
+- `frontend/src/ui/dockable/useDockablePanelState.test.tsx`
+- `frontend/src/ui/dockable/useDockablePanelWindowBounds.test.tsx`
 
 For object open routing/focus interactions, also validate:
 

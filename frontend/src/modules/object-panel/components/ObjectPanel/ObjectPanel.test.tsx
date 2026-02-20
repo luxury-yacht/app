@@ -100,7 +100,7 @@ vi.mock('@/core/contexts/ObjectPanelStateContext', () => ({
 }));
 
 // Mock dockable to provide both DockablePanel and useDockablePanelContext
-vi.mock('@/components/dockable', () => ({
+vi.mock('@ui/dockable', () => ({
   DockablePanel: ({ children }: any) => (
     <div>
       <div data-testid="dockable-body">{children}</div>
@@ -118,7 +118,7 @@ vi.mock('@/components/dockable', () => ({
 }));
 
 // Mock tabGroupState helpers
-vi.mock('@/components/dockable/tabGroupState', () => ({
+vi.mock('@ui/dockable/tabGroupState', () => ({
   getGroupForPanel: () => null,
   getGroupTabs: () => null,
 }));
@@ -128,7 +128,7 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   CurrentObjectPanelContext: createContext({ objectData: null, panelId: null }),
 }));
 
-vi.mock('@components/modals/ConfirmationModal', () => ({
+vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   default: (props: any) => {
     if (props?.title === 'Restart Workload') {
       restartModalPropsRef.current = props;

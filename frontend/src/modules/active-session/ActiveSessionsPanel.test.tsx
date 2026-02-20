@@ -61,7 +61,7 @@ const dockableContextState = vi.hoisted(() => ({
   },
 }));
 
-vi.mock('@/components/dockable', () => ({
+vi.mock('@ui/dockable', () => ({
   DockablePanel: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="dockable-panel">{children}</div>
   ),

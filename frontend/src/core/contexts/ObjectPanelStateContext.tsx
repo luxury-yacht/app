@@ -8,7 +8,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import type { KubernetesObjectReference } from '@/types/view-state';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { clearPanelState } from '@/components/dockable/useDockablePanelState';
+import { clearPanelState } from '@ui/dockable/useDockablePanelState';
 
 /**
  * Generate a stable, unique panel ID from a Kubernetes object reference.

@@ -14,7 +14,7 @@ import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown/types';
 import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
 import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
-import { useModalFocusTrap } from './useModalFocusTrap';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { buildClusterScope } from '@core/refresh/clusterScope';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@core/refresh';

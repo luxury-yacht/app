@@ -9,7 +9,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ListPortForwards } from '@wailsjs/go/backend/App';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import type { StatusState } from '@/components/status/StatusIndicator';
+import type { StatusState } from '@shared/components/status/StatusIndicator';
 
 /** Mirrors the backend PortForwardSession struct (subset of fields we need). */
 interface PortForwardSession {

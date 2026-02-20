@@ -9,10 +9,10 @@
  * instance can access the correct objectData for their specific panel.
  */
 import { createContext, useCallback, useContext, useEffect, useRef } from 'react';
-import { useDockablePanelContext } from '@components/dockable';
+import { useDockablePanelContext } from '@ui/dockable';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
 import type { KubernetesObjectReference } from '@/types/view-state';
-import { getGroupForPanel } from '@/components/dockable/tabGroupState';
+import { getGroupForPanel } from '@ui/dockable/tabGroupState';
 
 // ---------------------------------------------------------------------------
 // CurrentObjectPanelContext

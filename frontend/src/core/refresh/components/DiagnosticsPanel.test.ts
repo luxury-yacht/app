@@ -61,7 +61,7 @@ const mockNamespaceState: { selectedNamespace: string | null } = {
   selectedNamespace: 'default',
 };
 
-vi.mock('@components/dockable', () => ({
+vi.mock('@ui/dockable', () => ({
   DockablePanel: ({ children }: { children: React.ReactNode }) =>
     React.createElement(React.Fragment, null, children),
 }));

@@ -15,7 +15,7 @@ import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import ConfirmationModal from '@components/modals/ConfirmationModal';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import GridTable, {

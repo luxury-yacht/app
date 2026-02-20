@@ -42,12 +42,12 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 
 // App components
 import { AppLayout } from '@ui/layout/AppLayout';
-import { useAppLogsPanel } from '@/components/content/AppLogsPanel/AppLogsPanel';
+import { useAppLogsPanel } from '@ui/panels/app-logs/AppLogsPanel';
 import { useActiveSessionsPanel } from '@modules/active-session';
-import { DockablePanelProvider } from '@components/dockable';
+import { DockablePanelProvider } from '@ui/dockable';
 
 // Error Boundary
-import { AppErrorBoundary } from '@/components/errors';
+import { AppErrorBoundary } from '@ui/errors';
 
 // Custom hooks
 import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';

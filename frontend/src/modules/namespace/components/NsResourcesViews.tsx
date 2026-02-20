@@ -23,7 +23,7 @@ import NsViewQuotas from '@modules/namespace/components/NsViewQuotas';
 import NsViewRBAC from '@modules/namespace/components/NsViewRBAC';
 import NsViewStorage from '@modules/namespace/components/NsViewStorage';
 import NsViewWorkloads from '@modules/namespace/components/NsViewWorkloads';
-import { ErrorBoundary } from '@/components/errors/ErrorBoundary';
+import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 
 const ViewErrorFallback = ({ viewName, reset }: { viewName: string; reset: () => void }) => (
   <div className="namespace-view-error">

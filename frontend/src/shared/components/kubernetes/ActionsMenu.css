@@ -1,5 +1,5 @@
 /* Actions Menu Styles */
-@import "@components/modals/modals.css";
+@import "@ui/modals/modals.css";
 
 .actions-menu {
   position: relative;

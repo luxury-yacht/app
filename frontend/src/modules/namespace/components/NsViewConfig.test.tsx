@@ -89,7 +89,7 @@ vi.mock('@shared/components/ResourceLoadingBoundary', () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-vi.mock('@components/modals/ConfirmationModal', () => ({
+vi.mock('@shared/components/modals/ConfirmationModal', () => ({
   __esModule: true,
   default: (props: unknown) => {
     modalPropsRef.current = props;

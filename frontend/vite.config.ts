@@ -46,7 +46,6 @@ export default defineConfig({
       '@hooks': path.resolve(__dirname, './src/hooks'),
       '@types': path.resolve(__dirname, './src/types'),
       '@utils': path.resolve(__dirname, './src/utils'),
-      '@components': path.resolve(__dirname, './src/components'),
       '@contexts': path.resolve(__dirname, './src/core/contexts'),
       '@assets': path.resolve(__dirname, './src/assets'),
       '@wailsjs': path.resolve(__dirname, './wailsjs'),

@@ -10,7 +10,7 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import SettingsModal from './SettingsModal';
-import Settings from '../content/Settings';
+import Settings from '@ui/settings/Settings';
 
 const shortcutMocks = vi.hoisted(() => ({
   useShortcut: vi.fn(),
@@ -30,7 +30,7 @@ vi.mock('@ui/shortcuts', () => ({
     shortcutMocks.useKeyboardNavigationScope(...args),
 }));
 
-vi.mock('../content/Settings', () => ({
+vi.mock('@ui/settings/Settings', () => ({
   __esModule: true,
   default: vi.fn(() => <div data-testid="settings-content" />),
 }));

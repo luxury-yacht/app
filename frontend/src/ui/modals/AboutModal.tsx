@@ -15,7 +15,7 @@ import { GetAppInfo } from '@wailsjs/go/backend/App';
 import { backend } from '@wailsjs/go/models';
 import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
 import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
-import { useModalFocusTrap } from './useModalFocusTrap';
+import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 
 interface AboutModalProps {

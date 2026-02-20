@@ -11,7 +11,7 @@ import { errorHandler } from '@utils/errorHandler';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useShortcut, useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority, KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
-import { DockablePanel, useDockablePanelState } from '@/components/dockable';
+import { DockablePanel, useDockablePanelState } from '@ui/dockable';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import './AppLogsPanel.css';
 

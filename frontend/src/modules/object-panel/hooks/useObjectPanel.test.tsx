@@ -12,7 +12,7 @@ import { ObjectPanelStateProvider } from '@/core/contexts/ObjectPanelStateContex
 
 // Mock dockable panel context (replaces the old useDockablePanelState mock).
 const mockFocusPanel = vi.fn();
-vi.mock('@components/dockable', () => ({
+vi.mock('@ui/dockable', () => ({
   useDockablePanelContext: () => ({
     tabGroups: {
       right: { tabs: [], activeTab: null },
@@ -24,7 +24,7 @@ vi.mock('@components/dockable', () => ({
 }));
 
 // Mock tab group state helper used by the hook to find existing panels.
-vi.mock('@/components/dockable/tabGroupState', () => ({
+vi.mock('@ui/dockable/tabGroupState', () => ({
   getGroupForPanel: () => null,
 }));
 
@@ -35,7 +35,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   }),
 }));
 
-vi.mock('@/components/dockable/useDockablePanelState', () => ({
+vi.mock('@ui/dockable/useDockablePanelState', () => ({
   clearPanelState: vi.fn(),
 }));
 

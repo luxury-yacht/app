@@ -9,7 +9,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useObjectActions, type ObjectActionData } from '@shared/hooks/useObjectActions';
 import { PortForwardModal, type PortForwardTarget } from '@modules/port-forward';
 import ScaleModal from '@shared/components/modals/ScaleModal';
-import ConfirmationModal from '@components/modals/ConfirmationModal';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import '../ContextMenu.css';
 import './ActionsMenu.css';
 

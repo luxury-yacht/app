@@ -8,11 +8,11 @@
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
-import ConfirmationModal from '@components/modals/ConfirmationModal';
+import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import { types } from '@wailsjs/go/models';
 import { TriggerCronJob, SuspendCronJob } from '@wailsjs/go/backend/App';
-import { DockablePanel, useDockablePanelContext } from '@/components/dockable';
+import { DockablePanel, useDockablePanelContext } from '@ui/dockable';
 import { errorHandler } from '@utils/errorHandler';
 import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
@@ -48,8 +48,8 @@ import type { KubernetesObjectReference } from '@/types/view-state';
 import { useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
-import { getGroupForPanel, getGroupTabs } from '@/components/dockable/tabGroupState';
-import type { DockPosition } from '@/components/dockable';
+import { getGroupForPanel, getGroupTabs } from '@ui/dockable/tabGroupState';
+import type { DockPosition } from '@ui/dockable';
 
 // Tab configuration
 type DetailsSnapshotProps = Pick<

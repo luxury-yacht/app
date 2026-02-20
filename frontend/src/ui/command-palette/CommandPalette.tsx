@@ -26,7 +26,7 @@ import { getDisplayKind, aliasToKindMap, canonicalKinds } from '@/utils/kindAlia
 import { useShortNames } from '@/hooks/useShortNames';
 import { Command } from './CommandPaletteCommands';
 import { isMacPlatform } from '@/utils/platform';
-import { ErrorBoundary } from '@/components/errors/ErrorBoundary';
+import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 import './CommandPalette.css';
 
 interface CommandPaletteProps {

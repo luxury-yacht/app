@@ -1,5 +1,5 @@
 /* Import common modal styles */
-@import "../../../components/modals/modals.css";
+@import "../../modals/modals.css";
 
 /* ShortcutHelpModal specific sizing */
 .shortcut-help-modal {
