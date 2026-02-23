@@ -133,6 +133,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
 
     // Set up table sorting
     const { sortedData, sortConfig, handleSort } = useTableSort(data, 'name', 'asc', {
+      columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
     });

@@ -165,6 +165,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     });
 
     const { sortedData, sortConfig, handleSort } = useTableSort(data, undefined, 'asc', {
+      columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
     });

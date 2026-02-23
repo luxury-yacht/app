@@ -94,6 +94,58 @@ describe('useTableSort', () => {
     expect(getText('direction')).toBe('none');
   });
 
+  it('uses column sortValue when columns option is provided', async () => {
+    // Without sortValue, sorting by 'value' uses row.value (numeric).
+    // With sortValue, we can invert the sort order as a proof that sortValue is called.
+    type Item = { id: string; score: number };
+    const items: Item[] = [
+      { id: 'a', score: 10 },
+      { id: 'b', score: 30 },
+      { id: 'c', score: 20 },
+    ];
+
+    const columns = [
+      // sortValue negates the score, so asc sort should produce descending score order.
+      { key: 'score', sortValue: (item: Item) => -item.score },
+    ];
+
+    const SortValueHarness = () => {
+      const { sortedData } = useTableSort<Item>(items, 'score', 'asc', { columns });
+      return <div data-testid="ids">{sortedData.map((r) => r.id).join(',')}</div>;
+    };
+
+    await act(async () => {
+      root.render(<SortValueHarness />);
+    });
+
+    // With negated sortValue, asc sort gives: b(−30) < c(−20) < a(−10) → b,c,a
+    expect(getText('ids')).toBe('b,c,a');
+  });
+
+  it('falls back to row[key] when column has no sortValue', async () => {
+    type Item = { id: string; score: number };
+    const items: Item[] = [
+      { id: 'a', score: 10 },
+      { id: 'b', score: 30 },
+      { id: 'c', score: 20 },
+    ];
+
+    // Column exists but has no sortValue — should use row.score directly.
+    const columns = [{ key: 'score' }];
+
+    const FallbackHarness = () => {
+      const { sortedData } = useTableSort<Item>(items, 'score', 'asc', { columns });
+      return <div data-testid="ids">{sortedData.map((r) => r.id).join(',')}</div>;
+    };
+
+    await act(async () => {
+      root.render(<FallbackHarness />);
+    });
+
+    // Direct row.score asc: 10 < 20 < 30 → a,c,b
+    expect(getText('ids')).toBe('a,c,b');
+  });
+
   it('sorts age strings using duration-aware parsing', async () => {
     await renderHarness();
 

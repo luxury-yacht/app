@@ -205,8 +205,6 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
     : false;
   const eventsError = eventsScope ? (eventsSnapshot.error ?? null) : null;
 
-  const { sortedData, sortConfig, handleSort } = useTableSort(events, 'ageTimestamp', 'desc');
-
   const keyExtractor = useCallback((item: EventDisplay, index: number) => {
     const namespaceSegment = item.objectNamespace || CLUSTER_SCOPE;
     const identifier = `${namespaceSegment}:${item.objectKind}:${item.objectName}`;
@@ -286,6 +284,10 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
 
     return base;
   }, [openRelatedObject]);
+
+  const { sortedData, sortConfig, handleSort } = useTableSort(events, 'ageTimestamp', 'desc', {
+    columns,
+  });
 
   if (eventsLoading && events.length === 0) {
     return (

@@ -204,6 +204,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     });
 
     const { sortedData, sortConfig, handleSort } = useTableSort(data, 'name', 'asc', {
+      columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
     });

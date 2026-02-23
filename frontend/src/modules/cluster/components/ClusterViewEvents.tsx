@@ -200,6 +200,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
 
     // Set up table sorting
     const { sortedData, sortConfig, handleSort } = useTableSort(data, 'ageTimestamp', 'desc', {
+      columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
     });

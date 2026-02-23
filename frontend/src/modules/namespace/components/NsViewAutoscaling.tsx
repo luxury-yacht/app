@@ -263,6 +263,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
     });
 
     const { sortedData, sortConfig, handleSort } = useTableSort(data, undefined, 'asc', {
+      columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
     });

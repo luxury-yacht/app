@@ -94,9 +94,9 @@ Items 12–18 were investigated and could not be confirmed with a failing test. 
 
 ## Convention Violations
 
-### 24. `sortValue` is defined on columns but never used by the sort implementation
+### 24. ✅ `sortValue` is defined on columns but never used by the sort implementation
 
-`GridTable.types.ts:34` defines `sortValue?: (item: T) => any` on `GridColumnDefinition`, and multiple callsites set it (e.g., `EventsTab.tsx:270`, `useWorkloadTableColumns.tsx:91-127`, `NsViewEvents.tsx:176`). However, the sorting pipeline never calls it: `handleHeaderClick` (`GridTable.tsx:713`) passes only `column.key` to `onSort`, and `useTableSort` (`useTableSort.ts:99`) sorts by `row[effectiveSort.key]` — direct property access with no reference to column definitions at all. Every `sortValue` callback is silently ignored. This is a functional gap, not just a typing issue. Beyond tightening the type, `sortValue` needs to be wired into `useTableSort` or removed.
+`GridTable.types.ts:34` defines `sortValue?: (item: T) => any` on `GridColumnDefinition`, and multiple callsites set it, but `useTableSort` sorted by `row[effectiveSort.key]` — direct property access — ignoring every `sortValue` callback. Fixed by adding an optional `columns` parameter to `UseTableSortOptions`. When provided, `useTableSort` builds a `sortValueExtractors` map from columns that define `sortValue` and uses the extractor in the comparator instead of direct property access. All 20 callsites updated to pass `columns`. Regression tests added in `useTableSort.test.tsx` verifying both the sortValue path and the fallback to row[key].
 
 ### 25. Static inline CSS in header row
 

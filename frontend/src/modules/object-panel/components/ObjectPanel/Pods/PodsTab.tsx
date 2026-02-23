@@ -239,6 +239,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     sortConfig: tableSort,
     handleSort,
   } = useTableSort(pods, undefined, 'asc', {
+    columns,
     controlledSort: sortConfig,
     onChange: setSortConfig,
   });
