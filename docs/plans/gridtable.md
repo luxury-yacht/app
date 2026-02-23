@@ -82,9 +82,9 @@ Items 12–18 were investigated and could not be confirmed with a failing test. 
 
 ## Multi-Cluster Awareness Concerns
 
-### 22. `buildClusterScopedKey` usage is not enforced
+### 22. ✅ `buildClusterScopedKey` usage is not enforced
 
-`GridTable.utils.ts:77-81` provides a cluster-prefixed key builder, but `keyExtractor` is a user-provided prop with no documentation, warnings, or dev-time validation requiring cluster-scoped keys. Two rows from different clusters with the same name will silently collide. See also issue 5 for the silent fallback when `clusterId` is missing.
+`GridTable.utils.ts:77-81` provides a cluster-prefixed key builder, but `keyExtractor` is a user-provided prop with no enforcement requiring cluster-scoped keys. Two callers (`EventsTab.tsx`, `PodsTab.tsx`) were bypassing `buildClusterScopedKey` entirely — fixed to use it. A dev-time heuristic warning was added in `GridTable.tsx:702-711` that samples the first row's key and warns if it lacks a `|` separator. This is a heuristic, not strict enforcement — it will also warn on legitimate non-multi-cluster usage where keys lack `|` (e.g., test harnesses and single-cluster views that don't use `buildClusterScopedKey`). The warning is `warnDevOnce` so it fires at most once per view. See also issue 5 for the unconditional throw when `clusterId` is missing.
 
 ### 23. `isNamespaceScoped` duplicated into `filterOptions`
 

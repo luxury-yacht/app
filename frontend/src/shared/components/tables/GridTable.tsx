@@ -699,6 +699,21 @@ const GridTable = memo(function GridTable<T>({
     }
   }, [enableColumnResizing, resetManualResizes]);
 
+  // Dev-time check: keyExtractor must return cluster-scoped keys (containing '|')
+  // to prevent silent key collisions in multi-cluster views.
+  const clusterKeyCheckRef = useRef(false);
+  if (import.meta.env.DEV && !clusterKeyCheckRef.current && tableData.length > 0) {
+    clusterKeyCheckRef.current = true;
+    const sampleKey = keyExtractor(tableData[0], 0);
+    if (!sampleKey.includes('|')) {
+      warnDevOnce(
+        `GridTable: keyExtractor returned "${sampleKey}" which does not appear ` +
+          `cluster-scoped (missing "|" separator). Use buildClusterScopedKey() ` +
+          `to prevent key collisions in multi-cluster views.`
+      );
+    }
+  }
+
   // Render sort indicator
   const renderSortIndicator = useCallback((columnKey: string) => {
     if (!sortConfig || sortConfig.key !== columnKey) {

@@ -1489,3 +1489,57 @@ it('renders filter UI when enabled', () => {
 
   cleanup();
 });
+
+it('warns in dev when keyExtractor returns an unscoped key (missing | separator)', async () => {
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  const { cleanup } = renderGridTable({
+    data: [{ id: 'row-1', label: 'A' }],
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  await flushAsync();
+
+  // The default keyExtractor in renderGridTable returns item.id (no | separator),
+  // so the dev check should warn.
+  expect(warnSpy).toHaveBeenCalledWith(
+    expect.stringContaining('does not appear cluster-scoped')
+  );
+
+  warnSpy.mockRestore();
+  cleanup();
+});
+
+it('does not warn when keyExtractor returns a cluster-scoped key', async () => {
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOM.createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <ZoomProvider>
+        <KeyboardProvider>
+          <GridTable
+            data={[{ id: 'row-1', label: 'A' }]}
+            columns={defaultColumns}
+            keyExtractor={(item: SimpleRow) => `cluster-a|${item.id}`}
+          />
+        </KeyboardProvider>
+      </ZoomProvider>
+    );
+    await Promise.resolve();
+  });
+
+  // No cluster-scoping warning expected — key contains | separator.
+  const clusterWarnings = warnSpy.mock.calls.filter(
+    (args) => typeof args[0] === 'string' && args[0].includes('does not appear cluster-scoped')
+  );
+  expect(clusterWarnings).toHaveLength(0);
+
+  warnSpy.mockRestore();
+  act(() => root.unmount());
+  container.remove();
+});

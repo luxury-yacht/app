@@ -7,6 +7,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   applyColumnSizing,
   type ColumnSizingMap,
@@ -209,7 +210,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
   const keyExtractor = useCallback((item: EventDisplay, index: number) => {
     const namespaceSegment = item.objectNamespace || CLUSTER_SCOPE;
     const identifier = `${namespaceSegment}:${item.objectKind}:${item.objectName}`;
-    return `${identifier}:${item.lastTime.getTime()}:${index}`;
+    return buildClusterScopedKey(item, `${identifier}:${item.lastTime.getTime()}:${index}`);
   }, []);
 
   const openRelatedObject = useCallback(

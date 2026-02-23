@@ -7,6 +7,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   applyColumnSizing,
   createAgeColumn,
@@ -64,7 +65,10 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     [metrics?.collectedAt]
   );
 
-  const keyExtractor = useCallback((pod: PodSnapshotEntry) => `${pod.namespace}:${pod.name}`, []);
+  const keyExtractor = useCallback(
+    (pod: PodSnapshotEntry) => buildClusterScopedKey(pod, `${pod.namespace}:${pod.name}`),
+    []
+  );
   // Ensure pod navigation keeps the active cluster context for object detail scopes.
   const getPodClusterMeta = useCallback(
     (pod: PodSnapshotEntry) => ({
