@@ -65,6 +65,9 @@ interface EventDisplay {
   objectKind: string;
   objectName: string;
   objectNamespace: string;
+  // Per-event cluster identity from ObjectEventSummary (extends ClusterMeta).
+  clusterId?: string;
+  clusterName?: string;
 }
 
 const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
@@ -190,6 +193,8 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
           objectKind,
           objectName,
           objectNamespace,
+          clusterId: event.clusterId,
+          clusterName: event.clusterName,
         };
       }),
     [rawEvents, objectData?.kind, objectData?.name, objectData?.namespace]
@@ -222,12 +227,13 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
           ? item.objectNamespace
           : undefined;
 
+      // Prefer per-event cluster identity; fall back to parent panel cluster.
       openWithObjectRef.current({
         kind: item.objectKind,
         name: item.objectName,
         namespace: resolvedNamespace,
-        clusterId: objectData?.clusterId ?? undefined,
-        clusterName: objectData?.clusterName ?? undefined,
+        clusterId: item.clusterId ?? objectData?.clusterId ?? undefined,
+        clusterName: item.clusterName ?? objectData?.clusterName ?? undefined,
       });
     },
     [objectData?.clusterId, objectData?.clusterName]

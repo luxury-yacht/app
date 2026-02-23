@@ -22,7 +22,7 @@ Review of `frontend/src/modules/object-panel/`.
 
 **Verify:** Write a test confirming that when an event has its own `clusterId`, `openRelatedObject` uses the event's cluster identity rather than the parent panel's.
 
-- [ ] Fix
+- [x] ✅ Fix — Added `clusterId`/`clusterName` to `EventDisplay`, carried through from `ObjectEventSummary` in the mapping, and `openRelatedObject` now prefers per-event cluster over parent fallback. Test in `EventsTab.test.tsx` covers both cases.
 
 ## Important Issues (Should Fix)
 
