@@ -36,7 +36,7 @@ Every cluster change runs GC and wipes the saved state (sort, column visibility,
 
 `useGridTableVirtualization.ts:357` writes `hoverRowRef.current = null` directly, followed by `updateHoverForElement(null)` on line 358. This appears to violate the ownership boundary (only `useGridTableHoverSync` should write to its ref), but is likely intentional: `updateHoverForElement` early-returns without clearing the ref when hover is suppressed (`useGridTableHoverSync.ts:61-63`). The direct mutation ensures a detached DOM node (`!current.isConnected`) is cleared from `hoverRowRef` even during suppression. Fix: add a force-clear path to `updateHoverForElement` (e.g., an `options.force` parameter) so the virtualizer doesn't need to reach into the ref directly.
 
-### 7. `filters?.initial` object in useEffect deps resets search state
+### 7. ✅ `filters?.initial` object in useEffect deps resets search state
 
 `useGridTableFilters.ts:103-108` — If the parent passes `filters={{ initial: { search: '' }, enabled: true }}` as a literal, `filters.initial` is a new reference every render, resetting user-typed search text.
 

@@ -250,6 +250,85 @@ describe('useGridTableFilters', () => {
     expect(result?.tableData.map((r) => r.id)).toEqual(['1', '2']);
   });
 
+  it('does not reset user-typed search when filters.initial is a new reference with same content', async () => {
+    // Regression: inline `filters={{ initial: { search: '' }, enabled: true }}`
+    // creates a new object reference every render. The useEffect that applies
+    // `filters.initial` must not reset user-typed state when the content is unchanged.
+    const resultRef: {
+      current: ReturnType<typeof useGridTableFilters<Row>> | null;
+    } = { current: null };
+
+    const Harness: React.FC<{ filters: GridTableFilterConfig<Row> }> = ({ filters }) => {
+      const result = useGridTableFilters<Row>({
+        data: rows,
+        filters,
+        ...defaultAccessors,
+      });
+      useEffect(() => {
+        resultRef.current = result;
+      }, [result]);
+      return null;
+    };
+
+    // Initial render with empty initial search.
+    await act(async () => {
+      root.render(<Harness filters={{ enabled: true, initial: { search: '' } }} />);
+      await Promise.resolve();
+    });
+
+    // User types a search term.
+    await act(async () => {
+      resultRef.current?.handleFilterSearchChange('gateway');
+      await Promise.resolve();
+    });
+    expect(resultRef.current?.activeFilters.search).toBe('gateway');
+    expect(resultRef.current?.tableData.map((r) => r.id)).toEqual(['3']);
+
+    // Parent re-renders with a new `initial` object reference, same content.
+    await act(async () => {
+      root.render(<Harness filters={{ enabled: true, initial: { search: '' } }} />);
+      await Promise.resolve();
+    });
+
+    // User's search must be preserved — not reset to empty string.
+    expect(resultRef.current?.activeFilters.search).toBe('gateway');
+    expect(resultRef.current?.tableData.map((r) => r.id)).toEqual(['3']);
+  });
+
+  it('reapplies filters.initial when the content actually changes', async () => {
+    const resultRef: {
+      current: ReturnType<typeof useGridTableFilters<Row>> | null;
+    } = { current: null };
+
+    const Harness: React.FC<{ filters: GridTableFilterConfig<Row> }> = ({ filters }) => {
+      const result = useGridTableFilters<Row>({
+        data: rows,
+        filters,
+        ...defaultAccessors,
+      });
+      useEffect(() => {
+        resultRef.current = result;
+      }, [result]);
+      return null;
+    };
+
+    // Initial render with kind filter for Deployment.
+    await act(async () => {
+      root.render(<Harness filters={{ enabled: true, initial: { kinds: ['Deployment'] } }} />);
+      await Promise.resolve();
+    });
+    expect(resultRef.current?.activeFilters.kinds).toEqual(['Deployment']);
+    expect(resultRef.current?.tableData.map((r) => r.id)).toEqual(['1', '3']);
+
+    // Parent changes initial to a different kind — hook must reapply.
+    await act(async () => {
+      root.render(<Harness filters={{ enabled: true, initial: { kinds: ['Pod'] } }} />);
+      await Promise.resolve();
+    });
+    expect(resultRef.current?.activeFilters.kinds).toEqual(['Pod']);
+    expect(resultRef.current?.tableData.map((r) => r.id)).toEqual(['2']);
+  });
+
   it('builds filter option lists from data when options are not provided', async () => {
     const { getResult } = await renderHook({
       enabled: true,

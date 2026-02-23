@@ -5,7 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type {
   GridTableFilterAccessors,
@@ -100,11 +100,23 @@ export function useGridTableFilters<T>({
     normalizeFilterState(filters?.initial)
   );
 
+  // Track the last-applied initial filter signature so that a new object
+  // reference with identical content doesn't reset user-typed search text.
+  const lastAppliedInitialRef = useRef<string>(
+    filters?.initial ? JSON.stringify(normalizeFilterState(filters.initial)) : ''
+  );
+
   useEffect(() => {
     if (!filteringEnabled || isControlled || !filters?.initial) {
       return;
     }
-    setInternalFilters(normalizeFilterState(filters.initial));
+    const normalized = normalizeFilterState(filters.initial);
+    const signature = JSON.stringify(normalized);
+    if (signature === lastAppliedInitialRef.current) {
+      return;
+    }
+    lastAppliedInitialRef.current = signature;
+    setInternalFilters(normalized);
   }, [filteringEnabled, isControlled, filters?.initial]);
 
   const activeFilters = useMemo(() => {
