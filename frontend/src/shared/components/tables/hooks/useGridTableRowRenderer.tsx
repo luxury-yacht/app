@@ -100,6 +100,8 @@ export function useGridTableRowRenderer<T>({
         key={elementKey}
         className={rowClassName}
         style={rowInlineStyle}
+        role="row"
+        aria-selected={isFocused || isSelected || undefined}
         data-row-key={rowKey}
         data-grid-slot={slotId}
         onClick={(e) => handleRowClick(item, absoluteIndex, e)}
@@ -134,6 +136,7 @@ export function useGridTableRowRenderer<T>({
             <div
               key={model.key}
               className={`grid-cell ${model.className}`}
+              role="gridcell"
               data-column={model.key}
               data-has-context-menu="true"
               onContextMenu={(e) => handleContextMenu(e, model.key, item, absoluteIndex)}

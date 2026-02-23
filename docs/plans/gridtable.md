@@ -106,9 +106,16 @@ Removed `style={{ cursor: column.sortable ? 'pointer' : 'default' }}` from `useG
 
 ## Accessibility Issues
 
-### 26. No ARIA grid semantics
+### 26. No ARIA grid semantics (mostly fixed — `aria-activedescendant` deferred)
 
-The entire table is `<div>`-based with no `role="grid"`, `role="row"`, `role="gridcell"`, or `role="columnheader"` attributes. Sort state is expressed purely visually (`↑`/`↓` text) with no `aria-sort` on header cells. The focused row (`gridtable-row--focused`) has no `aria-activedescendant` or `aria-selected`. The loading overlay has no `aria-busy` or `role="status"`. Screen readers cannot identify this as a table, cannot identify column headers, and cannot hear which row is focused.
+Added ARIA roles and attributes across the GridTable component tree:
+- `GridTableLayout.tsx`: `role="grid"` and `aria-busy` on the container
+- `useGridTableHeaderRow.tsx`: `role="row"` on the header, `role="columnheader"` and `aria-sort` (`ascending`/`descending`/`none`) on each header cell (requires new `sortConfig` param)
+- `useGridTableRowRenderer.tsx`: `role="row"` and `aria-selected` on data rows, `role="gridcell"` on cells
+- `GridTableBody.tsx`: `role="rowgroup"` on the body table div
+- `GridTable.tsx`: `role="status"` and `aria-live="polite"` on the loading overlay
+
+Note: `aria-activedescendant` on the body wrapper (pointing to the focused row) was not added — it requires threading the focused row key from the focus navigation hook into GridTableBody props and adding `id` attributes to rows, which is a larger plumbing change.
 
 ### 27. Sort trigger has no keyboard activation
 

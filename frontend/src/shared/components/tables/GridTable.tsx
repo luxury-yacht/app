@@ -774,6 +774,7 @@ const GridTable = memo(function GridTable<T>({
     renderSortIndicator,
     handleResizeStart,
     autoSizeColumn,
+    sortConfig,
   });
 
   const headerNode = (
@@ -824,7 +825,7 @@ const GridTable = memo(function GridTable<T>({
   );
 
   const loadingOverlayNode = showLoadingOverlay ? (
-    <div className="gridtable-loading-overlay">
+    <div className="gridtable-loading-overlay" role="status" aria-live="polite">
       <LoadingSpinner message={loadingOverlayMessage} />
     </div>
   ) : null;

@@ -1543,3 +1543,96 @@ it('does not warn when keyExtractor returns a cluster-scoped key', async () => {
   act(() => root.unmount());
   container.remove();
 });
+
+it('renders ARIA grid semantics on container, header, rows, and cells', () => {
+  const sortableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label, sortable: true },
+  ];
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns: sortableColumns,
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  // Container has role="grid"
+  const grid = container.querySelector('[role="grid"]');
+  expect(grid).not.toBeNull();
+
+  // Header row has role="row"
+  const headerRow = container.querySelector('.gridtable-header[role="row"]');
+  expect(headerRow).not.toBeNull();
+
+  // Header cells have role="columnheader"
+  const headerCells = container.querySelectorAll('[role="columnheader"]');
+  expect(headerCells.length).toBeGreaterThan(0);
+
+  // Sortable header has aria-sort="none" when no sort is active
+  const sortableHeader = container.querySelector('[role="columnheader"][aria-sort]');
+  expect(sortableHeader).not.toBeNull();
+  expect(sortableHeader!.getAttribute('aria-sort')).toBe('none');
+
+  // Data rows have role="row"
+  const dataRows = container.querySelectorAll('.gridtable-row[role="row"]');
+  expect(dataRows.length).toBe(3);
+
+  // Data cells have role="gridcell"
+  const gridcells = container.querySelectorAll('[role="gridcell"]');
+  expect(gridcells.length).toBe(3); // 1 column × 3 rows
+
+  // Body has role="rowgroup"
+  const rowgroup = container.querySelector('[role="rowgroup"]');
+  expect(rowgroup).not.toBeNull();
+});
+
+it('sets aria-sort="ascending" on the actively sorted column header', () => {
+  const sortableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label, sortable: true },
+    { key: 'name', header: 'Name', render: (row) => row.name ?? '', sortable: true },
+  ];
+
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOM.createRoot(container);
+
+  act(() => {
+    root.render(
+      <ZoomProvider>
+        <KeyboardProvider>
+          <GridTable<SimpleRow>
+            data={createRows(2)}
+            columns={sortableColumns}
+            keyExtractor={(item) => `cluster|${item.id}`}
+            sortConfig={{ key: 'label', direction: 'asc' }}
+            onSort={() => {}}
+          />
+        </KeyboardProvider>
+      </ZoomProvider>
+    );
+  });
+
+  const labelHeader = container.querySelector('[data-column="label"][role="columnheader"]');
+  expect(labelHeader!.getAttribute('aria-sort')).toBe('ascending');
+
+  const nameHeader = container.querySelector('[data-column="name"][role="columnheader"]');
+  expect(nameHeader!.getAttribute('aria-sort')).toBe('none');
+
+  act(() => root.unmount());
+  container.remove();
+});
+
+it('sets aria-busy on grid container when loading overlay is shown', () => {
+  const { container, cleanup } = renderGridTable({
+    data: createRows(5),
+    loading: true,
+    loadingOverlay: { show: true, message: 'Updating...' },
+  });
+  cleanupRoot = cleanup;
+
+  const grid = container.querySelector('[role="grid"]');
+  expect(grid!.getAttribute('aria-busy')).toBe('true');
+
+  const statusOverlay = container.querySelector('[role="status"]');
+  expect(statusOverlay).not.toBeNull();
+});

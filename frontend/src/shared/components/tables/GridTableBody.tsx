@@ -181,6 +181,7 @@ function GridTableBody<T>({
       <div
         ref={tableRef}
         className={`gridtable gridtable--body ${tableClassName} ${useShortNames ? 'short-names' : ''}`}
+        role="rowgroup"
       >
         {renderRows()}
         {paginationEnabled && (
