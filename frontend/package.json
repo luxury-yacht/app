@@ -21,7 +21,7 @@
     "@codemirror/language": "^6.12.1",
     "@codemirror/search": "^6.6.0",
     "@codemirror/state": "^6.5.4",
-    "@codemirror/view": "^6.39.14",
+    "@codemirror/view": "^6.39.15",
     "@lezer/highlight": "^1.2.3",
     "@uiw/react-codemirror": "^4.25.4",
     "@xterm/addon-clipboard": "^0.2.0",
