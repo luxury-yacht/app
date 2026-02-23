@@ -4,6 +4,10 @@
 
 ## Feature Ideas
 
+- Pods view, change column order to Name, Owner, Namespace
+
+- Allow column dragging
+
 - Show number of items in tables
   - Perhaps an option to turn on row numbers?
 

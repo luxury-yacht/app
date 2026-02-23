@@ -78,11 +78,28 @@ describe('GridTable utils', () => {
     expect(buildClusterScopedKey({ item: { clusterId: 'beta:prod' } }, 'svc-1')).toBe(
       'beta:prod|svc-1'
     );
+  });
 
-    // Without clusterId, key is NOT prefixed (clusterName fallback removed).
-    expect(buildClusterScopedKey({ clusterName: 'dev' }, 'pod-1')).toBe('pod-1');
-    expect(buildClusterScopedKey({ item: { clusterName: 'prod' } }, 'svc-1')).toBe('svc-1');
-    expect(buildClusterScopedKey({}, 'deploy-1')).toBe('deploy-1');
-    expect(buildClusterScopedKey(null, 'job-1')).toBe('job-1');
+  it('throws when clusterId is missing', () => {
+    // Without clusterId, buildClusterScopedKey throws to prevent silent key
+    // collisions in multi-cluster views.
+    expect(() => buildClusterScopedKey({ clusterName: 'dev' }, 'pod-1')).toThrow(
+      /requires clusterId/
+    );
+    expect(() => buildClusterScopedKey({ item: { clusterName: 'prod' } }, 'svc-1')).toThrow(
+      /requires clusterId/
+    );
+    expect(() => buildClusterScopedKey({}, 'deploy-1')).toThrow(/requires clusterId/);
+    expect(() => buildClusterScopedKey(null, 'job-1')).toThrow(/requires clusterId/);
+  });
+
+  it('produces different keys for same name in different clusters', () => {
+    const rowA = { clusterId: 'cluster-a', name: 'app' };
+    const rowB = { clusterId: 'cluster-b', name: 'app' };
+    const keyA = buildClusterScopedKey(rowA, 'app');
+    const keyB = buildClusterScopedKey(rowB, 'app');
+    expect(keyA).not.toBe(keyB);
+    expect(keyA).toBe('cluster-a|app');
+    expect(keyB).toBe('cluster-b|app');
   });
 });

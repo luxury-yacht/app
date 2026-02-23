@@ -24,7 +24,7 @@ Every cluster change runs GC and wipes the saved state (sort, column visibility,
 
 `useGridTableFocusNavigation.ts:189-193` and `GridTable.tsx:583` both use `[data-row-key="..."] .gridtable-row` (descendant selector), but in `useGridTableRowRenderer.tsx:98-103` both `data-row-key` and `.gridtable-row` are on the **same** element. The descendant selector never matches, so `updateHoverForElement` is never called via keyboard navigation — the hover overlay does not track the focused row. In virtualized mode, scroll-into-view falls through to a fallback (`GridTable.tsx:593-614`, gated by `shouldVirtualize`) that partially compensates for scrolling but without hover highlight. In non-virtualized mode, there is no fallback — keyboard scroll-into-view fails entirely. Fix both selector sites: use `.gridtable-row[data-row-key="${escapedKey}"]`.
 
-### 5. `buildClusterScopedKey` silently drops cluster scoping when `clusterId` is missing
+### 5. ✅ `buildClusterScopedKey` silently drops cluster scoping when `clusterId` is missing
 
 `GridTable.utils.ts:77-81` — When a row has no `clusterId`, the function returns the bare `baseKey` with no cluster prefix. A dev-mode warning is logged when `clusterName` exists but `clusterId` is missing (`GridTable.utils.ts:69`), but rows that lack cluster identity entirely produce no warning. In a multi-cluster view, two rows with the same name from different clusters (e.g., a Pod named "app" in cluster-a and cluster-b) will produce identical keys, causing React to reuse the same DOM node, the focus tracker to navigate to the wrong item, and the context menu to act on the wrong resource. This extends issue 22 (usage not enforced) with a concrete collision path.
 
