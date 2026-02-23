@@ -32,7 +32,7 @@ Review of `frontend/src/modules/object-panel/`.
 
 The pattern is functional but has no backoff, no max-retry cap, and is not visible to the orchestrator's diagnostics. Consider whether the retry scheduling itself should be managed by a dedicated mechanism (e.g., the `objectLogFallbackManager`) rather than raw timers, to get backoff and observability.
 
-- [ ] Evaluate
+- [x] ✅ Fix — Replaced fixed `setInterval` with `setTimeout`-based retry using exponential backoff (3s, 6s, 12s, ... capped at 30s) and a max of 8 attempts. Recovery still routes through `refreshOrchestrator.restartStreamingDomain()`. On success, `fallbackActive=false` tears down the effect; on max retries exhausted, stops retrying.
 
 ### 4. 100ms `setTimeout` after `CreateDebugContainer` is a race condition
 

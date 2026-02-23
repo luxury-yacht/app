@@ -547,17 +547,36 @@ const LogViewer: React.FC<LogViewerProps> = ({
       }
     };
 
-    const initialTimer = window.setTimeout(() => {
-      void attemptRecovery();
-    }, 3000);
-    const intervalId = window.setInterval(() => {
-      void attemptRecovery();
-    }, 10000);
+    // Retry with exponential backoff: 3s, 6s, 12s, 24s, 30s (capped).
+    // Stops after MAX_RECOVERY_ATTEMPTS to avoid retrying indefinitely.
+    const MAX_RECOVERY_ATTEMPTS = 8;
+    const INITIAL_DELAY_MS = 3000;
+    const MAX_DELAY_MS = 30000;
+    let attempt = 0;
+    let timerId: number | undefined;
+
+    const scheduleNext = () => {
+      if (cancelled || attempt >= MAX_RECOVERY_ATTEMPTS) {
+        return;
+      }
+      const delay = Math.min(INITIAL_DELAY_MS * Math.pow(2, attempt), MAX_DELAY_MS);
+      timerId = window.setTimeout(async () => {
+        attempt++;
+        await attemptRecovery();
+        // On failure attemptRecovery sets fallbackActive=true, so this effect
+        // stays mounted and we schedule the next retry. On success it sets
+        // fallbackActive=false which unmounts this effect via the dependency array.
+        scheduleNext();
+      }, delay);
+    };
+
+    scheduleNext();
 
     return () => {
       cancelled = true;
-      window.clearTimeout(initialTimer);
-      window.clearInterval(intervalId);
+      if (timerId !== undefined) {
+        window.clearTimeout(timerId);
+      }
     };
   }, [autoRefresh, fallbackActive, isActive, logScope, showPreviousLogs]);
 
