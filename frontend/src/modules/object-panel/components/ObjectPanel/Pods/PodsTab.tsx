@@ -24,7 +24,6 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { getPodStatusSeverity } from '@utils/podStatusSeverity';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { useViewState } from '@core/contexts/ViewStateContext';
@@ -58,8 +57,7 @@ const workloadNameFromOwner = (pod: PodSnapshotEntry) =>
   pod.ownerName ? `${pod.ownerName}${pod.ownerKind ? ` (${pod.ownerKind})` : ''}` : '—';
 
 export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error, isActive }) => {
-  const { openWithObject } = useObjectPanel();
-  const { selectedClusterId } = useKubeconfig();
+  const { openWithObject, objectData } = useObjectPanel();
   const viewState = useViewState();
   const namespaceContext = useNamespace();
 
@@ -226,7 +224,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     resetState,
   } = useGridTablePersistence<PodSnapshotEntry>({
     viewId: 'object-panel-pods',
-    clusterIdentity: selectedClusterId,
+    // Use the panel-scoped cluster ID, not the global sidebar selection.
+    clusterIdentity: objectData?.clusterId ?? '',
     namespace: null,
     isNamespaceScoped: false,
     columns,

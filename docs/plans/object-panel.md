@@ -12,7 +12,7 @@ Review of `frontend/src/modules/object-panel/`.
 
 **Verify:** Write a test confirming that when `selectedClusterId` differs from the panel's `objectData.clusterId`, the persistence key uses the panel-scoped value.
 
-- [ ] Fix
+- [x] ✅ Fix — replaced `useKubeconfig().selectedClusterId` with `useObjectPanel().objectData?.clusterId`, removed unused import. Test in `PodsTab.test.tsx` confirms panel-scoped identity is used.
 
 ### 2. EventsTab drops cluster metadata when mapping events, then falls back to parent cluster
 
