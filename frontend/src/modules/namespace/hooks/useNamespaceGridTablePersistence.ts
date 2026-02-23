@@ -74,10 +74,9 @@ export function useNamespaceGridTablePersistence<T>({
     columns,
     data,
     keyExtractor,
-    filterOptions: {
-      ...(filterOptions ?? {}),
-      isNamespaceScoped,
-    },
+    // isNamespaceScoped is passed as a top-level param; useGridTablePersistence
+    // merges it into filterOptions internally, so we don't duplicate it here.
+    filterOptions,
   });
 
   const sortConfig = useMemo<SortConfig>(

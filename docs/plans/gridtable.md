@@ -86,9 +86,9 @@ Items 12–18 were investigated and could not be confirmed with a failing test. 
 
 `GridTable.utils.ts:77-81` provides a cluster-prefixed key builder, but `keyExtractor` is a user-provided prop with no enforcement requiring cluster-scoped keys. Two callers (`EventsTab.tsx`, `PodsTab.tsx`) were bypassing `buildClusterScopedKey` entirely — fixed to use it. A dev-time heuristic warning was added in `GridTable.tsx:702-711` that samples the first row's key and warns if it lacks a `|` separator. This is a heuristic, not strict enforcement — it will also warn on legitimate non-multi-cluster usage where keys lack `|` (e.g., test harnesses and single-cluster views that don't use `buildClusterScopedKey`). The warning is `warnDevOnce` so it fires at most once per view. See also issue 5 for the unconditional throw when `clusterId` is missing.
 
-### 23. `isNamespaceScoped` duplicated into `filterOptions`
+### 23. ✅ `isNamespaceScoped` duplicated into `filterOptions`
 
-`useNamespaceGridTablePersistence.ts:69-81` passes `isNamespaceScoped` both as a top-level param and inside `filterOptions`. The top-level always wins, making the duplication misleading.
+`useNamespaceGridTablePersistence.ts:69-81` was passing `isNamespaceScoped` both as a top-level param and inside `filterOptions`. Since `useGridTablePersistence` merges the top-level `isNamespaceScoped` into `filterOptions` internally (lines 157-160 and 217-220), the duplication was misleading — the top-level always won. Removed the injection from `filterOptions` and added a regression test verifying `filterOptions` is passed through without `isNamespaceScoped` contamination.
 
 ---
 
