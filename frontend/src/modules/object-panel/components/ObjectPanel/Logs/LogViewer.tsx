@@ -14,10 +14,10 @@ import GridTable, {
 import LoadingSpinner from '@shared/components/LoadingSpinner';
 import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { useLogFiltering } from './hooks/useLogFiltering';
+import { useLogStreamFallback, isLogDataUnavailable } from './hooks/useLogStreamFallback';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
-import { objectLogFallbackManager } from '@/core/refresh/fallbacks/objectLogFallbackManager';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
 import type { ObjectLogEntry } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -39,23 +39,6 @@ const LOG_DOMAIN = 'object-logs' as const;
 const PARSED_COLUMN_MIN_WIDTH = 120;
 const PARSED_TIMESTAMP_MIN_WIDTH = 180;
 const PARSED_POD_COLUMN_MIN_WIDTH = 160;
-
-const isLogDataUnavailable = (message?: string | null) => {
-  if (!message) {
-    return false;
-  }
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes('waiting to start') ||
-    normalized.includes('podinitializing') ||
-    normalized.includes('container not found') ||
-    normalized.includes('previous terminated container') ||
-    normalized.includes('is not valid for pod') ||
-    normalized.includes('no pods found') ||
-    normalized.includes('has no logs') ||
-    normalized.includes('no logs available')
-  );
-};
 
 const LogViewer: React.FC<LogViewerProps> = ({
   namespace,
@@ -303,75 +286,20 @@ const LogViewer: React.FC<LogViewerProps> = ({
     [fetchLogs]
   );
 
-  useEffect(() => {
-    if (!logScope) {
-      return;
-    }
-    if (!isActive) {
-      fallbackRecoveringRef.current = false;
-      dispatch({ type: 'SET_FALLBACK_ACTIVE', payload: false });
-      dispatch({ type: 'SET_SHOW_PREVIOUS_LOGS', payload: false });
-      dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
-      refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
-      // Use preserveState so the diagnostics panel can still see the last
-      // log snapshot while the logs tab is inactive. Full cleanup happens
-      // via ObjectPanelContent when the panel closes.
-      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
-        preserveState: true,
-      });
-      return;
-    }
-
-    if (showPreviousLogs) {
-      refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
-      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
-        preserveState: true,
-      });
-      return () => {
-        refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
-          preserveState: true,
-        });
-      };
-    }
-
-    if (fallbackActive) {
-      if (fallbackRecoveringRef.current) {
-        refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true);
-        return () => {
-          if (!fallbackRecoveringRef.current) {
-            refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
-              preserveState: true,
-            });
-          }
-        };
-      }
-      refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
-      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
-        preserveState: true,
-      });
-      return () => {
-        refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
-          preserveState: true,
-        });
-      };
-    }
-
-    fallbackRecoveringRef.current = false;
-    refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true);
-    return () => {
-      refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
-      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
-        preserveState: true,
-      });
-    };
-  }, [fallbackActive, isActive, logScope, showPreviousLogs]);
-
-  // RESET_FOR_NEW_SCOPE is now handled during render (above) to avoid
-  // causing a re-render that would interrupt streaming startup.
-  //
-  // Note: We don't call startStreamingDomain separately because setScopedDomainEnabled
-  // already handles starting streaming internally. Calling both creates a race condition
-  // with the orchestrator's deduplication during React Strict Mode.
+  // Stream lifecycle, fallback activation, recovery, and initial log priming.
+  useLogStreamFallback({
+    logScope,
+    isActive,
+    autoRefresh,
+    showPreviousLogs,
+    snapshotStatus,
+    logEntriesLength: logEntries.length,
+    fallbackActive,
+    fetchFallbackLogs,
+    dispatch,
+    fallbackRecoveringRef,
+    hasPrimedScopeRef,
+  });
 
   useEffect(() => {
     if (!isWorkload || !logScope || showPreviousLogs) {
@@ -435,163 +363,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
     previousLogCountRef.current = filteredEntries.length;
     previousActivePodsRef.current = normalizedActivePods;
   }, [isWorkload, logEntries, logScope, normalizedActivePods, showPreviousLogs]);
-
-  useEffect(() => {
-    if (fallbackActive || showPreviousLogs) {
-      hasPrimedScopeRef.current = false;
-    }
-  }, [fallbackActive, showPreviousLogs]);
-
-  useEffect(() => {
-    if (!logScope || !isActive || showPreviousLogs) {
-      return;
-    }
-
-    if (fallbackActive) {
-      return;
-    }
-
-    if (fallbackRecoveringRef.current) {
-      return;
-    }
-
-    if (snapshotStatus === 'error' && autoRefresh) {
-      refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
-      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false);
-      dispatch({ type: 'SET_FALLBACK_ACTIVE', payload: true });
-    }
-  }, [autoRefresh, fallbackActive, isActive, logScope, showPreviousLogs, snapshotStatus]);
-
-  useEffect(() => {
-    if (!fallbackActive || !logScope || showPreviousLogs) {
-      dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
-      if (logScope) {
-        objectLogFallbackManager.unregister(logScope);
-      }
-      return;
-    }
-
-    objectLogFallbackManager.register(logScope, fetchFallbackLogs, autoRefresh && isActive);
-
-    void objectLogFallbackManager.refreshNow(logScope);
-
-    return () => {
-      objectLogFallbackManager.unregister(logScope);
-    };
-  }, [autoRefresh, fallbackActive, fetchFallbackLogs, isActive, logScope, showPreviousLogs]);
-
-  useEffect(() => {
-    if (!fallbackActive || !logScope || showPreviousLogs) {
-      return;
-    }
-    objectLogFallbackManager.update(logScope, {
-      autoRefresh: autoRefresh && isActive,
-      fetcher: fetchFallbackLogs,
-    });
-  }, [autoRefresh, fallbackActive, fetchFallbackLogs, isActive, logScope, showPreviousLogs]);
-
-  useEffect(() => {
-    if (!fallbackActive || showPreviousLogs || !autoRefresh || !isActive || !logScope) {
-      return;
-    }
-
-    let cancelled = false;
-    let attemptInFlight = false;
-
-    const attemptRecovery = async () => {
-      if (cancelled || attemptInFlight) {
-        return;
-      }
-      attemptInFlight = true;
-      fallbackRecoveringRef.current = true;
-
-      setScopedDomainState(LOG_DOMAIN, logScope, (previous) => ({
-        ...previous,
-        status: 'loading',
-        error: null,
-        scope: logScope,
-      }));
-      dispatch({ type: 'SET_FALLBACK_ERROR', payload: null });
-
-      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, true);
-
-      try {
-        await refreshOrchestrator.restartStreamingDomain(LOG_DOMAIN, logScope);
-        if (cancelled) {
-          return;
-        }
-        fallbackRecoveringRef.current = false;
-        dispatch({ type: 'SET_FALLBACK_ACTIVE', payload: false });
-      } catch (restartError) {
-        if (cancelled) {
-          return;
-        }
-        fallbackRecoveringRef.current = false;
-        const message = restartError instanceof Error ? restartError.message : String(restartError);
-        const unavailable = isLogDataUnavailable(message);
-        setScopedDomainState(LOG_DOMAIN, logScope, (previous) => ({
-          ...previous,
-          status: unavailable ? 'ready' : 'error',
-          error: unavailable ? null : message,
-          scope: logScope,
-        }));
-        dispatch({ type: 'SET_FALLBACK_ERROR', payload: unavailable ? null : message });
-        dispatch({ type: 'SET_FALLBACK_ACTIVE', payload: true });
-      } finally {
-        attemptInFlight = false;
-        if (cancelled) {
-          fallbackRecoveringRef.current = false;
-        }
-      }
-    };
-
-    // Retry with exponential backoff: 3s, 6s, 12s, 24s, 30s (capped).
-    // Stops after MAX_RECOVERY_ATTEMPTS to avoid retrying indefinitely.
-    const MAX_RECOVERY_ATTEMPTS = 8;
-    const INITIAL_DELAY_MS = 3000;
-    const MAX_DELAY_MS = 30000;
-    let attempt = 0;
-    let timerId: number | undefined;
-
-    const scheduleNext = () => {
-      if (cancelled || attempt >= MAX_RECOVERY_ATTEMPTS) {
-        return;
-      }
-      const delay = Math.min(INITIAL_DELAY_MS * Math.pow(2, attempt), MAX_DELAY_MS);
-      timerId = window.setTimeout(async () => {
-        attempt++;
-        await attemptRecovery();
-        // On failure attemptRecovery sets fallbackActive=true, so this effect
-        // stays mounted and we schedule the next retry. On success it sets
-        // fallbackActive=false which unmounts this effect via the dependency array.
-        scheduleNext();
-      }, delay);
-    };
-
-    scheduleNext();
-
-    return () => {
-      cancelled = true;
-      if (timerId !== undefined) {
-        window.clearTimeout(timerId);
-      }
-    };
-  }, [autoRefresh, fallbackActive, isActive, logScope, showPreviousLogs]);
-
-  useEffect(() => {
-    if (!logScope || !isActive || fallbackActive || showPreviousLogs) {
-      return;
-    }
-    if (logEntries.length > 0) {
-      hasPrimedScopeRef.current = true;
-      return;
-    }
-    if (hasPrimedScopeRef.current) {
-      return;
-    }
-    hasPrimedScopeRef.current = true;
-    void fetchFallbackLogs();
-  }, [fallbackActive, fetchFallbackLogs, isActive, logEntries.length, logScope, showPreviousLogs]);
 
   const handleTogglePreviousLogs = useCallback(() => {
     if (!supportsPreviousLogs) {

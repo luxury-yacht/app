@@ -92,7 +92,7 @@ The pattern is functional but has no backoff, no max-retry cap, and is not visib
 
 Already well-structured with extracted hooks and a reducer, but fallback/recovery logic could be extracted into its own hook (e.g., `useLogStreamFallback`).
 
-- [ ] Refactor
+- [x] ✅ Refactor — Extracted 7 fallback/recovery effects from LogViewer.tsx (1430→1200 lines) into `hooks/useLogStreamFallback.ts`. The hook manages stream lifecycle (enable/disable), error-to-fallback transition, objectLogFallbackManager registration/updates, exponential-backoff recovery, and initial log priming. Also moved `isLogDataUnavailable` into the hook and exported it. Refs (`fallbackRecoveringRef`, `hasPrimedScopeRef`) remain owned by LogViewer and are passed to the hook. 19 dedicated tests in `useLogStreamFallback.test.ts` cover stream lifecycle, error transitions, fallback manager registration, recovery scheduling, and initial priming.
 
 ### 13. Generic boilerplate file comments add no value
 
