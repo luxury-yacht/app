@@ -24,9 +24,9 @@ Wails v2's `EventsOff` removes **all** listeners for the named event, not just t
 
 ### 5. `ViewStateContext.tsx:152-158,277-289` — Partial context updates to refresh orchestrator
 
-The `refreshOrchestrator.updateContext` calls omit cluster fields, but `clusterId` is already synced into refresh context from `KubeconfigContext` (`frontend/src/modules/kubernetes/config/KubeconfigContext.tsx:189`) and namespace context from `NamespaceContext` (`frontend/src/modules/namespace/contexts/NamespaceContext.tsx:320`). The real risk is transient mixed context due to partial updates from multiple providers — `RefreshManager` merges partial context (`frontend/src/core/refresh/RefreshManager.ts:258`). Lower confidence without a concrete repro.
+The `refreshOrchestrator.updateContext` calls omit cluster fields, but `clusterId` is already synced into refresh context from `KubeconfigContext` (`frontend/src/modules/kubernetes/config/KubeconfigContext.tsx:189`) and namespace context from `NamespaceContext` (`frontend/src/modules/namespace/contexts/NamespaceContext.tsx:320`). The real risk is transient mixed context due to partial updates from multiple providers — `RefreshManager` merges partial context (`frontend/src/core/refresh/RefreshManager.ts:258`).
 
-**Status: Needs investigation.** Before this drives a fix, a concrete scenario or test must prove that mixed refresh context can actually occur (e.g. rapid cluster tab switching producing a refresh call with mismatched clusterId and view state).
+**Status: Race confirmed by code path analysis (see Phase 4).** Mixed-context window exists during cluster tab switches when the two tabs are on different views. No repro test or instrumented log yet demonstrates end-to-end incorrect behavior. Needs a repro artifact before driving a fix.
 
 ## Low Priority / Style
 
@@ -61,8 +61,28 @@ Skipped — not worth two rounds of changes. The infinite loop is wasteful but n
 
 ### Phase 4 — Timeboxed investigation
 
-- [ ] **#5 — ViewStateContext partial updates** (risk: investigation only | payoff: unknown)
-  - Write a test that proves or disproves mixed refresh context during rapid cluster switching (e.g. a refresh call fires with mismatched clusterId and view state). Timebox to 1-2 hours. If no repro, deprioritize. If confirmed, promote to a fix — but note that touching the orchestrator's context merge path (`RefreshManager.ts:258`) is high-traffic and needs careful scoping.
+- [x] ✅ **#5 — ViewStateContext partial updates** (investigation complete — race confirmed)
+
+  **Finding: The race is real but narrow.** During a cluster tab switch, React effect ordering creates a window where the orchestrator holds mixed state: the old cluster's `selectedClusterId` combined with the new cluster's `currentView`/`activeNamespaceView`.
+
+  **Mechanism:** React runs child effects before parent effects. `RefreshSyncProvider` (child, `ViewStateContext.tsx:277`) fires before `KubeconfigContext`'s effect (parent, `KubeconfigContext.tsx:206`). The first write updates view state without a `clusterId`; the second write updates `clusterId`. Between the two, `RefreshManager.updateContext` (`RefreshManager.ts:258`) performs a raw `{ ...this.context, ...context }` merge with no consistency validation.
+
+  **Impact:** When `getManualRefreshTargets` (`RefreshManager.ts:480`) runs during the first write, it can select the wrong refresher — the one matching the new cluster's tab type, while `selectedClusterId` still points to the old cluster. `RefreshManager.updateContext` triggers manual refreshes immediately (`RefreshManager.ts:277`), `triggerManualRefreshMany` starts `refreshSingle` synchronously (`RefreshManager.ts:333`, `:625`), and refresh callbacks are invoked synchronously before awaiting (`RefreshManager.ts:818`). There is no guaranteed defer between the mixed-state write and refresh callback execution, so the refresh may execute against the mixed context — not just select the wrong refresher but also encode the wrong cluster scope.
+
+  **Conditions:** Only triggers when two cluster tabs are on different views (different `viewType` or `activeNamespaceView`) at the time of switching. Same-view tabs produce no diff and no targets.
+
+  **Mitigating factors (hypotheses, not verified by instrumentation):**
+  - `normalizeNamespaceScope` (`orchestrator.ts:1072`) reads `this.context` at call time — if any async boundary exists before the actual HTTP call, Effect B may have corrected `selectedClusterId` by then. This has not been measured.
+  - `contextVersion` guard exists (captured at `orchestrator.ts:1207`, checked at `orchestrator.ts:1287`, `:1329`) but is **not incremented** by the local tab-switch path via `setActiveKubeconfig`. Other kubeconfig event paths do bump it (`orchestrator.ts:1928`), but not this one.
+
+  **Severity: Low-medium.** The race is confirmed by code path analysis. No repro test or instrumented log exists yet to demonstrate end-to-end incorrect behavior. The mixed-state window is real and refreshes may execute against it; the actual downstream impact (wrong cluster data fetched/displayed) has not been observed but cannot be ruled out.
+
+  **Status: Needs a repro test or instrumented log before driving a fix.** If promoting to a fix, candidate directions:
+
+  **Potential fix directions** (not yet scoped):
+  1. Batch view state + clusterId into a single atomic `updateContext` call during tab switches
+  2. Add a `contextVersion` bump to `setActiveKubeconfig` so stale refreshes are aborted
+  3. Defer `triggerManualRefreshMany` behind a microtask so all synchronous effects settle first
 
 ### Phase 5 — Architectural alignment (larger effort)
 
