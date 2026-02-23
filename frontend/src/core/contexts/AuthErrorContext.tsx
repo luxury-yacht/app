@@ -5,6 +5,7 @@
  * Subscribes to backend auth events and provides auth state to all consumers.
  */
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { RetryClusterAuth, GetAllClusterAuthStates } from '@wailsjs/go/backend/App';
 import { eventBus } from '@/core/events';
 
 /**
@@ -76,6 +77,7 @@ const AuthErrorContext = createContext<AuthErrorContextValue | null>(null);
 
 /**
  * Provider component that subscribes to backend auth events and shares state.
+ * Mounted at the root in App.tsx (app-lifetime).
  */
 export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Track auth errors per cluster.
@@ -93,8 +95,7 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
 
     try {
-      const module = await import('../../../wailsjs/go/backend/App');
-      await module.RetryClusterAuth(clusterId);
+      await RetryClusterAuth(clusterId);
     } catch (err) {
       console.error(`[AuthErrorContext] RetryClusterAuth failed for ${clusterId}:`, err);
     }
@@ -105,8 +106,7 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => {
     const fetchInitialState = async () => {
       try {
-        const module = await import('../../../wailsjs/go/backend/App');
-        const states = await module.GetAllClusterAuthStates();
+        const states = await GetAllClusterAuthStates();
         if (!states) return;
 
         const initialErrors = new Map<string, ClusterAuthState>();
@@ -267,17 +267,18 @@ export const AuthErrorProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       });
     };
 
-    // Subscribe to cluster auth events.
-    runtime.EventsOn('cluster:auth:failed', handleAuthFailed);
-    runtime.EventsOn('cluster:auth:recovering', handleAuthRecovering);
-    runtime.EventsOn('cluster:auth:recovered', handleAuthRecovered);
-    runtime.EventsOn('cluster:auth:progress', handleAuthProgress);
+    // Subscribe to cluster auth events. EventsOn returns a per-listener
+    // disposer, so we use those for cleanup instead of EventsOff (which
+    // would remove ALL listeners for the event name).
+    const disposers = [
+      runtime.EventsOn('cluster:auth:failed', handleAuthFailed),
+      runtime.EventsOn('cluster:auth:recovering', handleAuthRecovering),
+      runtime.EventsOn('cluster:auth:recovered', handleAuthRecovered),
+      runtime.EventsOn('cluster:auth:progress', handleAuthProgress),
+    ];
 
     return () => {
-      runtime.EventsOff?.('cluster:auth:failed');
-      runtime.EventsOff?.('cluster:auth:recovering');
-      runtime.EventsOff?.('cluster:auth:recovered');
-      runtime.EventsOff?.('cluster:auth:progress');
+      disposers.forEach((dispose) => dispose());
     };
   }, []);
 

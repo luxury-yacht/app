@@ -49,19 +49,15 @@ Ordered by recommended execution sequence. Risk/payoff assessed per item.
   - **#4**: Split the mount effect so history replay runs once, separate from the subscription effect. Test: changing provider config props does not duplicate errors.
   - Both are mechanical changes in the same file with near-zero regression surface. Payoff is modest — prevents a minor React warning (#3) and a latent duplicate-replay trap (#4). Worth doing together, not worth standalone PRs.
 
-### Phase 2 — Stop the bleeding
+### ~~Phase 2 — Stop the bleeding~~ (skipped)
 
-- [ ] **#1 interim — ObjectCatalogContext cap the retry loop** (risk: low | payoff: medium)
-  - Add a max retry count and/or exponential backoff to the existing 1s polling loop. This is a temporary mitigation only — the final fix is orchestrator migration (Phase 5). Test: verify retry stops after limit when catalog is disabled.
-  - Low risk because it only constrains existing behavior. Payoff stops a loop that runs indefinitely in a valid app state.
+Skipped — not worth two rounds of changes. The infinite loop is wasteful but not destructive (polls a local backend call). Will be fixed properly in Phase 5 (orchestrator migration).
 
 ### Phase 3 — Correctness fix, scope depends on investigation
 
-- [ ] **#2 — AuthErrorContext EventsOff** (risk: low-medium | payoff: low in practice)
-  - First: verify whether `AuthErrorProvider` is app-lifetime (mounted at root, never unmounts). If yes, remove the `EventsOff` cleanup entirely and document the constraint — 5-minute fix. If no, or if a second subscriber exists/is planned, introduce a singleton listener per `cluster:auth:*` event with local fanout/ref-counting so no component calls `EventsOff` directly.
-  - The bug is real but dormant — it only fires on provider unmount. Operational frequency is likely near zero if the provider is app-lifetime. Don't build fanout infrastructure unless needed.
-  - Test (if fanout): multiple subscribers survive a single consumer unmount. Test (if removal): assert provider is mounted at app root only.
-  - **#7 — AuthErrorContext relative imports**: ride-along fix if editing this file. Replace dynamic relative imports with static `@wailsjs` alias imports. No test needed. (risk: near zero | payoff: near zero)
+- [x] ✅ **#2 — AuthErrorContext EventsOff** (risk: low-medium | payoff: low in practice)
+  - `EventsOn` returns a per-listener disposer (`frontend/wailsjs/runtime/runtime.d.ts:41`). Replaced `EventsOff` calls with per-listener disposers returned by `EventsOn`, invoked in the effect cleanup. This avoids the global listener removal problem and is StrictMode-safe (cleanup runs on remount, preventing duplicate handlers).
+  - [x] ✅ **#7 — AuthErrorContext relative imports**: Replaced dynamic `import('../../../wailsjs/go/backend/App')` with static `import { RetryClusterAuth, GetAllClusterAuthStates } from '@wailsjs/go/backend/App'`.
 
 ### Phase 4 — Timeboxed investigation
 
