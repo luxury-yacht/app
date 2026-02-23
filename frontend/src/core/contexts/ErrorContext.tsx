@@ -45,6 +45,8 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
   const [errors, setErrors] = useState<ErrorNotification[]>([]);
   const errorIdCounter = useRef(0);
   const dismissTimers = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  // Tracks the 300ms animation-delay timers used by dismissError/dismissAllErrors
+  const animationTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   const dismissError = useCallback((id: string) => {
     setErrors((prev) =>
@@ -59,9 +61,11 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
     }
 
     // Remove dismissed error after animation
-    setTimeout(() => {
+    const animTimer = setTimeout(() => {
       setErrors((prev) => prev.filter((error) => error.id !== id));
+      animationTimers.current.delete(animTimer);
     }, 300);
+    animationTimers.current.add(animTimer);
   }, []);
 
   const addError = useCallback(
@@ -112,12 +116,15 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
     ]
   );
 
-  // Subscribe to global error handler
+  // Replay any errors captured before the provider mounted (once only)
   useEffect(() => {
-    // Replay any errors captured before the provider mounted
     const history = errorHandler.getHistory();
     history.forEach((error) => addError(error));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once on mount
+  }, []);
 
+  // Subscribe to future errors from the global handler
+  useEffect(() => {
     const unsubscribe = subscribeToErrors((error: ErrorDetails) => {
       addError(error);
     });
@@ -126,10 +133,20 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
 
     return () => {
       unsubscribe();
-      // Clear all timers on unmount
+      // Clear auto-dismiss timers when subscription resets
       timers.forEach((timer) => clearTimeout(timer));
     };
   }, [addError]);
+
+  // Clear in-flight animation timers on unmount only — kept separate so that
+  // addError identity changes (from provider prop updates) don't cancel pending
+  // 300ms dismiss animations and leave errors stuck in internal state.
+  useEffect(() => {
+    const animTimers = animationTimers.current;
+    return () => {
+      animTimers.forEach((timer) => clearTimeout(timer));
+    };
+  }, []);
 
   const dismissAllErrors = useCallback(() => {
     setErrors((prev) => prev.map((error) => ({ ...error, dismissed: true })));
@@ -139,9 +156,11 @@ export const ErrorProvider: React.FC<ErrorProviderProps> = ({
     dismissTimers.current.clear();
 
     // Remove all errors after animation
-    setTimeout(() => {
+    const animTimer = setTimeout(() => {
       setErrors([]);
+      animationTimers.current.delete(animTimer);
     }, 300);
+    animationTimers.current.add(animTimer);
   }, []);
 
   const clearErrors = useCallback(() => {

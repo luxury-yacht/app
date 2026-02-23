@@ -44,7 +44,7 @@ Ordered by recommended execution sequence. Risk/payoff assessed per item.
 
 ### Phase 1 — Low risk, immediate cleanup
 
-- [ ] **#3 + #4 — ErrorContext cleanup** (risk: very low | payoff: low-medium)
+- [x] ✅ **#3 + #4 — ErrorContext cleanup** (risk: very low | payoff: low-medium)
   - **#3**: Track 300ms animation `setTimeout` handles in a ref and clear on unmount. Same pattern already used for `dismissTimers` in the same file. Test: no state updates after provider unmount.
   - **#4**: Split the mount effect so history replay runs once, separate from the subscription effect. Test: changing provider config props does not duplicate errors.
   - Both are mechanical changes in the same file with near-zero regression surface. Payoff is modest — prevents a minor React warning (#3) and a latent duplicate-replay trap (#4). Worth doing together, not worth standalone PRs.
