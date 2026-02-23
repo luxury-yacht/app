@@ -236,7 +236,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
         )}
 
         {(hasUtilization || objectData?.kind?.toLowerCase() === 'node') && utilizationData && (
-          <div style={{ marginTop: 'var(--spacing-xl)' }}>
+          <div className="details-section-spaced">
             <Utilization
               cpu={utilizationData.cpu}
               memory={utilizationData.memory}
@@ -270,7 +270,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
           if (!hasContainers) return null;
 
           return (
-            <div style={{ marginTop: 'var(--spacing-xl)' }}>
+            <div className="details-section-spaced">
               <Containers
                 containers={
                   podDetails?.containers ||
@@ -286,7 +286,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
         })()}
 
         {dataInfo && (
-          <div style={{ marginTop: 'var(--spacing-xl)' }}>
+          <div className="details-section-spaced">
             <DataSection
               data={dataInfo.data}
               binaryData={dataInfo.binaryData}

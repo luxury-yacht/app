@@ -235,3 +235,8 @@
   padding: 0.25rem 0.75rem;
   font-size: 0.875rem;
 }
+
+/* Vertical spacing between stacked detail sections (utilization, containers, data). */
+.details-section-spaced {
+  margin-top: var(--spacing-xl);
+}

@@ -1016,7 +1016,10 @@ const LogViewer: React.FC<LogViewerProps> = ({
         sortable: false,
         minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
         render: (item: ParsedLogEntry) => (
-          <span style={{ color: podColors[item._pod || ''] || podColors['__fallback__'] }}>
+          <span
+            className="pod-color-text"
+            style={{ '--pod-color': podColors[item._pod || ''] || podColors['__fallback__'] } as React.CSSProperties}
+          >
             {item._pod || '-'}
           </span>
         ),
@@ -1080,12 +1083,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
             <div
               className="parsed-log-cell"
               title={displayValue}
-              style={{
-                maxWidth: '300px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
             >
               {displayValue}
             </div>
@@ -1284,11 +1281,11 @@ const LogViewer: React.FC<LogViewerProps> = ({
               displayValue="Options"
               size="compact"
               renderOption={(option) => (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
-                  <span style={{ width: '20px', textAlign: 'center' }}>
+                <div className="log-option-row">
+                  <span className="log-option-check">
                     {option.metadata?.checked ? '✓' : ''}
                   </span>
-                  <span style={{ flex: 1 }}>{option.label}</span>
+                  <span className="log-option-label">{option.label}</span>
                   <span className="keycap">
                     <kbd>{option.metadata?.shortcut}</kbd>
                   </span>
@@ -1362,13 +1359,16 @@ const LogViewer: React.FC<LogViewerProps> = ({
                         return (
                           <div key={index} className="pod-log-line">
                             {timestamp && (
-                              <span className="pod-log-metadata" style={{ color: podColor }}>
+                              <span
+                                className="pod-log-metadata pod-color-text"
+                                style={{ '--pod-color': podColor } as React.CSSProperties}
+                              >
                                 {timestamp}
                               </span>
                             )}
                             <span
-                              className="pod-log-metadata"
-                              style={{ color: podColor, fontWeight: 500 }}
+                              className="pod-log-metadata pod-log-metadata--bold"
+                              style={{ '--pod-color': podColor } as React.CSSProperties}
                             >
                               [{pod}/{container}]
                             </span>

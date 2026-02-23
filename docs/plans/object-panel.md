@@ -46,7 +46,7 @@ The pattern is functional but has no backoff, no max-retry cap, and is not visib
 
 `DetailsTab.tsx:239,273,289`, `LogViewer.tsx:1000,1064-1069,1268-1271,1346,1352` — Static layout styles and spacing should be CSS classes. Dynamic values like pod colors can use CSS custom properties.
 
-- [ ] Fix
+- [x] ✅ Fix — DetailsTab: replaced 3 inline `marginTop` with `.details-section-spaced` class. LogViewer: removed redundant inline styles on `.parsed-log-cell` (already in CSS), replaced static dropdown layout with `.log-option-row`/`.log-option-check`/`.log-option-label` classes, replaced dynamic pod colors with `--pod-color` CSS custom property + `.pod-color-text`/`.pod-log-metadata--bold` classes.
 
 ### 6. `objectData` prop typed as `any`
 
