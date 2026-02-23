@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Pods/PodsTab.tsx
- *
- * UI component for PodsTab.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React, { useCallback, useMemo } from 'react';

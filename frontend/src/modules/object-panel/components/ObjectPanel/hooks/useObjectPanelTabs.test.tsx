@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs.test.tsx
- *
- * Test suite for useObjectPanelTabs.
- * Covers key behaviors and edge cases for useObjectPanelTabs.
  */
 
 import React from 'react';

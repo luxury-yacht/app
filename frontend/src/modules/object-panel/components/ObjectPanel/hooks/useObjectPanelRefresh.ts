@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelRefresh.ts
  *
- * Hook for useObjectPanelRefresh.
  * - Manages refresh logic for the object panel's resource details.
  * - Handles loading states, error handling, and provides a method to fetch resource details.
  * - Returns structured information about detail payload, loading state, error state, and a fetch function.

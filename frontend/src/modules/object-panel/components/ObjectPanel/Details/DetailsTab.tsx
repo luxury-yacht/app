@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.tsx
- *
- * UI component for DetailsTab.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React, { useMemo } from 'react';

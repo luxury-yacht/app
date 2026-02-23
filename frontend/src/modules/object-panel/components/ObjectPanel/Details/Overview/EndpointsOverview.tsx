@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/EndpointsOverview.tsx
- *
- * UI component for EndpointsOverview.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React, { useCallback, useMemo } from 'react';

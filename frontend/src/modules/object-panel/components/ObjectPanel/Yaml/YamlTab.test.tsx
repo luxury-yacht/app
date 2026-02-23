@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/YamlTab.test.tsx
- *
- * Test suite for YamlTab.
- * Covers key behaviors and edge cases for YamlTab.
  */
 
 import React, { act } from 'react';

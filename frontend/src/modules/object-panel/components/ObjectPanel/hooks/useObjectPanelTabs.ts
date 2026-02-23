@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs.ts
  *
- * Hook for useObjectPanelTabs.
  * Manages tabs within the object panel based on object capabilities and type.
  * Returns available tabs and handles keyboard shortcuts for navigation and tab switching.
  */

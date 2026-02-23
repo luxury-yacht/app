@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/IngressOverview.test.tsx
- *
- * Test suite for IngressOverview.
- * Covers key behaviors and edge cases for IngressOverview.
  */
 
 import React from 'react';

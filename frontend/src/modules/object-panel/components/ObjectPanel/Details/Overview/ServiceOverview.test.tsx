@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ServiceOverview.test.tsx
- *
- * Test suite for ServiceOverview.
- * Covers key behaviors and edge cases for ServiceOverview.
  */
 
 import React from 'react';

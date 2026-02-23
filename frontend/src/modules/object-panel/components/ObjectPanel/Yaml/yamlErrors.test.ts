@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlErrors.test.ts
- *
- * Test suite for yamlErrors.
- * Covers key behaviors and edge cases for yamlErrors.
  */
 
 import { describe, it, expect } from 'vitest';

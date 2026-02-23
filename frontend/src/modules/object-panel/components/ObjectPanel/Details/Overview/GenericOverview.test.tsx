@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/GenericOverview.test.tsx
- *
- * Test suite for GenericOverview.
- * Covers key behaviors and edge cases for GenericOverview.
  */
 
 import React from 'react';

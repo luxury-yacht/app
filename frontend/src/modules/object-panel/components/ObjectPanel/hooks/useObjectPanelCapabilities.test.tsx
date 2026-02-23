@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities.test.tsx
- *
- * Test suite for useObjectPanelCapabilities.
- * Covers key behaviors and edge cases for useObjectPanelCapabilities.
  */
 
 import React from 'react';

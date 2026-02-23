@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.tsx
  *
- * UI component for ObjectPanel.
  * Each instance renders a single object as a dockable tab.
  * Accepts objectRef and panelId as props; uses CurrentObjectPanelContext
  * so child components can access the correct object data.

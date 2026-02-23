@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization.test.tsx
- *
- * Test suite for DetailsTabUtilization.
- * Covers key behaviors and edge cases for DetailsTabUtilization.
  */
 
 import ReactDOM from 'react-dom/client';

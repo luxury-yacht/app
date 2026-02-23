@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.tsx
- *
- * UI component for ValuesTab.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';

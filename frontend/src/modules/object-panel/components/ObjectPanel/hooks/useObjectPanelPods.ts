@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods.ts
  *
- * Hook for useObjectPanelPods.
  * - Determines and manages pod data and metrics for the object panel.
  * - Handles refresh logic based on panel state and active tab.
  * - Returns structured pod data, loading states, and error information.

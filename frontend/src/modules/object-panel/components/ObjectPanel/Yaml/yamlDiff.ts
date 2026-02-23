@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlDiff.ts
- *
- * UI component for yamlDiff.
- * Handles rendering and interactions for the object panel feature.
  */
 
 export type DiffLineType = 'context' | 'added' | 'removed';

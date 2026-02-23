@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind.test.ts
- *
- * Test suite for getObjectPanelKind.
- * Covers key behaviors and edge cases for getObjectPanelKind.
  */
 
 import { describe, expect, it } from 'vitest';

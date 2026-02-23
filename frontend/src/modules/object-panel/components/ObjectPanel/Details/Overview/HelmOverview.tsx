@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/HelmOverview.tsx
- *
- * UI component for HelmOverview.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React from 'react';

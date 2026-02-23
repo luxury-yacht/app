@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport.ts
  *
- * Hook for useObjectPanelFeatureSupport.
  * Determines feature support for the object panel based on object kind and resource capabilities.
  * Returns a structured feature support object indicating available features.
  */

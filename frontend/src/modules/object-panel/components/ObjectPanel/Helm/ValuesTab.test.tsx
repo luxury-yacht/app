@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ValuesTab.test.tsx
  *
- * Test suite for ValuesTab.
  * Covers mode switching (defaults, overrides, merged), loading/error/empty
  * states, and correct recursive value computation with typed helpers.
  */

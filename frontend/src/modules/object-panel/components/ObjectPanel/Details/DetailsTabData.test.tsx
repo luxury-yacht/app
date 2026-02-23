@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.test.tsx
- *
- * Test suite for DetailsTabData.
- * Covers key behaviors and edge cases for DetailsTabData.
  */
 
 import ReactDOM from 'react-dom/client';

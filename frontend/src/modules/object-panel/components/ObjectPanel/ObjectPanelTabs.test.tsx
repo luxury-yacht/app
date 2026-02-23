@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelTabs.test.tsx
- *
- * Test suite for ObjectPanelTabs.
- * Covers key behaviors and edge cases for ObjectPanelTabs.
  */
 
 import ReactDOM from 'react-dom/client';

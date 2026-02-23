@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx
- *
- * UI component for ShellTab.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';

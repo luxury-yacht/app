@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogKeyboardShortcuts.ts
  *
- * Hook for useLogKeyboardShortcuts.
  * Keyboard shortcuts for the Log Viewer.
  * Extracts shortcut registration from the main component for clarity.
  */

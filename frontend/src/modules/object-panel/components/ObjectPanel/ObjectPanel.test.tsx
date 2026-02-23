@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanel.test.tsx
- *
- * Test suite for ObjectPanel.
- * Covers key behaviors and edge cases for ObjectPanel.
  */
 
 import ReactDOM from 'react-dom/client';
@@ -217,6 +214,7 @@ vi.mock('@/core/capabilities', () => ({
 
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => mockUseShortcut(...(args as [])),
+  useShortcuts: vi.fn(),
   useSearchShortcutTarget: () => undefined,
   useKeyboardNavigationScope: (...args: unknown[]) =>
     mockUseKeyboardNavigationScope(...(args as [])),

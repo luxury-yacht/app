@@ -98,7 +98,7 @@ Already well-structured with extracted hooks and a reducer, but fallback/recover
 
 Several files have comments like "UI component for EventsTab. Handles rendering and interactions for the object panel feature." — no information beyond the filename.
 
-- [ ] Fix
+- [x] ✅ Fix — Removed generic boilerplate comment lines ("UI component for X", "Handles rendering and interactions for the object panel feature", "Test suite for X", "Covers key behaviors and edge cases for X", etc.) from 94 files. Meaningful descriptions were preserved (e.g., LogViewer, useObjectPanel, useObjectPanelTabs). Also added `useShortcuts` to the `@ui/shortcuts` mock in `ObjectPanel.test.tsx` (required by fix #11).
 
 ### 14. 33-dependency `useMemo` in `useOverviewData`
 

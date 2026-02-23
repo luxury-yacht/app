@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab.tsx
- *
- * UI component for NodeMaintenanceTab.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';

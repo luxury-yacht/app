@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelActions.ts
  *
- * Hook for useObjectPanelActions.
  * Manages actions related to the object panel such as restart, delete, and scale.
  * Handles state updates and API calls for resource actions.
  */

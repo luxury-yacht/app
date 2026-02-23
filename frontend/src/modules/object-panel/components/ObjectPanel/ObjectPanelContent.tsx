@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.tsx
  *
- * Module source for ObjectPanelContent.
  * Renders the content of the object panel based on the active tab and provided props.
  * Each tab is conditionally rendered and wrapped in an error boundary for robustness.
  */

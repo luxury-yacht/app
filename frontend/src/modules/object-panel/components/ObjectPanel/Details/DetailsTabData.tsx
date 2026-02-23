@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabData.tsx
- *
- * UI component for DetailsTabData.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React, { useState, useMemo, useEffect } from 'react';

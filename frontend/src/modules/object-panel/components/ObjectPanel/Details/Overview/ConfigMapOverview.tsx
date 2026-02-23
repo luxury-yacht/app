@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/ConfigMapOverview.tsx
- *
- * UI component for ConfigMapOverview.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React from 'react';

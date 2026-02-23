@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/hooks/useObjectPanel.ts
  *
- * Hook for useObjectPanel.
  * Combines dockable panel UI state with object panel business logic from context.
  * Supports the multi-panel model: each object opens as its own tab.
  *

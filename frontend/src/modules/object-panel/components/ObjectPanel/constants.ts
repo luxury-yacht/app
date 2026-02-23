@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/constants.ts
- *
- * UI component for constants.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import type { ResourceCapability } from './types';

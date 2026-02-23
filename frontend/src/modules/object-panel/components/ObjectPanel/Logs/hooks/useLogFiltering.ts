@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Logs/hooks/useLogFiltering.ts
  *
- * Hook for useLogFiltering.
  * Handles filtering and JSON parsing of log entries.
  * Pure transformation logic extracted from LogViewer.
  */
