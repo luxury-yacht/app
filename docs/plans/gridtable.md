@@ -52,9 +52,9 @@ Every cluster change runs GC and wipes the saved state (sort, column visibility,
 
 `useGridTableAutoWidthMeasurementQueue.ts:165-176` — The `autoSize` event type is grouped with `dragStart` in the disabling block, which sets `isAutoSizingEnabledRef.current = false` before control reaches `markColumnsDirty(keys)` at line 212. But `markColumnsDirty` has an early-return guard at line 117 that checks `isAutoSizingEnabledRef.current`, so the call is always a no-op. The `reset` event correctly re-enables the flag at line 207 before calling `markColumnsDirty`, but `autoSize` has no equivalent re-enable step. After calling autoSizeColumn, all subsequent data-driven auto-width updates are also suppressed because the flag stays `false` permanently until a `reset` event arrives.
 
-### 11. `ReactDOMServer.renderToString` called synchronously on the main thread
+### 11. ✅ `ReactDOMServer.renderToString` serialize→parse round-trip in measurement loop
 
-`useGridTableColumnMeasurer.ts:185-188` — `ReactDOMServer.renderToString` is called synchronously for every non-kind column cell during width measurement, up to 400 samples per column (capped at line 144). This blocks the main thread during every auto-width remeasurement pass. Consider `renderToStaticMarkup` or DOM-based measurement instead.
+`useGridTableColumnMeasurer.ts` — Replaced `ReactDOMServer.renderToString` + `innerHTML` (serialize React tree to string, parse string back into DOM) with `createRoot` + `flushSync` (render React elements directly into the off-screen measurer node). This eliminates the `react-dom/server` dependency and the per-cell serialization overhead. The measurement loop is still synchronous on the main thread — DOM-based width measurement (`getBoundingClientRect`) requires synchronous rendering by nature. Fully async measurement would need a fundamentally different architecture.
 
 ---
 

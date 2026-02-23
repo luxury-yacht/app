@@ -7,7 +7,8 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import React from 'react';
-import ReactDOMServer from 'react-dom/server';
+import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 
 import type {
   ColumnWidthInput,
@@ -128,6 +129,9 @@ export function useGridTableColumnMeasurer<T>({
       const isKindColumn = isKindColumnKey(column.key);
       const kindMeasurer = isKindColumn ? ensureKindBadgeMeasurer() : null;
 
+      // Create an off-screen measurer node with a React root for direct DOM
+      // rendering. This avoids the serialize→parse round-trip of renderToString/
+      // renderToStaticMarkup — React elements are rendered straight into the DOM.
       const cellMeasurer =
         !isKindColumn || !kindMeasurer
           ? (() => {
@@ -139,7 +143,7 @@ export function useGridTableColumnMeasurer<T>({
               node.style.whiteSpace = 'nowrap';
               node.style.width = 'auto';
               document.body.appendChild(node);
-              return node;
+              return { node, root: createRoot(node) };
             })()
           : null;
 
@@ -190,20 +194,22 @@ export function useGridTableColumnMeasurer<T>({
           }
 
           if (React.isValidElement(contentNode)) {
-            // Pre-existing: renderToString output is used for off-screen width
-            // measurement only, never inserted into the visible DOM.
-            const html = ReactDOMServer.renderToString(contentNode);
-            cellMeasurer.innerHTML = html; // eslint-disable-line no-unsanitized/property
+            // Render directly into the DOM — avoids the synchronous
+            // serialize→parse round-trip of renderToString/renderToStaticMarkup.
+            flushSync(() => {
+              cellMeasurer.root.render(contentNode);
+            });
           } else {
-            cellMeasurer.textContent = String(contentNode ?? '');
+            cellMeasurer.node.textContent = String(contentNode ?? '');
           }
 
-          const width = cellMeasurer.getBoundingClientRect().width;
+          const width = cellMeasurer.node.getBoundingClientRect().width;
           maxWidth = Math.max(maxWidth, width);
         });
       } finally {
         if (cellMeasurer) {
-          cellMeasurer.remove();
+          cellMeasurer.root.unmount();
+          cellMeasurer.node.remove();
         }
         if (kindMeasurer) {
           kindMeasurer.badge.textContent = '';
