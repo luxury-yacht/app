@@ -4,12 +4,26 @@
 
 ## Feature Ideas
 
-- Pods view, change column order to Name, Owner, Namespace
+- Refresh kubeconfigs without restarting the app
+  - Add a directory watcher to all paths with auto-reload when files change in that dir
+  - If we can't do that, then add Refresh button in settings
 
-- Allow column dragging
-
-- Show number of items in tables
-  - Perhaps an option to turn on row numbers?
+- Gridtable improvements
+  - Link behavior
+    - Click to open in Object Panel
+    - Ctrl/Cmd+click to go to that item in its view
+  - Allow column order change via drag
+    - should reset button also reset to default column order?
+      - probably not because that reset is for filters
+  - Right-click menu on table header
+    - Sort asc/desc
+    - Move column left/right
+    - Hide column
+    - Reset to defaults
+  - Hover buttons to hide column, set sort?
+  - Pods view, change default column order to Name, Owner, Namespace
+  - Show number of items in tables
+    - Perhaps an option to turn on row numbers?
 
 - Move shell and port forward tracking to the status indicator tooltip instead of a panel tab
 

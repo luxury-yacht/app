@@ -27,7 +27,7 @@ export interface UseGridTableVirtualizationParams<T> {
   filterSignature: string;
   filteringEnabled: boolean;
   scheduleHeaderSync: () => void;
-  updateHoverForElement: (element: HTMLDivElement | null) => void;
+  updateHoverForElement: (element: HTMLDivElement | null, options?: { force?: boolean }) => void;
   hoverRowRef: RefObject<HTMLDivElement | null>;
   startFrameSampler: () => void;
   stopFrameSampler: (reason: 'timeout' | 'manual' | 'unmount') => void;
@@ -354,8 +354,9 @@ export function useGridTableVirtualization<T>({
       return;
     }
     if (!current.isConnected) {
-      hoverRowRef.current = null;
-      updateHoverForElement(null);
+      // Use force: true to bypass hover suppression — we need to clear the
+      // detached DOM node from hoverRowRef even while hover is suppressed.
+      updateHoverForElement(null, { force: true });
       return;
     }
     updateHoverForElement(current);

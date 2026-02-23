@@ -263,7 +263,8 @@ describe('NsViewCustom', () => {
       name: 'svc',
       namespace: 'tools',
       kindAlias: 'CR',
+      clusterId: 'alpha:ctx',
     } as CustomResourceData);
-    expect(generatedKey).toBe('tools/CR/svc');
+    expect(generatedKey).toBe('alpha:ctx|tools/CR/svc');
   });
 });
