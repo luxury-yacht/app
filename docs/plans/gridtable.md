@@ -116,9 +116,9 @@ Added ARIA roles and attributes across the GridTable component tree:
 
 Trade-off: The header row (`useGridTableHeaderRow`) renders outside the `role="grid"` element since it sits above the body wrapper in the DOM. The header cells still carry `role="columnheader"` and `aria-sort` for screen reader column identification, but they are not nested inside the grid landmark. Moving the header inside the body wrapper would require a layout restructure. This is a known deviation from the strict ARIA grid tree structure.
 
-### 27. Sort trigger has no keyboard activation
+### 27. ✅ Sort trigger has no keyboard activation
 
-`useGridTableHeaderRow.tsx:60-67` — The sort `<span>` has only an `onClick` handler. It has no `tabIndex`, no `onKeyDown`, no `role="button"`, and no `aria-label`. Keyboard-only users cannot sort columns.
+`useGridTableHeaderRow.tsx:72-85` — Added `role="button"`, `tabIndex={0}`, `aria-label` (e.g., "Sort by Name"), and an `onKeyDown` handler (Enter/Space) to the sort trigger `<span>` on sortable headers. Non-sortable headers are left as plain text with no button semantics. Regression tests cover Enter activation, Space activation, and absence of button semantics on non-sortable columns.
 
 ---
 

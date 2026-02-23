@@ -71,6 +71,19 @@ export function useGridTableHeaderRow<T>({
             <span className="header-content">
               <span
                 onClick={() => column.sortable && handleHeaderClick(column)}
+                {...(column.sortable
+                  ? {
+                      role: 'button',
+                      tabIndex: 0,
+                      'aria-label': `Sort by ${typeof column.header === 'string' ? column.header : column.key}`,
+                      onKeyDown: (e: React.KeyboardEvent) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleHeaderClick(column);
+                        }
+                      },
+                    }
+                  : undefined)}
               >
                 {column.header}
                 {column.sortable && renderSortIndicator(column.key)}
