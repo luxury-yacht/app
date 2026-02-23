@@ -115,13 +115,15 @@ export function useGridTableColumnMeasurer<T>({
       headerMeasurer.style.width = 'auto';
       headerMeasurer.textContent = column.header;
       document.body.appendChild(headerMeasurer);
-
-      let headerWidth = headerMeasurer.scrollWidth;
-      if (column.sortable) {
-        headerWidth += 20;
+      try {
+        let headerWidth = headerMeasurer.scrollWidth;
+        if (column.sortable) {
+          headerWidth += 20;
+        }
+        maxWidth = Math.max(maxWidth, headerWidth);
+      } finally {
+        document.body.removeChild(headerMeasurer);
       }
-      maxWidth = Math.max(maxWidth, headerWidth);
-      document.body.removeChild(headerMeasurer);
 
       const isKindColumn = isKindColumnKey(column.key);
       const kindMeasurer = isKindColumn ? ensureKindBadgeMeasurer() : null;
@@ -156,49 +158,56 @@ export function useGridTableColumnMeasurer<T>({
         }
       }
 
-      sampleItems.forEach((item) => {
-        const contentNode = column.render(item);
+      // Wrap measurement loop in try/finally so cellMeasurer and kindMeasurer
+      // are cleaned up even if column.render() or renderToString() throws.
+      try {
+        sampleItems.forEach((item) => {
+          const contentNode = column.render(item);
 
-        if (kindMeasurer) {
-          const displayText = getTextContent(contentNode).trim();
-          let canonicalKind = displayText;
+          if (kindMeasurer) {
+            const displayText = getTextContent(contentNode).trim();
+            let canonicalKind = displayText;
 
-          if (React.isValidElement(contentNode)) {
-            const explicit = (contentNode.props as Record<string, unknown>)?.['data-kind-value'];
-            if (typeof explicit === 'string' && explicit.trim().length > 0) {
-              canonicalKind = explicit.trim();
+            if (React.isValidElement(contentNode)) {
+              const explicit = (contentNode.props as Record<string, unknown>)?.[
+                'data-kind-value'
+              ];
+              if (typeof explicit === 'string' && explicit.trim().length > 0) {
+                canonicalKind = explicit.trim();
+              }
             }
+
+            kindMeasurer.badge.className = `kind-badge ${normalizeKindClass(canonicalKind)}`;
+            kindMeasurer.badge.textContent = displayText;
+
+            const badgeWidth = kindMeasurer.container.getBoundingClientRect().width;
+            maxWidth = Math.max(maxWidth, badgeWidth);
+            return;
           }
 
-          kindMeasurer.badge.className = `kind-badge ${normalizeKindClass(canonicalKind)}`;
-          kindMeasurer.badge.textContent = displayText;
+          if (!cellMeasurer) {
+            return;
+          }
 
-          const badgeWidth = kindMeasurer.container.getBoundingClientRect().width;
-          maxWidth = Math.max(maxWidth, badgeWidth);
-          return;
+          if (React.isValidElement(contentNode)) {
+            // Pre-existing: renderToString output is used for off-screen width
+            // measurement only, never inserted into the visible DOM.
+            const html = ReactDOMServer.renderToString(contentNode);
+            cellMeasurer.innerHTML = html; // eslint-disable-line no-unsanitized/property
+          } else {
+            cellMeasurer.textContent = String(contentNode ?? '');
+          }
+
+          const width = cellMeasurer.getBoundingClientRect().width;
+          maxWidth = Math.max(maxWidth, width);
+        });
+      } finally {
+        if (cellMeasurer) {
+          cellMeasurer.remove();
         }
-
-        if (!cellMeasurer) {
-          return;
+        if (kindMeasurer) {
+          kindMeasurer.badge.textContent = '';
         }
-
-        if (React.isValidElement(contentNode)) {
-          const html = ReactDOMServer.renderToString(contentNode);
-          cellMeasurer.innerHTML = html;
-        } else {
-          cellMeasurer.textContent = String(contentNode ?? '');
-        }
-
-        const width = cellMeasurer.getBoundingClientRect().width;
-        maxWidth = Math.max(maxWidth, width);
-      });
-
-      if (cellMeasurer) {
-        cellMeasurer.remove();
-      }
-
-      if (kindMeasurer) {
-        kindMeasurer.badge.textContent = '';
       }
 
       let measured = Math.ceil(maxWidth > 0 ? maxWidth : defaultColumnWidth);

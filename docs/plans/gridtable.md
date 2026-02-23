@@ -40,7 +40,7 @@ Every cluster change runs GC and wipes the saved state (sort, column visibility,
 
 `useGridTableFilters.ts:103-108` — If the parent passes `filters={{ initial: { search: '' }, enabled: true }}` as a literal, `filters.initial` is a new reference every render, resetting user-typed search text.
 
-### 8. DOM node leak in `measureColumnWidth` on exception
+### 8. ✅ DOM node leak in `measureColumnWidth` on exception
 
 `useGridTableColumnMeasurer.ts:109-197` — Both `headerMeasurer` (appended at line 117, removed at line 124) and `cellMeasurer` (appended at line 139, removed at line 197) are attached to `document.body` without `try/finally`. If code between append and remove throws (e.g., `column.render()` or `renderToString()`), the nodes leak. Wrap both in `try/finally`.
 
