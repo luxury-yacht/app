@@ -1131,6 +1131,33 @@ it('focuses the first row when the wrapper receives focus and moves with Arrow k
   // Keyboard navigation should be tested via E2E tests.
 });
 
+it('activates hover overlay on focused row when wrapper receives keyboard focus', async () => {
+  // Regression test: the effect in GridTable.tsx that syncs hover with focused
+  // row uses a compound selector (.gridtable-row[data-row-key="..."]) to find
+  // the row element. If this were a descendant selector, the query would return
+  // null and the hover overlay would never activate.
+  const { container, cleanup, scrollWrapper } = renderGridTable({
+    data: createRows(4),
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  const wrapper = scrollWrapper();
+  await act(async () => {
+    wrapper.focus();
+  });
+
+  // The focused row should have the focused class.
+  const rows = Array.from(container.querySelectorAll('.gridtable-row'));
+  expect(rows[0]?.classList.contains('gridtable-row--focused')).toBe(true);
+
+  // The hover overlay should be visible, proving the selector found the element
+  // and updateHoverForElement was called successfully.
+  const overlay = container.querySelector('.gridtable-hover-overlay');
+  expect(overlay).not.toBeNull();
+  expect(overlay!.classList.contains('is-visible')).toBe(true);
+});
+
 it('toggles hover suppression on the body only while focused', async () => {
   const { cleanup, scrollWrapper } = renderGridTable({
     data: createRows(2),

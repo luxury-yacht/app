@@ -580,8 +580,10 @@ const GridTable = memo(function GridTable<T>({
       typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
         ? CSS.escape(focusedRowKey)
         : focusedRowKey;
+    // Both data-row-key and .gridtable-row are on the same element, so use
+    // a compound selector (not a descendant selector).
     const rowElement = wrapper.querySelector<HTMLDivElement>(
-      `[data-row-key="${escapedKey}"] .gridtable-row`
+      `.gridtable-row[data-row-key="${escapedKey}"]`
     );
     if (rowElement) {
       if (allowAutoScroll && typeof rowElement.scrollIntoView === 'function') {

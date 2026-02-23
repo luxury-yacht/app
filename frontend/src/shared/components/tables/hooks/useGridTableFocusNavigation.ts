@@ -186,8 +186,10 @@ export function useGridTableFocusNavigation<T>({
     const rowKey = keyExtractor(tableData[clamped], clamped);
     const escapedKey =
       typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(rowKey) : rowKey;
+    // Both data-row-key and .gridtable-row are on the same element, so use
+    // a compound selector (not a descendant selector).
     const currentRow = wrapperRef.current?.querySelector<HTMLElement>(
-      `[data-row-key="${escapedKey}"] .gridtable-row`
+      `.gridtable-row[data-row-key="${escapedKey}"]`
     );
     if (currentRow && currentRow instanceof HTMLDivElement) {
       updateHoverForElement(currentRow);

@@ -20,7 +20,7 @@ Every cluster change runs GC and wipes the saved state (sort, column visibility,
 
 `GridTableKeys.ts:63` queries for `[data-gridtable-filter-role="search"]`, but `GridTableFiltersBar.tsx:142` uses `data-gridtable-filter-role="search-wrapper"`. The selector never matches, so keyboard tab-cycling permanently skips the search input.
 
-### 4. DOM selector for focused row returns `null` — hover-sync silently fails
+### 4. ✅ DOM selector for focused row returns `null` — hover-sync silently fails
 
 `useGridTableFocusNavigation.ts:189-193` and `GridTable.tsx:583` both use `[data-row-key="..."] .gridtable-row` (descendant selector), but in `useGridTableRowRenderer.tsx:98-103` both `data-row-key` and `.gridtable-row` are on the **same** element. The descendant selector never matches, so `updateHoverForElement` is never called via keyboard navigation — the hover overlay does not track the focused row. In virtualized mode, scroll-into-view falls through to a fallback (`GridTable.tsx:593-614`, gated by `shouldVirtualize`) that partially compensates for scrolling but without hover highlight. In non-virtualized mode, there is no fallback — keyboard scroll-into-view fails entirely. Fix both selector sites: use `.gridtable-row[data-row-key="${escapedKey}"]`.
 
