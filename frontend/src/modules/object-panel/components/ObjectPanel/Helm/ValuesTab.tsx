@@ -30,7 +30,18 @@ import {
 
 const INACTIVE_SCOPE = '__inactive__';
 
-type HelmValuesData = Record<string, any>;
+/** A single Helm value: primitive, array, or nested object. */
+type HelmValue = string | number | boolean | null | HelmValue[] | HelmValueObject;
+
+/** A Helm values object with string keys. */
+type HelmValueObject = { [key: string]: HelmValue };
+
+/** Top-level shape returned by the backend for Helm values. */
+interface HelmValuesData {
+  allValues?: HelmValueObject;
+  userValues?: HelmValueObject;
+  [key: string]: HelmValue | undefined;
+}
 
 interface ValuesTabProps {
   scope: string | null;
@@ -93,11 +104,11 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
     (snapshot.status === 'updating' && !valuesData);
   const valuesError = snapshot.error ?? null;
 
-  const hasPath = useCallback((obj: any, path: string[]): boolean => {
-    if (!obj) return false;
-    let current = obj;
+  const hasPath = useCallback((obj: HelmValue | undefined, path: string[]): boolean => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+    let current: HelmValue = obj;
     for (const key of path) {
-      if (current === null || current === undefined || !(key in current)) {
+      if (current === null || typeof current !== 'object' || Array.isArray(current) || !(key in current)) {
         return false;
       }
       current = current[key];
@@ -105,17 +116,19 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
     return true;
   }, []);
 
-  const getValueAtPath = useCallback((obj: any, path: string[]): any => {
-    let current = obj;
+  const getValueAtPath = useCallback((obj: HelmValue | undefined, path: string[]): HelmValue | undefined => {
+    let current: HelmValue | undefined = obj;
     for (const key of path) {
-      if (current === null || current === undefined) return undefined;
+      if (current === null || current === undefined || typeof current !== 'object' || Array.isArray(current)) {
+        return undefined;
+      }
       current = current[key];
     }
     return current;
   }, []);
 
   const getDefaultValues = useCallback(
-    (allVals: any, userVals: any, path: string[] = []): any => {
+    (allVals: HelmValue | undefined, userVals: HelmValue | undefined, path: string[] = []): HelmValue | undefined => {
       if (allVals === null || allVals === undefined) return allVals;
       if (typeof allVals !== 'object' || Array.isArray(allVals)) {
         if (hasPath(userVals, path)) {
@@ -123,13 +136,13 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
         }
         return allVals;
       }
-      const result: any = {};
+      const result: HelmValueObject = {};
       for (const key in allVals) {
         const newPath = [...path, key];
         const value = allVals[key];
         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
           const defaultVal = getDefaultValues(value, userVals, newPath);
-          if (defaultVal !== undefined && Object.keys(defaultVal).length > 0) {
+          if (defaultVal !== undefined && defaultVal !== null && typeof defaultVal === 'object' && !Array.isArray(defaultVal) && Object.keys(defaultVal).length > 0) {
             result[key] = defaultVal;
           }
         } else if (!hasPath(userVals, newPath)) {
@@ -142,31 +155,25 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   );
 
   const markOverriddenValues = useCallback(
-    (obj: any, userValues: any, path: string[] = []): any => {
+    (obj: HelmValue | undefined, userValues: HelmValue | undefined, path: string[] = []): HelmValue | undefined => {
       if (obj === null || obj === undefined) return obj;
       if (typeof obj !== 'object' || Array.isArray(obj)) {
-        const isOverridden = hasPath(userValues, path);
-        if (isOverridden) {
-          const userValue = getValueAtPath(userValues, path);
-          return userValue;
+        if (hasPath(userValues, path)) {
+          return getValueAtPath(userValues, path);
         }
         return obj;
       }
 
-      const result: any = {};
+      const result: HelmValueObject = {};
       for (const key in obj) {
         const newPath = [...path, key];
         const value = obj[key];
         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-          result[key] = markOverriddenValues(value, userValues, newPath);
+          result[key] = markOverriddenValues(value, userValues, newPath) ?? null;
+        } else if (hasPath(userValues, newPath)) {
+          result[key] = getValueAtPath(userValues, newPath) ?? null;
         } else {
-          const isOverridden = hasPath(userValues, newPath);
-          if (isOverridden) {
-            const userValue = getValueAtPath(userValues, newPath);
-            result[key] = userValue;
-          } else {
-            result[key] = value;
-          }
+          result[key] = value;
         }
       }
       return result;
@@ -175,14 +182,15 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   );
 
   const getActualOverrides = useCallback(
-    (userVals: any, _allVals: any, path: string[] = []): any => {
+    (userVals: HelmValue | undefined, _allVals: HelmValue | undefined, path: string[] = []): HelmValue | undefined => {
       if (userVals === null || userVals === undefined) return userVals;
       if (typeof userVals !== 'object' || Array.isArray(userVals)) {
         return userVals;
       }
-      const result: any = {};
+      const allObj = (_allVals !== null && typeof _allVals === 'object' && !Array.isArray(_allVals)) ? _allVals : undefined;
+      const result: HelmValueObject = {};
       for (const key in userVals) {
-        result[key] = getActualOverrides(userVals[key], _allVals?.[key], [...path, key]);
+        result[key] = getActualOverrides(userVals[key], allObj?.[key], [...path, key]) ?? null;
       }
       return result;
     },
@@ -194,10 +202,10 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
       return '';
     }
 
-    const allValues = valuesData.allValues ?? valuesData;
-    const userValues = valuesData.userValues ?? {};
+    const allValues: HelmValue = valuesData.allValues ?? (valuesData as HelmValueObject);
+    const userValues: HelmValue = valuesData.userValues ?? {};
 
-    let content: any;
+    let content: HelmValue | undefined;
     switch (showMode) {
       case 'defaults':
         content = getDefaultValues(allValues, userValues);

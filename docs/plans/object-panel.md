@@ -70,7 +70,7 @@ The pattern is functional but has no backoff, no max-retry cap, and is not visib
 
 `Helm/ValuesTab.tsx:33+` — All helper functions accept `any` parameters. Consider a recursive value type for better type safety.
 
-- [ ] Fix
+- [x] ✅ Fix — Replaced `Record<string, any>` with recursive `HelmValue`/`HelmValueObject`/`HelmValuesData` types. Typed all five helper functions (`hasPath`, `getValueAtPath`, `getDefaultValues`, `markOverriddenValues`, `getActualOverrides`) and the `displayContent` memo. Added `typeof`/`Array.isArray` guards for proper type narrowing during object traversal. Test in `ValuesTab.test.tsx` covers all three modes (defaults, overrides, merged), loading/error/empty states, and scoped domain lifecycle.
 
 ## Suggestions (Nice to Have)
 
