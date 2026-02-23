@@ -60,7 +60,6 @@ export function useGridTableHeaderRow<T>({
             <span className="header-content">
               <span
                 onClick={() => column.sortable && handleHeaderClick(column)}
-                style={{ cursor: column.sortable ? 'pointer' : 'default' }}
               >
                 {column.header}
                 {column.sortable && renderSortIndicator(column.key)}

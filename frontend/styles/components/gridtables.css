@@ -232,6 +232,10 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   transition: background-color var(--transition-fast);
 }
 
+.grid-cell-header[data-sortable="true"] .header-content > span {
+  cursor: pointer;
+}
+
 .sort-indicator {
   color: var(--grid-text-secondary);
   display: inline-block;

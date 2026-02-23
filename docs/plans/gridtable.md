@@ -98,9 +98,9 @@ Items 12–18 were investigated and could not be confirmed with a failing test. 
 
 `GridTable.types.ts:34` defines `sortValue?: (item: T) => any` on `GridColumnDefinition`, and multiple callsites set it, but `useTableSort` sorted by `row[effectiveSort.key]` — direct property access — ignoring every `sortValue` callback. Fixed by adding an optional `columns` parameter to `UseTableSortOptions`. When provided, `useTableSort` builds a `sortValueExtractors` map from columns that define `sortValue` and uses the extractor in the comparator instead of direct property access. All 20 callsites updated to pass `columns`. Regression tests added in `useTableSort.test.tsx` verifying both the sortValue path and the fallback to row[key].
 
-### 25. Static inline CSS in header row
+### 25. ✅ Static inline CSS in header row
 
-`useGridTableHeaderRow.tsx:63` uses `style={{ cursor: column.sortable ? 'pointer' : 'default' }}`. The `cursor` style is static and should be in CSS via the existing `data-sortable` attribute.
+Removed `style={{ cursor: column.sortable ? 'pointer' : 'default' }}` from `useGridTableHeaderRow.tsx:63` and added `.grid-cell-header[data-sortable="true"] .header-content > span { cursor: pointer; }` to `gridtables.css`, using the existing `data-sortable` attribute.
 
 ---
 
