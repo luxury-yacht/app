@@ -58,7 +58,7 @@ The pattern is functional but has no backoff, no max-retry cap, and is not visib
 
 `components/ObjectPanel/hooks/useObjectPanelKind.ts:28-63` — Named as a hook but contains zero React hooks; it's a pure function. Either rename to `getObjectPanelKind`/`computeObjectPanelKind`, or wrap the return in `useMemo`.
 
-- [ ] Fix
+- [x] ✅ Fix — Renamed to `getObjectPanelKind` (file and export). Simplified test to call the function directly without a React rendering harness. Updated import in `ObjectPanel.tsx`.
 
 ### 8. Module-level mutable `closeCallback` in useObjectPanel (test-only, low risk)
 

@@ -24,7 +24,7 @@ import {
 } from '@modules/object-panel/objectPanelTabRequests';
 import './ObjectPanel.css';
 import '@shared/components/tabs/Tabs/Tabs.css';
-import { useObjectPanelKind } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelKind';
+import { getObjectPanelKind } from '@modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind';
 import { useObjectPanelFeatureSupport } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelFeatureSupport';
 import { useObjectPanelCapabilities } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelCapabilities';
 import { useObjectPanelActions } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelActions';
@@ -212,7 +212,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   // Use reducer for state management
   const [state, dispatch] = useReducer(panelReducer, INITIAL_PANEL_STATE);
 
-  const { objectKind, detailScope, helmScope, isHelmRelease, isEvent } = useObjectPanelKind(
+  const { objectKind, detailScope, helmScope, isHelmRelease, isEvent } = getObjectPanelKind(
     objectData,
     {
       clusterScope: CLUSTER_SCOPE,

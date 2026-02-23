@@ -1,8 +1,7 @@
 /**
- * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelKind.ts
+ * frontend/src/modules/object-panel/components/ObjectPanel/hooks/getObjectPanelKind.ts
  *
- * Hook for useObjectPanelKind.
- * Determines object kind and related scopes for the object panel.
+ * Pure utility that determines object kind and related scopes for the object panel.
  * Returns structured information about the object kind, namespace scope, detail scope, and helm scope.
  * Also indicates if the object is a Helm release or an event.
  */
@@ -25,7 +24,7 @@ export interface ObjectPanelKindResult {
 
 const DEFAULT_CLUSTER_SCOPE = '__cluster__';
 
-export const useObjectPanelKind = (
+export const getObjectPanelKind = (
   objectData: PanelObjectData | null,
   options: UseObjectPanelKindOptions = {}
 ): ObjectPanelKindResult => {
