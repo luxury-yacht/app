@@ -203,8 +203,11 @@ export function useDirtyQueue<T>({
       }
 
       if (type === 'autoSize' || type === 'reset') {
+        // Re-enable auto-sizing so markColumnsDirty proceeds. The disabling
+        // block above cleared stale queue state; now we re-enable before
+        // queueing the measurement.
+        isAutoSizingEnabledRef.current = true;
         if (type === 'reset') {
-          isAutoSizingEnabledRef.current = true;
           dirtyColumnsRef.current.clear();
           columnHashesRef.current.clear();
           allowShrinkColumnsRef.current.clear();

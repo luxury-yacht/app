@@ -48,7 +48,7 @@ Every cluster change runs GC and wipes the saved state (sort, column visibility,
 
 `useGridTableContextMenuItems.tsx:76-92` — The `setTimeout` calls in "Sort Desc" and "Clear Sort" have no corresponding `clearTimeout`. If the component unmounts between the sync and deferred `onSort` calls, the timeout fires on a stale closure against an unmounted component. Related to issue 2 but a distinct leak/correctness concern.
 
-### 10. `autoSize` event permanently disables auto-sizing
+### 10. ✅ `autoSize` event permanently disables auto-sizing
 
 `useGridTableAutoWidthMeasurementQueue.ts:165-176` — The `autoSize` event type is grouped with `dragStart` in the disabling block, which sets `isAutoSizingEnabledRef.current = false` before control reaches `markColumnsDirty(keys)` at line 212. But `markColumnsDirty` has an early-return guard at line 117 that checks `isAutoSizingEnabledRef.current`, so the call is always a no-op. The `reset` event correctly re-enables the flag at line 207 before calling `markColumnsDirty`, but `autoSize` has no equivalent re-enable step. After calling autoSizeColumn, all subsequent data-driven auto-width updates are also suppressed because the flag stays `false` permanently until a `reset` event arrives.
 
