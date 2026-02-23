@@ -34,8 +34,6 @@ const GridTableLayout: React.FC<GridTableLayoutProps> = ({
         className={`gridtable-container ${embedded ? 'embedded' : ''} ${className} ${
           loading ? 'is-loading' : ''
         }`}
-        role="grid"
-        aria-busy={loading || undefined}
       >
         {loadingOverlay}
         {filters}

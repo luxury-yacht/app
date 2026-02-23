@@ -50,6 +50,10 @@ interface GridTableBodyProps<T> {
   contentWidth: number;
   allowHorizontalOverflow: boolean;
   viewportWidth: number;
+  /** Whether data is currently loading — drives aria-busy on the grid container. */
+  loading: boolean;
+  /** Key of the currently focused row — drives aria-activedescendant on the grid container. */
+  focusedRowKey: string | null;
 }
 
 function GridTableBody<T>({
@@ -84,6 +88,8 @@ function GridTableBody<T>({
   contentWidth,
   allowHorizontalOverflow,
   viewportWidth,
+  loading,
+  focusedRowKey,
 }: GridTableBodyProps<T>) {
   const stretchDecisionRef = useRef<boolean | null>(null);
 
@@ -162,6 +168,13 @@ function GridTableBody<T>({
       onBlur={onWrapperBlur}
       tabIndex={0}
       data-allow-shortcuts="true"
+      role="grid"
+      aria-busy={loading || undefined}
+      aria-activedescendant={
+        focusedRowKey
+          ? `gridtable-row-${focusedRowKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+          : undefined
+      }
     >
       <div
         className={[

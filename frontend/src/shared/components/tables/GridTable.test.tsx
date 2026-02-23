@@ -1556,7 +1556,7 @@ it('renders ARIA grid semantics on container, header, rows, and cells', () => {
   });
   cleanupRoot = cleanup;
 
-  // Container has role="grid"
+  // Body wrapper (the focus host) has role="grid"
   const grid = container.querySelector('[role="grid"]');
   expect(grid).not.toBeNull();
 
@@ -1635,4 +1635,33 @@ it('sets aria-busy on grid container when loading overlay is shown', () => {
 
   const statusOverlay = container.querySelector('[role="status"]');
   expect(statusOverlay).not.toBeNull();
+});
+
+it('sets aria-activedescendant on the role="grid" container when a row is focused', () => {
+  const { container, cleanup } = renderGridTable({
+    data: createRows(5),
+    virtualization: { enabled: false },
+    onRowClick: () => {},
+  });
+  cleanupRoot = cleanup;
+
+  const grid = container.querySelector('[role="grid"]');
+  // No row focused initially.
+  expect(grid!.hasAttribute('aria-activedescendant')).toBe(false);
+
+  // Click a specific row to focus it.
+  const rows = container.querySelectorAll('.gridtable-row[role="row"]');
+  const targetRow = rows[2]; // Third row
+  act(() => {
+    (targetRow as HTMLElement).click();
+  });
+
+  const activeId = grid!.getAttribute('aria-activedescendant');
+  expect(activeId).toBeTruthy();
+  // The referenced element must exist and be a row.
+  const focusedRow = document.getElementById(activeId!);
+  expect(focusedRow).not.toBeNull();
+  expect(focusedRow!.getAttribute('role')).toBe('row');
+  // It should be the row we clicked.
+  expect(focusedRow!.getAttribute('data-row-key')).toBe('row-2');
 });

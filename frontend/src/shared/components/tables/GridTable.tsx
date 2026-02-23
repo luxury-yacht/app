@@ -821,6 +821,8 @@ const GridTable = memo(function GridTable<T>({
       contentWidth={tableContentWidth}
       allowHorizontalOverflow={allowHorizontalOverflow}
       viewportWidth={tableViewportWidth}
+      loading={loading}
+      focusedRowKey={focusedRowKey}
     />
   );
 

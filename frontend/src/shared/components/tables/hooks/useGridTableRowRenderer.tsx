@@ -95,9 +95,13 @@ export function useGridTableRowRenderer<T>({
         }
       : undefined;
 
+    // Build a DOM-safe id for aria-activedescendant references.
+    const rowId = `gridtable-row-${rowKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+
     return (
       <div
         key={elementKey}
+        id={rowId}
         className={rowClassName}
         style={rowInlineStyle}
         role="row"

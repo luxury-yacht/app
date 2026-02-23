@@ -77,6 +77,8 @@ describe('GridTableBody', () => {
       contentWidth: 0,
       allowHorizontalOverflow: false,
       viewportWidth: 0,
+      loading: false,
+      focusedRowKey: null,
     };
 
     const allProps = { ...defaultProps, ...props } as BodyProps;
