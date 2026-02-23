@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo } from 'react';
 
-import { useShortcut } from '@ui/shortcuts';
+import { useShortcut, useShortcuts } from '@ui/shortcuts';
 import { KeyboardShortcutPriority } from '@ui/shortcuts/priorities';
 
 import { TABS } from '@modules/object-panel/components/ObjectPanel/constants';
@@ -116,82 +116,28 @@ export const useObjectPanelTabs = ({
     priority: isOpen ? KeyboardShortcutPriority.OBJECT_PANEL_ESCAPE : 0,
   });
 
-  useShortcut({
-    key: '1',
-    handler: () => {
-      if (isOpen) {
-        dispatch({ type: 'SET_ACTIVE_TAB', payload: 'details' });
-        return true;
-      }
-      return false;
-    },
-    description: 'Switch to Details tab',
-    category: 'Object Panel',
-    enabled: isOpen,
-    view: 'global',
-    priority: isOpen ? 20 : 0,
-  });
+  // Derive tab shortcuts from the visible tabs so shortcut numbers always
+  // match the rendered tab bar (e.g., key "1" = first visible tab, "2" =
+  // second, etc.). Supports up to 9 tabs (keys 1–9).
+  const tabShortcuts = useMemo(
+    () =>
+      availableTabs.slice(0, 9).map((tab, index) => ({
+        key: String(index + 1),
+        handler: () => {
+          if (isOpen) {
+            dispatch({ type: 'SET_ACTIVE_TAB', payload: tab.id as ViewType });
+            return true;
+          }
+          return false;
+        },
+        description: `Switch to ${tab.label} tab`,
+        enabled: isOpen,
+      })),
+    [availableTabs, isOpen, dispatch]
+  );
 
-  useShortcut({
-    key: '2',
-    handler: () => {
-      if (isOpen && capabilities.hasLogs) {
-        dispatch({ type: 'SET_ACTIVE_TAB', payload: 'logs' });
-        return true;
-      }
-      return false;
-    },
-    description: 'Switch to Logs tab',
+  useShortcuts(tabShortcuts, {
     category: 'Object Panel',
-    enabled: isOpen && capabilities.hasLogs,
-    view: 'global',
-    priority: isOpen ? 20 : 0,
-  });
-
-  useShortcut({
-    key: '3',
-    handler: () => {
-      if (isOpen) {
-        dispatch({ type: 'SET_ACTIVE_TAB', payload: 'events' });
-        return true;
-      }
-      return false;
-    },
-    description: 'Switch to Events tab',
-    category: 'Object Panel',
-    enabled: isOpen,
-    view: 'global',
-    priority: isOpen ? 20 : 0,
-  });
-
-  useShortcut({
-    key: '4',
-    handler: () => {
-      if (isOpen) {
-        dispatch({ type: 'SET_ACTIVE_TAB', payload: 'yaml' });
-        return true;
-      }
-      return false;
-    },
-    description: 'Switch to YAML tab',
-    category: 'Object Panel',
-    enabled: isOpen,
-    view: 'global',
-    priority: isOpen ? 20 : 0,
-  });
-
-  useShortcut({
-    key: '5',
-    handler: () => {
-      if (isOpen && capabilities.hasShell) {
-        dispatch({ type: 'SET_ACTIVE_TAB', payload: 'shell' });
-        return true;
-      }
-      return false;
-    },
-    description: 'Switch to Shell tab',
-    category: 'Object Panel',
-    enabled: isOpen && capabilities.hasShell,
     view: 'global',
     priority: isOpen ? 20 : 0,
   });

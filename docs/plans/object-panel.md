@@ -86,7 +86,7 @@ The pattern is functional but has no backoff, no max-retry cap, and is not visib
 
 **Fix:** Derive shortcut labels/bindings from the `availableTabs` array so numbering reflects only visible tabs.
 
-- [ ] Fix
+- [x] ✅ Fix — Replaced 5 hardcoded `useShortcut` calls (keys 1–5 mapped to fixed tab identities) with a single `useShortcuts` call driven by the `availableTabs` array. Shortcut numbers now reflect visible tab positions — hidden tabs (e.g., events/yaml for Helm, logs when capability absent) no longer leave gaps or register dead shortcuts. Tests updated to verify position-based numbering across Deployment, Helm, and capability-gated scenarios.
 
 ### 12. LogViewer at 1410 lines
 
