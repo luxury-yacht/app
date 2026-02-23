@@ -40,7 +40,7 @@ The pattern is functional but has no backoff, no max-retry cap, and is not visib
 
 **Fix:** Replace with a retry loop that polls for container readiness, or handle connection failure gracefully with automatic retry.
 
-- [ ] Fix
+- [x] ✅ Fix — Removed the 100ms `setTimeout`. The backend's `CreateDebugContainer` already polls via `waitForEphemeralContainer` until the container is Running before returning, so the frontend can call `initiateConnection()` immediately. If the connection still fails, the existing error handling + reconnect button covers it.
 
 ### 5. Static inline styles violate "never use inline CSS" convention
 
