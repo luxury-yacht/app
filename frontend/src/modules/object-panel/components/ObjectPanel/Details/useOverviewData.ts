@@ -1,8 +1,12 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/useOverviewData.ts
  *
- * React hook for useOverviewData.
- * Encapsulates state and side effects for the object panel feature.
+ * Maps resource-specific detail objects into a uniform OverviewData shape
+ * consumed by the Details tab's overview components.
+ *
+ * Dependencies are grouped by resource category so each useMemo block has a
+ * small, independently verifiable dep array (4–8 items) instead of one
+ * monolithic 33-item list.
  */
 
 import { useMemo } from 'react';
@@ -84,10 +88,13 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
     validatingWebhookDetails,
   } = params;
 
-  return useMemo(() => {
-    if (!objectData) return null;
+  const kind = objectData?.kind?.toLowerCase() ?? null;
 
-    const kind = objectData.kind?.toLowerCase();
+  // -------------------------------------------------------------------------
+  // Workloads: pod, deployment, replicaset, daemonset, statefulset, job, cronjob
+  // -------------------------------------------------------------------------
+  const workloadOverview = useMemo((): OverviewData | null => {
+    if (!objectData) return null;
 
     // Pod
     if (podDetails && kind === 'pod') {
@@ -206,6 +213,50 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
       };
     }
 
+    // Job
+    if (jobDetails && kind === 'job') {
+      return {
+        kind: 'Job',
+        name: jobDetails.name,
+        age: jobDetails.age,
+        namespace: jobDetails.namespace,
+        completions: jobDetails.completions,
+        parallelism: jobDetails.parallelism,
+        backoffLimit: jobDetails.backoffLimit,
+        succeeded: jobDetails.succeeded,
+        failed: jobDetails.failed,
+        active: jobDetails.active,
+        startTime: jobDetails.startTime,
+        completionTime: jobDetails.completionTime,
+        duration: jobDetails.duration,
+      };
+    }
+
+    // CronJob
+    if (cronJobDetails && kind === 'cronjob') {
+      return {
+        kind: 'CronJob',
+        name: cronJobDetails.name,
+        age: cronJobDetails.age,
+        namespace: cronJobDetails.namespace,
+        schedule: cronJobDetails.schedule,
+        suspend: cronJobDetails.suspend,
+        activeJobs: cronJobDetails.activeJobs,
+        lastScheduleTime: cronJobDetails.lastScheduleTime,
+        successfulJobsHistory: cronJobDetails.successfulJobsHistory,
+        failedJobsHistory: cronJobDetails.failedJobsHistory,
+      };
+    }
+
+    return null;
+  }, [objectData, kind, podDetails, deploymentDetails, replicaSetDetails, daemonSetDetails, statefulSetDetails, jobDetails, cronJobDetails]);
+
+  // -------------------------------------------------------------------------
+  // Configuration: configmap, secret, helmrelease
+  // -------------------------------------------------------------------------
+  const configOverview = useMemo((): OverviewData | null => {
+    if (!objectData) return null;
+
     // ConfigMap
     if (configMapDetails && kind === 'configmap') {
       return {
@@ -243,6 +294,15 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         helmReleaseDetails: helmReleaseDetails,
       };
     }
+
+    return null;
+  }, [objectData, kind, configMapDetails, secretDetails, helmReleaseDetails]);
+
+  // -------------------------------------------------------------------------
+  // Network: service, ingress, networkpolicy, endpointslice
+  // -------------------------------------------------------------------------
+  const networkOverview = useMemo((): OverviewData | null => {
+    if (!objectData) return null;
 
     // Service
     if (serviceDetails && kind === 'service') {
@@ -288,126 +348,14 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
       };
     }
 
-    // ServiceAccount
-    if (serviceAccountDetails && kind === 'serviceaccount') {
-      return {
-        kind: 'ServiceAccount',
-        name: serviceAccountDetails.name,
-        age: serviceAccountDetails.age,
-        namespace: serviceAccountDetails.namespace,
-        secrets: serviceAccountDetails.secrets,
-        imagePullSecrets: serviceAccountDetails.imagePullSecrets,
-        automountServiceAccountToken: serviceAccountDetails.automountServiceAccountToken,
-        usedBy: serviceAccountDetails.usedByPods,
-        roleBindings: serviceAccountDetails.roleBindings,
-        clusterRoleBindings: serviceAccountDetails.clusterRoleBindings,
-        // Surface metadata to match the ConfigMap/Secret layout.
-        labels: serviceAccountDetails.labels,
-        annotations: serviceAccountDetails.annotations,
-      };
-    }
+    return null;
+  }, [objectData, kind, serviceDetails, ingressDetails, networkPolicyDetails, endpointSliceDetails]);
 
-    // Role
-    if (roleDetails && kind === 'role') {
-      return {
-        kind: 'Role',
-        name: roleDetails.name,
-        age: roleDetails.age,
-        namespace: roleDetails.namespace,
-        policyRules: roleDetails.rules,
-        usedByRoleBindings: roleDetails.usedByRoleBindings,
-        // Surface metadata to match the ConfigMap/Secret layout.
-        labels: roleDetails.labels,
-        annotations: roleDetails.annotations,
-      };
-    }
-
-    // RoleBinding
-    if (roleBindingDetails && kind === 'rolebinding') {
-      return {
-        kind: 'RoleBinding',
-        name: roleBindingDetails.name,
-        age: roleBindingDetails.age,
-        namespace: roleBindingDetails.namespace,
-        roleRef: roleBindingDetails.roleRef,
-        subjects: roleBindingDetails.subjects,
-        // Surface metadata to match the ConfigMap/Secret layout.
-        labels: roleBindingDetails.labels,
-        annotations: roleBindingDetails.annotations,
-      };
-    }
-
-    // Node
-    if (nodeDetails && kind === 'node') {
-      return {
-        kind: 'Node',
-        name: nodeDetails.name,
-        age: nodeDetails.age,
-        status: nodeDetails.status,
-        roles: nodeDetails.roles,
-        version: nodeDetails.version,
-        os: nodeDetails.os,
-        osImage: nodeDetails.osImage,
-        architecture: nodeDetails.architecture,
-        containerRuntime: nodeDetails.containerRuntime,
-        kernelVersion: nodeDetails.kernelVersion,
-        kubeletVersion: nodeDetails.kubeletVersion,
-        hostname: nodeDetails.hostname,
-        internalIP: nodeDetails.internalIP,
-        externalIP: nodeDetails.externalIP,
-        cpuCapacity: nodeDetails.cpuCapacity,
-        cpuAllocatable: nodeDetails.cpuAllocatable,
-        memoryCapacity: nodeDetails.memoryCapacity,
-        memoryAllocatable: nodeDetails.memoryAllocatable,
-        podsCapacity: nodeDetails.podsCapacity,
-        podsAllocatable: nodeDetails.podsAllocatable,
-        storageCapacity: nodeDetails.storageCapacity,
-        podsCount: nodeDetails.podsCount,
-        cpuRequests: nodeDetails.cpuRequests,
-        cpuLimits: nodeDetails.cpuLimits,
-        memRequests: nodeDetails.memRequests,
-        memLimits: nodeDetails.memLimits,
-        taints: nodeDetails.taints,
-        conditions: nodeDetails.conditions,
-        labels: nodeDetails.labels,
-        annotations: nodeDetails.annotations,
-      };
-    }
-
-    // Job
-    if (jobDetails && kind === 'job') {
-      return {
-        kind: 'Job',
-        name: jobDetails.name,
-        age: jobDetails.age,
-        namespace: jobDetails.namespace,
-        completions: jobDetails.completions,
-        parallelism: jobDetails.parallelism,
-        backoffLimit: jobDetails.backoffLimit,
-        succeeded: jobDetails.succeeded,
-        failed: jobDetails.failed,
-        active: jobDetails.active,
-        startTime: jobDetails.startTime,
-        completionTime: jobDetails.completionTime,
-        duration: jobDetails.duration,
-      };
-    }
-
-    // CronJob
-    if (cronJobDetails && kind === 'cronjob') {
-      return {
-        kind: 'CronJob',
-        name: cronJobDetails.name,
-        age: cronJobDetails.age,
-        namespace: cronJobDetails.namespace,
-        schedule: cronJobDetails.schedule,
-        suspend: cronJobDetails.suspend,
-        activeJobs: cronJobDetails.activeJobs,
-        lastScheduleTime: cronJobDetails.lastScheduleTime,
-        successfulJobsHistory: cronJobDetails.successfulJobsHistory,
-        failedJobsHistory: cronJobDetails.failedJobsHistory,
-      };
-    }
+  // -------------------------------------------------------------------------
+  // Storage: pvc, pv, storageclass
+  // -------------------------------------------------------------------------
+  const storageOverview = useMemo((): OverviewData | null => {
+    if (!objectData) return null;
 
     // PersistentVolumeClaim
     if (pvcDetails && kind === 'persistentvolumeclaim') {
@@ -466,6 +414,64 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
       };
     }
 
+    return null;
+  }, [objectData, kind, pvcDetails, pvDetails, storageClassDetails]);
+
+  // -------------------------------------------------------------------------
+  // RBAC: serviceaccount, role, rolebinding, clusterrole, clusterrolebinding
+  // -------------------------------------------------------------------------
+  const rbacOverview = useMemo((): OverviewData | null => {
+    if (!objectData) return null;
+
+    // ServiceAccount
+    if (serviceAccountDetails && kind === 'serviceaccount') {
+      return {
+        kind: 'ServiceAccount',
+        name: serviceAccountDetails.name,
+        age: serviceAccountDetails.age,
+        namespace: serviceAccountDetails.namespace,
+        secrets: serviceAccountDetails.secrets,
+        imagePullSecrets: serviceAccountDetails.imagePullSecrets,
+        automountServiceAccountToken: serviceAccountDetails.automountServiceAccountToken,
+        usedBy: serviceAccountDetails.usedByPods,
+        roleBindings: serviceAccountDetails.roleBindings,
+        clusterRoleBindings: serviceAccountDetails.clusterRoleBindings,
+        // Surface metadata to match the ConfigMap/Secret layout.
+        labels: serviceAccountDetails.labels,
+        annotations: serviceAccountDetails.annotations,
+      };
+    }
+
+    // Role
+    if (roleDetails && kind === 'role') {
+      return {
+        kind: 'Role',
+        name: roleDetails.name,
+        age: roleDetails.age,
+        namespace: roleDetails.namespace,
+        policyRules: roleDetails.rules,
+        usedByRoleBindings: roleDetails.usedByRoleBindings,
+        // Surface metadata to match the ConfigMap/Secret layout.
+        labels: roleDetails.labels,
+        annotations: roleDetails.annotations,
+      };
+    }
+
+    // RoleBinding
+    if (roleBindingDetails && kind === 'rolebinding') {
+      return {
+        kind: 'RoleBinding',
+        name: roleBindingDetails.name,
+        age: roleBindingDetails.age,
+        namespace: roleBindingDetails.namespace,
+        roleRef: roleBindingDetails.roleRef,
+        subjects: roleBindingDetails.subjects,
+        // Surface metadata to match the ConfigMap/Secret layout.
+        labels: roleBindingDetails.labels,
+        annotations: roleBindingDetails.annotations,
+      };
+    }
+
     // ClusterRole
     if (clusterRoleDetails && kind === 'clusterrole') {
       return {
@@ -494,6 +500,15 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         annotations: clusterRoleBindingDetails.annotations,
       };
     }
+
+    return null;
+  }, [objectData, kind, serviceAccountDetails, roleDetails, roleBindingDetails, clusterRoleDetails, clusterRoleBindingDetails]);
+
+  // -------------------------------------------------------------------------
+  // Autoscaling & Policy: hpa, pdb, resourcequota, limitrange
+  // -------------------------------------------------------------------------
+  const policyOverview = useMemo((): OverviewData | null => {
+    if (!objectData) return null;
 
     // HorizontalPodAutoscaler
     if (hpaDetails && kind === 'horizontalpodautoscaler') {
@@ -556,6 +571,52 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
         age: limitRangeDetails.age,
         namespace: limitRangeDetails.namespace,
         limits: limitRangeDetails.limits,
+      };
+    }
+
+    return null;
+  }, [objectData, kind, hpaDetails, pdbDetails, resourceQuotaDetails, limitRangeDetails]);
+
+  // -------------------------------------------------------------------------
+  // Cluster resources: node, namespace, ingressclass, crd, webhooks
+  // -------------------------------------------------------------------------
+  const clusterOverview = useMemo((): OverviewData | null => {
+    if (!objectData) return null;
+
+    // Node
+    if (nodeDetails && kind === 'node') {
+      return {
+        kind: 'Node',
+        name: nodeDetails.name,
+        age: nodeDetails.age,
+        status: nodeDetails.status,
+        roles: nodeDetails.roles,
+        version: nodeDetails.version,
+        os: nodeDetails.os,
+        osImage: nodeDetails.osImage,
+        architecture: nodeDetails.architecture,
+        containerRuntime: nodeDetails.containerRuntime,
+        kernelVersion: nodeDetails.kernelVersion,
+        kubeletVersion: nodeDetails.kubeletVersion,
+        hostname: nodeDetails.hostname,
+        internalIP: nodeDetails.internalIP,
+        externalIP: nodeDetails.externalIP,
+        cpuCapacity: nodeDetails.cpuCapacity,
+        cpuAllocatable: nodeDetails.cpuAllocatable,
+        memoryCapacity: nodeDetails.memoryCapacity,
+        memoryAllocatable: nodeDetails.memoryAllocatable,
+        podsCapacity: nodeDetails.podsCapacity,
+        podsAllocatable: nodeDetails.podsAllocatable,
+        storageCapacity: nodeDetails.storageCapacity,
+        podsCount: nodeDetails.podsCount,
+        cpuRequests: nodeDetails.cpuRequests,
+        cpuLimits: nodeDetails.cpuLimits,
+        memRequests: nodeDetails.memRequests,
+        memLimits: nodeDetails.memLimits,
+        taints: nodeDetails.taints,
+        conditions: nodeDetails.conditions,
+        labels: nodeDetails.labels,
+        annotations: nodeDetails.annotations,
       };
     }
 
@@ -631,7 +692,14 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
       };
     }
 
-    // Default fallback
+    return null;
+  }, [objectData, kind, nodeDetails, namespaceDetails, ingressClassDetails, crdDetails, mutatingWebhookDetails, validatingWebhookDetails]);
+
+  // -------------------------------------------------------------------------
+  // Default fallback for unrecognised or generic resources.
+  // -------------------------------------------------------------------------
+  const defaultOverview = useMemo((): OverviewData | null => {
+    if (!objectData) return null;
     return {
       kind: objectData.kind || 'Unknown',
       name: objectData.name || 'Unnamed',
@@ -645,39 +713,17 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
       labels: objectData.labels ?? objectData.metadata?.labels,
       annotations: objectData.annotations ?? objectData.metadata?.annotations,
     };
-  }, [
-    objectData,
-    podDetails,
-    deploymentDetails,
-    replicaSetDetails,
-    daemonSetDetails,
-    statefulSetDetails,
-    jobDetails,
-    cronJobDetails,
-    configMapDetails,
-    secretDetails,
-    helmReleaseDetails,
-    serviceDetails,
-    ingressDetails,
-    networkPolicyDetails,
-    endpointSliceDetails,
-    pvcDetails,
-    pvDetails,
-    storageClassDetails,
-    serviceAccountDetails,
-    roleDetails,
-    roleBindingDetails,
-    clusterRoleDetails,
-    clusterRoleBindingDetails,
-    hpaDetails,
-    pdbDetails,
-    resourceQuotaDetails,
-    limitRangeDetails,
-    nodeDetails,
-    namespaceDetails,
-    ingressClassDetails,
-    crdDetails,
-    mutatingWebhookDetails,
-    validatingWebhookDetails,
-  ]);
+  }, [objectData]);
+
+  // Return the first matching group, or the default fallback.
+  return (
+    workloadOverview ??
+    configOverview ??
+    networkOverview ??
+    storageOverview ??
+    rbacOverview ??
+    policyOverview ??
+    clusterOverview ??
+    defaultOverview
+  );
 }

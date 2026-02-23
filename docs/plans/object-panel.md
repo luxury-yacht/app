@@ -104,7 +104,7 @@ Several files have comments like "UI component for EventsTab. Handles rendering 
 
 `Details/useOverviewData.ts:648-682` — The main `useMemo` has 33 dependencies. Hard to verify correctness. Consider breaking into smaller memos per resource kind.
 
-- [ ] Refactor
+- [x] ✅ Refactor — Split the single 33-dependency `useMemo` into 7 category-grouped memos (workloads, config, network, storage, RBAC, policy, cluster) plus a default fallback. Each memo has 4–8 verifiable deps. The final result is a null-coalescing chain across groups. Same interface, same output, same mapping logic. Regression test in `useOverviewData.test.ts` covers one representative kind per group (Pod, Deployment, ConfigMap, Service, PVC, ClusterRole, HPA, Node), the default fallback for unknown kinds, null objectData, and a cross-group isolation check (mismatched detail/kind).
 
 ### 15. Inverted `isManual` flag in EventsTab `onRefresh`
 
