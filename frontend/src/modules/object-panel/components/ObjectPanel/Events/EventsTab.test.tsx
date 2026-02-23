@@ -33,16 +33,22 @@ vi.mock('@/core/refresh/store', () => ({
   useRefreshScopedDomain: () => hoistedSnapshot,
 }));
 
+const mockFetchScopedDomain = vi.fn(() => Promise.resolve());
+
 vi.mock('@/core/refresh', () => ({
   refreshManager: { register: vi.fn(), unregister: vi.fn() },
   refreshOrchestrator: {
     setScopedDomainEnabled: vi.fn(),
-    fetchScopedDomain: vi.fn(),
+    fetchScopedDomain: mockFetchScopedDomain,
   },
 }));
 
+// Capture the onRefresh callback registered by EventsTab so we can invoke it.
+const refreshWatcherState = { onRefresh: null as ((isManual: boolean) => Promise<void>) | null };
 vi.mock('@/core/refresh/hooks/useRefreshWatcher', () => ({
-  useRefreshWatcher: vi.fn(),
+  useRefreshWatcher: (opts: { onRefresh: (isManual: boolean) => Promise<void> }) => {
+    refreshWatcherState.onRefresh = opts.onRefresh;
+  },
 }));
 
 vi.mock('@shared/components/tables/GridTable', () => ({
@@ -97,6 +103,8 @@ describe('EventsTab', () => {
 
   beforeEach(() => {
     mockOpenWithObject.mockClear();
+    mockFetchScopedDomain.mockClear();
+    refreshWatcherState.onRefresh = null;
     container = document.createElement('div');
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
@@ -138,6 +146,39 @@ describe('EventsTab', () => {
     const call = mockOpenWithObject.mock.calls[0][0];
     expect(call.clusterId).toBe(EVENT_CLUSTER_ID);
     expect(call.clusterName).toBe(EVENT_CLUSTER_NAME);
+  });
+
+  it('passes isManual flag through to fetchScopedDomain without inversion', async () => {
+    hoistedSnapshot.data = { events: [] };
+    hoistedSnapshot.status = 'ready';
+
+    act(() => {
+      root.render(<EventsTab objectData={parentObjectData} isActive={true} />);
+    });
+
+    expect(refreshWatcherState.onRefresh).toBeTruthy();
+
+    // Manual refresh — orchestrator should see isManual: true.
+    mockFetchScopedDomain.mockClear();
+    await act(async () => {
+      await refreshWatcherState.onRefresh!(true);
+    });
+    expect(mockFetchScopedDomain).toHaveBeenCalledWith(
+      'object-events',
+      expect.any(String),
+      { isManual: true }
+    );
+
+    // Scheduled refresh — orchestrator should see isManual: false.
+    mockFetchScopedDomain.mockClear();
+    await act(async () => {
+      await refreshWatcherState.onRefresh!(false);
+    });
+    expect(mockFetchScopedDomain).toHaveBeenCalledWith(
+      'object-events',
+      expect.any(String),
+      { isManual: false }
+    );
   });
 
   it('falls back to parent panel cluster when event has no cluster identity', () => {

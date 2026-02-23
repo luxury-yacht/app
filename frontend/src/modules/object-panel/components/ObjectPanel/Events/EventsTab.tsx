@@ -154,7 +154,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
     refresherName: eventsRefresherName,
     onRefresh: useCallback(
       async (isManual: boolean) => {
-        await fetchEvents(!isManual);
+        await fetchEvents(isManual);
       },
       [fetchEvents]
     ),

@@ -110,4 +110,4 @@ Several files have comments like "UI component for EventsTab. Handles rendering 
 
 `EventsTab.tsx:156-159` — `isManual` is inverted before passing to `fetchEvents`. The double-negation is confusing; at minimum needs a comment explaining the reasoning.
 
-- [ ] Fix
+- [x] ✅ Fix — Removed the `!` inversion. The `onRefresh` callback now passes `isManual` straight through to `fetchEvents`, matching the pattern in `useObjectPanelRefresh.ts`. The inversion was a bug: it caused manual refreshes to respect cooldowns (wrong) and scheduled refreshes to bypass them (wrong). Test in `EventsTab.test.tsx` captures the `useRefreshWatcher` `onRefresh` callback and verifies both `isManual: true` and `isManual: false` are passed through to `fetchScopedDomain` without inversion.
