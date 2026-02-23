@@ -124,22 +124,22 @@ Trade-off: The header row (`useGridTableHeaderRow`) renders outside the `role="g
 
 ## Test Coverage Gaps
 
-| Gap                                                                                                                                      | Confidence |
-| ---------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| **No registry contract test** — no test that all `viewId` values used in persistence hooks exist in `gridTableViewRegistry`               | 95         |
-| **No test file** for `useGridTableFocusNavigation` — pointer vs keyboard activation, shortcut suppression, data-shrink clamping untested | 90         |
-| **No test file** for `useGridTableContextMenuWiring` — `openFocusedRowContextMenu` DOM traversal, focus restoration untested             | 88         |
-| **No multi-cluster persistence tests** — switching `clusterIdentity` never tested to load independent state                              | 88         |
-| **`buildGridTableStorageKey`** has a single test case — no test that two clusters produce different keys                                 | 88         |
-| **`useGridTableShortcuts` tests** mock out `useShortcuts` entirely — tests lifecycle, not actual shortcut behavior                       | 87         |
-| **No test file** for `useGridTableColumnsDropdown` — Show All / Hide All actions, locked columns untested                                | 85         |
-| **No column resizing integration test** in `GridTable.test.tsx`                                                                          | 83         |
-| **No test file** for `useGridTableAutoWidthMeasurementQueue` — debounce, retry, and shrink-permission gating untested                    | 80         |
+| Gap                                                                                                                                      | Confidence | Status  |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------- |
+| **No registry contract test** — no test that all `viewId` values used in persistence hooks exist in `gridTableViewRegistry`               | 95         | ✅ Added `gridTableViewRegistry.contract.test.ts` |
+| **No test file** for `useGridTableFocusNavigation` — pointer vs keyboard activation, shortcut suppression, data-shrink clamping untested | 90         | ✅ Added `useGridTableFocusNavigation.test.tsx` — 7 tests: selector regression, CSS.escape, pointer vs keyboard activation (onRowClick gating), shortcut suppression on opt-out targets, data-shrink clamping (index clamp + null on empty) |
+| **No test file** for `useGridTableContextMenuWiring` — `openFocusedRowContextMenu` DOM traversal, focus restoration untested             | 88         | ✅ Added `useGridTableContextMenuWiring.test.tsx` — 9 tests: DOM traversal, disabled/null/range guards, cell and wrapper handlers, contextMenuActiveRef tracking, focus restoration via onClose (mocked ContextMenu captures onClose callback, verifies closeContextMenu called and activeRef cleared) |
+| **No multi-cluster persistence tests** — switching `clusterIdentity` never tested to load independent state                              | 88         | ✅ Added `useGridTablePersistence.multicluster.test.tsx` — 4 tests: independent sort, visibility, reset-to-defaults on unknown cluster, different storage keys |
+| **`buildGridTableStorageKey`** has a single test case — no test that two clusters produce different keys                                 | 88         | ✅ Added two-cluster key test in `gridTablePersistence.test.ts` |
+| **`useGridTableShortcuts` tests** mock out `useShortcuts` entirely — tests lifecycle, not actual shortcut behavior                       | 87         | ✅ Updated mock to capture args; 3 new tests verify registered keys, handler wiring (ArrowDown/Up/PageDown/Home/End), and F10 disabled state |
+| **No test file** for `useGridTableColumnsDropdown` — Show All / Hide All actions, locked columns untested                                | 85         | ✅ Added `useGridTableColumnsDropdown.test.tsx` — 8 tests: disabled, all-locked, options content, locked exclusion, value tracking, show/hide all, individual toggle, non-array guard |
+| **No column resizing integration test** in `GridTable.test.tsx`                                                                          | 83         | ✅ Added 3 integration tests: handles rendered when enabled, hidden when disabled, col-resize cursor during drag |
+| **No test file** for `useGridTableAutoWidthMeasurementQueue` — debounce, retry, and shrink-permission gating untested                    | 80         | ✅ Added `useGridTableAutoWidthMeasurementQueue.test.tsx` — 10 tests: autoSize re-enable, data-driven post-autoSize, debounce accumulation, disabled/manual-active/manually-resized guards, allowShrink tracking, dragStart/dragEnd lifecycle, reset re-enable + mark-all-dirty |
 
 ### Recommended new test files (priority order)
 
-1. `gridTableViewRegistry.contract.test.ts` — scan all `viewId:` literals passed to `useGridTablePersistence` and `useNamespaceGridTablePersistence` and assert each is in the registry
-2. `useGridTableFocusNavigation.test.ts`
-3. `useGridTableContextMenuWiring.test.tsx`
-4. `useGridTablePersistence.multicluster.test.tsx`
-5. `useGridTableColumnsDropdown.test.ts`
+1. ~~`gridTableViewRegistry.contract.test.ts`~~ — done
+2. ~~`useGridTableFocusNavigation.test.ts`~~ — done
+3. ~~`useGridTableContextMenuWiring.test.tsx`~~ — done
+4. ~~`useGridTablePersistence.multicluster.test.tsx`~~ — done
+5. ~~`useGridTableColumnsDropdown.test.tsx`~~ — done

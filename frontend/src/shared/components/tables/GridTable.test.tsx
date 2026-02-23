@@ -1665,3 +1665,74 @@ it('sets aria-activedescendant on the role="grid" container when a row is focuse
   // It should be the row we clicked.
   expect(focusedRow!.getAttribute('data-row-key')).toBe('row-2');
 });
+
+it('renders resize handles between columns when enableColumnResizing is true', () => {
+  const resizableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label },
+    { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+  ];
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns: resizableColumns,
+    enableColumnResizing: true,
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  const handles = container.querySelectorAll('.resize-handle');
+  // One handle between the two columns.
+  expect(handles.length).toBe(1);
+});
+
+it('does not render resize handles when enableColumnResizing is false', () => {
+  const resizableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label },
+    { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+  ];
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns: resizableColumns,
+    enableColumnResizing: false,
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  const handles = container.querySelectorAll('.resize-handle');
+  expect(handles.length).toBe(0);
+});
+
+it('sets col-resize cursor on body during a column drag resize', () => {
+  const resizableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label },
+    { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+  ];
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns: resizableColumns,
+    enableColumnResizing: true,
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  const handle = container.querySelector('.resize-handle') as HTMLElement;
+  expect(handle).not.toBeNull();
+
+  // Simulate drag start.
+  act(() => {
+    handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 100 }));
+  });
+
+  // During drag, body cursor should be 'col-resize'.
+  expect(document.body.style.cursor).toBe('col-resize');
+
+  // End drag.
+  act(() => {
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+
+  // Cursor should be restored.
+  expect(document.body.style.cursor).not.toBe('col-resize');
+});
