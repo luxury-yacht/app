@@ -14,7 +14,13 @@ import { useShortcuts } from '@ui/shortcuts';
 
 // Ref-counted hover suppression to handle multiple GridTable instances.
 // The class is only removed when all tables release their hold.
-let hoverSuppressionCount = 0;
+// On HMR, the module re-evaluates but document.body may still have the class
+// from the previous module instance. Sync the counter with the DOM so the
+// next release/acquire cycle stays consistent.
+let hoverSuppressionCount =
+  typeof document !== 'undefined' && document.body.classList.contains('gridtable-disable-hover')
+    ? 1
+    : 0;
 
 function acquireHoverSuppression(): void {
   if (typeof document === 'undefined') {

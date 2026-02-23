@@ -700,7 +700,7 @@ const GridTable = memo(function GridTable<T>({
   }, [enableColumnResizing, resetManualResizes]);
 
   // Render sort indicator
-  const renderSortIndicator = (columnKey: string) => {
+  const renderSortIndicator = useCallback((columnKey: string) => {
     if (!sortConfig || sortConfig.key !== columnKey) {
       return null;
     }
@@ -709,14 +709,14 @@ const GridTable = memo(function GridTable<T>({
         {sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : ''}
       </span>
     );
-  };
+  }, [sortConfig]);
 
   // Handle header click for sorting
-  const handleHeaderClick = (column: GridColumnDefinition<T>) => {
+  const handleHeaderClick = useCallback((column: GridColumnDefinition<T>) => {
     if (column.sortable && onSort) {
       onSort(column.key);
     }
-  };
+  }, [onSort]);
 
   const renderRowContent = useGridTableRowRenderer({
     keyExtractor,

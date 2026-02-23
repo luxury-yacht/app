@@ -5,6 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
+import { useCallback } from 'react';
 import type React from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 
@@ -72,7 +73,7 @@ export function useGridTableRowRenderer<T>({
   getCachedCellContent,
   firstVirtualRowRef,
 }: UseGridTableRowRendererParams<T>): RenderRowContentFn<T> {
-  return (
+  return useCallback((
     item: T,
     absoluteIndex: number,
     attachMeasurementRef: boolean,
@@ -146,5 +147,18 @@ export function useGridTableRowRenderer<T>({
         })}
       </div>
     );
-  };
+  }, [
+    keyExtractor,
+    getRowClassName,
+    getRowStyle,
+    handleRowClick,
+    handleRowMouseEnter,
+    handleRowMouseLeave,
+    columnRenderModelsWithOffsets,
+    columnVirtualizationConfig,
+    columnWindowRange,
+    handleContextMenu,
+    getCachedCellContent,
+    firstVirtualRowRef,
+  ]);
 }

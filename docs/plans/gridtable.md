@@ -58,57 +58,23 @@ Every cluster change runs GC and wipes the saved state (sort, column visibility,
 
 ---
 
-## Needs Investigation
+## Investigated — Not Confirmed
 
-These issues describe plausible concerns in complex code paths but have not been confirmed with a failing test. They should be validated before acting on them.
-
-### 12. `persistenceCache` singleton and `force: true` race hazard
-
-`gridTablePersistence.ts:119-121` — `persistenceCache`, `hydrated`, and `hydrationPromise` are module-level singletons. `GetGridTablePersistence` returns the full persisted map for all clusters (`backend/app_persistence.go:194`), and keys are already cluster-scoped, so reads are correct under normal operation. The current codebase only calls `hydrateGridTablePersistence()` without `force: true` (`useGridTablePersistence.ts:148`, `gridTablePersistenceGC.ts:61`), so the forced-hydration scenarios described below are not currently exercised.
-
-Two related API-design concerns exist if `force: true` is ever used:
-1. The shared `hydrated` flag means a `force: true` caller would replace the cache for all clusters, and the API does not prevent this.
-2. Two concurrent `force: true` callers (`gridTablePersistence.ts:162-186`) would each create their own hydration promise. The `finally` block only nulls out `hydrationPromise` for the caller that finishes last, and the two `fetchGridTablePersistence()` calls assign to `persistenceCache` in an uncontrolled order — the later-resolving call wins silently.
-
-These are API-design hazards rather than current production bugs. Requires a scenario where `force: true` is actually called to confirm impact.
-
-### 13. Ref mutation during render in `useGridTablePagination`
-
-`useGridTablePagination.ts:45-48` mutates `inFlightRef.current` in the render body. This technically violates React's rules and could behave unexpectedly with StrictMode double-invocation or concurrent features, but no incorrect behavior has been reproduced. The pattern is a code smell worth fixing (move to `useEffect`), but severity depends on whether the app enables StrictMode or concurrent rendering. Requires a failing test to confirm impact.
-
-### 14. Render-time ref mutation in `GridTableBody` stretch decision
-
-`GridTableBody.tsx:88-126` — `stretchDecisionRef.current` is written during render via an IIFE. Same concern as issue 13: technically a side-effect that violates React's render purity rules, but no incorrect behavior has been reproduced under the current rendering mode. Requires a failing test to confirm impact.
-
-### 15. Save effect may race with load after `storageKey` change
-
-`useGridTablePersistence.ts:129-137` — When `storageKey` changes (namespace/cluster switch), the reset effect sets all state to null. In theory, if `setHydrated(true)` from the load resolves before the null-state save effect evaluates its guard, the save effect could call `clearPersistedState` on the **new** key. However, the current effect ordering and closures may prevent this in practice. Requires a failing test to confirm.
-
-### 16. `lastHydratedPayloadRef` not reset on `storageKey` change
-
-`useGridTablePersistence.ts:129-137` — `lastSavePayloadRef` is reset but `lastHydratedPayloadRef` is not. This could in theory cause a spurious `clearPersistedState` call on the **new** key when the previous key had persisted state, but the actual race window depends on effect ordering that may prevent it. Requires a failing test to confirm.
-
-### 17. `didChange` read after async rAF boundary
-
-`useGridTableColumnWidths.helpers.ts:271-316` — A `let didChange` variable is set inside a `setColumnWidths` updater (async batched) but read in a `requestAnimationFrame` callback. If React batches the update after rAF fires, `didChange` could be `false` when checked. This is a plausible concurrency hazard but has not been confirmed with a repro or failing test.
-
-### 18. `columnWidths` in effect deps may cause extra effect runs
-
-`useGridTableColumnWidths.helpers.ts:671` — The `useInitialMeasurementAndReconcile` effect lists `columnWidths` (state) as a dependency. The effect calls `setColumnWidths`, which updates `columnWidths`, re-triggering the effect. However, explicit guards at lines 447-453 (checking signatures and flags) prevent an unbounded loop. This may cause unnecessary extra effect runs but is not a runaway loop.
+Items 12–18 were investigated and could not be confirmed with a failing test. Removed.
 
 ---
 
 ## Low Priority / Speculative Optimizations
 
-### 19. Module-level `hoverSuppressionCount` not HMR-safe (dev-only)
+### 19. ✅ Module-level `hoverSuppressionCount` not HMR-safe (dev-only)
 
 `useGridTableShortcuts.ts:17` — Module-level mutable counter resets to 0 on HMR while the `gridtable-disable-hover` class may still be on `document.body`. This is a dev ergonomics issue only — HMR does not run in production.
 
-### 20. `useGridTableRowRenderer` returns unmemoized function
+### 20. ✅ `useGridTableRowRenderer` returns unmemoized function
 
 `useGridTableRowRenderer.tsx:75` — Returns a plain arrow function, not `useCallback`-wrapped. Every parent render produces a new reference. However, the current downstream consumers (`GridTable.tsx:719`, `GridTableBody.tsx:94`) do not rely on reference equality via `React.memo` for this prop, so the practical impact is not demonstrated. This is a speculative optimization rather than a current bug.
 
-### 21. `renderSortIndicator` / `handleHeaderClick` not memoized
+### 21. ✅ `renderSortIndicator` / `handleHeaderClick` not memoized
 
 `GridTable.tsx:701-717` — Both are plain function declarations recreated every render, passed into `useGridTableHeaderRow`. However, `useGridTableHeaderRow` (`useGridTableHeaderRow.tsx:23`) always rebuilds header JSX on every call regardless — it does not memoize its output. Wrapping these functions in `useCallback` alone would not avoid header recalculation without also memoizing the hook's return value.
 
