@@ -64,7 +64,7 @@ The pattern is functional but has no backoff, no max-retry cap, and is not visib
 
 `hooks/useObjectPanel.ts:44` — Module-level mutable variable set by `useEffect`. In a multi-panel scenario only the last-mounted panel sets the callback. However, `closeObjectPanelGlobal()` is explicitly documented as test-only (`@lintignore`, line 123) and the callback is sourced from shared context (line 76). Practical runtime risk is low unless non-test usage is planned.
 
-- [ ] Fix (low priority)
+- [x] ✅ Documented and deferred — Added comments documenting the "last mount wins" limitation and test-only scope. The module-level mutable callback pattern is unchanged; practical risk is low since `closeObjectPanelGlobal` is only called from tests. A behavioral fix (e.g., replacing with a context-based approach) is not warranted unless non-test usage is planned.
 
 ### 9. `Record<string, any>` throughout ValuesTab helpers
 

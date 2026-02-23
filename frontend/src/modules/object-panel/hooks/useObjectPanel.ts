@@ -37,10 +37,13 @@ export const CurrentObjectPanelContext = createContext<CurrentObjectPanelContext
 const useCurrentObjectPanel = () => useContext(CurrentObjectPanelContext);
 
 // ---------------------------------------------------------------------------
-// closeObjectPanelGlobal
+// closeObjectPanelGlobal  (test-only)
 // ---------------------------------------------------------------------------
 
-// Callback ref for closeObjectPanelGlobal to use
+// Module-level callback used by closeObjectPanelGlobal(). In a multi-panel
+// scenario only the last-mounted useObjectPanel() instance sets this, so
+// it is NOT safe for production use with concurrent panels. It exists
+// solely to allow tests to close the panel from outside the React tree.
 let closeCallback: (() => void) | null = null;
 
 // ---------------------------------------------------------------------------
@@ -69,7 +72,8 @@ export function useObjectPanel() {
   // Per-instance object data (only set when called inside an ObjectPanel tree).
   const { objectData, panelId: currentPanelId } = useCurrentObjectPanel();
 
-  // Keep the close callback updated for closeObjectPanelGlobal
+  // Keep the close callback updated for closeObjectPanelGlobal (test-only).
+  // Last mount wins — not safe for concurrent multi-panel production use.
   const closeRef = useRef(onCloseObjectPanel);
   closeRef.current = onCloseObjectPanel;
 
