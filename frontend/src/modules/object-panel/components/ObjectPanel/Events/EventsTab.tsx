@@ -26,15 +26,13 @@ import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { PanelObjectData } from '../types';
+import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
 import './EventsTab.css';
 
 interface EventsTabProps {
   objectData?: PanelObjectData | null;
   isActive?: boolean;
 }
-
-const CLUSTER_SCOPE = '__cluster__';
-const INACTIVE_SCOPE = '__inactive__';
 
 function normalizeEventSource(source: ObjectEventSummary['source'] | undefined): string {
   if (typeof source === 'string') {

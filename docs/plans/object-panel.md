@@ -78,7 +78,7 @@ The pattern is functional but has no backoff, no max-retry cap, and is not visib
 
 `EventsTab.tsx:36`, `LogViewer.tsx:39` duplicate the constant already in `constants.ts`. Import from `constants.ts` instead.
 
-- [ ] Fix
+- [x] ✅ Fix — Removed local `CLUSTER_SCOPE` and `INACTIVE_SCOPE` declarations from `EventsTab.tsx` and `LogViewer.tsx`, replaced with imports from `constants.ts`.
 
 ### 11. Keyboard shortcuts are hardcoded to tab identities, not indices
 

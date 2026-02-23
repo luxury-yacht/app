@@ -24,6 +24,7 @@ import type { ObjectLogEntry } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { types } from '@wailsjs/go/models';
 import { logViewerReducer, initialLogViewerState, type ParsedLogEntry } from './logViewerReducer';
+import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
 
 interface LogViewerProps {
   namespace: string;
@@ -35,8 +36,6 @@ interface LogViewerProps {
 }
 
 const ALL_CONTAINERS = ''; // Empty string means all containers in the backend
-const INACTIVE_SCOPE = '__inactive__';
-const CLUSTER_SCOPE = '__cluster__';
 const LOG_DOMAIN = 'object-logs' as const;
 const PARSED_COLUMN_MIN_WIDTH = 120;
 const PARSED_TIMESTAMP_MIN_WIDTH = 180;
