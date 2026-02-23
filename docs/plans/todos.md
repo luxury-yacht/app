@@ -2,9 +2,12 @@
 
 ## Issues
 
-Components in two different places. `src/components` and `src/shared/components`. Why?
-
 ## Feature Ideas
+
+- Show number of items in tables
+  - Perhaps an option to turn on row numbers?
+
+- Move shell and port forward tracking to the status indicator tooltip instead of a panel tab
 
 - Transfer files to/from pods
   - Select container

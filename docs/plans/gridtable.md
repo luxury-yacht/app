@@ -12,7 +12,7 @@
 
 Every cluster change runs GC and wipes the saved state (sort, column visibility, widths) for all three views. A registry-vs-usage contract test should be added to prevent future drift (see Test Coverage Gaps).
 
-### 2. Sort Desc / Clear Sort uses stale-closure double-`onSort` hack
+### 2. ✅ Sort Desc / Clear Sort uses stale-closure double-`onSort` hack
 
 `useGridTableContextMenuItems.tsx:75-98` — "Sort Desc" calls `onSort` twice (once sync, once via `setTimeout`) assuming the parent toggles asc→desc. The second call uses a stale `sortConfig` closure. If the parent's state machine doesn't match this assumption, the sort direction is wrong.
 
@@ -44,7 +44,7 @@ Every cluster change runs GC and wipes the saved state (sort, column visibility,
 
 `useGridTableColumnMeasurer.ts:109-197` — Both `headerMeasurer` (appended at line 117, removed at line 124) and `cellMeasurer` (appended at line 139, removed at line 197) are attached to `document.body` without `try/finally`. If code between append and remove throws (e.g., `column.render()` or `renderToString()`), the nodes leak. Wrap both in `try/finally`.
 
-### 9. `setTimeout` in context menu sort logic is never cancelled
+### 9. ✅ `setTimeout` in context menu sort logic is never cancelled
 
 `useGridTableContextMenuItems.tsx:76-92` — The `setTimeout` calls in "Sort Desc" and "Clear Sort" have no corresponding `clearTimeout`. If the component unmounts between the sync and deferred `onSort` calls, the timeout fires on a stale closure against an unmounted component. Related to issue 2 but a distinct leak/correctness concern.
 

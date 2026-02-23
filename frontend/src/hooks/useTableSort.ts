@@ -32,8 +32,14 @@ export function useTableSort<T>(
 
   const effectiveSort = options?.controlledSort ?? sortConfig;
 
-  const handleSort = (key: string) => {
+  // Sort a column. When `targetDirection` is provided the sort jumps directly
+  // to that state (used by context-menu "Sort Desc" / "Clear Sort"). When
+  // omitted the direction cycles: asc → desc → null → asc.
+  const handleSort = (key: string, targetDirection?: SortDirection) => {
     const computeNext = (prev: SortConfig): SortConfig => {
+      if (targetDirection !== undefined) {
+        return { key, direction: targetDirection };
+      }
       if (prev.key === key) {
         const nextDirection =
           prev.direction === 'asc' ? 'desc' : prev.direction === 'desc' ? null : 'asc';

@@ -139,8 +139,7 @@ describe('useGridTableContextMenuItems', () => {
     expect(result).toEqual(cellItems);
   });
 
-  it('schedules sort toggles when descending from an unsorted state', async () => {
-    vi.useFakeTimers();
+  it('sort desc passes target direction directly from unsorted state', async () => {
     const onSort = vi.fn();
     const params = buildParams({
       onSort,
@@ -154,13 +153,12 @@ describe('useGridTableContextMenuItems', () => {
 
     const sortDesc = headerItems.find((item) => item.label === 'Sort Name Desc');
     sortDesc?.onClick?.();
+    // Single call with explicit target direction — no setTimeout hack.
     expect(onSort).toHaveBeenCalledTimes(1);
-    vi.runAllTimers();
-    expect(onSort).toHaveBeenCalledTimes(2);
+    expect(onSort).toHaveBeenCalledWith('name', 'desc');
   });
 
-  it('respects current ascending sort state when toggling options', async () => {
-    vi.useFakeTimers();
+  it('sort actions pass correct target directions from ascending state', async () => {
     const onSort = vi.fn();
     const params = buildParams({
       onSort,
@@ -174,17 +172,17 @@ describe('useGridTableContextMenuItems', () => {
     const clearSort = headerItems.find((item) => item.label === 'Clear Sort');
 
     expect(sortAsc?.disabled).toBe(true);
+
     sortDesc?.onClick?.();
     expect(onSort).toHaveBeenCalledTimes(1);
+    expect(onSort).toHaveBeenCalledWith('name', 'desc');
 
     clearSort?.onClick?.();
     expect(onSort).toHaveBeenCalledTimes(2);
-    vi.runAllTimers();
-    expect(onSort).toHaveBeenCalledTimes(3);
+    expect(onSort).toHaveBeenLastCalledWith('name', null);
   });
 
-  it('clears descending sort with a single toggle', async () => {
-    vi.useFakeTimers();
+  it('clears descending sort with a single direct call', async () => {
     const onSort = vi.fn();
     const params = buildParams({
       onSort,
@@ -200,7 +198,6 @@ describe('useGridTableContextMenuItems', () => {
 
     clearSort?.onClick?.();
     expect(onSort).toHaveBeenCalledTimes(1);
-    vi.runAllTimers();
-    expect(onSort).toHaveBeenCalledTimes(1);
+    expect(onSort).toHaveBeenCalledWith('name', null);
   });
 });

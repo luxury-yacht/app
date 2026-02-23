@@ -31,7 +31,7 @@ interface UseGridTableContextMenuOptions<T> {
     item: T | null,
     source: GridTableContextMenuSource
   ) => ContextMenuItem[];
-  onSort?: (columnKey: string) => void;
+  onSort?: (columnKey: string, targetDirection?: 'asc' | 'desc' | null) => void;
 }
 
 export interface GridTableContextMenuHandlers<T> {
