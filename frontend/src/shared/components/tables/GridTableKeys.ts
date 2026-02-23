@@ -60,7 +60,7 @@ export const useGridTableKeyboardScopes = ({
         )
       );
     }
-    addTarget(container.querySelector<HTMLElement>('[data-gridtable-filter-role="search"]'));
+    addTarget(container.querySelector<HTMLElement>('[data-gridtable-filter-role="search"] input'));
     addTarget(container.querySelector<HTMLElement>('[data-gridtable-filter-role="reset"]'));
 
     return targets;

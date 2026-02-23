@@ -16,7 +16,7 @@ Every cluster change runs GC and wipes the saved state (sort, column visibility,
 
 `useGridTableContextMenuItems.tsx:75-98` — "Sort Desc" calls `onSort` twice (once sync, once via `setTimeout`) assuming the parent toggles asc→desc. The second call uses a stale `sortConfig` closure. If the parent's state machine doesn't match this assumption, the sort direction is wrong.
 
-### 3. Broken keyboard selector — filter search is never tab-navigable
+### 3. ✅ Broken keyboard selector — filter search is never tab-navigable
 
 `GridTableKeys.ts:63` queries for `[data-gridtable-filter-role="search"]`, but `GridTableFiltersBar.tsx:142` uses `data-gridtable-filter-role="search-wrapper"`. The selector never matches, so keyboard tab-cycling permanently skips the search input.
 
