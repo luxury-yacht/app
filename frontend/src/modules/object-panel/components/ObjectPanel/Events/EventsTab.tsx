@@ -25,10 +25,11 @@ import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import type { PanelObjectData } from '../types';
 import './EventsTab.css';
 
 interface EventsTabProps {
-  objectData?: any;
+  objectData?: PanelObjectData | null;
   isActive?: boolean;
 }
 

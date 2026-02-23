@@ -52,7 +52,7 @@ The pattern is functional but has no backoff, no max-retry cap, and is not visib
 
 `Events/EventsTab.tsx:31` — Should be `PanelObjectData | null` from the module's own `types.ts`.
 
-- [ ] Fix
+- [x] ✅ Fix — Changed `objectData?: any` to `objectData?: PanelObjectData | null`, added import from `../types`.
 
 ### 7. `useObjectPanelKind` is not a React hook
 
