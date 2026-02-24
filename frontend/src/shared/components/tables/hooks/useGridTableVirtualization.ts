@@ -274,9 +274,9 @@ export function useGridTableVirtualization<T>({
 
   useEffect(() => {
     return () => {
-      if (hoverRowRef.current) {
-        updateHoverForElement(null);
-      }
+      // Clear any hover state unconditionally on unmount.
+      // updateHoverForElement(null) is safe even when no hover is active.
+      updateHoverForElement(null);
       stopFrameSampler('unmount');
     };
     // We only need to run this on unmount

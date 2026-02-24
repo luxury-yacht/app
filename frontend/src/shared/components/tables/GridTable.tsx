@@ -715,23 +715,29 @@ const GridTable = memo(function GridTable<T>({
   }
 
   // Render sort indicator
-  const renderSortIndicator = useCallback((columnKey: string) => {
-    if (!sortConfig || sortConfig.key !== columnKey) {
-      return null;
-    }
-    return (
-      <span className="sort-indicator">
-        {sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : ''}
-      </span>
-    );
-  }, [sortConfig]);
+  const renderSortIndicator = useCallback(
+    (columnKey: string) => {
+      if (!sortConfig || sortConfig.key !== columnKey) {
+        return null;
+      }
+      return (
+        <span className="sort-indicator">
+          {sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : ''}
+        </span>
+      );
+    },
+    [sortConfig]
+  );
 
   // Handle header click for sorting
-  const handleHeaderClick = useCallback((column: GridColumnDefinition<T>) => {
-    if (column.sortable && onSort) {
-      onSort(column.key);
-    }
-  }, [onSort]);
+  const handleHeaderClick = useCallback(
+    (column: GridColumnDefinition<T>) => {
+      if (column.sortable && onSort) {
+        onSort(column.key);
+      }
+    },
+    [onSort]
+  );
 
   const renderRowContent = useGridTableRowRenderer({
     keyExtractor,

@@ -92,9 +92,7 @@ describe('useGridTableFocusNavigation', () => {
     const ref = React.createRef<HarnessHandle>();
 
     await act(async () => {
-      root.render(
-        <Harness ref={ref} tableData={data} updateHoverForElement={updateHover} />
-      );
+      root.render(<Harness ref={ref} tableData={data} updateHoverForElement={updateHover} />);
     });
 
     // Focus row index 1 (row-b).
@@ -119,9 +117,7 @@ describe('useGridTableFocusNavigation', () => {
     const ref = React.createRef<HarnessHandle>();
 
     await act(async () => {
-      root.render(
-        <Harness ref={ref} tableData={data} updateHoverForElement={updateHover} />
-      );
+      root.render(<Harness ref={ref} tableData={data} updateHoverForElement={updateHover} />);
     });
 
     await act(async () => {
@@ -308,13 +304,7 @@ describe('useGridTableFocusNavigation – shortcut suppression', () => {
     const ref = React.createRef<ExtendedHandle>();
 
     await act(async () => {
-      root.render(
-        <ExtendedHarness
-          ref={ref}
-          tableData={data}
-          updateHoverForElement={vi.fn()}
-        />
-      );
+      root.render(<ExtendedHarness ref={ref} tableData={data} updateHoverForElement={vi.fn()} />);
     });
 
     const divEl = document.createElement('div');
@@ -399,9 +389,7 @@ describe('useGridTableFocusNavigation – data-shrink clamping', () => {
 
     // Empty the data.
     await act(async () => {
-      root.render(
-        <ExtendedHarness ref={ref} tableData={[]} updateHoverForElement={updateHover} />
-      );
+      root.render(<ExtendedHarness ref={ref} tableData={[]} updateHoverForElement={updateHover} />);
     });
 
     expect(ref.current!.focusedRowIndex).toBeNull();

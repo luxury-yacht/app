@@ -154,9 +154,7 @@ describe('useGridTableHeaderRow', () => {
 
     // Enter triggers sort.
     await act(async () => {
-      sortableSpan.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
-      );
+      sortableSpan.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
       await Promise.resolve();
     });
     expect(handleHeaderClick).toHaveBeenCalledTimes(1);
@@ -166,9 +164,7 @@ describe('useGridTableHeaderRow', () => {
 
     // Space triggers sort.
     await act(async () => {
-      sortableSpan.dispatchEvent(
-        new KeyboardEvent('keydown', { key: ' ', bubbles: true })
-      );
+      sortableSpan.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
       await Promise.resolve();
     });
     expect(handleHeaderClick).toHaveBeenCalledTimes(1);
@@ -181,9 +177,7 @@ describe('useGridTableHeaderRow', () => {
     });
 
     // "Age" column is not sortable.
-    const ageSpan = container.querySelector(
-      '[data-column="age"] span > span'
-    ) as HTMLElement;
+    const ageSpan = container.querySelector('[data-column="age"] span > span') as HTMLElement;
     expect(ageSpan).not.toBeNull();
     expect(ageSpan.hasAttribute('role')).toBe(false);
     expect(ageSpan.hasAttribute('tabindex')).toBe(false);

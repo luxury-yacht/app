@@ -38,9 +38,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
 }));
 
 // Import after mocks are set up.
-const { useNamespaceGridTablePersistence } = await import(
-  './useNamespaceGridTablePersistence'
-);
+const { useNamespaceGridTablePersistence } = await import('./useNamespaceGridTablePersistence');
 
 describe('useNamespaceGridTablePersistence', () => {
   const columns: GridColumnDefinition<{ id: string }>[] = [

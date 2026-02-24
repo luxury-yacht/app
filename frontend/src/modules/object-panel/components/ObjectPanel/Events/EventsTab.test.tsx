@@ -163,22 +163,18 @@ describe('EventsTab', () => {
     await act(async () => {
       await refreshWatcherState.onRefresh!(true);
     });
-    expect(mockFetchScopedDomain).toHaveBeenCalledWith(
-      'object-events',
-      expect.any(String),
-      { isManual: true }
-    );
+    expect(mockFetchScopedDomain).toHaveBeenCalledWith('object-events', expect.any(String), {
+      isManual: true,
+    });
 
     // Scheduled refresh — orchestrator should see isManual: false.
     mockFetchScopedDomain.mockClear();
     await act(async () => {
       await refreshWatcherState.onRefresh!(false);
     });
-    expect(mockFetchScopedDomain).toHaveBeenCalledWith(
-      'object-events',
-      expect.any(String),
-      { isManual: false }
-    );
+    expect(mockFetchScopedDomain).toHaveBeenCalledWith('object-events', expect.any(String), {
+      isManual: false,
+    });
   });
 
   it('falls back to parent panel cluster when event has no cluster identity', () => {

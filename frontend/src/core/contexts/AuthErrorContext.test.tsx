@@ -146,7 +146,11 @@ describe('AuthErrorContext', () => {
     // Simulate a backend auth:failed event
     const failedHandlers = listeners.get('cluster:auth:failed')!;
     act(() => {
-      failedHandlers[0]({ clusterId: 'cluster-1', clusterName: 'test-cluster', reason: 'token expired' });
+      failedHandlers[0]({
+        clusterId: 'cluster-1',
+        clusterName: 'test-cluster',
+        reason: 'token expired',
+      });
     });
 
     const state = stateRef.current?.getClusterAuthState('cluster-1');

@@ -173,9 +173,7 @@ export function useGridTableColumnMeasurer<T>({
             let canonicalKind = displayText;
 
             if (React.isValidElement(contentNode)) {
-              const explicit = (contentNode.props as Record<string, unknown>)?.[
-                'data-kind-value'
-              ];
+              const explicit = (contentNode.props as Record<string, unknown>)?.['data-kind-value'];
               if (typeof explicit === 'string' && explicit.trim().length > 0) {
                 canonicalKind = explicit.trim();
               }

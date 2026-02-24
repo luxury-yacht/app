@@ -15,27 +15,27 @@ import type { LogViewerAction } from '../logViewerReducer';
 
 const mockStopStreamingDomain = vi.fn();
 const mockSetScopedDomainEnabled = vi.fn();
-const mockRestartStreamingDomain = vi.fn(() => Promise.resolve());
+const mockRestartStreamingDomain = vi.fn((..._args: any[]) => Promise.resolve());
 
 vi.mock('@/core/refresh/orchestrator', () => ({
   refreshOrchestrator: {
-    stopStreamingDomain: (...args: unknown[]) => mockStopStreamingDomain(...args),
-    setScopedDomainEnabled: (...args: unknown[]) => mockSetScopedDomainEnabled(...args),
-    restartStreamingDomain: (...args: unknown[]) => mockRestartStreamingDomain(...args),
+    stopStreamingDomain: (...args: any[]) => mockStopStreamingDomain(...args),
+    setScopedDomainEnabled: (...args: any[]) => mockSetScopedDomainEnabled(...args),
+    restartStreamingDomain: (...args: any[]) => mockRestartStreamingDomain(...args),
   },
 }));
 
 const mockRegister = vi.fn();
 const mockUnregister = vi.fn();
-const mockRefreshNow = vi.fn(() => Promise.resolve());
+const mockRefreshNow = vi.fn((..._args: any[]) => Promise.resolve());
 const mockUpdate = vi.fn();
 
 vi.mock('@/core/refresh/fallbacks/objectLogFallbackManager', () => ({
   objectLogFallbackManager: {
-    register: (...args: unknown[]) => mockRegister(...args),
-    unregister: (...args: unknown[]) => mockUnregister(...args),
-    refreshNow: (...args: unknown[]) => mockRefreshNow(...args),
-    update: (...args: unknown[]) => mockUpdate(...args),
+    register: (...args: any[]) => mockRegister(...args),
+    unregister: (...args: any[]) => mockUnregister(...args),
+    refreshNow: (...args: any[]) => mockRefreshNow(...args),
+    update: (...args: any[]) => mockUpdate(...args),
   },
 }));
 
@@ -163,11 +163,7 @@ describe('useLogStreamFallback', () => {
       root.render(React.createElement(Harness, props));
     });
 
-    expect(mockSetScopedDomainEnabled).toHaveBeenCalledWith(
-      'object-logs',
-      'test-scope',
-      true
-    );
+    expect(mockSetScopedDomainEnabled).toHaveBeenCalledWith('object-logs', 'test-scope', true);
   });
 
   it('stops streaming and disables domain when inactive', () => {
@@ -179,17 +175,12 @@ describe('useLogStreamFallback', () => {
       root.render(React.createElement(Harness, props));
     });
 
-    expect(mockStopStreamingDomain).toHaveBeenCalledWith(
-      'object-logs',
-      'test-scope',
-      { reset: false }
-    );
-    expect(mockSetScopedDomainEnabled).toHaveBeenCalledWith(
-      'object-logs',
-      'test-scope',
-      false,
-      { preserveState: true }
-    );
+    expect(mockStopStreamingDomain).toHaveBeenCalledWith('object-logs', 'test-scope', {
+      reset: false,
+    });
+    expect(mockSetScopedDomainEnabled).toHaveBeenCalledWith('object-logs', 'test-scope', false, {
+      preserveState: true,
+    });
     expect(dispatch).toHaveBeenCalledWith({ type: 'SET_FALLBACK_ACTIVE', payload: false });
   });
 
@@ -201,11 +192,9 @@ describe('useLogStreamFallback', () => {
       root.render(React.createElement(Harness, props));
     });
 
-    expect(mockStopStreamingDomain).toHaveBeenCalledWith(
-      'object-logs',
-      'test-scope',
-      { reset: false }
-    );
+    expect(mockStopStreamingDomain).toHaveBeenCalledWith('object-logs', 'test-scope', {
+      reset: false,
+    });
   });
 
   it('does nothing when logScope is null', () => {
@@ -291,7 +280,7 @@ describe('useLogStreamFallback', () => {
   // -----------------------------------------------------------------------
 
   it('schedules recovery with exponential backoff when fallback is active', async () => {
-    const { Harness, refs } = createHarness();
+    const { Harness } = createHarness();
     const dispatch = vi.fn();
     const props = defaultProps({ fallbackActive: true, dispatch });
 

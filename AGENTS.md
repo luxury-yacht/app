@@ -31,6 +31,7 @@ You must adhere to these at all times. If you want an exception to these rules y
 
 - Always add clear, understandable comments to code.
 - Treat the object catalog as the source of truth for namespace/cluster listings (details in `backend/AGENTS.md#Object-Catalog`).
+- Always run all tests, linting, and typescript checks before presenting work as complete.
 
 ## Project Structure & Module Organization
 

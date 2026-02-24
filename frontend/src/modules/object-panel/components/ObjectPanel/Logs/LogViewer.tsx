@@ -787,7 +787,11 @@ const LogViewer: React.FC<LogViewerProps> = ({
         render: (item: ParsedLogEntry) => (
           <span
             className="pod-color-text"
-            style={{ '--pod-color': podColors[item._pod || ''] || podColors['__fallback__'] } as React.CSSProperties}
+            style={
+              {
+                '--pod-color': podColors[item._pod || ''] || podColors['__fallback__'],
+              } as React.CSSProperties
+            }
           >
             {item._pod || '-'}
           </span>
@@ -849,10 +853,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
           const value = item[key];
           const displayValue = formatParsedValue(value);
           return (
-            <div
-              className="parsed-log-cell"
-              title={displayValue}
-            >
+            <div className="parsed-log-cell" title={displayValue}>
               {displayValue}
             </div>
           );
@@ -1051,9 +1052,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
               size="compact"
               renderOption={(option) => (
                 <div className="log-option-row">
-                  <span className="log-option-check">
-                    {option.metadata?.checked ? '✓' : ''}
-                  </span>
+                  <span className="log-option-check">{option.metadata?.checked ? '✓' : ''}</span>
                   <span className="log-option-label">{option.label}</span>
                   <span className="keycap">
                     <kbd>{option.metadata?.shortcut}</kbd>

@@ -52,10 +52,12 @@ describe('useGridTableColumnsDropdown', () => {
     const lockedColumns = opts.lockedColumns ?? new Set<string>();
     const hiddenColumns = opts.hiddenColumns ?? new Set<string>();
     const enabled = opts.enabled ?? true;
-    const applyVisibilityChanges = vi.fn((updater: (next: Record<string, boolean | undefined>) => boolean) => {
-      const obj: Record<string, boolean | undefined> = {};
-      updater(obj);
-    });
+    const applyVisibilityChanges = vi.fn(
+      (updater: (next: Record<string, boolean | undefined>) => boolean) => {
+        const obj: Record<string, boolean | undefined> = {};
+        updater(obj);
+      }
+    );
     let result: CapturedResult = null;
 
     const Harness: React.FC = () => {
@@ -108,9 +110,7 @@ describe('useGridTableColumnsDropdown', () => {
     const result = renderHook({ lockedColumns: new Set(['status']) });
     expect(result).not.toBeNull();
 
-    const columnLabels = result!.options
-      .filter((o) => !o.metadata?.isAction)
-      .map((o) => o.label);
+    const columnLabels = result!.options.filter((o) => !o.metadata?.isAction).map((o) => o.label);
     expect(columnLabels).toContain('Name');
     expect(columnLabels).toContain('Age');
     expect(columnLabels).not.toContain('Status');

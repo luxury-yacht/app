@@ -62,9 +62,7 @@ function extractViewIds(sourceRoot: string): { viewId: string; file: string }[] 
       const varName = match[1];
       // Look for string literals in the variable's assignment expression.
       // Covers patterns like: const resolvedViewId = viewId ?? (cond ? 'a' : 'b');
-      const assignPattern = new RegExp(
-        `(?:const|let|var)\\s+${varName}\\s*=\\s*([^;]+);`
-      );
+      const assignPattern = new RegExp(`(?:const|let|var)\\s+${varName}\\s*=\\s*([^;]+);`);
       const assignMatch = content.match(assignPattern);
       if (assignMatch) {
         const expr = assignMatch[1];

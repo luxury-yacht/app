@@ -1503,9 +1503,7 @@ it('warns in dev when keyExtractor returns an unscoped key (missing | separator)
 
   // The default keyExtractor in renderGridTable returns item.id (no | separator),
   // so the dev check should warn.
-  expect(warnSpy).toHaveBeenCalledWith(
-    expect.stringContaining('does not appear cluster-scoped')
-  );
+  expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('does not appear cluster-scoped'));
 
   warnSpy.mockRestore();
   cleanup();

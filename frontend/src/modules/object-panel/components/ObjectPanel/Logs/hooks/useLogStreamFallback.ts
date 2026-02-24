@@ -163,7 +163,16 @@ export function useLogStreamFallback({
       refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false);
       dispatch({ type: 'SET_FALLBACK_ACTIVE', payload: true });
     }
-  }, [autoRefresh, dispatch, fallbackActive, fallbackRecoveringRef, isActive, logScope, showPreviousLogs, snapshotStatus]);
+  }, [
+    autoRefresh,
+    dispatch,
+    fallbackActive,
+    fallbackRecoveringRef,
+    isActive,
+    logScope,
+    showPreviousLogs,
+    snapshotStatus,
+  ]);
 
   // --- Fallback manager registration ---
   useEffect(() => {
@@ -181,7 +190,15 @@ export function useLogStreamFallback({
     return () => {
       objectLogFallbackManager.unregister(logScope);
     };
-  }, [autoRefresh, dispatch, fallbackActive, fetchFallbackLogs, isActive, logScope, showPreviousLogs]);
+  }, [
+    autoRefresh,
+    dispatch,
+    fallbackActive,
+    fetchFallbackLogs,
+    isActive,
+    logScope,
+    showPreviousLogs,
+  ]);
 
   // --- Fallback manager config updates ---
   useEffect(() => {
@@ -235,8 +252,7 @@ export function useLogStreamFallback({
           return;
         }
         fallbackRecoveringRef.current = false;
-        const message =
-          restartError instanceof Error ? restartError.message : String(restartError);
+        const message = restartError instanceof Error ? restartError.message : String(restartError);
         const unavailable = isLogDataUnavailable(message);
         setScopedDomainState(LOG_DOMAIN, logScope, (previous) => ({
           ...previous,
@@ -285,7 +301,15 @@ export function useLogStreamFallback({
         window.clearTimeout(timerId);
       }
     };
-  }, [autoRefresh, dispatch, fallbackActive, fallbackRecoveringRef, isActive, logScope, showPreviousLogs]);
+  }, [
+    autoRefresh,
+    dispatch,
+    fallbackActive,
+    fallbackRecoveringRef,
+    isActive,
+    logScope,
+    showPreviousLogs,
+  ]);
 
   // --- Initial log priming ---
   // On first activation of a scope, fetch logs once to populate the store
@@ -304,5 +328,13 @@ export function useLogStreamFallback({
     }
     hasPrimedScopeRef.current = true;
     void fetchFallbackLogs();
-  }, [fallbackActive, fetchFallbackLogs, hasPrimedScopeRef, isActive, logEntriesLength, logScope, showPreviousLogs]);
+  }, [
+    fallbackActive,
+    fetchFallbackLogs,
+    hasPrimedScopeRef,
+    isActive,
+    logEntriesLength,
+    logScope,
+    showPreviousLogs,
+  ]);
 }

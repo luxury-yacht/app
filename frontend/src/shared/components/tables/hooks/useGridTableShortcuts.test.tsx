@@ -179,8 +179,7 @@ describe('useGridTableShortcuts', () => {
       await Promise.resolve();
     });
 
-    const findShortcut = (key: string) =>
-      capturedShortcuts.shortcuts.find((s) => s.key === key);
+    const findShortcut = (key: string) => capturedShortcuts.shortcuts.find((s) => s.key === key);
 
     // ArrowDown calls moveSelectionByDelta(1).
     findShortcut('ArrowDown')!.handler();

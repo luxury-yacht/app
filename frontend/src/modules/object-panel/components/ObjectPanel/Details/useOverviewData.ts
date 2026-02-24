@@ -249,7 +249,17 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
     }
 
     return null;
-  }, [objectData, kind, podDetails, deploymentDetails, replicaSetDetails, daemonSetDetails, statefulSetDetails, jobDetails, cronJobDetails]);
+  }, [
+    objectData,
+    kind,
+    podDetails,
+    deploymentDetails,
+    replicaSetDetails,
+    daemonSetDetails,
+    statefulSetDetails,
+    jobDetails,
+    cronJobDetails,
+  ]);
 
   // -------------------------------------------------------------------------
   // Configuration: configmap, secret, helmrelease
@@ -349,7 +359,14 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
     }
 
     return null;
-  }, [objectData, kind, serviceDetails, ingressDetails, networkPolicyDetails, endpointSliceDetails]);
+  }, [
+    objectData,
+    kind,
+    serviceDetails,
+    ingressDetails,
+    networkPolicyDetails,
+    endpointSliceDetails,
+  ]);
 
   // -------------------------------------------------------------------------
   // Storage: pvc, pv, storageclass
@@ -502,7 +519,15 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
     }
 
     return null;
-  }, [objectData, kind, serviceAccountDetails, roleDetails, roleBindingDetails, clusterRoleDetails, clusterRoleBindingDetails]);
+  }, [
+    objectData,
+    kind,
+    serviceAccountDetails,
+    roleDetails,
+    roleBindingDetails,
+    clusterRoleDetails,
+    clusterRoleBindingDetails,
+  ]);
 
   // -------------------------------------------------------------------------
   // Autoscaling & Policy: hpa, pdb, resourcequota, limitrange
@@ -693,7 +718,16 @@ export function useOverviewData(params: UseOverviewDataParams): OverviewData | n
     }
 
     return null;
-  }, [objectData, kind, nodeDetails, namespaceDetails, ingressClassDetails, crdDetails, mutatingWebhookDetails, validatingWebhookDetails]);
+  }, [
+    objectData,
+    kind,
+    nodeDetails,
+    namespaceDetails,
+    ingressClassDetails,
+    crdDetails,
+    mutatingWebhookDetails,
+    validatingWebhookDetails,
+  ]);
 
   // -------------------------------------------------------------------------
   // Default fallback for unrecognised or generic resources.

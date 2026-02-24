@@ -114,7 +114,11 @@ describe('useGridTableContextMenuWiring', () => {
       result = wiring;
       return (
         <>
-          <div ref={(el) => { wrapperRef.current = el; }}>
+          <div
+            ref={(el) => {
+              wrapperRef.current = el;
+            }}
+          >
             {tableData.map((row) => (
               <div key={row.id} data-row-key={row.id} className="gridtable-row">
                 <div className="grid-cell" data-column="name">
@@ -157,9 +161,9 @@ describe('useGridTableContextMenuWiring', () => {
     expect(opened).toBe(true);
     expect(mockOpenCellContextMenuFromKeyboard).toHaveBeenCalledTimes(1);
     // Verify the correct column key and item were passed.
-    const [columnKey, item] = mockOpenCellContextMenuFromKeyboard.mock.calls[0];
-    expect(columnKey).toBe('name');
-    expect(item).toEqual({ id: '2', name: 'Bob' });
+    const callArgs = mockOpenCellContextMenuFromKeyboard.mock.calls[0] as unknown[];
+    expect(callArgs[0]).toBe('name');
+    expect(callArgs[1]).toEqual({ id: '2', name: 'Bob' });
   });
 
   it('openFocusedRowContextMenu returns false when the row element is not in the DOM', () => {

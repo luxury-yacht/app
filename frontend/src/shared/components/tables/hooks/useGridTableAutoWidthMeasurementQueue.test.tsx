@@ -13,7 +13,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
   useDirtyQueue,
-  type ManualResizeEvent,
   type DirtyQueueResult,
 } from '@shared/components/tables/hooks/useGridTableAutoWidthMeasurementQueue';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';

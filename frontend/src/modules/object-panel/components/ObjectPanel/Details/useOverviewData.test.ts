@@ -187,7 +187,11 @@ describe('useOverviewData', () => {
   // -----------------------------------------------------------------------
 
   it('maps PVC details from the storage group', () => {
-    const params = emptyParams({ kind: 'PersistentVolumeClaim', namespace: 'data', name: 'db-pvc' });
+    const params = emptyParams({
+      kind: 'PersistentVolumeClaim',
+      namespace: 'data',
+      name: 'db-pvc',
+    });
     params.pvcDetails = {
       name: 'db-pvc',
       age: '30d',
@@ -237,7 +241,11 @@ describe('useOverviewData', () => {
   // -----------------------------------------------------------------------
 
   it('maps HPA details from the policy group', () => {
-    const params = emptyParams({ kind: 'HorizontalPodAutoscaler', namespace: 'prod', name: 'api-hpa' });
+    const params = emptyParams({
+      kind: 'HorizontalPodAutoscaler',
+      namespace: 'prod',
+      name: 'api-hpa',
+    });
     params.hpaDetails = {
       name: 'api-hpa',
       age: '7d',

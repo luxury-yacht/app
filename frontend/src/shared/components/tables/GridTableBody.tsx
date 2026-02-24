@@ -171,9 +171,7 @@ function GridTableBody<T>({
       role="grid"
       aria-busy={loading || undefined}
       aria-activedescendant={
-        focusedRowKey
-          ? `gridtable-row-${focusedRowKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
-          : undefined
+        focusedRowKey ? `gridtable-row-${focusedRowKey.replace(/[^a-zA-Z0-9_-]/g, '_')}` : undefined
       }
     >
       <div

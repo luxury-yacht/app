@@ -105,7 +105,12 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
     if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
     let current: HelmValue = obj;
     for (const key of path) {
-      if (current === null || typeof current !== 'object' || Array.isArray(current) || !(key in current)) {
+      if (
+        current === null ||
+        typeof current !== 'object' ||
+        Array.isArray(current) ||
+        !(key in current)
+      ) {
         return false;
       }
       current = current[key];
@@ -113,19 +118,31 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
     return true;
   }, []);
 
-  const getValueAtPath = useCallback((obj: HelmValue | undefined, path: string[]): HelmValue | undefined => {
-    let current: HelmValue | undefined = obj;
-    for (const key of path) {
-      if (current === null || current === undefined || typeof current !== 'object' || Array.isArray(current)) {
-        return undefined;
+  const getValueAtPath = useCallback(
+    (obj: HelmValue | undefined, path: string[]): HelmValue | undefined => {
+      let current: HelmValue | undefined = obj;
+      for (const key of path) {
+        if (
+          current === null ||
+          current === undefined ||
+          typeof current !== 'object' ||
+          Array.isArray(current)
+        ) {
+          return undefined;
+        }
+        current = current[key];
       }
-      current = current[key];
-    }
-    return current;
-  }, []);
+      return current;
+    },
+    []
+  );
 
   const getDefaultValues = useCallback(
-    (allVals: HelmValue | undefined, userVals: HelmValue | undefined, path: string[] = []): HelmValue | undefined => {
+    (
+      allVals: HelmValue | undefined,
+      userVals: HelmValue | undefined,
+      path: string[] = []
+    ): HelmValue | undefined => {
       if (allVals === null || allVals === undefined) return allVals;
       if (typeof allVals !== 'object' || Array.isArray(allVals)) {
         if (hasPath(userVals, path)) {
@@ -139,7 +156,13 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
         const value = allVals[key];
         if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
           const defaultVal = getDefaultValues(value, userVals, newPath);
-          if (defaultVal !== undefined && defaultVal !== null && typeof defaultVal === 'object' && !Array.isArray(defaultVal) && Object.keys(defaultVal).length > 0) {
+          if (
+            defaultVal !== undefined &&
+            defaultVal !== null &&
+            typeof defaultVal === 'object' &&
+            !Array.isArray(defaultVal) &&
+            Object.keys(defaultVal).length > 0
+          ) {
             result[key] = defaultVal;
           }
         } else if (!hasPath(userVals, newPath)) {
@@ -152,7 +175,11 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   );
 
   const markOverriddenValues = useCallback(
-    (obj: HelmValue | undefined, userValues: HelmValue | undefined, path: string[] = []): HelmValue | undefined => {
+    (
+      obj: HelmValue | undefined,
+      userValues: HelmValue | undefined,
+      path: string[] = []
+    ): HelmValue | undefined => {
       if (obj === null || obj === undefined) return obj;
       if (typeof obj !== 'object' || Array.isArray(obj)) {
         if (hasPath(userValues, path)) {
@@ -179,12 +206,19 @@ const ValuesTab: React.FC<ValuesTabProps> = ({ scope, isActive = false }) => {
   );
 
   const getActualOverrides = useCallback(
-    (userVals: HelmValue | undefined, _allVals: HelmValue | undefined, path: string[] = []): HelmValue | undefined => {
+    (
+      userVals: HelmValue | undefined,
+      _allVals: HelmValue | undefined,
+      path: string[] = []
+    ): HelmValue | undefined => {
       if (userVals === null || userVals === undefined) return userVals;
       if (typeof userVals !== 'object' || Array.isArray(userVals)) {
         return userVals;
       }
-      const allObj = (_allVals !== null && typeof _allVals === 'object' && !Array.isArray(_allVals)) ? _allVals : undefined;
+      const allObj =
+        _allVals !== null && typeof _allVals === 'object' && !Array.isArray(_allVals)
+          ? _allVals
+          : undefined;
       const result: HelmValueObject = {};
       for (const key in userVals) {
         result[key] = getActualOverrides(userVals[key], allObj?.[key], [...path, key]) ?? null;

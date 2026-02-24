@@ -168,7 +168,9 @@ type SnapshotStatus = 'idle' | 'loading' | 'ready' | 'updating' | 'initialising'
 
 type Snapshot = {
   status: SnapshotStatus;
-  data?: { values?: { allValues?: Record<string, unknown>; userValues?: Record<string, unknown> } | null } | null;
+  data?: {
+    values?: { allValues?: Record<string, unknown>; userValues?: Record<string, unknown> } | null;
+  } | null;
   error?: string | null;
 };
 
