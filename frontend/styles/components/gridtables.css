@@ -109,6 +109,11 @@
   outline: none;
 }
 
+.gridtable-wrapper:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
 .gridtable-wrapper::-webkit-scrollbar-corner {
   background: var(--grid-bg-primary);
 }
@@ -154,6 +159,13 @@ body.dock-right-open .content-body .gridtable-header-container {
 
 body.dock-bottom-open .content-body .gridtable-wrapper {
   transition: margin-bottom 0.3s ease-out;
+}
+
+/* When both panels are open, transition both margins so neither snaps. */
+body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
+  transition:
+    margin-right 0.3s ease-out,
+    margin-bottom 0.3s ease-out;
 }
 
 body.dockable-panel-resizing .content-body .gridtable-wrapper,
@@ -278,7 +290,7 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
 }
 
 .resize-handle:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--grid-resize-handle-hover-color, rgba(0, 0, 0, 0.05));
 }
 
 .resize-handle:hover::before {

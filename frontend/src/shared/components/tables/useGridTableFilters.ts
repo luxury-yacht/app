@@ -124,7 +124,7 @@ export function useGridTableFilters<T>({
       return DEFAULT_FILTER_STATE;
     }
     return normalizeFilterState(isControlled ? filters!.value : internalFilters);
-  }, [filteringEnabled, isControlled, filters, internalFilters]);
+  }, [filteringEnabled, isControlled, filters?.value, internalFilters]);
 
   const filterSignature = useMemo(
     () => (filteringEnabled ? JSON.stringify(activeFilters) : ''),

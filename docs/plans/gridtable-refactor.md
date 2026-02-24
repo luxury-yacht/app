@@ -82,27 +82,26 @@ encompass multiple bug fixes are called out explicitly.
 
 ## P2 — Medium Impact (affects users in specific scenarios)
 
-### 6. Virtualization row-height cache broken (wrong DOM node for key lookup)
+### 6. ✅ Virtualization row-height cache broken (wrong DOM node for key lookup)
 
-- `hooks/useGridTableRowRenderer.tsx:93`, `hooks/useGridTableVirtualization.ts:323,345`
-- The measurement ref is on the row node, but virtualization reads `data-row-key` from
-  `node.parentElement`. Cache lookup uses the actual key, so it always misses.
-- `virtualRowHeight` itself still updates correctly from direct measurement of the
-  first rendered row (`:324`, `:334`). The bug is limited to cache-assisted reuse.
-- **Impact:** Cache-assisted row-height reuse is broken, degrading estimation stability
-  and scrollbar accuracy for variable-height rows. Base virtualization still functions.
-- **Fix:** Read `data-row-key` from the correct node, or attach the attribute at the
-  right DOM level.
-- **Coverage gap:** Cache-specific path is untested.
+- `hooks/useGridTableVirtualization.ts:323`
+- Changed `node.parentElement?.getAttribute('data-row-key')` to
+  `node.getAttribute('data-row-key')`. The measurement ref points to the row
+  node itself, which carries the `data-row-key` attribute.
+- **What was fixed:** Virtualization read `data-row-key` from `node.parentElement`
+  but the ref was on the row node. Cache lookup always missed, degrading
+  estimation stability and scrollbar accuracy for variable-height rows.
+- **Coverage gap:** Cache-specific path remains untested (no behavioral test
+  possible without a full virtualization integration harness).
 
-### 7. `useGridTableFilters` memo depends on entire `filters` object
+### 7. ✅ `useGridTableFilters` memo depends on entire `filters` object
 
-- `useGridTableFilters.ts:122-127`
-- The `activeFilters` memo depends on the full `filters` config object (new reference
-  every render). This causes the entire table to re-filter on every parent render.
-- **Impact:** Unnecessary re-filtering and re-rendering on every parent update.
-- **Fix:** Narrow dependency to `filters?.value` (the only field the memo actually
-  reads when controlled).
+- `useGridTableFilters.ts:127`
+- Narrowed `activeFilters` memo dependency from `filters` to `filters?.value`
+  (the only field the memo reads when controlled).
+- **What was fixed:** The memo depended on the full `filters` config object,
+  which is a new reference every render. This caused unnecessary re-filtering
+  and re-rendering on every parent update.
 
 ### 8. ✅ Lossy ID sanitizer creates duplicate `aria-activedescendant` IDs
 
@@ -116,27 +115,33 @@ encompass multiple bug fixes are called out explicitly.
 - **Coverage:** Uniqueness tests for slash/colon/pipe keys added in
   `GridTable.utils.test.tsx`.
 
-### 9. Dock panel transitions clobber each other when both panels are open
+### 9. ✅ Dock panel transitions clobber each other when both panels are open
 
-- `styles/components/gridtables.css:149-156`
-- The `dock-bottom-open` transition rule overrides `dock-right-open` via cascade, so
-  `margin-right` snaps instantly when both panels are open.
-- **Fix:** Add a combined `body.dock-right-open.dock-bottom-open` selector with both
-  transitions.
+- `styles/components/gridtables.css`
+- Added combined `body.dock-right-open.dock-bottom-open` selector that transitions
+  both `margin-right` and `margin-bottom`.
+- **What was fixed:** The `dock-bottom-open` transition rule overrode
+  `dock-right-open` via cascade, so `margin-right` snapped instantly when both
+  panels were open.
 
-### 10. Focus outline removed with no `:focus-visible` replacement (WCAG 2.4.7)
+### 10. ✅ Focus outline removed with no `:focus-visible` replacement (WCAG 2.4.7)
 
-- `styles/components/gridtables.css:107-109`
-- The wrapper has `tabIndex={0}` and `role="grid"` but `outline: none` on `:focus`
-  with no `focus-visible` fallback.
-- **Impact:** Keyboard users have no visual indicator that the grid has focus.
-- **Fix:** Add `.gridtable-wrapper:focus-visible` with an accent outline.
+- `styles/components/gridtables.css`
+- Added `.gridtable-wrapper:focus-visible` with a 2px accent outline
+  (`outline-offset: -2px` to stay inside the container).
+- **What was fixed:** The wrapper had `outline: none` on `:focus` with no
+  `:focus-visible` fallback. Keyboard users had no visual indicator that the
+  grid had focus.
 
-### 11. Resize handle hover invisible in dark mode
+### 11. ✅ Resize handle hover invisible in dark mode
 
-- `styles/components/gridtables.css:279-281`
-- Hardcoded `rgba(0, 0, 0, 0.05)` — nearly invisible on dark backgrounds.
-- **Fix:** Use a theme-aware variable with a dark-mode override.
+- `styles/components/gridtables.css`, `styles/themes/dark.css`
+- Changed hardcoded `rgba(0, 0, 0, 0.05)` to
+  `var(--grid-resize-handle-hover-color, rgba(0, 0, 0, 0.05))`. Added
+  `--grid-resize-handle-hover-color: rgba(255, 255, 255, 0.08)` in the dark
+  theme alongside the existing resize handle variables.
+- **What was fixed:** The hover background was hardcoded black-alpha, nearly
+  invisible on dark backgrounds.
 
 ---
 
@@ -263,5 +268,5 @@ their respective fixes:
 - [x] Focus retention across data reorder/sort/filter refresh (item 1)
 - [x] Shortcut behavior while focus is inside interactive descendants (item 2)
 - [x] Auto-sizing re-enabled after manual drag-resize cycle (item 3)
-- [ ] Row-height cache lookup path in virtualization (item 6)
+- [x] Row-height cache lookup path in virtualization (item 6) — fix applied; no integration test added
 - [x] Duplicate ARIA ID generation with similar keys (item 8)

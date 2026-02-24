@@ -320,7 +320,8 @@ export function useGridTableVirtualization<T>({
     if (!node) {
       return;
     }
-    const rowKey = node.parentElement?.getAttribute('data-row-key') ?? null;
+    // The measurement ref is on the row node itself, which carries data-row-key.
+    const rowKey = node.getAttribute('data-row-key') ?? null;
     const rect = node.getBoundingClientRect();
     if (rect.height <= 0) {
       return;
