@@ -239,40 +239,49 @@ They can be done alongside or instead of the individual fixes they encompass.
 - **What was fixed:** The ref mutation in the render body violated concurrent
   mode rules. Now runs as a side effect after render.
 
-### 19. `overflow: visible` on embedded wrapper — conditional
+### 19. ✅ `overflow: visible` on embedded wrapper
 
-- `styles/components/gridtables.css:523-526`
-- If virtualization is enabled on an embedded table, virtual rows would overflow the
-  container. Whether this is real depends on whether any embedded table uses
-  virtualization.
-- **Fix:** Use `overflow: clip`, or document/enforce the invariant.
+- `styles/components/gridtables.css`
+- Changed `overflow: visible` to `overflow: clip` on
+  `.gridtable-container.embedded .gridtable-wrapper`.
+- **What was fixed:** `overflow: visible` would allow virtual rows to overflow the
+  embedded container if virtualization were enabled on an embedded table.
 
-### 20. Global hover suppression counter can desync on HMR
+### 20. ✅ Global hover suppression counter can desync on HMR
 
-- `hooks/useGridTableShortcuts.ts:20-43`
-- Module-level integer counter; HMR recovery assumes at most 1 active suppressor. The
-  refcount logic is sound at normal runtime, but HMR with multiple instances can desync.
-- **Fix:** Use a `Set` of instance IDs instead of an integer counter.
+- `hooks/useGridTableShortcuts.ts`
+- Replaced module-level integer counter with a `Set<symbol>`. Each hook instance
+  creates a stable `Symbol` via `useRef` and passes it to `acquireHoverSuppression`
+  / `releaseHoverSuppression`. The `Set` is immune to HMR desync because stale
+  symbols from unmounted instances are never re-used.
+- **What was fixed:** The integer refcount assumed at most 1 active suppressor
+  survived HMR. With multiple GridTable instances, the counter could desync,
+  leaving hover permanently suppressed or prematurely released.
 
-### 21. Dev-mode cluster key check only validates first data batch
+### 21. ✅ Dev-mode cluster key check only validates first data batch
 
-- `GridTable.tsx:704-715`
-- `clusterKeyCheckRef` set once, never reset. If `keyExtractor` changes, validation
-  won't re-run.
-- **Fix:** Reset the ref when `keyExtractor` identity changes.
+- `GridTable.tsx`
+- Added a `keyExtractorRef` that tracks the current `keyExtractor` identity.
+  When the identity changes, `clusterKeyCheckRef` is reset to `false` so the
+  validation re-runs on the next data batch.
+- **What was fixed:** `clusterKeyCheckRef` was set once and never reset. If
+  `keyExtractor` changed (e.g. switching views), the cluster-scoping validation
+  would not re-run.
 
-### 22. Duplicate CSS rule
+### 22. ✅ Duplicate CSS rule
 
-- `styles/components/gridtables.css:47` and `:350`
-- `.gridtable-row:last-child { border-bottom: none; }` appears twice.
-- **Fix:** Remove the first instance (line 47).
+- `styles/components/gridtables.css`
+- Removed the first `.gridtable-row:last-child { border-bottom: none; }` rule
+  (previously at line 47). The identical rule near the row styles section remains.
 
-### 23. `hydrateGridTablePersistence` with `force: true` can race
+### 23. ✅ `hydrateGridTablePersistence` with `force: true` can race
 
-- `persistence/gridTablePersistence.ts:162-186`
-- `force: true` bypasses the in-flight promise guard, allowing concurrent fetches where
-  the last to resolve wins. Not currently called in production.
-- **Fix:** Await existing in-flight promise before starting a forced re-fetch.
+- `persistence/gridTablePersistence.ts`
+- `force: true` now awaits the existing `hydrationPromise` (if any) before
+  starting a new fetch, preventing concurrent fetches where the last to resolve
+  wins non-deterministically.
+- **What was fixed:** `force: true` bypassed the in-flight promise guard,
+  allowing a second fetch to race the first.
 
 ---
 

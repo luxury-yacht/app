@@ -43,11 +43,6 @@
   display: none !important;
 }
 
-/* Remove last row border */
-.gridtable-row:last-child {
-  border-bottom: none;
-}
-
 /* ============================================
    3. Design Tokens (CSS Variables)
    ============================================ */
@@ -538,7 +533,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
    ============================================ */
 .gridtable-container.embedded .gridtable-wrapper {
   max-height: none;
-  overflow: visible;
+  overflow: clip;
 }
 
 .gridtable-container.embedded .gridtable-header {

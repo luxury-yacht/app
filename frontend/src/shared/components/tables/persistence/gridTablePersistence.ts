@@ -163,9 +163,14 @@ export const hydrateGridTablePersistence = async (options?: { force?: boolean })
   if (hydrated && !options?.force) {
     return;
   }
-  if (hydrationPromise && !options?.force) {
+  if (hydrationPromise) {
+    // Wait for the existing fetch to finish before deciding whether to re-fetch.
+    // Without this, force: true would start a concurrent fetch and the last
+    // to resolve would win non-deterministically.
     await hydrationPromise;
-    return;
+    if (!options?.force) {
+      return;
+    }
   }
 
   hydrationPromise = (async () => {

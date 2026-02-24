@@ -695,6 +695,11 @@ const GridTable = memo(function GridTable<T>({
   // Dev-time check: keyExtractor must return cluster-scoped keys (containing '|')
   // to prevent silent key collisions in multi-cluster views.
   const clusterKeyCheckRef = useRef(false);
+  const keyExtractorRef = useRef(keyExtractor);
+  if (keyExtractorRef.current !== keyExtractor) {
+    keyExtractorRef.current = keyExtractor;
+    clusterKeyCheckRef.current = false;
+  }
   if (import.meta.env.DEV && !clusterKeyCheckRef.current && tableData.length > 0) {
     clusterKeyCheckRef.current = true;
     const sampleKey = keyExtractor(tableData[0], 0);

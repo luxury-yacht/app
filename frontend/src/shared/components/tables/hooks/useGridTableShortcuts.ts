@@ -12,32 +12,29 @@ import { useShortcuts } from '@ui/shortcuts';
 // disables hover when shortcuts/context menu are active, and registers the
 // navigation/open/context-menu bindings expected by table users.
 
-// Ref-counted hover suppression to handle multiple GridTable instances.
+// Set-based hover suppression to handle multiple GridTable instances.
 // The class is only removed when all tables release their hold.
-// On HMR, the module re-evaluates but document.body may still have the class
-// from the previous module instance. Sync the counter with the DOM so the
-// next release/acquire cycle stays consistent.
-let hoverSuppressionCount =
-  typeof document !== 'undefined' && document.body.classList.contains('gridtable-disable-hover')
-    ? 1
-    : 0;
+// Using a Set of instance IDs instead of an integer counter prevents
+// desync on HMR, where the module re-evaluates but active instances
+// from the previous module may not have cleaned up.
+const hoverSuppressors = new Set<symbol>();
 
-function acquireHoverSuppression(): void {
+function acquireHoverSuppression(id: symbol): void {
   if (typeof document === 'undefined') {
     return;
   }
-  hoverSuppressionCount++;
-  if (hoverSuppressionCount === 1) {
+  hoverSuppressors.add(id);
+  if (hoverSuppressors.size === 1) {
     document.body.classList.add('gridtable-disable-hover');
   }
 }
 
-function releaseHoverSuppression(): void {
+function releaseHoverSuppression(id: symbol): void {
   if (typeof document === 'undefined') {
     return;
   }
-  hoverSuppressionCount = Math.max(0, hoverSuppressionCount - 1);
-  if (hoverSuppressionCount === 0) {
+  hoverSuppressors.delete(id);
+  if (hoverSuppressors.size === 0) {
     document.body.classList.remove('gridtable-disable-hover');
   }
 }
@@ -98,30 +95,26 @@ export function useGridTableShortcuts({
     };
   }, [popShortcutContext]);
 
-  // Track whether this instance currently holds a hover suppression lock
-  const hasHoverSuppressionRef = useRef(false);
+  // Stable identity for this hook instance, used by the hover suppression Set.
+  const suppressionIdRef = useRef<symbol | null>(null);
+  if (!suppressionIdRef.current) {
+    suppressionIdRef.current = Symbol('grid-hover-suppressor');
+  }
+  const suppressionId = suppressionIdRef.current;
 
   useEffect(() => {
     const shouldDisableHover = shortcutsActive || isContextMenuVisible;
 
-    if (shouldDisableHover && !hasHoverSuppressionRef.current) {
-      // Acquire suppression if we need it and don't have it
-      hasHoverSuppressionRef.current = true;
-      acquireHoverSuppression();
-    } else if (!shouldDisableHover && hasHoverSuppressionRef.current) {
-      // Release suppression if we don't need it but have it
-      hasHoverSuppressionRef.current = false;
-      releaseHoverSuppression();
+    if (shouldDisableHover) {
+      acquireHoverSuppression(suppressionId);
+    } else {
+      releaseHoverSuppression(suppressionId);
     }
 
     return () => {
-      // On unmount, release if we're holding
-      if (hasHoverSuppressionRef.current) {
-        hasHoverSuppressionRef.current = false;
-        releaseHoverSuppression();
-      }
+      releaseHoverSuppression(suppressionId);
     };
-  }, [isContextMenuVisible, shortcutsActive]);
+  }, [isContextMenuVisible, shortcutsActive, suppressionId]);
 
   // Keep shortcut registrations stable; context activation controls when they fire.
   useShortcuts(
