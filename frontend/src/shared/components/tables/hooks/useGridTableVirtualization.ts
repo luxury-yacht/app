@@ -263,13 +263,19 @@ export function useGridTableVirtualization<T>({
       wrapper.scrollTo({ top: 0 });
     }
     setVirtualScrollTop(0);
+    let rafHandle: number | undefined;
     if (shouldVirtualize) {
       if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(() => updateColumnWindowRange());
+        rafHandle = requestAnimationFrame(() => updateColumnWindowRange());
       } else {
         updateColumnWindowRange();
       }
     }
+    return () => {
+      if (rafHandle != null) {
+        cancelAnimationFrame(rafHandle);
+      }
+    };
   }, [filteringEnabled, filterSignature, shouldVirtualize, wrapperRef, updateColumnWindowRange]);
 
   useEffect(() => {

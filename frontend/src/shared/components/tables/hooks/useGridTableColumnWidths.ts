@@ -5,7 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import {
   DEFAULT_COLUMN_MIN_WIDTH,
@@ -458,6 +458,16 @@ export function useGridTableColumnWidths<T>(
   );
 
   const initializedColumnsRef = useRef(false);
+  // State mirror of the ref so consumers get a re-render when initialization
+  // completes. The ref is set in rAF callbacks (in the helpers) that also call
+  // setColumnWidths; the resulting re-render runs this effect which syncs the
+  // ref value into state.
+  const [isInitializedState, setIsInitializedState] = useState(false);
+  useEffect(() => {
+    if (initializedColumnsRef.current && !isInitializedState) {
+      setIsInitializedState(true);
+    }
+  });
   const prevColumnsSignatureRef = useRef<string | null>(null);
   const prevShortNamesRef = useRef(useShortNames);
 
@@ -491,7 +501,7 @@ export function useGridTableColumnWidths<T>(
     reconcileWidthsToContainer,
     buildColumnWidthState,
     updateNaturalWidth,
-    isInitialized: initializedColumnsRef.current,
+    isInitialized: isInitializedState,
     markColumnsDirty,
     markAllAutoColumnsDirty,
     handleManualResizeEvent,

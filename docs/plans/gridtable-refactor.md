@@ -184,44 +184,60 @@ They can be done alongside or instead of the individual fixes they encompass.
 
 ## P3 — Lower Impact (future-proofing, edge cases, cleanup)
 
-### 14. `isInitialized` read from ref never triggers re-render — speculative
+### 14. ✅ `isInitialized` read from ref never triggers re-render — speculative
 
-- `hooks/useGridTableColumnWidths.ts:494`
-- Set in a rAF callback (ref, not state), so in theory consumers gating on this value
-  could show uninitialized content. However, initialization paths also set column widths
-  in the same rAF (`:helpers.ts:456,508,638`), which normally triggers a re-render.
-- **Status:** Speculative — no stale UI case demonstrated. Subsumed by item 13 if the
-  state machine refactor happens.
+- `hooks/useGridTableColumnWidths.ts:460-470`
+- Added `isInitializedState` alongside the ref. A no-deps `useEffect` syncs the
+  ref to state so consumers get a re-render when initialization completes.
+  The ref is kept for synchronous reads in helpers.
+- **What was fixed:** `isInitialized` was returned as `initializedColumnsRef.current`,
+  which doesn't trigger re-renders. Initialization paths also call `setColumnWidths`
+  in the same rAF, so this was largely mitigated — but the state sync makes it correct.
 
-### 15. Stale closure in `useExternalWidthsSync` — speculative
+### 15. ✅ Stale closure in `useExternalWidthsSync` — speculative
 
-- `hooks/useGridTableColumnWidths.helpers.ts:271-316`
-- `didChange` captured by closure may be stale if React batches the state updater,
-  causing redundant change notifications. Self-settling but wasteful. Concurrency-timing
-  hypothesis, not a verified bug.
-- **Fix:** Use a ref for the `didChange` flag. Subsumed by item 13 if the state machine
-  refactor happens.
+- `hooks/useGridTableColumnWidths.helpers.ts:251,275-312`
+- Converted `didChange` local variable to `didChangeRef` (a `useRef`). The ref
+  is read in the rAF `resetFlag` callback, avoiding any potential stale-closure
+  issue if React defers state updater execution.
+- **What was fixed:** `didChange` was a local `let` variable captured by closure.
+  If React batched the state updater, the rAF callback could theoretically read
+  stale `false`. In practice React 18 runs functional updaters synchronously, so
+  this was speculative — but the ref is strictly more correct.
 
-### 16. Render-phase ref mutations in `GridTableBody`
+### 16. ✅ Render-phase ref mutations in `GridTableBody` — fixed
 
-- `GridTableBody.tsx:106-112`
-- `renderRows()` mutates `rowControllerPoolRef` and `firstVirtualRowRef` during render.
-  Pool growth is bounded by virtual window size, so not an unbounded leak — but it is a
-  concurrency/Strict Mode correctness smell.
-- **Fix:** Move pool growth to `useLayoutEffect`.
+- `GridTableBody.tsx`, `GridTable.tsx`
+- Eliminated `rowControllerPoolRef` entirely. The pool generated deterministic
+  IDs (`slot-${idx}`), and `data-grid-slot` was a write-only DOM attribute
+  (never read back by JS). Virtual row slot IDs are now computed inline as
+  `` `slot-${idx}` `` in the `.map()` call, removing the render-phase ref
+  mutation completely.
+- **What was fixed:** `rowControllerPoolRef` was mutated during render (pool
+  growth via `push()`). The prior `useMemo` mitigation still ran during render.
+  The pool was unnecessary since IDs were deterministic.
+- **Remaining:** `firstVirtualRowRef.current = null` remains in the render
+  body. This is an intentional "clear before ref callbacks" pattern — the ref
+  callback sets it during commit, and it must be cleared before those callbacks
+  fire. Moving it to an effect would create a stale-ref race. This is safe in
+  concurrent mode (idempotent, worst case the ref stays null if React discards
+  the render). Subsumed by item 13 if the state machine refactor happens.
 
-### 17. Leaked `requestAnimationFrame` in filter-change effect
+### 17. ✅ Leaked `requestAnimationFrame` in filter-change effect
 
-- `hooks/useGridTableVirtualization.ts:252-273`
-- rAF scheduled on `filterSignature` change is never cancelled in effect cleanup.
-  Can fire after unmount.
-- **Fix:** Store handle, cancel in cleanup.
+- `hooks/useGridTableVirtualization.ts:252-280`
+- Stored the rAF handle in a local variable and added a cleanup function that
+  calls `cancelAnimationFrame` when the effect re-runs or the component unmounts.
+- **What was fixed:** The rAF scheduled on `filterSignature` change was never
+  cancelled in effect cleanup, so it could fire after unmount.
 
-### 18. Render-phase ref mutation in pagination hook
+### 18. ✅ Render-phase ref mutation in pagination hook
 
-- `hooks/useGridTablePagination.ts:45-48`
-- `inFlightRef.current = false` in the render body. Violates concurrent mode rules.
-- **Fix:** Move to `useEffect`.
+- `hooks/useGridTablePagination.ts:45-49`
+- Moved `inFlightRef.current = false` from the render body into a `useEffect`
+  that depends on `isRequestingMore`.
+- **What was fixed:** The ref mutation in the render body violated concurrent
+  mode rules. Now runs as a side effect after render.
 
 ### 19. `overflow: visible` on embedded wrapper — conditional
 

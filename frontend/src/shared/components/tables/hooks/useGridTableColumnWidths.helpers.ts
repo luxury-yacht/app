@@ -247,6 +247,11 @@ export function useExternalWidthsSync<T>({
   isApplyingExternalUpdateRef: RefObject<boolean>;
   lastNotifiedWidthsRef: RefObject<string>;
 }) {
+  // Tracks whether the external width sync actually changed any widths.
+  // Using a ref instead of a local variable avoids a potential stale-closure
+  // issue if React defers the state updater execution.
+  const didChangeRef = useRef(false);
+
   useEffect(() => {
     if (!externalColumnWidths) {
       return;
@@ -268,7 +273,7 @@ export function useExternalWidthsSync<T>({
 
     lastAppliedExternalWidthsRef.current = serializedPayload;
 
-    let didChange = false;
+    didChangeRef.current = false;
     isApplyingExternalUpdateRef.current = true;
 
     setColumnWidths((prev) => {
@@ -295,16 +300,16 @@ export function useExternalWidthsSync<T>({
 
         if (Math.abs((prev[col.key] ?? 0) - externalWidth) > 0.5) {
           next[col.key] = externalWidth;
-          didChange = true;
+          didChangeRef.current = true;
         }
       });
 
-      return didChange ? next : prev;
+      return didChangeRef.current ? next : prev;
     });
 
     const resetFlag = () => {
       isApplyingExternalUpdateRef.current = false;
-      if (didChange) {
+      if (didChangeRef.current) {
         lastNotifiedWidthsRef.current = serializedPayload;
       }
     };

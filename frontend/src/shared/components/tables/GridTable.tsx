@@ -438,8 +438,6 @@ const GridTable = memo(function GridTable<T>({
     data: tableData,
   });
 
-  const rowControllerPoolRef = useRef<Array<{ id: string }>>([]);
-
   useEffect(() => {
     markAllAutoColumnsDirty();
   }, [markAllAutoColumnsDirty, columnVirtualizationConfig.enabled, allowHorizontalOverflow]);
@@ -806,7 +804,6 @@ const GridTable = memo(function GridTable<T>({
       totalVirtualHeight={totalVirtualHeight}
       virtualOffset={virtualOffset}
       renderRowContent={renderRowContent}
-      rowControllerPoolRef={rowControllerPoolRef}
       firstVirtualRowRef={firstVirtualRowRef}
       paginationEnabled={paginationEnabled}
       paginationStatus={resolvedPaginationStatus}
