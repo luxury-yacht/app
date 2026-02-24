@@ -150,18 +150,22 @@ encompass multiple bug fixes are called out explicitly.
 These are larger changes that improve maintainability and subsume multiple bug fixes.
 They can be done alongside or instead of the individual fixes they encompass.
 
-### 12. Introduce a `useGridTableController` reducer
+### 12. ✅ Extract `useGridTableController` orchestration hook
 
-- `GridTable.tsx` (~865 lines)
-- The main component is purely wiring — it calls 25+ hooks and threads their outputs
-  into sub-components. A top-level `useReducer` could consolidate the coordination
-  between focus, sort, filter, and pagination state into a single dispatch-based model,
-  reducing the number of independent state variables and making the interaction between
-  subsystems more auditable.
-- **Encompasses:** General orchestration complexity. Would make future changes less
-  error-prone.
-- **Risk:** Large surface area. Should be done as a dedicated refactor pass, not mixed
-  with bug fixes.
+- `GridTable.tsx` (now ~160 lines), `hooks/useGridTableController.tsx` (~640 lines)
+- Extracted all hook orchestration (~636 lines) from `GridTable.tsx` into a dedicated
+  `useGridTableController` hook. `GridTable.tsx` is now a thin render shell that calls
+  the controller and destructures the result for its JSX.
+- **What was done:** The original item proposed a `useReducer`, but the hooks already
+  encapsulate their own state well — the actual problem was orchestration sprawl, not
+  scattered `useState` calls. A `useReducer` at the controller level would require
+  rewriting every sub-hook to accept dispatch instead of their own state — a massive,
+  high-risk rewrite for unclear benefit. The extract-hook approach achieves the stated
+  goals: consolidates coordination into one hook, groups outputs into a named result
+  object, and makes interaction between subsystems auditable in a single file.
+- **Encompasses:** General orchestration complexity. Future changes only need to touch
+  the controller hook, not the render component.
+- **No behavioral change:** All 44 test files / 216 tests pass unchanged.
 
 ### 13. Refactor column widths into an explicit state machine
 
@@ -260,7 +264,7 @@ They can be done alongside or instead of the individual fixes they encompass.
 
 ### 21. ✅ Dev-mode cluster key check only validates first data batch
 
-- `GridTable.tsx`
+- `hooks/useGridTableController.tsx` (previously in `GridTable.tsx`)
 - Added a `keyExtractorRef` that tracks the current `keyExtractor` identity.
   When the identity changes, `clusterKeyCheckRef` is reset to `false` so the
   validation re-runs on the next data batch.
