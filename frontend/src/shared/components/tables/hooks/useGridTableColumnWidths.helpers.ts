@@ -14,6 +14,7 @@ import type {
   ColumnWidthState,
   GridColumnDefinition,
 } from '@shared/components/tables/GridTable.types';
+import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 
 // Helper hooks extracted from useGridTableColumnWidths to reduce file size and clarify intent.
 // They cover local state init, syncing rendered columns, reacting to data changes,
@@ -402,7 +403,8 @@ export function useInitialMeasurementAndReconcile<T>({
   getColumnMaxWidth,
   parseWidthInputToNumber,
   isFixedColumnKey,
-  initializedColumnsRef,
+  phaseRef,
+  transitionPhase,
   prevColumnsSignatureRef,
   prevShortNamesRef,
   tableData,
@@ -426,12 +428,12 @@ export function useInitialMeasurementAndReconcile<T>({
   getColumnMaxWidth: (column: GridColumnDefinition<T>) => number;
   parseWidthInputToNumber: (input: ColumnWidthInput | undefined) => number | null;
   isFixedColumnKey: (key: string) => boolean;
-  initializedColumnsRef: RefObject<boolean>;
+  phaseRef: RefObject<ColumnWidthPhase>;
+  transitionPhase: (to: ColumnWidthPhase) => void;
   prevColumnsSignatureRef: RefObject<string | null>;
   prevShortNamesRef: RefObject<boolean>;
   tableData: T[];
 }) {
-  const initializedColumns = initializedColumnsRef;
   const initializedWithDataRef = useRef(false);
   useEffect(() => {
     if (!tableRef.current || renderedColumns.length === 0) {
@@ -442,12 +444,12 @@ export function useInitialMeasurementAndReconcile<T>({
       .map((col) => `${col.key}:${col.width ?? ''}:${col.minWidth ?? ''}:${col.maxWidth ?? ''}`)
       .join('|');
 
-    const needsInitialization = !initializedColumns.current;
+    const needsInitialization = phaseRef.current === 'initializing';
     const columnsChanged = prevColumnsSignatureRef.current !== columnsSignature;
     const shortNamesChanged = prevShortNamesRef.current !== useShortNames;
     // Re-initialize if we previously initialized with empty data and now have data
     const dataArrivedAfterEmptyInit =
-      initializedColumns.current && !initializedWithDataRef.current && tableData.length > 0;
+      phaseRef.current !== 'initializing' && !initializedWithDataRef.current && tableData.length > 0;
 
     if (
       !needsInitialization &&
@@ -514,7 +516,7 @@ export function useInitialMeasurementAndReconcile<T>({
 
         prevColumnsSignatureRef.current = columnsSignature;
         prevShortNamesRef.current = useShortNames;
-        initializedColumns.current = true;
+        transitionPhase('idle');
         if (tableData.length > 0) {
           initializedWithDataRef.current = true;
         }
@@ -664,7 +666,7 @@ export function useInitialMeasurementAndReconcile<T>({
 
       prevColumnsSignatureRef.current = columnsSignature;
       prevShortNamesRef.current = useShortNames;
-      initializedColumns.current = true;
+      transitionPhase('idle');
       if (tableData.length > 0) {
         initializedWithDataRef.current = true;
       }
@@ -677,12 +679,12 @@ export function useInitialMeasurementAndReconcile<T>({
     externalColumnWidths,
     getColumnMaxWidth,
     getColumnMinWidth,
-    initializedColumns,
     isFixedColumnKey,
     manuallyResizedColumnsRef,
     measureColumnWidth,
     naturalWidthsRef,
     parseWidthInputToNumber,
+    phaseRef,
     prevColumnsSignatureRef,
     prevShortNamesRef,
     reconcileWidthsToContainer,
@@ -690,6 +692,7 @@ export function useInitialMeasurementAndReconcile<T>({
     setColumnWidths,
     tableData,
     tableRef,
+    transitionPhase,
     useShortNames,
   ]);
 }

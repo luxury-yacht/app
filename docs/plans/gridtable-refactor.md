@@ -167,22 +167,31 @@ They can be done alongside or instead of the individual fixes they encompass.
   the controller hook, not the render component.
 - **No behavioral change:** All 44 test files / 216 tests pass unchanged.
 
-### 13. Refactor column widths into an explicit state machine
+### 13. ✅ Refactor column widths into an explicit state machine
 
 - `useGridTableColumnWidths.ts`, `useGridTableColumnWidths.helpers.ts`,
-  `useGridTableAutoWidthMeasurementQueue.ts`, `useGridTableColumnMeasurer.ts`,
-  `useGridTableAutoGrow.ts`, `useGridTableExternalWidths.ts`
+  `useGridTableAutoWidthMeasurementQueue.ts`
 - The width system generated the most bugs in the review (items 3, 14, 15). The root
-  cause is implicit state transitions spread across refs in 6+ files.
-- Replace ref flags (`isAutoSizingEnabledRef`, `isManualResizeActiveRef`,
-  `isApplyingExternalUpdateRef`, `initializedColumnsRef`) with a `useReducer` with
-  named states: `idle`, `measuring`, `dragging`, `syncing-external`, `initializing`.
-  Each action (`DRAG_START`, `DRAG_END`, `DATA_CHANGED`, `EXTERNAL_UPDATE`,
-  `MEASUREMENT_COMPLETE`) produces a deterministic next state.
-- **Encompasses:** Items 3 (auto-sizing disabled), 14 (isInitialized ref), 15 (stale
-  closure in external sync).
-- **Risk:** Complex subsystem. Needs thorough testing of width persistence round-trips,
-  auto-size → manual resize → auto-size cycles, and external width sync.
+  cause is implicit state transitions spread across refs in 3 files.
+- Replaced three coupled boolean refs (`isAutoSizingEnabledRef`,
+  `isManualResizeActiveRef`, `initializedColumnsRef`) with a single
+  `ColumnWidthPhase` enum (`'initializing' | 'idle' | 'dragging'`) stored in a
+  `phaseRef` (synchronous reads) + `phaseState` (re-renders). A `transitionPhase()`
+  callback validates transitions in dev mode via a `VALID_TRANSITIONS` map.
+- Added a `clearMeasurementQueue()` helper that replaces the "disable-then-enable
+  auto-sizing" hack — it wipes dirty/hash/allowShrink refs and cancels the debounce
+  timer without toggling any boolean.
+- Rewrote `handleManualResizeEvent` into five distinct branches (dragStart, drag,
+  dragEnd, autoSize, reset), each with a clear phase contract.
+- `isApplyingExternalUpdateRef` stays as a separate boolean ref — it is orthogonal
+  to the column-width lifecycle (external syncs can happen in any phase).
+- A full `useReducer` with additional phases (`measuring`, `syncing-external`) was
+  considered but rejected: the three boolean refs were the actual bug surface, and
+  the external-sync ref is an independent concern. The simpler enum approach
+  eliminates the coupled-boolean bugs without a high-risk rewrite of every sub-hook.
+- **Encompasses:** Items 3 (auto-sizing disabled), 14 (isInitialized ref).
+- **No behavioral change:** All 44 test files / 216 tests pass. Test file updated
+  to assert on phase values instead of boolean refs.
 
 ---
 

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 
 // Auto-width measurement queue for GridTable.
 // - When a column is marked autoWidth, we keep an eye on its rendered text/content.
@@ -34,8 +35,8 @@ type DirtyQueueOptions<T> = {
   dirtyColumnsRef: RefObject<Set<string>>;
   columnHashesRef: RefObject<Map<string, string>>;
   allowShrinkColumnsRef: RefObject<Set<string>>;
-  isManualResizeActiveRef: RefObject<boolean>;
-  isAutoSizingEnabledRef: RefObject<boolean>;
+  phaseRef: RefObject<ColumnWidthPhase>;
+  transitionPhase: (to: ColumnWidthPhase) => void;
   setColumnWidths: (updater: React.SetStateAction<Record<string, number>>) => void;
   measureColumnWidth: (column: GridColumnDefinition<T>) => number;
   getColumnMinWidth: (column: GridColumnDefinition<T>) => number;
@@ -83,8 +84,8 @@ export function useDirtyQueue<T>({
   dirtyColumnsRef,
   columnHashesRef,
   allowShrinkColumnsRef,
-  isManualResizeActiveRef,
-  isAutoSizingEnabledRef,
+  phaseRef,
+  transitionPhase,
   setColumnWidths,
   measureColumnWidth,
   getColumnMinWidth,
@@ -111,10 +112,22 @@ export function useDirtyQueue<T>({
     }, delay);
   }, []);
 
+  // Wipe all pending measurement state. Used before transitioning into
+  // a drag or before re-queueing columns for autoSize/reset.
+  const clearMeasurementQueue = useCallback(() => {
+    dirtyColumnsRef.current.clear();
+    columnHashesRef.current.clear();
+    allowShrinkColumnsRef.current.clear();
+    if (dirtyTimerRef.current != null && typeof window !== 'undefined') {
+      window.clearTimeout(dirtyTimerRef.current);
+    }
+    dirtyTimerRef.current = null;
+  }, [dirtyColumnsRef, columnHashesRef, allowShrinkColumnsRef]);
+
   const markColumnsDirty = useCallback(
     (keys: Iterable<string>) => {
       // Queue autoWidth columns for measurement unless a manual drag is in progress.
-      if (!isAutoSizingEnabledRef.current || isManualResizeActiveRef.current) {
+      if (phaseRef.current === 'dragging') {
         return;
       }
       let added = false;
@@ -143,17 +156,16 @@ export function useDirtyQueue<T>({
       manuallyResizedColumnsRef,
       scheduleDirtyFlush,
       dirtyColumnsRef,
-      isAutoSizingEnabledRef,
-      isManualResizeActiveRef,
+      phaseRef,
     ]
   );
 
   const markAllAutoColumnsDirty = useCallback(() => {
-    if (!isAutoSizingEnabledRef.current) {
+    if (phaseRef.current === 'dragging') {
       return;
     }
     markColumnsDirty(renderedColumnsRef.current.map((col) => col.key));
-  }, [markColumnsDirty, renderedColumnsRef, isAutoSizingEnabledRef]);
+  }, [markColumnsDirty, renderedColumnsRef, phaseRef]);
 
   const handleManualResizeEvent = useCallback(
     (event: ManualResizeEvent) => {
@@ -162,72 +174,65 @@ export function useDirtyQueue<T>({
         return;
       }
 
-      if (type === 'dragStart' || type === 'autoSize') {
-        if (isAutoSizingEnabledRef.current) {
-          isAutoSizingEnabledRef.current = false;
-          dirtyColumnsRef.current.clear();
-          columnHashesRef.current.clear();
-          allowShrinkColumnsRef.current.clear();
-          if (dirtyTimerRef.current != null && typeof window !== 'undefined') {
-            window.clearTimeout(dirtyTimerRef.current);
-          }
-          dirtyTimerRef.current = null;
-        }
-      }
+      // Each event type gets a clear, distinct branch:
 
       if (type === 'dragStart') {
-        isManualResizeActiveRef.current = true;
+        clearMeasurementQueue();
+        transitionPhase('dragging');
         return;
       }
 
-      const dirty = dirtyColumnsRef.current;
-      keys.forEach((key) => {
-        if (!key) {
-          return;
-        }
-        dirty.delete(key);
-        if (type === 'drag' || type === 'dragEnd') {
+      if (type === 'drag') {
+        // Per-column cleanup while dragging — no phase change.
+        keys.forEach((key) => {
+          if (!key) return;
+          dirtyColumnsRef.current.delete(key);
           columnHashesRef.current.delete(key);
           allowShrinkColumnsRef.current.delete(key);
-        } else {
-          allowShrinkColumnsRef.current.add(key);
-        }
-      });
+        });
+        return;
+      }
 
       if (type === 'dragEnd') {
-        isManualResizeActiveRef.current = false;
-        // Re-enable auto-sizing after the drag completes so that subsequent
-        // data changes can trigger column measurement again.
-        isAutoSizingEnabledRef.current = true;
+        // Per-column cleanup, then resume idle.
+        keys.forEach((key) => {
+          if (!key) return;
+          dirtyColumnsRef.current.delete(key);
+          columnHashesRef.current.delete(key);
+          allowShrinkColumnsRef.current.delete(key);
+        });
+        transitionPhase('idle');
         scheduleDirtyFlush(DIRTY_DEBOUNCE_MS);
         return;
       }
 
-      if (type === 'autoSize' || type === 'reset') {
-        // Re-enable auto-sizing so markColumnsDirty proceeds. The disabling
-        // block above cleared stale queue state; now we re-enable before
-        // queueing the measurement.
-        isAutoSizingEnabledRef.current = true;
-        if (type === 'reset') {
-          dirtyColumnsRef.current.clear();
-          columnHashesRef.current.clear();
-          allowShrinkColumnsRef.current.clear();
-        }
+      if (type === 'autoSize') {
+        // Clear stale queue state, then re-queue with allowShrink.
+        clearMeasurementQueue();
+        keys.forEach((key) => {
+          if (!key) return;
+          allowShrinkColumnsRef.current.add(key);
+        });
         markColumnsDirty(keys);
-        if (type === 'reset') {
-          markColumnsDirty(renderedColumnsRef.current.map((col) => col.key));
-        }
+        return;
+      }
+
+      if (type === 'reset') {
+        // Clear everything and re-measure the specified + all auto columns.
+        clearMeasurementQueue();
+        markColumnsDirty(keys);
+        markColumnsDirty(renderedColumnsRef.current.map((col) => col.key));
       }
     },
     [
+      clearMeasurementQueue,
       markColumnsDirty,
       renderedColumnsRef,
       scheduleDirtyFlush,
       allowShrinkColumnsRef,
       columnHashesRef,
       dirtyColumnsRef,
-      isAutoSizingEnabledRef,
-      isManualResizeActiveRef,
+      transitionPhase,
     ]
   );
 

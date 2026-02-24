@@ -2,7 +2,7 @@
  * frontend/src/shared/components/tables/hooks/useGridTableAutoWidthMeasurementQueue.test.ts
  *
  * Regression tests for useDirtyQueue / handleManualResizeEvent.
- * Covers the autoSize event re-enabling auto-sizing so markColumnsDirty
+ * Covers the autoSize event keeping phase in idle so markColumnsDirty
  * proceeds, and subsequent data-driven updates are not permanently suppressed.
  */
 
@@ -15,6 +15,7 @@ import {
   useDirtyQueue,
   type DirtyQueueResult,
 } from '@shared/components/tables/hooks/useGridTableAutoWidthMeasurementQueue';
+import type { ColumnWidthPhase } from '@shared/components/tables/hooks/useGridTableColumnWidths';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 
 type Row = { id: string; name: string };
@@ -47,7 +48,10 @@ describe('useDirtyQueue handleManualResizeEvent', () => {
 
     const columns = [makeColumn('col-a'), makeColumn('col-b')];
     const dirtyColumns = new Set<string>();
-    const isAutoSizingEnabledRef = { current: true };
+    const phaseRef = { current: 'idle' as ColumnWidthPhase };
+    const transitionPhase = vi.fn((to: ColumnWidthPhase) => {
+      phaseRef.current = to;
+    });
 
     const options = {
       tableRef: { current: document.createElement('div') },
@@ -57,8 +61,8 @@ describe('useDirtyQueue handleManualResizeEvent', () => {
       dirtyColumnsRef: { current: dirtyColumns },
       columnHashesRef: { current: new Map<string, string>() },
       allowShrinkColumnsRef: { current: new Set<string>() },
-      isManualResizeActiveRef: { current: false },
-      isAutoSizingEnabledRef,
+      phaseRef,
+      transitionPhase,
       setColumnWidths: vi.fn(),
       measureColumnWidth: vi.fn(() => 100),
       getColumnMinWidth: vi.fn(() => 72),
@@ -76,14 +80,14 @@ describe('useDirtyQueue handleManualResizeEvent', () => {
       root.render(<Harness />);
     });
 
-    return { resultRef, dirtyColumns, isAutoSizingEnabledRef };
+    return { resultRef, dirtyColumns, phaseRef };
   };
 
-  it('autoSize event re-enables auto-sizing and queues dirty columns', () => {
-    const { resultRef, dirtyColumns, isAutoSizingEnabledRef } = setupHook();
+  it('autoSize event stays in idle phase and queues dirty columns', () => {
+    const { resultRef, dirtyColumns, phaseRef } = setupHook();
 
-    // Baseline: auto-sizing is enabled.
-    expect(isAutoSizingEnabledRef.current).toBe(true);
+    // Baseline: phase is idle (auto-sizing active).
+    expect(phaseRef.current).toBe('idle');
 
     // Fire an autoSize event.
     act(() => {
@@ -93,14 +97,14 @@ describe('useDirtyQueue handleManualResizeEvent', () => {
       });
     });
 
-    // Auto-sizing must be re-enabled after autoSize (not stuck at false).
-    expect(isAutoSizingEnabledRef.current).toBe(true);
+    // Phase must stay idle after autoSize (not stuck in dragging).
+    expect(phaseRef.current).toBe('idle');
     // The column must be queued as dirty.
     expect(dirtyColumns.has('col-a')).toBe(true);
   });
 
   it('data-driven markColumnsDirty works after an autoSize event', () => {
-    const { resultRef, dirtyColumns, isAutoSizingEnabledRef } = setupHook();
+    const { resultRef, dirtyColumns, phaseRef } = setupHook();
 
     // Fire an autoSize event first.
     act(() => {
@@ -113,13 +117,13 @@ describe('useDirtyQueue handleManualResizeEvent', () => {
     // Clear dirty set to isolate the next call.
     dirtyColumns.clear();
 
-    // Subsequent data-driven mark should work — auto-sizing must not be
-    // permanently disabled.
+    // Subsequent data-driven mark should work — phase must not be
+    // permanently stuck in dragging.
     act(() => {
       resultRef.current!.markColumnsDirty(['col-b']);
     });
 
-    expect(isAutoSizingEnabledRef.current).toBe(true);
+    expect(phaseRef.current).not.toBe('dragging');
     expect(dirtyColumns.has('col-b')).toBe(true);
   });
 });
@@ -146,7 +150,10 @@ describe('useDirtyQueue debounce and retry', () => {
 
     const columns = [makeColumn('col-a'), makeColumn('col-b')];
     const dirtyColumns = new Set<string>();
-    const isAutoSizingEnabledRef = { current: true };
+    const phaseRef = { current: 'idle' as ColumnWidthPhase };
+    const transitionPhase = vi.fn((to: ColumnWidthPhase) => {
+      phaseRef.current = to;
+    });
     const setColumnWidths = vi.fn();
     const measureColumnWidth = vi.fn(() => measureWidth);
 
@@ -158,8 +165,8 @@ describe('useDirtyQueue debounce and retry', () => {
       dirtyColumnsRef: { current: dirtyColumns },
       columnHashesRef: { current: new Map<string, string>() },
       allowShrinkColumnsRef: { current: new Set<string>() },
-      isManualResizeActiveRef: { current: false },
-      isAutoSizingEnabledRef,
+      phaseRef,
+      transitionPhase,
       setColumnWidths,
       measureColumnWidth,
       getColumnMinWidth: vi.fn(() => 72),
@@ -180,7 +187,7 @@ describe('useDirtyQueue debounce and retry', () => {
     return {
       resultRef,
       dirtyColumns,
-      isAutoSizingEnabledRef,
+      phaseRef,
       setColumnWidths,
       measureColumnWidth,
       options,
@@ -205,30 +212,18 @@ describe('useDirtyQueue debounce and retry', () => {
     expect(dirtyColumns.size).toBe(2);
   });
 
-  it('skips markColumnsDirty when isAutoSizingEnabled is false', () => {
-    const { resultRef, dirtyColumns, isAutoSizingEnabledRef } = setupHookWithMeasurer();
+  it('skips markColumnsDirty when phase is dragging', () => {
+    const { resultRef, dirtyColumns, phaseRef } = setupHookWithMeasurer();
 
-    // Disable auto-sizing.
-    isAutoSizingEnabledRef.current = false;
+    // Set phase to dragging (replaces both old isAutoSizingEnabled=false
+    // and isManualResizeActive=true guards).
+    phaseRef.current = 'dragging';
 
     act(() => {
       resultRef.current!.markColumnsDirty(['col-a']);
     });
 
     // Should not have queued anything.
-    expect(dirtyColumns.has('col-a')).toBe(false);
-  });
-
-  it('skips markColumnsDirty when a manual resize is active', () => {
-    const { resultRef, dirtyColumns, options } = setupHookWithMeasurer();
-
-    // Simulate an active manual drag.
-    options.isManualResizeActiveRef.current = true;
-
-    act(() => {
-      resultRef.current!.markColumnsDirty(['col-a']);
-    });
-
     expect(dirtyColumns.has('col-a')).toBe(false);
   });
 
@@ -260,8 +255,8 @@ describe('useDirtyQueue debounce and retry', () => {
     expect(options.allowShrinkColumnsRef.current.has('col-a')).toBe(true);
   });
 
-  it('dragStart disables auto-sizing and marks manual resize as active', () => {
-    const { resultRef, isAutoSizingEnabledRef, options } = setupHookWithMeasurer();
+  it('dragStart transitions phase to dragging', () => {
+    const { resultRef, phaseRef } = setupHookWithMeasurer();
 
     act(() => {
       resultRef.current!.handleManualResizeEvent({
@@ -270,12 +265,11 @@ describe('useDirtyQueue debounce and retry', () => {
       });
     });
 
-    expect(isAutoSizingEnabledRef.current).toBe(false);
-    expect(options.isManualResizeActiveRef.current).toBe(true);
+    expect(phaseRef.current).toBe('dragging');
   });
 
-  it('dragEnd re-activates manual resize tracking', () => {
-    const { resultRef, options } = setupHookWithMeasurer();
+  it('dragEnd transitions phase back to idle', () => {
+    const { resultRef, phaseRef } = setupHookWithMeasurer();
 
     // Start a drag.
     act(() => {
@@ -284,7 +278,7 @@ describe('useDirtyQueue debounce and retry', () => {
         columns: ['col-a'],
       });
     });
-    expect(options.isManualResizeActiveRef.current).toBe(true);
+    expect(phaseRef.current).toBe('dragging');
 
     // End the drag.
     act(() => {
@@ -293,29 +287,29 @@ describe('useDirtyQueue debounce and retry', () => {
         columns: ['col-a'],
       });
     });
-    expect(options.isManualResizeActiveRef.current).toBe(false);
+    expect(phaseRef.current).toBe('idle');
   });
 
-  it('re-enables auto-sizing after full drag cycle so data changes trigger measurement', () => {
-    const { resultRef, dirtyColumns, isAutoSizingEnabledRef } = setupHookWithMeasurer();
+  it('returns to idle after full drag cycle so data changes trigger measurement', () => {
+    const { resultRef, dirtyColumns, phaseRef } = setupHookWithMeasurer();
 
-    // 1. Start a drag — auto-sizing should be disabled.
+    // 1. Start a drag — phase should be dragging.
     act(() => {
       resultRef.current!.handleManualResizeEvent({
         type: 'dragStart',
         columns: ['col-a'],
       });
     });
-    expect(isAutoSizingEnabledRef.current).toBe(false);
+    expect(phaseRef.current).toBe('dragging');
 
-    // 2. End the drag — auto-sizing must be re-enabled.
+    // 2. End the drag — phase must return to idle.
     act(() => {
       resultRef.current!.handleManualResizeEvent({
         type: 'dragEnd',
         columns: ['col-a'],
       });
     });
-    expect(isAutoSizingEnabledRef.current).toBe(true);
+    expect(phaseRef.current).toBe('idle');
 
     // 3. Simulate a data change after the drag cycle completes.
     dirtyColumns.clear();
@@ -323,21 +317,21 @@ describe('useDirtyQueue debounce and retry', () => {
       resultRef.current!.markColumnsDirty(['col-a']);
     });
 
-    // col-a must be queued — the auto-sizing gate should be open again.
+    // col-a must be queued — the phase gate should be open again.
     expect(dirtyColumns.has('col-a')).toBe(true);
   });
 
-  it('reset event re-enables auto-sizing and marks all auto columns dirty', () => {
-    const { resultRef, dirtyColumns, isAutoSizingEnabledRef } = setupHookWithMeasurer();
+  it('reset event stays in idle and marks all auto columns dirty', () => {
+    const { resultRef, dirtyColumns, phaseRef } = setupHookWithMeasurer();
 
-    // Disable via dragStart.
+    // Perform a full drag cycle first.
     act(() => {
       resultRef.current!.handleManualResizeEvent({
         type: 'dragStart',
         columns: ['col-a'],
       });
     });
-    expect(isAutoSizingEnabledRef.current).toBe(false);
+    expect(phaseRef.current).toBe('dragging');
     dirtyColumns.clear();
 
     // End drag.
@@ -348,7 +342,7 @@ describe('useDirtyQueue debounce and retry', () => {
       });
     });
 
-    // Reset should re-enable and queue all columns.
+    // Reset should stay in idle and queue all columns.
     act(() => {
       resultRef.current!.handleManualResizeEvent({
         type: 'reset',
@@ -356,7 +350,7 @@ describe('useDirtyQueue debounce and retry', () => {
       });
     });
 
-    expect(isAutoSizingEnabledRef.current).toBe(true);
+    expect(phaseRef.current).toBe('idle');
     // Both auto-width columns should be queued.
     expect(dirtyColumns.has('col-a')).toBe(true);
     expect(dirtyColumns.has('col-b')).toBe(true);
