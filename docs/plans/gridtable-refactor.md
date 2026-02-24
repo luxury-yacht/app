@@ -25,25 +25,27 @@ encompass multiple bug fixes are called out explicitly.
   - Shared `getStableRowId` utility introduced for `aria-activedescendant` (see item 8)
 - **Coverage:** Reorder retention, removal clearing, and insertion stability tests added.
 
-### 2. Fix shortcut scoping so interactive cell content is safe by default
+### 2. ✅ Fix shortcut scoping so interactive cell content is safe by default
 
-- `GridTableBody.tsx:170`, `ui/shortcuts/utils.ts:82`, `ui/shortcuts/context.tsx:266`,
-  `hooks/useGridTableShortcuts.ts:127`
-- The grid wrapper sets `data-allow-shortcuts="true"`, which bypasses the normal
-  "is this an input?" guard. GridTable registers unmodified Enter, Space, arrows,
-  Home/End, PageUp/PageDown.
-- **Impact:** Buttons, links, and inputs embedded in cells have keys intercepted
-  unless every column explicitly opts out.
-- **Scope:**
-  - Centralize one "should GridTable consume this key event?" guard in
-    `useGridTableShortcuts`
-  - Check `event.target` against interactive selectors (input, textarea, select,
-    button, [contenteditable], [role="textbox"]) before consuming
-  - Build on the existing `data-gridtable-shortcut-optout="true"` mechanism
-    (`GridTable.tsx:68`) rather than introducing new attributes
-  - Respect interactive descendants by default — column authors should not need to
-    know about the opt-out mechanism
-- **Coverage gap:** No test covers shortcut behavior inside interactive descendants.
+- `ui/shortcuts/utils.ts:65-76,98-106`
+- The `isInputElement` guard now checks whether the event target is an interactive
+  element (button, input, link, contenteditable, etc.) before allowing the
+  `data-allow-shortcuts="true"` ancestor bypass. Interactive elements inside the
+  grid wrapper are protected from bare-key interception by default. The direct
+  attribute opt-in (element itself carries `data-allow-shortcuts="true"`, e.g.
+  Dropdown's search input) is preserved.
+- **What was fixed:** Previously, the grid wrapper's `data-allow-shortcuts="true"`
+  caused `isInputElement` to return `false` for all descendants, including real
+  interactive elements. Buttons, links, and inputs embedded in cells had Enter,
+  Space, and arrow keys intercepted by GridTable shortcuts.
+- **Scope completed:**
+  - Root cause fixed in shared `isInputElement` (not per-handler guards)
+  - `INTERACTIVE_ELEMENT_SELECTOR` covers input, textarea, select, button,
+    summary, a[href], contenteditable, role="textbox", role="button"
+  - `data-gridtable-shortcut-optout` remains for non-interactive opt-out
+  - Column authors no longer need to know about the opt-out mechanism
+- **Coverage:** 8 unit tests for `isInputElement` with interactive elements
+  inside `data-allow-shortcuts` containers.
 
 ### 3. Fix auto-sizing permanently disabled after manual column resize
 
@@ -261,7 +263,7 @@ Test gaps corresponding to the highest-impact findings. Should be addressed alon
 their respective fixes:
 
 - [x] Focus retention across data reorder/sort/filter refresh (item 1)
-- [ ] Shortcut behavior while focus is inside interactive descendants (item 2)
+- [x] Shortcut behavior while focus is inside interactive descendants (item 2)
 - [ ] Auto-sizing re-enabled after manual drag-resize cycle (item 3)
 - [ ] Row-height cache lookup path in virtualization (item 6)
 - [x] Duplicate ARIA ID generation with similar keys (item 8)
