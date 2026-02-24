@@ -47,22 +47,20 @@ encompass multiple bug fixes are called out explicitly.
 - **Coverage:** 8 unit tests for `isInputElement` with interactive elements
   inside `data-allow-shortcuts` containers.
 
-### 3. Fix auto-sizing permanently disabled after manual column resize
+### 3. ✅ Fix auto-sizing permanently disabled after manual column resize
 
-- `hooks/useGridTableAutoWidthMeasurementQueue.ts:197-203`
-- `dragStart` sets `isAutoSizingEnabledRef = false`. `dragEnd` checks the ref before
-  scheduling a dirty flush — but it's always `false`. Auto-sizing never re-enables
-  until an explicit `autoSize` or `reset` event.
-- **Impact:** After any manual column resize, all auto-width columns stop responding
-  to data changes for the lifetime of the component.
-- **Scope:**
-  - Re-enable `isAutoSizingEnabledRef` on `dragEnd`
-  - Add regression test for full drag cycle (dragStart -> dragEnd -> data change)
-  - Verify no regressions in width persistence flows
-- **Coverage gap:** Existing tests cover dragStart/dragEnd flag behavior but not
-  re-enabling auto-sizing after the cycle.
-- **Note:** If doing the column width state machine refactor (item 13), this fix is
-  subsumed — include it there instead of patching the current code twice.
+- `hooks/useGridTableAutoWidthMeasurementQueue.ts:197-204`
+- `dragEnd` now re-enables `isAutoSizingEnabledRef` and unconditionally schedules
+  a dirty flush, so auto-width columns resume responding to data changes after a
+  manual resize.
+- **What was fixed:** `dragStart` set `isAutoSizingEnabledRef = false` but `dragEnd`
+  never re-enabled it. The dirty flush guard was permanently dead after any drag.
+  All auto-width columns stopped responding to data changes for the lifetime of
+  the component.
+- **Coverage:** Regression test for full drag cycle (dragStart → dragEnd →
+  markColumnsDirty) added.
+- **Note:** If doing the column width state machine refactor (item 13), this area
+  would be replaced entirely.
 
 ### 4. Hover overlay has no z-index, gets occluded by rows
 
@@ -264,6 +262,6 @@ their respective fixes:
 
 - [x] Focus retention across data reorder/sort/filter refresh (item 1)
 - [x] Shortcut behavior while focus is inside interactive descendants (item 2)
-- [ ] Auto-sizing re-enabled after manual drag-resize cycle (item 3)
+- [x] Auto-sizing re-enabled after manual drag-resize cycle (item 3)
 - [ ] Row-height cache lookup path in virtualization (item 6)
 - [x] Duplicate ARIA ID generation with similar keys (item 8)

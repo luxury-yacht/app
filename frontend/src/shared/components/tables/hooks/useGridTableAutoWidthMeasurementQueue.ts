@@ -196,9 +196,10 @@ export function useDirtyQueue<T>({
 
       if (type === 'dragEnd') {
         isManualResizeActiveRef.current = false;
-        if (isAutoSizingEnabledRef.current) {
-          scheduleDirtyFlush(DIRTY_DEBOUNCE_MS);
-        }
+        // Re-enable auto-sizing after the drag completes so that subsequent
+        // data changes can trigger column measurement again.
+        isAutoSizingEnabledRef.current = true;
+        scheduleDirtyFlush(DIRTY_DEBOUNCE_MS);
         return;
       }
 

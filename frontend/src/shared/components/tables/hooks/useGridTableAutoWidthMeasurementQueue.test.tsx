@@ -296,6 +296,37 @@ describe('useDirtyQueue debounce and retry', () => {
     expect(options.isManualResizeActiveRef.current).toBe(false);
   });
 
+  it('re-enables auto-sizing after full drag cycle so data changes trigger measurement', () => {
+    const { resultRef, dirtyColumns, isAutoSizingEnabledRef } = setupHookWithMeasurer();
+
+    // 1. Start a drag — auto-sizing should be disabled.
+    act(() => {
+      resultRef.current!.handleManualResizeEvent({
+        type: 'dragStart',
+        columns: ['col-a'],
+      });
+    });
+    expect(isAutoSizingEnabledRef.current).toBe(false);
+
+    // 2. End the drag — auto-sizing must be re-enabled.
+    act(() => {
+      resultRef.current!.handleManualResizeEvent({
+        type: 'dragEnd',
+        columns: ['col-a'],
+      });
+    });
+    expect(isAutoSizingEnabledRef.current).toBe(true);
+
+    // 3. Simulate a data change after the drag cycle completes.
+    dirtyColumns.clear();
+    act(() => {
+      resultRef.current!.markColumnsDirty(['col-a']);
+    });
+
+    // col-a must be queued — the auto-sizing gate should be open again.
+    expect(dirtyColumns.has('col-a')).toBe(true);
+  });
+
   it('reset event re-enables auto-sizing and marks all auto columns dirty', () => {
     const { resultRef, dirtyColumns, isAutoSizingEnabledRef } = setupHookWithMeasurer();
 
