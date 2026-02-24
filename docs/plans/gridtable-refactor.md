@@ -62,13 +62,14 @@ encompass multiple bug fixes are called out explicitly.
 - **Note:** If doing the column width state machine refactor (item 13), this area
   would be replaced entirely.
 
-### 4. ✅ Hover overlay has no z-index, gets occluded by rows
+### 4. Hover overlay has no z-index, gets occluded by rows
 
-- `styles/components/gridtables.css:322-333`
-- Added `z-index: 2` to `.gridtable-hover-overlay` so it sits above
-  `.gridtable-row` (`z-index: 1`).
-- **What was fixed:** The overlay had no `z-index` and sat before `.gridtable` in
-  DOM order. Rows with opaque backgrounds fully hid the hover highlight.
+- `styles/components/gridtables.css`
+- **Reverted.** Adding `z-index: 2` to the overlay caused cascading regressions
+  (opaque overlay hiding text, accent border flash on focus change, visible
+  row transition desync). The overlay stacking needs a different approach —
+  likely removing `z-index: 1` from rows or restructuring the overlay to
+  render inside each row rather than as a sibling.
 
 ### 5. ✅ Undefined CSS variable `--grid-spacing-md` — zero padding on pagination
 
@@ -124,14 +125,13 @@ encompass multiple bug fixes are called out explicitly.
   `dock-right-open` via cascade, so `margin-right` snapped instantly when both
   panels were open.
 
-### 10. ✅ Focus outline removed with no `:focus-visible` replacement (WCAG 2.4.7)
+### 10. Focus outline removed with no `:focus-visible` replacement (WCAG 2.4.7)
 
 - `styles/components/gridtables.css`
-- Added `.gridtable-wrapper:focus-visible` with a 2px accent outline
-  (`outline-offset: -2px` to stay inside the container).
-- **What was fixed:** The wrapper had `outline: none` on `:focus` with no
-  `:focus-visible` fallback. Keyboard users had no visual indicator that the
-  grid had focus.
+- **Reverted.** The wrapper-level `:focus-visible` outline was redundant with
+  the per-row `gridtable-row--focused` accent border, which already satisfies
+  WCAG 2.4.7. The wrapper outline was visually distracting during keyboard
+  navigation.
 
 ### 11. ✅ Resize handle hover invisible in dark mode
 

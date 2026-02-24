@@ -104,11 +104,6 @@
   outline: none;
 }
 
-.gridtable-wrapper:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
-}
-
 .gridtable-wrapper::-webkit-scrollbar-corner {
   background: var(--grid-bg-primary);
 }
@@ -331,9 +326,6 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   position: absolute;
   left: 0;
   right: 0;
-  /* Must sit above .gridtable-row (z-index: 1) so the hover highlight
-     is not occluded by rows with opaque backgrounds. */
-  z-index: 2;
   pointer-events: none;
   background-color: var(--grid-bg-hover);
   border-bottom: 1px solid var(--grid-border-color);
