@@ -26,7 +26,8 @@ type FocusNavigationOptions<T> = {
 type FocusNavigationResult<T> = {
   focusedRowIndex: number | null;
   focusedRowKey: string | null;
-  setFocusedRowIndex: React.Dispatch<React.SetStateAction<number | null>>;
+  setFocusedRowKey: React.Dispatch<React.SetStateAction<string | null>>;
+  focusByIndex: (index: number) => void;
   isWrapperFocused: boolean;
   isShortcutsSuppressed: boolean;
   shortcutsActive: boolean;
@@ -37,7 +38,6 @@ type FocusNavigationResult<T> = {
   handleRowActivation: (item: T, index: number, source: 'pointer' | 'keyboard') => void;
   handleRowClick: (item: T, index: number, event: React.MouseEvent) => void;
   getRowClassNameWithFocus: (item: T, index: number) => string;
-  clampRowIndex: (value: number) => number;
 };
 
 // Centralizes focus, selection, and keyboard-friendly row activation logic so
@@ -55,26 +55,28 @@ export function useGridTableFocusNavigation<T>({
 }: FocusNavigationOptions<T>): FocusNavigationResult<T> {
   const [isWrapperFocused, setIsWrapperFocused] = useState(false);
   const [isShortcutsSuppressed, setIsShortcutsSuppressed] = useState(false);
-  const [focusedRowIndex, setFocusedRowIndex] = useState<number | null>(null);
+  const [focusedRowKey, setFocusedRowKey] = useState<string | null>(null);
   const pendingPointerFocusRef = useRef(false);
   const lastNavigationMethodRef = useRef<'pointer' | 'keyboard'>('pointer');
 
-  const clampRowIndex = useCallback(
-    (value: number) => {
-      if (tableData.length === 0) {
-        return -1;
-      }
-      return Math.min(Math.max(value, 0), tableData.length - 1);
-    },
-    [tableData.length]
-  );
+  // Derive index from key — the key is the source of truth.
+  const focusedRowIndex = useMemo(() => {
+    if (focusedRowKey == null) return null;
+    const idx = tableData.findIndex((item, i) => keyExtractor(item, i) === focusedRowKey);
+    return idx === -1 ? null : idx;
+  }, [focusedRowKey, keyExtractor, tableData]);
 
-  const focusedRowKey = useMemo(() => {
-    if (focusedRowIndex == null || focusedRowIndex < 0 || focusedRowIndex >= tableData.length) {
-      return null;
-    }
-    return keyExtractor(tableData[focusedRowIndex], focusedRowIndex);
-  }, [focusedRowIndex, keyExtractor, tableData]);
+  // Helper to set focus by index — resolves to key immediately.
+  const focusByIndex = useCallback(
+    (index: number) => {
+      if (index < 0 || index >= tableData.length) {
+        setFocusedRowKey(null);
+        return;
+      }
+      setFocusedRowKey(keyExtractor(tableData[index], index));
+    },
+    [keyExtractor, tableData]
+  );
 
   const handleWrapperFocus = useCallback(
     (event: React.FocusEvent<HTMLDivElement>) => {
@@ -83,7 +85,7 @@ export function useGridTableFocusNavigation<T>({
       setIsShortcutsSuppressed(shouldSuppress);
 
       if (shouldSuppress) {
-        setFocusedRowIndex(null);
+        setFocusedRowKey(null);
         return;
       }
 
@@ -94,15 +96,16 @@ export function useGridTableFocusNavigation<T>({
 
       if (tableData.length > 0) {
         lastNavigationMethodRef.current = 'keyboard';
-        setFocusedRowIndex((prev) => {
-          if (prev == null || prev < 0 || prev >= tableData.length) {
-            return 0;
+        setFocusedRowKey((prev) => {
+          if (prev != null) {
+            const stillExists = tableData.some((item, i) => keyExtractor(item, i) === prev);
+            if (stillExists) return prev;
           }
-          return prev;
+          return keyExtractor(tableData[0], 0);
         });
       }
     },
-    [isShortcutOptOutTarget, tableData.length]
+    [isShortcutOptOutTarget, keyExtractor, tableData]
   );
 
   const handleWrapperBlur = useCallback((_event: React.FocusEvent<HTMLDivElement>) => {
@@ -116,13 +119,14 @@ export function useGridTableFocusNavigation<T>({
     (item: T, index: number, source: 'pointer' | 'keyboard') => {
       wrapperRef.current?.focus();
       lastNavigationMethodRef.current = source;
-      setFocusedRowIndex(clampRowIndex(index));
+      const key = keyExtractor(item, index);
+      setFocusedRowKey(key);
 
       if (source === 'keyboard') {
         onRowClick?.(item);
       }
     },
-    [clampRowIndex, onRowClick, wrapperRef]
+    [keyExtractor, onRowClick, wrapperRef]
   );
 
   const handleRowClick = useCallback(
@@ -171,37 +175,28 @@ export function useGridTableFocusNavigation<T>({
   }, [wrapperRef]);
 
   useEffect(() => {
-    if (focusedRowIndex == null) {
+    if (focusedRowIndex == null || focusedRowKey == null) {
       return;
     }
-    if (tableData.length === 0) {
-      setFocusedRowIndex(null);
-      return;
-    }
-    const clamped = clampRowIndex(focusedRowIndex);
-    if (clamped !== focusedRowIndex) {
-      setFocusedRowIndex(clamped);
-      return;
-    }
-    const rowKey = keyExtractor(tableData[clamped], clamped);
     const escapedKey =
-      typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(rowKey) : rowKey;
-    // Both data-row-key and .gridtable-row are on the same element, so use
-    // a compound selector (not a descendant selector).
+      typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+        ? CSS.escape(focusedRowKey)
+        : focusedRowKey;
     const currentRow = wrapperRef.current?.querySelector<HTMLElement>(
       `.gridtable-row[data-row-key="${escapedKey}"]`
     );
     if (currentRow && currentRow instanceof HTMLDivElement) {
       updateHoverForElement(currentRow);
     }
-  }, [clampRowIndex, focusedRowIndex, keyExtractor, tableData, updateHoverForElement, wrapperRef]);
+  }, [focusedRowIndex, focusedRowKey, updateHoverForElement, wrapperRef]);
 
   const shortcutsActive = isWrapperFocused && !isShortcutsSuppressed;
 
   return {
     focusedRowIndex,
     focusedRowKey,
-    setFocusedRowIndex,
+    setFocusedRowKey,
+    focusByIndex,
     isWrapperFocused,
     isShortcutsSuppressed,
     shortcutsActive,
@@ -212,6 +207,5 @@ export function useGridTableFocusNavigation<T>({
     handleRowActivation,
     handleRowClick,
     getRowClassNameWithFocus,
-    clampRowIndex,
   };
 }

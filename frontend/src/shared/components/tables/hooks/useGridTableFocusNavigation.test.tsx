@@ -17,7 +17,8 @@ import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/use
 type Row = { id: string };
 
 interface HarnessHandle {
-  setFocusedRowIndex: React.Dispatch<React.SetStateAction<number | null>>;
+  setFocusedRowKey: React.Dispatch<React.SetStateAction<string | null>>;
+  focusByIndex: (index: number) => void;
   focusedRowIndex: number | null;
   focusedRowKey: string | null;
 }
@@ -46,7 +47,8 @@ const Harness = forwardRef<HarnessHandle, HarnessProps>(
     });
 
     useImperativeHandle(ref, () => ({
-      setFocusedRowIndex: result.setFocusedRowIndex,
+      setFocusedRowKey: result.setFocusedRowKey,
+      focusByIndex: result.focusByIndex,
       focusedRowIndex: result.focusedRowIndex,
       focusedRowKey: result.focusedRowKey,
     }));
@@ -95,9 +97,9 @@ describe('useGridTableFocusNavigation', () => {
       root.render(<Harness ref={ref} tableData={data} updateHoverForElement={updateHover} />);
     });
 
-    // Focus row index 1 (row-b).
+    // Focus row 'row-b' by key.
     await act(async () => {
-      ref.current!.setFocusedRowIndex(1);
+      ref.current!.setFocusedRowKey('row-b');
     });
 
     // The hook should have found the DOM element via compound selector and
@@ -121,7 +123,7 @@ describe('useGridTableFocusNavigation', () => {
     });
 
     await act(async () => {
-      ref.current!.setFocusedRowIndex(0);
+      ref.current!.setFocusedRowKey('ns/pod:container');
     });
 
     expect(updateHover).toHaveBeenCalled();
@@ -168,7 +170,8 @@ const ExtendedHarness = forwardRef<ExtendedHandle, ExtendedProps>(
     });
 
     useImperativeHandle(ref, () => ({
-      setFocusedRowIndex: result.setFocusedRowIndex,
+      setFocusedRowKey: result.setFocusedRowKey,
+      focusByIndex: result.focusByIndex,
       focusedRowIndex: result.focusedRowIndex,
       focusedRowKey: result.focusedRowKey,
       shortcutsActive: result.shortcutsActive,
@@ -234,6 +237,7 @@ describe('useGridTableFocusNavigation – pointer vs keyboard activation', () =>
     });
     expect(onRowClick).not.toHaveBeenCalled();
     expect(ref.current!.focusedRowIndex).toBe(0);
+    expect(ref.current!.focusedRowKey).toBe('a');
     expect(ref.current!.lastNavigationMethodRef.current).toBe('pointer');
 
     // Keyboard activation SHOULD call onRowClick.
@@ -243,6 +247,7 @@ describe('useGridTableFocusNavigation – pointer vs keyboard activation', () =>
     expect(onRowClick).toHaveBeenCalledTimes(1);
     expect(onRowClick).toHaveBeenCalledWith(data[1]);
     expect(ref.current!.focusedRowIndex).toBe(1);
+    expect(ref.current!.focusedRowKey).toBe('b');
     expect(ref.current!.lastNavigationMethodRef.current).toBe('keyboard');
   });
 });
@@ -296,6 +301,7 @@ describe('useGridTableFocusNavigation – shortcut suppression', () => {
 
     expect(ref.current!.isShortcutsSuppressed).toBe(true);
     expect(ref.current!.shortcutsActive).toBe(false);
+    expect(ref.current!.focusedRowKey).toBeNull();
     expect(ref.current!.focusedRowIndex).toBeNull();
   });
 
@@ -320,6 +326,7 @@ describe('useGridTableFocusNavigation – shortcut suppression', () => {
     expect(ref.current!.shortcutsActive).toBe(true);
     // First focus with no prior focused row should default to index 0.
     expect(ref.current!.focusedRowIndex).toBe(0);
+    expect(ref.current!.focusedRowKey).toBe('a');
   });
 });
 
@@ -342,7 +349,7 @@ describe('useGridTableFocusNavigation – data-shrink clamping', () => {
     container.remove();
   });
 
-  it('clamps focused row index when data shrinks below the current index', async () => {
+  it('clears focus when focused row disappears from shrunken data', async () => {
     const updateHover = vi.fn();
     const initialData: Row[] = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }, { id: 'e' }];
     const ref = React.createRef<ExtendedHandle>();
@@ -353,13 +360,13 @@ describe('useGridTableFocusNavigation – data-shrink clamping', () => {
       );
     });
 
-    // Focus the last row (index 4).
+    // Focus the last row by key.
     await act(async () => {
-      ref.current!.setFocusedRowIndex(4);
+      ref.current!.setFocusedRowKey('e');
     });
     expect(ref.current!.focusedRowIndex).toBe(4);
 
-    // Shrink data to 2 rows — focused index 4 is out of range.
+    // Shrink data to 2 rows — focused key 'e' is no longer present.
     const shrunkData: Row[] = [{ id: 'a' }, { id: 'b' }];
     await act(async () => {
       root.render(
@@ -367,11 +374,13 @@ describe('useGridTableFocusNavigation – data-shrink clamping', () => {
       );
     });
 
-    // Should be clamped to last valid index (1).
-    expect(ref.current!.focusedRowIndex).toBe(1);
+    // With key-based tracking, key stays in state but derived index resolves to null
+    // since the focused key is no longer in the data.
+    expect(ref.current!.focusedRowKey).toBe('e');
+    expect(ref.current!.focusedRowIndex).toBeNull();
   });
 
-  it('nulls focused row index when data becomes empty', async () => {
+  it('resolves focused row index to null when data becomes empty', async () => {
     const updateHover = vi.fn();
     const initialData: Row[] = [{ id: 'a' }, { id: 'b' }];
     const ref = React.createRef<ExtendedHandle>();
@@ -382,9 +391,11 @@ describe('useGridTableFocusNavigation – data-shrink clamping', () => {
       );
     });
 
+    // Set focus by key.
     await act(async () => {
-      ref.current!.setFocusedRowIndex(1);
+      ref.current!.setFocusedRowKey('b');
     });
+    expect(ref.current!.focusedRowKey).toBe('b');
     expect(ref.current!.focusedRowIndex).toBe(1);
 
     // Empty the data.
@@ -392,6 +403,109 @@ describe('useGridTableFocusNavigation – data-shrink clamping', () => {
       root.render(<ExtendedHarness ref={ref} tableData={[]} updateHoverForElement={updateHover} />);
     });
 
+    // Key is still set in state, but index resolves to null since data is empty.
+    expect(ref.current!.focusedRowKey).toBe('b');
     expect(ref.current!.focusedRowIndex).toBeNull();
+  });
+});
+
+describe('useGridTableFocusNavigation – key-based focus stability', () => {
+  let container: HTMLDivElement;
+  let root: ReactDOM.Root;
+
+  beforeAll(() => {
+    (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+  });
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = ReactDOM.createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('focus follows the same logical row when data is reordered', async () => {
+    const updateHover = vi.fn();
+    const original: Row[] = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    const ref = React.createRef<ExtendedHandle>();
+
+    await act(async () => {
+      root.render(
+        <ExtendedHarness ref={ref} tableData={original} updateHoverForElement={updateHover} />
+      );
+    });
+
+    await act(async () => {
+      ref.current!.setFocusedRowKey('b');
+    });
+    expect(ref.current!.focusedRowKey).toBe('b');
+    expect(ref.current!.focusedRowIndex).toBe(1);
+
+    const reordered: Row[] = [{ id: 'a' }, { id: 'c' }, { id: 'b' }];
+    await act(async () => {
+      root.render(
+        <ExtendedHarness ref={ref} tableData={reordered} updateHoverForElement={updateHover} />
+      );
+    });
+
+    expect(ref.current!.focusedRowKey).toBe('b');
+    expect(ref.current!.focusedRowIndex).toBe(2);
+  });
+
+  it('clears derived index when the focused row is removed from data', async () => {
+    const updateHover = vi.fn();
+    const original: Row[] = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    const ref = React.createRef<ExtendedHandle>();
+
+    await act(async () => {
+      root.render(
+        <ExtendedHarness ref={ref} tableData={original} updateHoverForElement={updateHover} />
+      );
+    });
+
+    await act(async () => {
+      ref.current!.setFocusedRowKey('b');
+    });
+    expect(ref.current!.focusedRowIndex).toBe(1);
+
+    const without: Row[] = [{ id: 'a' }, { id: 'c' }];
+    await act(async () => {
+      root.render(
+        <ExtendedHarness ref={ref} tableData={without} updateHoverForElement={updateHover} />
+      );
+    });
+
+    expect(ref.current!.focusedRowIndex).toBeNull();
+  });
+
+  it('focus follows key when new rows are inserted before the focused row', async () => {
+    const updateHover = vi.fn();
+    const original: Row[] = [{ id: 'a' }, { id: 'b' }];
+    const ref = React.createRef<ExtendedHandle>();
+
+    await act(async () => {
+      root.render(
+        <ExtendedHarness ref={ref} tableData={original} updateHoverForElement={updateHover} />
+      );
+    });
+
+    await act(async () => {
+      ref.current!.setFocusedRowKey('b');
+    });
+    expect(ref.current!.focusedRowIndex).toBe(1);
+
+    const expanded: Row[] = [{ id: 'x' }, { id: 'y' }, { id: 'a' }, { id: 'b' }];
+    await act(async () => {
+      root.render(
+        <ExtendedHarness ref={ref} tableData={expanded} updateHoverForElement={updateHover} />
+      );
+    });
+
+    expect(ref.current!.focusedRowKey).toBe('b');
+    expect(ref.current!.focusedRowIndex).toBe(3);
   });
 });

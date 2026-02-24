@@ -239,7 +239,8 @@ const GridTable = memo(function GridTable<T>({
   const {
     focusedRowIndex,
     focusedRowKey,
-    setFocusedRowIndex,
+    setFocusedRowKey,
+    focusByIndex,
     isWrapperFocused,
     shortcutsActive,
     lastNavigationMethodRef,
@@ -248,7 +249,6 @@ const GridTable = memo(function GridTable<T>({
     handleRowActivation,
     handleRowClick,
     getRowClassNameWithFocus,
-    clampRowIndex,
   } = useGridTableFocusNavigation<T>({
     tableData,
     keyExtractor,
@@ -286,7 +286,7 @@ const GridTable = memo(function GridTable<T>({
       // Only reset keyboard focus when transitioning to mouse while table is focused.
       // When unfocused, preserve the selection.
       if (isWrapperFocused && !shortcutsActive && !contextMenuActiveRef.current) {
-        setFocusedRowIndex(null);
+        setFocusedRowKey(null);
       }
       handleRowMouseEnter(element);
     },
@@ -295,7 +295,7 @@ const GridTable = memo(function GridTable<T>({
       handleRowMouseEnter,
       isWrapperFocused,
       shortcutsActive,
-      setFocusedRowIndex,
+      setFocusedRowKey,
     ]
   );
 
@@ -317,14 +317,12 @@ const GridTable = memo(function GridTable<T>({
         return false;
       }
       lastNavigationMethodRef.current = 'keyboard';
-      setFocusedRowIndex((prev) => {
-        const base = prev == null ? (delta > 0 ? -1 : tableData.length) : prev;
-        const next = clampRowIndex(base + delta);
-        return next;
-      });
+      const base = focusedRowIndex == null ? (delta > 0 ? -1 : tableData.length) : focusedRowIndex;
+      const next = Math.min(Math.max(base + delta, 0), tableData.length - 1);
+      focusByIndex(next);
       return true;
     },
-    [clampRowIndex, tableData.length, lastNavigationMethodRef, setFocusedRowIndex]
+    [focusByIndex, focusedRowIndex, tableData.length, lastNavigationMethodRef]
   );
 
   const jumpToIndex = useCallback(
@@ -332,15 +330,12 @@ const GridTable = memo(function GridTable<T>({
       if (tableData.length === 0) {
         return false;
       }
-      const next = clampRowIndex(index);
-      if (next === -1) {
-        return false;
-      }
+      const clamped = Math.min(Math.max(index, 0), tableData.length - 1);
       lastNavigationMethodRef.current = 'keyboard';
-      setFocusedRowIndex(next);
+      focusByIndex(clamped);
       return true;
     },
-    [clampRowIndex, tableData.length, lastNavigationMethodRef, setFocusedRowIndex]
+    [focusByIndex, tableData.length, lastNavigationMethodRef]
   );
 
   useGridTableKeyboardScopes({
@@ -351,7 +346,7 @@ const GridTable = memo(function GridTable<T>({
     filterFocusIndexRef,
     wrapperRef,
     tableDataLength: tableData.length,
-    focusedRowIndex,
+    focusedRowKey,
     jumpToIndex,
   });
 

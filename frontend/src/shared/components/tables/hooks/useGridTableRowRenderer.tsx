@@ -8,6 +8,7 @@
 import { useCallback } from 'react';
 import type React from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
+import { getStableRowId } from '@shared/components/tables/GridTable.utils';
 
 // Returns row/cell render callbacks for GridTable, wiring hover handlers,
 // context menus, and slotting for virtualization measurements.
@@ -97,7 +98,7 @@ export function useGridTableRowRenderer<T>({
         : undefined;
 
       // Build a DOM-safe id for aria-activedescendant references.
-      const rowId = `gridtable-row-${rowKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
+      const rowId = getStableRowId(rowKey);
 
       return (
         <div

@@ -137,8 +137,8 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
   const openFocusedRowContextMenu = useCallback(() => {
     if (
       !enableContextMenu ||
+      focusedRowKey == null ||
       focusedRowIndex == null ||
-      focusedRowIndex < 0 ||
       focusedRowIndex >= tableData.length
     ) {
       return false;

@@ -14,6 +14,7 @@ import {
   defaultGetNamespace,
   defaultGetSearchText,
   detectWidthUnit,
+  getStableRowId,
   getTextContent,
   isFixedColumnKey,
   isKindColumnKey,
@@ -101,5 +102,31 @@ describe('GridTable utils', () => {
     expect(keyA).not.toBe(keyB);
     expect(keyA).toBe('cluster-a|app');
     expect(keyB).toBe('cluster-b|app');
+  });
+
+  describe('getStableRowId', () => {
+    it('returns a prefixed id for simple keys', () => {
+      expect(getStableRowId('row-a')).toBe('gridtable-row-row-a');
+    });
+
+    it('hex-encodes special characters to preserve uniqueness', () => {
+      const idSlash = getStableRowId('a/b');
+      const idColon = getStableRowId('a:b');
+      const idPipe = getStableRowId('a|b');
+      expect(idSlash).not.toBe(idColon);
+      expect(idSlash).not.toBe(idPipe);
+      expect(idColon).not.toBe(idPipe);
+    });
+
+    it('handles cluster-scoped keys with pipe separator', () => {
+      const id = getStableRowId('cluster-1|pod:default/nginx');
+      expect(id).toMatch(/^gridtable-row-/);
+      expect(id).toMatch(/^[a-zA-Z][a-zA-Z0-9_-]*$/);
+    });
+
+    it('produces identical output for identical input', () => {
+      const key = 'cluster-1|pod:ns/name';
+      expect(getStableRowId(key)).toBe(getStableRowId(key));
+    });
   });
 });

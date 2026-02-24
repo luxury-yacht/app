@@ -18,7 +18,7 @@ interface GridTableKeyboardOptions {
   filterFocusIndexRef: RefObject<number | null>;
   wrapperRef: RefObject<HTMLDivElement | null>;
   tableDataLength: number;
-  focusedRowIndex: number | null;
+  focusedRowKey: string | null;
   jumpToIndex: (index: number) => boolean;
 }
 
@@ -30,7 +30,7 @@ export const useGridTableKeyboardScopes = ({
   filterFocusIndexRef,
   wrapperRef,
   tableDataLength,
-  focusedRowIndex,
+  focusedRowKey,
   jumpToIndex,
 }: GridTableKeyboardOptions) => {
   const getFilterTargets = useCallback((): HTMLElement[] => {
@@ -145,12 +145,12 @@ export const useGridTableKeyboardScopes = ({
       if (element) {
         element.focus();
       }
-      if (focusedRowIndex === null && tableDataLength > 0) {
+      if (focusedRowKey === null && tableDataLength > 0) {
         const targetIndex = direction === 'backward' ? tableDataLength - 1 : 0;
         jumpToIndex(targetIndex);
       }
     },
-    [filterFocusIndexRef, focusedRowIndex, jumpToIndex, tableDataLength, wrapperRef]
+    [filterFocusIndexRef, focusedRowKey, jumpToIndex, tableDataLength, wrapperRef]
   );
 
   useKeyboardNavigationScope({

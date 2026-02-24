@@ -8,6 +8,7 @@
 import React, { useRef } from 'react';
 import type { RefObject } from 'react';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import { getStableRowId } from '@shared/components/tables/GridTable.utils';
 import GridTablePagination from '@shared/components/tables/GridTablePagination';
 
 interface HoverState {
@@ -170,9 +171,7 @@ function GridTableBody<T>({
       data-allow-shortcuts="true"
       role="grid"
       aria-busy={loading || undefined}
-      aria-activedescendant={
-        focusedRowKey ? `gridtable-row-${focusedRowKey.replace(/[^a-zA-Z0-9_-]/g, '_')}` : undefined
-      }
+      aria-activedescendant={focusedRowKey ? getStableRowId(focusedRowKey) : undefined}
     >
       <div
         className={[

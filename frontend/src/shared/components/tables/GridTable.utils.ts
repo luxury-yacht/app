@@ -90,6 +90,17 @@ export const buildClusterScopedKey = (row: any, baseKey: string): string => {
   );
 };
 
+// Deterministic, collision-free DOM id from a row key.
+// Hex-encodes characters outside [a-zA-Z0-9_-] so distinct keys always
+// produce distinct IDs — unlike the old lossy replace-with-underscore approach.
+export const getStableRowId = (rowKey: string): string => {
+  const safe = rowKey.replace(
+    /[^a-zA-Z0-9_-]/g,
+    (ch) => '_x' + ch.charCodeAt(0).toString(16) + '_'
+  );
+  return `gridtable-row-${safe}`;
+};
+
 export const defaultGetSearchText = (row: any): string[] => {
   if (!row || typeof row !== 'object') {
     return [];
