@@ -62,21 +62,21 @@ encompass multiple bug fixes are called out explicitly.
 - **Note:** If doing the column width state machine refactor (item 13), this area
   would be replaced entirely.
 
-### 4. Hover overlay has no z-index, gets occluded by rows
+### 4. ✅ Hover overlay has no z-index, gets occluded by rows
 
 - `styles/components/gridtables.css:322-333`
-- The overlay sits before `.gridtable` in DOM order with no `z-index`. Rows have
-  `z-index: 1`, so any row with an opaque background fully hides the hover highlight.
-- **Impact:** Hover feedback is invisible — a core visual interaction is broken.
-- **Fix:** Add `z-index: 2` to `.gridtable-hover-overlay`.
+- Added `z-index: 2` to `.gridtable-hover-overlay` so it sits above
+  `.gridtable-row` (`z-index: 1`).
+- **What was fixed:** The overlay had no `z-index` and sat before `.gridtable` in
+  DOM order. Rows with opaque backgrounds fully hid the hover highlight.
 
-### 5. Undefined CSS variable `--grid-spacing-md` — zero padding on pagination
+### 5. ✅ Undefined CSS variable `--grid-spacing-md` — zero padding on pagination
 
-- `styles/components/gridtables.css:479`
-- `:root` defines `--grid-spacing-xs` and `--grid-spacing-sm` but never
-  `--grid-spacing-md`. No fallback, so it resolves to `0`.
-- **Impact:** Pagination footer has zero vertical padding — visually crushed.
-- **Fix:** Add `--grid-spacing-md: var(--spacing-md);` to the `:root` block.
+- `styles/components/gridtables.css:72`
+- Added `--grid-spacing-md: var(--spacing-md);` to the `:root` block alongside
+  the existing `xs` and `sm` definitions.
+- **What was fixed:** `--grid-spacing-md` was used in the pagination footer
+  padding but never defined, resolving to `0` and visually crushing the footer.
 
 ---
 

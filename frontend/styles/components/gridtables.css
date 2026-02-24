@@ -69,6 +69,7 @@
   /* Spacing */
   --grid-spacing-xs: var(--spacing-xs);
   --grid-spacing-sm: var(--spacing-sm);
+  --grid-spacing-md: var(--spacing-md);
   --grid-spacing-cell-x: 1rem;
   --grid-spacing-cell-y: var(--spacing-sm);
 
@@ -323,6 +324,9 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   position: absolute;
   left: 0;
   right: 0;
+  /* Must sit above .gridtable-row (z-index: 1) so the hover highlight
+     is not occluded by rows with opaque backgrounds. */
+  z-index: 2;
   pointer-events: none;
   background-color: var(--grid-bg-hover);
   border-bottom: 1px solid var(--grid-border-color);
