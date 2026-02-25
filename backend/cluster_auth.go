@@ -45,7 +45,11 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 			"clusterName": clusterName,
 		})
 		// Rebuild only this cluster's subsystem
-		go a.rebuildClusterSubsystem(clusterID)
+		go func() {
+			a.kubeconfigChangeMu.Lock()
+			defer a.kubeconfigChangeMu.Unlock()
+			a.rebuildClusterSubsystem(clusterID)
+		}()
 
 	case authstate.StateRecovering:
 		if a.logger != nil {
@@ -58,7 +62,11 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 			"reason":      reason,
 		})
 		// Teardown only this cluster's subsystem
-		go a.teardownClusterSubsystem(clusterID)
+		go func() {
+			a.kubeconfigChangeMu.Lock()
+			defer a.kubeconfigChangeMu.Unlock()
+			a.teardownClusterSubsystem(clusterID)
+		}()
 
 	case authstate.StateInvalid:
 		if a.logger != nil {

@@ -347,6 +347,9 @@ func (a *App) saveAppSettings() error {
 
 // ClearAppState deletes persisted state files and resets in-memory caches for a clean restart.
 func (a *App) ClearAppState() error {
+	a.kubeconfigChangeMu.Lock()
+	defer a.kubeconfigChangeMu.Unlock()
+
 	if err := a.clearKubeconfigSelection(); err != nil {
 		return err
 	}
@@ -371,7 +374,9 @@ func (a *App) ClearAppState() error {
 		errs = append(errs, err)
 	}
 
+	a.settingsMu.Lock()
 	a.appSettings = nil
+	a.settingsMu.Unlock()
 	a.windowSettings = nil
 
 	if len(errs) > 0 {
@@ -390,21 +395,28 @@ func removeFileIfExists(path string) error {
 }
 
 func (a *App) GetAppSettings() (*AppSettings, error) {
-	if a.appSettings != nil {
-		return a.appSettings, nil
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return getDefaultAppSettings(), nil
+		}
 	}
 
-	if err := a.loadAppSettings(); err != nil {
-		return getDefaultAppSettings(), nil
-	}
-
-	return a.appSettings, nil
+	cp := *a.appSettings
+	cp.SelectedKubeconfigs = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
+	cp.Themes = append([]Theme(nil), a.appSettings.Themes...)
+	return &cp, nil
 }
 
 func (a *App) SetTheme(theme string) error {
 	if theme != "light" && theme != "dark" && theme != "system" {
 		return fmt.Errorf("invalid theme: %s", theme)
 	}
+
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
 
 	if a.appSettings == nil {
 		if err := a.loadAppSettings(); err != nil {
@@ -418,6 +430,9 @@ func (a *App) SetTheme(theme string) error {
 }
 
 func (a *App) SetUseShortResourceNames(useShort bool) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
 	if a.appSettings == nil {
 		if err := a.loadAppSettings(); err != nil {
 			return err
@@ -431,6 +446,9 @@ func (a *App) SetUseShortResourceNames(useShort bool) error {
 
 // SetAutoRefreshEnabled persists the auto-refresh preference.
 func (a *App) SetAutoRefreshEnabled(enabled bool) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
 	if a.appSettings == nil {
 		if err := a.loadAppSettings(); err != nil {
 			return err
@@ -444,6 +462,9 @@ func (a *App) SetAutoRefreshEnabled(enabled bool) error {
 
 // SetBackgroundRefreshEnabled persists the background refresh preference.
 func (a *App) SetBackgroundRefreshEnabled(enabled bool) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
 	if a.appSettings == nil {
 		if err := a.loadAppSettings(); err != nil {
 			return err
@@ -460,6 +481,9 @@ func (a *App) SetGridTablePersistenceMode(mode string) error {
 	if mode != "shared" && mode != "namespaced" {
 		return fmt.Errorf("invalid grid table persistence mode: %s", mode)
 	}
+
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
 
 	if a.appSettings == nil {
 		if err := a.loadAppSettings(); err != nil {
@@ -576,6 +600,9 @@ func (a *App) SetPaletteTint(theme string, hue, saturation, brightness int) erro
 		brightness = 50
 	}
 
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
 	if a.appSettings == nil {
 		if err := a.loadAppSettings(); err != nil {
 			return err
@@ -610,6 +637,9 @@ func (a *App) SetAccentColor(theme string, color string) error {
 		return fmt.Errorf("invalid accent color format: %s (expected #rrggbb)", color)
 	}
 
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
 	if a.appSettings == nil {
 		if err := a.loadAppSettings(); err != nil {
 			return err
@@ -627,12 +657,12 @@ func (a *App) SetAccentColor(theme string, color string) error {
 	return a.saveAppSettings()
 }
 
-// syncThemesCache updates the in-memory appSettings cache with the current
+// syncThemesCacheLocked updates the in-memory appSettings cache with the current
 // themes list so that saveAppSettings (used by SetPaletteTint, SetAccentColor,
 // etc.) does not overwrite disk-persisted themes with stale cached data.
-func (a *App) syncThemesCache(themes []Theme) {
+func (a *App) syncThemesCacheLocked(themes []Theme) {
 	if a.appSettings != nil {
-		a.appSettings.Themes = themes
+		a.appSettings.Themes = append([]Theme(nil), themes...)
 	}
 }
 
@@ -658,6 +688,9 @@ func (a *App) SaveTheme(theme Theme) error {
 		return fmt.Errorf("theme name is required")
 	}
 
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
 	settings, err := a.loadSettingsFile()
 	if err != nil {
 		return fmt.Errorf("loading settings: %w", err)
@@ -678,12 +711,15 @@ func (a *App) SaveTheme(theme Theme) error {
 	if err := a.saveSettingsFile(settings); err != nil {
 		return err
 	}
-	a.syncThemesCache(settings.Preferences.Themes)
+	a.syncThemesCacheLocked(settings.Preferences.Themes)
 	return nil
 }
 
 // DeleteTheme removes a theme from the library by ID.
 func (a *App) DeleteTheme(id string) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
 	settings, err := a.loadSettingsFile()
 	if err != nil {
 		return fmt.Errorf("loading settings: %w", err)
@@ -708,13 +744,16 @@ func (a *App) DeleteTheme(id string) error {
 	if err := a.saveSettingsFile(settings); err != nil {
 		return err
 	}
-	a.syncThemesCache(settings.Preferences.Themes)
+	a.syncThemesCacheLocked(settings.Preferences.Themes)
 	return nil
 }
 
 // ReorderThemes sets the theme ordering. The ids slice must contain exactly the
 // same IDs as the current theme list (first-match priority depends on order).
 func (a *App) ReorderThemes(ids []string) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
 	settings, err := a.loadSettingsFile()
 	if err != nil {
 		return fmt.Errorf("loading settings: %w", err)
@@ -742,7 +781,7 @@ func (a *App) ReorderThemes(ids []string) error {
 	if err := a.saveSettingsFile(settings); err != nil {
 		return err
 	}
-	a.syncThemesCache(settings.Preferences.Themes)
+	a.syncThemesCacheLocked(settings.Preferences.Themes)
 	return nil
 }
 
@@ -750,6 +789,9 @@ func (a *App) ReorderThemes(ids []string) error {
 // active settings fields, then persists. The frontend re-reads settings to
 // pick up the changes.
 func (a *App) ApplyTheme(id string) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
 	settings, err := a.loadSettingsFile()
 	if err != nil {
 		return fmt.Errorf("loading settings: %w", err)
@@ -790,7 +832,7 @@ func (a *App) ApplyTheme(id string) error {
 		a.appSettings.PaletteBrightnessDark = theme.PaletteBrightnessDark
 		a.appSettings.AccentColorLight = theme.AccentColorLight
 		a.appSettings.AccentColorDark = theme.AccentColorDark
-		a.appSettings.Themes = settings.Preferences.Themes
+		a.appSettings.Themes = append([]Theme(nil), settings.Preferences.Themes...)
 	}
 	return nil
 }

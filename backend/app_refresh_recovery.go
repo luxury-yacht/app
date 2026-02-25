@@ -274,6 +274,9 @@ func (a *App) recordClusterTransportSuccess(clusterID string) {
 // runClusterTransportRebuild performs a transport rebuild for a specific cluster.
 // It uses the existing rebuildClusterSubsystem which rebuilds only that cluster.
 func (a *App) runClusterTransportRebuild(clusterID, reason string, cause error) {
+	a.kubeconfigChangeMu.Lock()
+	defer a.kubeconfigChangeMu.Unlock()
+
 	state := a.getTransportState(clusterID)
 
 	defer func() {

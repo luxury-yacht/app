@@ -20,6 +20,7 @@ import {
   GetSelectedKubeconfigs,
   SetSelectedKubeconfigs,
 } from '@wailsjs/go/backend/App';
+import { EventsOn } from '@wailsjs/runtime/runtime';
 import { errorHandler } from '@utils/errorHandler';
 import { types } from '@wailsjs/go/models';
 import {
@@ -358,6 +359,19 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   // Load kubeconfigs on mount
   useEffect(() => {
     loadKubeconfigs();
+  }, [loadKubeconfigs]);
+
+  // Listen for backend kubeconfig watcher refresh events.
+  useEffect(() => {
+    const cancel = EventsOn('kubeconfig:available-changed', () => {
+      void loadKubeconfigs();
+    });
+
+    return () => {
+      if (typeof cancel === 'function') {
+        cancel();
+      }
+    };
   }, [loadKubeconfigs]);
 
   // Run GridTable persistence GC when kubeconfigs change or selection changes

@@ -125,7 +125,7 @@ func TestApp_discoverKubeconfigs(t *testing.T) {
 					// Check that default config is marked as default
 					foundDefault := false
 					for _, kc := range app.availableKubeconfigs {
-						if kc.Name == "default" {
+						if kc.Name == "config" {
 							assert.True(t, kc.IsDefault)
 							foundDefault = true
 						}
@@ -159,7 +159,7 @@ func TestApp_GetKubeconfigs(t *testing.T) {
 	configs, err := app.GetKubeconfigs()
 	assert.NoError(t, err)
 	assert.Len(t, configs, 1)
-	assert.Equal(t, "default", configs[0].Name)
+	assert.Equal(t, "config", configs[0].Name)
 	assert.True(t, configs[0].IsDefault)
 
 	// Test that subsequent calls return cached results
@@ -343,8 +343,10 @@ func TestApp_SetKubeconfig(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, []string{tt.kubeconfigPath}, app.selectedKubeconfigs)
 			}
-			// Ensure refresh listeners don't leak across subtests.
+			// Serialize teardown with auth/watcher mutation paths under race mode.
+			app.kubeconfigChangeMu.Lock()
 			app.teardownRefreshSubsystem()
+			app.kubeconfigChangeMu.Unlock()
 		})
 	}
 }
@@ -372,8 +374,10 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 	assert.Equal(t, selections, app.selectedKubeconfigs)
 	require.NotNil(t, app.appSettings)
 	assert.Equal(t, selections, app.appSettings.SelectedKubeconfigs)
-	// Ensure refresh listeners don't leak across tests.
+	// Serialize teardown with auth/watcher mutation paths under race mode.
+	app.kubeconfigChangeMu.Lock()
 	app.teardownRefreshSubsystem()
+	app.kubeconfigChangeMu.Unlock()
 }
 
 func TestApp_SetSelectedKubeconfigsAllowsSameContextNameFromDifferentFiles(t *testing.T) {

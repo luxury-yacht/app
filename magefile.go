@@ -310,6 +310,12 @@ func (Test) BackendCoverage() error {
 	return sh.RunV("go", "test", "./...", "-coverprofile="+backendCoverageFile)
 }
 
+// Runs Go tests with the race detector.
+func (Test) Race() error {
+	fmt.Println("\n🔎 Running Go tests with race detector...")
+	return sh.RunV("go", "test", "./...", "-race")
+}
+
 // Runs frontend tests
 func (Test) Frontend() error {
 	fmt.Println("\n🔎 Running frontend tests...")
