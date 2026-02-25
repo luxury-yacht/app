@@ -2,27 +2,55 @@ package refresh_test
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/luxury-yacht/app/backend/refresh"
 )
 
-type queueSpy struct{ queue *refresh.InMemoryQueue }
+type queueSpy struct {
+	queue *refresh.InMemoryQueue
+	mu    sync.RWMutex
+	jobs  map[string]refresh.ManualRefreshJob
+}
 
 func newQueueSpy() *queueSpy {
-	return &queueSpy{queue: refresh.NewInMemoryQueue()}
+	return &queueSpy{
+		queue: refresh.NewInMemoryQueue(),
+		jobs:  make(map[string]refresh.ManualRefreshJob),
+	}
 }
 
 func (q *queueSpy) Enqueue(ctx context.Context, domain, scope, reason string) (*refresh.ManualRefreshJob, error) {
-	return q.queue.Enqueue(ctx, domain, scope, reason)
+	job, err := q.queue.Enqueue(ctx, domain, scope, reason)
+	if err != nil || job == nil {
+		return job, err
+	}
+	q.mu.Lock()
+	q.jobs[job.ID] = *job
+	q.mu.Unlock()
+	return job, nil
 }
 
 func (q *queueSpy) Status(jobID string) (*refresh.ManualRefreshJob, bool) {
-	return q.queue.Status(jobID)
+	q.mu.RLock()
+	defer q.mu.RUnlock()
+	job, ok := q.jobs[jobID]
+	if !ok {
+		return nil, false
+	}
+	copy := job
+	return &copy, true
 }
 
 func (q *queueSpy) Update(job *refresh.ManualRefreshJob) {
+	if job != nil {
+		q.mu.Lock()
+		q.jobs[job.ID] = *job
+		q.mu.Unlock()
+	}
 	q.queue.Update(job)
 }
 
@@ -40,25 +68,31 @@ func TestManagerProcessesManualRefreshJob(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := mgr.Start(ctx); err != nil {
-		t.Fatalf("start manager: %v", err)
-	}
-
 	job, err := queue.Enqueue(context.Background(), "nodes", "default", "test")
 	if err != nil {
 		t.Fatalf("enqueue job: %v", err)
+	}
+	jobID := job.ID
+
+	if err := mgr.Start(ctx); err != nil {
+		t.Fatalf("start manager: %v", err)
 	}
 
 	deadline := time.After(2 * time.Second)
 	for {
 		select {
 		case <-deadline:
-			t.Fatalf("job never finished; state=%s error=%s", job.State, job.Error)
+			stored, ok := queue.Status(jobID)
+			if ok && stored != nil {
+				t.Fatalf("job never finished; state=%s error=%s", stored.State, stored.Error)
+			}
+			t.Fatal("job never finished; job missing from queue")
 		default:
-			stored, ok := queue.Status(job.ID)
+			stored, ok := queue.Status(jobID)
 			if ok && stored.State == refresh.JobStateSucceeded {
-				if stored.LatestVersion != svc.version {
-					t.Fatalf("expected latest version %d, got %d", svc.version, stored.LatestVersion)
+				expectedVersion := svc.version.Load()
+				if stored.LatestVersion != expectedVersion {
+					t.Fatalf("expected latest version %d, got %d", expectedVersion, stored.LatestVersion)
 				}
 				return
 			}
@@ -76,9 +110,9 @@ func (m *mockRegistry) ManualRefresh(ctx context.Context, domain, scope string) 
 	return &refresh.ManualRefreshResult{}, nil
 }
 
-type mockSnapshotService struct{ version uint64 }
+type mockSnapshotService struct{ version atomic.Uint64 }
 
 func (m *mockSnapshotService) Build(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
-	m.version = 42
-	return &refresh.Snapshot{Domain: domain, Scope: scope, Version: m.version}, nil
+	m.version.Store(42)
+	return &refresh.Snapshot{Domain: domain, Scope: scope, Version: m.version.Load()}, nil
 }

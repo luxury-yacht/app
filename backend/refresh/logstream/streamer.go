@@ -128,8 +128,19 @@ func (s *Streamer) run(
 ) {
 	var (
 		mu         sync.Mutex
+		podWG      sync.WaitGroup
 		podCancels = make(map[string]context.CancelFunc)
 	)
+
+	// Ensure all followContainer goroutines exit before run returns so callers can safely close channels.
+	defer func() {
+		mu.Lock()
+		for _, cancel := range podCancels {
+			cancel()
+		}
+		mu.Unlock()
+		podWG.Wait()
+	}()
 
 	startPod := func(pod *corev1.Pod) {
 		targets := buildTargetsFromPod(pod, opts.Container)
@@ -151,7 +162,9 @@ func (s *Streamer) run(
 				target.state = &containerState{}
 				states[target.key()] = target.state
 			}
+			podWG.Add(1)
 			go func(t containerTarget) {
+				defer podWG.Done()
 				defer func() {
 					if r := recover(); r != nil {
 						s.logger.Error(fmt.Sprintf("logstream: panic in followContainer for %s: %v", t.key(), r), "LogStream")

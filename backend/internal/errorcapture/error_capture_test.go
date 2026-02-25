@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -190,8 +191,11 @@ func TestCaptureStartAndEnhance(t *testing.T) {
 	c := &Capture{buffer: &bytes.Buffer{}}
 	global = c
 
+	var sinkLevelsMu sync.Mutex
 	var sinkLevels []string
 	SetLogSink(func(level string, message string) {
+		sinkLevelsMu.Lock()
+		defer sinkLevelsMu.Unlock()
 		sinkLevels = append(sinkLevels, fmt.Sprintf("%s:%s", level, message))
 	})
 	defer SetLogSink(nil)
@@ -207,7 +211,9 @@ func TestCaptureStartAndEnhance(t *testing.T) {
 	enhanced := Enhance(fmt.Errorf("original error"))
 	require.Error(t, enhanced)
 	require.Contains(t, enhanced.Error(), "token expired")
+	sinkLevelsMu.Lock()
 	require.NotEmpty(t, sinkLevels, "log sink should record emitted chunk")
+	sinkLevelsMu.Unlock()
 
 	// cleanup the pipe to stop the goroutine
 	_ = c.pipeWriter.Close()

@@ -23,6 +23,7 @@ import (
 
 type flushRecorder struct {
 	*httptest.ResponseRecorder
+	mu sync.Mutex
 }
 
 func newFlushRecorder() *flushRecorder {
@@ -30,6 +31,19 @@ func newFlushRecorder() *flushRecorder {
 }
 
 func (f *flushRecorder) Flush() {}
+
+// Write is synchronized so tests can safely poll BodyString while handlers stream in another goroutine.
+func (f *flushRecorder) Write(p []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ResponseRecorder.Write(p)
+}
+
+func (f *flushRecorder) BodyString() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Body.String()
+}
 
 func TestHandlerRejectsNonGET(t *testing.T) {
 	handler, _, _ := newTestHandler(t, func(scope string) (*refresh.Snapshot, error) {
@@ -77,7 +91,7 @@ func TestHandlerInitialSnapshotFailure(t *testing.T) {
 
 	handler.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusInternalServerError, rec.Code)
-	require.Contains(t, rec.Body.String(), "snapshot failed")
+	require.Contains(t, rec.BodyString(), "snapshot failed")
 
 	summary := recorder.SnapshotSummary()
 	require.Len(t, summary.Streams, 1)
@@ -104,7 +118,7 @@ func TestHandlerInitialSnapshotPermissionDenied(t *testing.T) {
 	handler.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	payloads := parseEventPayloads(rec.Body.String())
+	payloads := parseEventPayloads(rec.BodyString())
 	require.Len(t, payloads, 1)
 	require.Equal(t, "permission denied for domain cluster-events (core/events)", payloads[0].Error)
 	require.NotNil(t, payloads[0].ErrorDetails)
@@ -169,7 +183,7 @@ func TestHandlerStreamsEvents(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		return strings.Contains(rec.Body.String(), "initial message")
+		return strings.Contains(rec.BodyString(), "initial message")
 	}, time.Second, 10*time.Millisecond)
 
 	var ch chan StreamEvent
@@ -205,7 +219,7 @@ func TestHandlerStreamsEvents(t *testing.T) {
 	}
 
 	require.Eventually(t, func() bool {
-		body := rec.Body.String()
+		body := rec.BodyString()
 		return strings.Contains(body, "update message") && strings.Count(body, "event: event") >= 2
 	}, time.Second, 10*time.Millisecond)
 
@@ -281,7 +295,7 @@ func TestHandlerResumesFromSince(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		return strings.Contains(rec.Body.String(), "second message")
+		return strings.Contains(rec.BodyString(), "second message")
 	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, int32(0), buildCalls.Load())
 
@@ -341,7 +355,7 @@ func TestHandlerFallsBackToSnapshotWhenResumeTooOld(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		return strings.Contains(rec.Body.String(), "snapshot fallback")
+		return strings.Contains(rec.BodyString(), "snapshot fallback")
 	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, int32(1), buildCalls.Load())
 

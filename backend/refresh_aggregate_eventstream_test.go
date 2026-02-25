@@ -18,6 +18,7 @@ import (
 
 type flushRecorder struct {
 	*httptest.ResponseRecorder
+	mu sync.Mutex
 }
 
 func newFlushRecorder() *flushRecorder {
@@ -25,6 +26,19 @@ func newFlushRecorder() *flushRecorder {
 }
 
 func (f *flushRecorder) Flush() {}
+
+// Write is synchronized so tests can safely poll BodyString while handlers stream in another goroutine.
+func (f *flushRecorder) Write(p []byte) (int, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.ResponseRecorder.Write(p)
+}
+
+func (f *flushRecorder) BodyString() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.Body.String()
+}
 
 type stubEventManager struct {
 	mu    sync.Mutex
@@ -83,7 +97,7 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 	go handler.ServeHTTP(rec, req)
 
 	require.Eventually(t, func() bool {
-		return strings.Contains(rec.Body.String(), "initial message")
+		return strings.Contains(rec.BodyString(), "initial message")
 	}, time.Second, 10*time.Millisecond)
 
 	managerA.mu.Lock()
@@ -98,7 +112,7 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 	managerB.ch <- eventstream.StreamEvent{Entry: eventstream.Entry{Message: "event-b"}, Sequence: 3}
 
 	require.Eventually(t, func() bool {
-		body := rec.Body.String()
+		body := rec.BodyString()
 		return strings.Contains(body, "event-a") &&
 			strings.Contains(body, "event-b") &&
 			strings.Contains(body, `"clusterId":"cluster-a"`) &&
@@ -158,7 +172,7 @@ func TestAggregateEventStreamResumesFromBuffer(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		return strings.Contains(rec.Body.String(), "buffered")
+		return strings.Contains(rec.BodyString(), "buffered")
 	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, 0, buildCalls)
 
@@ -217,7 +231,7 @@ func TestAggregateEventStreamFallsBackToSnapshotWhenResumeTooOld(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		return strings.Contains(rec.Body.String(), "snapshot fallback")
+		return strings.Contains(rec.BodyString(), "snapshot fallback")
 	}, time.Second, 10*time.Millisecond)
 	require.Equal(t, 1, buildCalls)
 
@@ -254,9 +268,9 @@ func TestWriteEventPayloadEmitsSSE(t *testing.T) {
 
 	err := writeEventPayload(rec, rec, payload)
 	require.NoError(t, err)
-	require.Contains(t, rec.Body.String(), "event: event")
-	require.Contains(t, rec.Body.String(), "id: 5")
-	require.Contains(t, rec.Body.String(), "\"sequence\":5")
+	require.Contains(t, rec.BodyString(), "event: event")
+	require.Contains(t, rec.BodyString(), "id: 5")
+	require.Contains(t, rec.BodyString(), "\"sequence\":5")
 }
 
 func TestNoopLoggerDoesNothing(t *testing.T) {

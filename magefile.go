@@ -284,7 +284,7 @@ func (QC) Reset() error {
 
 // Runs all checks that could cause a release to fail.
 func (QC) PreRelease() error {
-	mg.SerialDeps(QC.Vet, Test.Backend, QC.LintFix, QC.Lint, QC.Typecheck, Test.Frontend, QC.Trivy)
+	mg.SerialDeps(QC.Vet, Test.Race, QC.LintFix, QC.Lint, QC.Typecheck, Test.Frontend, QC.Trivy)
 	return nil
 }
 
