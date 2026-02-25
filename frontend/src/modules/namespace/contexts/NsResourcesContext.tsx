@@ -798,6 +798,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
             kindAlias: item.kind,
             name: item.name,
             namespace: item.namespace,
+            // Multi-cluster identity — required for stable row keys and panel actions.
+            clusterId: item.clusterId,
+            clusterName: item.clusterName,
             scaleTargetRef,
             target: item.target,
             min: item.min,
@@ -852,6 +855,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           namespace: item.namespace,
           apiGroup: item.apiGroup,
           age: item.age,
+          // Multi-cluster identity — required for stable row keys and panel actions.
+          clusterId: item.clusterId,
+          clusterName: item.clusterName,
           // Preserve metadata for the custom view/object panel.
           labels: item.labels,
           annotations: item.annotations,
@@ -872,6 +878,9 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
           kind: 'HelmRelease',
           name: release.name,
           namespace: release.namespace,
+          // Multi-cluster identity — required for stable row keys and panel actions.
+          clusterId: release.clusterId,
+          clusterName: release.clusterName,
           chart: release.chart,
           appVersion: release.appVersion,
           status: release.status,
