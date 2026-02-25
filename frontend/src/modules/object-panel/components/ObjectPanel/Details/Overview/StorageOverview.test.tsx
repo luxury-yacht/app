@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/StorageOverview.test.tsx
- *
- * Test suite for StorageOverview.
- * Covers key behaviors and edge cases for StorageOverview.
  */
 
 import React from 'react';

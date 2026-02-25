@@ -74,10 +74,31 @@ const defaultGetClusterId = (row: any): string | null => {
 };
 
 // Prefix row keys with cluster identity to keep multi-cluster rows stable.
+// Throws when clusterId is missing — a key collision in a multi-cluster view
+// is worse than a crash, so callers must ensure clusterId is always populated.
 export const buildClusterScopedKey = (row: any, baseKey: string): string => {
   const clusterId = defaultGetClusterId(row);
   const trimmed = typeof clusterId === 'string' ? clusterId.trim() : '';
-  return trimmed ? `${trimmed}|${baseKey}` : baseKey;
+  if (trimmed) {
+    return `${trimmed}|${baseKey}`;
+  }
+  throw new Error(
+    `GridTable: buildClusterScopedKey requires clusterId on every row. ` +
+      `Row with key "${baseKey}" has no clusterId — this will cause key ` +
+      `collisions in multi-cluster views. Ensure the data source populates ` +
+      `clusterId on all rows.`
+  );
+};
+
+// Deterministic, collision-free DOM id from a row key.
+// Hex-encodes characters outside [a-zA-Z0-9_-] so distinct keys always
+// produce distinct IDs — unlike the old lossy replace-with-underscore approach.
+export const getStableRowId = (rowKey: string): string => {
+  const safe = rowKey.replace(
+    /[^a-zA-Z0-9_-]/g,
+    (ch) => '_x' + ch.charCodeAt(0).toString(16) + '_'
+  );
+  return `gridtable-row-${safe}`;
 };
 
 export const defaultGetSearchText = (row: any): string[] => {

@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Events/EventsTab.tsx
- *
- * UI component for EventsTab.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React, { useEffect, useCallback, useMemo, useRef } from 'react';
@@ -10,6 +7,7 @@ import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   applyColumnSizing,
   type ColumnSizingMap,
@@ -25,15 +23,14 @@ import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
+import type { PanelObjectData } from '../types';
+import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
 import './EventsTab.css';
 
 interface EventsTabProps {
-  objectData?: any;
+  objectData?: PanelObjectData | null;
   isActive?: boolean;
 }
-
-const CLUSTER_SCOPE = '__cluster__';
-const INACTIVE_SCOPE = '__inactive__';
 
 function normalizeEventSource(source: ObjectEventSummary['source'] | undefined): string {
   if (typeof source === 'string') {
@@ -65,6 +62,9 @@ interface EventDisplay {
   objectKind: string;
   objectName: string;
   objectNamespace: string;
+  // Per-event cluster identity from ObjectEventSummary (extends ClusterMeta).
+  clusterId?: string;
+  clusterName?: string;
 }
 
 const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
@@ -155,7 +155,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
     refresherName: eventsRefresherName,
     onRefresh: useCallback(
       async (isManual: boolean) => {
-        await fetchEvents(!isManual);
+        await fetchEvents(isManual);
       },
       [fetchEvents]
     ),
@@ -190,6 +190,8 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
           objectKind,
           objectName,
           objectNamespace,
+          clusterId: event.clusterId,
+          clusterName: event.clusterName,
         };
       }),
     [rawEvents, objectData?.kind, objectData?.name, objectData?.namespace]
@@ -203,12 +205,10 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
     : false;
   const eventsError = eventsScope ? (eventsSnapshot.error ?? null) : null;
 
-  const { sortedData, sortConfig, handleSort } = useTableSort(events, 'ageTimestamp', 'desc');
-
   const keyExtractor = useCallback((item: EventDisplay, index: number) => {
     const namespaceSegment = item.objectNamespace || CLUSTER_SCOPE;
     const identifier = `${namespaceSegment}:${item.objectKind}:${item.objectName}`;
-    return `${identifier}:${item.lastTime.getTime()}:${index}`;
+    return buildClusterScopedKey(item, `${identifier}:${item.lastTime.getTime()}:${index}`);
   }, []);
 
   const openRelatedObject = useCallback(
@@ -222,12 +222,13 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
           ? item.objectNamespace
           : undefined;
 
+      // Prefer per-event cluster identity; fall back to parent panel cluster.
       openWithObjectRef.current({
         kind: item.objectKind,
         name: item.objectName,
         namespace: resolvedNamespace,
-        clusterId: objectData?.clusterId ?? undefined,
-        clusterName: objectData?.clusterName ?? undefined,
+        clusterId: item.clusterId ?? objectData?.clusterId ?? undefined,
+        clusterName: item.clusterName ?? objectData?.clusterName ?? undefined,
       });
     },
     [objectData?.clusterId, objectData?.clusterName]
@@ -283,6 +284,10 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
 
     return base;
   }, [openRelatedObject]);
+
+  const { sortedData, sortConfig, handleSort } = useTableSort(events, 'ageTimestamp', 'desc', {
+    columns,
+  });
 
   if (eventsLoading && events.length === 0) {
     return (

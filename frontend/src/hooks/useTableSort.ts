@@ -17,6 +17,9 @@ export interface SortConfig {
 export interface UseTableSortOptions {
   controlledSort?: SortConfig | null;
   onChange?: (config: SortConfig) => void;
+  // When provided, columns with a `sortValue` accessor are used to extract
+  // comparison values instead of direct property access on the row.
+  columns?: ReadonlyArray<{ key: string; sortValue?: (item: any) => any }>;
 }
 
 export function useTableSort<T>(
@@ -32,8 +35,14 @@ export function useTableSort<T>(
 
   const effectiveSort = options?.controlledSort ?? sortConfig;
 
-  const handleSort = (key: string) => {
+  // Sort a column. When `targetDirection` is provided the sort jumps directly
+  // to that state (used by context-menu "Sort Desc" / "Clear Sort"). When
+  // omitted the direction cycles: asc → desc → null → asc.
+  const handleSort = (key: string, targetDirection?: SortDirection) => {
     const computeNext = (prev: SortConfig): SortConfig => {
+      if (targetDirection !== undefined) {
+        return { key, direction: targetDirection };
+      }
       if (prev.key === key) {
         const nextDirection =
           prev.direction === 'asc' ? 'desc' : prev.direction === 'desc' ? null : 'asc';
@@ -86,6 +95,19 @@ export function useTableSort<T>(
     return totalSeconds;
   };
 
+  // Build a lookup from column key → sortValue extractor. When a column
+  // defines sortValue, that function is used instead of row[key].
+  const sortValueExtractors = useMemo(() => {
+    if (!options?.columns) return null;
+    const map: Record<string, (item: T) => any> = {};
+    for (const col of options.columns) {
+      if (col.sortValue) {
+        map[col.key] = col.sortValue as (item: T) => any;
+      }
+    }
+    return Object.keys(map).length > 0 ? map : null;
+  }, [options?.columns]);
+
   const sortedData = useMemo(() => {
     // Handle null or undefined data
     if (!data) {
@@ -96,9 +118,11 @@ export function useTableSort<T>(
       return data;
     }
 
+    const extractor = sortValueExtractors?.[effectiveSort.key];
+
     return [...data].sort((a, b) => {
-      const aValue = (a as any)[effectiveSort.key];
-      const bValue = (b as any)[effectiveSort.key];
+      const aValue = extractor ? extractor(a) : (a as any)[effectiveSort.key];
+      const bValue = extractor ? extractor(b) : (b as any)[effectiveSort.key];
 
       // Handle null/undefined values
       if (aValue == null && bValue == null) return 0;
@@ -140,7 +164,7 @@ export function useTableSort<T>(
 
       return effectiveSort.direction === 'asc' ? comparison : -comparison;
     });
-  }, [data, effectiveSort]);
+  }, [data, effectiveSort, sortValueExtractors]);
 
   return {
     sortedData,

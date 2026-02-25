@@ -43,11 +43,6 @@
   display: none !important;
 }
 
-/* Remove last row border */
-.gridtable-row:last-child {
-  border-bottom: none;
-}
-
 /* ============================================
    3. Design Tokens (CSS Variables)
    ============================================ */
@@ -69,6 +64,7 @@
   /* Spacing */
   --grid-spacing-xs: var(--spacing-xs);
   --grid-spacing-sm: var(--spacing-sm);
+  --grid-spacing-md: var(--spacing-md);
   --grid-spacing-cell-x: 1rem;
   --grid-spacing-cell-y: var(--spacing-sm);
 
@@ -155,6 +151,13 @@ body.dock-bottom-open .content-body .gridtable-wrapper {
   transition: margin-bottom 0.3s ease-out;
 }
 
+/* When both panels are open, transition both margins so neither snaps. */
+body.dock-right-open.dock-bottom-open .content-body .gridtable-wrapper {
+  transition:
+    margin-right 0.3s ease-out,
+    margin-bottom 0.3s ease-out;
+}
+
 body.dockable-panel-resizing .content-body .gridtable-wrapper,
 body.dockable-panel-resizing .content-body .gridtable-header-container {
   transition: none;
@@ -232,6 +235,10 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
   transition: background-color var(--transition-fast);
 }
 
+.grid-cell-header[data-sortable="true"] .header-content > span {
+  cursor: pointer;
+}
+
 .sort-indicator {
   color: var(--grid-text-secondary);
   display: inline-block;
@@ -273,7 +280,7 @@ body.dockable-panel-resizing .content-body .gridtable-header-container {
 }
 
 .resize-handle:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: var(--grid-resize-handle-hover-color, rgba(0, 0, 0, 0.05));
 }
 
 .resize-handle:hover::before {
@@ -518,7 +525,7 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
    ============================================ */
 .gridtable-container.embedded .gridtable-wrapper {
   max-height: none;
-  overflow: visible;
+  overflow: clip;
 }
 
 .gridtable-container.embedded .gridtable-header {

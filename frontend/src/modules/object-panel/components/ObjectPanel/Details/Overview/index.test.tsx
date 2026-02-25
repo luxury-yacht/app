@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/index.test.tsx
- *
- * Test suite for index.
- * Covers key behaviors and edge cases for index.
  */
 
 import React from 'react';

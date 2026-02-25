@@ -1173,6 +1173,56 @@ export namespace types {
 		    return a;
 		}
 	}
+	export class JobSimpleInfo {
+	    kind: string;
+	    name: string;
+	    namespace: string;
+	    status: string;
+	    completions: string;
+	    succeeded: number;
+	    failed: number;
+	    active: number;
+	    startTime?: v1.Time;
+	    duration?: string;
+	    age: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new JobSimpleInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.status = source["status"];
+	        this.completions = source["completions"];
+	        this.succeeded = source["succeeded"];
+	        this.failed = source["failed"];
+	        this.active = source["active"];
+	        this.startTime = this.convertValues(source["startTime"], v1.Time);
+	        this.duration = source["duration"];
+	        this.age = source["age"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class JobReference {
 	    name: string;
 	    startTime?: v1.Time;
@@ -1222,6 +1272,7 @@ export namespace types {
 	    successfulJobsHistory: number;
 	    failedJobsHistory: number;
 	    activeJobs?: JobReference[];
+	    jobs?: JobSimpleInfo[];
 	    jobTemplate: JobTemplateDetails;
 	    labels?: Record<string, string>;
 	    annotations?: Record<string, string>;
@@ -1250,6 +1301,7 @@ export namespace types {
 	        this.successfulJobsHistory = source["successfulJobsHistory"];
 	        this.failedJobsHistory = source["failedJobsHistory"];
 	        this.activeJobs = this.convertValues(source["activeJobs"], JobReference);
+	        this.jobs = this.convertValues(source["jobs"], JobSimpleInfo);
 	        this.jobTemplate = this.convertValues(source["jobTemplate"], JobTemplateDetails);
 	        this.labels = source["labels"];
 	        this.annotations = source["annotations"];
@@ -2315,6 +2367,7 @@ export namespace types {
 		    return a;
 		}
 	}
+	
 	
 	
 	export class KubeconfigInfo {

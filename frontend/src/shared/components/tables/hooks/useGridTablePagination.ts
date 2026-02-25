@@ -40,12 +40,13 @@ export function useGridTablePagination({
   // Guard against double-firing before parent updates isRequestingMore
   const inFlightRef = useRef(false);
 
-  // Reset in-flight flag when parent acknowledges the request (isRequestingMore becomes true)
-  // or when request completes and we're ready for another
-  if (isRequestingMore) {
-    // Parent acknowledged - they're handling it now, we can reset our guard
-    inFlightRef.current = false;
-  }
+  // Reset in-flight flag when parent acknowledges the request.
+  // Moved to useEffect to avoid render-phase ref mutation (concurrent mode).
+  useEffect(() => {
+    if (isRequestingMore) {
+      inFlightRef.current = false;
+    }
+  }, [isRequestingMore]);
 
   const handleRequestMore = useCallback(
     (trigger: 'manual' | 'auto') => {

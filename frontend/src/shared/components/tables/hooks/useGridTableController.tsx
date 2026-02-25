@@ -1,0 +1,854 @@
+/**
+ * frontend/src/shared/components/tables/hooks/useGridTableController.ts
+ *
+ * Orchestration hook for GridTable. Wires together all sub-hooks (filters,
+ * hover, focus, context menu, shortcuts, column widths, virtualization,
+ * pagination, row rendering, header row, etc.) and returns the minimal set
+ * of values the render section needs.
+ *
+ * Extracted from GridTable.tsx — no behavioral change, purely mechanical.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactElement, ReactNode, RefObject } from 'react';
+import { useGridTableHoverSync } from '@shared/components/tables/hooks/useGridTableHoverSync';
+import type { HoverState } from '@shared/components/tables/hooks/useGridTableHoverSync';
+import { useGridTableColumnVirtualization } from '@shared/components/tables/hooks/useGridTableColumnVirtualization';
+import { useGridTableVirtualization } from '@shared/components/tables/hooks/useGridTableVirtualization';
+import { useGridTableRowRenderer } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import { useGridTableHeaderRow } from '@shared/components/tables/hooks/useGridTableHeaderRow';
+import { useColumnResizeController } from '@shared/components/tables/hooks/useColumnResizeController';
+import { useContainerWidthObserver } from '@shared/components/tables/hooks/useContainerWidthObserver';
+import { useColumnVisibilityController } from '@shared/components/tables/hooks/useColumnVisibilityController';
+import { useGridTableProfiler } from '@shared/components/tables/hooks/useGridTableProfiler';
+import { useGridTableColumnMeasurer } from '@shared/components/tables/hooks/useGridTableColumnMeasurer';
+import { useGridTableCellCache } from '@shared/components/tables/hooks/useGridTableCellCache';
+import { useGridTableColumnWidths } from '@shared/components/tables/hooks/useGridTableColumnWidths';
+import { useGridTablePagination } from '@shared/components/tables/hooks/useGridTablePagination';
+import { useGridTableHoverFallback } from '@shared/components/tables/hooks/useGridTableHoverFallback';
+import { useGridTableHeaderSyncEffects } from '@shared/components/tables/hooks/useGridTableHeaderSyncEffects';
+import { useGridTableAutoGrow } from '@shared/components/tables/hooks/useGridTableAutoGrow';
+import { useGridTableExternalWidths } from '@shared/components/tables/hooks/useGridTableExternalWidths';
+import { useGridTableFiltersWiring } from '@shared/components/tables/hooks/useGridTableFiltersWiring';
+import { useGridTableColumnsDropdown } from '@shared/components/tables/hooks/useGridTableColumnsDropdown';
+import { useGridTableContextMenuWiring } from '@shared/components/tables/hooks/useGridTableContextMenuWiring';
+import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
+import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
+import { useKeyboardContext } from '@ui/shortcuts';
+import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
+import type {
+  GridColumnDefinition,
+  GridTableProps,
+} from '@shared/components/tables/GridTable.types';
+import {
+  DEFAULT_COLUMN_MIN_WIDTH,
+  DEFAULT_COLUMN_WIDTH,
+  getTextContent,
+  isFixedColumnKey,
+  isKindColumnKey,
+  normalizeKindClass,
+  parseWidthInputToNumber,
+} from '@shared/components/tables/GridTable.utils';
+
+// ---------------------------------------------------------------------------
+// Selectors / constants consumed only by the controller
+// ---------------------------------------------------------------------------
+
+const GRIDTABLE_SHORTCUT_OPT_OUT_SELECTOR = '[data-gridtable-shortcut-optout="true"]';
+const GRIDTABLE_ROWCLICK_SUPPRESS_SELECTOR = '[data-gridtable-rowclick="suppress"]';
+const GRIDTABLE_ROWCLICK_ALLOW_SELECTOR = '[data-gridtable-rowclick="allow"]';
+const GRIDTABLE_INTERACTIVE_STOP_SELECTOR =
+  'button, a[href], input, textarea, select, summary, [role="button"], [role="menuitem"], [data-gridtable-interactive="true"]';
+
+const getColumnMinWidth = <T,>(column: GridColumnDefinition<T>) => {
+  const parsed = parseWidthInputToNumber(column.minWidth);
+  if (parsed != null) {
+    return parsed;
+  }
+  return DEFAULT_COLUMN_MIN_WIDTH;
+};
+
+const getColumnMaxWidth = <T,>(column: GridColumnDefinition<T>) => {
+  const parsed = parseWidthInputToNumber(column.maxWidth);
+  if (parsed != null) {
+    return parsed;
+  }
+  return Number.POSITIVE_INFINITY;
+};
+
+// Stable default to avoid re-creating lock lists on every render.
+const DEFAULT_NON_HIDEABLE_COLUMNS: string[] = [];
+
+// Shallow compare width maps so we can skip no-op reconciliations.
+const areWidthMapsEqual = (a: Record<string, number>, b: Record<string, number>): boolean => {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+  for (const key of aKeys) {
+    if (a[key] !== b[key]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+// ---------------------------------------------------------------------------
+// Return type — every value the render section of GridTable consumes
+// ---------------------------------------------------------------------------
+
+export interface GridTableControllerResult<T> {
+  // Refs needed by sub-components
+  wrapperRef: RefObject<HTMLDivElement | null>;
+  tableRef: RefObject<HTMLDivElement | null>;
+  headerInnerRef: RefObject<HTMLDivElement | null>;
+
+  // Filtered data
+  tableData: T[];
+  filtersNode: ReactNode;
+
+  // Focus
+  focusedRowKey: string | null;
+  handleWrapperFocus: (e: React.FocusEvent<HTMLDivElement>) => void;
+  handleWrapperBlur: (e: React.FocusEvent<HTMLDivElement>) => void;
+
+  // Hover
+  hoverState: HoverState;
+
+  // Context menu
+  contextMenuNode: ReactNode;
+  handleWrapperContextMenu: (e: React.MouseEvent) => void;
+
+  // Virtualization
+  shouldVirtualize: boolean;
+  virtualRows: T[];
+  virtualRange: { start: number; end: number };
+  totalVirtualHeight: number;
+  virtualOffset: number;
+  firstVirtualRowRef: RefObject<HTMLDivElement | null>;
+  scrollbarWidth: number;
+
+  // Columns
+  tableContentWidth: number;
+  tableViewportWidth: number;
+
+  // Rendering
+  renderRowContent: RenderRowContentFn<T>;
+  headerRow: ReactNode;
+
+  // Pagination
+  paginationEnabled: boolean;
+  resolvedPaginationStatus: string;
+  loadMoreSentinelRef: RefObject<HTMLDivElement | null>;
+  handleManualLoadMore: () => void;
+
+  // Loading
+  showLoadingOverlay: boolean;
+  loadingOverlayMessage: string;
+
+  // Profiler
+  wrapWithProfiler: (node: ReactElement) => ReactElement;
+}
+
+// ---------------------------------------------------------------------------
+// The hook
+// ---------------------------------------------------------------------------
+
+export function useGridTableController<T>({
+  data: inputData,
+  columns,
+  keyExtractor,
+  getRowClassName,
+  getRowStyle,
+  onRowClick,
+  onSort,
+  sortConfig,
+  loading = false,
+  hideHeader = false,
+  enableContextMenu = false,
+  getCustomContextMenuItems,
+  useShortNames = false,
+  initialColumnWidths,
+  columnWidths: controlledColumnWidths = null,
+  onColumnWidthsChange,
+  enableColumnResizing = true,
+  columnVisibility = null,
+  onColumnVisibilityChange,
+  nonHideableColumns = DEFAULT_NON_HIDEABLE_COLUMNS,
+  enableColumnVisibilityMenu = true,
+  hasMore = false,
+  onRequestMore,
+  isRequestingMore = false,
+  autoLoadMore = true,
+  showPaginationStatus = true,
+  virtualization,
+  loadingOverlay,
+  filters,
+  allowHorizontalOverflow = true,
+}: GridTableProps<T>): GridTableControllerResult<T> {
+  const sourceData = useMemo<T[]>(
+    () => (Array.isArray(inputData) ? inputData : ([] as T[])),
+    [inputData]
+  );
+  const { pushContext: pushShortcutContext, popContext: popShortcutContext } = useKeyboardContext();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+  const tableRefMutable = tableRef as RefObject<HTMLElement | null>;
+  const headerInnerRef = useRef<HTMLDivElement | null>(null);
+  const paginationEnabled = Boolean(onRequestMore);
+  const contextMenuActiveRef = useRef(false);
+  const [tableViewportWidth, setTableViewportWidth] = useState(0);
+  const isShortcutOptOutTarget = useCallback((target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+    return Boolean(target.closest(GRIDTABLE_SHORTCUT_OPT_OUT_SELECTOR));
+  }, []);
+
+  const shouldIgnoreRowClick = useCallback((event: React.MouseEvent) => {
+    if (event.defaultPrevented || event.isDefaultPrevented?.() || event.isPropagationStopped?.()) {
+      return true;
+    }
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+    const isOptInTarget = Boolean(target.closest(GRIDTABLE_ROWCLICK_ALLOW_SELECTOR));
+    if (!isOptInTarget && target.closest(GRIDTABLE_ROWCLICK_SUPPRESS_SELECTOR)) {
+      return true;
+    }
+    if (!isOptInTarget && target.closest(GRIDTABLE_INTERACTIVE_STOP_SELECTOR)) {
+      return true;
+    }
+    return false;
+  }, []);
+  const externalColumnWidths = useGridTableExternalWidths(controlledColumnWidths);
+
+  const { wrapWithProfiler, warnDevOnce, startFrameSampler, stopFrameSampler } =
+    useGridTableProfiler({
+      sampleLabel: 'GridTable scroll',
+      sampleWindowMs: 2000,
+      minSampleCount: 10,
+    });
+
+  const { renderedColumns, isColumnVisible, applyVisibilityChanges, lockedColumns } =
+    useColumnVisibilityController<T>({
+      columns,
+      columnVisibility,
+      nonHideableColumns,
+      onColumnVisibilityChange,
+    });
+
+  const columnsDropdownConfig = useGridTableColumnsDropdown({
+    columns,
+    lockedColumns,
+    isColumnVisible,
+    applyVisibilityChanges,
+    enableColumnVisibilityMenu,
+  });
+
+  const {
+    filteringEnabled,
+    tableData,
+    filterSignature,
+    filtersContainerRef,
+    filterFocusIndexRef,
+    showKindDropdown,
+    showNamespaceDropdown,
+    filtersNode,
+  } = useGridTableFiltersWiring<T>({
+    data: sourceData,
+    filters,
+    columnsDropdown: columnsDropdownConfig ?? undefined,
+  });
+
+  const loadingOverlayMessage = loadingOverlay?.message ?? 'Refreshing...';
+  const showLoadingOverlay = loadingOverlay ? loadingOverlay.show : loading && tableData.length > 0;
+
+  // References to the table and scroll wrapper
+  const {
+    hoverState,
+    hoverRowRef,
+    updateHoverForElement,
+    handleRowMouseEnter,
+    handleRowMouseLeave,
+    scheduleHeaderSync,
+  } = useGridTableHoverSync({
+    wrapperRef,
+    headerInnerRef,
+    hideHeader,
+  });
+
+  const {
+    focusedRowIndex,
+    focusedRowKey,
+    setFocusedRowKey,
+    focusByIndex,
+    isWrapperFocused,
+    shortcutsActive,
+    lastNavigationMethodRef,
+    handleWrapperFocus,
+    handleWrapperBlur,
+    handleRowActivation,
+    handleRowClick,
+    getRowClassNameWithFocus,
+  } = useGridTableFocusNavigation<T>({
+    tableData,
+    keyExtractor,
+    onRowClick,
+    isShortcutOptOutTarget,
+    wrapperRef,
+    updateHoverForElement,
+    getRowClassName,
+    shouldIgnoreRowClick,
+  });
+
+  const {
+    contextMenuNode,
+    handleCellContextMenu,
+    handleWrapperContextMenu,
+    openFocusedRowContextMenu,
+    isContextMenuVisible,
+  } = useGridTableContextMenuWiring<T>({
+    enableContextMenu,
+    columns,
+    tableData,
+    sortConfig,
+    getCustomContextMenuItems,
+    onSort,
+    keyExtractor,
+    focusedRowIndex,
+    focusedRowKey,
+    wrapperRef,
+    handleRowActivation,
+    contextMenuActiveRef,
+  });
+
+  const handleRowMouseEnterWithReset = useCallback(
+    (element: HTMLDivElement) => {
+      // Only reset keyboard focus when transitioning to mouse while table is focused.
+      // When unfocused, preserve the selection.
+      if (isWrapperFocused && !shortcutsActive && !contextMenuActiveRef.current) {
+        setFocusedRowKey(null);
+      }
+      handleRowMouseEnter(element);
+    },
+    [contextMenuActiveRef, handleRowMouseEnter, isWrapperFocused, shortcutsActive, setFocusedRowKey]
+  );
+
+  const handleRowMouseLeaveWithReset = useCallback(
+    (element?: HTMLDivElement | null) => {
+      if (contextMenuActiveRef.current) {
+        return;
+      }
+      handleRowMouseLeave(element);
+    },
+    [contextMenuActiveRef, handleRowMouseLeave]
+  );
+
+  const getPageSizeRef = useRef(1);
+
+  const moveSelectionByDelta = useCallback(
+    (delta: number) => {
+      if (tableData.length === 0) {
+        return false;
+      }
+      lastNavigationMethodRef.current = 'keyboard';
+      const base = focusedRowIndex == null ? (delta > 0 ? -1 : tableData.length) : focusedRowIndex;
+      const next = Math.min(Math.max(base + delta, 0), tableData.length - 1);
+      focusByIndex(next);
+      return true;
+    },
+    [focusByIndex, focusedRowIndex, tableData.length, lastNavigationMethodRef]
+  );
+
+  const jumpToIndex = useCallback(
+    (index: number) => {
+      if (tableData.length === 0) {
+        return false;
+      }
+      const clamped = Math.min(Math.max(index, 0), tableData.length - 1);
+      lastNavigationMethodRef.current = 'keyboard';
+      focusByIndex(clamped);
+      return true;
+    },
+    [focusByIndex, tableData.length, lastNavigationMethodRef]
+  );
+
+  useGridTableKeyboardScopes({
+    filteringEnabled,
+    showKindDropdown,
+    showNamespaceDropdown,
+    filtersContainerRef,
+    filterFocusIndexRef,
+    wrapperRef,
+    tableDataLength: tableData.length,
+    focusedRowKey,
+    jumpToIndex,
+  });
+
+  const activateFocusedRow = useCallback(() => {
+    if (focusedRowIndex == null || focusedRowIndex < 0 || focusedRowIndex >= tableData.length) {
+      return false;
+    }
+    const item = tableData[focusedRowIndex];
+    onRowClick?.(item);
+    return true;
+  }, [focusedRowIndex, onRowClick, tableData]);
+
+  useGridTableShortcuts({
+    shortcutsActive,
+    enableContextMenu,
+    onOpenFocusedRow: activateFocusedRow,
+    onOpenContextMenu: openFocusedRowContextMenu,
+    moveSelectionByDelta,
+    jumpToIndex,
+    getPageSizeRef,
+    tableDataLength: tableData.length,
+    pushShortcutContext: (opts) => pushShortcutContext(opts),
+    popShortcutContext,
+    isContextMenuVisible,
+  });
+
+  const { measureColumnWidth } = useGridTableColumnMeasurer<T>({
+    tableRef: tableRefMutable,
+    tableData,
+    parseWidthInputToNumber,
+    defaultColumnWidth: DEFAULT_COLUMN_WIDTH,
+    isKindColumnKey,
+    getTextContent,
+    normalizeKindClass,
+    getColumnMinWidth,
+    getColumnMaxWidth,
+  });
+
+  const {
+    columnWidths,
+    setColumnWidths,
+    manuallyResizedColumnsRef,
+    reconcileWidthsToContainer,
+    updateNaturalWidth,
+    isInitialized: columnWidthsInitialized,
+    markColumnsDirty,
+    markAllAutoColumnsDirty,
+    handleManualResizeEvent,
+  } = useGridTableColumnWidths<T>({
+    columns,
+    renderedColumns,
+    tableRef: tableRefMutable,
+    tableData,
+    initialColumnWidths,
+    controlledColumnWidths,
+    externalColumnWidths,
+    enableColumnResizing,
+    onColumnWidthsChange,
+    useShortNames,
+    measureColumnWidth,
+    allowHorizontalOverflow,
+  });
+
+  const {
+    columnVirtualizationConfig,
+    columnRenderModelsWithOffsets,
+    columnWindowRange,
+    updateColumnWindowRange,
+  } = useGridTableColumnVirtualization({
+    renderedColumns,
+    columnWidths,
+    virtualization,
+    wrapperRef,
+  });
+
+  const tableContentWidth = useMemo(() => {
+    if (columnRenderModelsWithOffsets.length === 0) {
+      return 0;
+    }
+    const lastModel = columnRenderModelsWithOffsets[columnRenderModelsWithOffsets.length - 1];
+    return Number.isFinite(lastModel.end) ? lastModel.end : 0;
+  }, [columnRenderModelsWithOffsets]);
+
+  const { getCachedCellContent } = useGridTableCellCache<T>({
+    renderedColumns,
+    isKindColumnKey,
+    getTextContent,
+    normalizeKindClass,
+    data: tableData,
+  });
+
+  useEffect(() => {
+    markAllAutoColumnsDirty();
+  }, [markAllAutoColumnsDirty, columnVirtualizationConfig.enabled, allowHorizontalOverflow]);
+
+  useGridTableHoverFallback({
+    hoverStateVisible: hoverState.visible,
+    wrapperRef,
+    updateHoverForElement,
+    tableLength: tableData.length,
+  });
+
+  const {
+    shouldVirtualize,
+    virtualRows,
+    virtualRange,
+    virtualRowHeight,
+    totalVirtualHeight,
+    virtualOffset,
+    firstVirtualRowRef,
+    scrollbarWidth,
+  } = useGridTableVirtualization({
+    data: tableData,
+    virtualization,
+    wrapperRef,
+    warnDevOnce,
+    keyExtractor,
+    filterSignature,
+    filteringEnabled,
+    scheduleHeaderSync,
+    updateHoverForElement,
+    hoverRowRef,
+    startFrameSampler,
+    stopFrameSampler,
+    updateColumnWindowRange,
+    hideHeader,
+  });
+
+  const visibleAutoColumnKeys = useMemo(() => {
+    if (renderedColumns.length === 0) {
+      return [];
+    }
+    if (!columnVirtualizationConfig.enabled) {
+      return renderedColumns.filter((column) => column.autoWidth).map((column) => column.key);
+    }
+    const total = columnRenderModelsWithOffsets.length;
+    if (total === 0) {
+      return [];
+    }
+    const stickyStart = Math.min(columnVirtualizationConfig.stickyStart, total);
+    const stickyEnd = Math.min(
+      columnVirtualizationConfig.stickyEnd,
+      Math.max(0, total - stickyStart)
+    );
+    const visibleKeys = new Set<string>();
+    columnRenderModelsWithOffsets.forEach((model, index) => {
+      const column = renderedColumns[index];
+      if (!column?.autoWidth) {
+        return;
+      }
+      const isSticky = index < stickyStart || index >= total - stickyEnd;
+      if (
+        isSticky ||
+        (index >= columnWindowRange.startIndex && index <= columnWindowRange.endIndex)
+      ) {
+        visibleKeys.add(model.key);
+      }
+    });
+    return Array.from(visibleKeys);
+  }, [
+    columnRenderModelsWithOffsets,
+    columnVirtualizationConfig.enabled,
+    columnVirtualizationConfig.stickyEnd,
+    columnVirtualizationConfig.stickyStart,
+    columnWindowRange.endIndex,
+    columnWindowRange.startIndex,
+    renderedColumns,
+  ]);
+
+  useEffect(() => {
+    if (visibleAutoColumnKeys.length === 0) {
+      return;
+    }
+    markColumnsDirty(visibleAutoColumnKeys);
+  }, [markColumnsDirty, visibleAutoColumnKeys, virtualRange.end, virtualRange.start]);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) {
+      getPageSizeRef.current = 1;
+      return;
+    }
+
+    const computePageSize = () => {
+      const height = wrapper.clientHeight || 1;
+      if (height <= 0) {
+        getPageSizeRef.current = 1;
+        return;
+      }
+
+      if (shouldVirtualize && virtualRowHeight > 0) {
+        getPageSizeRef.current = Math.max(1, Math.round(height / virtualRowHeight));
+        return;
+      }
+
+      const firstRow = wrapper.querySelector<HTMLElement>('.gridtable-row');
+      const rowHeight = firstRow?.getBoundingClientRect().height || 44;
+      getPageSizeRef.current = Math.max(1, Math.round(height / Math.max(rowHeight, 1)));
+    };
+
+    computePageSize();
+
+    const observer =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(computePageSize) : null;
+    if (observer) {
+      observer.observe(wrapper);
+    }
+
+    return () => {
+      observer?.disconnect();
+    };
+  }, [shouldVirtualize, virtualRowHeight, wrapperRef, tableData.length]);
+
+  useEffect(() => {
+    if (!shortcutsActive || !focusedRowKey) {
+      return;
+    }
+    const wrapper = wrapperRef.current;
+    if (!wrapper) {
+      return;
+    }
+    const allowAutoScroll = lastNavigationMethodRef.current === 'keyboard';
+    const escapedKey =
+      typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+        ? CSS.escape(focusedRowKey)
+        : focusedRowKey;
+    // Both data-row-key and .gridtable-row are on the same element, so use
+    // a compound selector (not a descendant selector).
+    const rowElement = wrapper.querySelector<HTMLDivElement>(
+      `.gridtable-row[data-row-key="${escapedKey}"]`
+    );
+    if (rowElement) {
+      if (allowAutoScroll && typeof rowElement.scrollIntoView === 'function') {
+        rowElement.scrollIntoView({ block: 'nearest' });
+      }
+      updateHoverForElement(rowElement);
+      return;
+    }
+    if (
+      allowAutoScroll &&
+      shouldVirtualize &&
+      virtualRowHeight > 0 &&
+      focusedRowIndex != null &&
+      focusedRowIndex >= 0
+    ) {
+      // Mimic scrollIntoView({ block: 'nearest' }) - only scroll if row is outside visible area
+      const rowTop = focusedRowIndex * virtualRowHeight;
+      const rowBottom = rowTop + virtualRowHeight;
+      const viewportTop = wrapper.scrollTop;
+      const viewportBottom = viewportTop + wrapper.clientHeight;
+
+      if (rowTop < viewportTop) {
+        // Row is above viewport - scroll up to show it at top
+        wrapper.scrollTo({ top: rowTop, behavior: 'auto' });
+      } else if (rowBottom > viewportBottom) {
+        // Row is below viewport - scroll down to show it at bottom
+        wrapper.scrollTo({ top: rowBottom - wrapper.clientHeight, behavior: 'auto' });
+      }
+      // If row is already visible, don't scroll
+    }
+  }, [
+    focusedRowIndex,
+    focusedRowKey,
+    shortcutsActive,
+    shouldVirtualize,
+    updateHoverForElement,
+    virtualRowHeight,
+    wrapperRef,
+    lastNavigationMethodRef,
+  ]);
+
+  useGridTableHeaderSyncEffects({
+    hideHeader,
+    wrapperRef,
+    scheduleHeaderSync,
+    updateHoverForElement,
+    hoverRowRef,
+    updateColumnWindowRange,
+    virtualizationHandlesScroll: shouldVirtualize,
+  });
+
+  useGridTableAutoGrow({
+    tableRef,
+    tableDataLength: tableData.length,
+    renderedColumns,
+    isKindColumnKey,
+    externalColumnWidths,
+    measureColumnWidth,
+    setColumnWidths,
+    reconcileWidthsToContainer: (base, width) => reconcileWidthsToContainer(base, width),
+    updateNaturalWidth,
+  });
+
+  const recalculateForContainerWidth = useCallback(
+    (incomingWidth: number) => {
+      if (!incomingWidth || incomingWidth <= 0) {
+        return;
+      }
+      setTableViewportWidth((prev) =>
+        Math.abs(prev - incomingWidth) < 0.5 ? prev : incomingWidth
+      );
+      setColumnWidths((prev) => {
+        if (allowHorizontalOverflow && !columnWidthsInitialized) {
+          return prev;
+        }
+        const next = reconcileWidthsToContainer(prev, incomingWidth);
+        // Avoid state updates when reconciled widths match the current map.
+        return areWidthMapsEqual(prev, next) ? prev : next;
+      });
+    },
+    [
+      allowHorizontalOverflow,
+      columnWidthsInitialized,
+      reconcileWidthsToContainer,
+      setColumnWidths,
+      setTableViewportWidth,
+    ]
+  );
+
+  useContainerWidthObserver({
+    tableRef: tableRefMutable,
+    onContainerWidth: recalculateForContainerWidth,
+    tableDataLength: tableData.length,
+  });
+
+  const { handleResizeStart, autoSizeColumn, resetManualResizes } = useColumnResizeController<T>({
+    columns,
+    renderedColumns,
+    columnWidths,
+    setColumnWidths,
+    manuallyResizedColumnsRef,
+    getColumnMinWidth,
+    getColumnMaxWidth,
+    measureColumnWidth,
+    enableColumnResizing,
+    isFixedColumnKey,
+    onManualResize: handleManualResizeEvent,
+  });
+
+  useEffect(() => {
+    if (!enableColumnResizing) {
+      resetManualResizes();
+    }
+  }, [enableColumnResizing, resetManualResizes]);
+
+  // Dev-time check: keyExtractor must return cluster-scoped keys (containing '|')
+  // to prevent silent key collisions in multi-cluster views.
+  const clusterKeyCheckRef = useRef(false);
+  const keyExtractorRef = useRef(keyExtractor);
+  if (keyExtractorRef.current !== keyExtractor) {
+    keyExtractorRef.current = keyExtractor;
+    clusterKeyCheckRef.current = false;
+  }
+  if (import.meta.env.DEV && !clusterKeyCheckRef.current && tableData.length > 0) {
+    clusterKeyCheckRef.current = true;
+    const sampleKey = keyExtractor(tableData[0], 0);
+    if (!sampleKey.includes('|')) {
+      warnDevOnce(
+        `GridTable: keyExtractor returned "${sampleKey}" which does not appear ` +
+          `cluster-scoped (missing "|" separator). Use buildClusterScopedKey() ` +
+          `to prevent key collisions in multi-cluster views.`
+      );
+    }
+  }
+
+  // Render sort indicator
+  const renderSortIndicator = useCallback(
+    (columnKey: string) => {
+      if (!sortConfig || sortConfig.key !== columnKey) {
+        return null;
+      }
+      return (
+        <span className="sort-indicator">
+          {sortConfig.direction === 'asc' ? '↑' : sortConfig.direction === 'desc' ? '↓' : ''}
+        </span>
+      );
+    },
+    [sortConfig]
+  );
+
+  // Handle header click for sorting
+  const handleHeaderClick = useCallback(
+    (column: GridColumnDefinition<T>) => {
+      if (column.sortable && onSort) {
+        onSort(column.key);
+      }
+    },
+    [onSort]
+  );
+
+  const renderRowContent = useGridTableRowRenderer({
+    keyExtractor,
+    getRowClassName: getRowClassNameWithFocus,
+    getRowStyle,
+    handleRowClick,
+    handleRowMouseEnter: handleRowMouseEnterWithReset,
+    handleRowMouseLeave: handleRowMouseLeaveWithReset,
+    columnRenderModelsWithOffsets,
+    columnVirtualizationConfig,
+    columnWindowRange,
+    handleContextMenu: handleCellContextMenu,
+    getCachedCellContent,
+    firstVirtualRowRef,
+  });
+
+  const { loadMoreSentinelRef, handleManualLoadMore, paginationStatus } = useGridTablePagination({
+    paginationEnabled,
+    autoLoadMore,
+    hasMore,
+    isRequestingMore,
+    onRequestMore,
+    tableDataLength: tableData.length,
+    tableRef: tableRefMutable,
+  });
+
+  const resolvedPaginationStatus = useMemo(() => {
+    if (!showPaginationStatus) {
+      return '';
+    }
+    return paginationStatus;
+  }, [paginationStatus, showPaginationStatus]);
+
+  const headerRow = useGridTableHeaderRow({
+    renderedColumns,
+    enableColumnResizing,
+    isFixedColumnKey,
+    columnWidths,
+    handleHeaderClick,
+    renderSortIndicator,
+    handleResizeStart,
+    autoSizeColumn,
+    sortConfig,
+  });
+
+  return {
+    wrapperRef,
+    tableRef,
+    headerInnerRef,
+    tableData,
+    filtersNode,
+    focusedRowKey,
+    handleWrapperFocus,
+    handleWrapperBlur,
+    hoverState,
+    contextMenuNode,
+    handleWrapperContextMenu,
+    shouldVirtualize,
+    virtualRows,
+    virtualRange,
+    totalVirtualHeight,
+    virtualOffset,
+    firstVirtualRowRef,
+    scrollbarWidth,
+    tableContentWidth,
+    tableViewportWidth,
+    renderRowContent,
+    headerRow,
+    paginationEnabled,
+    resolvedPaginationStatus,
+    loadMoreSentinelRef,
+    handleManualLoadMore,
+    showLoadingOverlay,
+    loadingOverlayMessage,
+    wrapWithProfiler,
+  };
+}

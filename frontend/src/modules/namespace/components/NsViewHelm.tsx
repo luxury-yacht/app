@@ -271,6 +271,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     });
 
     const { sortedData, sortConfig, handleSort } = useTableSort(data, undefined, 'asc', {
+      columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
     });

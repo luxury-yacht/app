@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Yaml/yamlTabConfig.ts
- *
- * UI component for yamlTabConfig.
- * Handles rendering and interactions for the object panel feature.
  */
 
 export const INACTIVE_SCOPE = '__inactive__';

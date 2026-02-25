@@ -24,10 +24,16 @@ export interface UseGridTableHoverSyncParams {
   hideHeader: boolean;
 }
 
+export interface UpdateHoverOptions {
+  // When true, bypasses hover suppression. Used by the virtualizer to clear
+  // detached DOM nodes from hoverRowRef even while hover is suppressed.
+  force?: boolean;
+}
+
 export interface UseGridTableHoverSyncResult {
   hoverState: HoverState;
   hoverRowRef: RefObject<HTMLDivElement | null>;
-  updateHoverForElement: (element: HTMLDivElement | null) => void;
+  updateHoverForElement: (element: HTMLDivElement | null, options?: UpdateHoverOptions) => void;
   handleRowMouseEnter: (element: HTMLDivElement) => void;
   handleRowMouseLeave: (element?: HTMLDivElement | null) => void;
   scheduleHeaderSync: () => void;
@@ -57,8 +63,8 @@ export function useGridTableHoverSync({
   }, []);
 
   const updateHoverForElement = useCallback(
-    (element: HTMLDivElement | null) => {
-      if (isHoverSuppressed()) {
+    (element: HTMLDivElement | null, options?: UpdateHoverOptions) => {
+      if (!options?.force && isHoverSuppressed()) {
         return;
       }
       if (!element) {

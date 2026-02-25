@@ -139,7 +139,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
           </div>
         )}
         <div className="gridtable-filter-subcluster">
-          <div className="gridtable-filter-group" data-gridtable-filter-role="search-wrapper">
+          <div className="gridtable-filter-group" data-gridtable-filter-role="search">
             <SearchInput
               inputRef={searchInputRef}
               id={searchInputId}

@@ -10,7 +10,6 @@ import { NamespaceProvider } from '@modules/namespace/contexts/NamespaceContext'
 import { ViewStateProvider, useViewState } from './ViewStateContext';
 import { ThemeProvider } from './ThemeContext';
 import { RefreshManagerProvider } from '@/core/refresh/contexts/RefreshManagerContext';
-import { ObjectCatalogProvider } from './ObjectCatalogContext';
 import { useBackgroundClusterRefresh } from '@/core/refresh/hooks/useBackgroundClusterRefresh';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 
@@ -49,15 +48,13 @@ export const KubernetesProvider: React.FC<KubernetesProviderProps> = ({ children
   return (
     <ThemeProvider>
       <RefreshManagerProvider>
-        <ObjectCatalogProvider>
-          <KubeconfigProvider>
-            <ViewStateProvider>
-              <NamespaceProvider>
-                <BackgroundClusterRefreshBridge>{children}</BackgroundClusterRefreshBridge>
-              </NamespaceProvider>
-            </ViewStateProvider>
-          </KubeconfigProvider>
-        </ObjectCatalogProvider>
+        <KubeconfigProvider>
+          <ViewStateProvider>
+            <NamespaceProvider>
+              <BackgroundClusterRefreshBridge>{children}</BackgroundClusterRefreshBridge>
+            </NamespaceProvider>
+          </ViewStateProvider>
+        </KubeconfigProvider>
       </RefreshManagerProvider>
     </ThemeProvider>
   );

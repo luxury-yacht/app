@@ -18,6 +18,7 @@ export interface UseGridTableHeaderRowParams<T> {
   renderSortIndicator: (columnKey: string) => React.ReactNode;
   handleResizeStart: (event: React.MouseEvent, leftKey: string, rightKey: string) => void;
   autoSizeColumn: (columnKey: string) => void;
+  sortConfig?: { key: string; direction: 'asc' | 'desc' | null } | null;
 }
 
 export function useGridTableHeaderRow<T>({
@@ -30,9 +31,10 @@ export function useGridTableHeaderRow<T>({
   renderSortIndicator,
   handleResizeStart,
   autoSizeColumn,
+  sortConfig,
 }: UseGridTableHeaderRowParams<T>): React.ReactNode {
   return (
-    <div className="gridtable-header">
+    <div className="gridtable-header" role="row">
       {renderedColumns.map((column, index) => {
         const nextColumn = renderedColumns[index + 1];
         const showResizeHandle =
@@ -41,10 +43,19 @@ export function useGridTableHeaderRow<T>({
           !isFixedColumnKey(column.key) &&
           !isFixedColumnKey(nextColumn.key);
 
+        // Compute aria-sort for this header cell.
+        const ariaSortValue = (() => {
+          if (!column.sortable) return undefined;
+          if (!sortConfig || sortConfig.key !== column.key || !sortConfig.direction) return 'none';
+          return sortConfig.direction === 'asc' ? 'ascending' : 'descending';
+        })();
+
         return (
           <div
             key={column.key}
             className={`grid-cell grid-cell-header ${column.className || ''}`}
+            role="columnheader"
+            aria-sort={ariaSortValue}
             data-column={column.key}
             data-sortable={column.sortable || false}
             onContextMenu={
@@ -60,7 +71,19 @@ export function useGridTableHeaderRow<T>({
             <span className="header-content">
               <span
                 onClick={() => column.sortable && handleHeaderClick(column)}
-                style={{ cursor: column.sortable ? 'pointer' : 'default' }}
+                {...(column.sortable
+                  ? {
+                      role: 'button',
+                      tabIndex: 0,
+                      'aria-label': `Sort by ${typeof column.header === 'string' ? column.header : column.key}`,
+                      onKeyDown: (e: React.KeyboardEvent) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleHeaderClick(column);
+                        }
+                      },
+                    }
+                  : undefined)}
               >
                 {column.header}
                 {column.sortable && renderSortIndicator(column.key)}

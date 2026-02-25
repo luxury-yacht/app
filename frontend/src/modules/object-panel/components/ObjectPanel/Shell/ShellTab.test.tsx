@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.test.tsx
- *
- * Test suite for ShellTab.
- * Covers key behaviors and edge cases for ShellTab.
  */
 
 import React from 'react';

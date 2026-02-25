@@ -139,4 +139,47 @@ describe('useGridTableHeaderRow', () => {
     // sortable column should still trigger click even without resize handles
     expect(handleHeaderClick).toHaveBeenCalledWith(columns[2]);
   });
+
+  it('activates sort via Enter and Space keys on sortable headers', async () => {
+    await act(async () => {
+      root.render(<HeaderHarness enableResizing={false} />);
+    });
+
+    const sortableSpan = container.querySelector(
+      '[data-column="name"] span > span[role="button"]'
+    ) as HTMLElement;
+    expect(sortableSpan).not.toBeNull();
+    expect(sortableSpan.tabIndex).toBe(0);
+    expect(sortableSpan.getAttribute('aria-label')).toBe('Sort by Name');
+
+    // Enter triggers sort.
+    await act(async () => {
+      sortableSpan.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(handleHeaderClick).toHaveBeenCalledTimes(1);
+    expect(handleHeaderClick).toHaveBeenCalledWith(columns[0]);
+
+    handleHeaderClick.mockClear();
+
+    // Space triggers sort.
+    await act(async () => {
+      sortableSpan.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(handleHeaderClick).toHaveBeenCalledTimes(1);
+    expect(handleHeaderClick).toHaveBeenCalledWith(columns[0]);
+  });
+
+  it('does not add keyboard/button semantics to non-sortable headers', async () => {
+    await act(async () => {
+      root.render(<HeaderHarness enableResizing={false} />);
+    });
+
+    // "Age" column is not sortable.
+    const ageSpan = container.querySelector('[data-column="age"] span > span') as HTMLElement;
+    expect(ageSpan).not.toBeNull();
+    expect(ageSpan.hasAttribute('role')).toBe(false);
+    expect(ageSpan.hasAttribute('tabindex')).toBe(false);
+  });
 });

@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelContent.tsx
  *
- * Module source for ObjectPanelContent.
  * Renders the content of the object panel based on the active tab and provided props.
  * Each tab is conditionally rendered and wrapped in an error boundary for robustness.
  */
@@ -18,6 +17,7 @@ import ValuesTab from '@modules/object-panel/components/ObjectPanel/Helm/ValuesT
 import ShellTab from '@modules/object-panel/components/ObjectPanel/Shell/ShellTab';
 import { NodeMaintenanceTab } from '@modules/object-panel/components/ObjectPanel/Maintenance/NodeMaintenanceTab';
 import { PodsTab } from '@modules/object-panel/components/ObjectPanel/Pods/PodsTab';
+import { JobsTab } from '@modules/object-panel/components/ObjectPanel/Jobs/JobsTab';
 import type { ObjectPanelPodsState } from '@modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods';
 import { ErrorBoundary } from '@shared/components/errors/ErrorBoundary';
 
@@ -75,6 +75,7 @@ export function ObjectPanelContent({
   const showLogs = activeTab === 'logs' && capabilities.hasLogs && objectData;
   const showShell = activeTab === 'shell' && capabilities.hasShell && objectData;
   const showPods = activeTab === 'pods';
+  const showJobs = activeTab === 'jobs';
   const showEvents = activeTab === 'events';
   const showYaml = activeTab === 'yaml';
   const showManifest = activeTab === 'manifest';
@@ -283,6 +284,22 @@ export function ObjectPanelContent({
             loading={podsState.loading}
             error={podsState.error}
             isActive={isPanelOpen && activeTab === 'pods'}
+          />
+        </ErrorBoundary>
+      )}
+
+      {showJobs && (
+        <ErrorBoundary
+          scope="panel-jobs"
+          resetKeys={[objectData?.name ?? '', objectData?.namespace ?? ''].filter(Boolean)}
+          fallback={(_, reset) => <TabErrorFallback tabName="Jobs" reset={reset} />}
+        >
+          <JobsTab
+            jobs={detailTabProps?.cronJobDetails?.jobs ?? []}
+            loading={!detailTabProps?.cronJobDetails && !!detailTabProps?.detailsLoading}
+            isActive={isPanelOpen && activeTab === 'jobs'}
+            clusterId={objectData?.clusterId}
+            clusterName={objectData?.clusterName}
           />
         </ErrorBoundary>
       )}

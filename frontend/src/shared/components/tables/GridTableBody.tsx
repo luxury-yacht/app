@@ -8,6 +8,7 @@
 import React, { useRef } from 'react';
 import type { RefObject } from 'react';
 import type { RenderRowContentFn } from '@shared/components/tables/hooks/useGridTableRowRenderer';
+import { getStableRowId } from '@shared/components/tables/GridTable.utils';
 import GridTablePagination from '@shared/components/tables/GridTablePagination';
 
 interface HoverState {
@@ -34,7 +35,6 @@ interface GridTableBodyProps<T> {
   totalVirtualHeight: number;
   virtualOffset: number;
   renderRowContent: RenderRowContentFn<T>;
-  rowControllerPoolRef: RefObject<Array<{ id: string }>>;
   firstVirtualRowRef: RefObject<HTMLDivElement | null>;
   paginationEnabled: boolean;
   paginationStatus: string;
@@ -50,6 +50,10 @@ interface GridTableBodyProps<T> {
   contentWidth: number;
   allowHorizontalOverflow: boolean;
   viewportWidth: number;
+  /** Whether data is currently loading — drives aria-busy on the grid container. */
+  loading: boolean;
+  /** Key of the currently focused row — drives aria-activedescendant on the grid container. */
+  focusedRowKey: string | null;
 }
 
 function GridTableBody<T>({
@@ -68,7 +72,6 @@ function GridTableBody<T>({
   totalVirtualHeight,
   virtualOffset,
   renderRowContent,
-  rowControllerPoolRef,
   firstVirtualRowRef,
   paginationEnabled,
   paginationStatus,
@@ -84,6 +87,8 @@ function GridTableBody<T>({
   contentWidth,
   allowHorizontalOverflow,
   viewportWidth,
+  loading,
+  focusedRowKey,
 }: GridTableBodyProps<T>) {
   const stretchDecisionRef = useRef<boolean | null>(null);
 
@@ -97,12 +102,6 @@ function GridTableBody<T>({
     }
 
     if (shouldVirtualize) {
-      const controllers = rowControllerPoolRef.current;
-      const targetSize = virtualRows.length;
-      while (controllers.length < targetSize) {
-        controllers.push({ id: `slot-${controllers.length}` });
-      }
-
       firstVirtualRowRef.current = null;
       const shouldStretch = (() => {
         if (!allowHorizontalOverflow || contentWidth <= 0) {
@@ -138,10 +137,9 @@ function GridTableBody<T>({
             }}
           >
             {virtualRows.map((item, idx) => {
-              const controller = controllers[idx];
               const absoluteIndex = virtualRangeStart + idx;
               const rowKey = keyExtractor(item, absoluteIndex);
-              return renderRowContent(item, absoluteIndex, idx === 0, rowKey, controller.id);
+              return renderRowContent(item, absoluteIndex, idx === 0, rowKey, `slot-${idx}`);
             })}
           </div>
         </div>
@@ -162,6 +160,9 @@ function GridTableBody<T>({
       onBlur={onWrapperBlur}
       tabIndex={0}
       data-allow-shortcuts="true"
+      role="grid"
+      aria-busy={loading || undefined}
+      aria-activedescendant={focusedRowKey ? getStableRowId(focusedRowKey) : undefined}
     >
       <div
         className={[
@@ -181,6 +182,7 @@ function GridTableBody<T>({
       <div
         ref={tableRef}
         className={`gridtable gridtable--body ${tableClassName} ${useShortNames ? 'short-names' : ''}`}
+        role="rowgroup"
       >
         {renderRows()}
         {paginationEnabled && (

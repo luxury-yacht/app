@@ -476,4 +476,37 @@
   background: var(--log-scroll-thumb-hover);
 }
 
+/* Dynamic pod color applied via --pod-color CSS custom property. */
+.pod-color-text {
+  color: var(--pod-color);
+}
+
+/* Higher specificity to override .pod-log-line .pod-log-metadata base color. */
+.pod-log-line .pod-color-text {
+  color: var(--pod-color);
+}
+
+/* Pod/container prefix in raw multi-pod log lines. */
+.pod-log-line .pod-log-metadata--bold {
+  color: var(--pod-color);
+  font-weight: 500;
+}
+
+/* Layout for dropdown option rows in the log options menu. */
+.log-option-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.log-option-check {
+  width: 20px;
+  text-align: center;
+}
+
+.log-option-label {
+  flex: 1;
+}
+
 /* Light theme adjustments for parsed table */

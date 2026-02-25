@@ -76,6 +76,7 @@ const baseEvent = {
   object: 'Pod/foo',
   message: 'Something happened',
   ageTimestamp: 123,
+  clusterId: 'test-cluster',
 };
 
 describe('ClusterViewEvents', () => {

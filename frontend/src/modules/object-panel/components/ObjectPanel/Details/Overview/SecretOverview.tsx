@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/SecretOverview.tsx
- *
- * UI component for SecretOverview.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React from 'react';

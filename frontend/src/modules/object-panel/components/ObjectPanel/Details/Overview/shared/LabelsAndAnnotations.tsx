@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/shared/LabelsAndAnnotations.tsx
- *
- * UI component for LabelsAndAnnotations.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React, { useState } from 'react';

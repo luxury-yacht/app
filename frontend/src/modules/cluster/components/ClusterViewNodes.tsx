@@ -257,6 +257,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
 
     // Set up table sorting
     const { sortedData, sortConfig, handleSort } = useTableSort(data, 'name', 'asc', {
+      columns: tableColumns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
     });

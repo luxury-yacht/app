@@ -23,7 +23,7 @@ type ContextMenuWiringOptions<T> = {
   tableData: T[];
   sortConfig: { key: string; direction: 'asc' | 'desc' | null } | undefined;
   getCustomContextMenuItems?: (item: T, columnKey: string) => ContextMenuItem[];
-  onSort?: (key: string) => void;
+  onSort?: (key: string, targetDirection?: 'asc' | 'desc' | null) => void;
   keyExtractor: (item: T, index: number) => string;
   focusedRowIndex: number | null;
   focusedRowKey: string | null;
@@ -137,8 +137,8 @@ export function useGridTableContextMenuWiring<T>(options: ContextMenuWiringOptio
   const openFocusedRowContextMenu = useCallback(() => {
     if (
       !enableContextMenu ||
+      focusedRowKey == null ||
       focusedRowIndex == null ||
-      focusedRowIndex < 0 ||
       focusedRowIndex >= tableData.length
     ) {
       return false;

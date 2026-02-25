@@ -59,6 +59,22 @@ export const resolveEventElement = (target: EventTarget | null): HTMLElement | n
   return null;
 };
 
+// Selector for elements with their own keyboard interaction.
+// Used to protect interactive elements inside data-allow-shortcuts containers
+// from having bare keystrokes intercepted by shortcut handlers.
+const INTERACTIVE_ELEMENT_SELECTOR = [
+  'input',
+  'textarea',
+  'select',
+  'button',
+  'summary',
+  'a[href]',
+  '[contenteditable="true"]',
+  '[contenteditable="plaintext-only"]',
+  '[role="textbox"]',
+  '[role="button"]',
+].join(', ');
+
 export function isInputElement(target: EventTarget | null): boolean {
   let element = resolveEventElement(target);
   if (!element && typeof document !== 'undefined') {
@@ -75,11 +91,21 @@ export function isInputElement(target: EventTarget | null): boolean {
   if (!element) return false;
 
   if (element instanceof HTMLElement) {
+    // Direct opt-in: the element itself carries data-allow-shortcuts="true".
+    // Must be checked before the ancestor .closest() check below, which also
+    // matches self — without this guard, interactive elements that explicitly
+    // opt in (e.g. Dropdown's search input) would be treated as inputs.
     const optIn = element.getAttribute('data-allow-shortcuts');
     if (optIn && optIn.toLowerCase() === 'true') {
       return false;
     }
     if (element.closest('[data-allow-shortcuts="true"]')) {
+      // The ancestor opted in to shortcuts, but interactive elements inside
+      // should still be protected from bare-key interception. The direct
+      // attribute check above already handles elements that explicitly opt in.
+      if (element.closest(INTERACTIVE_ELEMENT_SELECTOR)) {
+        return true;
+      }
       return false;
     }
   }

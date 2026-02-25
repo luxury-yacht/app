@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PolicyOverview.test.tsx
- *
- * Test suite for PolicyOverview.
- * Covers key behaviors and edge cases for PolicyOverview.
  */
 
 import React from 'react';

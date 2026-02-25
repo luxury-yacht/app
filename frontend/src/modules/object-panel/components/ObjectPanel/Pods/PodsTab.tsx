@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Pods/PodsTab.tsx
- *
- * UI component for PodsTab.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React, { useCallback, useMemo } from 'react';
@@ -10,6 +7,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
   type GridColumnDefinition,
 } from '@shared/components/tables/GridTable';
+import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import {
   applyColumnSizing,
   createAgeColumn,
@@ -24,7 +22,6 @@ import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { getPodStatusSeverity } from '@utils/podStatusSeverity';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
 import type { PodSnapshotEntry, PodMetricsInfo } from '@/core/refresh/types';
 import { useViewState } from '@core/contexts/ViewStateContext';
@@ -58,8 +55,7 @@ const workloadNameFromOwner = (pod: PodSnapshotEntry) =>
   pod.ownerName ? `${pod.ownerName}${pod.ownerKind ? ` (${pod.ownerKind})` : ''}` : '—';
 
 export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error, isActive }) => {
-  const { openWithObject } = useObjectPanel();
-  const { selectedClusterId } = useKubeconfig();
+  const { openWithObject, objectData } = useObjectPanel();
   const viewState = useViewState();
   const namespaceContext = useNamespace();
 
@@ -69,7 +65,10 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     [metrics?.collectedAt]
   );
 
-  const keyExtractor = useCallback((pod: PodSnapshotEntry) => `${pod.namespace}:${pod.name}`, []);
+  const keyExtractor = useCallback(
+    (pod: PodSnapshotEntry) => buildClusterScopedKey(pod, `${pod.namespace}:${pod.name}`),
+    []
+  );
   // Ensure pod navigation keeps the active cluster context for object detail scopes.
   const getPodClusterMeta = useCallback(
     (pod: PodSnapshotEntry) => ({
@@ -226,7 +225,8 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     resetState,
   } = useGridTablePersistence<PodSnapshotEntry>({
     viewId: 'object-panel-pods',
-    clusterIdentity: selectedClusterId,
+    // Use the panel-scoped cluster ID, not the global sidebar selection.
+    clusterIdentity: objectData?.clusterId ?? '',
     namespace: null,
     isNamespaceScoped: false,
     columns,
@@ -239,6 +239,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     sortConfig: tableSort,
     handleSort,
   } = useTableSort(pods, undefined, 'asc', {
+    columns,
     controlledSort: sortConfig,
     onChange: setSortConfig,
   });

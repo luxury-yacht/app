@@ -31,6 +31,7 @@ You must adhere to these at all times. If you want an exception to these rules y
 
 - Always add clear, understandable comments to code.
 - Treat the object catalog as the source of truth for namespace/cluster listings (details in `backend/AGENTS.md#Object-Catalog`).
+- Always run all tests, linting, and typescript checks before presenting work as complete.
 
 ## Project Structure & Module Organization
 
@@ -46,8 +47,8 @@ You must adhere to these at all times. If you want an exception to these rules y
 
 - Aim for at least 80% test coverage; if that is not feasible, note the gap and ask for guidance.
 
-## Git Commands, Commit & Pull Request Guidelines
+## Git Commands and Pull Requests
 
+- IMPORTANT!!! Never run git commands that modify the state of the repo unless explicity directed to do so.
+  - You may run git commands that perform read-only actions, such as reviewing git history for reference.
 - Do not create commits or pull requests. The user will handle that.
-- Never run git commands that modify the state of the repo unless explicity directed to do so.
-- You may run commands that perform read-only actions, such as reviewing git history for reference.

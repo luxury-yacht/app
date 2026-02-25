@@ -7,7 +7,8 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import React from 'react';
-import ReactDOMServer from 'react-dom/server';
+import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 
 import type {
   ColumnWidthInput,
@@ -115,17 +116,22 @@ export function useGridTableColumnMeasurer<T>({
       headerMeasurer.style.width = 'auto';
       headerMeasurer.textContent = column.header;
       document.body.appendChild(headerMeasurer);
-
-      let headerWidth = headerMeasurer.scrollWidth;
-      if (column.sortable) {
-        headerWidth += 20;
+      try {
+        let headerWidth = headerMeasurer.scrollWidth;
+        if (column.sortable) {
+          headerWidth += 20;
+        }
+        maxWidth = Math.max(maxWidth, headerWidth);
+      } finally {
+        document.body.removeChild(headerMeasurer);
       }
-      maxWidth = Math.max(maxWidth, headerWidth);
-      document.body.removeChild(headerMeasurer);
 
       const isKindColumn = isKindColumnKey(column.key);
       const kindMeasurer = isKindColumn ? ensureKindBadgeMeasurer() : null;
 
+      // Create an off-screen measurer node with a React root for direct DOM
+      // rendering. This avoids the serialize→parse round-trip of renderToString/
+      // renderToStaticMarkup — React elements are rendered straight into the DOM.
       const cellMeasurer =
         !isKindColumn || !kindMeasurer
           ? (() => {
@@ -137,7 +143,7 @@ export function useGridTableColumnMeasurer<T>({
               node.style.whiteSpace = 'nowrap';
               node.style.width = 'auto';
               document.body.appendChild(node);
-              return node;
+              return { node, root: createRoot(node) };
             })()
           : null;
 
@@ -156,49 +162,56 @@ export function useGridTableColumnMeasurer<T>({
         }
       }
 
-      sampleItems.forEach((item) => {
-        const contentNode = column.render(item);
+      // Wrap measurement loop in try/finally so cellMeasurer and kindMeasurer
+      // are cleaned up even if column.render() or renderToString() throws.
+      try {
+        sampleItems.forEach((item) => {
+          const contentNode = column.render(item);
 
-        if (kindMeasurer) {
-          const displayText = getTextContent(contentNode).trim();
-          let canonicalKind = displayText;
+          if (kindMeasurer) {
+            const displayText = getTextContent(contentNode).trim();
+            let canonicalKind = displayText;
 
-          if (React.isValidElement(contentNode)) {
-            const explicit = (contentNode.props as Record<string, unknown>)?.['data-kind-value'];
-            if (typeof explicit === 'string' && explicit.trim().length > 0) {
-              canonicalKind = explicit.trim();
+            if (React.isValidElement(contentNode)) {
+              const explicit = (contentNode.props as Record<string, unknown>)?.['data-kind-value'];
+              if (typeof explicit === 'string' && explicit.trim().length > 0) {
+                canonicalKind = explicit.trim();
+              }
             }
+
+            kindMeasurer.badge.className = `kind-badge ${normalizeKindClass(canonicalKind)}`;
+            kindMeasurer.badge.textContent = displayText;
+
+            const badgeWidth = kindMeasurer.container.getBoundingClientRect().width;
+            maxWidth = Math.max(maxWidth, badgeWidth);
+            return;
           }
 
-          kindMeasurer.badge.className = `kind-badge ${normalizeKindClass(canonicalKind)}`;
-          kindMeasurer.badge.textContent = displayText;
+          if (!cellMeasurer) {
+            return;
+          }
 
-          const badgeWidth = kindMeasurer.container.getBoundingClientRect().width;
-          maxWidth = Math.max(maxWidth, badgeWidth);
-          return;
+          if (React.isValidElement(contentNode)) {
+            // Render directly into the DOM — avoids the synchronous
+            // serialize→parse round-trip of renderToString/renderToStaticMarkup.
+            flushSync(() => {
+              cellMeasurer.root.render(contentNode);
+            });
+          } else {
+            cellMeasurer.node.textContent = String(contentNode ?? '');
+          }
+
+          const width = cellMeasurer.node.getBoundingClientRect().width;
+          maxWidth = Math.max(maxWidth, width);
+        });
+      } finally {
+        if (cellMeasurer) {
+          cellMeasurer.root.unmount();
+          cellMeasurer.node.remove();
         }
-
-        if (!cellMeasurer) {
-          return;
+        if (kindMeasurer) {
+          kindMeasurer.badge.textContent = '';
         }
-
-        if (React.isValidElement(contentNode)) {
-          const html = ReactDOMServer.renderToString(contentNode);
-          cellMeasurer.innerHTML = html;
-        } else {
-          cellMeasurer.textContent = String(contentNode ?? '');
-        }
-
-        const width = cellMeasurer.getBoundingClientRect().width;
-        maxWidth = Math.max(maxWidth, width);
-      });
-
-      if (cellMeasurer) {
-        cellMeasurer.remove();
-      }
-
-      if (kindMeasurer) {
-        kindMeasurer.badge.textContent = '';
       }
 
       let measured = Math.ceil(maxWidth > 0 ? maxWidth : defaultColumnWidth);

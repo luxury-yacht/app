@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/PolicyOverview.tsx
- *
- * UI component for PolicyOverview.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React from 'react';

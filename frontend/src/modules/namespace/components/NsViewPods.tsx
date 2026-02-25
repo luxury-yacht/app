@@ -303,6 +303,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     });
 
     const { sortedData, sortConfig, handleSort } = useTableSort(data, undefined, 'asc', {
+      columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
     });

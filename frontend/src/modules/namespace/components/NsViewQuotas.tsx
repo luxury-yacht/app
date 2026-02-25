@@ -158,6 +158,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
     });
 
     const { sortedData, sortConfig, handleSort } = useTableSort(data, undefined, 'asc', {
+      columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
     });

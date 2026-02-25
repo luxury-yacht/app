@@ -35,7 +35,6 @@ describe('GridTableBody', () => {
 
     const wrapperRef = { current: wrapper };
     const tableRef = { current: table };
-    const rowControllerPoolRef = { current: [] as Array<{ id: string }> };
     const firstVirtualRowRef = { current: null as HTMLDivElement | null };
     const sentinelRef = { current: document.createElement('div') };
 
@@ -61,7 +60,6 @@ describe('GridTableBody', () => {
       totalVirtualHeight: 0,
       virtualOffset: 0,
       renderRowContent: defaultRenderRowContent as RenderRowContentFn<any>,
-      rowControllerPoolRef,
       firstVirtualRowRef,
       paginationEnabled: true,
       paginationStatus: 'More rows',
@@ -77,6 +75,8 @@ describe('GridTableBody', () => {
       contentWidth: 0,
       allowHorizontalOverflow: false,
       viewportWidth: 0,
+      loading: false,
+      focusedRowKey: null,
     };
 
     const allProps = { ...defaultProps, ...props } as BodyProps;
@@ -90,7 +90,6 @@ describe('GridTableBody', () => {
       container,
       root,
       props: allProps,
-      rowControllerPoolRef,
       firstVirtualRowRef,
     };
   };
@@ -119,7 +118,7 @@ describe('GridTableBody', () => {
       </div>
     );
 
-    const { container, rowControllerPoolRef } = await renderTableBody({
+    const { container } = await renderTableBody({
       shouldVirtualize: true,
       virtualRows: [{ id: 'A' }, { id: 'B' }] as unknown as TestRow[],
       renderRowContent: renderRowContent as RenderRowContentFn<any>,
@@ -128,7 +127,6 @@ describe('GridTableBody', () => {
     const virtualInner = container.querySelector('.gridtable-virtual-inner');
     expect(virtualInner).not.toBeNull();
     expect(virtualInner!.textContent).toContain('Virtual A');
-    expect(rowControllerPoolRef.current.length).toBeGreaterThan(0);
   });
 
   it('remounts virtualized rows when the data window changes to prevent state leaks', async () => {

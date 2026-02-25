@@ -1093,6 +1093,9 @@ type CronJobDetails struct {
 	// Active jobs
 	ActiveJobs []JobReference `json:"activeJobs,omitempty"`
 
+	// All owned jobs (completed, failed, running, etc.)
+	Jobs []JobSimpleInfo `json:"jobs,omitempty"`
+
 	// Job template information
 	JobTemplate JobTemplateDetails `json:"jobTemplate"`
 
@@ -1107,6 +1110,21 @@ type CronJobDetails struct {
 type JobReference struct {
 	Name      string       `json:"name"`
 	StartTime *metav1.Time `json:"startTime,omitempty"`
+}
+
+// JobSimpleInfo provides a summary of a Job for list/tab views.
+type JobSimpleInfo struct {
+	Kind        string       `json:"kind"`
+	Name        string       `json:"name"`
+	Namespace   string       `json:"namespace"`
+	Status      string       `json:"status"`
+	Completions string       `json:"completions"` // e.g. "1/1"
+	Succeeded   int32        `json:"succeeded"`
+	Failed      int32        `json:"failed"`
+	Active      int32        `json:"active"`
+	StartTime   *metav1.Time `json:"startTime,omitempty"`
+	Duration    string       `json:"duration,omitempty"`
+	Age         string       `json:"age"`
 }
 type JobTemplateDetails struct {
 	Completions             *int32                   `json:"completions,omitempty"`

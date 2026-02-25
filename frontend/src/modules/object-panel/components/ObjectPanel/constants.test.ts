@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/constants.test.ts
- *
- * Test suite for constants.
- * Covers key behaviors and edge cases for constants.
  */
 
 import { describe, expect, it } from 'vitest';

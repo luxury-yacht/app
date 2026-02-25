@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Helm/ManifestTab.tsx
- *
- * UI component for ManifestTab.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';

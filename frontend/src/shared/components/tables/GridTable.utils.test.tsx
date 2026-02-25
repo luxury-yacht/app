@@ -14,6 +14,7 @@ import {
   defaultGetNamespace,
   defaultGetSearchText,
   detectWidthUnit,
+  getStableRowId,
   getTextContent,
   isFixedColumnKey,
   isKindColumnKey,
@@ -78,11 +79,54 @@ describe('GridTable utils', () => {
     expect(buildClusterScopedKey({ item: { clusterId: 'beta:prod' } }, 'svc-1')).toBe(
       'beta:prod|svc-1'
     );
+  });
 
-    // Without clusterId, key is NOT prefixed (clusterName fallback removed).
-    expect(buildClusterScopedKey({ clusterName: 'dev' }, 'pod-1')).toBe('pod-1');
-    expect(buildClusterScopedKey({ item: { clusterName: 'prod' } }, 'svc-1')).toBe('svc-1');
-    expect(buildClusterScopedKey({}, 'deploy-1')).toBe('deploy-1');
-    expect(buildClusterScopedKey(null, 'job-1')).toBe('job-1');
+  it('throws when clusterId is missing', () => {
+    // Without clusterId, buildClusterScopedKey throws to prevent silent key
+    // collisions in multi-cluster views.
+    expect(() => buildClusterScopedKey({ clusterName: 'dev' }, 'pod-1')).toThrow(
+      /requires clusterId/
+    );
+    expect(() => buildClusterScopedKey({ item: { clusterName: 'prod' } }, 'svc-1')).toThrow(
+      /requires clusterId/
+    );
+    expect(() => buildClusterScopedKey({}, 'deploy-1')).toThrow(/requires clusterId/);
+    expect(() => buildClusterScopedKey(null, 'job-1')).toThrow(/requires clusterId/);
+  });
+
+  it('produces different keys for same name in different clusters', () => {
+    const rowA = { clusterId: 'cluster-a', name: 'app' };
+    const rowB = { clusterId: 'cluster-b', name: 'app' };
+    const keyA = buildClusterScopedKey(rowA, 'app');
+    const keyB = buildClusterScopedKey(rowB, 'app');
+    expect(keyA).not.toBe(keyB);
+    expect(keyA).toBe('cluster-a|app');
+    expect(keyB).toBe('cluster-b|app');
+  });
+
+  describe('getStableRowId', () => {
+    it('returns a prefixed id for simple keys', () => {
+      expect(getStableRowId('row-a')).toBe('gridtable-row-row-a');
+    });
+
+    it('hex-encodes special characters to preserve uniqueness', () => {
+      const idSlash = getStableRowId('a/b');
+      const idColon = getStableRowId('a:b');
+      const idPipe = getStableRowId('a|b');
+      expect(idSlash).not.toBe(idColon);
+      expect(idSlash).not.toBe(idPipe);
+      expect(idColon).not.toBe(idPipe);
+    });
+
+    it('handles cluster-scoped keys with pipe separator', () => {
+      const id = getStableRowId('cluster-1|pod:default/nginx');
+      expect(id).toMatch(/^gridtable-row-/);
+      expect(id).toMatch(/^[a-zA-Z][a-zA-Z0-9_-]*$/);
+    });
+
+    it('produces identical output for identical input', () => {
+      const key = 'cluster-1|pod:ns/name';
+      expect(getStableRowId(key)).toBe(getStableRowId(key));
+    });
   });
 });

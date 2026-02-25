@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelPods.ts
  *
- * Hook for useObjectPanelPods.
  * - Determines and manages pod data and metrics for the object panel.
  * - Handles refresh logic based on panel state and active tab.
  * - Returns structured pod data, loading states, and error information.
@@ -52,14 +51,7 @@ export function useObjectPanelPods({
     const workloadNamespace = objectData.namespace?.trim();
     const workloadKindSegment =
       WORKLOAD_KIND_API_NAMES[normalizedKind] ?? objectData.kind ?? normalizedKind;
-    const workloadKinds = [
-      'deployment',
-      'daemonset',
-      'statefulset',
-      'job',
-      'cronjob',
-      'replicaset',
-    ];
+    const workloadKinds = ['deployment', 'daemonset', 'statefulset', 'job', 'replicaset'];
     if (workloadNamespace && workloadKinds.includes(normalizedKind)) {
       return {
         scope: `workload:${workloadNamespace}:${workloadKindSegment}:${objectData.name}`,

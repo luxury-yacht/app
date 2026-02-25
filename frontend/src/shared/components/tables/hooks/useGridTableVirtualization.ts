@@ -27,7 +27,7 @@ export interface UseGridTableVirtualizationParams<T> {
   filterSignature: string;
   filteringEnabled: boolean;
   scheduleHeaderSync: () => void;
-  updateHoverForElement: (element: HTMLDivElement | null) => void;
+  updateHoverForElement: (element: HTMLDivElement | null, options?: { force?: boolean }) => void;
   hoverRowRef: RefObject<HTMLDivElement | null>;
   startFrameSampler: () => void;
   stopFrameSampler: (reason: 'timeout' | 'manual' | 'unmount') => void;
@@ -263,20 +263,26 @@ export function useGridTableVirtualization<T>({
       wrapper.scrollTo({ top: 0 });
     }
     setVirtualScrollTop(0);
+    let rafHandle: number | undefined;
     if (shouldVirtualize) {
       if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(() => updateColumnWindowRange());
+        rafHandle = requestAnimationFrame(() => updateColumnWindowRange());
       } else {
         updateColumnWindowRange();
       }
     }
+    return () => {
+      if (rafHandle != null) {
+        cancelAnimationFrame(rafHandle);
+      }
+    };
   }, [filteringEnabled, filterSignature, shouldVirtualize, wrapperRef, updateColumnWindowRange]);
 
   useEffect(() => {
     return () => {
-      if (hoverRowRef.current) {
-        updateHoverForElement(null);
-      }
+      // Clear any hover state unconditionally on unmount.
+      // updateHoverForElement(null) is safe even when no hover is active.
+      updateHoverForElement(null);
       stopFrameSampler('unmount');
     };
     // We only need to run this on unmount
@@ -320,7 +326,8 @@ export function useGridTableVirtualization<T>({
     if (!node) {
       return;
     }
-    const rowKey = node.parentElement?.getAttribute('data-row-key') ?? null;
+    // The measurement ref is on the row node itself, which carries data-row-key.
+    const rowKey = node.getAttribute('data-row-key') ?? null;
     const rect = node.getBoundingClientRect();
     if (rect.height <= 0) {
       return;
@@ -354,8 +361,9 @@ export function useGridTableVirtualization<T>({
       return;
     }
     if (!current.isConnected) {
-      hoverRowRef.current = null;
-      updateHoverForElement(null);
+      // Use force: true to bypass hover suppression — we need to clear the
+      // detached DOM node from hoverRowRef even while hover is suppressed.
+      updateHoverForElement(null, { force: true });
       return;
     }
     updateHoverForElement(current);

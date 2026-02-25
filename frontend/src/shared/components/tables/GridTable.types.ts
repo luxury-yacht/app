@@ -101,7 +101,7 @@ export interface GridTableProps<T> {
   getRowClassName?: (item: T, index: number) => string | undefined | null;
   getRowStyle?: (item: T, index: number) => React.CSSProperties | undefined;
   onRowClick?: (item: T) => void;
-  onSort?: (key: string) => void;
+  onSort?: (key: string, targetDirection?: 'asc' | 'desc' | null) => void;
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null };
   embedded?: boolean;
   className?: string;

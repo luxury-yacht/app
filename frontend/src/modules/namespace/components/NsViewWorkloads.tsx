@@ -161,6 +161,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       sortConfig: workloadSortConfig,
       handleSort: handleWorkloadSort,
     } = useTableSort(data, undefined, 'asc', {
+      columns: tableColumns,
       controlledSort: persistedSort,
       onChange: onSortChange,
     });

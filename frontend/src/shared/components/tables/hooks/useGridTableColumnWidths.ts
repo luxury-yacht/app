@@ -5,7 +5,7 @@
  * Encapsulates state and side effects for the shared components.
  */
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { RefObject } from 'react';
 import {
   DEFAULT_COLUMN_MIN_WIDTH,
@@ -25,6 +25,22 @@ import {
   useDirtyQueue,
   type ManualResizeEvent,
 } from '@shared/components/tables/hooks/useGridTableAutoWidthMeasurementQueue';
+
+// Column width lifecycle phase. Replaces the three coupled boolean refs
+// (initializedColumnsRef, isAutoSizingEnabledRef, isManualResizeActiveRef)
+// with a single state machine.
+//
+// Valid transitions:
+//   initializing → idle   (first measurement complete)
+//   idle → dragging       (drag start)
+//   dragging → idle       (drag end)
+export type ColumnWidthPhase = 'initializing' | 'idle' | 'dragging';
+
+const VALID_TRANSITIONS: Record<ColumnWidthPhase, ColumnWidthPhase[]> = {
+  initializing: ['idle'],
+  idle: ['dragging'],
+  dragging: ['idle'],
+};
 
 // Orchestrates all column-width concerns for GridTable: starting widths, auto
 // measurement, manual resize tracking, reconciling to container space, and
@@ -111,8 +127,26 @@ export function useGridTableColumnWidths<T>(
   const dirtyColumnsRef = useRef<Set<string>>(new Set());
   const columnHashesRef = useRef<Map<string, string>>(new Map());
   const allowShrinkColumnsRef = useRef<Set<string>>(new Set());
-  const isManualResizeActiveRef = useRef(false);
-  const isAutoSizingEnabledRef = useRef(true);
+
+  // Single phase ref + state replaces the three coupled boolean refs
+  // (isManualResizeActiveRef, isAutoSizingEnabledRef, initializedColumnsRef).
+  const phaseRef = useRef<ColumnWidthPhase>('initializing');
+  const [phaseState, setPhaseState] = useState<ColumnWidthPhase>('initializing');
+
+  const transitionPhase = useCallback((to: ColumnWidthPhase) => {
+    if (import.meta.env.DEV) {
+      const from = phaseRef.current;
+      const allowed = VALID_TRANSITIONS[from];
+      if (!allowed.includes(to)) {
+        console.warn(
+          `[ColumnWidthPhase] invalid transition: ${from} → ${to}. ` +
+            `Allowed from "${from}": [${allowed.join(', ')}]`
+        );
+      }
+    }
+    phaseRef.current = to;
+    setPhaseState(to);
+  }, []);
 
   const { columnWidths, setColumnWidths } = useColumnWidthState({
     columns,
@@ -141,8 +175,8 @@ export function useGridTableColumnWidths<T>(
     dirtyColumnsRef,
     columnHashesRef,
     allowShrinkColumnsRef,
-    isManualResizeActiveRef,
-    isAutoSizingEnabledRef,
+    phaseRef,
+    transitionPhase,
     setColumnWidths,
     measureColumnWidth,
     getColumnMinWidth,
@@ -261,10 +295,10 @@ export function useGridTableColumnWidths<T>(
       options?: { forceFit?: boolean }
     ): Record<string, number> => {
       // Adjust widths so the table fits its container without fighting the user.
-      // - Skip auto-fitting while a drag is in progress or auto sizing is turned off.
+      // - Skip auto-fitting while a drag is in progress.
       // - If overflow is allowed, we mostly leave widths alone unless forceFit asks us to fill space.
       // - Manually resized columns are protected below (locked as fixed) while flex columns adjust.
-      if (!isAutoSizingEnabledRef.current || isManualResizeActiveRef.current) {
+      if (phaseRef.current === 'dragging') {
         return base;
       }
       if (!containerWidth || containerWidth <= 0 || renderedColumns.length === 0) {
@@ -457,7 +491,6 @@ export function useGridTableColumnWidths<T>(
     [enableColumnResizing, externalColumnWidths, renderedColumns, allowHorizontalOverflow]
   );
 
-  const initializedColumnsRef = useRef(false);
   const prevColumnsSignatureRef = useRef<string | null>(null);
   const prevShortNamesRef = useRef(useShortNames);
 
@@ -477,7 +510,8 @@ export function useGridTableColumnWidths<T>(
     getColumnMaxWidth,
     parseWidthInputToNumber,
     isFixedColumnKey,
-    initializedColumnsRef,
+    phaseRef,
+    transitionPhase,
     prevColumnsSignatureRef,
     prevShortNamesRef,
     tableData,
@@ -491,7 +525,7 @@ export function useGridTableColumnWidths<T>(
     reconcileWidthsToContainer,
     buildColumnWidthState,
     updateNaturalWidth,
-    isInitialized: initializedColumnsRef.current,
+    isInitialized: phaseState !== 'initializing',
     markColumnsDirty,
     markAllAutoColumnsDirty,
     handleManualResizeEvent,

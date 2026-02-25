@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/index.tsx
  *
- * Barrel exports for Overview.
  * Re-exports public APIs for the object panel feature.
  */
 

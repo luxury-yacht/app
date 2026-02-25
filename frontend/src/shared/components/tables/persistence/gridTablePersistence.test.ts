@@ -44,6 +44,25 @@ describe('gridTablePersistence', () => {
     expect(key).toBe('gridtable:v1:abc123:namespace-workloads%3Apods:team-a');
   });
 
+  it('produces different keys for different cluster hashes', () => {
+    const keyA = buildGridTableStorageKey({
+      clusterHash: 'cluster-a-hash',
+      viewId: 'namespace-pods',
+      namespace: 'default',
+    });
+    const keyB = buildGridTableStorageKey({
+      clusterHash: 'cluster-b-hash',
+      viewId: 'namespace-pods',
+      namespace: 'default',
+    });
+    expect(keyA).not.toBeNull();
+    expect(keyB).not.toBeNull();
+    expect(keyA).not.toBe(keyB);
+    // Both keys contain their respective cluster hash.
+    expect(keyA).toContain('cluster-a-hash');
+    expect(keyB).toContain('cluster-b-hash');
+  });
+
   it('prunes persisted state against current columns, filters, and rows', () => {
     const pruned = prunePersistedState(
       {

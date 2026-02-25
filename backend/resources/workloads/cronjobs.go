@@ -9,6 +9,7 @@ package workloads
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/luxury-yacht/app/backend/resources/common"
 	"github.com/luxury-yacht/app/backend/resources/pods"
@@ -46,7 +47,8 @@ func (s *CronJobService) CronJob(namespace, name string) (*restypes.CronJobDetai
 	}
 
 	podInfos, podSummary := s.collectCronJobPods(namespace, cronJob, jobs)
-	return buildCronJobDetails(cronJob, jobs, podInfos, podSummary), nil
+	jobInfos := collectCronJobJobs(cronJob, jobs)
+	return buildCronJobDetails(cronJob, jobs, podInfos, podSummary, jobInfos), nil
 }
 
 func (s *CronJobService) CronJobs(namespace string) ([]*restypes.CronJobDetails, error) {
@@ -69,13 +71,13 @@ func (s *CronJobService) CronJobs(namespace string) ([]*restypes.CronJobDetails,
 	var results []*restypes.CronJobDetails
 	for i := range cronJobs.Items {
 		cj := &cronJobs.Items[i]
-		results = append(results, buildCronJobDetails(cj, jobs, nil, nil))
+		results = append(results, buildCronJobDetails(cj, jobs, nil, nil, nil))
 	}
 
 	return results, nil
 }
 
-func buildCronJobDetails(cronJob *batchv1.CronJob, jobs *batchv1.JobList, podInfos []restypes.PodSimpleInfo, podSummary *restypes.PodMetricsSummary) *restypes.CronJobDetails {
+func buildCronJobDetails(cronJob *batchv1.CronJob, jobs *batchv1.JobList, podInfos []restypes.PodSimpleInfo, podSummary *restypes.PodMetricsSummary, jobInfos []restypes.JobSimpleInfo) *restypes.CronJobDetails {
 	details := &restypes.CronJobDetails{
 		Kind:                    "CronJob",
 		Name:                    cronJob.Name,
@@ -110,6 +112,7 @@ func buildCronJobDetails(cronJob *batchv1.CronJob, jobs *batchv1.JobList, podInf
 	details.Details = summarizeCronJob(details)
 	details.Pods = podInfos
 	details.PodMetricsSummary = podSummary
+	details.Jobs = jobInfos
 	return details
 }
 
@@ -197,6 +200,70 @@ func (s *CronJobService) collectCronJobPods(namespace string, cronJob *batchv1.C
 
 	podSummary, _ := summarizePodMetrics(collected, metrics)
 	return podInfos, podSummary
+}
+
+// collectCronJobJobs returns summary info for all Jobs owned by the given CronJob.
+func collectCronJobJobs(cronJob *batchv1.CronJob, jobs *batchv1.JobList) []restypes.JobSimpleInfo {
+	if jobs == nil {
+		return nil
+	}
+	var result []restypes.JobSimpleInfo
+	for i := range jobs.Items {
+		job := &jobs.Items[i]
+		if !ownedByCronJob(job.OwnerReferences, cronJob.UID) {
+			continue
+		}
+		result = append(result, summarizeJobSimple(job))
+	}
+	return result
+}
+
+// summarizeJobSimple builds a JobSimpleInfo from a Kubernetes Job object.
+func summarizeJobSimple(job *batchv1.Job) restypes.JobSimpleInfo {
+	completions := int32(1)
+	if job.Spec.Completions != nil {
+		completions = *job.Spec.Completions
+	}
+	backoffLimit := defaultInt32(job.Spec.BackoffLimit, 6)
+
+	info := restypes.JobSimpleInfo{
+		Kind:        "Job",
+		Name:        job.Name,
+		Namespace:   job.Namespace,
+		Completions: fmt.Sprintf("%d/%d", job.Status.Succeeded, completions),
+		Succeeded:   job.Status.Succeeded,
+		Failed:      job.Status.Failed,
+		Active:      job.Status.Active,
+		StartTime:   job.Status.StartTime,
+		Age:         common.FormatAge(job.CreationTimestamp.Time),
+	}
+
+	// Duration: elapsed time from start to completion, or start to now if still running.
+	if info.StartTime != nil {
+		if job.Status.CompletionTime != nil {
+			duration := job.Status.CompletionTime.Time.Sub(info.StartTime.Time)
+			info.Duration = common.FormatAge(time.Now().Add(-duration))
+		} else {
+			info.Duration = common.FormatAge(info.StartTime.Time)
+		}
+	}
+
+	// Status determination (same logic as buildJobDetails in jobs.go).
+	suspend := job.Spec.Suspend != nil && *job.Spec.Suspend
+	switch {
+	case info.Failed > 0 && backoffLimit > 0 && info.Failed >= backoffLimit:
+		info.Status = "Failed"
+	case info.Succeeded >= completions:
+		info.Status = "Completed"
+	case info.Active > 0:
+		info.Status = "Running"
+	case suspend:
+		info.Status = "Suspended"
+	default:
+		info.Status = "Pending"
+	}
+
+	return info
 }
 
 func ownedByCronJob(owners []metav1.OwnerReference, cronJobUID types.UID) bool {

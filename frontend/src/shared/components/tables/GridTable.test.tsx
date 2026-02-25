@@ -1131,6 +1131,33 @@ it('focuses the first row when the wrapper receives focus and moves with Arrow k
   // Keyboard navigation should be tested via E2E tests.
 });
 
+it('activates hover overlay on focused row when wrapper receives keyboard focus', async () => {
+  // Regression test: the effect in GridTable.tsx that syncs hover with focused
+  // row uses a compound selector (.gridtable-row[data-row-key="..."]) to find
+  // the row element. If this were a descendant selector, the query would return
+  // null and the hover overlay would never activate.
+  const { container, cleanup, scrollWrapper } = renderGridTable({
+    data: createRows(4),
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  const wrapper = scrollWrapper();
+  await act(async () => {
+    wrapper.focus();
+  });
+
+  // The focused row should have the focused class.
+  const rows = Array.from(container.querySelectorAll('.gridtable-row'));
+  expect(rows[0]?.classList.contains('gridtable-row--focused')).toBe(true);
+
+  // The hover overlay should be visible, proving the selector found the element
+  // and updateHoverForElement was called successfully.
+  const overlay = container.querySelector('.gridtable-hover-overlay');
+  expect(overlay).not.toBeNull();
+  expect(overlay!.classList.contains('is-visible')).toBe(true);
+});
+
 it('toggles hover suppression on the body only while focused', async () => {
   const { cleanup, scrollWrapper } = renderGridTable({
     data: createRows(2),
@@ -1461,4 +1488,264 @@ it('renders filter UI when enabled', () => {
   expect(container.querySelector('input[name="gridtable-filter-search"]')).not.toBeNull();
 
   cleanup();
+});
+
+// Standalone tests below are outside the `describe` block and need their own
+// afterEach to flush React's async scheduler and call cleanupRoot. Without
+// this, pending scheduler work fires after jsdom teardown → "window is not
+// defined".
+afterEach(async () => {
+  if (cleanupRoot) {
+    cleanupRoot();
+    cleanupRoot = null;
+  }
+  // Flush any remaining async React work so it completes while jsdom is alive.
+  await act(async () => {
+    await Promise.resolve();
+  });
+});
+
+it('warns in dev when keyExtractor returns an unscoped key (missing | separator)', async () => {
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  const { cleanup } = renderGridTable({
+    data: [{ id: 'row-1', label: 'A' }],
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  await flushAsync();
+
+  // The default keyExtractor in renderGridTable returns item.id (no | separator),
+  // so the dev check should warn.
+  expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('does not appear cluster-scoped'));
+
+  warnSpy.mockRestore();
+  cleanup();
+});
+
+it('does not warn when keyExtractor returns a cluster-scoped key', async () => {
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOM.createRoot(container);
+
+  await act(async () => {
+    root.render(
+      <ZoomProvider>
+        <KeyboardProvider>
+          <GridTable
+            data={[{ id: 'row-1', label: 'A' }]}
+            columns={defaultColumns}
+            keyExtractor={(item: SimpleRow) => `cluster-a|${item.id}`}
+          />
+        </KeyboardProvider>
+      </ZoomProvider>
+    );
+    await Promise.resolve();
+  });
+
+  // No cluster-scoping warning expected — key contains | separator.
+  const clusterWarnings = warnSpy.mock.calls.filter(
+    (args) => typeof args[0] === 'string' && args[0].includes('does not appear cluster-scoped')
+  );
+  expect(clusterWarnings).toHaveLength(0);
+
+  warnSpy.mockRestore();
+  act(() => root.unmount());
+  container.remove();
+});
+
+it('renders ARIA grid semantics on container, header, rows, and cells', () => {
+  const sortableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label, sortable: true },
+  ];
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns: sortableColumns,
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  // Body wrapper (the focus host) has role="grid"
+  const grid = container.querySelector('[role="grid"]');
+  expect(grid).not.toBeNull();
+
+  // Header row has role="row"
+  const headerRow = container.querySelector('.gridtable-header[role="row"]');
+  expect(headerRow).not.toBeNull();
+
+  // Header cells have role="columnheader"
+  const headerCells = container.querySelectorAll('[role="columnheader"]');
+  expect(headerCells.length).toBeGreaterThan(0);
+
+  // Sortable header has aria-sort="none" when no sort is active
+  const sortableHeader = container.querySelector('[role="columnheader"][aria-sort]');
+  expect(sortableHeader).not.toBeNull();
+  expect(sortableHeader!.getAttribute('aria-sort')).toBe('none');
+
+  // Data rows have role="row"
+  const dataRows = container.querySelectorAll('.gridtable-row[role="row"]');
+  expect(dataRows.length).toBe(3);
+
+  // Data cells have role="gridcell"
+  const gridcells = container.querySelectorAll('[role="gridcell"]');
+  expect(gridcells.length).toBe(3); // 1 column × 3 rows
+
+  // Body has role="rowgroup"
+  const rowgroup = container.querySelector('[role="rowgroup"]');
+  expect(rowgroup).not.toBeNull();
+});
+
+it('sets aria-sort="ascending" on the actively sorted column header', () => {
+  const sortableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label, sortable: true },
+    { key: 'name', header: 'Name', render: (row) => row.name ?? '', sortable: true },
+  ];
+
+  const container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = ReactDOM.createRoot(container);
+
+  act(() => {
+    root.render(
+      <ZoomProvider>
+        <KeyboardProvider>
+          <GridTable<SimpleRow>
+            data={createRows(2)}
+            columns={sortableColumns}
+            keyExtractor={(item) => `cluster|${item.id}`}
+            sortConfig={{ key: 'label', direction: 'asc' }}
+            onSort={() => {}}
+          />
+        </KeyboardProvider>
+      </ZoomProvider>
+    );
+  });
+
+  const labelHeader = container.querySelector('[data-column="label"][role="columnheader"]');
+  expect(labelHeader!.getAttribute('aria-sort')).toBe('ascending');
+
+  const nameHeader = container.querySelector('[data-column="name"][role="columnheader"]');
+  expect(nameHeader!.getAttribute('aria-sort')).toBe('none');
+
+  act(() => root.unmount());
+  container.remove();
+});
+
+it('sets aria-busy on grid container when loading overlay is shown', () => {
+  const { container, cleanup } = renderGridTable({
+    data: createRows(5),
+    loading: true,
+    loadingOverlay: { show: true, message: 'Updating...' },
+  });
+  cleanupRoot = cleanup;
+
+  const grid = container.querySelector('[role="grid"]');
+  expect(grid!.getAttribute('aria-busy')).toBe('true');
+
+  const statusOverlay = container.querySelector('[role="status"]');
+  expect(statusOverlay).not.toBeNull();
+});
+
+it('sets aria-activedescendant on the role="grid" container when a row is focused', () => {
+  const { container, cleanup } = renderGridTable({
+    data: createRows(5),
+    virtualization: { enabled: false },
+    onRowClick: () => {},
+  });
+  cleanupRoot = cleanup;
+
+  const grid = container.querySelector('[role="grid"]');
+  // No row focused initially.
+  expect(grid!.hasAttribute('aria-activedescendant')).toBe(false);
+
+  // Click a specific row to focus it.
+  const rows = container.querySelectorAll('.gridtable-row[role="row"]');
+  const targetRow = rows[2]; // Third row
+  act(() => {
+    (targetRow as HTMLElement).click();
+  });
+
+  const activeId = grid!.getAttribute('aria-activedescendant');
+  expect(activeId).toBeTruthy();
+  // The referenced element must exist and be a row.
+  const focusedRow = document.getElementById(activeId!);
+  expect(focusedRow).not.toBeNull();
+  expect(focusedRow!.getAttribute('role')).toBe('row');
+  // It should be the row we clicked.
+  expect(focusedRow!.getAttribute('data-row-key')).toBe('row-2');
+});
+
+it('renders resize handles between columns when enableColumnResizing is true', () => {
+  const resizableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label },
+    { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+  ];
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns: resizableColumns,
+    enableColumnResizing: true,
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  const handles = container.querySelectorAll('.resize-handle');
+  // One handle between the two columns.
+  expect(handles.length).toBe(1);
+});
+
+it('does not render resize handles when enableColumnResizing is false', () => {
+  const resizableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label },
+    { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+  ];
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns: resizableColumns,
+    enableColumnResizing: false,
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  const handles = container.querySelectorAll('.resize-handle');
+  expect(handles.length).toBe(0);
+});
+
+it('sets col-resize cursor on body during a column drag resize', () => {
+  const resizableColumns: GridColumnDefinition<SimpleRow>[] = [
+    { key: 'label', header: 'Label', render: (row) => row.label },
+    { key: 'name', header: 'Name', render: (row) => row.name ?? '' },
+  ];
+
+  const { container, cleanup } = renderGridTable({
+    data: createRows(3),
+    columns: resizableColumns,
+    enableColumnResizing: true,
+    virtualization: { enabled: false },
+  });
+  cleanupRoot = cleanup;
+
+  const handle = container.querySelector('.resize-handle') as HTMLElement;
+  expect(handle).not.toBeNull();
+
+  // Simulate drag start.
+  act(() => {
+    handle.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, clientX: 100 }));
+  });
+
+  // During drag, body cursor should be 'col-resize'.
+  expect(document.body.style.cursor).toBe('col-resize');
+
+  // End drag.
+  act(() => {
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+
+  // Cursor should be restored.
+  expect(document.body.style.cursor).not.toBe('col-resize');
 });

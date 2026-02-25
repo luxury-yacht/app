@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/ObjectPanelHeader.test.tsx
- *
- * Test suite for ObjectPanelHeader.
- * Covers key behaviors and edge cases for ObjectPanelHeader.
  */
 
 import React from 'react';

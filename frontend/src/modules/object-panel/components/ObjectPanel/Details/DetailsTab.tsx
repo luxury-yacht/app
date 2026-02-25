@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTab.tsx
- *
- * UI component for DetailsTab.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React, { useMemo } from 'react';
@@ -236,12 +233,14 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
         )}
 
         {(hasUtilization || objectData?.kind?.toLowerCase() === 'node') && utilizationData && (
-          <div style={{ marginTop: 'var(--spacing-xl)' }}>
+          <div className="details-section-spaced">
             <Utilization
               cpu={utilizationData.cpu}
               memory={utilizationData.memory}
               pods={utilizationData.pods}
               mode={utilizationData.mode}
+              podCount={utilizationData.podCount}
+              readyPodCount={utilizationData.readyPodCount}
             />
           </div>
         )}
@@ -270,7 +269,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
           if (!hasContainers) return null;
 
           return (
-            <div style={{ marginTop: 'var(--spacing-xl)' }}>
+            <div className="details-section-spaced">
               <Containers
                 containers={
                   podDetails?.containers ||
@@ -286,7 +285,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
         })()}
 
         {dataInfo && (
-          <div style={{ marginTop: 'var(--spacing-xl)' }}>
+          <div className="details-section-spaced">
             <DataSection
               data={dataInfo.data}
               binaryData={dataInfo.binaryData}

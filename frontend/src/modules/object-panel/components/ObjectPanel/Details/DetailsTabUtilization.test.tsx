@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabUtilization.test.tsx
- *
- * Test suite for DetailsTabUtilization.
- * Covers key behaviors and edge cases for DetailsTabUtilization.
  */
 
 import ReactDOM from 'react-dom/client';
@@ -55,6 +52,35 @@ describe('DetailsTabUtilization', () => {
     );
 
     expect(container.textContent).toContain('Allocatable');
+    cleanup();
+  });
+
+  it('shows pod count in section title for workload resources', async () => {
+    const { container, cleanup } = await render(
+      <Utilization
+        cpu={{ usage: '400m', request: '200m', limit: '800m' }}
+        podCount={3}
+        readyPodCount={3}
+      />
+    );
+    expect(container.textContent).toContain('3/3 pods');
+    cleanup();
+  });
+
+  it('shows only total pod count when readyPodCount is not provided', async () => {
+    const { container, cleanup } = await render(
+      <Utilization cpu={{ usage: '400m', request: '200m', limit: '800m' }} podCount={5} />
+    );
+    expect(container.textContent).toContain('5 pods');
+    expect(container.textContent).not.toContain('/');
+    cleanup();
+  });
+
+  it('does not show pod count when podCount is zero', async () => {
+    const { container, cleanup } = await render(
+      <Utilization cpu={{ usage: '400m', request: '200m', limit: '800m' }} podCount={0} />
+    );
+    expect(container.textContent).not.toContain('pods');
     cleanup();
   });
 

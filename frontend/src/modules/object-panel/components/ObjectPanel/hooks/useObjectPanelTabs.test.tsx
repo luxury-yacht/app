@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/hooks/useObjectPanelTabs.test.tsx
- *
- * Test suite for useObjectPanelTabs.
- * Covers key behaviors and edge cases for useObjectPanelTabs.
  */
 
 import React from 'react';
@@ -20,10 +17,12 @@ import type {
 
 const hoistedShortcuts = vi.hoisted(() => ({
   useShortcut: vi.fn(),
+  useShortcuts: vi.fn(),
 }));
 
 vi.mock('@ui/shortcuts', () => ({
   useShortcut: (...args: unknown[]) => hoistedShortcuts.useShortcut(...args),
+  useShortcuts: (...args: unknown[]) => hoistedShortcuts.useShortcuts(...args),
   useSearchShortcutTarget: () => undefined,
 }));
 
@@ -93,6 +92,7 @@ describe('useObjectPanelTabs', () => {
     dispatchMock.mockClear();
     closeMock.mockClear();
     hoistedShortcuts.useShortcut.mockClear();
+    hoistedShortcuts.useShortcuts.mockClear();
   });
 
   afterEach(() => {
@@ -169,35 +169,63 @@ describe('useObjectPanelTabs', () => {
     expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_ACTIVE_TAB', payload: 'details' });
   });
 
-  it('registers shortcut handlers for tab switching', async () => {
+  it('registers position-based shortcut keys matching visible tab order', async () => {
     await renderHook();
-    const shortcutCalls = hoistedShortcuts.useShortcut.mock.calls;
-    const keys = shortcutCalls.map(([config]) => (config as { key: string }).key);
-    expect(keys).toEqual(['Escape', '1', '2', '3', '4', '5']);
+
+    // Escape still registered via useShortcut (singular).
+    const escapeKeys = hoistedShortcuts.useShortcut.mock.calls.map(
+      ([config]) => (config as { key: string }).key
+    );
+    expect(escapeKeys).toContain('Escape');
+
+    // Tab shortcuts registered via useShortcuts (plural), keyed by position.
+    // Deployment tabs: Details, Pods, Logs, Events, YAML → keys 1–5.
+    const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
+      | Array<{ key: string; description: string }>
+      | undefined;
+    expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4', '5']);
+    expect(tabShortcuts?.map((s) => s.description)).toEqual([
+      'Switch to Details tab',
+      'Switch to Pods tab',
+      'Switch to Logs tab',
+      'Switch to Events tab',
+      'Switch to YAML tab',
+    ]);
   });
 
-  it('excludes logs tab and disables related shortcut when logs capability is absent', async () => {
+  it('numbers shortcuts by position so hidden tabs do not leave gaps', async () => {
+    // Helm releases hide events/yaml/pods, showing: Details, Logs, Manifest, Values.
+    await renderHook({
+      isHelmRelease: true,
+      capabilities: { ...baseCapabilities, hasManifest: true, hasValues: true },
+    });
+
+    const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
+      | Array<{ key: string; description: string }>
+      | undefined;
+    expect(tabShortcuts?.map((s) => s.key)).toEqual(['1', '2', '3', '4']);
+    expect(tabShortcuts?.map((s) => s.description)).toEqual([
+      'Switch to Details tab',
+      'Switch to Logs tab',
+      'Switch to Manifest tab',
+      'Switch to Values tab',
+    ]);
+  });
+
+  it('omits shortcuts for hidden tabs instead of disabling them', async () => {
+    // Without logs capability: Details, Pods, Events, YAML → 4 shortcuts, no gap.
     const { availableTabs } = await renderHook({
       capabilities: { ...baseCapabilities, hasLogs: false },
     });
 
     expect(availableTabs.map((tab) => tab.label)).toEqual(['Details', 'Pods', 'Events', 'YAML']);
 
-    const logShortcut = hoistedShortcuts.useShortcut.mock.calls.find(
-      ([config]) => (config as { key: string }).key === '2'
-    )?.[0] as { enabled: boolean } | undefined;
-    expect(logShortcut?.enabled).toBe(false);
-  });
-
-  it('disables shell shortcut when capability is absent', async () => {
-    await renderHook({
-      objectData: { kind: 'Pod', name: 'api-123', namespace: 'team-a' },
-    });
-
-    const shellShortcut = hoistedShortcuts.useShortcut.mock.calls.find(
-      ([config]) => (config as { key: string }).key === '5'
-    )?.[0] as { enabled: boolean } | undefined;
-    expect(shellShortcut?.enabled).toBe(false);
+    const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
+      | Array<{ key: string; description: string }>
+      | undefined;
+    expect(tabShortcuts).toHaveLength(4);
+    // Key '2' now maps to Pods (second visible tab), not to a disabled Logs shortcut.
+    expect(tabShortcuts?.[1]?.description).toBe('Switch to Pods tab');
   });
 
   it('invokes close handler when escape shortcut fires while open', async () => {
@@ -212,28 +240,32 @@ describe('useObjectPanelTabs', () => {
 
   it('ignores tab shortcuts when the panel is closed', async () => {
     await renderHook({ isOpen: false });
-    const detailsShortcut = hoistedShortcuts.useShortcut.mock.calls.find(
-      ([config]) => (config as { key: string }).key === '1'
-    )?.[0] as { handler: () => boolean };
 
-    expect(detailsShortcut.handler()).toBe(false);
+    const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
+      | Array<{ key: string; handler: () => boolean; enabled: boolean }>
+      | undefined;
+    expect(tabShortcuts?.[0]?.enabled).toBe(false);
+    expect(tabShortcuts?.[0]?.handler()).toBe(false);
     expect(dispatchMock).not.toHaveBeenCalled();
   });
 
-  it('fires tab change shortcuts when the panel is open', async () => {
+  it('fires tab change shortcuts matching visible tab positions', async () => {
     await renderHook();
-    const shortcutByKey = (key: string) =>
-      hoistedShortcuts.useShortcut.mock.calls.find(
-        ([config]) => (config as { key: string }).key === key
-      )?.[0] as { handler: () => boolean };
 
-    expect(shortcutByKey('2').handler()).toBe(true);
+    const tabShortcuts = hoistedShortcuts.useShortcuts.mock.calls[0]?.[0] as
+      | Array<{ key: string; handler: () => boolean }>
+      | undefined;
+
+    // Key '1' → Details (first visible tab).
+    expect(tabShortcuts?.[0]?.handler()).toBe(true);
+    expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_ACTIVE_TAB', payload: 'details' });
+
+    // Key '3' → Logs (third visible tab for Deployment: Details, Pods, Logs).
+    expect(tabShortcuts?.[2]?.handler()).toBe(true);
     expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_ACTIVE_TAB', payload: 'logs' });
 
-    expect(shortcutByKey('3').handler()).toBe(true);
+    // Key '4' → Events (fourth visible tab).
+    expect(tabShortcuts?.[3]?.handler()).toBe(true);
     expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_ACTIVE_TAB', payload: 'events' });
-
-    expect(shortcutByKey('4').handler()).toBe(true);
-    expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_ACTIVE_TAB', payload: 'yaml' });
   });
 });

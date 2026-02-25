@@ -18,7 +18,7 @@ export type ContextMenuSource = 'cell' | 'header' | 'empty';
 export interface UseGridTableContextMenuItemsParams<T> {
   columns: GridColumnDefinition<T>[];
   getCustomContextMenuItems?: (item: T, columnKey: string) => ContextMenuItem[];
-  onSort?: (columnKey: string) => void;
+  onSort?: (columnKey: string, targetDirection?: 'asc' | 'desc' | null) => void;
   sortConfig?: { key: string; direction: 'asc' | 'desc' | null } | null;
 }
 
@@ -62,37 +62,26 @@ export function useGridTableContextMenuItems<T>({
         const isCurrentlySorted = sortConfig?.key === columnKey;
         const currentDirection = isCurrentlySorted ? (sortConfig?.direction ?? null) : null;
 
+        // Pass the target direction directly instead of cycling through the
+        // state machine with multiple onSort calls. This avoids stale-closure
+        // bugs and setTimeout leaks (see gridtable.md issues 2 and 9).
         items.push(
           {
             label: `Sort ${column.header} Asc`,
             icon: <SortAscIcon />,
-            onClick: () => onSort(columnKey),
+            onClick: () => onSort(columnKey, 'asc'),
             disabled: currentDirection === 'asc',
           },
           {
             label: `Sort ${column.header} Desc`,
             icon: <SortDescIcon />,
-            onClick: () => {
-              if (currentDirection !== 'desc') {
-                onSort(columnKey);
-                if (currentDirection !== 'asc') {
-                  setTimeout(() => onSort(columnKey), 0);
-                }
-              }
-            },
+            onClick: () => onSort(columnKey, 'desc'),
             disabled: currentDirection === 'desc',
           },
           {
             label: 'Clear Sort',
             icon: '×',
-            onClick: () => {
-              if (currentDirection === 'asc') {
-                onSort(columnKey);
-                setTimeout(() => onSort(columnKey), 0);
-              } else if (currentDirection === 'desc') {
-                onSort(columnKey);
-              }
-            },
+            onClick: () => onSort(columnKey, null),
             disabled: !isCurrentlySorted,
           }
         );

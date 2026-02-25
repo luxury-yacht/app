@@ -1,7 +1,6 @@
 /**
  * frontend/src/modules/object-panel/hooks/useObjectPanel.test.tsx
  *
- * Test suite for useObjectPanel.
  * Covers key behaviors for the multi-tab object panel system.
  */
 

@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/DetailsTabContainers.tsx
- *
- * UI component for DetailsTabContainers.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import React from 'react';

@@ -1,8 +1,5 @@
 /**
  * frontend/src/modules/object-panel/components/ObjectPanel/Shell/ShellTab.tsx
- *
- * UI component for ShellTab.
- * Handles rendering and interactions for the object panel feature.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -796,12 +793,12 @@ const ShellTab: React.FC<ShellTabProps> = ({
         targetContainer: debugTarget || containerOptions[0]?.value || '',
       });
       // Revert to default shell controls, target the new container, and connect.
+      // The backend's CreateDebugContainer already polls until the ephemeral
+      // container is Running, so we can initiate the connection immediately.
       setStartDebugContainer(false);
       setContainerOverride(response.containerName);
       void refreshContainers();
-      setTimeout(() => {
-        initiateConnection();
-      }, 100);
+      initiateConnection();
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       ensureTerminal();

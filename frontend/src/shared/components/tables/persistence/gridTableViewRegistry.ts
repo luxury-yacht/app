@@ -13,6 +13,7 @@ const VIEW_IDS = new Set<string>([
   'cluster-config',
   'cluster-crds',
   'cluster-events',
+  'cluster-custom',
   'namespace-workloads',
   'namespace-pods',
   'namespace-events',
@@ -24,6 +25,9 @@ const VIEW_IDS = new Set<string>([
   'namespace-custom',
   'namespace-rbac',
   'namespace-helm',
+  'namespace-browse',
+  'object-panel-pods',
+  'object-panel-jobs',
 ]);
 
 export const isRegisteredGridTableView = (viewId: string): boolean => VIEW_IDS.has(viewId);

@@ -43,6 +43,7 @@
   /* Grid table resize handle */
   --grid-resize-handle-color: var(--color-base-500);
   --grid-resize-handle-opacity: 0.5;
+  --grid-resize-handle-hover-color: rgba(255, 255, 255, 0.08);
 
   /* Button colors - Gold primary, refined secondary */
   --button-generic-bg: var(--color-base-700);
