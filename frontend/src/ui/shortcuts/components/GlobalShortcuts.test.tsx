@@ -307,17 +307,12 @@ describe('GlobalShortcuts', () => {
     expect(toggleDiagnostics).toHaveBeenCalledTimes(1);
   });
 
-  it('toggles active sessions panel via Cmd+Shift+S shortcut', async () => {
-    const toggleActiveSessions = vi.fn();
+  it('does not register an active sessions shortcut', async () => {
     isMacPlatformMock.mockReturnValue(true);
     registeredShortcuts.length = 0;
-    await renderComponent({ onToggleActiveSessions: toggleActiveSessions });
+    await renderComponent({});
 
-    act(() => {
-      findShortcut('s', { meta: true, shift: true }).handler();
-    });
-
-    expect(toggleActiveSessions).toHaveBeenCalledTimes(1);
+    expect(() => findShortcut('s', { meta: true, shift: true })).toThrow('not registered');
   });
 
   it('toggles object diff viewer via Cmd+D shortcut', async () => {

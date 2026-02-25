@@ -1,0 +1,133 @@
+/**
+ * frontend/src/ui/status/SessionsStatus.css
+ *
+ * Tooltip layout overrides for detailed session tracking in the header.
+ */
+
+.status-popover.sessions-status-popover {
+  min-width: 320px;
+  max-width: 520px;
+}
+
+.sessions-status-message {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sessions-status-tracking {
+  max-height: 360px;
+  overflow-y: auto;
+  margin-right: -14px;
+  padding-right: 14px;
+}
+
+.sessions-status-empty {
+  min-height: 140px;
+}
+
+.sessions-status-message .as-sections {
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sessions-status-message .ss-session-item {
+  padding: 6px 8px;
+}
+
+.sessions-status-message .as-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  gap: 6px;
+}
+
+.sessions-status-message .as-empty-icon {
+  font-size: 18px;
+}
+
+.sessions-status-message .as-empty-text {
+  font-size: 12px;
+}
+
+.sessions-status-message .as-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sessions-status-message .as-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sessions-status-message .as-section-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sessions-status-message .as-section-count {
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+.sessions-status-message .as-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sessions-status-message .as-section-empty {
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.sessions-status-message .as-shell-session,
+.sessions-status-message .as-pf-session {
+  align-items: flex-start;
+}
+
+.sessions-status-message .as-pf-fields .as-pf-field-row {
+  grid-template-columns: 16px 74px minmax(0, 1fr);
+}
+
+.sessions-status-message .as-pf-local-row .ss-field-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.sessions-status-message .as-pf-status-slot {
+  width: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sessions-status-message .as-pf-reason {
+  padding-left: 0;
+  margin-top: 8px;
+}

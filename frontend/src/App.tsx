@@ -43,7 +43,6 @@ import { ZoomProvider } from '@core/contexts/ZoomContext';
 // App components
 import { AppLayout } from '@ui/layout/AppLayout';
 import { useAppLogsPanel } from '@ui/panels/app-logs/AppLogsPanel';
-import { useActiveSessionsPanel } from '@modules/active-session';
 import { DockablePanelProvider } from '@ui/dockable';
 
 // Error Boundary
@@ -60,7 +59,6 @@ import { useSidebarResize } from '@/hooks/useSidebarResize';
 function AppContent() {
   const viewState = useViewState();
   const appLogsPanel = useAppLogsPanel();
-  const activeSessionsPanel = useActiveSessionsPanel();
   const connectionStatus = useConnectionStatus();
   const { selectedClusterId, selectedClusterName } = useKubeconfig();
 
@@ -184,10 +182,6 @@ function AppContent() {
     appLogsPanel.toggle();
   }, [appLogsPanel]);
 
-  const handleToggleActiveSessionsPanel = useCallback(() => {
-    activeSessionsPanel.setOpen(!activeSessionsPanel.isOpen);
-  }, [activeSessionsPanel]);
-
   const handleToggleDiagnostics = useCallback(() => {
     eventBus.emit('view:toggle-diagnostics');
   }, []);
@@ -204,7 +198,6 @@ function AppContent() {
     onToggleAppLogs: handleToggleAppLogsPanel,
     onToggleDiagnostics: handleToggleDiagnostics,
     onToggleObjectDiff: handleToggleObjectDiff,
-    onToggleActiveSessions: handleToggleActiveSessionsPanel,
   });
 
   // Handle sidebar resize
@@ -253,7 +246,6 @@ function AppContent() {
         onToggleObjectDiff={() => viewState.setIsObjectDiffOpen(!viewState.isObjectDiffOpen)}
         onRefresh={handleManualRefresh}
         onToggleDiagnostics={handleToggleDiagnostics}
-        onToggleActiveSessions={handleToggleActiveSessionsPanel}
         viewType={viewState.viewType}
         isLogsPanelOpen={appLogsPanel.isOpen}
         isObjectPanelOpen={viewState.showObjectPanel}

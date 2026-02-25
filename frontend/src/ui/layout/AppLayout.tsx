@@ -60,11 +60,6 @@ const AppLogsPanel = withLazyBoundary(
 // (when openPanels has entries). A lazy boundary would flash a loading spinner
 // on the first click before the chunk loads.
 import ObjectPanel from '@modules/object-panel/components/ObjectPanel/ObjectPanel';
-const ActiveSessionsPanel = withLazyBoundary(
-  () => import('@modules/active-session').then((m) => ({ default: m.ActiveSessionsPanel })),
-  'Loading active sessions panel...'
-);
-
 const DevTestErrorBoundaryLazy = React.lazy(() => import('@ui/errors/TestErrorBoundary'));
 
 export const AppLayout: React.FC = () => {
@@ -284,10 +279,6 @@ export const AppLayout: React.FC = () => {
 
       <PanelErrorBoundary onClose={() => {}} panelName="app-logs">
         <AppLogsPanel />
-      </PanelErrorBoundary>
-
-      <PanelErrorBoundary onClose={() => {}} panelName="active-sessions">
-        <ActiveSessionsPanel />
       </PanelErrorBoundary>
 
       <PanelErrorBoundary onClose={() => setShowDiagnostics(false)} panelName="diagnostics">

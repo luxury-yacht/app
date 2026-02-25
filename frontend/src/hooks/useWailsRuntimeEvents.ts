@@ -42,7 +42,6 @@ interface WailsRuntimeEventHandlers {
   onToggleAppLogs: () => void;
   onToggleDiagnostics: () => void;
   onToggleObjectDiff: () => void;
-  onToggleActiveSessions: () => void;
 }
 
 /**
@@ -56,7 +55,6 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
     onToggleAppLogs,
     onToggleDiagnostics,
     onToggleObjectDiff,
-    onToggleActiveSessions,
   } = handlers;
 
   useEffect(() => {
@@ -72,10 +70,6 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
       ['toggle-app-logs', onToggleAppLogs],
       ['toggle-diagnostics', onToggleDiagnostics],
       ['toggle-object-diff', onToggleObjectDiff],
-      ['toggle-active-sessions', onToggleActiveSessions],
-      // Backward compatibility for older backend emits.
-      ['toggle-port-forwards', onToggleActiveSessions],
-      ['toggle-shell-sessions', onToggleActiveSessions],
     ];
 
     eventHandlers.forEach(([event, handler]) => runtime.EventsOn?.(event, handler));
@@ -90,7 +84,6 @@ export function useWailsRuntimeEvents(handlers: WailsRuntimeEventHandlers): void
     onToggleAppLogs,
     onToggleDiagnostics,
     onToggleObjectDiff,
-    onToggleActiveSessions,
   ]);
 }
 
