@@ -48,6 +48,7 @@ export const useObjectPanelTabs = ({
     const orderedTabs = [
       TABS.DETAILS,
       TABS.PODS,
+      TABS.JOBS,
       TABS.LOGS,
       TABS.EVENTS,
       TABS.YAML,
@@ -59,7 +60,7 @@ export const useObjectPanelTabs = ({
 
     return orderedTabs.filter((tab) => {
       if (isHelmRelease) {
-        if (tab.id === 'events' || tab.id === 'yaml' || tab.id === 'pods') {
+        if (tab.id === 'events' || tab.id === 'yaml' || tab.id === 'pods' || tab.id === 'jobs') {
           return false;
         }
       } else if (tab.id === 'manifest' || tab.id === 'values') {

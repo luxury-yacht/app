@@ -119,12 +119,13 @@ export function useGridTableFilters<T>({
     setInternalFilters(normalized);
   }, [filteringEnabled, isControlled, filters?.initial]);
 
+  const controlledValue = filters?.value;
   const activeFilters = useMemo(() => {
     if (!filteringEnabled) {
       return DEFAULT_FILTER_STATE;
     }
-    return normalizeFilterState(isControlled ? filters!.value : internalFilters);
-  }, [filteringEnabled, isControlled, filters?.value, internalFilters]);
+    return normalizeFilterState(isControlled ? controlledValue! : internalFilters);
+  }, [filteringEnabled, isControlled, controlledValue, internalFilters]);
 
   const filterSignature = useMemo(
     () => (filteringEnabled ? JSON.stringify(activeFilters) : ''),

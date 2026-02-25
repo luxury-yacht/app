@@ -1490,6 +1490,21 @@ it('renders filter UI when enabled', () => {
   cleanup();
 });
 
+// Standalone tests below are outside the `describe` block and need their own
+// afterEach to flush React's async scheduler and call cleanupRoot. Without
+// this, pending scheduler work fires after jsdom teardown → "window is not
+// defined".
+afterEach(async () => {
+  if (cleanupRoot) {
+    cleanupRoot();
+    cleanupRoot = null;
+  }
+  // Flush any remaining async React work so it completes while jsdom is alive.
+  await act(async () => {
+    await Promise.resolve();
+  });
+});
+
 it('warns in dev when keyExtractor returns an unscoped key (missing | separator)', async () => {
   const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 

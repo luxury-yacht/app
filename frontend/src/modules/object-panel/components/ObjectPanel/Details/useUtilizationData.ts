@@ -124,7 +124,8 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
     if (deploymentDetails && objectKind === 'deployment') {
       const summary = deploymentDetails.podMetricsSummary;
       const hasSummary =
-        summary && (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
+        summary &&
+        (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
       // Use totals from podMetricsSummary when available, fall back to averages.
       const source = hasSummary ? summary : deploymentDetails;
       const hasCpuData = source.cpuUsage || source.cpuRequest || source.cpuLimit;
@@ -156,7 +157,8 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
     if (daemonSetDetails && objectKind === 'daemonset') {
       const summary = daemonSetDetails.podMetricsSummary;
       const hasSummary =
-        summary && (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
+        summary &&
+        (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
       const source = hasSummary ? summary : daemonSetDetails;
       const hasCpuData = source.cpuUsage || source.cpuRequest || source.cpuLimit;
       const hasMemData = source.memUsage || source.memRequest || source.memLimit;
@@ -187,7 +189,8 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
     if (statefulSetDetails && objectKind === 'statefulset') {
       const summary = statefulSetDetails.podMetricsSummary;
       const hasSummary =
-        summary && (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
+        summary &&
+        (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
       const source = hasSummary ? summary : statefulSetDetails;
       const hasCpuData = source.cpuUsage || source.cpuRequest || source.cpuLimit;
       const hasMemData = source.memUsage || source.memRequest || source.memLimit;
@@ -222,7 +225,8 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
 
       const summary = replicaSetDetails.podMetricsSummary;
       const hasSummary =
-        summary && (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
+        summary &&
+        (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
       const source = hasSummary ? summary : replicaSetDetails;
       const hasCpuData = source.cpuUsage || source.cpuRequest || source.cpuLimit;
       const hasMemData = source.memUsage || source.memRequest || source.memLimit;

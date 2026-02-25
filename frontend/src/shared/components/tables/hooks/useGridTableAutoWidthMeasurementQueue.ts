@@ -151,13 +151,7 @@ export function useDirtyQueue<T>({
         scheduleDirtyFlush();
       }
     },
-    [
-      renderedColumnsRef,
-      manuallyResizedColumnsRef,
-      scheduleDirtyFlush,
-      dirtyColumnsRef,
-      phaseRef,
-    ]
+    [renderedColumnsRef, manuallyResizedColumnsRef, scheduleDirtyFlush, dirtyColumnsRef, phaseRef]
   );
 
   const markAllAutoColumnsDirty = useCallback(() => {

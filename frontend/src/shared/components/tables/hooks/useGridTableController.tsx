@@ -335,13 +335,7 @@ export function useGridTableController<T>({
       }
       handleRowMouseEnter(element);
     },
-    [
-      contextMenuActiveRef,
-      handleRowMouseEnter,
-      isWrapperFocused,
-      shortcutsActive,
-      setFocusedRowKey,
-    ]
+    [contextMenuActiveRef, handleRowMouseEnter, isWrapperFocused, shortcutsActive, setFocusedRowKey]
   );
 
   const handleRowMouseLeaveWithReset = useCallback(

@@ -69,10 +69,7 @@ describe('DetailsTabUtilization', () => {
 
   it('shows only total pod count when readyPodCount is not provided', async () => {
     const { container, cleanup } = await render(
-      <Utilization
-        cpu={{ usage: '400m', request: '200m', limit: '800m' }}
-        podCount={5}
-      />
+      <Utilization cpu={{ usage: '400m', request: '200m', limit: '800m' }} podCount={5} />
     );
     expect(container.textContent).toContain('5 pods');
     expect(container.textContent).not.toContain('/');
@@ -81,10 +78,7 @@ describe('DetailsTabUtilization', () => {
 
   it('does not show pod count when podCount is zero', async () => {
     const { container, cleanup } = await render(
-      <Utilization
-        cpu={{ usage: '400m', request: '200m', limit: '800m' }}
-        podCount={0}
-      />
+      <Utilization cpu={{ usage: '400m', request: '200m', limit: '800m' }} podCount={0} />
     );
     expect(container.textContent).not.toContain('pods');
     cleanup();

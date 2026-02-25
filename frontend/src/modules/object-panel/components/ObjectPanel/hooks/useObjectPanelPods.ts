@@ -51,14 +51,7 @@ export function useObjectPanelPods({
     const workloadNamespace = objectData.namespace?.trim();
     const workloadKindSegment =
       WORKLOAD_KIND_API_NAMES[normalizedKind] ?? objectData.kind ?? normalizedKind;
-    const workloadKinds = [
-      'deployment',
-      'daemonset',
-      'statefulset',
-      'job',
-      'cronjob',
-      'replicaset',
-    ];
+    const workloadKinds = ['deployment', 'daemonset', 'statefulset', 'job', 'replicaset'];
     if (workloadNamespace && workloadKinds.includes(normalizedKind)) {
       return {
         scope: `workload:${workloadNamespace}:${workloadKindSegment}:${objectData.name}`,

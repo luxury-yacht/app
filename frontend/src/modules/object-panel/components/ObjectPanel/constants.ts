@@ -81,15 +81,12 @@ export const TABS = {
   PODS: {
     id: 'pods',
     label: 'Pods',
-    onlyForKinds: [
-      'node',
-      'deployment',
-      'daemonset',
-      'statefulset',
-      'job',
-      'cronjob',
-      'replicaset',
-    ],
+    onlyForKinds: ['node', 'deployment', 'daemonset', 'statefulset', 'job', 'replicaset'],
+  },
+  JOBS: {
+    id: 'jobs',
+    label: 'Jobs',
+    onlyForKinds: ['cronjob'],
   },
   EVENTS: { id: 'events', label: 'Events', alwaysShow: true },
   YAML: { id: 'yaml', label: 'YAML', alwaysShow: true },

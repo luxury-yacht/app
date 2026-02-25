@@ -256,6 +256,67 @@ func TestCronJobServiceCollectsPods(t *testing.T) {
 	require.Contains(t, detail.Details, "Schedule: "+cron.Spec.Schedule)
 }
 
+func TestCronJobServiceCollectsJobs(t *testing.T) {
+	cron := testsupport.CronJobFixture("default", "nightly")
+	cron.UID = types.UID("cron-nightly")
+
+	// Create two jobs owned by the cronjob: one completed, one running.
+	completedJob := testsupport.JobFixture("default", "nightly-001")
+	completedJob.UID = types.UID("job-001")
+	completedJob.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: "batch/v1",
+		Kind:       "CronJob",
+		Name:       cron.Name,
+		UID:        cron.UID,
+		Controller: ptrTo(true),
+	}}
+	completedJob.Status.Succeeded = 1
+	completedJob.Status.StartTime = &metav1.Time{Time: timeNow().Add(-10 * time.Minute)}
+	completedJob.Status.CompletionTime = &metav1.Time{Time: timeNow().Add(-8 * time.Minute)}
+
+	runningJob := testsupport.JobFixture("default", "nightly-002")
+	runningJob.UID = types.UID("job-002")
+	runningJob.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: "batch/v1",
+		Kind:       "CronJob",
+		Name:       cron.Name,
+		UID:        cron.UID,
+		Controller: ptrTo(true),
+	}}
+	runningJob.Status.Active = 1
+	runningJob.Status.StartTime = &metav1.Time{Time: timeNow().Add(-1 * time.Minute)}
+
+	// Create a job NOT owned by the cronjob — should be excluded.
+	unrelatedJob := testsupport.JobFixture("default", "other-job")
+	unrelatedJob.UID = types.UID("job-other")
+
+	client := cgofake.NewClientset(cron.DeepCopy(), completedJob.DeepCopy(), runningJob.DeepCopy(), unrelatedJob.DeepCopy())
+	deps := newDeps(t, client)
+
+	service := workloads.NewCronJobService(deps)
+	detail, err := service.CronJob("default", "nightly")
+	require.NoError(t, err)
+
+	// Verify jobs are collected and unrelated job is filtered out.
+	require.Len(t, detail.Jobs, 2, "should include exactly the two owned jobs")
+
+	// Find the completed and running jobs by name.
+	jobsByName := make(map[string]struct{ Status, Completions string })
+	for _, j := range detail.Jobs {
+		require.Equal(t, "Job", j.Kind)
+		require.Equal(t, "default", j.Namespace)
+		jobsByName[j.Name] = struct{ Status, Completions string }{j.Status, j.Completions}
+	}
+
+	require.Contains(t, jobsByName, "nightly-001")
+	require.Equal(t, "Completed", jobsByName["nightly-001"].Status)
+	require.Equal(t, "1/1", jobsByName["nightly-001"].Completions)
+
+	require.Contains(t, jobsByName, "nightly-002")
+	require.Equal(t, "Running", jobsByName["nightly-002"].Status)
+	require.Equal(t, "0/1", jobsByName["nightly-002"].Completions)
+}
+
 func TestGetWorkloadsAggregatesKinds(t *testing.T) {
 	deploy := testsupport.DeploymentFixture("default", "web")
 	stateful := testsupport.StatefulSetFixture("default", "db")

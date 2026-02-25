@@ -449,7 +449,9 @@ export function useInitialMeasurementAndReconcile<T>({
     const shortNamesChanged = prevShortNamesRef.current !== useShortNames;
     // Re-initialize if we previously initialized with empty data and now have data
     const dataArrivedAfterEmptyInit =
-      phaseRef.current !== 'initializing' && !initializedWithDataRef.current && tableData.length > 0;
+      phaseRef.current !== 'initializing' &&
+      !initializedWithDataRef.current &&
+      tableData.length > 0;
 
     if (
       !needsInitialization &&

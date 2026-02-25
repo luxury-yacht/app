@@ -140,7 +140,7 @@ export function useGridTableColumnWidths<T>(
       if (!allowed.includes(to)) {
         console.warn(
           `[ColumnWidthPhase] invalid transition: ${from} → ${to}. ` +
-          `Allowed from "${from}": [${allowed.join(', ')}]`
+            `Allowed from "${from}": [${allowed.join(', ')}]`
         );
       }
     }

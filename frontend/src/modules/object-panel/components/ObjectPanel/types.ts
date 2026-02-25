@@ -111,6 +111,7 @@ export type ViewType =
   | 'logs'
   | 'shell'
   | 'pods'
+  | 'jobs'
   | 'events'
   | 'yaml'
   | 'manifest'
