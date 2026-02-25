@@ -239,6 +239,8 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
               memory={utilizationData.memory}
               pods={utilizationData.pods}
               mode={utilizationData.mode}
+              podCount={utilizationData.podCount}
+              readyPodCount={utilizationData.readyPodCount}
             />
           </div>
         )}

@@ -85,6 +85,12 @@
   font-weight: 600;
 }
 
+.utilization-pod-count {
+  font-weight: normal;
+  color: var(--color-text-secondary);
+  margin-left: 0.5rem;
+}
+
 .utilization-empty {
   padding: 2rem;
   text-align: center;

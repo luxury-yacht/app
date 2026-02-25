@@ -100,6 +100,6 @@ export interface UtilizationData {
     allocatable: string;
   };
   mode?: 'nodeMetrics';
-  isAverage?: boolean;
   podCount?: number;
+  readyPodCount?: number;
 }

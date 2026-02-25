@@ -37,6 +37,8 @@ interface UtilizationProps {
     allocatable?: string;
   };
   mode?: 'podMetrics' | 'nodeMetrics' | 'nodePods';
+  podCount?: number;
+  readyPodCount?: number;
 }
 
 interface ResourceSectionProps {
@@ -149,10 +151,24 @@ const ResourceSection: React.FC<ResourceSectionProps> = ({ title, usage, data, t
   );
 };
 
-const Utilization: React.FC<UtilizationProps> = ({ cpu, memory, pods, mode = 'podMetrics' }) => {
+const Utilization: React.FC<UtilizationProps> = ({
+  cpu,
+  memory,
+  pods,
+  mode = 'podMetrics',
+  podCount,
+  readyPodCount,
+}) => {
   return (
     <div className="object-panel-section">
-      <div className="object-panel-section-title">Resource Utilization</div>
+      <div className="object-panel-section-title">
+        Resource Utilization
+        {podCount != null && podCount > 0 && (
+          <span className="utilization-pod-count">
+            {readyPodCount != null ? `${readyPodCount}/${podCount} pods` : `${podCount} pods`}
+          </span>
+        )}
+      </div>
 
       <div className="utilization-content">
         {cpu || memory || pods ? (

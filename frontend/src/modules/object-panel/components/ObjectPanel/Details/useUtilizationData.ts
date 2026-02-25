@@ -120,123 +120,132 @@ export function useUtilizationData(params: UseUtilizationDataParams): Utilizatio
       };
     }
 
-    // Deployment utilization (average per pod)
+    // Deployment utilization (aggregated totals from podMetricsSummary)
     if (deploymentDetails && objectKind === 'deployment') {
-      const hasCpuData =
-        deploymentDetails.cpuUsage || deploymentDetails.cpuRequest || deploymentDetails.cpuLimit;
-      const hasMemData =
-        deploymentDetails.memUsage || deploymentDetails.memRequest || deploymentDetails.memLimit;
+      const summary = deploymentDetails.podMetricsSummary;
+      const hasSummary =
+        summary && (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
+      // Use totals from podMetricsSummary when available, fall back to averages.
+      const source = hasSummary ? summary : deploymentDetails;
+      const hasCpuData = source.cpuUsage || source.cpuRequest || source.cpuLimit;
+      const hasMemData = source.memUsage || source.memRequest || source.memLimit;
 
       if (!hasCpuData && !hasMemData) return null;
 
       return {
         cpu: hasCpuData
           ? {
-              usage: deploymentDetails.cpuUsage || '-',
-              request: deploymentDetails.cpuRequest || '-',
-              limit: deploymentDetails.cpuLimit || '-',
+              usage: source.cpuUsage || '-',
+              request: source.cpuRequest || '-',
+              limit: source.cpuLimit || '-',
             }
           : undefined,
         memory: hasMemData
           ? {
-              usage: deploymentDetails.memUsage || '-',
-              request: deploymentDetails.memRequest || '-',
-              limit: deploymentDetails.memLimit || '-',
+              usage: source.memUsage || '-',
+              request: source.memRequest || '-',
+              limit: source.memLimit || '-',
             }
           : undefined,
-        isAverage: true,
-        podCount: deploymentDetails.pods?.length || 0,
+        podCount: summary?.pods ?? deploymentDetails.pods?.length ?? 0,
+        readyPodCount: summary?.readyPods,
       };
     }
 
-    // DaemonSet utilization (average per pod)
+    // DaemonSet utilization (aggregated totals from podMetricsSummary)
     if (daemonSetDetails && objectKind === 'daemonset') {
-      const hasCpuData =
-        daemonSetDetails.cpuUsage || daemonSetDetails.cpuRequest || daemonSetDetails.cpuLimit;
-      const hasMemData =
-        daemonSetDetails.memUsage || daemonSetDetails.memRequest || daemonSetDetails.memLimit;
+      const summary = daemonSetDetails.podMetricsSummary;
+      const hasSummary =
+        summary && (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
+      const source = hasSummary ? summary : daemonSetDetails;
+      const hasCpuData = source.cpuUsage || source.cpuRequest || source.cpuLimit;
+      const hasMemData = source.memUsage || source.memRequest || source.memLimit;
 
       if (!hasCpuData && !hasMemData) return null;
 
       return {
         cpu: hasCpuData
           ? {
-              usage: daemonSetDetails.cpuUsage || '-',
-              request: daemonSetDetails.cpuRequest || '-',
-              limit: daemonSetDetails.cpuLimit || '-',
+              usage: source.cpuUsage || '-',
+              request: source.cpuRequest || '-',
+              limit: source.cpuLimit || '-',
             }
           : undefined,
         memory: hasMemData
           ? {
-              usage: daemonSetDetails.memUsage || '-',
-              request: daemonSetDetails.memRequest || '-',
-              limit: daemonSetDetails.memLimit || '-',
+              usage: source.memUsage || '-',
+              request: source.memRequest || '-',
+              limit: source.memLimit || '-',
             }
           : undefined,
-        isAverage: true,
-        podCount: daemonSetDetails.pods?.length || 0,
+        podCount: summary?.pods ?? daemonSetDetails.pods?.length ?? 0,
+        readyPodCount: summary?.readyPods,
       };
     }
 
-    // StatefulSet utilization (average per pod)
+    // StatefulSet utilization (aggregated totals from podMetricsSummary)
     if (statefulSetDetails && objectKind === 'statefulset') {
-      const hasCpuData =
-        statefulSetDetails.cpuUsage || statefulSetDetails.cpuRequest || statefulSetDetails.cpuLimit;
-      const hasMemData =
-        statefulSetDetails.memUsage || statefulSetDetails.memRequest || statefulSetDetails.memLimit;
+      const summary = statefulSetDetails.podMetricsSummary;
+      const hasSummary =
+        summary && (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
+      const source = hasSummary ? summary : statefulSetDetails;
+      const hasCpuData = source.cpuUsage || source.cpuRequest || source.cpuLimit;
+      const hasMemData = source.memUsage || source.memRequest || source.memLimit;
 
       if (!hasCpuData && !hasMemData) return null;
 
       return {
         cpu: hasCpuData
           ? {
-              usage: statefulSetDetails.cpuUsage || '-',
-              request: statefulSetDetails.cpuRequest || '-',
-              limit: statefulSetDetails.cpuLimit || '-',
+              usage: source.cpuUsage || '-',
+              request: source.cpuRequest || '-',
+              limit: source.cpuLimit || '-',
             }
           : undefined,
         memory: hasMemData
           ? {
-              usage: statefulSetDetails.memUsage || '-',
-              request: statefulSetDetails.memRequest || '-',
-              limit: statefulSetDetails.memLimit || '-',
+              usage: source.memUsage || '-',
+              request: source.memRequest || '-',
+              limit: source.memLimit || '-',
             }
           : undefined,
-        isAverage: true,
-        podCount: statefulSetDetails.pods?.length || 0,
+        podCount: summary?.pods ?? statefulSetDetails.pods?.length ?? 0,
+        readyPodCount: summary?.readyPods,
       };
     }
 
-    // ReplicaSet utilization (average per pod)
+    // ReplicaSet utilization (aggregated totals from podMetricsSummary)
     if (replicaSetDetails && objectKind === 'replicaset') {
       if (replicaSetDetails.isActive === false) {
         return null;
       }
 
-      const hasCpuData =
-        replicaSetDetails.cpuUsage || replicaSetDetails.cpuRequest || replicaSetDetails.cpuLimit;
-      const hasMemData =
-        replicaSetDetails.memUsage || replicaSetDetails.memRequest || replicaSetDetails.memLimit;
+      const summary = replicaSetDetails.podMetricsSummary;
+      const hasSummary =
+        summary && (summary.cpuUsage || summary.memUsage || summary.cpuRequest || summary.memRequest);
+      const source = hasSummary ? summary : replicaSetDetails;
+      const hasCpuData = source.cpuUsage || source.cpuRequest || source.cpuLimit;
+      const hasMemData = source.memUsage || source.memRequest || source.memLimit;
 
       if (!hasCpuData && !hasMemData) return null;
 
       return {
         cpu: hasCpuData
           ? {
-              usage: replicaSetDetails.cpuUsage || '-',
-              request: replicaSetDetails.cpuRequest || '-',
-              limit: replicaSetDetails.cpuLimit || '-',
+              usage: source.cpuUsage || '-',
+              request: source.cpuRequest || '-',
+              limit: source.cpuLimit || '-',
             }
           : undefined,
         memory: hasMemData
           ? {
-              usage: replicaSetDetails.memUsage || '-',
-              request: replicaSetDetails.memRequest || '-',
-              limit: replicaSetDetails.memLimit || '-',
+              usage: source.memUsage || '-',
+              request: source.memRequest || '-',
+              limit: source.memLimit || '-',
             }
           : undefined,
-        isAverage: true,
-        podCount: replicaSetDetails.pods?.length || 0,
+        podCount: summary?.pods ?? replicaSetDetails.pods?.length ?? 0,
+        readyPodCount: summary?.readyPods,
       };
     }
 
