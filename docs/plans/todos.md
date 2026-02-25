@@ -4,10 +4,6 @@
 
 ## Feature Ideas
 
-- Refresh kubeconfigs without restarting the app
-  - Add a directory watcher to all paths with auto-reload when files change in that dir
-  - If we can't do that, then add Refresh button in settings
-
 - Gridtable improvements
   - Link behavior
     - Click to open in Object Panel
