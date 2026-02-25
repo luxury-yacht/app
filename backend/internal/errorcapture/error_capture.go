@@ -32,7 +32,9 @@ type Capture struct {
 }
 
 var (
-	global       *Capture                           // global capture instance
+	global *Capture // global capture instance
+	// callbackMu guards package-level callbacks that are read from capture goroutines and set by tests/app init.
+	callbackMu   sync.RWMutex
 	eventEmitter func(string)                       // function to emit events
 	logSink      func(level string, message string) // function to handle log messages
 	// Word-boundary matching avoids false positives from resource names like "podidentityassociations".
@@ -83,8 +85,8 @@ func (c *Capture) start() {
 
 	r, w, err := os.Pipe()
 	if err != nil {
-		if logSink != nil {
-			logSink("error", "Failed to create pipe for stderr capture: "+err.Error())
+		if sink := getLogSink(); sink != nil {
+			sink("error", "Failed to create pipe for stderr capture: "+err.Error())
 		}
 		return
 	}
@@ -104,8 +106,10 @@ func (c *Capture) readPipe() {
 	for {
 		n, err := c.pipeReader.Read(scanner)
 		if err != nil {
-			if err != io.EOF && logSink != nil {
-				logSink("error", "Error reading stderr pipe: "+err.Error())
+			if err != io.EOF {
+				if sink := getLogSink(); sink != nil {
+					sink("error", "Error reading stderr pipe: "+err.Error())
+				}
 			}
 			break
 		}
@@ -126,7 +130,7 @@ func (c *Capture) readPipe() {
 		// auth manager knows about failures before logs are emitted.
 		c.captureIfInteresting(string(chunk))
 
-		if logSink != nil {
+		if getLogSink() != nil {
 			c.emitToLogSink(chunk)
 		}
 	}
@@ -221,8 +225,8 @@ func (c *Capture) captureIfInteresting(output string) {
 			return
 		}
 		c.setLastError(msg)
-		if eventEmitter != nil {
-			eventEmitter(msg)
+		if emitter := getEventEmitter(); emitter != nil {
+			emitter(msg)
 		}
 	})
 }
@@ -319,19 +323,35 @@ func CaptureWithCluster(clusterID string, message string) {
 	}
 	prefixed := fmt.Sprintf("[%s] %s", clusterID, message)
 	global.setLastError(prefixed)
-	if eventEmitter != nil {
-		eventEmitter(prefixed)
+	if emitter := getEventEmitter(); emitter != nil {
+		emitter(prefixed)
 	}
 }
 
 // SetEventEmitter configures a callback invoked when interesting errors are captured.
 func SetEventEmitter(emitter func(string)) {
+	callbackMu.Lock()
+	defer callbackMu.Unlock()
 	eventEmitter = emitter
 }
 
 // SetLogSink configures a callback for internal errors emitted by the capture subsystem.
 func SetLogSink(fn func(level string, message string)) {
+	callbackMu.Lock()
+	defer callbackMu.Unlock()
 	logSink = fn
+}
+
+func getEventEmitter() func(string) {
+	callbackMu.RLock()
+	defer callbackMu.RUnlock()
+	return eventEmitter
+}
+
+func getLogSink() func(level string, message string) {
+	callbackMu.RLock()
+	defer callbackMu.RUnlock()
+	return logSink
 }
 
 // emitToLogSink sends captured error messages to the configured log sink.
@@ -350,6 +370,8 @@ func (c *Capture) emitToLogSink(chunk []byte) {
 			level = "debug"
 		}
 
-		logSink(level, msg)
+		if sink := getLogSink(); sink != nil {
+			sink(level, msg)
+		}
 	})
 }

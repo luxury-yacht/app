@@ -108,7 +108,6 @@ func TestTransportBlocksWhenRecovering(t *testing.T) {
 
 	// Channel to signal test completion so recovery can stop
 	done := make(chan struct{})
-	defer close(done)
 
 	// Create a manager with recovery enabled so it goes to Recovering state
 	manager := New(Config{
@@ -121,6 +120,7 @@ func TestTransportBlocksWhenRecovering(t *testing.T) {
 		},
 	})
 	defer manager.Shutdown()
+	defer close(done)
 
 	// Force the manager into Recovering state
 	manager.ReportFailure("token expired")
@@ -406,33 +406,33 @@ func (m *mockErrorTransport) RoundTrip(_ *http.Request) (*http.Response, error) 
 // before an HTTP request is even made.
 func TestTransportReportsFailureOnCredentialError(t *testing.T) {
 	testCases := []struct {
-		name     string
-		errMsg   string
+		name      string
+		errMsg    string
 		isAuthErr bool
 	}{
 		{
-			name:     "AWS exec credential failure",
-			errMsg:   "getting credentials: exec: executable aws failed with exit code 255",
+			name:      "AWS exec credential failure",
+			errMsg:    "getting credentials: exec: executable aws failed with exit code 255",
 			isAuthErr: true,
 		},
 		{
-			name:     "Token expired",
-			errMsg:   "token has expired",
+			name:      "Token expired",
+			errMsg:    "token has expired",
 			isAuthErr: true,
 		},
 		{
-			name:     "SSO session error",
-			errMsg:   "sso session has expired",
+			name:      "SSO session error",
+			errMsg:    "sso session has expired",
 			isAuthErr: true,
 		},
 		{
-			name:     "Regular network error",
-			errMsg:   "dial tcp: connection refused",
+			name:      "Regular network error",
+			errMsg:    "dial tcp: connection refused",
 			isAuthErr: false,
 		},
 		{
-			name:     "DNS resolution failure",
-			errMsg:   "lookup example.com: no such host",
+			name:      "DNS resolution failure",
+			errMsg:    "lookup example.com: no such host",
 			isAuthErr: false,
 		},
 	}
