@@ -976,7 +976,9 @@ export const CommandPalette = memo(function CommandPalette({ commands = [] }: Co
                             )
                           )}
                           <div className="command-palette-item-content">
-                            <div className="command-palette-item-label">{command.label}</div>
+                            <div className="command-palette-item-label">
+                              {command.renderLabel ?? command.label}
+                            </div>
                           </div>
                           {command.shortcut && (
                             <div className="keycap">

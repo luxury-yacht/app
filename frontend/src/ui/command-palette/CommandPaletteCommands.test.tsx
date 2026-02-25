@@ -155,6 +155,8 @@ describe('CommandPaletteCommands', () => {
     const commands = getCommands();
     const command = commands.find((entry) => entry.id === 'kubeconfig-/kube/alpha:dev');
 
+    expect(command?.label).toBe('alpha:dev');
+    expect(command?.renderLabel).toBeTruthy();
     expect(command?.icon).toBeUndefined();
     command?.action();
 
