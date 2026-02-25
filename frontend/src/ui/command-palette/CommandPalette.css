@@ -177,6 +177,22 @@
   white-space: nowrap;
 }
 
+.command-palette-kubeconfig-label {
+  display: inline;
+}
+
+.command-palette-kubeconfig-file {
+  color: var(--color-text-secondary);
+}
+
+.command-palette-kubeconfig-separator {
+  color: var(--color-text-secondary);
+}
+
+.command-palette-kubeconfig-context {
+  color: var(--color-text);
+}
+
 .command-palette-item-label.catalog {
   display: flex;
   align-items: center;

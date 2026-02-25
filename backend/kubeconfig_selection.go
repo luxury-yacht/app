@@ -83,6 +83,8 @@ func (a *App) normalizeKubeconfigSelection(selection string) (kubeconfigSelectio
 		return parsed, nil
 	}
 
+	a.kubeconfigsMu.RLock()
+	defer a.kubeconfigsMu.RUnlock()
 	for _, kc := range a.availableKubeconfigs {
 		if kc.Path == parsed.Path {
 			parsed.Context = kc.Context
@@ -95,6 +97,8 @@ func (a *App) normalizeKubeconfigSelection(selection string) (kubeconfigSelectio
 
 // validateKubeconfigSelection ensures the selection matches a discovered kubeconfig context.
 func (a *App) validateKubeconfigSelection(selection kubeconfigSelection) error {
+	a.kubeconfigsMu.RLock()
+	defer a.kubeconfigsMu.RUnlock()
 	for _, kc := range a.availableKubeconfigs {
 		if kc.Path == selection.Path && kc.Context == selection.Context {
 			return nil
@@ -110,14 +114,17 @@ func (a *App) clusterMetaForSelection(selection kubeconfigSelection) ClusterMeta
 	}
 
 	if selection.Context != "" {
+		a.kubeconfigsMu.RLock()
 		for _, kc := range a.availableKubeconfigs {
 			if kc.Path == selection.Path && kc.Context == selection.Context {
+				a.kubeconfigsMu.RUnlock()
 				return ClusterMeta{
 					ID:   fmt.Sprintf("%s:%s", kc.Name, kc.Context),
 					Name: kc.Context,
 				}
 			}
 		}
+		a.kubeconfigsMu.RUnlock()
 	}
 
 	filename := filepath.Base(selection.Path)

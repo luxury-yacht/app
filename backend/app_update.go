@@ -43,12 +43,14 @@ func (a *App) startUpdateCheck() {
 		return
 	}
 	a.updateCheckOnce.Do(func() {
-		go a.runUpdateCheck()
+		// Snapshot build metadata before launching the background goroutine so
+		// tests (and future runtime changes) don't race on package-level vars.
+		currentVersion := strings.TrimSpace(Version)
+		go a.runUpdateCheck(currentVersion)
 	})
 }
 
-func (a *App) runUpdateCheck() {
-	currentVersion := strings.TrimSpace(Version)
+func (a *App) runUpdateCheck(currentVersion string) {
 	if isDevVersion(currentVersion) {
 		a.storeUpdateInfo(&UpdateInfo{
 			CurrentVersion: currentVersion,

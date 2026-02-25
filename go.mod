@@ -3,6 +3,7 @@ module github.com/luxury-yacht/app
 go 1.26.0
 
 require (
+	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/magefile/mage v1.15.0

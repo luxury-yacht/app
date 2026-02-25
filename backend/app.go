@@ -54,6 +54,13 @@ type App struct {
 	// persistenceMu guards persistence.json read/write operations.
 	persistenceMu sync.Mutex
 
+	// kubeconfigsMu guards availableKubeconfigs and selectedKubeconfigs reads/writes.
+	kubeconfigsMu sync.RWMutex
+	// kubeconfigChangeMu serializes runtime cluster/subsystem mutation paths.
+	kubeconfigChangeMu sync.Mutex
+	// settingsMu guards appSettings access in runtime watcher/selection/settings flows.
+	settingsMu sync.Mutex
+
 	clusterClientsMu sync.Mutex
 	clusterClients   map[string]*clusterClients
 
@@ -80,6 +87,8 @@ type App struct {
 	transportStates   map[string]*transportFailureState
 
 	listenLoopback func() (net.Listener, error)
+
+	kubeconfigWatcher *kubeconfigWatcher
 
 	eventEmitter          func(context.Context, string, ...interface{})
 	kubeClientInitializer func() error

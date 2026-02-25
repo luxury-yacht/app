@@ -712,6 +712,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
           objectKind={objectKind}
           resourceDeleted={state.resourceDeleted}
           deletedResourceName={state.deletedResourceName}
+          onClosePanel={close}
           onRefreshDetails={fetchResourceDetails}
           podsState={podsState}
         />

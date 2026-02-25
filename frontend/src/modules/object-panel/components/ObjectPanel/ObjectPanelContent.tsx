@@ -52,6 +52,7 @@ interface ObjectPanelContentProps {
   objectKind: string | null;
   resourceDeleted: boolean;
   deletedResourceName: string;
+  onClosePanel?: () => void;
   onRefreshDetails?: () => void;
   podsState: ObjectPanelPodsState;
 }
@@ -68,6 +69,7 @@ export function ObjectPanelContent({
   objectKind,
   resourceDeleted,
   deletedResourceName,
+  onClosePanel,
   onRefreshDetails,
   podsState,
 }: ObjectPanelContentProps) {
@@ -210,6 +212,13 @@ export function ObjectPanelContent({
         <div className="object-panel-empty-state">
           <h3>Object not found</h3>
           <p>{deletedResourceName || 'Resource'} is no longer available.</p>
+          {onClosePanel && (
+            <div>
+              <button type="button" className="button generic" onClick={onClosePanel}>
+                Close
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );

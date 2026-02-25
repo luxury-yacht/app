@@ -166,6 +166,7 @@ describe('ObjectPanelContent', () => {
     objectKind: 'deployment',
     resourceDeleted: false,
     deletedResourceName: '',
+    onClosePanel: vi.fn(),
     onRefreshDetails: vi.fn(),
     podsState: {
       pods: [],
@@ -303,5 +304,25 @@ describe('ObjectPanelContent', () => {
       loading: false,
       isActive: true,
     });
+  });
+
+  it('renders a close button when the object is deleted and closes the tab', () => {
+    const onClosePanel = vi.fn();
+    renderContent({
+      resourceDeleted: true,
+      deletedResourceName: 'api',
+      onClosePanel,
+    });
+
+    const closeButton = container.querySelector('button');
+    expect(closeButton?.textContent).toBe('Close');
+
+    act(() => {
+      closeButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(onClosePanel).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Object not found');
+    expect(container.textContent).toContain('api is no longer available.');
   });
 });

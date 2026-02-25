@@ -116,6 +116,9 @@ func (a *App) Startup(ctx context.Context) {
 		a.logger.Info(fmt.Sprintf("Found %d kubeconfig file(s)", len(a.availableKubeconfigs)), "App")
 	}
 
+	// Startup is single-threaded here: the kubeconfig watcher has not started and
+	// Wails RPC handlers are not yet dispatching, so loadAppSettings is safe
+	// without settingsMu.
 	if err := a.loadAppSettings(); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to load app settings: %v", err), "App")
 		a.appSettings = getDefaultAppSettings()
@@ -135,6 +138,12 @@ func (a *App) Startup(ctx context.Context) {
 		}
 	} else {
 		a.logger.Warn("No kubeconfig selections found - please select a cluster", "App")
+	}
+
+	// Start watching kubeconfig directories after cluster initialization completes
+	// so watcher callbacks cannot race startup subsystem construction.
+	if err := a.startKubeconfigWatcher(); err != nil {
+		a.logger.Warn(fmt.Sprintf("Kubeconfig directory watcher not available: %v", err), "App")
 	}
 
 	// Per-cluster heartbeat runs via startHeartbeatLoop, launched by setupRefreshSubsystem.
@@ -199,6 +208,9 @@ func (a *App) Shutdown(ctx context.Context) {
 		}
 	}
 	a.clusterClientsMu.Unlock()
+
+	// Stop the kubeconfig directory watcher before tearing down cluster state.
+	a.stopKubeconfigWatcher()
 
 	a.teardownRefreshSubsystem()
 

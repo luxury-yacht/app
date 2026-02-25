@@ -5,7 +5,7 @@
  * Implements CommandPaletteCommands logic for the UI layer.
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, type ReactNode } from 'react';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -24,6 +24,7 @@ import { useActiveSessionsPanel } from '@modules/active-session';
 export interface Command {
   id: string;
   label: string;
+  renderLabel?: ReactNode;
   description?: string;
   icon?: string;
   category?: string;
@@ -540,10 +541,20 @@ export function useCommandPaletteCommands() {
       // Backend ALWAYS expects format "path:context"
       const configValue = `${config.path}:${config.context}`;
       const isActive = selectedKubeconfigs.includes(configValue);
+      const label = `${config.name}:${config.context}`;
 
       return {
         id: `kubeconfig-${configValue}`,
-        label: config.context,
+        label,
+        renderLabel: (
+          <span className="command-palette-kubeconfig-label">
+            <span className="command-palette-kubeconfig-file">{config.name}</span>
+            <span className="command-palette-kubeconfig-separator" aria-hidden="true">
+              :
+            </span>
+            <span className="command-palette-kubeconfig-context">{config.context}</span>
+          </span>
+        ),
         description:
           config.name !== config.context ? `From ${config.name}` : 'Switch to this context',
         category: 'Kubeconfigs',
