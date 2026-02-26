@@ -9,6 +9,7 @@ import { ListPortForwards, ListShellSessions, StopPortForward } from '@wailsjs/g
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
 import { errorHandler } from '@utils/errorHandler';
 import StatusIndicator, { type StatusState } from '@shared/components/status/StatusIndicator';
+import { CloseIcon, OpenIcon, RestartIcon } from '@shared/components/icons/MenuIcons';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { requestObjectPanelTab } from '@modules/object-panel/objectPanelTabRequests';
@@ -81,14 +82,42 @@ function getPortForwardStatusPriority(status: string): number {
 function renderPortForwardStatusIcon(status: string) {
   switch (status) {
     case 'active':
-      return <span className="pf-status-icon pf-status-active">●</span>;
+      return (
+        <span className="pf-status-icon pf-status-active" aria-hidden="true">
+          <svg viewBox="0 0 12 12" fill="currentColor" width="12" height="12">
+            <circle cx="6" cy="6" r="4" />
+          </svg>
+        </span>
+      );
     case 'reconnecting':
-      return <span className="pf-status-icon pf-status-reconnecting">↻</span>;
+      return (
+        <span className="pf-status-icon pf-status-reconnecting" aria-hidden="true">
+          <RestartIcon width={12} height={12} />
+        </span>
+      );
     case 'error':
-      return <span className="pf-status-icon pf-status-error">✕</span>;
+      return (
+        <span className="pf-status-icon pf-status-error" aria-hidden="true">
+          <CloseIcon width={10} height={10} />
+        </span>
+      );
     default:
-      return <span className="pf-status-icon pf-status-unknown">○</span>;
+      return (
+        <span className="pf-status-icon pf-status-unknown" aria-hidden="true">
+          <svg viewBox="0 0 12 12" fill="none" width="12" height="12">
+            <circle cx="6" cy="6" r="4" stroke="currentColor" strokeWidth="1.5" />
+          </svg>
+        </span>
+      );
   }
+}
+
+function StopSquareIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" width="16" height="16" aria-hidden="true">
+      <rect x="4" y="4" width="8" height="8" rx="1.2" />
+    </svg>
+  );
 }
 
 const SessionsStatus: React.FC = () => {
@@ -358,7 +387,7 @@ const SessionsStatus: React.FC = () => {
                           className="ss-session-item as-shell-session as-shell-session-jump"
                           onClick={() => handleJumpToShellSession(session)}
                           disabled={Boolean(jumpingShellSessionId)}
-                          title="Click to open this shell session"
+                          title="Open this shell session"
                           aria-label={`Open shell session tab for ${session.podName || 'pod'}`}
                         >
                           <div className="ss-session-main">
@@ -375,7 +404,11 @@ const SessionsStatus: React.FC = () => {
                             </div>
                           </div>
                           <span className="as-shell-open-affordance" aria-hidden="true">
-                            {jumpingShellSessionId === session.sessionId ? '…' : '↗'}
+                            {jumpingShellSessionId === session.sessionId ? (
+                              '…'
+                            ) : (
+                              <OpenIcon width={14} height={14} />
+                            )}
                           </span>
                         </button>
                       );
@@ -458,13 +491,19 @@ const SessionsStatus: React.FC = () => {
                           <div className="ss-session-actions as-pf-actions">
                             <button
                               type="button"
-                              className={`pf-action-button as-compact-icon-action ${isError ? 'as-danger' : 'as-warning'}`}
+                              className={`as-compact-icon-action ${isError ? 'as-danger' : 'as-warning'}`}
                               onClick={() => void handleStopPortForward(session.id)}
                               disabled={isStopping}
                               title={isError ? 'Remove session' : 'Stop port forward'}
                               aria-label={isError ? 'Remove session' : 'Stop port forward'}
                             >
-                              {isStopping ? '…' : isError ? '✕' : '■'}
+                              {isStopping ? (
+                                '…'
+                              ) : isError ? (
+                                <CloseIcon width={14} height={14} />
+                              ) : (
+                                <StopSquareIcon />
+                              )}
                             </button>
                           </div>
                         </div>
