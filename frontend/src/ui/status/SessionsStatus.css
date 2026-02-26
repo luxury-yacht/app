@@ -34,7 +34,7 @@
 }
 
 .sessions-status-message .ss-session-item {
-  padding: 6px 8px;
+  padding: 6px;
 }
 
 .sessions-status-message .as-empty {
@@ -167,6 +167,10 @@
 }
 
 .sessions-status-message .as-shell-session-jump:hover:not(:disabled) {
+  background: var(--color-bg-tertiary);
+}
+
+.sessions-status-message .as-pf-session:hover {
   background: var(--color-bg-tertiary);
 }
 

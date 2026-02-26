@@ -387,7 +387,7 @@ const SessionsStatus: React.FC = () => {
                           className="ss-session-item as-shell-session as-shell-session-jump"
                           onClick={() => handleJumpToShellSession(session)}
                           disabled={Boolean(jumpingShellSessionId)}
-                          title="Open this shell session"
+                          title="Click to open this shell session"
                           aria-label={`Open shell session tab for ${session.podName || 'pod'}`}
                         >
                           <div className="ss-session-main">
@@ -452,9 +452,7 @@ const SessionsStatus: React.FC = () => {
                                       : null}
                                   </span>
                                   <span className="ss-field-label">{field.label}:</span>
-                                  <span className="ss-field-value" title={field.value}>
-                                    {field.value}
-                                  </span>
+                                  <span className="ss-field-value">{field.value}</span>
                                 </div>
                               ))}
                               <div className="ss-field-row as-pf-field-row as-pf-local-row">
@@ -480,10 +478,7 @@ const SessionsStatus: React.FC = () => {
                               </div>
                             </div>
                             {session.statusReason && (
-                              <div
-                                className="pf-session-reason as-pf-reason"
-                                title={session.statusReason}
-                              >
+                              <div className="pf-session-reason as-pf-reason">
                                 {session.statusReason}
                               </div>
                             )}
@@ -494,7 +489,7 @@ const SessionsStatus: React.FC = () => {
                               className={`as-compact-icon-action ${isError ? 'as-danger' : 'as-warning'}`}
                               onClick={() => void handleStopPortForward(session.id)}
                               disabled={isStopping}
-                              title={isError ? 'Remove session' : 'Stop port forward'}
+                              title={isError ? undefined : 'Stop port forward'}
                               aria-label={isError ? 'Remove session' : 'Stop port forward'}
                             >
                               {isStopping ? (
