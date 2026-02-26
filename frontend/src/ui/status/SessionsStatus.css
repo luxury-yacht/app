@@ -125,7 +125,7 @@
 .sessions-status-message .ss-field-row {
   display: grid;
   grid-template-columns: 74px minmax(0, 1fr);
-  gap: 8px;
+  gap: 2px;
   align-items: baseline;
 }
 
@@ -221,13 +221,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  top: 2px;
 }
 
 .sessions-status-message .pf-status-icon {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
+  /* align-items: center; */
+  /* justify-content: center; */
+  /* line-height: 1; */
 }
 
 .sessions-status-message .pf-status-icon svg {
