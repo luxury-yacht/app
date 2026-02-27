@@ -121,6 +121,7 @@ type RenderOptions = Partial<{
   onColumnWidthsChange: (widths: Record<string, any>) => void;
   columnWidths: Record<string, any>;
   allowHorizontalOverflow: boolean;
+  keyExtractor: (item: SimpleRow, index: number) => string;
 }>;
 
 let cleanupRoot: (() => void) | null = null;
@@ -958,7 +959,7 @@ function renderGridTable(options: RenderOptions = {}) {
   const initialProps = {
     data: options.data ?? createRows(30),
     columns: options.columns ?? defaultColumns,
-    keyExtractor: (item: SimpleRow) => item.id,
+    keyExtractor: options.keyExtractor ?? ((item: SimpleRow) => `cluster-a|${item.id}`),
     virtualization: {
       enabled: true,
       threshold: 1,
@@ -1511,13 +1512,13 @@ it('warns in dev when keyExtractor returns an unscoped key (missing | separator)
   const { cleanup } = renderGridTable({
     data: [{ id: 'row-1', label: 'A' }],
     virtualization: { enabled: false },
+    keyExtractor: (item: SimpleRow) => item.id,
   });
   cleanupRoot = cleanup;
 
   await flushAsync();
 
-  // The default keyExtractor in renderGridTable returns item.id (no | separator),
-  // so the dev check should warn.
+  // Explicitly use an unscoped key (no | separator), so the dev check should warn.
   expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('does not appear cluster-scoped'));
 
   warnSpy.mockRestore();
@@ -1676,7 +1677,7 @@ it('sets aria-activedescendant on the role="grid" container when a row is focuse
   expect(focusedRow).not.toBeNull();
   expect(focusedRow!.getAttribute('role')).toBe('row');
   // It should be the row we clicked.
-  expect(focusedRow!.getAttribute('data-row-key')).toBe('row-2');
+  expect(focusedRow!.getAttribute('data-row-key')).toBe('cluster-a|row-2');
 });
 
 it('renders resize handles between columns when enableColumnResizing is true', () => {

@@ -287,6 +287,7 @@ describe('ShellTab', () => {
   it('copies selection on mod+c when the terminal has a selection', async () => {
     await renderShellTab();
     clickConnectButton();
+    await flushAsync();
 
     const terminal = getLatestTerminal();
     expect(terminal?.attachCustomKeyEventHandler).toHaveBeenCalled();
