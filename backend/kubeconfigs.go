@@ -1,11 +1,13 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
@@ -379,6 +381,8 @@ type selectionChangeIntent struct {
 	clearSelection          bool
 }
 
+const selectionChangeWorkTimeout = 2 * time.Minute
+
 // SetSelectedKubeconfigs updates the active kubeconfig selection set for multi-cluster support.
 //
 // This function is the primary entry point for changing which Kubernetes clusters the application
@@ -406,7 +410,7 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 		}
 
 		a.commitSelectionChangeIntent(intent)
-		return a.executeSelectionChangeWork(intent)
+		return a.executeSelectionChangeWork(mutation.ctx, intent)
 	})
 }
 
@@ -481,7 +485,16 @@ func (a *App) commitSelectionChangeIntent(intent selectionChangeIntent) {
 }
 
 // executeSelectionChangeWork performs client and refresh work for an already-committed intent.
-func (a *App) executeSelectionChangeWork(intent selectionChangeIntent) error {
+func (a *App) executeSelectionChangeWork(workCtx context.Context, intent selectionChangeIntent) error {
+	if workCtx == nil {
+		workCtx = context.Background()
+	}
+	workCtx, cancel := context.WithTimeout(workCtx, selectionChangeWorkTimeout)
+	defer cancel()
+
+	if err := workCtx.Err(); err != nil {
+		return nil
+	}
 	if !a.isSelectionGenerationCurrent(intent.generation) {
 		if a.logger != nil {
 			a.logger.Debug(
@@ -492,14 +505,20 @@ func (a *App) executeSelectionChangeWork(intent selectionChangeIntent) error {
 		return nil
 	}
 
-	if err := a.syncClusterClientPool(intent.normalizedSelections); err != nil {
+	if err := a.syncClusterClientPoolWithContext(workCtx, intent.normalizedSelections); err != nil {
 		return err
+	}
+	if err := workCtx.Err(); err != nil {
+		return nil
 	}
 
 	if !intent.selectionChanged {
 		return nil
 	}
 
+	if err := workCtx.Err(); err != nil {
+		return nil
+	}
 	if a.refreshHTTPServer == nil || a.refreshAggregates == nil || a.refreshCtx == nil {
 		if err := a.setupRefreshSubsystem(); err != nil {
 			return err
@@ -508,6 +527,9 @@ func (a *App) executeSelectionChangeWork(intent selectionChangeIntent) error {
 		if err := a.updateRefreshSubsystemSelections(intent.normalizedSelections); err != nil {
 			return err
 		}
+	}
+	if err := workCtx.Err(); err != nil {
+		return nil
 	}
 
 	a.startObjectCatalog()

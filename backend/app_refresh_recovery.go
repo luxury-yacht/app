@@ -295,8 +295,16 @@ func (a *App) runClusterTransportRebuild(clusterID, reason string, cause error) 
 				a.logger.Info(fmt.Sprintf("Starting transport rebuild for cluster %s", clusterID), "KubernetesClient")
 			}
 
-			// Use existing per-cluster rebuild mechanism.
-			a.rebuildClusterSubsystem(clusterID)
+			if err := a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
+				if err := opCtx.Err(); err != nil {
+					return err
+				}
+				// Use existing per-cluster rebuild mechanism.
+				a.rebuildClusterSubsystem(clusterID)
+				return opCtx.Err()
+			}); err != nil {
+				return err
+			}
 
 			if a.logger != nil {
 				msg := fmt.Sprintf("Transport rebuild complete for cluster %s", clusterID)

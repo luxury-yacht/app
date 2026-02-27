@@ -184,10 +184,10 @@ Diagnostics panel should reflect transition status without ambiguous “hung” 
 
 ## Phase 2: Per-Cluster Parallel Execution
 
-- [ ] Add per-cluster coordinator with bounded concurrency.
-- [ ] Enforce one in-flight operation per cluster ID.
-- [ ] Add cancellation for superseded generations.
-- [ ] Add explicit operation timeouts.
+- [x] ✅ Add per-cluster coordinator with bounded concurrency.
+- [x] ✅ Enforce one in-flight operation per cluster ID.
+- [x] ✅ Add cancellation for superseded generations.
+- [x] ✅ Add explicit operation timeouts.
 
 ## Phase 3: Optional Frontend Coalescing (Conditional)
 

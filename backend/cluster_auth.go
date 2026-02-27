@@ -46,8 +46,13 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 		})
 		// Rebuild only this cluster's subsystem through the coordinated mutation path.
 		a.runSelectionMutationAsync(fmt.Sprintf("cluster-auth-rebuild:%s", clusterID), func(_ selectionMutation) error {
-			a.rebuildClusterSubsystem(clusterID)
-			return nil
+			return a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
+				if err := opCtx.Err(); err != nil {
+					return err
+				}
+				a.rebuildClusterSubsystem(clusterID)
+				return opCtx.Err()
+			})
 		})
 
 	case authstate.StateRecovering:
@@ -62,8 +67,13 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 		})
 		// Teardown only this cluster's subsystem through the coordinated mutation path.
 		a.runSelectionMutationAsync(fmt.Sprintf("cluster-auth-teardown:%s", clusterID), func(_ selectionMutation) error {
-			a.teardownClusterSubsystem(clusterID)
-			return nil
+			return a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
+				if err := opCtx.Err(); err != nil {
+					return err
+				}
+				a.teardownClusterSubsystem(clusterID)
+				return opCtx.Err()
+			})
 		})
 
 	case authstate.StateInvalid:

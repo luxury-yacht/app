@@ -42,6 +42,42 @@ func TestRunSelectionMutationDoesNotHoldKubeconfigChangeLockAcrossCallback(t *te
 	require.NoError(t, err)
 }
 
+func TestRunSelectionMutationSupersededGenerationCancelsPriorContext(t *testing.T) {
+	app := newTestAppWithDefaults(t)
+
+	firstStarted := make(chan struct{})
+	firstDone := make(chan struct{})
+	firstErrCh := make(chan error, 1)
+
+	go func() {
+		err := app.runSelectionMutation("first", func(mutation selectionMutation) error {
+			close(firstStarted)
+			<-mutation.ctx.Done()
+			close(firstDone)
+			return mutation.ctx.Err()
+		})
+		firstErrCh <- err
+	}()
+
+	<-firstStarted
+
+	secondErr := app.runSelectionMutation("second", func(selectionMutation) error {
+		return nil
+	})
+	require.NoError(t, secondErr)
+
+	require.Eventually(t, func() bool {
+		select {
+		case <-firstDone:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 10*time.Millisecond)
+
+	require.NoError(t, <-firstErrCh)
+}
+
 func TestHandleKubeconfigChangeUsesSelectionMutationBoundary(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)

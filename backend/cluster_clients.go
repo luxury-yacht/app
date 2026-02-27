@@ -1,11 +1,15 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/luxury-yacht/app/backend/internal/parallel"
 	apiextensionsclientset "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -46,8 +50,16 @@ func (a *App) clusterClientsForID(clusterID string) *clusterClients {
 
 // syncClusterClientPool builds missing clients for the provided selections and drops stale entries.
 func (a *App) syncClusterClientPool(selections []kubeconfigSelection) error {
+	return a.syncClusterClientPoolWithContext(context.Background(), selections)
+}
+
+// syncClusterClientPoolWithContext builds missing clients for the provided selections and drops stale entries.
+func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections []kubeconfigSelection) error {
 	if a == nil {
 		return fmt.Errorf("app is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 
 	desired := make(map[string]kubeconfigSelection, len(selections))
@@ -72,18 +84,64 @@ func (a *App) syncClusterClientPool(selections []kubeconfigSelection) error {
 	}
 	a.clusterClientsMu.Unlock()
 
-	for _, sel := range toCreate {
-		meta := a.clusterMetaForSelection(sel)
-		if meta.ID == "" {
-			continue
+	if len(toCreate) > 0 {
+		type builtClient struct {
+			id      string
+			clients *clusterClients
 		}
-		clients, err := a.buildClusterClients(sel, meta)
+
+		// Pre-build metadata so worker goroutines do not repeatedly derive IDs.
+		type createTask struct {
+			selection kubeconfigSelection
+			meta      ClusterMeta
+		}
+		tasks := make([]createTask, 0, len(toCreate))
+		for _, sel := range toCreate {
+			meta := a.clusterMetaForSelection(sel)
+			if meta.ID == "" {
+				continue
+			}
+			tasks = append(tasks, createTask{selection: sel, meta: meta})
+		}
+
+		built := make([]builtClient, 0, len(tasks))
+		limit := clusterClientBuildConcurrencyLimit(len(tasks))
+		var builtMu sync.Mutex
+		err := parallel.ForEach(ctx, tasks, limit, func(taskCtx context.Context, task createTask) error {
+			return a.runClusterOperation(taskCtx, task.meta.ID, func(opCtx context.Context) error {
+				if err := opCtx.Err(); err != nil {
+					return err
+				}
+				clients, buildErr := a.buildClusterClients(task.selection, task.meta)
+				if buildErr != nil {
+					return buildErr
+				}
+				if err := opCtx.Err(); err != nil {
+					if clients != nil && clients.authManager != nil {
+						clients.authManager.Shutdown()
+					}
+					return err
+				}
+				builtMu.Lock()
+				built = append(built, builtClient{id: task.meta.ID, clients: clients})
+				builtMu.Unlock()
+				return nil
+			})
+		})
 		if err != nil {
+			// Cleanup any successfully created auth managers on partial failure.
+			for _, item := range built {
+				if item.clients != nil && item.clients.authManager != nil {
+					item.clients.authManager.Shutdown()
+				}
+			}
 			return err
 		}
 
 		a.clusterClientsMu.Lock()
-		a.clusterClients[meta.ID] = clients
+		for _, item := range built {
+			a.clusterClients[item.id] = item.clients
+		}
 		a.clusterClientsMu.Unlock()
 	}
 
@@ -100,6 +158,22 @@ func (a *App) syncClusterClientPool(selections []kubeconfigSelection) error {
 	a.clusterClientsMu.Unlock()
 
 	return nil
+}
+
+// clusterClientBuildConcurrencyLimit derives a bounded parallelism level for
+// per-selection client initialization. Work is network-bound (discovery/auth).
+func clusterClientBuildConcurrencyLimit(taskCount int) int {
+	if taskCount <= 1 {
+		return taskCount
+	}
+	limit := runtime.GOMAXPROCS(0)
+	if limit <= 0 {
+		limit = 1
+	}
+	if taskCount < limit {
+		return taskCount
+	}
+	return limit
 }
 
 // buildClusterClients initializes client-go dependencies for a specific kubeconfig selection.
