@@ -131,9 +131,13 @@ vi.mock('@/modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => mockNamespaceState,
 }));
 
+const mockKubeconfigState: { selectedClusterId: string } = {
+  selectedClusterId: 'test-cluster',
+};
+
 vi.mock('@/modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
-    selectedClusterId: 'test-cluster',
+    selectedClusterId: mockKubeconfigState.selectedClusterId,
     getClusterMeta: (id: string) => ({ id, name: id }),
   }),
 }));
@@ -257,6 +261,7 @@ beforeEach(() => {
     activeClusterTab: null,
     activeNamespaceTab: 'workloads',
   };
+  mockKubeconfigState.selectedClusterId = 'test-cluster';
   mockNamespaceState.selectedNamespace = 'default';
   fetchTelemetrySummaryMock.mockReset();
   fetchTelemetrySummaryMock.mockRejectedValue(new Error('fetchTelemetrySummary not stubbed'));
@@ -535,6 +540,55 @@ describe('DiagnosticsPanel component', () => {
 
     // Only the namespace portion should be shown in the label.
     expect(markup).toContain('ObjPanel - Pods - team-a');
+  });
+
+  test('prefers the active cluster scope for cluster domain rows', async () => {
+    seedBaseDomainStates();
+    setScopedEntries('cluster-config', [
+      [
+        'cluster-a|',
+        {
+          ...createReadyState({
+            resources: [{ kind: 'ConfigMap', name: 'cfg-a', namespace: 'default' }],
+          }),
+          scope: 'cluster-a|',
+        },
+      ],
+      [
+        'cluster-b|',
+        {
+          ...createReadyState({
+            resources: [{ kind: 'ConfigMap', name: 'cfg-b', namespace: 'default' }],
+          }),
+          scope: 'cluster-b|',
+        },
+      ],
+    ]);
+
+    const findClusterConfigScope = (container: HTMLElement) => {
+      const rows = Array.from(container.querySelectorAll('tbody tr'));
+      const row = rows.find((candidate) => {
+        const firstCell = candidate.querySelector('td');
+        return firstCell?.textContent?.includes('Cluster Config');
+      });
+      expect(row).toBeTruthy();
+      const cells = row?.querySelectorAll('td');
+      return cells?.[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    };
+
+    mockKubeconfigState.selectedClusterId = 'cluster-a';
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+
+    await flushAsync();
+    expect(findClusterConfigScope(rendered.container)).toContain('cluster-a (active)');
+
+    mockKubeconfigState.selectedClusterId = 'cluster-b';
+    await rendered.rerender();
+    await flushAsync();
+    expect(findClusterConfigScope(rendered.container)).toContain('cluster-b (active)');
+
+    await rendered.unmount();
   });
 
   test('renders telemetry summaries after successful fetch', async () => {

@@ -233,19 +233,41 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const objectHelmManifestScopeEntries = useRefreshScopedDomainEntries('object-helm-manifest');
   const objectHelmValuesScopeEntries = useRefreshScopedDomainEntries('object-helm-values');
 
-  // Helper to pick the first active scoped domain state for the base rows display.
-  // Diagnostics shows one summary row per domain; individual scope entries appear in expanded views.
-  const pickFirstScopeState = useCallback(
-    (entries: Array<[string, DomainSnapshotState<any>]>): DomainSnapshotState<any> => {
+  // Pick the scoped domain state that best matches the active cluster context.
+  // Diagnostics renders one summary row per domain, so prefer entries scoped to the
+  // active cluster before falling back to generic "first populated" selection.
+  const pickPreferredScopeState = useCallback(
+    (
+      entries: Array<[string, DomainSnapshotState<any>]>,
+      preferredClusterId: string | undefined
+    ): DomainSnapshotState<any> => {
       if (entries.length === 0) {
         return { status: 'idle', data: null, stats: null, error: null, droppedAutoRefreshes: 0 };
       }
-      // Prefer entries with data, then non-idle entries, then the first entry.
-      const withData = entries.find(([, s]) => s.data !== null);
-      if (withData) return withData[1];
-      const nonIdle = entries.find(([, s]) => s.status !== 'idle');
-      if (nonIdle) return nonIdle[1];
-      return entries[0][1];
+
+      let candidates = entries;
+      const clusterId = (preferredClusterId ?? '').trim();
+      if (clusterId) {
+        const clusterMatches = entries.filter(([scopeKey, state]) => {
+          const parsed = parseClusterScopeList(state.scope ?? scopeKey);
+          return parsed.clusterIds.includes(clusterId);
+        });
+        if (clusterMatches.length > 0) {
+          candidates = clusterMatches;
+        }
+      }
+
+      // Prefer entries with data, then non-idle entries, then the first candidate.
+      const selected =
+        candidates.find(([, s]) => s.data !== null) ??
+        candidates.find(([, s]) => s.status !== 'idle') ??
+        candidates[0];
+
+      const [scopeKey, scopedState] = selected;
+      if (scopedState.scope && scopedState.scope.trim()) {
+        return scopedState;
+      }
+      return { ...scopedState, scope: scopeKey };
     },
     []
   );
@@ -339,119 +361,119 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       {
         domain: 'namespaces' as RefreshDomain,
         label: 'Namespaces',
-        state: pickFirstScopeState(namespaceScopeEntries),
+        state: pickPreferredScopeState(namespaceScopeEntries, selectedClusterId),
       },
       {
         domain: 'cluster-overview' as RefreshDomain,
         label: 'Cluster Overview',
-        state: pickFirstScopeState(clusterOverviewScopeEntries),
+        state: pickPreferredScopeState(clusterOverviewScopeEntries, selectedClusterId),
         hasMetrics: true,
       },
       {
         domain: 'nodes' as RefreshDomain,
         label: 'Nodes',
-        state: pickFirstScopeState(nodeScopeEntries),
+        state: pickPreferredScopeState(nodeScopeEntries, selectedClusterId),
         hasMetrics: true,
       },
       {
         domain: 'cluster-config' as RefreshDomain,
         label: 'Cluster Config',
-        state: pickFirstScopeState(clusterConfigScopeEntries),
+        state: pickPreferredScopeState(clusterConfigScopeEntries, selectedClusterId),
       },
       {
         domain: 'cluster-crds' as RefreshDomain,
         label: 'Cluster CRDs',
-        state: pickFirstScopeState(clusterCRDScopeEntries),
+        state: pickPreferredScopeState(clusterCRDScopeEntries, selectedClusterId),
       },
       {
         domain: 'cluster-custom' as RefreshDomain,
         label: 'Cluster Custom Resources',
-        state: pickFirstScopeState(clusterCustomScopeEntries),
+        state: pickPreferredScopeState(clusterCustomScopeEntries, selectedClusterId),
       },
       {
         domain: 'cluster-events' as RefreshDomain,
         label: 'Cluster Events',
-        state: pickFirstScopeState(clusterEventsScopeEntries),
+        state: pickPreferredScopeState(clusterEventsScopeEntries, selectedClusterId),
       },
       {
         domain: 'object-maintenance' as RefreshDomain,
         label: 'ObjPanel - Maintenance',
-        state: pickFirstScopeState(objectMaintenanceScopeEntries),
+        state: pickPreferredScopeState(objectMaintenanceScopeEntries, selectedClusterId),
       },
       {
         domain: 'catalog' as RefreshDomain,
         label: 'Browse Catalog',
-        state: pickFirstScopeState(catalogScopeEntries),
+        state: pickPreferredScopeState(catalogScopeEntries, selectedClusterId),
       },
       {
         domain: 'catalog-diff' as RefreshDomain,
         label: 'Diff Catalog',
-        state: pickFirstScopeState(catalogDiffScopeEntries),
+        state: pickPreferredScopeState(catalogDiffScopeEntries, selectedClusterId),
       },
       {
         domain: 'cluster-rbac' as RefreshDomain,
         label: 'Cluster RBAC',
-        state: pickFirstScopeState(clusterRBACScopeEntries),
+        state: pickPreferredScopeState(clusterRBACScopeEntries, selectedClusterId),
       },
       {
         domain: 'cluster-storage' as RefreshDomain,
         label: 'Cluster Storage',
-        state: pickFirstScopeState(clusterStorageScopeEntries),
+        state: pickPreferredScopeState(clusterStorageScopeEntries, selectedClusterId),
       },
       {
         domain: 'namespace-workloads' as RefreshDomain,
         label: 'Workloads',
-        state: pickFirstScopeState(namespaceWorkloadsScopeEntries),
+        state: pickPreferredScopeState(namespaceWorkloadsScopeEntries, selectedClusterId),
       },
       {
         domain: 'namespace-autoscaling' as RefreshDomain,
         label: 'NS Autoscaling',
-        state: pickFirstScopeState(namespaceAutoscalingScopeEntries),
+        state: pickPreferredScopeState(namespaceAutoscalingScopeEntries, selectedClusterId),
       },
       {
         domain: 'namespace-config' as RefreshDomain,
         label: 'NS Config',
-        state: pickFirstScopeState(namespaceConfigScopeEntries),
+        state: pickPreferredScopeState(namespaceConfigScopeEntries, selectedClusterId),
       },
       {
         domain: 'namespace-custom' as RefreshDomain,
         label: 'NS Custom',
-        state: pickFirstScopeState(namespaceCustomScopeEntries),
+        state: pickPreferredScopeState(namespaceCustomScopeEntries, selectedClusterId),
       },
       {
         domain: 'namespace-events' as RefreshDomain,
         label: 'NS Events',
-        state: pickFirstScopeState(namespaceEventsScopeEntries),
+        state: pickPreferredScopeState(namespaceEventsScopeEntries, selectedClusterId),
       },
       {
         domain: 'namespace-helm' as RefreshDomain,
         label: 'NS Helm',
-        state: pickFirstScopeState(namespaceHelmScopeEntries),
+        state: pickPreferredScopeState(namespaceHelmScopeEntries, selectedClusterId),
       },
       {
         domain: 'namespace-network' as RefreshDomain,
         label: 'NS Network',
-        state: pickFirstScopeState(namespaceNetworkScopeEntries),
+        state: pickPreferredScopeState(namespaceNetworkScopeEntries, selectedClusterId),
       },
       {
         domain: 'namespace-quotas' as RefreshDomain,
         label: 'NS Quotas',
-        state: pickFirstScopeState(namespaceQuotasScopeEntries),
+        state: pickPreferredScopeState(namespaceQuotasScopeEntries, selectedClusterId),
       },
       {
         domain: 'namespace-rbac' as RefreshDomain,
         label: 'NS RBAC',
-        state: pickFirstScopeState(namespaceRBACScopeEntries),
+        state: pickPreferredScopeState(namespaceRBACScopeEntries, selectedClusterId),
       },
       {
         domain: 'namespace-storage' as RefreshDomain,
         label: 'NS Storage',
-        state: pickFirstScopeState(namespaceStorageScopeEntries),
+        state: pickPreferredScopeState(namespaceStorageScopeEntries, selectedClusterId),
       },
     ],
     [
       objectMaintenanceScopeEntries,
-      pickFirstScopeState,
+      pickPreferredScopeState,
       namespaceScopeEntries,
       clusterOverviewScopeEntries,
       nodeScopeEntries,
@@ -473,6 +495,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       namespaceQuotasScopeEntries,
       namespaceRBACScopeEntries,
       namespaceStorageScopeEntries,
+      selectedClusterId,
     ]
   );
 
@@ -1164,7 +1187,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     const orderedLogRows = logRows.sort((a, b) => a.label.localeCompare(b.label));
 
     const clusterEventsRow: DiagnosticsRow = (() => {
-      const state = pickFirstScopeState(clusterEventsScopeEntries);
+      const state = pickPreferredScopeState(clusterEventsScopeEntries, selectedClusterId);
       const payload = state.data as ClusterEventsSnapshotPayload | null;
       const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
       const lastUpdatedInfo = formatLastUpdated(lastUpdated);
@@ -1255,7 +1278,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     })();
 
     const namespaceEventsRow: DiagnosticsRow = (() => {
-      const state = pickFirstScopeState(namespaceEventsScopeEntries);
+      const state = pickPreferredScopeState(namespaceEventsScopeEntries, selectedClusterId);
       const payload = state.data as NamespaceEventsSnapshotPayload | null;
       const lastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
       const lastUpdatedInfo = formatLastUpdated(lastUpdated);
@@ -1472,7 +1495,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     objectHelmValuesScopeEntries,
     clusterEventsScopeEntries,
     namespaceEventsScopeEntries,
-    pickFirstScopeState,
+    pickPreferredScopeState,
     telemetrySummary,
     resourceStreamStats,
     selectedClusterId,
@@ -1929,7 +1952,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   }, [eventStreamTelemetry, telemetryError, telemetrySummary]);
 
   const catalogSummary = useMemo(() => {
-    const catalogState = pickFirstScopeState(catalogScopeEntries);
+    const catalogState = pickPreferredScopeState(catalogScopeEntries, selectedClusterId);
     const catalogSnapshot = catalogState.data as CatalogSnapshotPayload | null;
     const firstRowLatencyMs =
       catalogState.stats?.timeToFirstRowMs ?? catalogSnapshot?.firstBatchLatencyMs ?? null;
@@ -1982,7 +2005,8 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     };
   }, [
     catalogScopeEntries,
-    pickFirstScopeState,
+    pickPreferredScopeState,
+    selectedClusterId,
     catalogStreamTelemetry,
     telemetryError,
     telemetrySummary,
