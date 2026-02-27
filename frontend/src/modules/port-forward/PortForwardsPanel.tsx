@@ -171,7 +171,7 @@ function PortForwardsPanel() {
     };
 
     // Use cancel functions instead of EventsOff to avoid removing
-    // listeners registered by other components (e.g., usePortForwardStatus).
+    // listeners registered by other components.
     const cancelList = EventsOn('portforward:list', handleListUpdate);
     const cancelStatus = EventsOn('portforward:status', handleStatusUpdate);
 
