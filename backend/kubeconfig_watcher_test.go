@@ -236,9 +236,9 @@ func TestDeselectClusters_AbortsOnReconciliationFailure(t *testing.T) {
 	app.refreshHTTPServer = nil
 	app.refreshCtx = nil
 
-	app.kubeconfigChangeMu.Lock()
+	app.selectionMutationMu.Lock()
 	app.deselectClusters([]string{"b:ctx-b"})
-	app.kubeconfigChangeMu.Unlock()
+	app.selectionMutationMu.Unlock()
 
 	assert.Equal(t, []string{"/path/a:ctx-a", "/path/b:ctx-b"}, app.GetSelectedKubeconfigs())
 	_, aOK := app.clusterClients["a:ctx-a"]

@@ -174,13 +174,13 @@ Diagnostics panel should reflect transition status without ambiguous “hung” 
 
 ## Phase 1: Backend Refactor (No Behavior Change Yet)
 
-- [ ] Split `SetSelectedKubeconfigs` into intent/diff + execution + commit stages.
-- [ ] Narrow lock scope to state transitions only.
-- [ ] Introduce generation token plumbing.
-- [ ] Route watcher/auth-recovery/transport-recovery mutation paths through generation-aware coordinator boundaries.
-- [ ] Document and enforce lock ordering (`kubeconfigChangeMu` and downstream locks) in code comments/tests.
-- [ ] Fix `clearKubeconfigSelection` to shut down existing auth managers before clearing cluster client state.
-- [ ] Keep execution still sequential initially for safer validation.
+- [x] ✅ Split `SetSelectedKubeconfigs` into intent/diff + execution + commit stages.
+- [x] ✅ Narrow lock scope to state transitions only.
+- [x] ✅ Introduce generation token plumbing.
+- [x] ✅ Route watcher/auth-recovery/transport-recovery mutation paths through generation-aware coordinator boundaries.
+- [x] ✅ Document and enforce lock ordering (`kubeconfigChangeMu` and downstream locks) in code comments/tests.
+- [x] ✅ Fix `clearKubeconfigSelection` to shut down existing auth managers before clearing cluster client state.
+- [x] ✅ Keep execution still sequential initially for safer validation.
 
 ## Phase 2: Per-Cluster Parallel Execution
 

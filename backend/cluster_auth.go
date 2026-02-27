@@ -44,12 +44,11 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 			"clusterId":   clusterID,
 			"clusterName": clusterName,
 		})
-		// Rebuild only this cluster's subsystem
-		go func() {
-			a.kubeconfigChangeMu.Lock()
-			defer a.kubeconfigChangeMu.Unlock()
+		// Rebuild only this cluster's subsystem through the coordinated mutation path.
+		a.runSelectionMutationAsync(fmt.Sprintf("cluster-auth-rebuild:%s", clusterID), func(_ selectionMutation) error {
 			a.rebuildClusterSubsystem(clusterID)
-		}()
+			return nil
+		})
 
 	case authstate.StateRecovering:
 		if a.logger != nil {
@@ -61,12 +60,11 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 			"clusterName": clusterName,
 			"reason":      reason,
 		})
-		// Teardown only this cluster's subsystem
-		go func() {
-			a.kubeconfigChangeMu.Lock()
-			defer a.kubeconfigChangeMu.Unlock()
+		// Teardown only this cluster's subsystem through the coordinated mutation path.
+		a.runSelectionMutationAsync(fmt.Sprintf("cluster-auth-teardown:%s", clusterID), func(_ selectionMutation) error {
 			a.teardownClusterSubsystem(clusterID)
-		}()
+			return nil
+		})
 
 	case authstate.StateInvalid:
 		if a.logger != nil {

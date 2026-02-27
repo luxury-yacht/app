@@ -344,9 +344,9 @@ func TestApp_SetKubeconfig(t *testing.T) {
 				assert.Equal(t, []string{tt.kubeconfigPath}, app.selectedKubeconfigs)
 			}
 			// Serialize teardown with auth/watcher mutation paths under race mode.
-			app.kubeconfigChangeMu.Lock()
+			app.selectionMutationMu.Lock()
 			app.teardownRefreshSubsystem()
-			app.kubeconfigChangeMu.Unlock()
+			app.selectionMutationMu.Unlock()
 		})
 	}
 }
@@ -372,12 +372,13 @@ func TestApp_SetSelectedKubeconfigs(t *testing.T) {
 	require.NoError(t, app.SetSelectedKubeconfigs(selections))
 
 	assert.Equal(t, selections, app.selectedKubeconfigs)
+	assert.GreaterOrEqual(t, app.selectionGeneration.Load(), uint64(1))
 	require.NotNil(t, app.appSettings)
 	assert.Equal(t, selections, app.appSettings.SelectedKubeconfigs)
 	// Serialize teardown with auth/watcher mutation paths under race mode.
-	app.kubeconfigChangeMu.Lock()
+	app.selectionMutationMu.Lock()
 	app.teardownRefreshSubsystem()
-	app.kubeconfigChangeMu.Unlock()
+	app.selectionMutationMu.Unlock()
 }
 
 func TestApp_SetSelectedKubeconfigsAllowsSameContextNameFromDifferentFiles(t *testing.T) {
