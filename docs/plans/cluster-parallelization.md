@@ -168,9 +168,9 @@ Diagnostics panel should reflect transition status without ambiguous “hung” 
 
 ## Phase 0: Baseline Instrumentation
 
-- [ ] Add timing/log instrumentation around current selection path.
-- [ ] Capture baseline p50/p95 open/close latency and queue wait.
-- [ ] Add regression reproduction scenario in tests.
+- [x] ✅ Add timing/log instrumentation around current selection path.
+- [x] ✅ Capture baseline p50/p95 open/close latency and queue wait.
+- [x] ✅ Add regression reproduction scenario in tests.
 
 ## Phase 1: Backend Refactor (No Behavior Change Yet)
 

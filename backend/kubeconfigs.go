@@ -399,8 +399,10 @@ const selectionChangeWorkTimeout = 2 * time.Minute
 // which is different from app startup where initKubernetesClient() handles the initial setup.
 // Both code paths must perform the same initialization steps to ensure consistent behavior.
 func (a *App) SetSelectedKubeconfigs(selections []string) error {
-	return a.runSelectionMutation("set-selected-kubeconfigs", func(mutation selectionMutation) error {
+	return a.runSelectionMutation("set-selected-kubeconfigs", func(mutation *selectionMutation) error {
+		intentStart := time.Now()
 		intent, err := a.buildSelectionChangeIntent(selections, mutation.generation)
+		mutation.phases.intent = time.Since(intentStart)
 		if err != nil {
 			return err
 		}
@@ -409,8 +411,10 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 			return a.clearKubeconfigSelection()
 		}
 
+		commitStart := time.Now()
 		a.commitSelectionChangeIntent(intent)
-		return a.executeSelectionChangeWork(mutation.ctx, intent)
+		mutation.phases.commit = time.Since(commitStart)
+		return a.executeSelectionChangeWork(mutation.ctx, intent, &mutation.phases)
 	})
 }
 
@@ -485,7 +489,11 @@ func (a *App) commitSelectionChangeIntent(intent selectionChangeIntent) {
 }
 
 // executeSelectionChangeWork performs client and refresh work for an already-committed intent.
-func (a *App) executeSelectionChangeWork(workCtx context.Context, intent selectionChangeIntent) error {
+func (a *App) executeSelectionChangeWork(
+	workCtx context.Context,
+	intent selectionChangeIntent,
+	phases *selectionMutationPhases,
+) error {
 	if workCtx == nil {
 		workCtx = context.Background()
 	}
@@ -493,7 +501,7 @@ func (a *App) executeSelectionChangeWork(workCtx context.Context, intent selecti
 	defer cancel()
 
 	if err := workCtx.Err(); err != nil {
-		return nil
+		return err
 	}
 	if !a.isSelectionGenerationCurrent(intent.generation) {
 		if a.logger != nil {
@@ -505,11 +513,15 @@ func (a *App) executeSelectionChangeWork(workCtx context.Context, intent selecti
 		return nil
 	}
 
+	clientSyncStart := time.Now()
 	if err := a.syncClusterClientPoolWithContext(workCtx, intent.normalizedSelections); err != nil {
 		return err
 	}
+	if phases != nil {
+		phases.clientSync = time.Since(clientSyncStart)
+	}
 	if err := workCtx.Err(); err != nil {
-		return nil
+		return err
 	}
 
 	if !intent.selectionChanged {
@@ -517,8 +529,9 @@ func (a *App) executeSelectionChangeWork(workCtx context.Context, intent selecti
 	}
 
 	if err := workCtx.Err(); err != nil {
-		return nil
+		return err
 	}
+	refreshStart := time.Now()
 	if a.refreshHTTPServer == nil || a.refreshAggregates == nil || a.refreshCtx == nil {
 		if err := a.setupRefreshSubsystem(); err != nil {
 			return err
@@ -528,11 +541,18 @@ func (a *App) executeSelectionChangeWork(workCtx context.Context, intent selecti
 			return err
 		}
 	}
+	if phases != nil {
+		phases.refresh = time.Since(refreshStart)
+	}
 	if err := workCtx.Err(); err != nil {
-		return nil
+		return err
 	}
 
+	catalogStart := time.Now()
 	a.startObjectCatalog()
+	if phases != nil {
+		phases.objectCatalog = time.Since(catalogStart)
+	}
 	return nil
 }
 
@@ -669,7 +689,7 @@ func (a *App) handleKubeconfigChange(changedPaths []string) {
 		return
 	}
 
-	if err := a.runSelectionMutation("kubeconfig-watcher-change", func(mutation selectionMutation) error {
+	if err := a.runSelectionMutation("kubeconfig-watcher-change", func(mutation *selectionMutation) error {
 		a.handleKubeconfigChangeLocked(changedPaths, mutation.generation)
 		return nil
 	}); err != nil && a.logger != nil {

@@ -276,7 +276,7 @@ func (a *App) recordClusterTransportSuccess(clusterID string) {
 func (a *App) runClusterTransportRebuild(clusterID, reason string, cause error) {
 	if err := a.runSelectionMutation(
 		fmt.Sprintf("cluster-transport-rebuild:%s", clusterID),
-		func(_ selectionMutation) error {
+		func(_ *selectionMutation) error {
 			state := a.getTransportState(clusterID)
 
 			defer func() {

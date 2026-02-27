@@ -45,7 +45,7 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 			"clusterName": clusterName,
 		})
 		// Rebuild only this cluster's subsystem through the coordinated mutation path.
-		a.runSelectionMutationAsync(fmt.Sprintf("cluster-auth-rebuild:%s", clusterID), func(_ selectionMutation) error {
+		a.runSelectionMutationAsync(fmt.Sprintf("cluster-auth-rebuild:%s", clusterID), func(_ *selectionMutation) error {
 			return a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
 				if err := opCtx.Err(); err != nil {
 					return err
@@ -66,7 +66,7 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 			"reason":      reason,
 		})
 		// Teardown only this cluster's subsystem through the coordinated mutation path.
-		a.runSelectionMutationAsync(fmt.Sprintf("cluster-auth-teardown:%s", clusterID), func(_ selectionMutation) error {
+		a.runSelectionMutationAsync(fmt.Sprintf("cluster-auth-teardown:%s", clusterID), func(_ *selectionMutation) error {
 			return a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
 				if err := opCtx.Err(); err != nil {
 					return err

@@ -347,7 +347,7 @@ func (a *App) saveAppSettings() error {
 
 // ClearAppState deletes persisted state files and resets in-memory caches for a clean restart.
 func (a *App) ClearAppState() error {
-	return a.runSelectionMutation("clear-app-state", func(_ selectionMutation) error {
+	return a.runSelectionMutation("clear-app-state", func(_ *selectionMutation) error {
 		if err := a.clearKubeconfigSelection(); err != nil {
 			return err
 		}

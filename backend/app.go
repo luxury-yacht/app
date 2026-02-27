@@ -74,6 +74,7 @@ type App struct {
 	selectionGeneration atomic.Uint64
 	selectionGenCtxMu   sync.Mutex
 	selectionGenCancel  context.CancelFunc
+	selectionDiag       selectionDiagnosticsState
 	// settingsMu guards appSettings access in runtime watcher/selection/settings flows.
 	settingsMu sync.Mutex
 

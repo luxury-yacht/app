@@ -12,7 +12,7 @@ func TestRunSelectionMutationIncrementsGeneration(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 	before := app.selectionGeneration.Load()
 
-	err := app.runSelectionMutation("unit-test", func(mutation selectionMutation) error {
+	err := app.runSelectionMutation("unit-test", func(mutation *selectionMutation) error {
 		require.Equal(t, before+1, mutation.generation)
 		return nil
 	})
@@ -23,7 +23,7 @@ func TestRunSelectionMutationIncrementsGeneration(t *testing.T) {
 func TestRunSelectionMutationDoesNotHoldKubeconfigChangeLockAcrossCallback(t *testing.T) {
 	app := newTestAppWithDefaults(t)
 
-	err := app.runSelectionMutation("unit-test", func(_ selectionMutation) error {
+	err := app.runSelectionMutation("unit-test", func(_ *selectionMutation) error {
 		acquired := make(chan struct{})
 		go func() {
 			app.kubeconfigChangeMu.Lock()
@@ -50,7 +50,7 @@ func TestRunSelectionMutationSupersededGenerationCancelsPriorContext(t *testing.
 	firstErrCh := make(chan error, 1)
 
 	go func() {
-		err := app.runSelectionMutation("first", func(mutation selectionMutation) error {
+		err := app.runSelectionMutation("first", func(mutation *selectionMutation) error {
 			close(firstStarted)
 			<-mutation.ctx.Done()
 			close(firstDone)
@@ -61,7 +61,7 @@ func TestRunSelectionMutationSupersededGenerationCancelsPriorContext(t *testing.
 
 	<-firstStarted
 
-	secondErr := app.runSelectionMutation("second", func(selectionMutation) error {
+	secondErr := app.runSelectionMutation("second", func(*selectionMutation) error {
 		return nil
 	})
 	require.NoError(t, secondErr)
