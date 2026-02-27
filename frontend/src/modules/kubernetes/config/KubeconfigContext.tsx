@@ -96,10 +96,12 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   const [selectedKubeconfig, setSelectedKubeconfigState] = useState<string>('');
   const [kubeconfigsLoading, setKubeconfigsLoading] = useState(false);
   const { enabled: backgroundRefreshEnabled } = useBackgroundRefresh();
-  const selectionQueueRef = useRef<Promise<void>>(Promise.resolve());
   const kubeconfigsRef = useRef<types.KubeconfigInfo[]>([]);
   const selectedKubeconfigsRef = useRef<string[]>([]);
   const selectedKubeconfigRef = useRef<string>('');
+  const committedSelectionsRef = useRef<string[]>([]);
+  const committedActiveRef = useRef<string>('');
+  const latestSelectionRequestIdRef = useRef(0);
   // Prevent refresh context churn until the backend confirms selection updates.
   const selectionPendingRef = useRef(false);
 
@@ -226,6 +228,8 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       const normalizedSelection = normalizeSelections(currentSelection || []);
       selectedKubeconfigsRef.current = normalizedSelection;
       selectedKubeconfigRef.current = normalizedSelection[0] || '';
+      committedSelectionsRef.current = normalizedSelection;
+      committedActiveRef.current = normalizedSelection[0] || '';
       setSelectedKubeconfigsState(normalizedSelection);
       setSelectedKubeconfigState(normalizedSelection[0] || '');
     } catch (error) {
@@ -243,7 +247,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
   }, [normalizeSelections]);
 
   const applySelectedKubeconfigs = useCallback(
-    async (configs: string[]) => {
+    async (configs: string[], requestId: number) => {
       const previousSelections = selectedKubeconfigsRef.current;
       const previousActive = selectedKubeconfigRef.current;
       const normalizedSelections = normalizeSelections(configs);
@@ -266,7 +270,7 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
       const shouldEmitSelectionChanged = selectionChanged && !willBeEmpty;
       try {
         selectionPendingRef.current = true;
-        // Keep refs in sync immediately so queued requests read the latest state.
+        // Keep refs in sync immediately so superseding requests read the latest state.
         selectedKubeconfigsRef.current = normalizedSelections;
         selectedKubeconfigRef.current = nextActive;
 
@@ -284,6 +288,11 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         // Perform the actual kubeconfig switch.
         await SetSelectedKubeconfigs(normalizedSelections);
 
+        // A newer intent has already been issued; ignore stale completion.
+        if (requestId !== latestSelectionRequestIdRef.current) {
+          return;
+        }
+
         // Emit after backend updates to avoid refreshing with inactive clusters.
         if (shouldEmitSelectionChanged) {
           eventBus.emit('kubeconfig:selection-changed');
@@ -299,18 +308,38 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
         });
         // Push refresh context after the backend activates the new selection.
         updateRefreshContext(nextMeta, Array.from(nextClusterIds));
+        committedSelectionsRef.current = normalizedSelections;
+        committedActiveRef.current = nextActive;
 
         // 4. Perform a manual refresh (will be triggered by kubeconfig:changed event).
         if (shouldEmitChanged) {
           eventBus.emit('kubeconfig:changed', '');
         }
       } catch (error) {
+        // Ignore stale errors from superseded requests.
+        if (requestId !== latestSelectionRequestIdRef.current) {
+          return;
+        }
         selectionPendingRef.current = false;
-        // Roll back the UI to the previous value if the backend switch failed.
-        selectedKubeconfigsRef.current = previousSelections;
-        selectedKubeconfigRef.current = previousActive;
-        setSelectedKubeconfigsState(previousSelections);
-        setSelectedKubeconfigState(previousActive);
+        // Roll back to the last committed backend selection.
+        let rollbackSelections = committedSelectionsRef.current;
+        let rollbackActive = committedActiveRef.current;
+        try {
+          const confirmed = normalizeSelections((await GetSelectedKubeconfigs()) || []);
+          rollbackSelections = confirmed;
+          rollbackActive =
+            rollbackActive && confirmed.includes(rollbackActive)
+              ? rollbackActive
+              : confirmed[0] || '';
+          committedSelectionsRef.current = rollbackSelections;
+          committedActiveRef.current = rollbackActive;
+        } catch {
+          // Keep last committed in-memory snapshot when backend confirmation fails.
+        }
+        selectedKubeconfigsRef.current = rollbackSelections;
+        selectedKubeconfigRef.current = rollbackActive;
+        setSelectedKubeconfigsState(rollbackSelections);
+        setSelectedKubeconfigState(rollbackActive);
         errorHandler.handle(
           error,
           {
@@ -327,10 +356,9 @@ export const KubeconfigProvider: React.FC<KubeconfigProviderProps> = ({ children
 
   const setSelectedKubeconfigs = useCallback(
     (configs: string[]) => {
-      // Serialize selection changes to avoid overlapping refresh subsystem rebuilds.
-      const queued = selectionQueueRef.current.then(() => applySelectedKubeconfigs(configs));
-      selectionQueueRef.current = queued.catch(() => undefined);
-      return queued;
+      const requestId = latestSelectionRequestIdRef.current + 1;
+      latestSelectionRequestIdRef.current = requestId;
+      return applySelectedKubeconfigs(configs, requestId);
     },
     [applySelectedKubeconfigs]
   );

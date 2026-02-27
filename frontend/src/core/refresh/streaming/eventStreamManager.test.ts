@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetRefreshBaseURL: vi.fn(async () => 'http://127.0.0.1:0'),
+  GetSelectionDiagnostics: vi.fn(async () => ({})),
 }));
 
 const ensureRefreshBaseURLMock = vi.hoisted(() => vi.fn(async () => 'http://127.0.0.1:0'));

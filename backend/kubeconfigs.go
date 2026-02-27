@@ -1,11 +1,13 @@
 package backend
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
@@ -355,9 +357,7 @@ func (a *App) SetKubeconfig(selection string) error {
 	a.logger.Info(fmt.Sprintf("Switching kubeconfig to: %s", selection), "KubeconfigManager")
 
 	if strings.TrimSpace(selection) == "" {
-		a.kubeconfigChangeMu.Lock()
-		defer a.kubeconfigChangeMu.Unlock()
-		return a.clearKubeconfigSelection()
+		return a.SetSelectedKubeconfigs(nil)
 	}
 
 	// Delegate to the multi-cluster selection flow to avoid implicit base routing.
@@ -371,6 +371,17 @@ func (a *App) SetKubeconfig(selection string) error {
 	}
 	return nil
 }
+
+// selectionChangeIntent captures the parsed/validated selection intent before runtime work begins.
+type selectionChangeIntent struct {
+	generation              uint64
+	normalizedSelections    []kubeconfigSelection
+	normalizedSelectionText []string
+	selectionChanged        bool
+	clearSelection          bool
+}
+
+const selectionChangeWorkTimeout = 2 * time.Minute
 
 // SetSelectedKubeconfigs updates the active kubeconfig selection set for multi-cluster support.
 //
@@ -388,91 +399,63 @@ func (a *App) SetKubeconfig(selection string) error {
 // which is different from app startup where initKubernetesClient() handles the initial setup.
 // Both code paths must perform the same initialization steps to ensure consistent behavior.
 func (a *App) SetSelectedKubeconfigs(selections []string) error {
-	a.kubeconfigChangeMu.Lock()
-	defer a.kubeconfigChangeMu.Unlock()
-
-	// ===========================================================================================
-	// STEP 1: Handle empty selection case
-	// ===========================================================================================
-	// If the user has deselected all clusters (empty selection), we need to tear down all
-	// cluster-related state and connections. This is handled by a separate function since
-	// it involves cleanup logic rather than setup logic.
-	if len(selections) == 0 {
-		return a.clearKubeconfigSelection()
-	}
-
-	// ===========================================================================================
-	// STEP 2: Capture previous state for change detection
-	// ===========================================================================================
-	// We need to know if the selection actually changed so we can skip expensive operations
-	// (like restarting the refresh subsystem) if the user selected the same clusters they
-	// already had selected. We copy the slice to avoid issues if the underlying array is
-	// modified during processing.
-	a.kubeconfigsMu.RLock()
-	previousSelections := append([]string(nil), a.selectedKubeconfigs...)
-	a.kubeconfigsMu.RUnlock()
-
-	// ===========================================================================================
-	// STEP 3: Parse, validate, and normalize each selection string
-	// ===========================================================================================
-	// Selection strings come from the frontend in a format like "path/to/kubeconfig:context-name".
-	// We need to:
-	//   - Parse them into structured kubeconfigSelection objects
-	//   - Validate that the referenced kubeconfig files and contexts actually exist
-	//   - Normalize the paths and names for consistent storage and comparison
-	//   - Detect and reject duplicate context selections (can't connect to same context twice)
-	//
-	// We build two parallel slices:
-	//   - normalized: structured objects used for creating Kubernetes clients
-	//   - normalizedStrings: string representations used for storage and comparison
-	normalized := make([]kubeconfigSelection, 0, len(selections))
-	normalizedStrings := make([]string, 0, len(selections))
-	seenContexts := make(map[string]struct{}, len(selections)) // tracks contexts we've already seen to detect duplicates
-
-	for _, selection := range selections {
-		// Parse the selection string into a structured object containing the kubeconfig
-		// file path and the context name within that kubeconfig.
-		parsed, err := a.normalizeKubeconfigSelection(selection)
+	return a.runSelectionMutation("set-selected-kubeconfigs", func(mutation *selectionMutation) error {
+		intentStart := time.Now()
+		intent, err := a.buildSelectionChangeIntent(selections, mutation.generation)
+		mutation.phases.intent = time.Since(intentStart)
 		if err != nil {
 			return err
 		}
 
-		// Validate that the kubeconfig file exists and contains the specified context.
-		// This prevents the user from selecting a cluster that doesn't actually exist,
-		// which would cause confusing errors later when we try to connect.
-		if err := a.validateKubeconfigSelection(parsed); err != nil {
-			return err
+		if intent.clearSelection {
+			return a.clearKubeconfigSelection()
 		}
 
-		// Check for duplicate selections. Selecting the same kubeconfig:context twice would
-		// create duplicate connections and cause confusion in the UI.
-		// We use the full path:context string to allow the same context name from different
-		// kubeconfig files (e.g., "dev" context in both ~/.kube/config and ~/.kube/staging).
+		commitStart := time.Now()
+		a.commitSelectionChangeIntent(intent)
+		mutation.phases.commit = time.Since(commitStart)
+		return a.executeSelectionChangeWork(mutation.ctx, intent, &mutation.phases)
+	})
+}
+
+// buildSelectionChangeIntent parses and validates a requested selection set.
+func (a *App) buildSelectionChangeIntent(selections []string, generation uint64) (selectionChangeIntent, error) {
+	intent := selectionChangeIntent{generation: generation}
+	if len(selections) == 0 {
+		intent.clearSelection = true
+		return intent, nil
+	}
+
+	a.kubeconfigsMu.RLock()
+	previousSelections := append([]string(nil), a.selectedKubeconfigs...)
+	a.kubeconfigsMu.RUnlock()
+
+	normalized := make([]kubeconfigSelection, 0, len(selections))
+	normalizedStrings := make([]string, 0, len(selections))
+	seenContexts := make(map[string]struct{}, len(selections))
+
+	for _, selection := range selections {
+		parsed, err := a.normalizeKubeconfigSelection(selection)
+		if err != nil {
+			return selectionChangeIntent{}, err
+		}
+		if err := a.validateKubeconfigSelection(parsed); err != nil {
+			return selectionChangeIntent{}, err
+		}
+
 		selectionKey := parsed.String()
 		if selectionKey != "" {
 			if _, exists := seenContexts[selectionKey]; exists {
-				return fmt.Errorf("duplicate selection: %s", selectionKey)
+				return selectionChangeIntent{}, fmt.Errorf("duplicate selection: %s", selectionKey)
 			}
 			seenContexts[selectionKey] = struct{}{}
 		}
 
-		// Add the validated selection to our normalized slices.
 		normalized = append(normalized, parsed)
 		normalizedStrings = append(normalizedStrings, parsed.String())
 	}
 
-	// ===========================================================================================
-	// STEP 4: Determine if the selection actually changed
-	// ===========================================================================================
-	// Compare the new normalized selection with the previous selection to determine if
-	// anything actually changed. We do this comparison BEFORE updating any state so we
-	// can skip expensive operations if nothing changed.
-	//
-	// First, check if the counts differ (quick check).
 	selectionChanged := len(previousSelections) != len(normalizedStrings)
-
-	// If counts match, compare each element. We compare in order because the order of
-	// selections matters (order determines UI tab ordering and default active tab).
 	if !selectionChanged {
 		for i, selection := range previousSelections {
 			if selection != normalizedStrings[i] {
@@ -482,91 +465,94 @@ func (a *App) SetSelectedKubeconfigs(selections []string) error {
 		}
 	}
 
-	// ===========================================================================================
-	// STEP 5: Update in-memory selection state
-	// ===========================================================================================
-	// Store the new selection in the App's in-memory state. This is used by other parts
-	// of the application to know which clusters are currently selected.
+	intent.normalizedSelections = normalized
+	intent.normalizedSelectionText = normalizedStrings
+	intent.selectionChanged = selectionChanged
+	return intent, nil
+}
+
+// commitSelectionChangeIntent applies validated selection state in-memory and to settings.
+func (a *App) commitSelectionChangeIntent(intent selectionChangeIntent) {
 	a.kubeconfigsMu.Lock()
-	a.selectedKubeconfigs = append([]string(nil), normalizedStrings...)
+	a.selectedKubeconfigs = append([]string(nil), intent.normalizedSelectionText...)
 	a.kubeconfigsMu.Unlock()
 
-	// ===========================================================================================
-	// STEP 6: Persist the selection to disk
-	// ===========================================================================================
-	// Save the selection to the app settings file so it survives app restarts. On the next
-	// app launch, restoreKubeconfigSelection() will read this file and restore the selection,
-	// allowing initKubernetesClient() to automatically reconnect to the same clusters.
-	//
-	// This is critical for the "first run" vs "subsequent run" behavior:
-	//   - First run: No settings file exists, so no clusters are auto-selected at startup.
-	//                The user must manually select clusters, which calls this function.
-	//   - Subsequent runs: Settings file exists with saved selection, so clusters are
-	//                      auto-selected at startup via initKubernetesClient().
 	a.settingsMu.Lock()
 	if a.appSettings == nil {
 		a.appSettings = getDefaultAppSettings()
 	}
-	a.appSettings.SelectedKubeconfigs = append([]string(nil), normalizedStrings...)
-	// Write the settings to disk. We log but don't fail on error because the selection
-	// can still work for this session even if persistence fails.
+	a.appSettings.SelectedKubeconfigs = append([]string(nil), intent.normalizedSelectionText...)
 	if err := a.saveAppSettings(); err != nil {
 		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
 	}
 	a.settingsMu.Unlock()
+}
 
-	// ===========================================================================================
-	// STEP 7: Create/update Kubernetes API clients for each selected cluster
-	// ===========================================================================================
-	// The cluster client pool manages Kubernetes API client connections for each cluster.
-	// This function creates new clients for newly-selected clusters and removes clients
-	// for clusters that are no longer selected. Each cluster needs its own set of clients
-	// (clientset, dynamic client, API extensions client, etc.) to communicate with that
-	// cluster's API server.
-	if err := a.syncClusterClientPool(normalized); err != nil {
+// executeSelectionChangeWork performs client and refresh work for an already-committed intent.
+func (a *App) executeSelectionChangeWork(
+	workCtx context.Context,
+	intent selectionChangeIntent,
+	phases *selectionMutationPhases,
+) error {
+	if workCtx == nil {
+		workCtx = context.Background()
+	}
+	workCtx, cancel := context.WithTimeout(workCtx, selectionChangeWorkTimeout)
+	defer cancel()
+
+	if err := workCtx.Err(); err != nil {
+		return err
+	}
+	if !a.isSelectionGenerationCurrent(intent.generation) {
+		if a.logger != nil {
+			a.logger.Debug(
+				fmt.Sprintf("Skipping superseded selection work (generation=%d)", intent.generation),
+				"KubeconfigManager",
+			)
+		}
+		return nil
+	}
+
+	clientSyncStart := time.Now()
+	if err := a.syncClusterClientPoolWithContext(workCtx, intent.normalizedSelections); err != nil {
+		return err
+	}
+	if phases != nil {
+		phases.clientSync = time.Since(clientSyncStart)
+	}
+	if err := workCtx.Err(); err != nil {
 		return err
 	}
 
-	// ===========================================================================================
-	// STEP 8: Initialize or update the refresh subsystem
-	// ===========================================================================================
-	// The refresh subsystem is the core data pipeline that fetches Kubernetes resources
-	// and serves them to the frontend. It consists of:
-	//   - An HTTP server that the frontend connects to for data streaming
-	//   - Snapshot handlers that fetch and cache Kubernetes resource data
-	//   - Stream handlers that push real-time updates to the frontend
-	//
-	// We only need to do this work if the selection actually changed. If the user selected
-	// the same clusters they already had, we can skip this expensive operation.
-	if selectionChanged {
-		// Check if the refresh subsystem has never been initialized. This happens on first
-		// run when the user selects clusters for the first time (as opposed to subsequent
-		// runs where initKubernetesClient() initializes it at startup).
-		if a.refreshHTTPServer == nil || a.refreshAggregates == nil || a.refreshCtx == nil {
-			// First-time initialization: Create the entire refresh subsystem from scratch.
-			// This starts the HTTP server, registers all the snapshot and stream handlers,
-			// and begins the background refresh loops.
-			if err := a.setupRefreshSubsystem(); err != nil {
-				return err
-			}
-		} else {
-			// The refresh subsystem already exists (user is changing their selection, not
-			// making an initial selection). Update it in-place to add/remove clusters
-			// without tearing down and recreating the entire HTTP server.
-			if err := a.updateRefreshSubsystemSelections(normalized); err != nil {
-				return err
-			}
-		}
-
-		// ===========================================================================================
-		// STEP 9: Start the object catalog service
-		// ===========================================================================================
-		// The object catalog powers the "Browse" and "All Objects" views in the frontend.
-		// This call is required to start the object catalog on the initial app run.
-		// On subsequent app runs, initKubernetesClient() handles this.
-		a.startObjectCatalog()
+	if !intent.selectionChanged {
+		return nil
 	}
 
+	if err := workCtx.Err(); err != nil {
+		return err
+	}
+	refreshStart := time.Now()
+	if a.refreshHTTPServer == nil || a.refreshAggregates == nil || a.refreshCtx == nil {
+		if err := a.setupRefreshSubsystem(); err != nil {
+			return err
+		}
+	} else {
+		if err := a.updateRefreshSubsystemSelections(intent.normalizedSelections); err != nil {
+			return err
+		}
+	}
+	if phases != nil {
+		phases.refresh = time.Since(refreshStart)
+	}
+	if err := workCtx.Err(); err != nil {
+		return err
+	}
+
+	catalogStart := time.Now()
+	a.startObjectCatalog()
+	if phases != nil {
+		phases.objectCatalog = time.Since(catalogStart)
+	}
 	return nil
 }
 
@@ -576,9 +562,28 @@ func (a *App) clearKubeconfigSelection() error {
 	a.kubeconfigsMu.Lock()
 	a.selectedKubeconfigs = nil
 	a.kubeconfigsMu.Unlock()
+	var authManagers []interface{ Shutdown() }
+	clusterIDs := make(map[string]struct{})
 	a.clusterClientsMu.Lock()
+	for id, clients := range a.clusterClients {
+		clusterIDs[id] = struct{}{}
+		if clients != nil && clients.authManager != nil {
+			authManagers = append(authManagers, clients.authManager)
+		}
+	}
 	a.clusterClients = make(map[string]*clusterClients)
 	a.clusterClientsMu.Unlock()
+	for _, mgr := range authManagers {
+		mgr.Shutdown()
+	}
+	for clusterID := range clusterIDs {
+		if err := a.StopClusterShellSessions(clusterID); err != nil && a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for cleared cluster %s: %v", clusterID, err), "KubeconfigManager")
+		}
+		if err := a.StopClusterPortForwards(clusterID); err != nil && a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for cleared cluster %s: %v", clusterID, err), "KubeconfigManager")
+		}
+	}
 	clearGVRCache()
 	a.teardownRefreshSubsystem()
 
@@ -591,10 +596,6 @@ func (a *App) clearKubeconfigSelection() error {
 		a.logger.Warn(fmt.Sprintf("Failed to save kubeconfig selection: %v", err), "KubeconfigManager")
 	}
 	a.settingsMu.Unlock()
-
-	a.clusterClientsMu.Lock()
-	a.clusterClients = make(map[string]*clusterClients)
-	a.clusterClientsMu.Unlock()
 
 	return nil
 }
@@ -698,10 +699,20 @@ func (a *App) handleKubeconfigChange(changedPaths []string) {
 		return
 	}
 
-	a.kubeconfigChangeMu.Lock()
-	defer a.kubeconfigChangeMu.Unlock()
+	if err := a.runSelectionMutation("kubeconfig-watcher-change", func(mutation *selectionMutation) error {
+		a.handleKubeconfigChangeLocked(changedPaths, mutation.generation)
+		return nil
+	}); err != nil && a.logger != nil {
+		a.logger.Warn(fmt.Sprintf("Failed to process kubeconfig file changes: %v", err), "KubeconfigWatcher")
+	}
+}
 
-	a.logger.Info(fmt.Sprintf("Kubeconfig file change detected (%d file(s)), refreshing...", len(changedPaths)), "KubeconfigWatcher")
+// handleKubeconfigChangeLocked processes file watcher mutations under the selection mutation boundary.
+func (a *App) handleKubeconfigChangeLocked(changedPaths []string, generation uint64) {
+	a.logger.Info(
+		fmt.Sprintf("Kubeconfig file change detected (%d file(s)), refreshing... (generation=%d)", len(changedPaths), generation),
+		"KubeconfigWatcher",
+	)
 
 	changedSet := make(map[string]struct{}, len(changedPaths))
 	for _, p := range changedPaths {
@@ -845,7 +856,7 @@ func (a *App) handleKubeconfigChange(changedPaths []string) {
 }
 
 // deselectClusters removes the specified cluster IDs from the active selection.
-// Caller must hold kubeconfigChangeMu.
+// Caller must run within a coordinated selection mutation boundary.
 func (a *App) deselectClusters(clusterIDs []string) {
 	if len(clusterIDs) == 0 {
 		return
@@ -914,6 +925,14 @@ func (a *App) deselectClusters(clusterIDs []string) {
 	a.clusterClientsMu.Unlock()
 	for _, mgr := range authManagers {
 		mgr.Shutdown()
+	}
+	for _, id := range clusterIDs {
+		if err := a.StopClusterShellSessions(id); err != nil && a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for deselected cluster %s: %v", id, err), "KubeconfigWatcher")
+		}
+		if err := a.StopClusterPortForwards(id); err != nil && a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for deselected cluster %s: %v", id, err), "KubeconfigWatcher")
+		}
 	}
 
 	a.settingsMu.Lock()

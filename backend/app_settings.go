@@ -347,43 +347,42 @@ func (a *App) saveAppSettings() error {
 
 // ClearAppState deletes persisted state files and resets in-memory caches for a clean restart.
 func (a *App) ClearAppState() error {
-	a.kubeconfigChangeMu.Lock()
-	defer a.kubeconfigChangeMu.Unlock()
+	return a.runSelectionMutation("clear-app-state", func(_ *selectionMutation) error {
+		if err := a.clearKubeconfigSelection(); err != nil {
+			return err
+		}
 
-	if err := a.clearKubeconfigSelection(); err != nil {
-		return err
-	}
+		var errs []error
 
-	var errs []error
-
-	settingsFile, err := a.getSettingsFilePath()
-	if err == nil {
-		if err := removeFileIfExists(settingsFile); err != nil {
+		settingsFile, err := a.getSettingsFilePath()
+		if err == nil {
+			if err := removeFileIfExists(settingsFile); err != nil {
+				errs = append(errs, err)
+			}
+		} else {
 			errs = append(errs, err)
 		}
-	} else {
-		errs = append(errs, err)
-	}
 
-	persistenceFile, err := a.getPersistenceFilePath()
-	if err == nil {
-		if err := removeFileIfExists(persistenceFile); err != nil {
+		persistenceFile, err := a.getPersistenceFilePath()
+		if err == nil {
+			if err := removeFileIfExists(persistenceFile); err != nil {
+				errs = append(errs, err)
+			}
+		} else {
 			errs = append(errs, err)
 		}
-	} else {
-		errs = append(errs, err)
-	}
 
-	a.settingsMu.Lock()
-	a.appSettings = nil
-	a.settingsMu.Unlock()
-	a.windowSettings = nil
+		a.settingsMu.Lock()
+		a.appSettings = nil
+		a.settingsMu.Unlock()
+		a.windowSettings = nil
 
-	if len(errs) > 0 {
-		return fmt.Errorf("clear app state: %w", errs[0])
-	}
+		if len(errs) > 0 {
+			return fmt.Errorf("clear app state: %w", errs[0])
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // removeFileIfExists ignores missing files so reset can be re-run safely.

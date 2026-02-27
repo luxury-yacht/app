@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 
 	"github.com/luxury-yacht/app/backend/internal/versioning"
 	"github.com/luxury-yacht/app/backend/refresh"
@@ -56,13 +57,30 @@ type App struct {
 
 	// kubeconfigsMu guards availableKubeconfigs and selectedKubeconfigs reads/writes.
 	kubeconfigsMu sync.RWMutex
+	// selectionMutationMu serializes coordinated cluster runtime mutations.
+	// This preserves sequential behavior while allowing kubeconfigChangeMu to stay
+	// narrowly scoped to short state-transition sections.
+	selectionMutationMu sync.Mutex
 	// kubeconfigChangeMu serializes runtime cluster/subsystem mutation paths.
+	// Lock ordering for runtime cluster mutation paths:
+	//   1) selectionMutationMu
+	//   2) kubeconfigChangeMu
+	//   3) clusterClientsMu
+	//   4) objectCatalogMu
+	// Keep this ordering consistent to avoid deadlocks.
 	kubeconfigChangeMu sync.Mutex
+	// selectionGeneration is a monotonic token incremented for each coordinated
+	// runtime mutation touching cluster selection/subsystem state.
+	selectionGeneration atomic.Uint64
+	selectionGenCtxMu   sync.Mutex
+	selectionGenCancel  context.CancelFunc
+	selectionDiag       selectionDiagnosticsState
 	// settingsMu guards appSettings access in runtime watcher/selection/settings flows.
 	settingsMu sync.Mutex
 
 	clusterClientsMu sync.Mutex
 	clusterClients   map[string]*clusterClients
+	clusterOps       *clusterOperationCoordinator
 
 	shellSessions   map[string]*shellSession
 	shellSessionsMu sync.Mutex
@@ -105,6 +123,7 @@ func NewApp() *App {
 		refreshSubsystems:        make(map[string]*system.Subsystem),
 		refreshPermissionCancels: make(map[string]context.CancelFunc),
 		clusterClients:           make(map[string]*clusterClients),
+		clusterOps:               newClusterOperationCoordinator(),
 		objectCatalogEntries:     make(map[string]*objectCatalogEntry),
 		shellSessions:            make(map[string]*shellSession),
 		portForwardSessions:      make(map[string]*portForwardSessionInternal),

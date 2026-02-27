@@ -758,6 +758,37 @@ describe('refreshOrchestrator', () => {
     expect(clientMocks.setMetricsActiveMock).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps only the latest scope active for single-scope system domains', () => {
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-overview',
+      refresherName: SYSTEM_REFRESHERS.clusterOverview,
+      category: 'system',
+      autoStart: false,
+    });
+
+    const scopeA = buildClusterScopeList(['cluster-a'], '');
+    const scopeAB = buildClusterScopeList(['cluster-a', 'cluster-b'], '');
+
+    refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scopeA, true);
+    setScopedDomainState('cluster-overview', scopeA, (previous) => ({
+      ...previous,
+      status: 'ready',
+      data: { overview: { totalNodes: 1 } } as any,
+      stats: { itemCount: 1, buildDurationMs: 0 },
+      scope: scopeA,
+    }));
+
+    refreshOrchestrator.setScopedDomainEnabled('cluster-overview', scopeAB, true);
+
+    const scopedMap = orchestratorInternals.scopedEnabledState.get('cluster-overview') as Map<
+      string,
+      boolean
+    >;
+    expect(scopedMap.get(scopeAB)).toBe(true);
+    expect(scopedMap.get(scopeA)).toBe(false);
+    expect(getScopedDomainState('cluster-overview', scopeA).status).toBe('idle');
+  });
+
   it('replaces existing non-scoped subscriptions when re-registering a domain', () => {
     refreshOrchestrator.registerDomain({
       domain: 'cluster-config',

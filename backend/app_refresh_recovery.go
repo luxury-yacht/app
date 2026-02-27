@@ -274,35 +274,48 @@ func (a *App) recordClusterTransportSuccess(clusterID string) {
 // runClusterTransportRebuild performs a transport rebuild for a specific cluster.
 // It uses the existing rebuildClusterSubsystem which rebuilds only that cluster.
 func (a *App) runClusterTransportRebuild(clusterID, reason string, cause error) {
-	a.kubeconfigChangeMu.Lock()
-	defer a.kubeconfigChangeMu.Unlock()
+	if err := a.runSelectionMutation(
+		fmt.Sprintf("cluster-transport-rebuild:%s", clusterID),
+		func(_ *selectionMutation) error {
+			state := a.getTransportState(clusterID)
 
-	state := a.getTransportState(clusterID)
+			defer func() {
+				state.mu.Lock()
+				state.failureCount = 0
+				state.windowStart = time.Time{}
+				state.rebuildInProgress = false
+				state.mu.Unlock()
+			}()
 
-	defer func() {
-		state.mu.Lock()
-		state.failureCount = 0
-		state.windowStart = time.Time{}
-		state.rebuildInProgress = false
-		state.mu.Unlock()
-	}()
+			if a.telemetryRecorder != nil {
+				a.telemetryRecorder.RecordTransportRebuild(fmt.Sprintf("cluster:%s - %s", clusterID, reason))
+			}
 
-	if a.telemetryRecorder != nil {
-		a.telemetryRecorder.RecordTransportRebuild(fmt.Sprintf("cluster:%s - %s", clusterID, reason))
-	}
+			if a.logger != nil {
+				a.logger.Info(fmt.Sprintf("Starting transport rebuild for cluster %s", clusterID), "KubernetesClient")
+			}
 
-	if a.logger != nil {
-		a.logger.Info(fmt.Sprintf("Starting transport rebuild for cluster %s", clusterID), "KubernetesClient")
-	}
+			if err := a.runClusterOperation(context.Background(), clusterID, func(opCtx context.Context) error {
+				if err := opCtx.Err(); err != nil {
+					return err
+				}
+				// Use existing per-cluster rebuild mechanism.
+				a.rebuildClusterSubsystem(clusterID)
+				return opCtx.Err()
+			}); err != nil {
+				return err
+			}
 
-	// Use existing per-cluster rebuild mechanism
-	a.rebuildClusterSubsystem(clusterID)
-
-	if a.logger != nil {
-		msg := fmt.Sprintf("Transport rebuild complete for cluster %s", clusterID)
-		if cause != nil {
-			msg = fmt.Sprintf("%s after %v", msg, cause)
-		}
-		a.logger.Info(msg, "KubernetesClient")
+			if a.logger != nil {
+				msg := fmt.Sprintf("Transport rebuild complete for cluster %s", clusterID)
+				if cause != nil {
+					msg = fmt.Sprintf("%s after %v", msg, cause)
+				}
+				a.logger.Info(msg, "KubernetesClient")
+			}
+			return nil
+		},
+	); err != nil && a.logger != nil {
+		a.logger.Warn(fmt.Sprintf("Transport rebuild coordination failed for cluster %s: %v", clusterID, err), "KubernetesClient")
 	}
 }

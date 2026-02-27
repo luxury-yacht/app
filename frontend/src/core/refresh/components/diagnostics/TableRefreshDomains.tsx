@@ -104,7 +104,7 @@ export const DiagnosticsTable: React.FC<DiagnosticsTableProps> = ({ rows }) => {
 };
 
 interface DiagnosticsSummaryCardsProps {
-  orchestratorPendingRequests: number;
+  orchestratorSummary: SummaryCardData;
   metricsSummary: SummaryCardData;
   eventSummary: SummaryCardData;
   catalogSummary: SummaryCardData;
@@ -112,7 +112,7 @@ interface DiagnosticsSummaryCardsProps {
 }
 
 export const DiagnosticsSummaryCards: React.FC<DiagnosticsSummaryCardsProps> = ({
-  orchestratorPendingRequests,
+  orchestratorSummary,
   metricsSummary,
   eventSummary,
   catalogSummary,
@@ -120,12 +120,7 @@ export const DiagnosticsSummaryCards: React.FC<DiagnosticsSummaryCardsProps> = (
 }) => {
   return (
     <div className="diagnostics-summary">
-      <div className="diagnostics-summary-card">
-        <span className="diagnostics-summary-heading">Orchestrator</span>
-        <span className="diagnostics-summary-primary">
-          Pending Requests: {orchestratorPendingRequests}
-        </span>
-      </div>
+      <SummaryCard heading="Orchestrator" data={orchestratorSummary} />
       <SummaryCard heading="Metrics" data={metricsSummary} />
       <SummaryCard heading="Events" data={eventSummary} />
       <SummaryCard heading="Catalog Stream" data={catalogSummary} />

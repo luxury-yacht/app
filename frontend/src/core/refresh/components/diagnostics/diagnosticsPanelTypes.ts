@@ -61,6 +61,9 @@ export interface DiagnosticsRow {
 export interface DiagnosticsStreamRow {
   rowKey: string;
   label: string;
+  activeDomainCount: number;
+  activeDomains: string;
+  activeDomainsTooltip?: string;
   sessions: number;
   delivered: number;
   dropped: number;

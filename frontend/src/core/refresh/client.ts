@@ -5,7 +5,7 @@
  * Handles API calls and response shaping for the core layer.
  */
 
-import { GetRefreshBaseURL } from '@wailsjs/go/backend/App';
+import { GetRefreshBaseURL, GetSelectionDiagnostics } from '@wailsjs/go/backend/App';
 
 import type { TelemetrySummary } from './types';
 import { formatPermissionDeniedStatus, isPermissionDeniedStatus } from './permissionErrors';
@@ -34,6 +34,36 @@ export interface Snapshot<TPayload> {
   sequence: number;
   payload: TPayload;
   stats: SnapshotStats;
+}
+
+export interface SelectionDiagnostics {
+  activeQueueDepth: number;
+  maxQueueDepth: number;
+  sampleCount: number;
+  totalMutations: number;
+  completedMutations: number;
+  failedMutations: number;
+  canceledMutations: number;
+  supersededMutations: number;
+  lastUpdatedMs?: number;
+  lastReason?: string;
+  lastError?: string;
+  lastQueueMs?: number;
+  lastTotalMs?: number;
+  queueP50Ms?: number;
+  queueP95Ms?: number;
+  totalP50Ms?: number;
+  totalP95Ms?: number;
+  intentP50Ms?: number;
+  intentP95Ms?: number;
+  commitP50Ms?: number;
+  commitP95Ms?: number;
+  clientSyncP50Ms?: number;
+  clientSyncP95Ms?: number;
+  refreshP50Ms?: number;
+  refreshP95Ms?: number;
+  catalogP50Ms?: number;
+  catalogP95Ms?: number;
 }
 
 interface FetchSnapshotOptions {
@@ -236,4 +266,8 @@ export async function setMetricsActive(active: boolean): Promise<void> {
   if (!response.ok) {
     throw new Error(`Metrics activity request failed: ${response.status} ${response.statusText}`);
   }
+}
+
+export async function fetchSelectionDiagnostics(): Promise<SelectionDiagnostics> {
+  return (await GetSelectionDiagnostics()) as SelectionDiagnostics;
 }
