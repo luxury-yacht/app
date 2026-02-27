@@ -20,6 +20,8 @@ import (
 	"github.com/luxury-yacht/app/backend/internal/authstate"
 )
 
+const clusterClientPreflightTimeout = 8 * time.Second
+
 // clusterClients stores Kubernetes clients scoped to a specific cluster selection.
 type clusterClients struct {
 	meta                ClusterMeta
@@ -112,7 +114,7 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 				if err := opCtx.Err(); err != nil {
 					return err
 				}
-				clients, buildErr := a.buildClusterClients(task.selection, task.meta)
+				clients, buildErr := a.buildClusterClientsWithContext(opCtx, task.selection, task.meta)
 				if buildErr != nil {
 					return buildErr
 				}
@@ -145,17 +147,34 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 		a.clusterClientsMu.Unlock()
 	}
 
+	var removedClusterIDs []string
+	var removedAuthManagers []interface{ Shutdown() }
 	a.clusterClientsMu.Lock()
 	for id, clients := range a.clusterClients {
-		if _, ok := desired[id]; !ok {
-			// Shutdown the auth manager for removed clusters
-			if clients != nil && clients.authManager != nil {
-				clients.authManager.Shutdown()
-			}
-			delete(a.clusterClients, id)
+		if _, ok := desired[id]; ok {
+			continue
 		}
+		removedClusterIDs = append(removedClusterIDs, id)
+		if clients != nil && clients.authManager != nil {
+			removedAuthManagers = append(removedAuthManagers, clients.authManager)
+		}
+		delete(a.clusterClients, id)
 	}
 	a.clusterClientsMu.Unlock()
+
+	for _, mgr := range removedAuthManagers {
+		mgr.Shutdown()
+	}
+	// Ensure cluster-scoped runtime sessions are torn down whenever selection
+	// churn drops a cluster from the active client pool.
+	for _, clusterID := range removedClusterIDs {
+		if err := a.StopClusterShellSessions(clusterID); err != nil && a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for removed cluster %s: %v", clusterID, err), "KubernetesClient")
+		}
+		if err := a.StopClusterPortForwards(clusterID); err != nil && a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for removed cluster %s: %v", clusterID, err), "KubernetesClient")
+		}
+	}
 
 	return nil
 }
@@ -178,6 +197,16 @@ func clusterClientBuildConcurrencyLimit(taskCount int) int {
 
 // buildClusterClients initializes client-go dependencies for a specific kubeconfig selection.
 func (a *App) buildClusterClients(selection kubeconfigSelection, meta ClusterMeta) (*clusterClients, error) {
+	return a.buildClusterClientsWithContext(context.Background(), selection, meta)
+}
+
+// buildClusterClientsWithContext initializes client-go dependencies for a specific kubeconfig selection.
+// The preflight check is context-bound so superseding selection generations can preempt stale work.
+func (a *App) buildClusterClientsWithContext(
+	ctx context.Context,
+	selection kubeconfigSelection,
+	meta ClusterMeta,
+) (*clusterClients, error) {
 	// Create a per-cluster auth manager. This ensures auth failures in one cluster
 	// don't affect other clusters.
 	clusterAuthMgr := a.createClusterAuthManager(meta)
@@ -249,7 +278,7 @@ func (a *App) buildClusterClients(selection kubeconfigSelection, meta ClusterMet
 	// The exec credential provider runs at this layer (above HTTP transport), so transport
 	// wrapper won't catch these errors - we must check them explicitly here.
 	var authFailedOnInit bool
-	if _, err := clientset.Discovery().ServerVersion(); err != nil {
+	if err := a.preflightClusterClientWithContext(ctx, clientset); err != nil {
 		if a.logger != nil {
 			a.logger.Warn(fmt.Sprintf("Pre-flight check failed for cluster %s: %v", meta.Name, err), "Auth")
 		}
@@ -280,6 +309,28 @@ func (a *App) buildClusterClients(selection kubeconfigSelection, meta ClusterMet
 		authManager:         clusterAuthMgr,
 		authFailedOnInit:    authFailedOnInit,
 	}, nil
+}
+
+func (a *App) preflightClusterClientWithContext(ctx context.Context, client kubernetes.Interface) error {
+	if client == nil || client.Discovery() == nil {
+		return fmt.Errorf("discovery client unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	preflightCtx, cancel := context.WithTimeout(ctx, clusterClientPreflightTimeout)
+	defer cancel()
+
+	restClient := client.Discovery().RESTClient()
+	if restClient == nil {
+		// Fallback for fake/test discovery implementations.
+		_, err := client.Discovery().ServerVersion()
+		return err
+	}
+
+	_, err := restClient.Get().AbsPath("/version").DoRaw(preflightCtx)
+	return err
 }
 
 // createClusterAuthManager creates a new auth state manager for a specific cluster.

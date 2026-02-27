@@ -262,6 +262,10 @@ export function GetSelectedKubeconfigs() {
   return window['go']['backend']['App']['GetSelectedKubeconfigs']();
 }
 
+export function GetSelectionDiagnostics() {
+  return window['go']['backend']['App']['GetSelectionDiagnostics']();
+}
+
 export function GetService(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetService'](arg1, arg2, arg3);
 }

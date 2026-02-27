@@ -8,8 +8,10 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const mockGetBaseURL = vi.fn();
+const mockGetSelectionDiagnostics = vi.fn(async () => ({}));
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetRefreshBaseURL: mockGetBaseURL,
+  GetSelectionDiagnostics: mockGetSelectionDiagnostics,
 }));
 
 const originalFetch = globalThis.fetch;
@@ -18,6 +20,7 @@ beforeEach(() => {
   vi.resetModules();
   vi.resetAllMocks();
   mockGetBaseURL.mockReset();
+  mockGetSelectionDiagnostics.mockReset();
 });
 
 afterEach(async () => {

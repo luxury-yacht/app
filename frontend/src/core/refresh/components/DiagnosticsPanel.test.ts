@@ -28,9 +28,35 @@ const fetchTelemetrySummaryMock = vi.hoisted(() =>
     throw new Error('fetchTelemetrySummary not stubbed');
   })
 );
+const fetchSelectionDiagnosticsMock = vi.hoisted(() =>
+  vi.fn<
+    () => Promise<{
+      activeQueueDepth: number;
+      maxQueueDepth: number;
+      sampleCount: number;
+      totalMutations: number;
+      failedMutations: number;
+      canceledMutations: number;
+      supersededMutations: number;
+      queueP95Ms: number;
+      lastReason?: string;
+      lastError?: string;
+    }>
+  >(async () => ({
+    activeQueueDepth: 0,
+    maxQueueDepth: 0,
+    sampleCount: 0,
+    totalMutations: 0,
+    failedMutations: 0,
+    canceledMutations: 0,
+    supersededMutations: 0,
+    queueP95Ms: 0,
+  }))
+);
 
 vi.mock('../client', () => ({
   fetchTelemetrySummary: fetchTelemetrySummaryMock,
+  fetchSelectionDiagnostics: fetchSelectionDiagnosticsMock,
 }));
 
 let capabilityDiagnosticsData: CapabilityNamespaceDiagnostics[] = [];
@@ -234,6 +260,17 @@ beforeEach(() => {
   mockNamespaceState.selectedNamespace = 'default';
   fetchTelemetrySummaryMock.mockReset();
   fetchTelemetrySummaryMock.mockRejectedValue(new Error('fetchTelemetrySummary not stubbed'));
+  fetchSelectionDiagnosticsMock.mockReset();
+  fetchSelectionDiagnosticsMock.mockResolvedValue({
+    activeQueueDepth: 0,
+    maxQueueDepth: 0,
+    sampleCount: 0,
+    totalMutations: 0,
+    failedMutations: 0,
+    canceledMutations: 0,
+    supersededMutations: 0,
+    queueP95Ms: 0,
+  });
   Object.values(mockRefreshManager).forEach((value) => {
     if (typeof value === 'function') {
       value.mockClear?.();
@@ -589,6 +626,18 @@ describe('DiagnosticsPanel component', () => {
       });
 
     fetchTelemetrySummaryMock.mockResolvedValueOnce(telemetrySummary);
+    fetchSelectionDiagnosticsMock.mockResolvedValueOnce({
+      activeQueueDepth: 1,
+      maxQueueDepth: 2,
+      sampleCount: 4,
+      totalMutations: 5,
+      failedMutations: 1,
+      canceledMutations: 1,
+      supersededMutations: 0,
+      queueP95Ms: 42,
+      lastReason: 'set-selected-kubeconfigs',
+      lastError: 'context canceled',
+    });
 
     const catalogState = createReadyState({
       firstBatchLatencyMs: 900,
@@ -627,7 +676,14 @@ describe('DiagnosticsPanel component', () => {
     const orchestratorPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(1) .diagnostics-summary-primary'
     );
-    expect(orchestratorPrimary?.textContent?.trim()).toBe('Pending Requests: 2');
+    expect(orchestratorPrimary?.textContent?.trim()).toBe(
+      'Pending Requests: 2 • Selection Queue: 1'
+    );
+    const orchestratorSecondary = rendered.container.querySelector<HTMLSpanElement>(
+      '.diagnostics-summary-card:nth-of-type(1) .diagnostics-summary-secondary'
+    );
+    expect(orchestratorSecondary?.textContent).toContain('Queue p95: 42 ms');
+    expect(orchestratorSecondary?.textContent).toContain('Failed: 1');
 
     const metricsPrimary = rendered.container.querySelector<HTMLSpanElement>(
       '.diagnostics-summary-card:nth-of-type(2) .diagnostics-summary-primary'

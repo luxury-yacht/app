@@ -25,7 +25,11 @@ import { refreshManager } from '../RefreshManager';
 import { resourceStreamManager } from '../streaming/resourceStreamManager';
 import { useShortcut, useKeyboardNavigationScope } from '@ui/shortcuts';
 import { KeyboardScopePriority } from '@ui/shortcuts/priorities';
-import { fetchTelemetrySummary } from '../client';
+import {
+  fetchSelectionDiagnostics,
+  fetchTelemetrySummary,
+  type SelectionDiagnostics,
+} from '../client';
 import { stripClusterScope, parseClusterScopeList } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import {
@@ -247,6 +251,10 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   );
   const [telemetrySummary, setTelemetrySummary] = useState<TelemetrySummary | null>(null);
   const [telemetryError, setTelemetryError] = useState<string | null>(null);
+  const [selectionDiagnostics, setSelectionDiagnostics] = useState<SelectionDiagnostics | null>(
+    null
+  );
+  const [selectionDiagnosticsError, setSelectionDiagnosticsError] = useState<string | null>(null);
   const permissionMap = useUserPermissions();
   const capabilityDiagnostics = useCapabilityDiagnostics();
   const { viewType, activeClusterTab, activeNamespaceTab } = useViewState();
@@ -259,28 +267,48 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     if (!isOpen) {
       setTelemetrySummary(null);
       setTelemetryError(null);
+      setSelectionDiagnostics(null);
+      setSelectionDiagnosticsError(null);
       return;
     }
 
     let cancelled = false;
 
-    const loadTelemetry = async () => {
-      try {
-        const summary = await fetchTelemetrySummary();
-        if (!cancelled) {
-          setTelemetrySummary(summary);
-          setTelemetryError(null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          const message = error instanceof Error ? error.message : 'Failed to load telemetry';
-          setTelemetryError(message);
-        }
+    const loadDiagnostics = async () => {
+      const [telemetryResult, selectionResult] = await Promise.allSettled([
+        fetchTelemetrySummary(),
+        fetchSelectionDiagnostics(),
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      if (telemetryResult.status === 'fulfilled') {
+        setTelemetrySummary(telemetryResult.value);
+        setTelemetryError(null);
+      } else {
+        const message =
+          telemetryResult.reason instanceof Error
+            ? telemetryResult.reason.message
+            : 'Failed to load telemetry';
+        setTelemetryError(message);
+      }
+
+      if (selectionResult.status === 'fulfilled') {
+        setSelectionDiagnostics(selectionResult.value);
+        setSelectionDiagnosticsError(null);
+      } else {
+        const message =
+          selectionResult.reason instanceof Error
+            ? selectionResult.reason.message
+            : 'Failed to load selection diagnostics';
+        setSelectionDiagnosticsError(message);
       }
     };
 
-    void loadTelemetry();
-    const intervalId = window.setInterval(loadTelemetry, 5000);
+    void loadDiagnostics();
+    const intervalId = window.setInterval(loadDiagnostics, 5000);
 
     return () => {
       cancelled = true;
@@ -1765,6 +1793,43 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const logStreamTelemetry = telemetrySummary?.streams.find(
     (entry) => entry.name === 'object-logs'
   );
+  const orchestratorSummary = useMemo(() => {
+    const pending = refreshState.pendingRequests;
+    const queueDepth = selectionDiagnostics?.activeQueueDepth ?? 0;
+    const queueP95 = selectionDiagnostics?.queueP95Ms ?? 0;
+    const totalMutations = selectionDiagnostics?.totalMutations ?? 0;
+    const failedMutations = selectionDiagnostics?.failedMutations ?? 0;
+    const canceledMutations = selectionDiagnostics?.canceledMutations ?? 0;
+    const supersededMutations = selectionDiagnostics?.supersededMutations ?? 0;
+
+    let className: string | undefined;
+    if (selectionDiagnosticsError && !selectionDiagnostics) {
+      className = 'diagnostics-summary-warning';
+    } else if (failedMutations > 0) {
+      className = 'diagnostics-summary-error';
+    } else if (queueDepth > 0 || pending > 0) {
+      className = 'diagnostics-summary-warning';
+    }
+
+    const titleParts: string[] = [];
+    if (selectionDiagnosticsError && !selectionDiagnostics) {
+      titleParts.push(selectionDiagnosticsError);
+    }
+    if (selectionDiagnostics?.lastReason) {
+      titleParts.push(`Last mutation: ${selectionDiagnostics.lastReason}`);
+    }
+    if (selectionDiagnostics?.lastError) {
+      titleParts.push(`Last error: ${selectionDiagnostics.lastError}`);
+    }
+
+    return {
+      primary: `Pending Requests: ${pending} • Selection Queue: ${queueDepth}`,
+      secondary: `Queue p95: ${queueP95} ms • Total: ${totalMutations} • Failed: ${failedMutations} • Canceled: ${canceledMutations} • Superseded: ${supersededMutations}`,
+      className,
+      title: titleParts.length > 0 ? titleParts.join(' | ') : undefined,
+    };
+  }, [refreshState.pendingRequests, selectionDiagnostics, selectionDiagnosticsError]);
+
   const metricsSummary = useMemo(() => {
     const updatedInfo = formatLastUpdated(telemetryMetrics?.lastCollected);
     // Demand-driven metrics polling reports inactive when no metrics views are open.
@@ -2008,7 +2073,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
   const refreshDomainsContent = (
     <>
       <DiagnosticsSummaryCards
-        orchestratorPendingRequests={refreshState.pendingRequests}
+        orchestratorSummary={orchestratorSummary}
         metricsSummary={metricsSummary}
         eventSummary={eventSummary}
         catalogSummary={catalogSummary}

@@ -141,6 +141,8 @@ export function GetSecret(arg1:string,arg2:string,arg3:string):Promise<types.Sec
 
 export function GetSelectedKubeconfigs():Promise<Array<string>>;
 
+export function GetSelectionDiagnostics():Promise<backend.SelectionDiagnostics>;
+
 export function GetService(arg1:string,arg2:string,arg3:string):Promise<types.ServiceDetails>;
 
 export function GetServiceAccount(arg1:string,arg2:string,arg3:string):Promise<types.ServiceAccountDetails>;

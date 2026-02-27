@@ -272,7 +272,7 @@ describe('KubeconfigContext', () => {
     unmount();
   });
 
-  it('serializes selection updates to avoid overlapping backend calls', async () => {
+  it('dispatches superseding selection updates immediately', async () => {
     const kubeconfigs: types.KubeconfigInfo[] = [
       {
         name: 'alpha',
@@ -301,7 +301,7 @@ describe('KubeconfigContext', () => {
 
     let resolveFirst!: () => void;
     const firstCall = new Promise<void>((resolve) => {
-      // Keep the first selection pending so the second request queues behind it.
+      // Keep the first selection pending so the second request can supersede it.
       resolveFirst = resolve;
     });
 
@@ -320,15 +320,18 @@ describe('KubeconfigContext', () => {
       await flushPromises();
     });
 
-    expect(setSelectedKubeconfigsMock).toHaveBeenCalledTimes(1);
-
-    resolveFirst();
+    expect(setSelectedKubeconfigsMock).toHaveBeenCalledTimes(2);
+    expect(setSelectedKubeconfigsMock).toHaveBeenNthCalledWith(2, [
+      '/kube/alpha:dev',
+      '/kube/beta:prod',
+      '/kube/gamma:staging',
+    ]);
 
     await act(async () => {
       await (secondPromise ?? Promise.resolve());
     });
 
-    expect(setSelectedKubeconfigsMock).toHaveBeenCalledTimes(2);
+    resolveFirst();
 
     unmount();
   });

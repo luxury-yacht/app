@@ -446,6 +446,70 @@ export namespace backend {
 		    return a;
 		}
 	}
+	export class SelectionDiagnostics {
+	    activeQueueDepth: number;
+	    maxQueueDepth: number;
+	    sampleCount: number;
+	    totalMutations: number;
+	    completedMutations: number;
+	    failedMutations: number;
+	    canceledMutations: number;
+	    supersededMutations: number;
+	    lastUpdatedMs?: number;
+	    lastReason?: string;
+	    lastError?: string;
+	    lastQueueMs?: number;
+	    lastTotalMs?: number;
+	    queueP50Ms?: number;
+	    queueP95Ms?: number;
+	    totalP50Ms?: number;
+	    totalP95Ms?: number;
+	    intentP50Ms?: number;
+	    intentP95Ms?: number;
+	    commitP50Ms?: number;
+	    commitP95Ms?: number;
+	    clientSyncP50Ms?: number;
+	    clientSyncP95Ms?: number;
+	    refreshP50Ms?: number;
+	    refreshP95Ms?: number;
+	    catalogP50Ms?: number;
+	    catalogP95Ms?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SelectionDiagnostics(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.activeQueueDepth = source["activeQueueDepth"];
+	        this.maxQueueDepth = source["maxQueueDepth"];
+	        this.sampleCount = source["sampleCount"];
+	        this.totalMutations = source["totalMutations"];
+	        this.completedMutations = source["completedMutations"];
+	        this.failedMutations = source["failedMutations"];
+	        this.canceledMutations = source["canceledMutations"];
+	        this.supersededMutations = source["supersededMutations"];
+	        this.lastUpdatedMs = source["lastUpdatedMs"];
+	        this.lastReason = source["lastReason"];
+	        this.lastError = source["lastError"];
+	        this.lastQueueMs = source["lastQueueMs"];
+	        this.lastTotalMs = source["lastTotalMs"];
+	        this.queueP50Ms = source["queueP50Ms"];
+	        this.queueP95Ms = source["queueP95Ms"];
+	        this.totalP50Ms = source["totalP50Ms"];
+	        this.totalP95Ms = source["totalP95Ms"];
+	        this.intentP50Ms = source["intentP50Ms"];
+	        this.intentP95Ms = source["intentP95Ms"];
+	        this.commitP50Ms = source["commitP50Ms"];
+	        this.commitP95Ms = source["commitP95Ms"];
+	        this.clientSyncP50Ms = source["clientSyncP50Ms"];
+	        this.clientSyncP95Ms = source["clientSyncP95Ms"];
+	        this.refreshP50Ms = source["refreshP50Ms"];
+	        this.refreshP95Ms = source["refreshP95Ms"];
+	        this.catalogP50Ms = source["catalogP50Ms"];
+	        this.catalogP95Ms = source["catalogP95Ms"];
+	    }
+	}
 	
 	export class VersionedResponse {
 	    data: any;

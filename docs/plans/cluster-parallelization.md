@@ -197,10 +197,10 @@ Diagnostics panel should reflect transition status without ambiguous “hung” 
 
 ## Phase 4: Hardening
 
-- [ ] Expand integration tests for rapid open/close/open sequences.
-- [ ] Run race detector for backend selection paths.
-- [ ] Validate object catalog/refresh/shell/port-forward behavior under churn.
-- [ ] Verify no cross-cluster contamination in cached state.
+- [x] ✅ Expand integration tests for rapid open/close/open sequences.
+- [x] ✅ Run race detector for backend selection paths.
+- [x] ✅ Validate object catalog/refresh/shell/port-forward behavior under churn.
+- [x] ✅ Verify no cross-cluster contamination in cached state.
 
 ## Test Plan
 

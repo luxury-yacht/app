@@ -563,8 +563,10 @@ func (a *App) clearKubeconfigSelection() error {
 	a.selectedKubeconfigs = nil
 	a.kubeconfigsMu.Unlock()
 	var authManagers []interface{ Shutdown() }
+	clusterIDs := make(map[string]struct{})
 	a.clusterClientsMu.Lock()
-	for _, clients := range a.clusterClients {
+	for id, clients := range a.clusterClients {
+		clusterIDs[id] = struct{}{}
 		if clients != nil && clients.authManager != nil {
 			authManagers = append(authManagers, clients.authManager)
 		}
@@ -573,6 +575,14 @@ func (a *App) clearKubeconfigSelection() error {
 	a.clusterClientsMu.Unlock()
 	for _, mgr := range authManagers {
 		mgr.Shutdown()
+	}
+	for clusterID := range clusterIDs {
+		if err := a.StopClusterShellSessions(clusterID); err != nil && a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for cleared cluster %s: %v", clusterID, err), "KubeconfigManager")
+		}
+		if err := a.StopClusterPortForwards(clusterID); err != nil && a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for cleared cluster %s: %v", clusterID, err), "KubeconfigManager")
+		}
 	}
 	clearGVRCache()
 	a.teardownRefreshSubsystem()
@@ -915,6 +925,14 @@ func (a *App) deselectClusters(clusterIDs []string) {
 	a.clusterClientsMu.Unlock()
 	for _, mgr := range authManagers {
 		mgr.Shutdown()
+	}
+	for _, id := range clusterIDs {
+		if err := a.StopClusterShellSessions(id); err != nil && a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to stop shell sessions for deselected cluster %s: %v", id, err), "KubeconfigWatcher")
+		}
+		if err := a.StopClusterPortForwards(id); err != nil && a.logger != nil {
+			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for deselected cluster %s: %v", id, err), "KubeconfigWatcher")
+		}
 	}
 
 	a.settingsMu.Lock()
