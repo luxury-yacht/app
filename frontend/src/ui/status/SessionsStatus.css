@@ -1,0 +1,307 @@
+/**
+ * frontend/src/ui/status/SessionsStatus.css
+ *
+ * Tooltip layout overrides for detailed session tracking in the header.
+ */
+
+.status-popover.sessions-status-popover {
+  min-width: 320px;
+  max-width: 520px;
+}
+
+.sessions-status-message {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sessions-status-tracking {
+  max-height: 360px;
+  overflow-y: auto;
+  margin-right: -14px;
+  padding-right: 14px;
+}
+
+.sessions-status-empty {
+  min-height: 72px;
+}
+
+.sessions-status-message .as-sections {
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sessions-status-message .ss-session-item {
+  padding: 6px;
+}
+
+.sessions-status-message .as-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  gap: 6px;
+}
+
+.sessions-status-message .as-empty-icon {
+  font-size: 18px;
+}
+
+.sessions-status-message .as-empty-text {
+  font-size: 12px;
+}
+
+.sessions-status-message .as-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sessions-status-message .as-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sessions-status-message .as-section-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sessions-status-message .as-section-count {
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+.sessions-status-message .as-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sessions-status-message .as-section-empty {
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.sessions-status-message .ss-session-item {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-bg-secondary);
+}
+
+.sessions-status-message .ss-session-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.sessions-status-message .ss-session-fields {
+  display: flex;
+  flex-direction: column;
+}
+
+.sessions-status-message .ss-field-row {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 2px;
+  align-items: baseline;
+}
+
+.sessions-status-message .ss-field-label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  text-transform: lowercase;
+}
+
+.sessions-status-message .ss-field-value {
+  font-size: 11px;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessions-status-message .ss-session-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.sessions-status-message .as-shell-session,
+.sessions-status-message .as-pf-session {
+  align-items: flex-start;
+}
+
+.sessions-status-message .as-shell-session-jump {
+  appearance: none;
+  width: 100%;
+  padding: 6px 8px;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sessions-status-message .as-shell-session-jump:hover:not(:disabled) {
+  background: var(--color-bg-tertiary);
+}
+
+.sessions-status-message .as-pf-session:hover {
+  background: var(--color-bg-tertiary);
+}
+
+.sessions-status-message .as-shell-session-jump:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.sessions-status-message .as-shell-session-jump:disabled {
+  cursor: wait;
+}
+
+.sessions-status-message .as-shell-open-affordance {
+  align-self: center;
+  flex-shrink: 0;
+  color: var(--color-text-secondary);
+  opacity: 0.35;
+  transition: opacity 0.12s ease;
+}
+
+.sessions-status-message .as-shell-open-affordance svg {
+  display: block;
+}
+
+.sessions-status-message .as-shell-session-jump:hover:not(:disabled) .as-shell-open-affordance,
+.sessions-status-message .as-shell-session-jump:focus-visible .as-shell-open-affordance {
+  opacity: 0.9;
+}
+
+.sessions-status-message .as-shell-session .ss-field-label {
+  font-size: 11px;
+}
+
+.sessions-status-message .as-pf-fields .as-pf-field-row {
+  grid-template-columns: 16px 74px minmax(0, 1fr);
+}
+
+.sessions-status-message .as-pf-local-row .ss-field-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.sessions-status-message .as-pf-status-slot {
+  width: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  top: 2px;
+}
+
+.sessions-status-message .pf-status-icon {
+  display: inline-flex;
+  /* align-items: center; */
+  /* justify-content: center; */
+  /* line-height: 1; */
+}
+
+.sessions-status-message .pf-status-icon svg {
+  display: block;
+}
+
+.sessions-status-message .as-pf-actions {
+  align-self: center;
+  /* Keep the larger button, but align its icon center with the shell affordance icon. */
+  margin-right: -9px;
+  opacity: 0.45;
+  transition: opacity 0.12s ease;
+}
+
+.sessions-status-message .as-pf-session:hover .as-pf-actions,
+.sessions-status-message .as-pf-session:focus-within .as-pf-actions {
+  opacity: 1;
+}
+
+.sessions-status-message .as-compact-icon-action {
+  appearance: none;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-error);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.78;
+  transition:
+    opacity 0.12s ease,
+    filter 0.12s ease;
+}
+
+.sessions-status-message .as-compact-icon-action svg {
+  display: block;
+}
+
+.sessions-status-message .as-compact-icon-action:hover:not(:disabled),
+.sessions-status-message .as-compact-icon-action:focus-visible {
+  background: none;
+  color: var(--color-error);
+  opacity: 1;
+  filter: brightness(1.15);
+  outline: none;
+}
+
+.sessions-status-message .as-compact-icon-action.as-warning:hover:not(:disabled),
+.sessions-status-message .as-compact-icon-action.as-warning:focus-visible {
+  color: var(--color-error);
+}
+
+.sessions-status-message .as-compact-icon-action.as-danger:hover:not(:disabled),
+.sessions-status-message .as-compact-icon-action.as-danger:focus-visible {
+  color: var(--color-error);
+}
+
+.sessions-status-message .as-compact-icon-action:disabled {
+  opacity: 0.45;
+  filter: none;
+  cursor: wait;
+}
+
+.sessions-status-message .as-pf-reason {
+  padding-left: 0;
+  margin-top: 8px;
+}

@@ -1,18 +1,8 @@
 import { vi } from 'vitest';
 
-const ensureStorage = (key: 'localStorage' | 'sessionStorage') => {
-  const existing = (globalThis as any)[key];
-  if (
-    existing &&
-    typeof existing.setItem === 'function' &&
-    typeof existing.removeItem === 'function'
-  ) {
-    return;
-  }
-
+const buildStorageShim = (): Storage => {
   const store = new Map<string, string>();
-
-  const storage = {
+  return {
     get length() {
       return store.size;
     },
@@ -32,9 +22,32 @@ const ensureStorage = (key: 'localStorage' | 'sessionStorage') => {
       store.set(String(name), String(value));
     },
   } satisfies Storage;
+};
+
+const ensureStorage = (key: 'localStorage' | 'sessionStorage') => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, key);
+  if (descriptor?.get && descriptor.configurable) {
+    // Avoid invoking Node's Web Storage getter, which can emit warnings when
+    // --localstorage-file is misconfigured in the parent environment.
+    Object.defineProperty(globalThis, key, {
+      value: buildStorageShim(),
+      configurable: true,
+      writable: false,
+    });
+    return;
+  }
+
+  const existing = (globalThis as any)[key];
+  if (
+    existing &&
+    typeof existing.setItem === 'function' &&
+    typeof existing.removeItem === 'function'
+  ) {
+    return;
+  }
 
   Object.defineProperty(globalThis, key, {
-    value: storage,
+    value: buildStorageShim(),
     configurable: true,
     writable: false,
   });

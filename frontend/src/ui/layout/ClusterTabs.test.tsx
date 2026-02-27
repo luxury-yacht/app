@@ -14,6 +14,12 @@ import {
   setClusterTabOrder,
 } from '@core/persistence/clusterTabOrder';
 
+const backendMocks = vi.hoisted(() => ({
+  GetClusterPortForwardCount: vi.fn().mockResolvedValue(0),
+  StopClusterPortForwards: vi.fn().mockResolvedValue(undefined),
+  StopClusterShellSessions: vi.fn().mockResolvedValue(undefined),
+}));
+
 type MockState = {
   selectedKubeconfigs: string[];
   selectedKubeconfig: string;
@@ -34,6 +40,8 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => mockState,
 }));
 
+vi.mock('@wailsjs/go/backend/App', () => backendMocks);
+
 describe('ClusterTabs', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -51,6 +59,10 @@ describe('ClusterTabs', () => {
     mockState.selectedKubeconfig = '';
     mockState.setSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
     mockState.setActiveKubeconfig = vi.fn();
+    backendMocks.GetClusterPortForwardCount.mockResolvedValue(0);
+    backendMocks.StopClusterPortForwards.mockResolvedValue(undefined);
+    backendMocks.StopClusterShellSessions.mockResolvedValue(undefined);
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
@@ -132,6 +144,8 @@ describe('ClusterTabs', () => {
       closeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
+    expect(backendMocks.GetClusterPortForwardCount).toHaveBeenCalledWith('b');
+    expect(backendMocks.StopClusterShellSessions).toHaveBeenCalledWith('b');
     expect(mockState.setSelectedKubeconfigs).toHaveBeenCalledWith(['a']);
   });
 

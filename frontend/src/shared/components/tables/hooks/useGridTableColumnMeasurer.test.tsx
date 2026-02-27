@@ -94,7 +94,13 @@ const renderHarness = async (tableData: SampleRow[]) => {
       if (!measureColumnWidth) {
         throw new Error('measureColumnWidth not initialised');
       }
-      return measureColumnWidth(column);
+      let measured = 0;
+      // The measurement path creates and unmounts a temporary React root.
+      // Keep that work inside act() so React test warnings stay clean.
+      act(() => {
+        measured = measureColumnWidth!(column);
+      });
+      return measured;
     },
     cleanup: async () => {
       await act(async () => {

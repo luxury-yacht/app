@@ -26,6 +26,10 @@ export interface StatusIndicatorProps {
   onAction?: () => void;
   /** Accessible label for screen readers. */
   ariaLabel: string;
+  /** Optional extra class name applied to the tooltip popover element. */
+  tooltipClassName?: string;
+  /** Hide the tooltip title row for indicators with self-describing content. */
+  hideTitle?: boolean;
 }
 
 const StatusIndicator: React.FC<StatusIndicatorProps> = ({
@@ -35,11 +39,13 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
   actionLabel,
   onAction,
   ariaLabel,
+  tooltipClassName,
+  hideTitle,
 }) => {
   /* Build the rich tooltip content matching the existing popover layout */
   const tooltipContent = (
     <div className="status-popover-content" data-status={status}>
-      <div className="status-popover-title">{title}</div>
+      {!hideTitle && <div className="status-popover-title">{title}</div>}
       <div className="status-popover-message">{message}</div>
       {actionLabel && onAction && (
         <div className="status-popover-action">
@@ -62,7 +68,7 @@ const StatusIndicator: React.FC<StatusIndicatorProps> = ({
       placement="bottom"
       showArrow={false}
       hoverDelay={150}
-      className="status-popover"
+      className={tooltipClassName ? `status-popover ${tooltipClassName}` : 'status-popover'}
       interactive
     >
       <div className="status-indicator" aria-label={ariaLabel} role="status" tabIndex={0}>

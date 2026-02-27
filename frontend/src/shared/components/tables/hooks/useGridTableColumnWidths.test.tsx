@@ -543,12 +543,16 @@ describe('useGridTableColumnWidths', () => {
     const result = getResult();
     expect(result).not.toBeNull();
 
-    result!.manuallyResizedColumnsRef.current.add('name');
-    result!.handleManualResizeEvent({ type: 'dragStart', columns: ['name'] });
-    result!.handleManualResizeEvent({ type: 'drag', columns: ['name'] });
-    result!.handleManualResizeEvent({ type: 'dragEnd', columns: ['name'] });
+    act(() => {
+      result!.manuallyResizedColumnsRef.current.add('name');
+      result!.handleManualResizeEvent({ type: 'dragStart', columns: ['name'] });
+      result!.handleManualResizeEvent({ type: 'drag', columns: ['name'] });
+      result!.handleManualResizeEvent({ type: 'dragEnd', columns: ['name'] });
+    });
     measureColumnWidth.mockClear();
-    result!.markColumnsDirty(['name']);
+    act(() => {
+      result!.markColumnsDirty(['name']);
+    });
 
     await act(async () => {
       vi.advanceTimersByTime(300);
@@ -565,9 +569,11 @@ describe('useGridTableColumnWidths', () => {
       nameCell.textContent = 'alpha-extended-value';
     }
 
-    result!.manuallyResizedColumnsRef.current.clear();
-    result!.handleManualResizeEvent({ type: 'reset', columns: ['name'] });
-    result!.markColumnsDirty(['name']);
+    act(() => {
+      result!.manuallyResizedColumnsRef.current.clear();
+      result!.handleManualResizeEvent({ type: 'reset', columns: ['name'] });
+      result!.markColumnsDirty(['name']);
+    });
 
     await act(async () => {
       vi.advanceTimersByTime(300);

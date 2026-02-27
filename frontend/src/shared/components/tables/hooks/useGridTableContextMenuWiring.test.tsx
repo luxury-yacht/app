@@ -156,7 +156,10 @@ describe('useGridTableContextMenuWiring', () => {
 
   it('openFocusedRowContextMenu traverses DOM to find the focused row and opens the menu', () => {
     const result = renderHook({ focusedRowIndex: 1, focusedRowKey: '2' });
-    const opened = result.openFocusedRowContextMenu();
+    let opened = false;
+    act(() => {
+      opened = result.openFocusedRowContextMenu();
+    });
 
     expect(opened).toBe(true);
     expect(mockOpenCellContextMenuFromKeyboard).toHaveBeenCalledTimes(1);
@@ -194,7 +197,9 @@ describe('useGridTableContextMenuWiring', () => {
     const result = renderHook({ focusedRowIndex: 0, focusedRowKey: '1' });
     expect(result.contextMenuActiveRef.current).toBe(false);
 
-    result.openFocusedRowContextMenu();
+    act(() => {
+      result.openFocusedRowContextMenu();
+    });
     expect(result.contextMenuActiveRef.current).toBe(true);
   });
 
@@ -210,7 +215,9 @@ describe('useGridTableContextMenuWiring', () => {
     const result = renderHook({ focusedRowIndex: 0, focusedRowKey: '1' });
 
     // Open the context menu to capture the restore target.
-    result.openFocusedRowContextMenu();
+    act(() => {
+      result.openFocusedRowContextMenu();
+    });
     expect(result.contextMenuActiveRef.current).toBe(true);
 
     // ContextMenu was rendered — capturedOnClose should be the handleCloseContextMenu callback.

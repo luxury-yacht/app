@@ -174,9 +174,10 @@ describe('ClusterOverview', () => {
     }
   });
 
-  it('renders zero-value skeleton with loading message before data arrives', () => {
+  it('renders zero-value skeleton with loading message before data arrives', async () => {
     const { container, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
+    await flushEffects();
 
     expect(container.querySelector('.overview-header h1')?.textContent).toBe('Cluster Overview');
     expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
@@ -190,7 +191,7 @@ describe('ClusterOverview', () => {
     expect(container.querySelector('.cluster-overview .cluster-overview-error') ?? null).toBeNull();
   });
 
-  it('hydrates with overview data once the domain resolves', () => {
+  it('hydrates with overview data once the domain resolves', async () => {
     const { container, rerender, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
 
@@ -222,6 +223,7 @@ describe('ClusterOverview', () => {
     });
 
     rerender();
+    await flushEffects();
 
     expect(container.querySelector('.cluster-overview')?.classList.contains('is-skeleton')).toBe(
       false
@@ -260,11 +262,12 @@ describe('ClusterOverview', () => {
     expect(banner?.textContent).toContain('1.2.0');
   });
 
-  it('shows an inline error while retaining the zero skeleton when permissions fail', () => {
+  it('shows an inline error while retaining the zero skeleton when permissions fail', async () => {
     domainStateRef.current = createDomainState('error', { error: 'forbidden' });
 
     const { container, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
+    await flushEffects();
 
     expect(container.textContent).toContain('Failed to load cluster overview');
     expect(container.textContent).toContain('forbidden');
@@ -275,7 +278,7 @@ describe('ClusterOverview', () => {
     expect(container.textContent).not.toContain('Loading cluster overview...');
   });
 
-  it('navigates to the pods view with unhealthy filter when clicking a pod status card', () => {
+  it('navigates to the pods view with unhealthy filter when clicking a pod status card', async () => {
     domainStateRef.current = createDomainState('ready', {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
@@ -285,6 +288,7 @@ describe('ClusterOverview', () => {
 
     const { container, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
+    await flushEffects();
 
     const pendingCard = container.querySelector('[data-testid="cluster-pod-status-pending"]');
     expect(pendingCard).not.toBeNull();
@@ -303,7 +307,7 @@ describe('ClusterOverview', () => {
     expect(emitPodsUnhealthySignalMock).toHaveBeenCalledWith('cluster-1', ALL_NAMESPACES_SCOPE);
   });
 
-  it('navigates to the pods view without unhealthy filter when clicking the running card', () => {
+  it('navigates to the pods view without unhealthy filter when clicking the running card', async () => {
     domainStateRef.current = createDomainState('ready', {
       overview: {
         ...EMPTY_OVERVIEW_DATA,
@@ -313,6 +317,7 @@ describe('ClusterOverview', () => {
 
     const { container, cleanup } = renderClusterOverview();
     cleanupRoot = cleanup;
+    await flushEffects();
 
     const runningCard = container.querySelector('[data-testid="cluster-pod-status-running"]');
     expect(runningCard).not.toBeNull();
@@ -378,6 +383,12 @@ function renderClusterOverview() {
   };
 
   return { container, rerender, cleanup };
+}
+
+async function flushEffects() {
+  await act(async () => {
+    await Promise.resolve();
+  });
 }
 
 function statValueFor(container: HTMLElement, label: string): string {
