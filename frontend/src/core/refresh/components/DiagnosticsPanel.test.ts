@@ -542,7 +542,7 @@ describe('DiagnosticsPanel component', () => {
     expect(markup).toContain('ObjPanel - Pods - team-a');
   });
 
-  test('prefers the active cluster scope for cluster domain rows', async () => {
+  test('renders all active cluster scopes and marks the selected cluster as active', async () => {
     seedBaseDomainStates();
     setScopedEntries('cluster-config', [
       [
@@ -565,15 +565,29 @@ describe('DiagnosticsPanel component', () => {
       ],
     ]);
 
-    const findClusterConfigScope = (container: HTMLElement) => {
+    const findClusterConfigScopes = (container: HTMLElement) => {
       const rows = Array.from(container.querySelectorAll('tbody tr'));
-      const row = rows.find((candidate) => {
+      return rows
+        .filter((candidate) => {
+          const firstCell = candidate.querySelector('td');
+          return firstCell?.textContent?.includes('Cluster Config');
+        })
+        .map((row) => {
+          const cells = row.querySelectorAll('td');
+          return cells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+        });
+    };
+
+    const findClusterConfigRow = (container: HTMLElement, clusterName: string) => {
+      const rows = Array.from(container.querySelectorAll('tbody tr'));
+      return rows.find((candidate) => {
         const firstCell = candidate.querySelector('td');
-        return firstCell?.textContent?.includes('Cluster Config');
+        const scopeCell = candidate.querySelectorAll('td')[1];
+        return (
+          firstCell?.textContent?.includes('Cluster Config') &&
+          (scopeCell?.textContent?.includes(clusterName) ?? false)
+        );
       });
-      expect(row).toBeTruthy();
-      const cells = row?.querySelectorAll('td');
-      return cells?.[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
     };
 
     mockKubeconfigState.selectedClusterId = 'cluster-a';
@@ -581,17 +595,25 @@ describe('DiagnosticsPanel component', () => {
     const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
 
     await flushAsync();
-    expect(findClusterConfigScope(rendered.container)).toContain('cluster-a (active)');
+    const clusterAScopeRow = findClusterConfigRow(rendered.container, 'cluster-a');
+    const clusterBScopeRow = findClusterConfigRow(rendered.container, 'cluster-b');
+    expect(clusterAScopeRow).toBeDefined();
+    expect(clusterBScopeRow).toBeDefined();
+    expect(findClusterConfigScopes(rendered.container)).toEqual(
+      expect.arrayContaining(['cluster-a (active)', 'cluster-b'])
+    );
 
     mockKubeconfigState.selectedClusterId = 'cluster-b';
     await rendered.rerender();
     await flushAsync();
-    expect(findClusterConfigScope(rendered.container)).toContain('cluster-b (active)');
+    expect(findClusterConfigScopes(rendered.container)).toEqual(
+      expect.arrayContaining(['cluster-a', 'cluster-b (active)'])
+    );
 
     await rendered.unmount();
   });
 
-  test('does not fall back to a different cluster scope for cluster rows', async () => {
+  test('keeps visible background cluster scopes when the active cluster has none', async () => {
     setScopedEntries('cluster-config', [
       [
         'cluster-a|',
@@ -617,10 +639,11 @@ describe('DiagnosticsPanel component', () => {
       })
     );
 
-    expect(markup).not.toContain('Cluster Config');
+    expect(markup).toContain('Cluster Config');
+    expect(markup).toContain('cluster-a');
   });
 
-  test('projects multi-cluster namespaces and overview rows to the active cluster', async () => {
+  test('keeps multi-cluster namespaces and overview rows cluster-inclusive', async () => {
     const multiClusterScope = buildClusterScopeList(['cluster-a', 'cluster-b'], '');
     mockKubeconfigState.selectedClusterId = 'cluster-b';
 
@@ -686,18 +709,18 @@ describe('DiagnosticsPanel component', () => {
     expect(namespacesRow).toBeDefined();
     const namespacesCells = namespacesRow?.querySelectorAll('td') ?? [];
     const namespacesScope = namespacesCells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    expect(namespacesScope).toContain('cluster-a');
     expect(namespacesScope).toContain('cluster-b (active)');
-    expect(namespacesScope).not.toContain('cluster-a');
-    expect(namespacesCells[8]?.textContent?.trim()).toBe('1');
+    expect(namespacesCells[8]?.textContent?.trim()).toBe('2');
 
     const overviewRow = findRowByLabel('Cluster Overview');
     expect(overviewRow).toBeDefined();
     const overviewCells = overviewRow?.querySelectorAll('td') ?? [];
     const overviewScope = overviewCells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    expect(overviewScope).toContain('cluster-a');
     expect(overviewScope).toContain('cluster-b (active)');
-    expect(overviewScope).not.toContain('cluster-a');
-    expect(overviewCells[8]?.textContent?.trim()).toBe('6');
-    expect(overviewCells[13]?.textContent?.trim()).toContain('OK (9 polls)');
+    expect(overviewCells[8]?.textContent?.trim()).toBe('10');
+    expect(overviewCells[13]?.textContent?.trim()).toContain('OK (1 polls)');
 
     await rendered.unmount();
   });
@@ -892,8 +915,8 @@ describe('DiagnosticsPanel component', () => {
       row.textContent?.includes('Resources')
     );
     const cells = resourcesRow?.querySelectorAll('td') ?? [];
-    expect(cells[5]?.textContent?.trim()).toBe('2');
-    expect(cells[6]?.textContent?.trim()).toBe('1');
+    expect(cells[6]?.textContent?.trim()).toBe('2');
+    expect(cells[7]?.textContent?.trim()).toBe('1');
 
     await rendered.unmount();
     resourceStreamSpy.mockRestore();

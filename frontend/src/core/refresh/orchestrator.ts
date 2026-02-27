@@ -100,6 +100,8 @@ const logWarning = (message: string): void => {
 };
 
 const makeInFlightKey = (domain: RefreshDomain, scope?: string) => `${domain}::${scope ?? '*'}`;
+// Domains that should never keep multiple concurrently-enabled scopes.
+const SINGLE_ACTIVE_SCOPE_DOMAINS = new Set<RefreshDomain>(['namespaces', 'cluster-overview']);
 
 const shallowEqualRecord = (left: Record<string, unknown>, right: Record<string, unknown>) => {
   if (left === right) {
@@ -471,9 +473,30 @@ class RefreshOrchestrator {
       this.scopedEnabledState.set(domain, scopedMap);
     }
 
+    if (enabled && SINGLE_ACTIVE_SCOPE_DOMAINS.has(domain)) {
+      const staleScopes: string[] = [];
+      scopedMap.forEach((scopeEnabled, existingScope) => {
+        if (!scopeEnabled || existingScope === normalizedScope) {
+          return;
+        }
+        staleScopes.push(existingScope);
+      });
+      staleScopes.forEach((staleScope) => {
+        scopedMap!.set(staleScope, false);
+        this.cancelInFlightForScopedDomain(domain, staleScope);
+        if (config.streaming) {
+          this.streamingReady.delete(makeInFlightKey(domain, staleScope));
+          this.stopStreamingScope(domain, staleScope, config.streaming, true);
+        } else {
+          resetScopedDomainState(domain, staleScope);
+        }
+      });
+    }
+
     const wasActive = this.hasEnabledScopedSources(domain);
     const previous = scopedMap.get(normalizedScope);
     if (previous === enabled) {
+      this.updateMetricsDemand();
       return;
     }
 
@@ -1037,7 +1060,13 @@ class RefreshOrchestrator {
       const clusterScope = buildClusterScopeList(selectedClusterIds, '');
       return clusterScope || undefined;
     }
-    return buildClusterScopeList(selectedClusterIds, trimmed);
+    const parsed = parseClusterScopeList(trimmed);
+    // Preserve explicit cluster-scoped inputs to avoid rewriting historical keys
+    // when selectedClusterIds changes between enable/disable calls.
+    if (parsed.clusterIds.length > 0) {
+      return buildClusterScopeList(parsed.clusterIds, parsed.scope);
+    }
+    return buildClusterScopeList(selectedClusterIds, parsed.scope || trimmed);
   }
 
   private isMultiClusterMetricsDomain(domain: RefreshDomain): boolean {
