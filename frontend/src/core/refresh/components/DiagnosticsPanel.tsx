@@ -30,7 +30,11 @@ import {
   fetchTelemetrySummary,
   type SelectionDiagnostics,
 } from '../client';
-import { stripClusterScope, parseClusterScopeList } from '@/core/refresh/clusterScope';
+import {
+  buildClusterScopeList,
+  stripClusterScope,
+  parseClusterScopeList,
+} from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@/modules/kubernetes/config/KubeconfigContext';
 import {
   getPermissionKey,
@@ -113,6 +117,7 @@ const STREAM_MODE_BY_NAME: Record<string, 'streaming' | 'watch'> = {
 };
 
 const PERMISSION_ERROR_HINTS = ['forbidden', 'permission', 'unauthorized', 'access denied', 'rbac'];
+const ACTIVE_CLUSTER_ONLY_DOMAIN_ROWS = new Set<RefreshDomain>(['namespaces', 'cluster-overview']);
 
 // Diagnostics helpers for scope, error, and health labels.
 type ScopeEntry = { label: 'Active' | 'Background'; clusterName: string };
@@ -254,6 +259,22 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         });
         if (clusterMatches.length > 0) {
           candidates = clusterMatches;
+        } else {
+          const hasClusterScopedEntries = entries.some(([scopeKey, state]) => {
+            const parsed = parseClusterScopeList(state.scope ?? scopeKey);
+            return parsed.clusterIds.length > 0;
+          });
+          if (hasClusterScopedEntries) {
+            // Keep diagnostics cluster-aware: never fall back to a different
+            // cluster's scoped entry when the active cluster has no match.
+            return {
+              status: 'idle',
+              data: null,
+              stats: null,
+              error: null,
+              droppedAutoRefreshes: 0,
+            };
+          }
         }
       }
 
@@ -646,6 +667,16 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
     };
 
     const baseRows = domainStates.map<DiagnosticsRow>(({ domain, state, label, hasMetrics }) => {
+      const activeClusterId = selectedClusterId?.trim() ?? '';
+      const parsedScope = parseClusterScopeList(state.scope);
+      const shouldProjectToActiveCluster =
+        activeClusterId.length > 0 &&
+        ACTIVE_CLUSTER_ONLY_DOMAIN_ROWS.has(domain) &&
+        parsedScope.clusterIds.length > 1 &&
+        parsedScope.clusterIds.includes(activeClusterId);
+      const effectiveScope = shouldProjectToActiveCluster
+        ? buildClusterScopeList([activeClusterId], parsedScope.scope)
+        : state.scope;
       const hasMetricsFlag = Boolean(hasMetrics);
       const telemetryInfo = telemetrySummary?.snapshots.find((entry) => entry.domain === domain);
       const streamName = DOMAIN_STREAM_MAP[domain];
@@ -654,7 +685,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         : undefined;
       const isResourceStreamDomain = streamName === 'resources';
       const streamMode = streamName ? (STREAM_MODE_BY_NAME[streamName] ?? 'streaming') : null;
-      const scopeDetails = resolveScopeDetails(state.scope, selectedClusterId, getClusterMeta);
+      const scopeDetails = resolveScopeDetails(effectiveScope, selectedClusterId, getClusterMeta);
       const streamLastEvent = isResourceStreamDomain ? streamTelemetry?.lastEvent : 0;
       const baseLastUpdated = state.lastUpdated ?? state.lastAutoRefresh ?? state.lastManualRefresh;
       const lastUpdated = (() => {
@@ -662,9 +693,18 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         return combined > 0 ? combined : undefined;
       })();
       const isStale = lastUpdated ? Date.now() - lastUpdated > STALE_THRESHOLD_MS : false;
-      const metricsInfo: (NodeMetricsInfo | ClusterOverviewMetrics) | undefined = hasMetricsFlag
-        ? (state.data as any)?.metrics
-        : undefined;
+      const metricsInfo: (NodeMetricsInfo | ClusterOverviewMetrics) | undefined = (() => {
+        if (!hasMetricsFlag) {
+          return undefined;
+        }
+        if (domain === 'cluster-overview' && shouldProjectToActiveCluster && activeClusterId) {
+          const metricsByCluster = (state.data as any)?.metricsByCluster as
+            | Record<string, ClusterOverviewMetrics>
+            | undefined;
+          return metricsByCluster?.[activeClusterId] ?? (state.data as any)?.metrics;
+        }
+        return (state.data as any)?.metrics;
+      })();
       const telemetryLastUpdatedInfo = (() => {
         if (streamLastEvent && streamLastEvent > 0) {
           return formatLastUpdated(streamLastEvent);
@@ -783,8 +823,26 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
         }
         switch (domain) {
           case 'namespaces':
-            return Array.isArray(data.namespaces) ? data.namespaces.length : 0;
+            if (!Array.isArray(data.namespaces)) {
+              return 0;
+            }
+            if (shouldProjectToActiveCluster && activeClusterId) {
+              return data.namespaces.filter(
+                (namespace: { clusterId?: string | null }) =>
+                  namespace.clusterId === activeClusterId
+              ).length;
+            }
+            return data.namespaces.length;
           case 'cluster-overview':
+            if (shouldProjectToActiveCluster && activeClusterId) {
+              const overviewByCluster = data.overviewByCluster as
+                | Record<string, { totalNodes?: number }>
+                | undefined;
+              const activeOverview = overviewByCluster?.[activeClusterId];
+              if (activeOverview && typeof activeOverview.totalNodes === 'number') {
+                return activeOverview.totalNodes;
+              }
+            }
             return data.overview?.totalNodes ?? 0;
           case 'nodes':
             return Array.isArray(data.nodes) ? data.nodes.length : 0;
@@ -833,7 +891,7 @@ export const DiagnosticsPanel: React.FC<DiagnosticsPanelProps> = ({ onClose, isO
       const intervalLabel = formatInterval(
         refresherName ? refreshManager.getRefresherInterval(refresherName) : null
       );
-      const namespaceLabel = resolveDomainNamespace(domain, state.scope);
+      const namespaceLabel = resolveDomainNamespace(domain, effectiveScope);
       const stats = state.stats;
       let truncated = Boolean(stats?.truncated);
       let totalItems = stats?.totalItems ?? (truncated ? count : undefined);

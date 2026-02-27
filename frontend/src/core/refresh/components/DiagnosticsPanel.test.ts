@@ -591,6 +591,117 @@ describe('DiagnosticsPanel component', () => {
     await rendered.unmount();
   });
 
+  test('does not fall back to a different cluster scope for cluster rows', async () => {
+    setScopedEntries('cluster-config', [
+      [
+        'cluster-a|',
+        {
+          ...createReadyState({
+            resources: [{ kind: 'ConfigMap', name: 'cfg-a', namespace: 'default' }],
+          }),
+          scope: 'cluster-a|',
+        },
+      ],
+    ]);
+
+    mockKubeconfigState.selectedClusterId = 'cluster-b';
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+
+    const markup = renderToStaticMarkup(
+      React.createElement(KeyboardProvider, {
+        disabled: true,
+        children: React.createElement(DiagnosticsPanel, {
+          isOpen: true,
+          onClose: () => undefined,
+        }),
+      })
+    );
+
+    expect(markup).not.toContain('Cluster Config');
+  });
+
+  test('projects multi-cluster namespaces and overview rows to the active cluster', async () => {
+    const multiClusterScope = buildClusterScopeList(['cluster-a', 'cluster-b'], '');
+    mockKubeconfigState.selectedClusterId = 'cluster-b';
+
+    setScopedEntries('namespaces', [
+      [
+        multiClusterScope,
+        {
+          ...createReadyState({
+            namespaces: [
+              {
+                name: 'ns-a',
+                phase: 'Active',
+                resourceVersion: '1',
+                creationTimestamp: Date.now(),
+                clusterId: 'cluster-a',
+              },
+              {
+                name: 'ns-b',
+                phase: 'Active',
+                resourceVersion: '2',
+                creationTimestamp: Date.now(),
+                clusterId: 'cluster-b',
+              },
+            ],
+          }),
+          scope: multiClusterScope,
+        },
+      ],
+    ]);
+
+    setScopedEntries('cluster-overview', [
+      [
+        multiClusterScope,
+        {
+          ...createReadyState({
+            overview: { totalNodes: 10 },
+            metrics: { stale: false, successCount: 1, failureCount: 0 },
+            overviewByCluster: {
+              'cluster-a': { totalNodes: 4 },
+              'cluster-b': { totalNodes: 6 },
+            },
+            metricsByCluster: {
+              'cluster-a': { stale: false, successCount: 3, failureCount: 0 },
+              'cluster-b': { stale: false, successCount: 9, failureCount: 0 },
+            },
+          }),
+          scope: multiClusterScope,
+        },
+      ],
+    ]);
+
+    const { DiagnosticsPanel } = await import('./DiagnosticsPanel');
+    const rendered = await renderDiagnosticsPanel(DiagnosticsPanel, { isOpen: true });
+
+    await flushAsync();
+
+    const findRowByLabel = (label: string) => {
+      const rows = Array.from(rendered.container.querySelectorAll('.diagnostics-table tbody tr'));
+      return rows.find((row) => row.querySelector('td')?.textContent?.includes(label));
+    };
+
+    const namespacesRow = findRowByLabel('Namespaces');
+    expect(namespacesRow).toBeDefined();
+    const namespacesCells = namespacesRow?.querySelectorAll('td') ?? [];
+    const namespacesScope = namespacesCells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    expect(namespacesScope).toContain('cluster-b (active)');
+    expect(namespacesScope).not.toContain('cluster-a');
+    expect(namespacesCells[8]?.textContent?.trim()).toBe('1');
+
+    const overviewRow = findRowByLabel('Cluster Overview');
+    expect(overviewRow).toBeDefined();
+    const overviewCells = overviewRow?.querySelectorAll('td') ?? [];
+    const overviewScope = overviewCells[1]?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
+    expect(overviewScope).toContain('cluster-b (active)');
+    expect(overviewScope).not.toContain('cluster-a');
+    expect(overviewCells[8]?.textContent?.trim()).toBe('6');
+    expect(overviewCells[13]?.textContent?.trim()).toContain('OK (9 polls)');
+
+    await rendered.unmount();
+  });
+
   test('renders telemetry summaries after successful fetch', async () => {
     vi.useFakeTimers();
     const baseTime = new Date('2024-01-01T12:00:00Z');
@@ -793,6 +904,7 @@ describe('DiagnosticsPanel component', () => {
     const baseTime = new Date('2024-01-01T12:00:00Z');
     vi.setSystemTime(baseTime);
     const now = Date.now();
+    mockKubeconfigState.selectedClusterId = 'cluster-a';
 
     const scope = buildClusterScopeList(['cluster-a'], '');
     const configState = {
