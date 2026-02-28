@@ -17,6 +17,7 @@ import (
 
 const (
 	updateRepoReleaseURL = "https://api.github.com/repos/luxury-yacht/app/releases/latest"
+	updateDownloadsURL   = "https://luxury-yacht.app/#downloads"
 	updateUserAgent      = "LuxuryYachtUpdateCheck/1.0"
 )
 
@@ -33,7 +34,6 @@ type UpdateInfo struct {
 
 type githubRelease struct {
 	TagName     string `json:"tag_name"`
-	HTMLURL     string `json:"html_url"`
 	Name        string `json:"name"`
 	PublishedAt string `json:"published_at"`
 }
@@ -72,7 +72,7 @@ func (a *App) runUpdateCheck(currentVersion string) {
 	}
 
 	info.LatestVersion = release.TagName
-	info.ReleaseURL = release.HTMLURL
+	info.ReleaseURL = updateDownloadsURL
 	info.ReleaseName = release.Name
 	info.PublishedAt = release.PublishedAt
 
@@ -139,9 +139,6 @@ func fetchLatestRelease() (*githubRelease, error) {
 
 	if strings.TrimSpace(release.TagName) == "" {
 		return nil, fmt.Errorf("update check returned an empty tag")
-	}
-	if strings.TrimSpace(release.HTMLURL) == "" {
-		return nil, fmt.Errorf("update check returned an empty release url")
 	}
 
 	return &release, nil

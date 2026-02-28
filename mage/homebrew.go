@@ -14,9 +14,6 @@ import (
 )
 
 const (
-	// Git user config for committing to the tap repo.
-	gitUserName  = "luxury-yacht-automation"
-	gitUserEmail = "automation@luxury-yacht.app"
 	// Homebrew tap repo info.
 	tapRepo   = "luxury-yacht/homebrew-tap"
 	tapBranch = "main"
@@ -108,17 +105,6 @@ func updateHomebrewTemplate(version, arm64Sha, amd64Sha string) ([]byte, error) 
 	return []byte(cask), nil
 }
 
-// buildTapCloneURL builds a clone URL, using GH_TOKEN when available.
-func buildTapCloneURL(repo string) string {
-	// Prefer GH_TOKEN so CI can authenticate without relying on local credentials.
-	token := os.Getenv("GH_TOKEN")
-	if token == "" {
-		return fmt.Sprintf("https://github.com/%s.git", repo)
-	}
-	// Use x-access-token to avoid exposing the token in GitHub logs.
-	return fmt.Sprintf("https://x-access-token:%s@github.com/%s.git", token, repo)
-}
-
 // Clone the homebrew tap repo
 func cloneTapRepo() (string, error) {
 	tmpDir, err := os.MkdirTemp("", "luxury-yacht-homebrew-tap-*")
@@ -126,35 +112,12 @@ func cloneTapRepo() (string, error) {
 		return "", fmt.Errorf("failed to create temp directory: %w", err)
 	}
 
-	cloneURL := buildTapCloneURL(tapRepo)
+	cloneURL := buildCloneURL(tapRepo)
 	if err := sh.Run("git", "clone", "--depth", "1", "--branch", tapBranch, cloneURL, tmpDir); err != nil {
 		return "", fmt.Errorf("failed to clone tap repo: %w", err)
 	}
 
 	return tmpDir, nil
-}
-
-// Make sure the git user.name and user.email are set in the tap repo
-func ensureGitUserConfig(repoDir string) error {
-	// Check if user.name is set.
-	userName, err := sh.Output("git", "-C", repoDir, "config", "user.name")
-	if err != nil || strings.TrimSpace(userName) == "" {
-		if err := sh.Run("git", "-C", repoDir, "config", "user.name", gitUserName); err != nil {
-			return fmt.Errorf("failed to set git user.name: %w", err)
-		}
-	}
-	fmt.Printf("git user.name: %s\n", userName)
-
-	// Check if user.email is set.
-	userEmail, err := sh.Output("git", "-C", repoDir, "config", "user.email")
-	if err != nil || strings.TrimSpace(userEmail) == "" {
-		if err := sh.Run("git", "-C", repoDir, "config", "user.email", gitUserEmail); err != nil {
-			return fmt.Errorf("failed to set git user.email: %w", err)
-		}
-	}
-	fmt.Printf("git user.email: %s\n", userEmail)
-
-	return nil
 }
 
 // Publish the Homebrew formula.

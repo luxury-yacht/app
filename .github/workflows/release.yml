@@ -192,9 +192,31 @@ jobs:
       - name: Publish GitHub release
         run: |
           export GITHUB_RUN_NUMBER="${{ github.run_number }}"
-          mage release
+          mage release:app
 
-  homebrew:
+  update-site:
+    if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
+    needs:
+      - prepare
+      - release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-toolchain
+        with:
+          go-version: ${{ needs.prepare.outputs.go_version }}
+          mage-version: latest
+          setup-node: "false"
+          install-wails: "false"
+
+      - name: Update version on website
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
+        run: mage release:site
+
+  update-homebrew:
     if: ${{ github.event.inputs.release == 'true' || github.event_name == 'push' }}
     needs:
       - prepare
@@ -214,4 +236,4 @@ jobs:
       - name: Update Homebrew formula
         env:
           GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
-        run: mage homebrew
+        run: mage release:homebrew

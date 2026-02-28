@@ -449,12 +449,19 @@ func (Package) Unsigned() error {
 // GitHub Release Tasks
 // ===============================
 
+type Release mg.Namespace
+
 // Publishes a GitHub release using the current artifacts.
-func Release() error {
+func (Release) App() error {
 	return mage.PublishRelease(cfg)
 }
 
 // Updates the Homebrew formula for the new release.
-func Homebrew() error {
+func (Release) Homebrew() error {
 	return mage.PublishHomebrew(cfg)
+}
+
+// Updates the version displayed on the website.
+func (Release) Site() error {
+	return mage.PublishSiteVersion(cfg)
 }
