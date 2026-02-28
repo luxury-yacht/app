@@ -24,6 +24,9 @@ func CreateMenu(app *App) *menu.Menu {
 	// Window menu
 	createWindowMenu(appMenu, app)
 
+	// Help menu (rightmost, Windows/Linux only)
+	createHelpMenu(appMenu, app)
+
 	return appMenu
 }
 
@@ -82,15 +85,6 @@ func createApplicationMenu(appMenu *menu.Menu, app *App) {
 			}
 		})
 
-		// Help menu for About/License on Windows
-		helpMenu := appMenu.AddSubmenu("Help")
-
-		helpMenu.AddText("About Luxury Yacht", nil, func(_ *menu.CallbackData) {
-			go func() {
-				app.ShowAbout()
-			}()
-		})
-
 	default: // linux and other unix-like systems
 		// Linux: Similar to Windows
 		fileMenu = appMenu.AddSubmenu("File")
@@ -107,15 +101,6 @@ func createApplicationMenu(appMenu *menu.Menu, app *App) {
 			if app.Ctx != nil {
 				wailsRuntime.Quit(app.Ctx)
 			}
-		})
-
-		// Help menu for About/License on Linux
-		helpMenu := appMenu.AddSubmenu("Help")
-
-		helpMenu.AddText("About Luxury Yacht", nil, func(_ *menu.CallbackData) {
-			go func() {
-				app.ShowAbout()
-			}()
 		})
 
 	}
@@ -324,4 +309,19 @@ func createWindowMenu(appMenu *menu.Menu, app *App) {
 			}()
 		})
 	}
+}
+
+// createHelpMenu creates the Help menu for Windows and Linux (macOS uses the app menu instead)
+func createHelpMenu(appMenu *menu.Menu, app *App) {
+	if runtime.GOOS == "darwin" {
+		return
+	}
+
+	helpMenu := appMenu.AddSubmenu("Help")
+
+	helpMenu.AddText("About Luxury Yacht", nil, func(_ *menu.CallbackData) {
+		go func() {
+			app.ShowAbout()
+		}()
+	})
 }

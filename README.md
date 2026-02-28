@@ -48,7 +48,7 @@ If your distro isn't on this (admittedly short) list, you'll have to search your
 
 ### Prerequisites
 
-- Go 1.25
+- Go 1.26
 - Node 25
 - [Wails](https://wails.io/)
 - [Mage](https://magefile.org/)

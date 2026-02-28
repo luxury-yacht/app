@@ -26,7 +26,7 @@ func TestCreateMenuTopLevelLabels(t *testing.T) {
 	case "darwin":
 		expected = []string{"Luxury Yacht", "Edit", "View", "Window"}
 	default:
-		expected = []string{"File", "Help", "Edit", "View", "Window"}
+		expected = []string{"File", "Edit", "View", "Window", "Help"}
 	}
 
 	if len(m.Items) != len(expected) {
