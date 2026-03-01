@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@codemirror/lang-yaml": "^6.1.2",
-    "@codemirror/language": "^6.12.1",
+    "@codemirror/language": "^6.12.2",
     "@codemirror/search": "^6.6.0",
     "@codemirror/state": "^6.5.4",
     "@codemirror/view": "^6.39.15",
@@ -32,7 +32,7 @@
     "yaml": "^2.8.2"
   },
   "devDependencies": {
-    "@types/node": "^25.3.0",
+    "@types/node": "^25.3.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
