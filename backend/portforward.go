@@ -74,7 +74,7 @@ func (a *App) StartPortForward(clusterID string, req PortForwardRequest) (string
 			TargetKind:    req.TargetKind,
 			TargetName:    req.TargetName,
 			Status:        "connecting",
-			StartedAt:     time.Now(),
+			StartedAt:     time.Now().Format(time.RFC3339),
 		},
 		stopChan:  make(chan struct{}),
 		readyChan: make(chan error, 1),
@@ -175,7 +175,7 @@ func (a *App) ListPortForwards() []PortForwardSession {
 
 	// Sort by start time for consistent ordering.
 	sort.Slice(sessions, func(i, j int) bool {
-		return sessions[i].StartedAt.Before(sessions[j].StartedAt)
+		return sessions[i].StartedAt < sessions[j].StartedAt
 	})
 
 	return sessions

@@ -22,7 +22,8 @@ import (
 // It creates a test cluster entry in clusterClients so the app behaves as if
 // a real cluster is connected. The client is stored only in the per-cluster
 // clusterClients map - there are no global client fields.
-func (a *App) InitializeForTesting(ctx context.Context, client kubernetes.Interface) {
+// This is a standalone function (not a method) so Wails does not bind it.
+func InitializeForTesting(a *App, ctx context.Context, client kubernetes.Interface) {
 	a.Ctx = ctx
 	if a.logger == nil {
 		a.logger = NewLogger(1000)
@@ -42,7 +43,7 @@ func (a *App) InitializeForTesting(ctx context.Context, client kubernetes.Interf
 		}
 		// Create cluster clients with only the provided client.
 		// Additional clients (apiextensions, dynamic, metrics, restConfig) can be set
-		// using the SetRestConfig, SetMetricsClient, etc. helper methods after this call.
+		// using SetRestConfigForTest, SetMetricsClientForTest, etc. after this call.
 		a.clusterClients[meta.ID] = &clusterClients{
 			meta:              meta,
 			kubeconfigPath:    selection.Path,
@@ -58,9 +59,9 @@ func (a *App) InitializeForTesting(ctx context.Context, client kubernetes.Interf
 	}
 }
 
-// SetRestConfig sets the REST config for all cluster clients.
-// This is a test helper for configuring mock clients.
-func (a *App) SetRestConfig(config *rest.Config) {
+// SetRestConfigForTest sets the REST config for all cluster clients.
+// This is a standalone function (not a method) so Wails does not bind it.
+func SetRestConfigForTest(a *App, config *rest.Config) {
 	a.clusterClientsMu.Lock()
 	for _, clients := range a.clusterClients {
 		if clients != nil {
@@ -70,9 +71,9 @@ func (a *App) SetRestConfig(config *rest.Config) {
 	a.clusterClientsMu.Unlock()
 }
 
-// SetMetricsClient sets the metrics client for all cluster clients.
-// This is a test helper for configuring mock clients.
-func (a *App) SetMetricsClient(client *metricsclient.Clientset) {
+// SetMetricsClientForTest sets the metrics client for all cluster clients.
+// This is a standalone function (not a method) so Wails does not bind it.
+func SetMetricsClientForTest(a *App, client *metricsclient.Clientset) {
 	a.clusterClientsMu.Lock()
 	for _, clients := range a.clusterClients {
 		if clients != nil {
@@ -82,9 +83,9 @@ func (a *App) SetMetricsClient(client *metricsclient.Clientset) {
 	a.clusterClientsMu.Unlock()
 }
 
-// SetApiExtensionsClient sets the API extensions client for all cluster clients.
-// This is a test helper for configuring mock clients.
-func (a *App) SetApiExtensionsClient(client apiextensionsclientset.Interface) {
+// SetApiExtensionsClientForTest sets the API extensions client for all cluster clients.
+// This is a standalone function (not a method) so Wails does not bind it.
+func SetApiExtensionsClientForTest(a *App, client apiextensionsclientset.Interface) {
 	a.clusterClientsMu.Lock()
 	for _, clients := range a.clusterClients {
 		if clients != nil {
@@ -94,9 +95,9 @@ func (a *App) SetApiExtensionsClient(client apiextensionsclientset.Interface) {
 	a.clusterClientsMu.Unlock()
 }
 
-// SetDynamicClient sets the dynamic client for all cluster clients.
-// This is a test helper for configuring mock clients.
-func (a *App) SetDynamicClient(client dynamic.Interface) {
+// SetDynamicClientForTest sets the dynamic client for all cluster clients.
+// This is a standalone function (not a method) so Wails does not bind it.
+func SetDynamicClientForTest(a *App, client dynamic.Interface) {
 	a.clusterClientsMu.Lock()
 	for _, clients := range a.clusterClients {
 		if clients != nil {

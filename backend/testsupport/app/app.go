@@ -85,19 +85,19 @@ func New(t testing.TB, opts ...Option) *backend.App {
 	if appCtx == nil {
 		appCtx = context.Background()
 	}
-	app.InitializeForTesting(appCtx, b.client)
+	backend.InitializeForTesting(app, appCtx, b.client)
 
 	if b.restConfig != nil {
-		app.SetRestConfig(b.restConfig)
+		backend.SetRestConfigForTest(app, b.restConfig)
 	}
 	if b.metrics != nil {
-		app.SetMetricsClient(b.metrics)
+		backend.SetMetricsClientForTest(app, b.metrics)
 	}
 	if b.apiExt != nil {
-		app.SetApiExtensionsClient(b.apiExt)
+		backend.SetApiExtensionsClientForTest(app, b.apiExt)
 	}
 	if b.dynamic != nil {
-		app.SetDynamicClient(b.dynamic)
+		backend.SetDynamicClientForTest(app, b.dynamic)
 	}
 
 	return app

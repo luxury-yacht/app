@@ -310,10 +310,6 @@ export function GetZoomLevel() {
   return window['go']['backend']['App']['GetZoomLevel']();
 }
 
-export function InitializeForTesting(arg1, arg2) {
-  return window['go']['backend']['App']['InitializeForTesting'](arg1, arg2);
-}
-
 export function IsActiveSessionsPanelVisible() {
   return window['go']['backend']['App']['IsActiveSessionsPanelVisible']();
 }
@@ -414,10 +410,6 @@ export function SetActiveSessionsPanelVisible(arg1) {
   return window['go']['backend']['App']['SetActiveSessionsPanelVisible'](arg1);
 }
 
-export function SetApiExtensionsClient(arg1) {
-  return window['go']['backend']['App']['SetApiExtensionsClient'](arg1);
-}
-
 export function SetAutoRefreshEnabled(arg1) {
   return window['go']['backend']['App']['SetAutoRefreshEnabled'](arg1);
 }
@@ -428,10 +420,6 @@ export function SetBackgroundRefreshEnabled(arg1) {
 
 export function SetClusterTabOrder(arg1) {
   return window['go']['backend']['App']['SetClusterTabOrder'](arg1);
-}
-
-export function SetDynamicClient(arg1) {
-  return window['go']['backend']['App']['SetDynamicClient'](arg1);
 }
 
 export function SetGridTablePersistence(arg1, arg2) {
@@ -454,20 +442,12 @@ export function SetLogsPanelVisible(arg1) {
   return window['go']['backend']['App']['SetLogsPanelVisible'](arg1);
 }
 
-export function SetMetricsClient(arg1) {
-  return window['go']['backend']['App']['SetMetricsClient'](arg1);
-}
-
 export function SetPaletteTint(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['SetPaletteTint'](arg1, arg2, arg3, arg4);
 }
 
 export function SetPortForwardsPanelVisible(arg1) {
   return window['go']['backend']['App']['SetPortForwardsPanelVisible'](arg1);
-}
-
-export function SetRestConfig(arg1) {
-  return window['go']['backend']['App']['SetRestConfig'](arg1);
 }
 
 export function SetSelectedKubeconfigs(arg1) {

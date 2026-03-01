@@ -29,7 +29,7 @@ type PortForwardSession struct {
 	TargetName    string    `json:"targetName"`
 	Status        string    `json:"status"`
 	StatusReason  string    `json:"statusReason,omitempty"`
-	StartedAt     time.Time `json:"startedAt"`
+	StartedAt     string    `json:"startedAt"`
 }
 
 // portForwardSessionInternal holds runtime state not exposed to frontend.

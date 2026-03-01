@@ -5,11 +5,6 @@ import {types} from '../models';
 import {context} from '../models';
 import {capabilities} from '../models';
 import {json} from '../models';
-import {kubernetes} from '../models';
-import {clientset} from '../models';
-import {dynamic} from '../models';
-import {versioned} from '../models';
-import {rest} from '../models';
 
 export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
@@ -165,8 +160,6 @@ export function GetWorkloads(arg1:string,arg2:string,arg3:string):Promise<backen
 
 export function GetZoomLevel():Promise<number>;
 
-export function InitializeForTesting(arg1:context.Context,arg2:kubernetes.Interface):Promise<void>;
-
 export function IsActiveSessionsPanelVisible():Promise<boolean>;
 
 export function IsDiagnosticsPanelVisible():Promise<boolean>;
@@ -217,15 +210,11 @@ export function SetAccentColor(arg1:string,arg2:string):Promise<void>;
 
 export function SetActiveSessionsPanelVisible(arg1:boolean):Promise<void>;
 
-export function SetApiExtensionsClient(arg1:clientset.Interface):Promise<void>;
-
 export function SetAutoRefreshEnabled(arg1:boolean):Promise<void>;
 
 export function SetBackgroundRefreshEnabled(arg1:boolean):Promise<void>;
 
 export function SetClusterTabOrder(arg1:Array<string>):Promise<void>;
-
-export function SetDynamicClient(arg1:dynamic.Interface):Promise<void>;
 
 export function SetGridTablePersistence(arg1:string,arg2:json.RawMessage):Promise<void>;
 
@@ -237,13 +226,9 @@ export function SetKubeconfigSearchPaths(arg1:Array<string>):Promise<void>;
 
 export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 
-export function SetMetricsClient(arg1:versioned.Clientset):Promise<void>;
-
 export function SetPaletteTint(arg1:string,arg2:number,arg3:number,arg4:number):Promise<void>;
 
 export function SetPortForwardsPanelVisible(arg1:boolean):Promise<void>;
-
-export function SetRestConfig(arg1:rest.Config):Promise<void>;
 
 export function SetSelectedKubeconfigs(arg1:Array<string>):Promise<void>;
 

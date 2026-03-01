@@ -33,7 +33,7 @@ func (l LogLevel) String() string {
 
 // LogEntry represents a single log entry
 type LogEntry struct {
-	Timestamp time.Time `json:"timestamp"`
+	Timestamp string `json:"timestamp"`
 	Level     string    `json:"level"`
 	Message   string    `json:"message"`
 	Source    string    `json:"source,omitempty"`
@@ -68,7 +68,7 @@ func (l *Logger) Log(level LogLevel, message string, source ...string) {
 	defer l.mu.Unlock()
 
 	entry := LogEntry{
-		Timestamp: time.Now(),
+		Timestamp: time.Now().Format(time.RFC3339Nano),
 		Level:     level.String(),
 		Message:   message,
 	}

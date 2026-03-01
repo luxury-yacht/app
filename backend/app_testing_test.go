@@ -17,7 +17,7 @@ func TestInitializeForTestingSetsContextAndLogger(t *testing.T) {
 	app := &App{}
 	ctx := context.Background()
 
-	app.InitializeForTesting(ctx, nil)
+	InitializeForTesting(app, ctx, nil)
 
 	require.Equal(t, ctx, app.Ctx)
 	require.NotNil(t, app.logger)
@@ -30,7 +30,7 @@ func TestAppTestingSettersUpdateClusterClients(t *testing.T) {
 
 	// Initialize with a test client to create a cluster entry
 	fakeClient := cgofake.NewClientset()
-	app.InitializeForTesting(context.Background(), fakeClient)
+	InitializeForTesting(app, context.Background(), fakeClient)
 
 	// Now set additional clients
 	restCfg := &rest.Config{}
@@ -38,10 +38,10 @@ func TestAppTestingSettersUpdateClusterClients(t *testing.T) {
 	apiExt := &apiextensionsclientset.Clientset{}
 	dyn := fake.NewSimpleDynamicClient(runtime.NewScheme())
 
-	app.SetRestConfig(restCfg)
-	app.SetMetricsClient(metrics)
-	app.SetApiExtensionsClient(apiExt)
-	app.SetDynamicClient(dyn)
+	SetRestConfigForTest(app, restCfg)
+	SetMetricsClientForTest(app, metrics)
+	SetApiExtensionsClientForTest(app, apiExt)
+	SetDynamicClientForTest(app, dyn)
 
 	// Verify the cluster clients were updated
 	require.NotEmpty(t, app.clusterClients)
@@ -69,25 +69,25 @@ func TestAppSettersAssignToAllClusterClients(t *testing.T) {
 	}
 
 	restCfg := &rest.Config{Host: "example"}
-	app.SetRestConfig(restCfg)
+	SetRestConfigForTest(app, restCfg)
 	for id, clients := range app.clusterClients {
 		require.Equal(t, restCfg, clients.restConfig, "cluster %s should have restConfig set", id)
 	}
 
 	metricsClient := &metricsclient.Clientset{}
-	app.SetMetricsClient(metricsClient)
+	SetMetricsClientForTest(app, metricsClient)
 	for id, clients := range app.clusterClients {
 		require.Equal(t, metricsClient, clients.metricsClient, "cluster %s should have metricsClient set", id)
 	}
 
 	apiExt := &apiextensionsclientset.Clientset{}
-	app.SetApiExtensionsClient(apiExt)
+	SetApiExtensionsClientForTest(app, apiExt)
 	for id, clients := range app.clusterClients {
 		require.Equal(t, apiExt, clients.apiextensionsClient, "cluster %s should have apiextensionsClient set", id)
 	}
 
 	dyn := fake.NewSimpleDynamicClient(runtime.NewScheme())
-	app.SetDynamicClient(dyn)
+	SetDynamicClientForTest(app, dyn)
 	for id, clients := range app.clusterClients {
 		require.Equal(t, dyn, clients.dynamicClient, "cluster %s should have dynamicClient set", id)
 	}

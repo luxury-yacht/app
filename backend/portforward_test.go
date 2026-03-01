@@ -156,7 +156,7 @@ func TestListPortForwards_ReturnsSessions(t *testing.T) {
 			TargetKind:    "Pod",
 			TargetName:    "pod-1",
 			Status:        "active",
-			StartedAt:     now.Add(-2 * time.Minute),
+			StartedAt:     now.Add(-2 * time.Minute).Format(time.RFC3339),
 		},
 		stopChan: make(chan struct{}),
 	}
@@ -172,7 +172,7 @@ func TestListPortForwards_ReturnsSessions(t *testing.T) {
 			TargetKind:    "Deployment",
 			TargetName:    "web-app",
 			Status:        "active",
-			StartedAt:     now.Add(-1 * time.Minute),
+			StartedAt:     now.Add(-1 * time.Minute).Format(time.RFC3339),
 		},
 		stopChan: make(chan struct{}),
 	}
@@ -232,7 +232,7 @@ func TestStopPortForward_Success(t *testing.T) {
 			TargetKind:    "Pod",
 			TargetName:    "pod-1",
 			Status:        "active",
-			StartedAt:     time.Now(),
+			StartedAt:     time.Now().Format(time.RFC3339),
 		},
 		stopChan: make(chan struct{}),
 	}
