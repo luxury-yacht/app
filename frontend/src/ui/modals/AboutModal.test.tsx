@@ -173,7 +173,7 @@ describe('AboutModal', () => {
     await modal.unmount();
   });
 
-  it('closes via overlay click but ignores clicks inside modal', async () => {
+  it('does not close via overlay click', async () => {
     appInfoMock.GetAppInfo.mockResolvedValue({ version: '3.0.0' });
     const onClose = vi.fn();
     const modal = await renderModal({
@@ -185,20 +185,13 @@ describe('AboutModal', () => {
       await Promise.resolve();
     });
 
-    const container = document.querySelector('.about-modal') as HTMLDivElement | null;
     const overlay = document.querySelector('.modal-overlay') as HTMLDivElement | null;
-    expect(container).toBeTruthy();
     expect(overlay).toBeTruthy();
-
-    act(() => {
-      container?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onClose).not.toHaveBeenCalled();
 
     act(() => {
       overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
 
     await modal.unmount();
   });

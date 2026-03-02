@@ -21,6 +21,10 @@
   z-index: var(--z-index-modal, 1050);
   animation: fadeIn 200ms ease-out;
   padding: 2rem;
+  /* Let pointer events pass through to the app header underneath so Wails
+     window dragging still works. The modal container re-enables pointer
+     events for its own content. */
+  pointer-events: none;
 }
 
 .modal-overlay.closing {
@@ -45,6 +49,10 @@
   box-shadow: var(--modal-container-shadow);
   animation: slideUp 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
   overflow: hidden;
+  /* Re-enable pointer events for modal content (overlay disables them). */
+  pointer-events: auto;
+  /* Prevent window dragging inside the modal so content stays interactive. */
+  --wails-draggable: none;
 }
 
 .modal-container.closing {

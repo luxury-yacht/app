@@ -107,7 +107,7 @@ describe('ObjectDiffModal', () => {
     throw new Error('Escape shortcut not registered');
   };
 
-  it('closes via overlay click but ignores clicks inside modal', () => {
+  it('does not close via overlay click', () => {
     const onClose = vi.fn();
     act(() => {
       root.render(<ObjectDiffModal isOpen onClose={onClose} />);
@@ -115,18 +115,11 @@ describe('ObjectDiffModal', () => {
 
     const overlay = document.querySelector('.object-diff-modal-overlay') as HTMLDivElement | null;
     expect(overlay).toBeTruthy();
-    const modal = document.querySelector('.object-diff-modal') as HTMLDivElement | null;
-    expect(modal).toBeTruthy();
-
-    act(() => {
-      modal?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-    expect(onClose).not.toHaveBeenCalled();
 
     act(() => {
       overlay?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    expect(onClose).toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('invokes onClose when Escape shortcut handler fires', () => {

@@ -102,11 +102,10 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
 
   return (
     <>
-      <div className={`modal-overlay ${isClosing ? 'closing' : ''}`} onClick={onClose}>
+      <div className={`modal-overlay ${isClosing ? 'closing' : ''}`}>
         <div
           className={`modal-container about-modal ${isClosing ? 'closing' : ''}`}
           style={{ maxWidth: '500px' }}
-          onClick={(e) => e.stopPropagation()}
           ref={modalRef}
         >
           <div className="modal-header">

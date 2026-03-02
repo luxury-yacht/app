@@ -149,11 +149,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   return (
     <div
       className={`modal-overlay settings-modal-overlay ${isClosing ? 'closing' : ''}`}
-      onClick={onClose}
     >
       <div
         className={`modal-container settings-modal ${isClosing ? 'closing' : ''}`}
-        onClick={(e) => e.stopPropagation()}
         ref={modalRef}
       >
         <div className="modal-header settings-modal-header">

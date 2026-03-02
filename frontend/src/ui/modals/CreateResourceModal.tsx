@@ -431,10 +431,9 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
 
     return (
       <>
-        <div className={`modal-overlay ${isClosing ? 'closing' : ''}`} onClick={onClose}>
+        <div className={`modal-overlay ${isClosing ? 'closing' : ''}`}>
           <div
             className={`modal-container create-resource-modal ${isClosing ? 'closing' : ''}`}
-            onClick={(e) => e.stopPropagation()}
             ref={modalRef}
           >
             <div className="modal-header">
