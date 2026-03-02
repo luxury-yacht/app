@@ -27,7 +27,7 @@ const HOVER_LIGHTNESS_OFFSET = 12;
  * Generate a hover color from a base hex by shifting lightness in HSL space.
  * Dark mode: lightens (+offset). Light mode: darkens (-offset).
  */
-export function generateLinkHoverColor(hex: string, mode: 'light' | 'dark'): string {
+function generateLinkHoverColor(hex: string, mode: 'light' | 'dark'): string {
   const { h, s, l } = hexToHsl(hex);
   const direction = mode === 'dark' ? 1 : -1;
   const adjusted = Math.min(95, Math.max(5, l + HOVER_LIGHTNESS_OFFSET * direction));
@@ -74,17 +74,5 @@ export function saveLinkColorToLocalStorage(theme: 'light' | 'dark', color: stri
     }
   } catch {
     // Silently ignore storage errors (private browsing, quota exceeded, etc.)
-  }
-}
-
-/**
- * Remove all link color keys from localStorage.
- */
-export function clearLinkColorFromLocalStorage(): void {
-  try {
-    localStorage.removeItem(LS_KEY_LINK_LIGHT);
-    localStorage.removeItem(LS_KEY_LINK_DARK);
-  } catch {
-    // Silently ignore storage errors
   }
 }
