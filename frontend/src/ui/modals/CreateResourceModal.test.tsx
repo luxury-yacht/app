@@ -129,6 +129,10 @@ vi.mock('@/core/codemirror/theme', () => ({
   }),
 }));
 
+vi.mock('@/core/codemirror/search', () => ({
+  createSearchExtensions: () => [],
+}));
+
 vi.mock('@wailsjs/go/backend/App', () => ({
   GetResourceTemplates: wailsMock.GetResourceTemplates,
   ValidateResourceCreation: wailsMock.ValidateResourceCreation,

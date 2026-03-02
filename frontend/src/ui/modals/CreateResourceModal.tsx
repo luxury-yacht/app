@@ -27,6 +27,7 @@ import { useErrorContext } from '@core/contexts/ErrorContext';
 import { ErrorSeverity, ErrorCategory } from '@utils/errorHandler';
 import { refreshOrchestrator } from '@/core/refresh';
 import { buildCodeTheme } from '@/core/codemirror/theme';
+import { createSearchExtensions } from '@/core/codemirror/search';
 import {
   GetResourceTemplates,
   ValidateResourceCreation,
@@ -139,14 +140,20 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       return () => observer.disconnect();
     }, []);
 
+    // CodeMirror theme and extensions — same pattern as YamlTab.
     const { theme: codeMirrorTheme, highlight: highlightExtension } = useMemo(
       () => buildCodeTheme(isDarkTheme),
       [isDarkTheme]
     );
 
+    const searchExtensions = useMemo(
+      () => createSearchExtensions({ enableKeymap: false }),
+      []
+    );
+
     const editorExtensions = useMemo(
-      () => [yamlLang(), EditorView.lineWrapping, codeMirrorTheme, highlightExtension],
-      [codeMirrorTheme, highlightExtension]
+      () => [yamlLang(), EditorView.lineWrapping, highlightExtension, ...searchExtensions],
+      [highlightExtension, searchExtensions]
     );
 
     // Handle open/close animation and state reset.
@@ -469,10 +476,20 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                     </label>
                   </div>
 
-                  {/* YAML editor */}
+                  {/* YAML editor — same setup as YamlTab */}
                   <div className="create-resource-editor">
                     <CodeMirror
                       value={yamlContent}
+                      height="100%"
+                      editable={!isBusy}
+                      basicSetup={{
+                        highlightActiveLine: true,
+                        highlightActiveLineGutter: true,
+                        lineNumbers: true,
+                        foldGutter: false,
+                        searchKeymap: false,
+                      }}
+                      theme={codeMirrorTheme}
                       extensions={editorExtensions}
                       onChange={handleYamlChange}
                     />
