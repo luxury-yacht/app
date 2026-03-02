@@ -78,6 +78,62 @@ const wailsMock = vi.hoisted(() => ({
   }),
 }));
 
+vi.mock('./create-resource/formDefinitions', () => ({
+  getFormDefinition: (kind: string) => {
+    if (kind === 'Deployment') {
+      return {
+        kind: 'Deployment',
+        sections: [
+          {
+            title: 'Metadata',
+            fields: [
+              { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text' as const },
+            ],
+          },
+        ],
+      };
+    }
+    return undefined;
+  },
+}));
+
+vi.mock('./create-resource/ResourceForm', () => ({
+  ResourceForm: ({ yamlContent, onYamlChange }: { yamlContent: string; onYamlChange: (v: string) => void; definition: unknown }) => {
+    // Use a ref-based native event listener so that dispatching a native
+    // 'change' event from tests correctly invokes onYamlChange.
+    const yamlRef = React.useRef(yamlContent);
+    const onChangeRef = React.useRef(onYamlChange);
+    yamlRef.current = yamlContent;
+    onChangeRef.current = onYamlChange;
+
+    const inputRef = React.useRef<HTMLInputElement | null>(null);
+
+    React.useEffect(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      const handler = (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        onChangeRef.current(
+          yamlRef.current.replace(/name: [^\n]+/, `name: ${target.value}`)
+        );
+      };
+      el.addEventListener('change', handler);
+      return () => el.removeEventListener('change', handler);
+    }, []);
+
+    return (
+      <div data-testid="resource-form">
+        <input
+          ref={inputRef}
+          data-field-key="name"
+          data-testid="form-name-input"
+          defaultValue="mock-form"
+        />
+      </div>
+    );
+  },
+}));
+
 // --- Module mocks ---
 
 vi.mock('@ui/shortcuts', () => ({
@@ -321,6 +377,13 @@ describe('CreateResourceModal', () => {
       select.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
+    // Selecting Deployment activates the Form tab; switch to YAML tab to
+    // verify the template content was loaded into the editor.
+    const yamlTab = Array.from(container.querySelectorAll('.tab-item')).find(
+      (el) => el.textContent === 'YAML'
+    ) as HTMLButtonElement;
+    await act(async () => { yamlTab.click(); });
+
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     expect(editor.value).toContain('kind: Deployment');
     await unmount();
@@ -556,6 +619,130 @@ describe('CreateResourceModal', () => {
     expect(clusterDropdown).not.toBeNull();
     // The active cluster should be selected.
     expect(clusterDropdown.value).toBe('config:test-cluster');
+    await unmount();
+  });
+
+  it('shows tab strip when a supported template is selected', async () => {
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    await act(async () => {
+      templateSelect.value = 'Deployment';
+      templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const tabStrip = container.querySelector('.tab-strip');
+    expect(tabStrip).not.toBeNull();
+    expect(tabStrip?.textContent).toContain('Form');
+    expect(tabStrip?.textContent).toContain('YAML');
+    await unmount();
+  });
+
+  it('does not show tab strip when Blank template is selected', async () => {
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const tabStrip = container.querySelector('.tab-strip');
+    expect(tabStrip).toBeNull();
+    await unmount();
+  });
+
+  it('defaults to Form tab when a supported template is selected', async () => {
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    await act(async () => {
+      templateSelect.value = 'Deployment';
+      templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const activeTab = container.querySelector('.tab-item--active');
+    expect(activeTab?.textContent).toBe('Form');
+    expect(container.querySelector('[data-testid="yaml-editor"]')).toBeNull();
+    await unmount();
+  });
+
+  it('switches to YAML tab when clicked', async () => {
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    await act(async () => {
+      templateSelect.value = 'Deployment';
+      templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const yamlTab = Array.from(container.querySelectorAll('.tab-item')).find(
+      (el) => el.textContent === 'YAML'
+    ) as HTMLButtonElement;
+    await act(async () => { yamlTab.click(); });
+
+    expect(container.querySelector('[data-testid="yaml-editor"]')).not.toBeNull();
+    const activeTab = container.querySelector('.tab-item--active');
+    expect(activeTab?.textContent).toBe('YAML');
+    await unmount();
+  });
+
+  it('form changes are reflected in YAML when switching tabs', async () => {
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    await act(async () => {
+      templateSelect.value = 'Deployment';
+      templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const nameInput = container.querySelector('input[data-field-key="name"]') as HTMLInputElement;
+    if (nameInput) {
+      await act(async () => {
+        nameInput.value = 'changed-name';
+        nameInput.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+
+    const yamlTab = Array.from(container.querySelectorAll('.tab-item')).find(
+      (el) => el.textContent === 'YAML'
+    ) as HTMLButtonElement;
+    await act(async () => { yamlTab.click(); });
+
+    const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
+    expect(editor.value).toContain('name: changed-name');
+    await unmount();
+  });
+
+  it('hides tab strip when kind is changed to unsupported in YAML', async () => {
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    // Select Deployment to show tabs.
+    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    await act(async () => {
+      templateSelect.value = 'Deployment';
+      templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(container.querySelector('.tab-strip')).not.toBeNull();
+
+    // Switch to YAML and change kind to unsupported.
+    const yamlTab = Array.from(container.querySelectorAll('.tab-item')).find(
+      (el) => el.textContent === 'YAML'
+    ) as HTMLButtonElement;
+    await act(async () => { yamlTab.click(); });
+
+    const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
+    // Use the native value setter + input event to trigger React's synthetic onChange.
+    const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype, 'value'
+    )!.set!;
+    await act(async () => {
+      nativeTextAreaValueSetter.call(editor, 'apiVersion: v1\nkind: Pod\nmetadata:\n  name: test\n');
+      editor.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    // Tab strip should disappear for unsupported kind.
+    expect(container.querySelector('.tab-strip')).toBeNull();
     await unmount();
   });
 });

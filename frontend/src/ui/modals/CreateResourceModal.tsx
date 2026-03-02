@@ -39,6 +39,8 @@ import {
   type ObjectYamlErrorPayload,
 } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlErrors';
 import type { templates } from '@wailsjs/go/models';
+import { getFormDefinition } from './create-resource/formDefinitions';
+import { ResourceForm } from './create-resource/ResourceForm';
 
 // Minimal YAML skeleton for the "Blank" option.
 const BLANK_YAML = `apiVersion:
@@ -190,6 +192,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         setRawError(null);
         setIsValidating(false);
         setIsCreating(false);
+        setActiveTab('yaml');
         // Load templates.
         GetResourceTemplates()
           .then(setAvailableTemplates)
@@ -269,6 +272,18 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       }
     }, [yamlContent]);
 
+    // Active tab: 'form' or 'yaml'. Defaults based on whether a form definition exists.
+    const [activeTab, setActiveTab] = useState<'form' | 'yaml'>('yaml');
+
+    // Look up form definition for the current kind.
+    const formDefinition = useMemo(
+      () => (parsedKind ? getFormDefinition(parsedKind) : undefined),
+      [parsedKind]
+    );
+
+    // Whether to show the tab strip.
+    const showTabs = !!formDefinition;
+
     // Template selection handler.
     const handleTemplateChange = useCallback(
       (value: string | string[]) => {
@@ -296,6 +311,10 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
           );
         }
         setYamlContent(templateYaml);
+
+        // Switch to form tab if the template has a form definition.
+        const def = getFormDefinition(template?.kind ?? '');
+        setActiveTab(def ? 'form' : 'yaml');
       },
       [availableTemplates, selectedNamespace]
     );
@@ -488,24 +507,56 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                     </div>
                   </div>
 
-                  {/* YAML editor — same setup as YamlTab */}
-                  <div className="create-resource-editor">
-                    <CodeMirror
-                      value={yamlContent}
-                      height="100%"
-                      editable={!isBusy}
-                      basicSetup={{
-                        highlightActiveLine: true,
-                        highlightActiveLineGutter: true,
-                        lineNumbers: true,
-                        foldGutter: false,
-                        searchKeymap: false,
-                      }}
-                      theme={codeMirrorTheme}
-                      extensions={editorExtensions}
-                      onChange={handleYamlChange}
-                    />
-                  </div>
+                  {/* Tab strip — visible when a form definition exists for the selected kind */}
+                  {showTabs && (
+                    <div className="tab-strip create-resource-tab-strip">
+                      <button
+                        className={`tab-item${activeTab === 'form' ? ' tab-item--active' : ''}`}
+                        onClick={() => setActiveTab('form')}
+                        type="button"
+                        data-create-resource-focusable="true"
+                      >
+                        Form
+                      </button>
+                      <button
+                        className={`tab-item${activeTab === 'yaml' ? ' tab-item--active' : ''}`}
+                        onClick={() => setActiveTab('yaml')}
+                        type="button"
+                        data-create-resource-focusable="true"
+                      >
+                        YAML
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Editor section — Form view or YAML CodeMirror */}
+                  {showTabs && activeTab === 'form' && formDefinition ? (
+                    <div className="create-resource-editor">
+                      <ResourceForm
+                        definition={formDefinition}
+                        yamlContent={yamlContent}
+                        onYamlChange={handleYamlChange}
+                      />
+                    </div>
+                  ) : (
+                    <div className="create-resource-editor">
+                      <CodeMirror
+                        value={yamlContent}
+                        height="100%"
+                        editable={!isBusy}
+                        basicSetup={{
+                          highlightActiveLine: true,
+                          highlightActiveLineGutter: true,
+                          lineNumbers: true,
+                          foldGutter: false,
+                          searchKeymap: false,
+                        }}
+                        theme={codeMirrorTheme}
+                        extensions={editorExtensions}
+                        onChange={handleYamlChange}
+                      />
+                    </div>
+                  )}
 
                   {/* Client-side parse error */}
                   {parseError && (

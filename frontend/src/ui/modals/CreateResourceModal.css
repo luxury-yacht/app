@@ -49,6 +49,13 @@
   overflow: hidden;
 }
 
+/* Remove border when showing the form view — the form sections have their own cards */
+.create-resource-editor:has(.resource-form) {
+  border: none;
+  border-radius: 0;
+  overflow-y: auto;
+}
+
 .create-resource-editor .cm-editor {
   height: 100%;
 }
@@ -103,6 +110,11 @@
 
 .create-resource-error-causes li {
   margin-bottom: var(--spacing-xs);
+}
+
+/* Tab strip within the create resource modal */
+.create-resource-tab-strip {
+  flex-shrink: 0;
 }
 
 /* Kind badge shown in the footer when the YAML has a parseable kind */

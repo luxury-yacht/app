@@ -1,0 +1,257 @@
+/* ResourceForm.css — styles for the generic form renderer component.
+   Follows the object-panel-section card pattern used throughout the app. */
+
+/* ── Form container ──────────────────────────────────────────────────── */
+
+.resource-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  overflow-y: auto;
+  /* padding: var(--spacing-sm); */
+  height: 100%;
+}
+
+/* ── Sections — card pattern from object-panel-section ───────────────── */
+
+.resource-form-section {
+  background-color: var(--color-bg-secondary);
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.resource-form-section-title {
+  color: var(--color-text);
+  font-size: var(--font-size-title, 1rem);
+  font-weight: var(--font-weight-bold);
+  margin: 0 0 0.5rem 0;
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* ── Fields — overview-item inline label/value layout ────────────────── */
+
+.resource-form-field {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.resource-form-label {
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  min-width: 8rem;
+  text-align: left;
+  padding-top: 6px;
+  flex-shrink: 0;
+}
+
+/* ── Inputs ──────────────────────────────────────────────────────────── */
+
+.resource-form-input,
+.resource-form-select,
+.resource-form-textarea {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm, 4px);
+  color: var(--color-text);
+  font-size: var(--font-size-normal, 0.875rem);
+  font-family: inherit;
+  outline: none;
+  transition:
+    border-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    box-shadow var(--duration-fast, 150ms) var(--ease-out, ease);
+}
+
+.resource-form-input:focus,
+.resource-form-select:focus,
+.resource-form-textarea:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent);
+}
+
+.resource-form-input:hover:not(:focus),
+.resource-form-select:hover:not(:focus),
+.resource-form-textarea:hover:not(:focus) {
+  border-color: var(--color-text-secondary);
+}
+
+.resource-form-input::placeholder,
+.resource-form-textarea::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.5;
+}
+
+/* Remove browser number input spinners */
+.resource-form-input[type="number"]::-webkit-inner-spin-button,
+.resource-form-input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.resource-form-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Select — custom arrow */
+.resource-form-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+  cursor: pointer;
+}
+
+.resource-form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* ── Key-value list ──────────────────────────────────────────────────── */
+
+.resource-form-kv-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-kv-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-kv-row .resource-form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.resource-form-kv-row .resource-form-input:first-child {
+  flex: 0.4;
+}
+
+.resource-form-kv-row .resource-form-input:nth-child(2) {
+  flex: 0.6;
+}
+
+/* ── Group-list ──────────────────────────────────────────────────────── */
+
+.resource-form-group-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.resource-form-group-item {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg, 8px);
+  padding: var(--spacing-md) var(--spacing-lg);
+  background: var(--color-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.resource-form-group-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--spacing-xs);
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: var(--spacing-xs);
+}
+
+.resource-form-group-item-title {
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text);
+}
+
+.resource-form-group-item-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Sub-fields inside group items use the same inline label/value layout */
+.resource-form-group-item-fields > .resource-form-field {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+/* Narrower labels inside nested cards */
+.resource-form-group-item-fields > .resource-form-field > .resource-form-label {
+  min-width: 6rem;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+
+.resource-form-add-btn {
+  align-self: flex-start;
+  padding: 0.3rem var(--spacing-md);
+  font-size: var(--font-size-button, 0.85rem);
+  font-weight: var(--font-weight-button, 500);
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  background-color: var(--button-generic-bg);
+  color: var(--button-generic-text);
+  transition:
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
+    transform var(--duration-fast, 150ms) var(--ease-out, ease);
+}
+
+.resource-form-add-btn:hover {
+  background-color: var(--button-generic-hover);
+  transform: translateY(-1px);
+}
+
+.resource-form-add-btn:active {
+  transform: translateY(0);
+}
+
+.resource-form-remove-btn {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--color-text-secondary);
+  transition:
+    color var(--duration-fast, 150ms) var(--ease-out, ease),
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease);
+}
+
+.resource-form-remove-btn:hover {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+}
+
+/* ── Parse error ─────────────────────────────────────────────────────── */
+
+.resource-form-parse-error {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  border-radius: var(--border-radius-sm, 4px);
+  font-size: 0.85rem;
+}

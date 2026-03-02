@@ -12,7 +12,7 @@
 
 ---
 
-## Task 1: Backend — Resource Creation Types and Core Logic
+## Task 1: Backend — Resource Creation Types and Core Logic ✅
 
 **Files:**
 - Create: `backend/object_yaml_creation.go`
@@ -449,7 +449,7 @@ feat: add backend resource creation with dry-run validation
 
 ---
 
-## Task 2: Backend — Additional Creation Tests
+## Task 2: Backend — Additional Creation Tests ✅
 
 **Files:**
 - Modify: `backend/object_yaml_creation_test.go`
@@ -911,7 +911,7 @@ test: add comprehensive tests for resource creation backend
 
 ---
 
-## Task 3: Backend — Resource Templates
+## Task 3: Backend — Resource Templates ✅
 
 **Files:**
 - Create: `backend/resources/templates/templates.go`
@@ -1068,7 +1068,7 @@ feat: add curated resource creation templates
 
 ---
 
-## Task 4: Frontend — Modal State and Keyboard Priorities
+## Task 4: Frontend — Modal State and Keyboard Priorities ✅
 
 **Files:**
 - Modify: `frontend/src/core/contexts/ModalStateContext.tsx`
@@ -1102,7 +1102,7 @@ feat: add create resource modal state and keyboard priorities
 
 ---
 
-## Task 5: Frontend — Command Palette Entry
+## Task 5: Frontend — Command Palette Entry ✅
 
 **Files:**
 - Modify: `frontend/src/ui/command-palette/CommandPaletteCommands.tsx`
@@ -1140,7 +1140,7 @@ feat: add Create Resource command to command palette
 
 ---
 
-## Task 6: Frontend — CreateResourceModal Shell
+## Task 6: Frontend — CreateResourceModal Shell ✅
 
 **Files:**
 - Create: `frontend/src/ui/modals/CreateResourceModal.tsx`
@@ -1198,7 +1198,7 @@ feat: add CreateResourceModal shell with AppLayout wiring
 
 ---
 
-## Task 7: Frontend — Template Picker and YAML Editor
+## Task 7: Frontend — Template Picker and YAML Editor ✅
 
 **Files:**
 - Modify: `frontend/src/ui/modals/CreateResourceModal.tsx`
@@ -1265,7 +1265,7 @@ feat: add template picker and YAML editor to CreateResourceModal
 
 ---
 
-## Task 8: Frontend — Validation and Creation Flow
+## Task 8: Frontend — Validation and Creation Flow ✅
 
 **Files:**
 - Modify: `frontend/src/ui/modals/CreateResourceModal.tsx`
@@ -1327,7 +1327,7 @@ feat: add validation and creation flow to CreateResourceModal
 
 ---
 
-## Task 9: Frontend — CreateResourceModal Tests
+## Task 9: Frontend — CreateResourceModal Tests ✅
 
 **Files:**
 - Create: `frontend/src/ui/modals/CreateResourceModal.test.tsx`
@@ -1403,7 +1403,7 @@ test: add CreateResourceModal component tests
 
 ---
 
-## Task 10: Build Verification and Wails Binding Generation
+## Task 10: Build Verification and Wails Binding Generation ✅
 
 **Step 1: Generate Wails bindings**
 
@@ -1438,7 +1438,7 @@ chore: regenerate Wails bindings for resource creation
 
 ---
 
-## Task 11: Update Documentation
+## Task 11: Update Documentation ✅
 
 **Files:**
 - Modify: `docs/plans/todos.md` (mark resource creation as ✅)
