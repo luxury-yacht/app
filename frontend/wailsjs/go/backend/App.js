@@ -34,6 +34,10 @@ export function CreateDebugContainer(arg1, arg2) {
   return window['go']['backend']['App']['CreateDebugContainer'](arg1, arg2);
 }
 
+export function CreateResource(arg1, arg2) {
+  return window['go']['backend']['App']['CreateResource'](arg1, arg2);
+}
+
 export function CreateVersionedEndpoint(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['CreateVersionedEndpoint'](arg1, arg2, arg3, arg4);
 }
@@ -244,6 +248,10 @@ export function GetReplicaSet(arg1, arg2, arg3) {
 
 export function GetResourceQuota(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetResourceQuota'](arg1, arg2, arg3);
+}
+
+export function GetResourceTemplates() {
+  return window['go']['backend']['App']['GetResourceTemplates']();
 }
 
 export function GetRole(arg1, arg2, arg3) {
@@ -560,4 +568,8 @@ export function ValidateObjectYaml(arg1, arg2) {
 
 export function ValidatePortForwardURL(arg1) {
   return window['go']['backend']['App']['ValidatePortForwardURL'](arg1);
+}
+
+export function ValidateResourceCreation(arg1, arg2) {
+  return window['go']['backend']['App']['ValidateResourceCreation'](arg1, arg2);
 }

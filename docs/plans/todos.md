@@ -25,7 +25,7 @@
   - Select container
   - can we show a file dialog for the remote filesystem?
 
-- Resource creation
+- ✅ Resource creation
   - starter templates for common resource types
   - reuse the existing code editor
 

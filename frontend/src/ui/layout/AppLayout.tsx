@@ -52,6 +52,10 @@ const ObjectDiffModal = withLazyBoundary(
   () => import('@ui/modals/ObjectDiffModal'),
   'Loading diff viewer...'
 );
+const CreateResourceModal = withLazyBoundary(
+  () => import('@ui/modals/CreateResourceModal'),
+  'Loading create resource...'
+);
 const AppLogsPanel = withLazyBoundary(
   () => import('@ui/panels/app-logs/AppLogsPanel'),
   'Loading app logs panel...'
@@ -312,6 +316,15 @@ export const AppLayout: React.FC = () => {
         <ObjectDiffModal
           isOpen={viewState.isObjectDiffOpen}
           onClose={() => viewState.setIsObjectDiffOpen(false)}
+        />
+      </PanelErrorBoundary>
+      <PanelErrorBoundary
+        onClose={() => viewState.setIsCreateResourceOpen(false)}
+        panelName="create-resource"
+      >
+        <CreateResourceModal
+          isOpen={viewState.isCreateResourceOpen}
+          onClose={() => viewState.setIsCreateResourceOpen(false)}
         />
       </PanelErrorBoundary>
       <ErrorNotificationSystem />

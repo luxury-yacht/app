@@ -5,6 +5,7 @@ import {types} from '../models';
 import {context} from '../models';
 import {capabilities} from '../models';
 import {json} from '../models';
+import {templates} from '../models';
 
 export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
@@ -21,6 +22,8 @@ export function CloseShellSession(arg1:string):Promise<void>;
 export function CordonNode(arg1:string,arg2:string):Promise<void>;
 
 export function CreateDebugContainer(arg1:string,arg2:types.DebugContainerRequest):Promise<types.DebugContainerResponse>;
+
+export function CreateResource(arg1:string,arg2:backend.ResourceCreationRequest):Promise<backend.ResourceCreationResponse>;
 
 export function CreateVersionedEndpoint(arg1:string,arg2:string,arg3:any,arg4:string):Promise<backend.VersionedResponse>;
 
@@ -127,6 +130,8 @@ export function GetRefreshBaseURL():Promise<string>;
 export function GetReplicaSet(arg1:string,arg2:string,arg3:string):Promise<types.ReplicaSetDetails>;
 
 export function GetResourceQuota(arg1:string,arg2:string,arg3:string):Promise<types.ResourceQuotaDetails>;
+
+export function GetResourceTemplates():Promise<Array<templates.ResourceTemplate>>;
 
 export function GetRole(arg1:string,arg2:string,arg3:string):Promise<types.RoleDetails>;
 
@@ -285,3 +290,5 @@ export function UpdateMenu():Promise<void>;
 export function ValidateObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
 export function ValidatePortForwardURL(arg1:string):Promise<boolean|string>;
+
+export function ValidateResourceCreation(arg1:string,arg2:backend.ResourceCreationRequest):Promise<backend.ResourceCreationResponse>;

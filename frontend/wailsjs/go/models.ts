@@ -308,6 +308,40 @@ export namespace backend {
 	        this.startedAt = source["startedAt"];
 	    }
 	}
+	export class ResourceCreationRequest {
+	    yaml: string;
+	    namespace: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResourceCreationRequest(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.yaml = source["yaml"];
+	        this.namespace = source["namespace"];
+	    }
+	}
+	export class ResourceCreationResponse {
+	    name: string;
+	    namespace: string;
+	    kind: string;
+	    apiVersion: string;
+	    resourceVersion: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResourceCreationResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.namespace = source["namespace"];
+	        this.kind = source["kind"];
+	        this.apiVersion = source["apiVersion"];
+	        this.resourceVersion = source["resourceVersion"];
+	    }
+	}
 	export class SelectionDiagnostics {
 	    activeQueueDepth: number;
 	    maxQueueDepth: number;
@@ -448,6 +482,33 @@ export namespace capabilities {
 	        this.deniedReason = source["deniedReason"];
 	        this.evaluationError = source["evaluationError"];
 	        this.error = source["error"];
+	    }
+	}
+
+}
+
+export namespace templates {
+	
+	export class ResourceTemplate {
+	    name: string;
+	    kind: string;
+	    apiVersion: string;
+	    category: string;
+	    description: string;
+	    yaml: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResourceTemplate(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.kind = source["kind"];
+	        this.apiVersion = source["apiVersion"];
+	        this.category = source["category"];
+	        this.description = source["description"];
+	        this.yaml = source["yaml"];
 	    }
 	}
 

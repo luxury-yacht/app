@@ -1,0 +1,117 @@
+/* CreateResourceModal.css — styles for the resource creation modal. */
+
+.create-resource-modal {
+  max-width: 900px;
+  width: 90vw;
+  height: 80vh;
+}
+
+.create-resource-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  flex: 1;
+  min-height: 0;
+}
+
+/* Context bar — cluster, namespace, and kind dropdowns side by side */
+.create-resource-context-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-shrink: 0;
+}
+
+/* Labeled dropdown field */
+.create-resource-dropdown-field {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  flex: 1;
+  min-width: 0;
+}
+
+.create-resource-dropdown-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+/* YAML editor container */
+.create-resource-editor {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.create-resource-editor .cm-editor {
+  height: 100%;
+}
+
+/* No cluster connected state */
+.create-resource-no-cluster {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  text-align: center;
+  padding: var(--spacing-lg);
+}
+
+/* Parse error display */
+.create-resource-parse-error {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+/* Validation result states */
+.create-resource-validation-success {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: rgba(74, 222, 128, 0.15);
+  color: var(--color-success);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.create-resource-validation-error {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.create-resource-error-causes {
+  list-style: disc;
+  padding-left: var(--spacing-md);
+  margin-top: var(--spacing-xs);
+}
+
+.create-resource-error-causes li {
+  margin-bottom: var(--spacing-xs);
+}
+
+/* Kind badge shown in the footer when the YAML has a parseable kind */
+.create-resource-kind-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  margin-right: auto;
+}

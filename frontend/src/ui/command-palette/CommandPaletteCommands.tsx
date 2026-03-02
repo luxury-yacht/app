@@ -158,6 +158,18 @@ export function useCommandPaletteCommands() {
         shortcut: ['⇧', '⌃', 'D'],
       },
 
+      // Resource Actions
+      {
+        id: 'create-resource',
+        label: 'Create Resource',
+        description: 'Create a new Kubernetes resource from YAML',
+        category: 'Application',
+        action: () => {
+          viewState.setIsCreateResourceOpen(true);
+        },
+        keywords: ['create', 'new', 'resource', 'yaml', 'apply', 'deploy'],
+      },
+
       // Zoom Commands
       {
         id: 'zoom-in',
