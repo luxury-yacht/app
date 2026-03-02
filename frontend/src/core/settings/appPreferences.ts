@@ -36,6 +36,8 @@ interface AppPreferences {
   paletteBrightnessDark: number;
   accentColorLight: string;
   accentColorDark: string;
+  linkColorLight: string;
+  linkColorDark: string;
 }
 
 interface AppSettingsPayload {
@@ -58,6 +60,8 @@ interface AppSettingsPayload {
   paletteBrightnessDark?: number;
   accentColorLight?: string;
   accentColorDark?: string;
+  linkColorLight?: string;
+  linkColorDark?: string;
 }
 
 const DEFAULT_METRICS_REFRESH_INTERVAL_MS = 5000;
@@ -77,6 +81,8 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   paletteBrightnessDark: 0,
   accentColorLight: '',
   accentColorDark: '',
+  linkColorLight: '',
+  linkColorDark: '',
 };
 
 let preferenceCache: AppPreferences = { ...DEFAULT_PREFERENCES };
@@ -153,6 +159,12 @@ const emitPreferenceChanges = (previous: AppPreferences, next: AppPreferences): 
   if (previous.accentColorDark !== next.accentColorDark) {
     eventBus.emit('settings:accent-color', { theme: 'dark', color: next.accentColorDark });
   }
+  if (previous.linkColorLight !== next.linkColorLight) {
+    eventBus.emit('settings:link-color', { theme: 'light', color: next.linkColorLight });
+  }
+  if (previous.linkColorDark !== next.linkColorDark) {
+    eventBus.emit('settings:link-color', { theme: 'dark', color: next.linkColorDark });
+  }
 };
 
 const updatePreferenceCache = (updates: Partial<AppPreferences>): void => {
@@ -228,6 +240,8 @@ export const hydrateAppPreferences = async (options?: {
       backendSettings?.paletteBrightnessDark ?? DEFAULT_PREFERENCES.paletteBrightnessDark,
     accentColorLight: backendSettings?.accentColorLight ?? DEFAULT_PREFERENCES.accentColorLight,
     accentColorDark: backendSettings?.accentColorDark ?? DEFAULT_PREFERENCES.accentColorDark,
+    linkColorLight: backendSettings?.linkColorLight ?? DEFAULT_PREFERENCES.linkColorLight,
+    linkColorDark: backendSettings?.linkColorDark ?? DEFAULT_PREFERENCES.linkColorDark,
   };
 
   hydrated = true;
@@ -301,6 +315,32 @@ export const setAccentColor = (theme: 'light' | 'dark', color: string): void => 
   }
   void setter(theme, color).catch((error: unknown) => {
     console.error('Failed to persist accent color:', error);
+  });
+};
+
+// Returns the custom link color hex for the specified theme (empty = default).
+export const getLinkColor = (theme: 'light' | 'dark'): string => {
+  return theme === 'light' ? preferenceCache.linkColorLight : preferenceCache.linkColorDark;
+};
+
+// Persist link color for a specific theme to backend via fire-and-forget.
+export const setLinkColor = (theme: 'light' | 'dark', color: string): void => {
+  hydrated = true;
+  if (theme === 'light') {
+    updatePreferenceCache({ linkColorLight: color });
+  } else {
+    updatePreferenceCache({ linkColorDark: color });
+  }
+  const runtimeApp = (window as any)?.go?.backend?.App;
+  if (!runtimeApp) {
+    return;
+  }
+  const setter = runtimeApp?.SetLinkColor;
+  if (typeof setter !== 'function') {
+    return;
+  }
+  void setter(theme, color).catch((error: unknown) => {
+    console.error('Failed to persist link color:', error);
   });
 };
 

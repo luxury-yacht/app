@@ -7,6 +7,8 @@
 
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
+import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 
 interface ResourceHeaderProps {
   kind: string;
@@ -16,16 +18,38 @@ interface ResourceHeaderProps {
   displayKind?: string; // Optional override for display
 }
 
-export const ResourceHeader = React.memo<ResourceHeaderProps>(
-  ({ kind, name, namespace, age, displayKind }) => {
-    return (
-      <>
-        <OverviewItem label="Kind" value={displayKind || kind} />
-        <OverviewItem label="Name" value={name} />
-        {namespace && <OverviewItem label="Namespace" value={namespace} />}
-        {age && <OverviewItem label="Age" value={age} />}
-        <div className="overview-separator" aria-hidden="true" />
-      </>
-    );
-  }
-);
+export const ResourceHeader: React.FC<ResourceHeaderProps> = ({
+  kind,
+  name,
+  namespace,
+  age,
+  displayKind,
+}) => {
+  const { objectData } = useObjectPanel();
+
+  return (
+    <>
+      <OverviewItem label="Kind" value={displayKind || kind} />
+      <OverviewItem label="Name" value={name} />
+      {namespace && (
+        <OverviewItem
+          label="Namespace"
+          value={
+            <ObjectPanelLink
+              objectRef={{
+                kind: 'Namespace',
+                name: namespace,
+                clusterId: objectData?.clusterId ?? undefined,
+                clusterName: objectData?.clusterName ?? undefined,
+              }}
+            >
+              {namespace}
+            </ObjectPanelLink>
+          }
+        />
+      )}
+      {age && <OverviewItem label="Age" value={age} />}
+      <div className="overview-separator" aria-hidden="true" />
+    </>
+  );
+};

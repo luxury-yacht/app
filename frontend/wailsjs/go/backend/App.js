@@ -438,6 +438,10 @@ export function SetKubeconfigSearchPaths(arg1) {
   return window['go']['backend']['App']['SetKubeconfigSearchPaths'](arg1);
 }
 
+export function SetLinkColor(arg1, arg2) {
+  return window['go']['backend']['App']['SetLinkColor'](arg1, arg2);
+}
+
 export function SetLogsPanelVisible(arg1) {
   return window['go']['backend']['App']['SetLogsPanelVisible'](arg1);
 }

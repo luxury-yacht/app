@@ -479,6 +479,8 @@ export namespace types {
 	    paletteBrightnessDark: number;
 	    accentColorLight?: string;
 	    accentColorDark?: string;
+	    linkColorLight?: string;
+	    linkColorDark?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Theme(source);
@@ -497,6 +499,8 @@ export namespace types {
 	        this.paletteBrightnessDark = source["paletteBrightnessDark"];
 	        this.accentColorLight = source["accentColorLight"];
 	        this.accentColorDark = source["accentColorDark"];
+	        this.linkColorLight = source["linkColorLight"];
+	        this.linkColorDark = source["linkColorDark"];
 	    }
 	}
 	export class AppSettings {
@@ -515,6 +519,8 @@ export namespace types {
 	    paletteBrightnessDark: number;
 	    accentColorLight: string;
 	    accentColorDark: string;
+	    linkColorLight: string;
+	    linkColorDark: string;
 	    themes: Theme[];
 	
 	    static createFrom(source: any = {}) {
@@ -538,6 +544,8 @@ export namespace types {
 	        this.paletteBrightnessDark = source["paletteBrightnessDark"];
 	        this.accentColorLight = source["accentColorLight"];
 	        this.accentColorDark = source["accentColorDark"];
+	        this.linkColorLight = source["linkColorLight"];
+	        this.linkColorDark = source["linkColorDark"];
 	        this.themes = this.convertValues(source["themes"], Theme);
 	    }
 	

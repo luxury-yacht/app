@@ -26,6 +26,8 @@ import {
   getPaletteTint,
   getAccentColor,
   setAccentColor as persistAccentColor,
+  getLinkColor,
+  setLinkColor as persistLinkColor,
   getThemes,
   saveTheme,
   deleteTheme as deleteThemeApi,
@@ -45,6 +47,11 @@ import {
   saveAccentColorToLocalStorage,
   clearAccentColor,
 } from '@utils/accentColor';
+import {
+  applyLinkColor,
+  saveLinkColorToLocalStorage,
+  clearLinkColor,
+} from '@utils/linkColor';
 import {
   getGridTablePersistenceMode,
   setGridTablePersistenceMode,
@@ -89,6 +96,13 @@ function Settings({ onClose }: SettingsProps) {
   const [isEditingAccentHex, setIsEditingAccentHex] = useState(false);
   const [accentHexDraft, setAccentHexDraft] = useState('');
   const accentHexInputRef = useRef<HTMLInputElement>(null);
+  // Link color state and debounce timer
+  const [linkColor, setLinkColorState] = useState('');
+  const linkPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Inline hex editing state for link color
+  const [isEditingLinkHex, setIsEditingLinkHex] = useState(false);
+  const [linkHexDraft, setLinkHexDraft] = useState('');
+  const linkHexInputRef = useRef<HTMLInputElement>(null);
   // Inline editing state for palette slider values
   const [editingPaletteField, setEditingPaletteField] = useState<
     'hue' | 'saturation' | 'brightness' | null
@@ -157,6 +171,7 @@ function Settings({ onClose }: SettingsProps) {
     setPaletteSaturation(tint.saturation);
     setPaletteBrightness(tint.brightness);
     setAccentColorState(getAccentColor(resolvedTheme));
+    setLinkColorState(getLinkColor(resolvedTheme));
   }, [resolvedTheme]);
 
   // Auto-focus the palette inline edit input when it appears.
@@ -353,6 +368,60 @@ function Settings({ onClose }: SettingsProps) {
     setIsEditingAccentHex(false);
   };
 
+  // Debounced persistence for link color — same pattern as accent color.
+  const debounceLinkPersist = useCallback(
+    (color: string) => {
+      if (linkPersistTimer.current) {
+        clearTimeout(linkPersistTimer.current);
+      }
+      linkPersistTimer.current = setTimeout(() => {
+        persistLinkColor(resolvedTheme, color);
+        saveLinkColorToLocalStorage(resolvedTheme, color);
+      }, 300);
+    },
+    [resolvedTheme]
+  );
+
+  const handleLinkColorChange = (hex: string) => {
+    setLinkColorState(hex);
+    applyLinkColor(hex, resolvedTheme);
+    debounceLinkPersist(hex);
+  };
+
+  // Reset link color for the current resolved theme.
+  const handleLinkReset = () => {
+    setLinkColorState('');
+    applyLinkColor('', resolvedTheme);
+    persistLinkColor(resolvedTheme, '');
+    saveLinkColorToLocalStorage(resolvedTheme, '');
+  };
+
+  // Inline hex editing handlers for link color.
+  const defaultLink = resolvedTheme === 'light' ? '#0f766e' : '#7dd3fc';
+
+  const handleLinkHexClick = () => {
+    setLinkHexDraft(linkColor || defaultLink);
+    setIsEditingLinkHex(true);
+    requestAnimationFrame(() => linkHexInputRef.current?.select());
+  };
+
+  const handleLinkHexCommit = () => {
+    let trimmed = linkHexDraft.trim().toLowerCase();
+    if (!trimmed.startsWith('#')) trimmed = '#' + trimmed;
+    // Expand shorthand #rgb → #rrggbb
+    if (/^#[0-9a-f]{3}$/.test(trimmed)) {
+      trimmed = '#' + trimmed[1] + trimmed[1] + trimmed[2] + trimmed[2] + trimmed[3] + trimmed[3];
+    }
+    if (validHexRe.test(trimmed)) {
+      handleLinkColorChange(trimmed);
+    }
+    setIsEditingLinkHex(false);
+  };
+
+  const handleLinkHexCancel = () => {
+    setIsEditingLinkHex(false);
+  };
+
   // Palette value inline editing handlers — same pattern as accent hex editing.
   const handlePaletteValueClick = (field: 'hue' | 'saturation' | 'brightness') => {
     const current =
@@ -461,6 +530,8 @@ function Settings({ onClose }: SettingsProps) {
         paletteBrightnessDark: darkTint.brightness,
         accentColorLight: getAccentColor('light'),
         accentColorDark: getAccentColor('dark'),
+        linkColorLight: getLinkColor('light'),
+        linkColorDark: getLinkColor('dark'),
       });
       await saveTheme(newTheme);
       await reloadThemes();
@@ -513,11 +584,18 @@ function Settings({ onClose }: SettingsProps) {
       saveAccentColorToLocalStorage('light', lightAccent);
       saveAccentColorToLocalStorage('dark', darkAccent);
 
-      // Update local slider/accent state to reflect the applied theme values.
+      // Apply link color overrides from the theme.
+      const currentLinkColor = getLinkColor(currentTheme);
+      applyLinkColor(currentLinkColor, currentTheme);
+      saveLinkColorToLocalStorage('light', getLinkColor('light'));
+      saveLinkColorToLocalStorage('dark', getLinkColor('dark'));
+
+      // Update local slider/accent/link state to reflect the applied theme values.
       setPaletteHue(tint.hue);
       setPaletteSaturation(tint.saturation);
       setPaletteBrightness(tint.brightness);
       setAccentColorState(getAccentColor(currentTheme));
+      setLinkColorState(getLinkColor(currentTheme));
     } catch (error) {
       errorHandler.handle(error, { action: 'applyTheme' });
     }
@@ -541,6 +619,8 @@ function Settings({ onClose }: SettingsProps) {
         paletteBrightnessDark: darkTint.brightness,
         accentColorLight: getAccentColor('light'),
         accentColorDark: getAccentColor('dark'),
+        linkColorLight: getLinkColor('light'),
+        linkColorDark: getLinkColor('dark'),
       });
       await saveTheme(updated);
       await reloadThemes();
@@ -570,10 +650,14 @@ function Settings({ onClose }: SettingsProps) {
       const activeAccentMatch = isLight
         ? (theme.accentColorLight || '') === (accentColor || '')
         : (theme.accentColorDark || '') === (accentColor || '');
+      const activeLinkMatch = isLight
+        ? (theme.linkColorLight || '') === (linkColor || '')
+        : (theme.linkColorDark || '') === (linkColor || '');
 
       // Inactive mode: compare against persisted preference cache.
       const otherTint = getPaletteTint(isLight ? 'dark' : 'light');
       const otherAccent = getAccentColor(isLight ? 'dark' : 'light');
+      const otherLink = getLinkColor(isLight ? 'dark' : 'light');
       const otherHueMatch = isLight
         ? theme.paletteHueDark === otherTint.hue
         : theme.paletteHueLight === otherTint.hue;
@@ -586,19 +670,24 @@ function Settings({ onClose }: SettingsProps) {
       const otherAccentMatch = isLight
         ? (theme.accentColorDark || '') === (otherAccent || '')
         : (theme.accentColorLight || '') === (otherAccent || '');
+      const otherLinkMatch = isLight
+        ? (theme.linkColorDark || '') === (otherLink || '')
+        : (theme.linkColorLight || '') === (otherLink || '');
 
       return (
         activeHueMatch &&
         activeSatMatch &&
         activeBrtMatch &&
         activeAccentMatch &&
+        activeLinkMatch &&
         otherHueMatch &&
         otherSatMatch &&
         otherBrtMatch &&
-        otherAccentMatch
+        otherAccentMatch &&
+        otherLinkMatch
       );
     },
-    [resolvedTheme, paletteHue, paletteSaturation, paletteBrightness, accentColor]
+    [resolvedTheme, paletteHue, paletteSaturation, paletteBrightness, accentColor, linkColor]
   );
 
   // Drag-and-drop reorder handler.
@@ -685,9 +774,10 @@ function Settings({ onClose }: SettingsProps) {
   const handleClearAllState = async () => {
     setIsClearStateConfirmOpen(false);
     try {
-      // Clear palette tint and accent color before reload so UI reverts immediately.
+      // Clear palette tint, accent color, and link color before reload so UI reverts immediately.
       clearTintedPalette();
       clearAccentColor();
+      clearLinkColor();
 
       const clearAppState = (window as any)?.go?.backend?.App?.ClearAppState;
       if (typeof clearAppState !== 'function') {
@@ -897,6 +987,51 @@ function Settings({ onClose }: SettingsProps) {
             onClick={handleAccentReset}
             disabled={!accentColor}
             title="Reset Accent Color"
+          >
+            ↺
+          </button>
+
+          <label>Links</label>
+          <input
+            type="color"
+            className="palette-accent-swatch"
+            value={linkColor || (resolvedTheme === 'light' ? '#0f766e' : '#7dd3fc')}
+            onChange={(e) => handleLinkColorChange(e.target.value)}
+          />
+          {isEditingLinkHex ? (
+            <input
+              ref={linkHexInputRef}
+              className="palette-slider-value palette-hex-input"
+              value={linkHexDraft}
+              onChange={(e) => setLinkHexDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleLinkHexCommit();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  handleLinkHexCancel();
+                } else e.stopPropagation();
+              }}
+              onBlur={handleLinkHexCancel}
+              maxLength={7}
+              spellCheck={false}
+            />
+          ) : (
+            <span
+              className="palette-slider-value palette-hex-clickable"
+              onClick={handleLinkHexClick}
+              title="Click to edit hex value"
+            >
+              {linkColor || defaultLink}
+            </span>
+          )}
+          <button
+            type="button"
+            className="palette-row-reset"
+            onClick={handleLinkReset}
+            disabled={!linkColor}
+            title="Reset Link Color"
           >
             ↺
           </button>

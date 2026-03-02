@@ -85,6 +85,7 @@ export interface AppEvents {
     brightness: number;
   };
   'settings:accent-color': { theme: 'light' | 'dark'; color: string };
+  'settings:link-color': { theme: 'light' | 'dark'; color: string };
   'settings:theme-resolved': 'light' | 'dark';
 
   // Feature events

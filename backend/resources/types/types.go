@@ -44,6 +44,8 @@ type AppSettings struct {
 	PaletteBrightnessDark            int      `json:"paletteBrightnessDark"`            // Brightness offset for gray palette in dark theme (-50 to +50)
 	AccentColorLight                 string   `json:"accentColorLight"`                 // Custom accent hex for light theme (empty = default)
 	AccentColorDark                  string   `json:"accentColorDark"`                  // Custom accent hex for dark theme (empty = default)
+	LinkColorLight                   string   `json:"linkColorLight"`                   // Custom link hex for light theme (empty = default)
+	LinkColorDark                    string   `json:"linkColorDark"`                    // Custom link hex for dark theme (empty = default)
 	Themes                           []Theme  `json:"themes"`                           // Saved theme library
 }
 
@@ -69,6 +71,9 @@ type Theme struct {
 
 	AccentColorLight string `json:"accentColorLight,omitempty"` // Hex "#rrggbb" or empty for default
 	AccentColorDark  string `json:"accentColorDark,omitempty"`  // Hex "#rrggbb" or empty for default
+
+	LinkColorLight string `json:"linkColorLight,omitempty"` // Hex "#rrggbb" or empty for default
+	LinkColorDark  string `json:"linkColorDark,omitempty"`  // Hex "#rrggbb" or empty for default
 }
 
 // PodLogEntry represents a single log line with metadata

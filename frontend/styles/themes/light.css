@@ -34,7 +34,8 @@
   --color-sidebar-active: var(--color-base-200);
   --color-sidebar-active-end: var(--color-base-100);
   --color-sidebar-active-text: var(--color-text);
-  --color-object-panel-link: var(--color-text);
+  --color-object-panel-link: var(--color-accent-light-700);
+  --color-object-panel-link-hover: var(--color-accent-light-600);
   --color-text-inverse: #ffffff;
   --color-success-bg: rgba(34, 197, 94, 0.1);
   --color-warning-bg: rgba(245, 158, 11, 0.1);

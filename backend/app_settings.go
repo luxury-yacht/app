@@ -50,6 +50,8 @@ type settingsPreferences struct {
 	PaletteBrightnessDark  int    `json:"paletteBrightnessDark"`
 	AccentColorLight       string `json:"accentColorLight,omitempty"`
 	AccentColorDark        string `json:"accentColorDark,omitempty"`
+	LinkColorLight         string `json:"linkColorLight,omitempty"`
+	LinkColorDark          string `json:"linkColorDark,omitempty"`
 
 	// Saved theme library. Order matters: first match wins for cluster pattern matching.
 	Themes []Theme `json:"themes,omitempty"`
@@ -305,6 +307,8 @@ func (a *App) loadAppSettings() error {
 		PaletteBrightnessDark:            settings.Preferences.PaletteBrightnessDark,
 		AccentColorLight:                 settings.Preferences.AccentColorLight,
 		AccentColorDark:                  settings.Preferences.AccentColorDark,
+		LinkColorLight:                   settings.Preferences.LinkColorLight,
+		LinkColorDark:                    settings.Preferences.LinkColorDark,
 		Themes:                           settings.Preferences.Themes,
 	}
 	return nil
@@ -338,6 +342,8 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.PaletteBrightnessDark = a.appSettings.PaletteBrightnessDark
 	settings.Preferences.AccentColorLight = a.appSettings.AccentColorLight
 	settings.Preferences.AccentColorDark = a.appSettings.AccentColorDark
+	settings.Preferences.LinkColorLight = a.appSettings.LinkColorLight
+	settings.Preferences.LinkColorDark = a.appSettings.LinkColorDark
 	settings.Preferences.Themes = a.appSettings.Themes
 
 	settings.Kubeconfig.Selected = append([]string(nil), a.appSettings.SelectedKubeconfigs...)
@@ -626,6 +632,36 @@ func (a *App) SetPaletteTint(theme string, hue, saturation, brightness int) erro
 // validHexColorRe matches a 7-character hex color string (#rrggbb).
 var validHexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
 
+// SetLinkColor persists a custom link color for the specified theme ("light" or "dark").
+// The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
+func (a *App) SetLinkColor(theme string, color string) error {
+	if theme != "light" && theme != "dark" {
+		return fmt.Errorf("invalid link color theme: %s", theme)
+	}
+	if color != "" && !validHexColorRe.MatchString(color) {
+		return fmt.Errorf("invalid link color format: %s (expected #rrggbb)", color)
+	}
+
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(fmt.Sprintf("Link color (%s) changed to: %s", theme, color), "Settings")
+
+	if theme == "light" {
+		a.appSettings.LinkColorLight = color
+	} else {
+		a.appSettings.LinkColorDark = color
+	}
+
+	return a.saveAppSettings()
+}
+
 // SetAccentColor persists a custom accent color for the specified theme ("light" or "dark").
 // The color must be a 7-char hex string (#rrggbb) or an empty string to reset to default.
 func (a *App) SetAccentColor(theme string, color string) error {
@@ -816,6 +852,8 @@ func (a *App) ApplyTheme(id string) error {
 	settings.Preferences.PaletteBrightnessDark = theme.PaletteBrightnessDark
 	settings.Preferences.AccentColorLight = theme.AccentColorLight
 	settings.Preferences.AccentColorDark = theme.AccentColorDark
+	settings.Preferences.LinkColorLight = theme.LinkColorLight
+	settings.Preferences.LinkColorDark = theme.LinkColorDark
 
 	if err := a.saveSettingsFile(settings); err != nil {
 		return err
@@ -831,6 +869,8 @@ func (a *App) ApplyTheme(id string) error {
 		a.appSettings.PaletteBrightnessDark = theme.PaletteBrightnessDark
 		a.appSettings.AccentColorLight = theme.AccentColorLight
 		a.appSettings.AccentColorDark = theme.AccentColorDark
+		a.appSettings.LinkColorLight = theme.LinkColorLight
+		a.appSettings.LinkColorDark = theme.LinkColorDark
 		a.appSettings.Themes = append([]Theme(nil), settings.Preferences.Themes...)
 	}
 	return nil
