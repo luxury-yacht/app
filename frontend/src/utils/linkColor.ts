@@ -42,7 +42,10 @@ export function applyLinkColor(hex: string, resolvedTheme: 'light' | 'dark'): vo
   const root = document.documentElement;
   if (hex) {
     root.style.setProperty('--color-object-panel-link', hex);
-    root.style.setProperty('--color-object-panel-link-hover', generateLinkHoverColor(hex, resolvedTheme));
+    root.style.setProperty(
+      '--color-object-panel-link-hover',
+      generateLinkHoverColor(hex, resolvedTheme)
+    );
   } else {
     root.style.removeProperty('--color-object-panel-link');
     root.style.removeProperty('--color-object-panel-link-hover');
