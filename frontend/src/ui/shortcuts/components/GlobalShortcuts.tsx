@@ -23,6 +23,7 @@ interface GlobalShortcutsProps {
   onToggleLogsPanel?: () => void;
   onToggleSettings?: () => void;
   onToggleObjectDiff?: () => void;
+  onCreateResource?: () => void;
   onRefresh?: () => void;
   onToggleDiagnostics?: () => void;
   viewType?: string;
@@ -36,6 +37,7 @@ export function GlobalShortcuts({
   onToggleLogsPanel,
   onToggleSettings,
   onToggleObjectDiff,
+  onCreateResource,
   onRefresh,
   onToggleDiagnostics,
   viewType,
@@ -121,6 +123,12 @@ export function GlobalShortcuts({
       onToggleObjectDiff?.();
     }
   }, [onToggleObjectDiff, isHelpOpen, isModalAnimating]);
+
+  const handleCreateResource = useCallback(() => {
+    if (!isHelpOpen && !isModalAnimating) {
+      onCreateResource?.();
+    }
+  }, [onCreateResource, isHelpOpen, isModalAnimating]);
 
   const handleToggleDiagnostics = useCallback(() => {
     onToggleDiagnostics?.();
@@ -259,7 +267,7 @@ export function GlobalShortcuts({
 
   useShortcut({
     key: 'l',
-    modifiers: { shift: true, ctrl: true },
+    modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
     handler: handleToggleLogsPanel,
     description: 'Toggle logs panel',
     category: 'Global',
@@ -279,11 +287,21 @@ export function GlobalShortcuts({
 
   useShortcut({
     key: 'd',
-    modifiers: macPlatform ? { meta: true } : { ctrl: true },
+    modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
     handler: handleToggleObjectDiff,
     description: 'Toggle object diff viewer',
     category: 'Global',
     enabled: !!onToggleObjectDiff,
+    view: 'global',
+  });
+
+  useShortcut({
+    key: 'n',
+    modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
+    handler: handleCreateResource,
+    description: 'Create resource',
+    category: 'Global',
+    enabled: !!onCreateResource,
     view: 'global',
   });
 
@@ -298,8 +316,8 @@ export function GlobalShortcuts({
   });
 
   useShortcut({
-    key: 'd',
-    modifiers: { ctrl: true, shift: true },
+    key: 'i',
+    modifiers: macPlatform ? { meta: true, shift: true } : { ctrl: true, shift: true },
     handler: handleToggleDiagnostics,
     description: 'Toggle diagnostics panel',
     category: 'Global',

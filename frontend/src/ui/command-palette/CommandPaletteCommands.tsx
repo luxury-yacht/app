@@ -87,7 +87,10 @@ export function useCommandPaletteCommands() {
   );
 
   const closeTabShortcut = useMemo(() => (isMacPlatform() ? ['⌘', 'W'] : ['Ctrl', 'W']), []);
-  const diffObjectsShortcut = useMemo(() => (isMacPlatform() ? ['⌘', 'D'] : ['Ctrl', 'D']), []);
+  const diffObjectsShortcut = useMemo(
+    () => (isMacPlatform() ? ['⇧', '⌘', 'D'] : ['⇧', 'Ctrl', 'D']),
+    []
+  );
 
   const commands = useMemo(
     () => [
@@ -122,7 +125,7 @@ export function useCommandPaletteCommands() {
           viewState.toggleSidebar();
         },
         keywords: ['sidebar', 'toggle', 'hide', 'show'],
-        shortcut: 'B',
+        shortcut: isMacPlatform() ? ['⌘', 'B'] : ['Ctrl', 'B'],
       },
       {
         id: 'open-object-diff',
@@ -144,7 +147,7 @@ export function useCommandPaletteCommands() {
           eventBus.emit('view:toggle-app-logs');
         },
         keywords: ['logs', 'application', 'debug'],
-        shortcut: ['⇧', '⌃', 'L'],
+        shortcut: isMacPlatform() ? ['⇧', '⌘', 'L'] : ['⇧', 'Ctrl', 'L'],
       },
       {
         id: 'toggle-diagnostics',
@@ -155,7 +158,7 @@ export function useCommandPaletteCommands() {
           eventBus.emit('view:toggle-diagnostics');
         },
         keywords: ['diagnostics', 'status', 'permissions', 'refresh'],
-        shortcut: ['⇧', '⌃', 'D'],
+        shortcut: isMacPlatform() ? ['⇧', '⌘', 'I'] : ['⇧', 'Ctrl', 'I'],
       },
 
       // Resource Actions
@@ -168,6 +171,7 @@ export function useCommandPaletteCommands() {
           viewState.setIsCreateResourceOpen(true);
         },
         keywords: ['create', 'new', 'resource', 'yaml', 'apply', 'deploy'],
+        shortcut: isMacPlatform() ? ['⇧', '⌘', 'N'] : ['⇧', 'Ctrl', 'N'],
       },
 
       // Zoom Commands

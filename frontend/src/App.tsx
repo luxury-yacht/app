@@ -244,6 +244,7 @@ function AppContent() {
         onToggleLogsPanel={handleToggleAppLogsPanel}
         onToggleSettings={() => viewState.setIsSettingsOpen(!viewState.isSettingsOpen)}
         onToggleObjectDiff={() => viewState.setIsObjectDiffOpen(!viewState.isObjectDiffOpen)}
+        onCreateResource={() => viewState.setIsCreateResourceOpen(true)}
         onRefresh={handleManualRefresh}
         onToggleDiagnostics={handleToggleDiagnostics}
         viewType={viewState.viewType}

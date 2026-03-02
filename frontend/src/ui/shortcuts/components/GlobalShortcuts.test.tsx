@@ -285,8 +285,23 @@ describe('GlobalShortcuts', () => {
     expect(toggleSidebar).toHaveBeenCalledTimes(1);
   });
 
-  it('toggles logs panel via Ctrl+Shift+L shortcut', async () => {
+  it('toggles logs panel via Cmd+Shift+L shortcut', async () => {
     const toggleLogs = vi.fn();
+    isMacPlatformMock.mockReturnValue(true);
+    registeredShortcuts.length = 0;
+    await renderComponent({ onToggleLogsPanel: toggleLogs });
+
+    act(() => {
+      findShortcut('l', { meta: true, shift: true }).handler();
+    });
+
+    expect(toggleLogs).toHaveBeenCalledTimes(1);
+  });
+
+  it('toggles logs panel via Ctrl+Shift+L shortcut on non-Mac', async () => {
+    const toggleLogs = vi.fn();
+    isMacPlatformMock.mockReturnValue(false);
+    registeredShortcuts.length = 0;
     await renderComponent({ onToggleLogsPanel: toggleLogs });
 
     act(() => {
@@ -296,12 +311,27 @@ describe('GlobalShortcuts', () => {
     expect(toggleLogs).toHaveBeenCalledTimes(1);
   });
 
-  it('toggles diagnostics panel via Ctrl+Shift+D shortcut', async () => {
+  it('toggles diagnostics panel via Cmd+Shift+I shortcut', async () => {
     const toggleDiagnostics = vi.fn();
+    isMacPlatformMock.mockReturnValue(true);
+    registeredShortcuts.length = 0;
     await renderComponent({ onToggleDiagnostics: toggleDiagnostics });
 
     act(() => {
-      findShortcut('d', { ctrl: true, shift: true }).handler();
+      findShortcut('i', { meta: true, shift: true }).handler();
+    });
+
+    expect(toggleDiagnostics).toHaveBeenCalledTimes(1);
+  });
+
+  it('toggles diagnostics panel via Ctrl+Shift+I shortcut on non-Mac', async () => {
+    const toggleDiagnostics = vi.fn();
+    isMacPlatformMock.mockReturnValue(false);
+    registeredShortcuts.length = 0;
+    await renderComponent({ onToggleDiagnostics: toggleDiagnostics });
+
+    act(() => {
+      findShortcut('i', { ctrl: true, shift: true }).handler();
     });
 
     expect(toggleDiagnostics).toHaveBeenCalledTimes(1);
@@ -315,27 +345,27 @@ describe('GlobalShortcuts', () => {
     expect(() => findShortcut('s', { meta: true, shift: true })).toThrow('not registered');
   });
 
-  it('toggles object diff viewer via Cmd+D shortcut', async () => {
+  it('toggles object diff viewer via Cmd+Shift+D shortcut', async () => {
     const toggleDiff = vi.fn();
     isMacPlatformMock.mockReturnValue(true);
     registeredShortcuts.length = 0;
     await renderComponent({ onToggleObjectDiff: toggleDiff });
 
     act(() => {
-      findShortcut('d', { meta: true }).handler();
+      findShortcut('d', { meta: true, shift: true }).handler();
     });
 
     expect(toggleDiff).toHaveBeenCalledTimes(1);
   });
 
-  it('toggles object diff viewer via Ctrl+D shortcut', async () => {
+  it('toggles object diff viewer via Ctrl+Shift+D shortcut', async () => {
     const toggleDiff = vi.fn();
     isMacPlatformMock.mockReturnValue(false);
     registeredShortcuts.length = 0;
     await renderComponent({ onToggleObjectDiff: toggleDiff });
 
     act(() => {
-      findShortcut('d', { ctrl: true }).handler();
+      findShortcut('d', { ctrl: true, shift: true }).handler();
     });
 
     expect(toggleDiff).toHaveBeenCalledTimes(1);

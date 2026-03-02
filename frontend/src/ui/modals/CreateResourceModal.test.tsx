@@ -28,12 +28,19 @@ const kubeconfigMock = vi.hoisted(() => ({
 }));
 
 const namespaceMock = vi.hoisted(() => ({
-  namespaces: [
-    { name: 'default', scope: 'default', isSynthetic: false },
-    { name: 'kube-system', scope: 'kube-system', isSynthetic: false },
-    { name: 'All Namespaces', scope: 'namespace:all', isSynthetic: true },
-  ],
   selectedNamespace: 'default',
+}));
+
+// Namespace domain data returned by useRefreshScopedDomain('namespaces', ...).
+const namespaceDomainMock = vi.hoisted(() => ({
+  data: {
+    namespaces: [
+      { name: 'default', clusterId: 'config:test-cluster' },
+      { name: 'kube-system', clusterId: 'config:test-cluster' },
+      { name: 'other-ns', clusterId: 'config:other-cluster' },
+    ],
+  },
+  status: 'ready' as const,
 }));
 
 const objectPanelMock = vi.hoisted(() => ({
@@ -93,7 +100,7 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
 }));
 
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
-  useNamespace: () => namespaceMock,
+  useNamespace: () => ({ selectedNamespace: namespaceMock.selectedNamespace }),
 }));
 
 vi.mock('@modules/namespace/constants', () => ({
@@ -120,6 +127,11 @@ vi.mock('@/core/refresh', () => ({
   refreshOrchestrator: {
     triggerManualRefreshForContext: vi.fn().mockResolvedValue(undefined),
   },
+  useRefreshScopedDomain: () => namespaceDomainMock,
+}));
+
+vi.mock('@/core/refresh/clusterScope', () => ({
+  buildClusterScopeList: () => 'clusters=config:test-cluster|',
 }));
 
 vi.mock('@/core/codemirror/theme', () => ({
@@ -496,7 +508,7 @@ describe('CreateResourceModal', () => {
     await unmount();
   });
 
-  it('namespace dropdown excludes synthetic All Namespaces entry', async () => {
+  it('namespace dropdown shows only namespaces for the target cluster', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
@@ -504,10 +516,11 @@ describe('CreateResourceModal', () => {
     expect(nsSelect).not.toBeNull();
 
     const options = Array.from(nsSelect.options).map((o) => o.text);
+    // Should include namespaces from config:test-cluster.
     expect(options).toContain('default');
     expect(options).toContain('kube-system');
-    // Synthetic "All Namespaces" must not appear — filtered before building options.
-    expect(options).not.toContain('All Namespaces');
+    // Should NOT include namespaces from other clusters.
+    expect(options).not.toContain('other-ns');
     await unmount();
   });
 

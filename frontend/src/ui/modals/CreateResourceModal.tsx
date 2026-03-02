@@ -25,7 +25,8 @@ import { isAllNamespaces } from '@modules/namespace/constants';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useErrorContext } from '@core/contexts/ErrorContext';
 import { ErrorSeverity, ErrorCategory } from '@utils/errorHandler';
-import { refreshOrchestrator } from '@/core/refresh';
+import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { buildCodeTheme } from '@/core/codemirror/theme';
 import { createSearchExtensions } from '@/core/codemirror/search';
 import {
@@ -64,7 +65,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       selectedClusterIds,
       getClusterMeta,
     } = useKubeconfig();
-    const namespace = useNamespace();
+    const { selectedNamespace: activeNamespace } = useNamespace();
     const { openWithObject } = useObjectPanel();
     const { addError } = useErrorContext();
 
@@ -95,21 +96,36 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       [selectedClusterIds, getClusterMeta]
     );
 
-    // Namespace selection — filtered to exclude synthetic entries.
-    const realNamespaces = useMemo(
-      () => (namespace.namespaces ?? []).filter((ns) => !ns.isSynthetic),
-      [namespace.namespaces]
+    // Namespace data — pull from the refresh store for all connected clusters,
+    // then filter to the target cluster so the dropdown repopulates when the
+    // cluster selection changes.
+    const namespacesScope = useMemo(
+      () => buildClusterScopeList(selectedClusterIds, ''),
+      [selectedClusterIds]
     );
-    const defaultNamespace = isAllNamespaces(namespace.selectedNamespace)
+    const namespaceDomain = useRefreshScopedDomain('namespaces', namespacesScope);
+
+    const namespaceOptions: DropdownOption[] = useMemo(() => {
+      if (!namespaceDomain.data || !targetClusterId) return [];
+      return namespaceDomain.data.namespaces
+        .filter((ns) => ns.clusterId === targetClusterId)
+        .map((ns) => ({ value: ns.name, label: ns.name }));
+    }, [namespaceDomain.data, targetClusterId]);
+
+    const defaultNamespace = isAllNamespaces(activeNamespace)
       ? ''
-      : namespace.selectedNamespace ?? '';
+      : activeNamespace ?? '';
     const [selectedNamespace, setSelectedNamespace] = useState(defaultNamespace);
 
-    // Namespace dropdown options.
-    const namespaceOptions: DropdownOption[] = useMemo(
-      () => realNamespaces.map((ns) => ({ value: ns.name, label: ns.name })),
-      [realNamespaces]
-    );
+    // Reset namespace when target cluster changes — the previous namespace
+    // may not exist in the new cluster.
+    const prevTargetClusterRef = useRef(targetClusterId);
+    useEffect(() => {
+      if (prevTargetClusterRef.current !== targetClusterId) {
+        prevTargetClusterRef.current = targetClusterId;
+        setSelectedNamespace('');
+      }
+    }, [targetClusterId]);
 
     // Client-side YAML parse error.
     const [parseError, setParseError] = useState<string | null>(null);
@@ -166,9 +182,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         setSelectedTemplate('');
         setTargetClusterId(selectedClusterId ?? '');
         setSelectedNamespace(
-          isAllNamespaces(namespace.selectedNamespace)
-            ? ''
-            : namespace.selectedNamespace ?? ''
+          isAllNamespaces(activeNamespace) ? '' : activeNamespace ?? ''
         );
         setParseError(null);
         setValidationSuccess(null);
@@ -188,7 +202,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         }, 200);
         return () => clearTimeout(timer);
       }
-    }, [isOpen, shouldRender, namespace.selectedNamespace]);
+    }, [isOpen, shouldRender, activeNamespace]);
 
     // Handle keyboard context and body overflow.
     useEffect(() => {
@@ -440,7 +454,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                 <>
                   {/* Context bar: cluster, namespace, and kind dropdowns */}
                   <div className="create-resource-context-bar">
-                    <label className="create-resource-dropdown-field">
+                    <div className="create-resource-dropdown-field">
                       <span className="create-resource-dropdown-label">Cluster</span>
                       <Dropdown
                         options={clusterOptions}
@@ -450,8 +464,8 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                         size="compact"
                         ariaLabel="Target cluster"
                       />
-                    </label>
-                    <label className="create-resource-dropdown-field">
+                    </div>
+                    <div className="create-resource-dropdown-field">
                       <span className="create-resource-dropdown-label">Namespace</span>
                       <Dropdown
                         options={namespaceOptions}
@@ -459,11 +473,10 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                         onChange={(v) => setSelectedNamespace(Array.isArray(v) ? v[0] ?? '' : v)}
                         placeholder="Select namespace"
                         size="compact"
-                        clearable
                         ariaLabel="Target namespace"
                       />
-                    </label>
-                    <label className="create-resource-dropdown-field">
+                    </div>
+                    <div className="create-resource-dropdown-field">
                       <span className="create-resource-dropdown-label">Kind</span>
                       <Dropdown
                         options={templateOptions}
@@ -473,7 +486,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                         size="compact"
                         ariaLabel="Resource template"
                       />
-                    </label>
+                    </div>
                   </div>
 
                   {/* YAML editor — same setup as YamlTab */}
