@@ -34,8 +34,8 @@
   --color-sidebar-active: var(--color-base-200);
   --color-sidebar-active-end: var(--color-base-100);
   --color-sidebar-active-text: var(--color-text);
-  --color-object-panel-link: var(--color-accent-light-700);
-  --color-object-panel-link-hover: var(--color-accent-light-600);
+  --color-object-panel-link: var(--color-base-600);
+  --color-object-panel-link-hover: var(--color-base-900);
   --color-text-inverse: #ffffff;
   --color-success-bg: rgba(34, 197, 94, 0.1);
   --color-warning-bg: rgba(245, 158, 11, 0.1);
@@ -354,21 +354,9 @@
   --resourcebar-status-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
   --resourcebar-status-stale-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
   --resourcebar-status-error-shadow: 0 0 4px rgba(239, 68, 68, 0.4);
-  --resourcebar-usage-normal: linear-gradient(
-    90deg,
-    #22c55e 0%,
-    #16a34a 100%
-  );
-  --resourcebar-usage-warning: linear-gradient(
-    90deg,
-    #f59e0b 0%,
-    #d97706 100%
-  );
-  --resourcebar-usage-critical: linear-gradient(
-    90deg,
-    #ef4444 0%,
-    #dc2626 100%
-  );
+  --resourcebar-usage-normal: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+  --resourcebar-usage-warning: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+  --resourcebar-usage-critical: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
   --resourcebar-usage-unbounded: linear-gradient(
     90deg,
     var(--color-base-500) 0%,

@@ -47,11 +47,7 @@ import {
   saveAccentColorToLocalStorage,
   clearAccentColor,
 } from '@utils/accentColor';
-import {
-  applyLinkColor,
-  saveLinkColorToLocalStorage,
-  clearLinkColor,
-} from '@utils/linkColor';
+import { applyLinkColor, saveLinkColorToLocalStorage, clearLinkColor } from '@utils/linkColor';
 import {
   getGridTablePersistenceMode,
   setGridTablePersistenceMode,
@@ -397,7 +393,7 @@ function Settings({ onClose }: SettingsProps) {
   };
 
   // Inline hex editing handlers for link color.
-  const defaultLink = resolvedTheme === 'light' ? '#0f766e' : '#7dd3fc';
+  const defaultLink = resolvedTheme === 'light' ? '#525252' : '#aaaaaa';
 
   const handleLinkHexClick = () => {
     setLinkHexDraft(linkColor || defaultLink);
@@ -945,7 +941,9 @@ function Settings({ onClose }: SettingsProps) {
           >
             ↺
           </button>
-
+        </div>
+        {/* Color pickers row — Accent and Links side by side */}
+        <div className="palette-color-controls">
           <label>Accent</label>
           <input
             type="color"
@@ -991,11 +989,14 @@ function Settings({ onClose }: SettingsProps) {
             ↺
           </button>
 
+          {/* Spacer column between Accent and Links */}
+          <div className="palette-color-spacer" />
+
           <label>Links</label>
           <input
             type="color"
             className="palette-accent-swatch"
-            value={linkColor || (resolvedTheme === 'light' ? '#0f766e' : '#7dd3fc')}
+            value={linkColor || (resolvedTheme === 'light' ? '#525252' : '#aaaaaa')}
             onChange={(e) => handleLinkColorChange(e.target.value)}
           />
           {isEditingLinkHex ? (

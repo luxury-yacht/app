@@ -9,8 +9,9 @@
  * Persists the chosen hex per theme to localStorage so the FOUC-prevention
  * script in index.html can apply overrides before React mounts.
  *
- * IMPORTANT: The hover lightness offset (+12) is duplicated in the inline
- * <script> in frontend/index.html for FOUC prevention. Keep both in sync.
+ * IMPORTANT: The hover lightness offset (±12) and direction logic are
+ * duplicated in the inline <script> in frontend/index.html for FOUC
+ * prevention. Keep both in sync.
  */
 
 import { hexToHsl, hslToHex } from './accentColor';
@@ -19,15 +20,17 @@ import { hexToHsl, hslToHex } from './accentColor';
 const LS_KEY_LINK_LIGHT = 'app-link-color-light';
 const LS_KEY_LINK_DARK = 'app-link-color-dark';
 
-// Hover variant is +12 lightness from the base, clamped to 5%-95%.
+// Hover shifts lightness by this amount: lighter in dark mode, darker in light mode.
 const HOVER_LIGHTNESS_OFFSET = 12;
 
 /**
- * Generate a hover color from a base hex by lightening in HSL space.
+ * Generate a hover color from a base hex by shifting lightness in HSL space.
+ * Dark mode: lightens (+offset). Light mode: darkens (-offset).
  */
-export function generateLinkHoverColor(hex: string): string {
+export function generateLinkHoverColor(hex: string, mode: 'light' | 'dark'): string {
   const { h, s, l } = hexToHsl(hex);
-  const adjusted = Math.min(95, Math.max(5, l + HOVER_LIGHTNESS_OFFSET));
+  const direction = mode === 'dark' ? 1 : -1;
+  const adjusted = Math.min(95, Math.max(5, l + HOVER_LIGHTNESS_OFFSET * direction));
   return hslToHex(h, s, adjusted);
 }
 
@@ -39,14 +42,11 @@ export function applyLinkColor(hex: string, resolvedTheme: 'light' | 'dark'): vo
   const root = document.documentElement;
   if (hex) {
     root.style.setProperty('--color-object-panel-link', hex);
-    root.style.setProperty('--color-object-panel-link-hover', generateLinkHoverColor(hex));
+    root.style.setProperty('--color-object-panel-link-hover', generateLinkHoverColor(hex, resolvedTheme));
   } else {
     root.style.removeProperty('--color-object-panel-link');
     root.style.removeProperty('--color-object-panel-link-hover');
   }
-  // resolvedTheme parameter kept for API consistency; both themes use the same
-  // CSS variable names (the theme file sets the default, override replaces it).
-  void resolvedTheme;
 }
 
 /**

@@ -243,9 +243,10 @@
 
             var root = document.documentElement;
             root.style.setProperty('--color-object-panel-link', linkColor);
-            // Hover = +12 lightness, clamped to 5%-95%.
+            // Hover = ±12 lightness (lighter in dark, darker in light), clamped to 5%-95%.
             var hsl = hexToHsl(linkColor);
-            var hoverL = Math.min(95, Math.max(5, hsl.l + 12));
+            var direction = theme === 'dark' ? 1 : -1;
+            var hoverL = Math.min(95, Math.max(5, hsl.l + 12 * direction));
             root.style.setProperty('--color-object-panel-link-hover', hslToHex(hsl.h, hsl.s, hoverL));
         })();
     </script>
