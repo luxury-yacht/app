@@ -545,7 +545,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
 
             <div className="modal-footer">
               <button
-                className="modal-btn modal-btn-secondary"
+                className="button generic"
                 onClick={onClose}
                 data-create-resource-focusable="true"
               >
@@ -555,7 +555,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                 <span className="create-resource-kind-badge">{parsedKind}</span>
               )}
               <button
-                className="modal-btn modal-btn-primary"
+                className="button generic"
                 disabled={!hasTarget || isBusy}
                 onClick={handleValidate}
                 data-create-resource-focusable="true"
@@ -563,7 +563,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                 {isValidating ? 'Validating...' : 'Validate'}
               </button>
               <button
-                className="modal-btn modal-btn-primary"
+                className="button action"
                 disabled={!hasTarget || isBusy}
                 onClick={handleCreate}
                 data-create-resource-focusable="true"
