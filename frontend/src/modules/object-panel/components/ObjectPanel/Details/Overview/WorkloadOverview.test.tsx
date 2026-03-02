@@ -36,6 +36,10 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
   ResourceMetadata: () => <div data-testid="resource-metadata" />,
 }));
 
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
 describe('WorkloadOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;

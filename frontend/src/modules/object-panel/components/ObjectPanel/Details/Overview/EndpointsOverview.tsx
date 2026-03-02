@@ -2,11 +2,12 @@
  * frontend/src/modules/object-panel/components/ObjectPanel/Details/Overview/EndpointsOverview.tsx
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { types } from '@wailsjs/go/models';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import './EndpointsOverview.css';
 
 interface EndpointSliceOverviewProps {
@@ -25,42 +26,16 @@ const parseTargetRef = (targetRef: string): { kind: string; name: string } | nul
 export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
   endpointSliceDetails,
 }) => {
-  const { openWithObject, objectData } = useObjectPanel();
+  const { objectData } = useObjectPanel();
   const clusterId = objectData?.clusterId ?? undefined;
   const clusterName = objectData?.clusterName ?? undefined;
-  // Memoize cluster metadata to keep callbacks stable.
+  // Memoize cluster metadata to keep refs stable.
   const clusterMeta = useMemo(
     () => ({
       clusterId,
       clusterName,
     }),
     [clusterId, clusterName]
-  );
-
-  const handleTargetClick = useCallback(
-    (targetRef: string, namespace: string) => {
-      const parsed = parseTargetRef(targetRef);
-      if (parsed) {
-        openWithObject({
-          kind: parsed.kind,
-          name: parsed.name,
-          namespace,
-          ...clusterMeta,
-        });
-      }
-    },
-    [clusterMeta, openWithObject]
-  );
-
-  const handleNodeClick = useCallback(
-    (nodeName: string) => {
-      openWithObject({
-        kind: 'Node',
-        name: nodeName,
-        ...clusterMeta,
-      });
-    },
-    [clusterMeta, openWithObject]
   );
 
   if (!endpointSliceDetails) return null;
@@ -109,39 +84,39 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
                                   {addr.targetRef && (
                                     <>
                                       <span className="address-arrow">→</span>
-                                      <span
-                                        className="address-target object-panel-link"
-                                        onClick={() =>
-                                          handleTargetClick(addr.targetRef!, namespace)
-                                        }
-                                        role="button"
-                                        tabIndex={0}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter' || e.key === ' ') {
-                                            handleTargetClick(addr.targetRef!, namespace);
-                                          }
-                                        }}
-                                      >
-                                        {addr.targetRef}
-                                      </span>
+                                      {(() => {
+                                        const parsed = parseTargetRef(addr.targetRef!);
+                                        return parsed ? (
+                                          <ObjectPanelLink
+                                            className="address-target"
+                                            objectRef={{
+                                              kind: parsed.kind,
+                                              name: parsed.name,
+                                              namespace,
+                                              ...clusterMeta,
+                                            }}
+                                          >
+                                            {addr.targetRef}
+                                          </ObjectPanelLink>
+                                        ) : (
+                                          <span className="address-target">{addr.targetRef}</span>
+                                        );
+                                      })()}
                                     </>
                                   )}
                                   {addr.nodeName && (
                                     <>
                                       <span className="address-on">on</span>
-                                      <span
-                                        className="address-node object-panel-link"
-                                        onClick={() => handleNodeClick(addr.nodeName!)}
-                                        role="button"
-                                        tabIndex={0}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter' || e.key === ' ') {
-                                            handleNodeClick(addr.nodeName!);
-                                          }
+                                      <ObjectPanelLink
+                                        className="address-node"
+                                        objectRef={{
+                                          kind: 'Node',
+                                          name: addr.nodeName!,
+                                          ...clusterMeta,
                                         }}
                                       >
                                         {addr.nodeName}
-                                      </span>
+                                      </ObjectPanelLink>
                                     </>
                                   )}
                                 </div>
@@ -167,39 +142,39 @@ export const EndpointSliceOverview: React.FC<EndpointSliceOverviewProps> = ({
                                   {addr.targetRef && (
                                     <>
                                       <span className="address-arrow">→</span>
-                                      <span
-                                        className="address-target object-panel-link"
-                                        onClick={() =>
-                                          handleTargetClick(addr.targetRef!, namespace)
-                                        }
-                                        role="button"
-                                        tabIndex={0}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter' || e.key === ' ') {
-                                            handleTargetClick(addr.targetRef!, namespace);
-                                          }
-                                        }}
-                                      >
-                                        {addr.targetRef}
-                                      </span>
+                                      {(() => {
+                                        const parsed = parseTargetRef(addr.targetRef!);
+                                        return parsed ? (
+                                          <ObjectPanelLink
+                                            className="address-target"
+                                            objectRef={{
+                                              kind: parsed.kind,
+                                              name: parsed.name,
+                                              namespace,
+                                              ...clusterMeta,
+                                            }}
+                                          >
+                                            {addr.targetRef}
+                                          </ObjectPanelLink>
+                                        ) : (
+                                          <span className="address-target">{addr.targetRef}</span>
+                                        );
+                                      })()}
                                     </>
                                   )}
                                   {addr.nodeName && (
                                     <>
                                       <span className="address-on">on</span>
-                                      <span
-                                        className="address-node object-panel-link"
-                                        onClick={() => handleNodeClick(addr.nodeName!)}
-                                        role="button"
-                                        tabIndex={0}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter' || e.key === ' ') {
-                                            handleNodeClick(addr.nodeName!);
-                                          }
+                                      <ObjectPanelLink
+                                        className="address-node"
+                                        objectRef={{
+                                          kind: 'Node',
+                                          name: addr.nodeName!,
+                                          ...clusterMeta,
                                         }}
                                       >
                                         {addr.nodeName}
-                                      </span>
+                                      </ObjectPanelLink>
                                     </>
                                   )}
                                 </div>

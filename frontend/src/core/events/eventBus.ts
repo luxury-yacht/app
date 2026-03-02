@@ -91,6 +91,15 @@ export interface AppEvents {
   'pods:show-unhealthy': { clusterId: string; scope: string };
   'gridtable:persistence-mode': 'namespaced' | 'shared';
 
+  // Grid table external focus — emitted to request that a visible GridTable
+  // finds and focuses a specific row matching the given resource fields.
+  'gridtable:focus-request': {
+    kind: string;
+    name: string;
+    namespace?: string;
+    clusterId: string;
+  };
+
   // App visibility events
   'app:visibility-hidden': void;
   'app:visibility-visible': void;

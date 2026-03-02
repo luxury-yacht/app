@@ -12,6 +12,7 @@ import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -53,6 +54,7 @@ interface CRDsViewProps {
 const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
+    const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
@@ -88,10 +90,24 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           getDisplayText: (crd) =>
             getDisplayKind(crd.kind || 'CustomResourceDefinition', useShortResourceNames),
           onClick: handleResourceClick,
+          onAltClick: (crd) =>
+            navigateToView({
+              kind: 'CustomResourceDefinition',
+              name: crd.name,
+              clusterId: crd.clusterId,
+              clusterName: crd.clusterName,
+            }),
         }),
         cf.createTextColumn<CRDsData>('name', 'Name', (crd) => crd.name, {
           sortable: true,
           onClick: handleResourceClick,
+          onAltClick: (crd) =>
+            navigateToView({
+              kind: 'CustomResourceDefinition',
+              name: crd.name,
+              clusterId: crd.clusterId,
+              clusterName: crd.clusterName,
+            }),
           getTitle: (crd) => `Open ${crd.name}`,
           getClassName: () => 'object-panel-link',
         }),
@@ -110,7 +126,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleResourceClick, useShortResourceNames]);
+    }, [handleResourceClick, navigateToView, useShortResourceNames]);
 
     // Set up grid table persistence
     const {

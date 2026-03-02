@@ -8,13 +8,14 @@ import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Detai
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 
 interface ConfigMapOverviewProps {
   configMapDetails: types.ConfigMapDetails | null;
 }
 
 export const ConfigMapOverview: React.FC<ConfigMapOverviewProps> = ({ configMapDetails }) => {
-  const { openWithObject, objectData } = useObjectPanel();
+  const { objectData } = useObjectPanel();
   const clusterMeta = {
     clusterId: objectData?.clusterId ?? undefined,
     clusterName: objectData?.clusterName ?? undefined,
@@ -57,20 +58,17 @@ export const ConfigMapOverview: React.FC<ConfigMapOverviewProps> = ({ configMapD
               <div>
                 {configMapDetails.usedBy.map((podName: string, index: number) => (
                   <div key={`${podName}-${index}`} style={{ marginTop: index > 0 ? '4px' : 0 }}>
-                    <span
-                      className="object-panel-link"
-                      onClick={() =>
-                        openWithObject?.({
-                          kind: 'pod',
-                          name: podName,
-                          namespace: configMapDetails.namespace,
-                          ...clusterMeta,
-                        })
-                      }
+                    <ObjectPanelLink
+                      objectRef={{
+                        kind: 'pod',
+                        name: podName,
+                        namespace: configMapDetails.namespace,
+                        ...clusterMeta,
+                      }}
                       title={`Click to view pod: ${podName}`}
                     >
                       {podName}
-                    </span>
+                    </ObjectPanelLink>
                   </div>
                 ))}
               </div>

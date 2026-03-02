@@ -30,6 +30,10 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
   ResourceMetadata: () => <div data-testid="resource-metadata" />,
 }));
 
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
 const getValueForLabel = (container: HTMLElement, label: string) => {
   const labelElement = Array.from(container.querySelectorAll<HTMLElement>('.overview-label')).find(
     (el) => el.textContent?.trim() === label

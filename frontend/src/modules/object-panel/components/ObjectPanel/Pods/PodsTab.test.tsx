@@ -78,6 +78,10 @@ vi.mock('@shared/hooks/useObjectActions', () => ({
   buildObjectActionItems: () => [],
 }));
 
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
 vi.mock('../shared.css', () => ({}));
 
 beforeAll(() => {

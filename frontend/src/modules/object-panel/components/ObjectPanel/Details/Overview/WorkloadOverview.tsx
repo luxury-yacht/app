@@ -5,6 +5,7 @@
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
@@ -102,7 +103,7 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
   const isDaemonSet = normalizedKind === 'daemonset';
   const isStatefulSet = normalizedKind === 'statefulset';
   const isReplicaSet = normalizedKind === 'replicaset';
-  const { openWithObject, objectData } = useObjectPanel();
+  const { objectData } = useObjectPanel();
   const clusterMeta = {
     clusterId: objectData?.clusterId ?? undefined,
     clusterName: objectData?.clusterName ?? undefined,
@@ -236,21 +237,17 @@ export const WorkloadOverview: React.FC<WorkloadOverviewProps> = ({
             label="Service"
             value={
               serviceName ? (
-                <span
-                  className="object-panel-link"
-                  onClick={() =>
-                    openWithObject &&
-                    openWithObject({
-                      kind: 'Service',
-                      name: serviceName,
-                      namespace: namespace,
-                      ...clusterMeta,
-                    })
-                  }
+                <ObjectPanelLink
+                  objectRef={{
+                    kind: 'Service',
+                    name: serviceName,
+                    namespace: namespace,
+                    ...clusterMeta,
+                  }}
                   title="Click to view service"
                 >
                   {serviceName}
-                </span>
+                </ObjectPanelLink>
               ) : undefined
             }
           />

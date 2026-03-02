@@ -30,6 +30,10 @@ vi.mock('@shared/components/kubernetes/ResourceMetadata', () => ({
   ResourceMetadata: () => <div data-testid="resource-metadata" />,
 }));
 
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
 const getLinkByText = (container: HTMLElement, text: string) =>
   Array.from(container.querySelectorAll<HTMLElement>('.object-panel-link')).find(
     (el) => el.textContent?.trim() === text

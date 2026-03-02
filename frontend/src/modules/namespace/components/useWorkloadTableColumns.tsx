@@ -14,6 +14,7 @@ import type { WorkloadData } from '@modules/namespace/components/NsViewWorkloads
 
 interface UseWorkloadTableColumnsParams {
   handleWorkloadClick: (workload: WorkloadData) => void;
+  onAltClick?: (row: WorkloadData) => void;
   showNamespaceColumn: boolean;
   useShortResourceNames: boolean;
   metrics?: {
@@ -25,6 +26,7 @@ interface UseWorkloadTableColumnsParams {
 
 const useWorkloadTableColumns = ({
   handleWorkloadClick,
+  onAltClick,
   showNamespaceColumn,
   useShortResourceNames,
   metrics,
@@ -56,6 +58,7 @@ const useWorkloadTableColumns = ({
         getKind: (row) => row.kind,
         getDisplayText: (row) => getDisplayKind(row.kind, useShortResourceNames),
         onClick: (row) => handleWorkloadClick(row),
+        onAltClick,
         isInteractive: () => true,
         sortValue: (row) => row.kind.toLowerCase(),
       })
@@ -64,6 +67,7 @@ const useWorkloadTableColumns = ({
     columns.push(
       cf.createTextColumn<WorkloadData>('name', 'Name', (row) => row.name, {
         onClick: (row) => handleWorkloadClick(row),
+        onAltClick,
         // Match object panel link styling for clickable names.
         getClassName: () => 'object-panel-link',
         isInteractive: () => true,
@@ -186,6 +190,7 @@ const useWorkloadTableColumns = ({
     metrics?.collectedAt,
     metrics?.lastError,
     metrics?.stale,
+    onAltClick,
     showNamespaceColumn,
     useShortResourceNames,
   ]);
