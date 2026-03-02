@@ -9,6 +9,7 @@ import './NsViewRBAC.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -76,6 +77,7 @@ interface RBACViewProps {
 const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
   ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
+    const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
 
@@ -116,9 +118,25 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
           getAlias: (resource) => resource.kindAlias,
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
+          onAltClick: (resource) =>
+            navigateToView({
+              kind: resource.kind,
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId ?? undefined,
+              clusterName: resource.clusterName ?? undefined,
+            }),
         }),
         cf.createTextColumn<RBACData>('name', 'Name', {
           onClick: handleResourceClick,
+          onAltClick: (resource) =>
+            navigateToView({
+              kind: resource.kind,
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId ?? undefined,
+              clusterName: resource.clusterName ?? undefined,
+            }),
           getClassName: () => 'object-panel-link',
         }),
         cf.createAgeColumn(),
@@ -140,7 +158,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       }
 
       return baseColumns;
-    }, [handleResourceClick, showNamespaceColumn, useShortResourceNames]);
+    }, [handleResourceClick, navigateToView, showNamespaceColumn, useShortResourceNames]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 

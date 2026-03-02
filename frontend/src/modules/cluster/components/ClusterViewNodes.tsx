@@ -10,6 +10,7 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useRefreshScopedDomain } from '@/core/refresh';
 import { buildClusterScopeList } from '@/core/refresh/clusterScope';
@@ -47,6 +48,7 @@ interface NodesViewProps {
 const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
+    const { navigateToView } = useNavigateToView();
     const { selectedClusterId, selectedClusterIds } = useKubeconfig();
     // Metadata-aware search: when toggled on, includes labels and annotations.
     const { searchActions, getSearchText } = useMetadataSearch<ClusterNodeRow>({
@@ -115,11 +117,25 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
           getKind: () => 'Node',
           getDisplayText: () => getDisplayKind('Node', useShortResourceNames),
           onClick: (row) => handleNodeClick(row),
+          onAltClick: (row) =>
+            navigateToView({
+              kind: 'Node',
+              name: row.name,
+              clusterId: row.clusterId,
+              clusterName: row.clusterName,
+            }),
           isInteractive: () => true,
           sortValue: () => 'node',
         }),
         cf.createTextColumn<ClusterNodeRow>('name', 'Name', (row) => row.name || '', {
           onClick: (row) => handleNodeClick(row),
+          onAltClick: (row) =>
+            navigateToView({
+              kind: 'Node',
+              name: row.name,
+              clusterId: row.clusterId,
+              clusterName: row.clusterName,
+            }),
           // Use the shared link styling for object panel navigation.
           getClassName: () => 'object-panel-link',
           isInteractive: () => true,
@@ -220,6 +236,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       metricsInfo?.stale,
       metricsInfo?.lastError,
       metricsInfo?.collectedAt,
+      navigateToView,
       useShortResourceNames,
     ]);
 

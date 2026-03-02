@@ -9,6 +9,7 @@ import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import './shared/LabelsAndAnnotations.css';
 import './HelmOverview.css';
 
@@ -43,7 +44,7 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
   labels,
   annotations,
 }) => {
-  const { openWithObject, objectData } = useObjectPanel();
+  const { objectData } = useObjectPanel();
   const clusterMeta = {
     clusterId: objectData?.clusterId ?? undefined,
     clusterName: objectData?.clusterName ?? undefined,
@@ -119,20 +120,18 @@ export const HelmOverview: React.FC<HelmOverviewProps> = ({
                   className="metadata-pair"
                 >
                   <span className="metadata-key">{resource.kind}:</span>
-                  <span
-                    className="metadata-value object-panel-link"
-                    onClick={() =>
-                      openWithObject?.({
-                        kind: resource.kind.toLowerCase(),
-                        name: resource.name,
-                        namespace: resource.namespace,
-                        ...clusterMeta,
-                      })
-                    }
+                  <ObjectPanelLink
+                    className="metadata-value"
+                    objectRef={{
+                      kind: resource.kind.toLowerCase(),
+                      name: resource.name,
+                      namespace: resource.namespace,
+                      ...clusterMeta,
+                    }}
                     title={`Click to view ${resource.kind}: ${resource.name}`}
                   >
                     {resource.namespace ? `${resource.namespace}/${resource.name}` : resource.name}
-                  </span>
+                  </ObjectPanelLink>
                 </div>
               ))}
           </div>

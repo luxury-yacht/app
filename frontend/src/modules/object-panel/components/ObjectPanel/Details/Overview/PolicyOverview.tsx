@@ -7,6 +7,7 @@ import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Detai
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { types } from '@wailsjs/go/models';
 import './PolicyOverview.css';
 
@@ -44,24 +45,13 @@ interface PolicyOverviewProps {
 // Policy resources Overview
 export const PolicyOverview: React.FC<PolicyOverviewProps> = (props) => {
   const { kind, name, namespace, age } = props;
-  const { openWithObject, objectData } = useObjectPanel();
+  const { objectData } = useObjectPanel();
   const clusterMeta = {
     clusterId: objectData?.clusterId ?? undefined,
     clusterName: objectData?.clusterName ?? undefined,
   };
 
-  const handleTargetClick = () => {
-    if (!props.scaleTargetRef || !openWithObject) {
-      return;
-    }
-
-    openWithObject({
-      kind: props.scaleTargetRef.kind,
-      name: props.scaleTargetRef.name,
-      namespace,
-      ...clusterMeta,
-    });
-  };
+  // handleTargetClick removed — ObjectPanelLink handles click + alt+click.
 
   // Parse policy string like "type:Pods, value:4, periodSeconds:60" into key-value pairs
   const parsePolicyString = (policy: string): Record<string, string> => {
@@ -303,9 +293,16 @@ export const PolicyOverview: React.FC<PolicyOverviewProps> = (props) => {
             label="Target"
             value={
               props.scaleTargetRef ? (
-                <span className="object-panel-link" onClick={handleTargetClick}>
+                <ObjectPanelLink
+                  objectRef={{
+                    kind: props.scaleTargetRef.kind,
+                    name: props.scaleTargetRef.name,
+                    namespace,
+                    ...clusterMeta,
+                  }}
+                >
                   {`${props.scaleTargetRef.kind}/${props.scaleTargetRef.name}`}
-                </span>
+                </ObjectPanelLink>
               ) : undefined
             }
           />

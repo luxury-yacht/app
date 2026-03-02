@@ -9,6 +9,7 @@ import './NsViewHelm.css';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -69,6 +70,7 @@ interface HelmViewProps {
 const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
   ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
+    const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
 
     const handleResourceClick = useCallback(
@@ -100,10 +102,26 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
           getKind: () => 'HelmRelease',
           getDisplayText: () => getDisplayKind('HelmRelease', useShortResourceNames),
           onClick: handleResourceClick,
+          onAltClick: (resource) =>
+            navigateToView({
+              kind: 'HelmRelease',
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+            }),
           isInteractive: () => true,
         }),
         cf.createTextColumn<HelmData>('name', 'Name', {
           onClick: handleResourceClick,
+          onAltClick: (resource) =>
+            navigateToView({
+              kind: 'HelmRelease',
+              name: resource.name,
+              namespace: resource.namespace,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+            }),
           getClassName: () => 'object-panel-link',
         }),
       ];
@@ -246,7 +264,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleResourceClick, showNamespaceColumn, useShortResourceNames]);
+    }, [handleResourceClick, navigateToView, showNamespaceColumn, useShortResourceNames]);
 
     const isNamespaceScoped = namespace !== ALL_NAMESPACES_SCOPE;
 

@@ -85,11 +85,21 @@ export interface AppEvents {
     brightness: number;
   };
   'settings:accent-color': { theme: 'light' | 'dark'; color: string };
+  'settings:link-color': { theme: 'light' | 'dark'; color: string };
   'settings:theme-resolved': 'light' | 'dark';
 
   // Feature events
   'pods:show-unhealthy': { clusterId: string; scope: string };
   'gridtable:persistence-mode': 'namespaced' | 'shared';
+
+  // Grid table external focus — emitted to request that a visible GridTable
+  // finds and focuses a specific row matching the given resource fields.
+  'gridtable:focus-request': {
+    kind: string;
+    name: string;
+    namespace?: string;
+    clusterId: string;
+  };
 
   // App visibility events
   'app:visibility-hidden': void;

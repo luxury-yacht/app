@@ -12,6 +12,7 @@ import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -52,6 +53,7 @@ interface ConfigViewProps {
 const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
+    const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
@@ -90,10 +92,24 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           getAlias: (resource) => resource.kindAlias,
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
+          onAltClick: (resource) =>
+            navigateToView({
+              kind: resource.kind,
+              name: resource.name,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+            }),
         }),
         cf.createTextColumn<ConfigData>('name', 'Name', (resource) => resource.name, {
           sortable: true,
           onClick: handleResourceClick,
+          onAltClick: (resource) =>
+            navigateToView({
+              kind: resource.kind,
+              name: resource.name,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+            }),
           getClassName: () => 'object-panel-link',
         }),
         cf.createAgeColumn(),
@@ -107,7 +123,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleResourceClick, useShortResourceNames]);
+    }, [handleResourceClick, navigateToView, useShortResourceNames]);
 
     // Set up grid table persistence
     const {

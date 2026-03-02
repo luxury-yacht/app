@@ -196,6 +196,30 @@
   border-color: var(--color-accent);
 }
 
+/* Color pickers row — 9-column grid: label|swatch|value|reset | spacer | label|swatch|value|reset */
+.palette-color-controls {
+  display: grid;
+  grid-template-columns: auto auto auto auto 1fr auto auto auto auto;
+  gap: var(--spacing-xs) var(--spacing-sm);
+  align-items: center;
+  margin-top: var(--spacing-sm);
+}
+
+.palette-color-controls > label {
+  font-size: var(--font-size-normal);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.palette-color-spacer {
+  /* Empty spacer column — the 1fr gap does the work */
+}
+
+/* Bottom action row spans all columns in color-controls grid */
+.palette-color-controls > .palette-bottom-actions {
+  grid-column: 1 / -1;
+}
+
 /* Accent color swatch in the grid */
 .palette-accent-swatch {
   width: 28px;

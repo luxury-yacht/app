@@ -171,6 +171,8 @@ export interface CreateTextColumnOptions<T> {
   className?: string;
   sortable?: boolean;
   onClick?: (item: T) => void;
+  /** Alt+click handler — navigates to the item's view and focuses it. */
+  onAltClick?: (item: T) => void;
   getTitle?: (item: T) => string | undefined;
   getClassName?: (item: T) => string | undefined;
   isInteractive?: (item: T) => boolean;
@@ -257,13 +259,23 @@ export function createTextColumn<T>(
           title={title}
           data-gridtable-shortcut-optout="true"
           data-gridtable-rowclick="allow"
-          onClick={() => {
-            options?.onClick?.(item);
+          onClick={(event) => {
+            if (event.altKey && options?.onAltClick) {
+              event.preventDefault();
+              event.stopPropagation();
+              options.onAltClick(item);
+            } else {
+              options?.onClick?.(item);
+            }
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
-              options?.onClick?.(item);
+              if (event.altKey && options?.onAltClick) {
+                options.onAltClick(item);
+              } else {
+                options?.onClick?.(item);
+              }
             }
           }}
         >
@@ -321,6 +333,8 @@ export interface CreateKindColumnOptions<T> {
   getAlias?: (item: T) => string | undefined;
   getDisplayText?: (item: T) => string;
   onClick?: KindColumnClickHandler<T>;
+  /** Alt+click handler — navigates to the item's view and focuses it. */
+  onAltClick?: (item: T) => void;
   isInteractive?: (item: T) => boolean;
   sortable?: boolean;
   sortValue?: (item: T) => string | number;
@@ -376,14 +390,24 @@ export const createKindColumn = <T,>(
         return <span data-kind-value={kindValue}>{displayText}</span>;
       }
 
-      const handleClick = () => {
-        onClick?.(item);
+      const handleClick = (event: React.MouseEvent<HTMLSpanElement>) => {
+        if (event.altKey && options.onAltClick) {
+          event.preventDefault();
+          event.stopPropagation();
+          options.onAltClick(item);
+        } else {
+          onClick?.(item);
+        }
       };
 
       const handleKeyDown = (event: React.KeyboardEvent<HTMLSpanElement>) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
-          onClick?.(item);
+          if (event.altKey && options.onAltClick) {
+            options.onAltClick(item);
+          } else {
+            onClick?.(item);
+          }
         }
       };
 

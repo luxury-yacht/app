@@ -20,6 +20,7 @@ import {
   type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
 import { useTableSort } from '@hooks/useTableSort';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
@@ -88,6 +89,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
   clusterName,
 }) => {
   const { openWithObject, objectData } = useObjectPanel();
+  const { navigateToView } = useNavigateToView();
   const viewState = useViewState();
   const namespaceContext = useNamespace();
 
@@ -138,6 +140,14 @@ export const JobsTab: React.FC<JobsTabProps> = ({
             namespace: job.namespace,
             ...getJobClusterMeta(job),
           }),
+        onAltClick: (job) =>
+          navigateToView({
+            kind: 'Job',
+            name: job.name,
+            namespace: job.namespace,
+            clusterId: job.clusterId,
+            clusterName: job.clusterName,
+          }),
         sortable: false,
       }),
       createTextColumn<JobRow>('name', 'Name', {
@@ -147,6 +157,14 @@ export const JobsTab: React.FC<JobsTabProps> = ({
             name: job.name,
             namespace: job.namespace,
             ...getJobClusterMeta(job),
+          }),
+        onAltClick: (job) =>
+          navigateToView({
+            kind: 'Job',
+            name: job.name,
+            namespace: job.namespace,
+            clusterId: job.clusterId,
+            clusterName: job.clusterName,
           }),
         getClassName: () => 'object-panel-link',
         getTitle: (job) => job.name,
@@ -180,7 +198,7 @@ export const JobsTab: React.FC<JobsTabProps> = ({
 
     applyColumnSizing(base, COLUMN_SIZING);
     return base;
-  }, [handleNamespaceSelect, getJobClusterMeta, openWithObject]);
+  }, [handleNamespaceSelect, navigateToView, getJobClusterMeta, openWithObject]);
 
   const {
     sortConfig,

@@ -8,6 +8,7 @@
 import { useMemo } from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable';
 import * as cf from '@shared/components/tables/columnFactories';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { formatAge, formatFullDate } from '@/utils/ageFormatter';
 import { getDisplayKind } from '@/utils/kindAliasMap';
 import type { CatalogItem } from '@/core/refresh/types';
@@ -86,6 +87,8 @@ export function useBrowseColumns({
   onRowClick,
   onNamespaceClick,
 }: UseBrowseColumnsOptions): GridColumnDefinition<BrowseTableRow>[] {
+  const { navigateToView } = useNavigateToView();
+
   return useMemo<GridColumnDefinition<BrowseTableRow>[]>(() => {
     // Age column with custom render for tooltip
     const ageColumn = cf.createAgeColumn<BrowseTableRow>('age', 'Age', (row) => row.age);
@@ -103,10 +106,26 @@ export function useBrowseColumns({
         getDisplayText: (row) => row.kindDisplay,
         sortValue: (row) => row.kind,
         onClick: onRowClick,
+        onAltClick: (row) =>
+          navigateToView({
+            kind: row.item.kind,
+            name: row.name,
+            namespace: row.item.namespace,
+            clusterId: row.item.clusterId,
+            clusterName: row.item.clusterName,
+          }),
       }),
       cf.createTextColumn<BrowseTableRow>('name', 'Name', (row) => row.name, {
         sortable: true,
         onClick: (row) => onRowClick(row),
+        onAltClick: (row) =>
+          navigateToView({
+            kind: row.item.kind,
+            name: row.name,
+            namespace: row.item.namespace,
+            clusterId: row.item.clusterId,
+            clusterName: row.item.clusterName,
+          }),
         getClassName: () => 'object-panel-link',
       }),
     ];
@@ -142,5 +161,5 @@ export function useBrowseColumns({
     cf.applyColumnSizing(baseColumns, sizing);
 
     return baseColumns;
-  }, [showNamespaceColumn, onRowClick, onNamespaceClick]);
+  }, [showNamespaceColumn, onRowClick, onNamespaceClick, navigateToView]);
 }

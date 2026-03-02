@@ -48,6 +48,10 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   useObjectPanel: () => objectPanelMock,
 }));
 
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
 vi.mock('@/hooks/useTableSort', () => ({
   useTableSort: (data: unknown) => ({
     sortedData: sortHookMock.sortedData.length ? sortHookMock.sortedData : data,

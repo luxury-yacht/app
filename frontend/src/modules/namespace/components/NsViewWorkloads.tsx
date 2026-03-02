@@ -13,6 +13,7 @@ import { buildClusterScopeList } from '@/core/refresh/clusterScope';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import { getMetricsBannerInfo } from '@shared/utils/metricsAvailability';
@@ -71,6 +72,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     metrics = null,
   }) => {
     const { openWithObject } = useObjectPanel();
+    const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
     const { selectedClusterIds } = useKubeconfig();
@@ -129,6 +131,14 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const tableColumns = useWorkloadTableColumns({
       handleWorkloadClick,
+      onAltClick: (workload) =>
+        navigateToView({
+          kind: workload.kind,
+          name: workload.name,
+          namespace: workload.namespace,
+          clusterId: workload.clusterId ?? undefined,
+          clusterName: workload.clusterName ?? undefined,
+        }),
       showNamespaceColumn,
       useShortResourceNames,
       metrics: metricsInfo ?? null,

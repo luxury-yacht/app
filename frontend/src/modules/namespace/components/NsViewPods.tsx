@@ -31,6 +31,7 @@ import { DeletePod } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 
 interface PodsViewProps {
   namespace: string;
@@ -97,6 +98,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
     error = null,
   }) => {
     const { openWithObject } = useObjectPanel();
+    const { navigateToView } = useNavigateToView();
     const clusterMetrics = useClusterMetricsAvailability();
     const effectiveMetrics = metrics ?? clusterMetrics ?? null;
     const permissionMap = useUserPermissions();
@@ -181,10 +183,26 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         cf.createKindColumn<PodSnapshotEntry>({
           getKind: () => 'Pod',
           onClick: handlePodOpen,
+          onAltClick: (pod) =>
+            navigateToView({
+              kind: 'Pod',
+              name: pod.name,
+              namespace: pod.namespace,
+              clusterId: pod.clusterId ?? undefined,
+              clusterName: pod.clusterName ?? undefined,
+            }),
           sortable: false,
         }),
         cf.createTextColumn<PodSnapshotEntry>('name', 'Name', {
           onClick: handlePodOpen,
+          onAltClick: (pod) =>
+            navigateToView({
+              kind: 'Pod',
+              name: pod.name,
+              namespace: pod.namespace,
+              clusterId: pod.clusterId ?? undefined,
+              clusterName: pod.clusterName ?? undefined,
+            }),
           getTitle: (pod) => pod.name,
           getClassName: () => 'object-panel-link',
         }),
@@ -208,6 +226,17 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
           (pod) => (pod.ownerName ? pod.ownerName : '—'),
           {
             onClick: handleOwnerOpen,
+            onAltClick: (pod) => {
+              if (pod.ownerKind && pod.ownerName) {
+                navigateToView({
+                  kind: pod.ownerKind,
+                  name: pod.ownerName,
+                  namespace: pod.namespace,
+                  clusterId: pod.clusterId ?? undefined,
+                  clusterName: pod.clusterName ?? undefined,
+                });
+              }
+            },
             isInteractive: (pod) => Boolean(pod.ownerKind && pod.ownerName),
             getClassName: (pod) =>
               pod.ownerKind && pod.ownerName ? 'object-panel-link' : undefined,
@@ -217,6 +246,16 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         ),
         cf.createTextColumn<PodSnapshotEntry>('node', 'Node', (pod) => pod.node || '—', {
           onClick: handleNodeOpen,
+          onAltClick: (pod) => {
+            if (pod.node) {
+              navigateToView({
+                kind: 'Node',
+                name: pod.node,
+                clusterId: pod.clusterId ?? undefined,
+                clusterName: pod.clusterName ?? undefined,
+              });
+            }
+          },
           isInteractive: (pod) => Boolean(pod.node),
           getClassName: (pod) => (pod.node ? 'object-panel-link' : undefined),
         }),
@@ -277,6 +316,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       handleOwnerOpen,
       handlePodOpen,
       metricsLastUpdated,
+      navigateToView,
       showNamespaceColumn,
     ]);
 

@@ -5,6 +5,7 @@
 import React from 'react';
 import { OverviewItem } from '@modules/object-panel/components/ObjectPanel/Details/Overview/shared/OverviewItem';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { ObjectPanelLink } from '@shared/components/ObjectPanelLink';
 import { ResourceHeader } from '@shared/components/kubernetes/ResourceHeader';
 import { ResourceStatus } from '@shared/components/kubernetes/ResourceStatus';
 import { ResourceMetadata } from '@shared/components/kubernetes/ResourceMetadata';
@@ -48,7 +49,7 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
   labels,
   annotations,
 }) => {
-  const { openWithObject, objectData } = useObjectPanel();
+  const { objectData } = useObjectPanel();
   const clusterMeta = {
     clusterId: objectData?.clusterId ?? undefined,
     clusterName: objectData?.clusterName ?? undefined,
@@ -78,19 +79,16 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
             typeof owner === 'string' ? (
               owner
             ) : (
-              <span
-                className="object-panel-link"
-                onClick={() =>
-                  openWithObject?.({
-                    kind: owner.kind.toLowerCase(),
-                    name: owner.name,
-                    namespace: namespace,
-                    ...clusterMeta,
-                  })
-                }
+              <ObjectPanelLink
+                objectRef={{
+                  kind: owner.kind.toLowerCase(),
+                  name: owner.name,
+                  namespace: namespace,
+                  ...clusterMeta,
+                }}
               >
                 {owner.kind}/{owner.name}
-              </span>
+              </ObjectPanelLink>
             )
           }
         />
@@ -101,13 +99,12 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
         <OverviewItem
           label="Node"
           value={
-            <span
-              className="object-panel-link"
-              onClick={() => openWithObject?.({ kind: 'node', name: node, ...clusterMeta })}
+            <ObjectPanelLink
+              objectRef={{ kind: 'node', name: node, ...clusterMeta }}
               title="Click to view node"
             >
               {node}
-            </span>
+            </ObjectPanelLink>
           }
         />
       )}
@@ -137,20 +134,17 @@ export const PodOverview: React.FC<PodOverviewProps> = ({
         <OverviewItem
           label="Service Account"
           value={
-            <span
-              className="object-panel-link"
-              onClick={() =>
-                openWithObject?.({
-                  kind: 'serviceaccount',
-                  name: serviceAccount,
-                  namespace: namespace,
-                  ...clusterMeta,
-                })
-              }
+            <ObjectPanelLink
+              objectRef={{
+                kind: 'serviceaccount',
+                name: serviceAccount,
+                namespace: namespace,
+                ...clusterMeta,
+              }}
               title="Click to view service account"
             >
               {serviceAccount}
-            </span>
+            </ObjectPanelLink>
           }
         />
       )}

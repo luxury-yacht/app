@@ -14,6 +14,7 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -56,6 +57,7 @@ interface ClusterCustomViewProps {
 const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
+    const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
@@ -99,10 +101,24 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           getAlias: (resource) => resource.kindAlias,
           getDisplayText: (resource) => getDisplayKind(resource.kind, useShortResourceNames),
           onClick: handleResourceClick,
+          onAltClick: (resource) =>
+            navigateToView({
+              kind: resource.kind,
+              name: resource.name,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+            }),
         }),
         cf.createTextColumn<ClusterCustomData>('name', 'Name', {
           sortable: true,
           onClick: handleResourceClick,
+          onAltClick: (resource) =>
+            navigateToView({
+              kind: resource.kind,
+              name: resource.name,
+              clusterId: resource.clusterId,
+              clusterName: resource.clusterName,
+            }),
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn<ClusterCustomData>(
@@ -125,7 +141,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleResourceClick, useShortResourceNames]);
+    }, [handleResourceClick, navigateToView, useShortResourceNames]);
 
     // Set up grid table persistence
     const {

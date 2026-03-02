@@ -18,6 +18,7 @@ import {
   type ColumnSizingMap,
 } from '@shared/components/tables/columnFactories';
 import { useTableSort } from '@hooks/useTableSort';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { getPodStatusSeverity } from '@utils/podStatusSeverity';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
@@ -56,6 +57,7 @@ const workloadNameFromOwner = (pod: PodSnapshotEntry) =>
 
 export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error, isActive }) => {
   const { openWithObject, objectData } = useObjectPanel();
+  const { navigateToView } = useNavigateToView();
   const viewState = useViewState();
   const namespaceContext = useNamespace();
 
@@ -105,6 +107,14 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             namespace: pod.namespace,
             ...getPodClusterMeta(pod),
           }),
+        onAltClick: (pod) =>
+          navigateToView({
+            kind: 'Pod',
+            name: pod.name,
+            namespace: pod.namespace,
+            clusterId: pod.clusterId,
+            clusterName: pod.clusterName,
+          }),
         sortable: false,
       }),
       createTextColumn<PodSnapshotEntry>('name', 'Name', {
@@ -114,6 +124,14 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
             name: pod.name,
             namespace: pod.namespace,
             ...getPodClusterMeta(pod),
+          }),
+        onAltClick: (pod) =>
+          navigateToView({
+            kind: 'Pod',
+            name: pod.name,
+            namespace: pod.namespace,
+            clusterId: pod.clusterId,
+            clusterName: pod.clusterName,
           }),
         getClassName: () => 'object-panel-link',
         getTitle: (pod) => pod.name,
@@ -209,6 +227,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     metrics?.lastError,
     metrics?.stale,
     metricsLastUpdated,
+    navigateToView,
     getPodClusterMeta,
     openWithObject,
   ]);

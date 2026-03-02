@@ -224,6 +224,8 @@ export function SetKubeconfig(arg1:string):Promise<void>;
 
 export function SetKubeconfigSearchPaths(arg1:Array<string>):Promise<void>;
 
+export function SetLinkColor(arg1:string,arg2:string):Promise<void>;
+
 export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 
 export function SetPaletteTint(arg1:string,arg2:number,arg3:number,arg4:number):Promise<void>;

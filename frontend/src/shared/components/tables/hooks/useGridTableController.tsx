@@ -34,6 +34,7 @@ import { useGridTableFiltersWiring } from '@shared/components/tables/hooks/useGr
 import { useGridTableColumnsDropdown } from '@shared/components/tables/hooks/useGridTableColumnsDropdown';
 import { useGridTableContextMenuWiring } from '@shared/components/tables/hooks/useGridTableContextMenuWiring';
 import { useGridTableFocusNavigation } from '@shared/components/tables/hooks/useGridTableFocusNavigation';
+import { useGridTableExternalFocus } from '@shared/components/tables/hooks/useGridTableExternalFocus';
 import { useGridTableShortcuts } from '@shared/components/tables/hooks/useGridTableShortcuts';
 import { useKeyboardContext } from '@ui/shortcuts';
 import { useGridTableKeyboardScopes } from '@shared/components/tables/GridTableKeys';
@@ -303,6 +304,15 @@ export function useGridTableController<T>({
     updateHoverForElement,
     getRowClassName,
     shouldIgnoreRowClick,
+  });
+
+  // External focus — allows other parts of the app to request that this
+  // GridTable highlights a specific row (e.g., via alt+click navigation).
+  useGridTableExternalFocus<T>({
+    tableData,
+    keyExtractor,
+    setFocusedRowKey,
+    wrapperRef,
   });
 
   const {

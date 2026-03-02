@@ -12,6 +12,7 @@ import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -57,6 +58,7 @@ interface StorageViewProps {
 const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
   ({ data, loading = false, loaded = false, error }) => {
     const { openWithObject } = useObjectPanel();
+    const { navigateToView } = useNavigateToView();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
@@ -119,9 +121,23 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           getDisplayText: (pv) =>
             getDisplayKind(pv.kind || 'PersistentVolume', useShortResourceNames),
           onClick: handleResourceClick,
+          onAltClick: (pv) =>
+            navigateToView({
+              kind: pv.kind || 'PersistentVolume',
+              name: pv.name,
+              clusterId: pv.clusterId,
+              clusterName: pv.clusterName,
+            }),
         }),
         cf.createTextColumn<StorageData>('name', 'Name', {
           onClick: handleResourceClick,
+          onAltClick: (pv) =>
+            navigateToView({
+              kind: pv.kind || 'PersistentVolume',
+              name: pv.name,
+              clusterId: pv.clusterId,
+              clusterName: pv.clusterName,
+            }),
           getClassName: () => 'object-panel-link',
         }),
         cf.createTextColumn('capacity', 'Capacity', (pv) => pv.capacity || '-'),
@@ -148,6 +164,17 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
                 clusterName: pv.clusterName ?? undefined,
               });
             },
+            onAltClick: (pv) => {
+              if (!pv.storageClass) {
+                return;
+              }
+              navigateToView({
+                kind: 'StorageClass',
+                name: pv.storageClass,
+                clusterId: pv.clusterId,
+                clusterName: pv.clusterName,
+              });
+            },
             isInteractive: (pv) => Boolean(pv.storageClass),
             getClassName: (pv) =>
               pv.storageClass ? 'storage-class-link object-panel-link' : 'default-class',
@@ -155,6 +182,19 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
         ),
         cf.createTextColumn<StorageData>('claim', 'Claim', (pv) => pv.claim || '-', {
           onClick: handleClaimClick,
+          onAltClick: (pv) => {
+            const target = getClaimTarget(pv);
+            if (!target) {
+              return;
+            }
+            navigateToView({
+              kind: 'PersistentVolumeClaim',
+              namespace: target.namespace,
+              name: target.name,
+              clusterId: pv.clusterId,
+              clusterName: pv.clusterName,
+            });
+          },
           isInteractive: (pv) => Boolean(getClaimTarget(pv)),
           getClassName: (pv) => (getClaimTarget(pv) ? 'object-panel-link' : undefined),
         }),
@@ -178,6 +218,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       getClaimTarget,
       handleClaimClick,
       handleResourceClick,
+      navigateToView,
       openWithObject,
       useShortResourceNames,
     ]);

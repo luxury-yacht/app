@@ -18,7 +18,7 @@
 }
 
 .object-panel-link:hover {
-  color: var(--color-object-panel-link);
+  color: var(--color-object-panel-link-hover);
   text-decoration: underline;
 }
 

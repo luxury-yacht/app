@@ -26,6 +26,10 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
 describe('EndpointSliceOverview', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
