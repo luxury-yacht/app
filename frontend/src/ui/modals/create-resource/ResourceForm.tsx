@@ -10,7 +10,7 @@ import React, { useCallback, useMemo, useRef, useEffect, useState } from 'react'
 import * as YAML from 'yaml';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { CloseIcon } from '@shared/components/icons/MenuIcons';
+import { AddIcon, CloseIcon } from '@shared/components/icons/MenuIcons';
 import { getFieldValue, setFieldValue } from './yamlSync';
 import type { ResourceFormDefinition, FormFieldDefinition } from './formDefinitions';
 import './ResourceForm.css';
@@ -975,7 +975,7 @@ function GroupListField({
                       title={`Add ${subField.label}`}
                       onClick={handleNestedAdd}
                     >
-                      +
+                      <AddIcon width={12} height={12} />
                     </button>
                   )}
                   <button
@@ -1001,7 +1001,7 @@ function GroupListField({
                     title={`Add ${subField.label}`}
                     onClick={handleNestedAdd}
                   >
-                    +
+                    <AddIcon width={12} height={12} />
                   </button>
                 </div>
               </div>

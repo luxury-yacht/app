@@ -481,7 +481,20 @@
   height: 12px;
 }
 
+.resource-form-add-btn.resource-form-icon-btn svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
 .resource-form-remove-btn.resource-form-icon-btn svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.resource-form-add-btn.resource-form-icon-btn svg path {
   fill: none;
   stroke: currentColor;
   stroke-width: 2.2;

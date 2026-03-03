@@ -484,9 +484,9 @@ spec:
       'button[aria-label="Add Env Vars"]'
     ) as HTMLButtonElement;
     expect(addPortsButton).not.toBeNull();
-    expect(addPortsButton.textContent).toBe('+');
+    expect(addPortsButton.querySelector('svg')).not.toBeNull();
     expect(addEnvVarsButton).not.toBeNull();
-    expect(addEnvVarsButton.textContent).toBe('+');
+    expect(addEnvVarsButton.querySelector('svg')).not.toBeNull();
   });
 
   it('removes empty protocol option and defaults protocol to TCP when missing', async () => {

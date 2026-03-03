@@ -34,6 +34,7 @@ import {
   ClusterOverviewIcon,
   ClusterResourcesIcon,
   CategoryIcon,
+  AddIcon,
 } from './MenuIcons';
 
 const ALL_ICONS = [
@@ -88,5 +89,16 @@ describe('MenuIcons', () => {
     expect(svg?.getAttribute('width')).toBe('24');
     expect(svg?.getAttribute('height')).toBe('18');
     expect(svg?.getAttribute('fill')).toBe('#ff0000');
+  });
+
+  it('renders AddIcon with stroke paths and custom dimensions', () => {
+    const markup = ReactDOMServer.renderToStaticMarkup(<AddIcon width={12} height={12} />);
+    const container = document.createElement('div');
+    container.innerHTML = markup;
+    const svg = container.querySelector('svg');
+    const path = container.querySelector('path');
+    expect(svg?.getAttribute('width')).toBe('12');
+    expect(svg?.getAttribute('height')).toBe('12');
+    expect(path).toBeTruthy();
   });
 });
