@@ -396,6 +396,12 @@ spec:
                   defaultValue: { containerPort: 80, protocol: 'TCP' },
                 },
                 {
+                  key: 'resources',
+                  label: 'Resources',
+                  path: ['resources'],
+                  type: 'container-resources',
+                },
+                {
                   key: 'env',
                   label: 'Env Vars',
                   path: ['env'],
@@ -423,6 +429,11 @@ spec:
           ports:
             - containerPort: 8080
               protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+            limits:
+              memory: 256Mi
           env:
             - name: LOG_LEVEL
               value: debug
@@ -450,12 +461,20 @@ spec:
     const envValueInput = container.querySelector(
       '[data-field-key="env"] input[data-field-key="value"]'
     ) as HTMLInputElement;
+    const requestValueInput = container.querySelector(
+      '[data-field-key="requestsCpu"]'
+    ) as HTMLInputElement;
+    const limitValueInput = container.querySelector(
+      '[data-field-key="limitsMemory"]'
+    ) as HTMLInputElement;
 
     expect(portInput.value).toBe('8080');
     expect(portInput.min).toBe('1');
     expect(portInput.max).toBe('65535');
     expect(portInput.step).toBe('1');
     expect(protocolSelect.value).toBe('TCP');
+    expect(requestValueInput.value).toBe('100m');
+    expect(limitValueInput.value).toBe('256Mi');
     expect(envNameInput.value).toBe('LOG_LEVEL');
     expect(envValueInput.value).toBe('debug');
     const addPortsButton = container.querySelector(
@@ -649,6 +668,164 @@ spec:
     expect(emittedYamls.some((yaml) => yaml.includes('containerPort: 80'))).toBe(true);
     expect(emittedYamls.some((yaml) => yaml.includes('protocol: TCP'))).toBe(true);
     expect(emittedYamls.some((yaml) => yaml.includes('env:'))).toBe(true);
+  });
+
+  it('updates container resource requests through labeled resource inputs', async () => {
+    const onChange = vi.fn();
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Containers',
+          fields: [
+            {
+              key: 'containers',
+              label: 'Containers',
+              path: ['spec', 'template', 'spec', 'containers'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                {
+                  key: 'resources',
+                  label: 'Resources',
+                  path: ['resources'],
+                  type: 'container-resources',
+                },
+              ],
+              defaultValue: { name: '', resources: { requests: {} } },
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          resources:
+            requests:
+              cpu: 100m
+`;
+
+    await act(async () => {
+      root.render(
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={deploymentLikeYaml}
+          onYamlChange={onChange}
+        />
+      );
+    });
+
+    const requestValueInput = container.querySelector(
+      '[data-field-key="requestsCpu"]'
+    ) as HTMLInputElement;
+    expect(requestValueInput).not.toBeNull();
+    expect(requestValueInput.value).toBe('100m');
+
+    await act(async () => {
+      setNativeInputValue(requestValueInput, '250m');
+      requestValueInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(onChange).toHaveBeenCalled();
+    const updatedYaml = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as string;
+    const parsed = YAML.parse(updatedYaml) as {
+      spec?: {
+        template?: {
+          spec?: { containers?: Array<{ resources?: { requests?: { cpu?: string } } }> };
+        };
+      };
+    };
+    const cpuRequest = parsed.spec?.template?.spec?.containers?.[0]?.resources?.requests?.cpu;
+    expect(cpuRequest).toBe('250m');
+
+    await act(async () => {
+      setNativeInputValue(requestValueInput, '');
+      requestValueInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(onChange).toHaveBeenCalled();
+    const clearedYaml = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as string;
+    const cleared = YAML.parse(clearedYaml) as {
+      spec?: {
+        template?: {
+          spec?: { containers?: Array<{ resources?: { requests?: { cpu?: string } } }> };
+        };
+      };
+    };
+    const clearedCpuRequest =
+      cleared.spec?.template?.spec?.containers?.[0]?.resources?.requests?.cpu;
+    expect(clearedCpuRequest).toBeUndefined();
+  });
+
+  it('shows a single Add button and expands to labeled resource fields', async () => {
+    const onChange = vi.fn();
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Containers',
+          fields: [
+            {
+              key: 'containers',
+              label: 'Containers',
+              path: ['spec', 'template', 'spec', 'containers'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                {
+                  key: 'resources',
+                  label: 'Resources',
+                  path: ['resources'],
+                  type: 'container-resources',
+                },
+              ],
+              defaultValue: { name: '', resources: {} },
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+`;
+
+    await act(async () => {
+      root.render(
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={deploymentLikeYaml}
+          onYamlChange={onChange}
+        />
+      );
+    });
+
+    const addResourcesBtn = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Add'
+    ) as HTMLButtonElement | undefined;
+    expect(addResourcesBtn).toBeDefined();
+    expect(container.querySelector('[data-field-key="requestsCpu"]')).toBeNull();
+
+    await act(async () => {
+      addResourcesBtn?.click();
+    });
+
+    expect(container.querySelector('[data-field-key="requestsCpu"]')).not.toBeNull();
+    expect(container.querySelector('[data-field-key="requestsMemory"]')).not.toBeNull();
+    expect(container.querySelector('[data-field-key="limitsCpu"]')).not.toBeNull();
+    expect(container.querySelector('[data-field-key="limitsMemory"]')).not.toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('uses optional hint for port name and omits blank port name from YAML', async () => {

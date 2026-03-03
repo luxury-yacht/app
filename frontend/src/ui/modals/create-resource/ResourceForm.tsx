@@ -6,16 +6,13 @@
  * getFieldValue and writes changes via setFieldValue.
  */
 
-import React, { useCallback, useMemo, useRef, useEffect } from 'react';
+import React, { useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import * as YAML from 'yaml';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import { getFieldValue, setFieldValue } from './yamlSync';
-import type {
-  ResourceFormDefinition,
-  FormFieldDefinition,
-} from './formDefinitions';
+import type { ResourceFormDefinition, FormFieldDefinition } from './formDefinitions';
 import './ResourceForm.css';
 
 interface ResourceFormProps {
@@ -233,9 +230,7 @@ function NumberField({
 
       const digitsOnly = target.value.replace(/[^\d-]/g, '');
       const normalized =
-        typeof min === 'number' && min >= 0
-          ? digitsOnly.replace(/-/g, '')
-          : digitsOnly;
+        typeof min === 'number' && min >= 0 ? digitsOnly.replace(/-/g, '') : digitsOnly;
 
       if (normalized === '' || normalized === '-') {
         target.value = '';
@@ -334,7 +329,7 @@ function SelectField({
         options={options}
         value={effectiveValue}
         onChange={(nextValue) => {
-          const normalized = Array.isArray(nextValue) ? nextValue[0] ?? '' : nextValue;
+          const normalized = Array.isArray(nextValue) ? (nextValue[0] ?? '') : nextValue;
           const updated = setFieldValue(yamlContent, field.path, normalized);
           if (updated !== null) onYamlChange(updated);
         }}
@@ -539,6 +534,7 @@ function GroupListField({
     return [];
   }, [rawValue]);
   const isContainerGroup = field.key === 'containers';
+  const [resourceFieldsVisible, setResourceFieldsVisible] = useState<Record<string, boolean>>({});
 
   /** Write the full updated array back to the YAML at the group-list's path. */
   const updateItems = useCallback(
@@ -569,6 +565,8 @@ function GroupListField({
   const handleRemoveItem = (index: number) => {
     const newItems = items.filter((_, i) => i !== index);
     updateItems(newItems);
+    // Item indexes may shift after removal, so clear the transient visibility map.
+    setResourceFieldsVisible({});
   };
 
   /** Add a new item with the default value. */
@@ -610,9 +608,7 @@ function GroupListField({
             data-field-key={subField.key}
             value={stringValue}
             placeholder={subField.placeholder}
-            onChange={(e) =>
-              handleSubFieldChange(itemIndex, subField, e.target.value)
-            }
+            onChange={(e) => handleSubFieldChange(itemIndex, subField, e.target.value)}
           />
         );
       case 'number':
@@ -648,9 +644,7 @@ function GroupListField({
               options={buildSelectOptions(subField)}
               value={getSelectFieldValue(subField, stringValue)}
               onChange={(nextValue) => {
-                const normalized = Array.isArray(nextValue)
-                  ? nextValue[0] ?? ''
-                  : nextValue;
+                const normalized = Array.isArray(nextValue) ? (nextValue[0] ?? '') : nextValue;
                 handleSubFieldChange(itemIndex, subField, normalized);
               }}
               ariaLabel={subField.label}
@@ -664,15 +658,181 @@ function GroupListField({
             data-field-key={subField.key}
             value={stringValue}
             placeholder={subField.placeholder}
-            onChange={(e) =>
-              handleSubFieldChange(itemIndex, subField, e.target.value)
-            }
+            onChange={(e) => handleSubFieldChange(itemIndex, subField, e.target.value)}
           />
         );
+      case 'container-resources': {
+        const requestFields = [
+          { key: 'requestsCpu', label: 'CPU Request', path: ['requests', 'cpu'] },
+          { key: 'requestsMemory', label: 'Memory Request', path: ['requests', 'memory'] },
+        ] as const;
+        const limitFields = [
+          { key: 'limitsCpu', label: 'CPU Limit', path: ['limits', 'cpu'] },
+          { key: 'limitsMemory', label: 'Memory Limit', path: ['limits', 'memory'] },
+        ] as const;
+        const resourceFieldRows = [requestFields, limitFields] as const;
+        const allResourceFields = [...requestFields, ...limitFields] as const;
+
+        const resources =
+          subValue && typeof subValue === 'object' && !Array.isArray(subValue)
+            ? (subValue as Record<string, unknown>)
+            : undefined;
+        const visibilityKey = `${itemIndex}:${subField.key}`;
+        const hasAnyValue = allResourceFields.some((resourceField) => {
+          const value = resources ? getNestedValue(resources, [...resourceField.path]) : undefined;
+          return String(value ?? '').trim() !== '';
+        });
+        const showFields = hasAnyValue || resourceFieldsVisible[visibilityKey] === true;
+
+        const handleResourceValueChange = (resourcePath: readonly string[], rawValue: string) => {
+          const absolutePath = [...subField.path, ...resourcePath];
+          const updatedItems = items.map((currentItem, i) => {
+            if (i !== itemIndex) return currentItem;
+            if (rawValue.trim() === '') {
+              return unsetNestedValue(currentItem, absolutePath);
+            }
+            return setNestedValue(currentItem, absolutePath, rawValue);
+          });
+          updateItems(updatedItems);
+        };
+
+        if (!showFields) {
+          return (
+            <button
+              type="button"
+              className="resource-form-add-btn"
+              onClick={() =>
+                setResourceFieldsVisible((previous) => ({
+                  ...previous,
+                  [visibilityKey]: true,
+                }))
+              }
+            >
+              Add
+            </button>
+          );
+        }
+
+        return (
+          <div data-field-key={subField.key} className="resource-form-container-resources">
+            {resourceFieldRows.map((rowFields, rowIndex) => (
+              <div key={rowIndex} className="resource-form-container-resources-row">
+                {rowFields.map((resourceField) => {
+                  const value = resources
+                    ? getNestedValue(resources, [...resourceField.path])
+                    : undefined;
+                  return (
+                    <div key={resourceField.key} className="resource-form-container-resources-item">
+                      <label className="resource-form-container-resources-label">
+                        {resourceField.label}
+                      </label>
+                      <input
+                        type="text"
+                        className="resource-form-input"
+                        data-field-key={resourceField.key}
+                        value={value != null ? String(value) : ''}
+                        placeholder="optional"
+                        onChange={(e) =>
+                          handleResourceValueChange(resourceField.path, e.target.value)
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        );
+      }
+      case 'key-value-list': {
+        const entries: [string, string][] =
+          subValue && typeof subValue === 'object' && !Array.isArray(subValue)
+            ? Object.entries(subValue as Record<string, unknown>).map(([k, v]) => [
+                k,
+                String(v ?? ''),
+              ])
+            : [];
+
+        /** Rebuild the map and write it back to the current group-list item. */
+        const updateEntries = (newEntries: [string, string][]) => {
+          const obj: Record<string, string> = {};
+          for (const [k, v] of newEntries) {
+            if (k) obj[k] = v;
+          }
+          handleSubFieldChange(itemIndex, subField, obj);
+        };
+
+        const handleKeyChange = (entryIndex: number, newKey: string) => {
+          const newEntries = entries.map((entry, i) =>
+            i === entryIndex ? ([newKey, entry[1]] as [string, string]) : entry
+          );
+          updateEntries(newEntries);
+        };
+
+        const handleValueChange = (entryIndex: number, newValue: string) => {
+          const newEntries = entries.map((entry, i) =>
+            i === entryIndex ? ([entry[0], newValue] as [string, string]) : entry
+          );
+          updateEntries(newEntries);
+        };
+
+        const handleRemove = (entryIndex: number) => {
+          updateEntries(entries.filter((_, i) => i !== entryIndex));
+        };
+
+        const handleAdd = () => {
+          const terminalPath = subField.path[subField.path.length - 1];
+          const baseKey =
+            terminalPath === 'requests'
+              ? 'request-key'
+              : terminalPath === 'limits'
+                ? 'limit-key'
+                : 'key';
+          const existingKeys = new Set(entries.map(([k]) => k));
+          let candidate = baseKey;
+          let suffix = 2;
+          while (existingKeys.has(candidate)) {
+            candidate = `${baseKey}-${suffix}`;
+            suffix += 1;
+          }
+          updateEntries([...entries, [candidate, '']]);
+        };
+
+        return (
+          <div data-field-key={subField.key} className="resource-form-kv-container">
+            {entries.map(([k, v], entryIndex) => (
+              <div key={entryIndex} className="resource-form-kv-row">
+                <input
+                  type="text"
+                  className="resource-form-input"
+                  value={k}
+                  placeholder="Key"
+                  onChange={(e) => handleKeyChange(entryIndex, e.target.value)}
+                />
+                <input
+                  type="text"
+                  className="resource-form-input"
+                  value={v}
+                  placeholder="Value"
+                  onChange={(e) => handleValueChange(entryIndex, e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="resource-form-remove-btn"
+                  onClick={() => handleRemove(entryIndex)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button type="button" className="resource-form-add-btn" onClick={handleAdd}>
+              Add Entry
+            </button>
+          </div>
+        );
+      }
       case 'group-list': {
-        const nestedItems = Array.isArray(subValue)
-          ? (subValue as Record<string, unknown>[])
-          : [];
+        const nestedItems = Array.isArray(subValue) ? (subValue as Record<string, unknown>[]) : [];
 
         /** Write an updated nested list back into the parent item. */
         const updateNestedItems = (newNestedItems: Record<string, unknown>[]) => {
@@ -763,7 +923,7 @@ function GroupListField({
                     value={getSelectFieldValue(nestedField, nestedStringValue)}
                     onChange={(nextValue) => {
                       const normalized = Array.isArray(nextValue)
-                        ? nextValue[0] ?? ''
+                        ? (nextValue[0] ?? '')
                         : nextValue;
                       handleNestedFieldChange(nestedIndex, nestedField, normalized);
                     }}
@@ -960,37 +1120,19 @@ function FieldRenderer({
 }): React.ReactElement | null {
   switch (field.type) {
     case 'text':
-      return (
-        <TextField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />
-      );
+      return <TextField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />;
     case 'number':
-      return (
-        <NumberField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />
-      );
+      return <NumberField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />;
     case 'select':
-      return (
-        <SelectField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />
-      );
+      return <SelectField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />;
     case 'textarea':
-      return (
-        <TextareaField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />
-      );
+      return <TextareaField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />;
     case 'key-value-list':
       return (
-        <KeyValueListField
-          field={field}
-          yamlContent={yamlContent}
-          onYamlChange={onYamlChange}
-        />
+        <KeyValueListField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />
       );
     case 'group-list':
-      return (
-        <GroupListField
-          field={field}
-          yamlContent={yamlContent}
-          onYamlChange={onYamlChange}
-        />
-      );
+      return <GroupListField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />;
     default:
       return null;
   }

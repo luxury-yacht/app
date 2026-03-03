@@ -22,7 +22,14 @@ export interface FormFieldDefinition {
   /** YAML path to read/write this field's value, e.g. ['spec', 'replicas']. */
   path: string[];
   /** Input type. */
-  type: 'text' | 'number' | 'select' | 'textarea' | 'key-value-list' | 'group-list';
+  type:
+    | 'text'
+    | 'number'
+    | 'select'
+    | 'textarea'
+    | 'key-value-list'
+    | 'group-list'
+    | 'container-resources';
   /** Placeholder text for text/number inputs. */
   placeholder?: string;
   /** Optional minimum value for number inputs. */
@@ -112,6 +119,7 @@ const deploymentDefinition: ResourceFormDefinition = {
               type: 'text',
               placeholder: 'nginx:latest',
             },
+            { key: 'resources', label: 'Resources', path: ['resources'], type: 'container-resources' },
             {
               key: 'ports',
               label: 'Ports',
@@ -381,6 +389,7 @@ const jobDefinition: ResourceFormDefinition = {
               type: 'text',
               placeholder: 'busybox:latest',
             },
+            { key: 'resources', label: 'Resources', path: ['resources'], type: 'container-resources' },
             {
               key: 'command',
               label: 'Command',
@@ -458,6 +467,7 @@ const cronJobDefinition: ResourceFormDefinition = {
               type: 'text',
               placeholder: 'busybox:latest',
             },
+            { key: 'resources', label: 'Resources', path: ['resources'], type: 'container-resources' },
             {
               key: 'command',
               label: 'Command',
