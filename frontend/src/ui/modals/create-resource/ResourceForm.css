@@ -55,7 +55,6 @@
 /* ── Inputs ──────────────────────────────────────────────────────────── */
 
 .resource-form-input,
-.resource-form-select,
 .resource-form-textarea {
   flex: 1;
   min-width: 0;
@@ -74,14 +73,12 @@
 }
 
 .resource-form-input:focus,
-.resource-form-select:focus,
 .resource-form-textarea:focus {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .resource-form-input:hover:not(:focus),
-.resource-form-select:hover:not(:focus),
 .resource-form-textarea:hover:not(:focus) {
   border-color: var(--color-text-secondary);
 }
@@ -102,15 +99,43 @@
   -moz-appearance: textfield;
 }
 
-/* Select — custom arrow */
-.resource-form-select {
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  padding-right: 28px;
-  cursor: pointer;
+/* Deployment replicas should be compact (0-999). */
+.resource-form-field input[data-field-key="replicas"] {
+  flex: 0 0 6ch;
+  width: 6ch;
+  min-width: 6ch;
+  max-width: 6ch;
+}
+
+/* Resource form dropdowns should use the shared Dropdown component. */
+.resource-form-dropdown {
+  flex: 1;
+  min-width: 0;
+}
+
+.resource-form-dropdown .dropdown {
+  display: block;
+  width: 100%;
+}
+
+.resource-form-dropdown .dropdown-trigger {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 6px 28px 6px 10px;
+  font-size: var(--font-size-normal, 0.875rem);
+  font-family: inherit;
+  box-shadow: none;
+}
+
+.resource-form-dropdown .dropdown-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resource-form-dropdown .dropdown-menu {
+  width: 100%;
+  min-width: 100%;
 }
 
 .resource-form-textarea {
@@ -153,6 +178,17 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-sm);
+}
+
+.resource-form-group-entry {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-group-entry-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .resource-form-group-item {
@@ -199,31 +235,94 @@
   min-width: 6rem;
 }
 
+/* Nested group-list controls (e.g., container ports/env vars). */
+.resource-form-nested-group-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-nested-group-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-nested-group-fields {
+  flex: 1;
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-nested-group-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.resource-form-nested-group-label {
+  font-size: 0.7rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+}
+
+/* Container port should be sized for 5 digits (1-65535). */
+.resource-form-nested-group-field input[data-field-key="containerPort"] {
+  align-self: flex-start;
+  flex: 0 0 auto;
+  width: calc(5ch + 20px);
+  min-width: calc(5ch + 20px);
+  max-width: calc(5ch + 20px);
+}
+
+.resource-form-nested-group-actions {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.resource-form-icon-btn {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: var(--border-radius-sm, 4px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+}
+
 /* ── Buttons ─────────────────────────────────────────────────────────── */
 
 .resource-form-add-btn {
   align-self: flex-start;
-  padding: 0.3rem var(--spacing-md);
-  font-size: var(--font-size-button, 0.85rem);
-  font-weight: var(--font-weight-button, 500);
-  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 4px;
   border: none;
   cursor: pointer;
   white-space: nowrap;
-  background-color: var(--button-generic-bg);
-  color: var(--button-generic-text);
+  background: transparent;
+  color: var(--color-text-secondary);
   transition:
-    background-color var(--duration-fast, 150ms) var(--ease-out, ease),
-    transform var(--duration-fast, 150ms) var(--ease-out, ease);
+    color var(--duration-fast, 150ms) var(--ease-out, ease),
+    background-color var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
 .resource-form-add-btn:hover {
-  background-color: var(--button-generic-hover);
-  transform: translateY(-1px);
+  color: var(--color-success);
+  background: var(--color-success-bg);
 }
 
 .resource-form-add-btn:active {
-  transform: translateY(0);
+  color: var(--color-success);
+  background: var(--color-success-bg);
 }
 
 .resource-form-remove-btn {
@@ -239,6 +338,37 @@
   transition:
     color var(--duration-fast, 150ms) var(--ease-out, ease),
     background-color var(--duration-fast, 150ms) var(--ease-out, ease);
+}
+
+.resource-form-add-btn.resource-form-icon-btn,
+.resource-form-remove-btn.resource-form-icon-btn {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.resource-form-add-btn.resource-form-icon-btn {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.resource-form-remove-btn.resource-form-icon-btn {
+  color: var(--color-text-secondary);
+  background: transparent;
+}
+
+.resource-form-remove-btn.resource-form-icon-btn svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.resource-form-remove-btn.resource-form-icon-btn svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
 }
 
 .resource-form-remove-btn:hover {

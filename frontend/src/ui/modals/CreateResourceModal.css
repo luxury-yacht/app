@@ -117,13 +117,7 @@
   flex-shrink: 0;
 }
 
-/* Kind badge shown in the footer when the YAML has a parseable kind */
-.create-resource-kind-badge {
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: var(--color-bg-secondary);
-  color: var(--color-text-secondary);
+/* Preserve footer alignment after removing the kind badge spacer. */
+.create-resource-footer-cancel {
   margin-right: auto;
 }

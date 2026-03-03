@@ -365,6 +365,17 @@ describe('CreateResourceModal', () => {
     await unmount();
   });
 
+  it('defaults to Deployment template on open', async () => {
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    expect(templateSelect.value).toBe('Deployment');
+    expect(container.querySelector('.tab-strip')).not.toBeNull();
+    expect(container.querySelector('.tab-item--active')?.textContent).toBe('Form');
+    await unmount();
+  });
+
   it('populates editor when template is selected', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
@@ -642,6 +653,12 @@ describe('CreateResourceModal', () => {
   it('does not show tab strip when Blank template is selected', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
+
+    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    await act(async () => {
+      templateSelect.value = '';
+      templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
 
     const tabStrip = container.querySelector('.tab-strip');
     expect(tabStrip).toBeNull();

@@ -179,13 +179,14 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       if (isOpen) {
         setShouldRender(true);
         setIsClosing(false);
+        const initialNamespace = isAllNamespaces(activeNamespace)
+          ? ''
+          : activeNamespace ?? '';
         // Reset state on open.
         setYamlContent(BLANK_YAML);
         setSelectedTemplate('');
         setTargetClusterId(selectedClusterId ?? '');
-        setSelectedNamespace(
-          isAllNamespaces(activeNamespace) ? '' : activeNamespace ?? ''
-        );
+        setSelectedNamespace(initialNamespace);
         setParseError(null);
         setValidationSuccess(null);
         setValidationError(null);
@@ -195,7 +196,26 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         setActiveTab('yaml');
         // Load templates.
         GetResourceTemplates()
-          .then(setAvailableTemplates)
+          .then((templates) => {
+            setAvailableTemplates(templates);
+            const defaultTemplate =
+              templates.find((t) => t.kind === 'Deployment') ??
+              templates.find((t) => t.name === 'Deployment');
+            if (!defaultTemplate) return;
+
+            setSelectedTemplate(defaultTemplate.name);
+            let templateYaml = defaultTemplate.yaml;
+            if (initialNamespace) {
+              templateYaml = templateYaml.replace(
+                /namespace:\s*my-namespace/,
+                `namespace: ${initialNamespace}`
+              );
+            }
+            setYamlContent(templateYaml);
+
+            const def = getFormDefinition(defaultTemplate.kind ?? '');
+            setActiveTab(def ? 'form' : 'yaml');
+          })
           .catch(() => setAvailableTemplates([]));
       } else if (shouldRender) {
         setIsClosing(true);
@@ -596,15 +616,12 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
 
             <div className="modal-footer">
               <button
-                className="button generic"
+                className="button generic create-resource-footer-cancel"
                 onClick={onClose}
                 data-create-resource-focusable="true"
               >
                 Cancel
               </button>
-              {parsedKind && (
-                <span className="create-resource-kind-badge">{parsedKind}</span>
-              )}
               <button
                 className="button generic"
                 disabled={!hasTarget || isBusy}

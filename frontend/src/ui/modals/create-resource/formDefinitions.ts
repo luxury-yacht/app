@@ -25,6 +25,12 @@ export interface FormFieldDefinition {
   type: 'text' | 'number' | 'select' | 'textarea' | 'key-value-list' | 'group-list';
   /** Placeholder text for text/number inputs. */
   placeholder?: string;
+  /** Optional minimum value for number inputs. */
+  min?: number;
+  /** Optional maximum value for number inputs. */
+  max?: number;
+  /** Whether number values must be integers. */
+  integer?: boolean;
   /** Options for 'select' type fields. */
   options?: FormFieldOption[];
   /** Sub-field definitions for 'group-list' type fields. */
@@ -55,9 +61,30 @@ const deploymentDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-app' },
-        { key: 'replicas', label: 'Replicas', path: ['spec', 'replicas'], type: 'number', placeholder: '1' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-app',
+        },
+        {
+          key: 'replicas',
+          label: 'Replicas',
+          path: ['spec', 'replicas'],
+          type: 'number',
+          placeholder: '1',
+          min: 0,
+          max: 999,
+          integer: true,
+        },
         { key: 'labels', label: 'Labels', path: ['metadata', 'labels'], type: 'key-value-list' },
+        {
+          key: 'annotations',
+          label: 'Annotations',
+          path: ['metadata', 'annotations'],
+          type: 'key-value-list',
+        },
       ],
     },
     {
@@ -69,15 +96,36 @@ const deploymentDefinition: ResourceFormDefinition = {
           path: ['spec', 'template', 'spec', 'containers'],
           type: 'group-list',
           fields: [
-            { key: 'name', label: 'Name', path: ['name'], type: 'text', placeholder: 'my-container' },
-            { key: 'image', label: 'Image', path: ['image'], type: 'text', placeholder: 'nginx:latest' },
+            {
+              key: 'name',
+              label: 'Name',
+              path: ['name'],
+              type: 'text',
+              placeholder: 'my-container',
+            },
+            {
+              key: 'image',
+              label: 'Image',
+              path: ['image'],
+              type: 'text',
+              placeholder: 'nginx:latest',
+            },
             {
               key: 'ports',
               label: 'Ports',
               path: ['ports'],
               type: 'group-list',
               fields: [
-                { key: 'containerPort', label: 'Port', path: ['containerPort'], type: 'number', placeholder: '80' },
+                {
+                  key: 'containerPort',
+                  label: 'Port',
+                  path: ['containerPort'],
+                  type: 'number',
+                  placeholder: '80',
+                  min: 1,
+                  max: 65535,
+                  integer: true,
+                },
                 {
                   key: 'protocol',
                   label: 'Protocol',
@@ -93,12 +141,24 @@ const deploymentDefinition: ResourceFormDefinition = {
             },
             {
               key: 'env',
-              label: 'Environment Variables',
+              label: 'Env Vars',
               path: ['env'],
               type: 'group-list',
               fields: [
-                { key: 'name', label: 'Name', path: ['name'], type: 'text', placeholder: 'ENV_VAR' },
-                { key: 'value', label: 'Value', path: ['value'], type: 'text', placeholder: 'value' },
+                {
+                  key: 'name',
+                  label: 'Name',
+                  path: ['name'],
+                  type: 'text',
+                  placeholder: 'ENV_VAR',
+                },
+                {
+                  key: 'value',
+                  label: 'Value',
+                  path: ['value'],
+                  type: 'text',
+                  placeholder: 'value',
+                },
               ],
               defaultValue: { name: '', value: '' },
             },
@@ -116,7 +176,19 @@ const serviceDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-service' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-service',
+        },
+        {
+          key: 'annotations',
+          label: 'Annotations',
+          path: ['metadata', 'annotations'],
+          type: 'key-value-list',
+        },
       ],
     },
     {
@@ -141,7 +213,13 @@ const serviceDefinition: ResourceFormDefinition = {
           type: 'group-list',
           fields: [
             { key: 'port', label: 'Port', path: ['port'], type: 'number', placeholder: '80' },
-            { key: 'targetPort', label: 'Target Port', path: ['targetPort'], type: 'number', placeholder: '80' },
+            {
+              key: 'targetPort',
+              label: 'Target Port',
+              path: ['targetPort'],
+              type: 'number',
+              placeholder: '80',
+            },
             {
               key: 'protocol',
               label: 'Protocol',
@@ -166,14 +244,24 @@ const configMapDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-config' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-config',
+        },
+        {
+          key: 'annotations',
+          label: 'Annotations',
+          path: ['metadata', 'annotations'],
+          type: 'key-value-list',
+        },
       ],
     },
     {
       title: 'Data',
-      fields: [
-        { key: 'data', label: 'Data', path: ['data'], type: 'key-value-list' },
-      ],
+      fields: [{ key: 'data', label: 'Data', path: ['data'], type: 'key-value-list' }],
     },
   ],
 };
@@ -184,7 +272,19 @@ const secretDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-secret' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-secret',
+        },
+        {
+          key: 'annotations',
+          label: 'Annotations',
+          path: ['metadata', 'annotations'],
+          type: 'key-value-list',
+        },
         {
           key: 'type',
           label: 'Type',
@@ -214,8 +314,26 @@ const jobDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-job' },
-        { key: 'backoffLimit', label: 'Backoff Limit', path: ['spec', 'backoffLimit'], type: 'number', placeholder: '3' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-job',
+        },
+        {
+          key: 'annotations',
+          label: 'Annotations',
+          path: ['metadata', 'annotations'],
+          type: 'key-value-list',
+        },
+        {
+          key: 'backoffLimit',
+          label: 'Backoff Limit',
+          path: ['spec', 'backoffLimit'],
+          type: 'number',
+          placeholder: '3',
+        },
         {
           key: 'restartPolicy',
           label: 'Restart Policy',
@@ -238,8 +356,20 @@ const jobDefinition: ResourceFormDefinition = {
           type: 'group-list',
           fields: [
             { key: 'name', label: 'Name', path: ['name'], type: 'text', placeholder: 'worker' },
-            { key: 'image', label: 'Image', path: ['image'], type: 'text', placeholder: 'busybox:latest' },
-            { key: 'command', label: 'Command', path: ['command'], type: 'text', placeholder: 'echo,Hello' },
+            {
+              key: 'image',
+              label: 'Image',
+              path: ['image'],
+              type: 'text',
+              placeholder: 'busybox:latest',
+            },
+            {
+              key: 'command',
+              label: 'Command',
+              path: ['command'],
+              type: 'text',
+              placeholder: 'echo,Hello',
+            },
           ],
           defaultValue: { name: '', image: '', command: [] },
         },
@@ -254,9 +384,33 @@ const cronJobDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-cronjob' },
-        { key: 'schedule', label: 'Schedule', path: ['spec', 'schedule'], type: 'text', placeholder: '0 * * * *' },
-        { key: 'backoffLimit', label: 'Backoff Limit', path: ['spec', 'jobTemplate', 'spec', 'backoffLimit'], type: 'number', placeholder: '3' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-cronjob',
+        },
+        {
+          key: 'annotations',
+          label: 'Annotations',
+          path: ['metadata', 'annotations'],
+          type: 'key-value-list',
+        },
+        {
+          key: 'schedule',
+          label: 'Schedule',
+          path: ['spec', 'schedule'],
+          type: 'text',
+          placeholder: '0 * * * *',
+        },
+        {
+          key: 'backoffLimit',
+          label: 'Backoff Limit',
+          path: ['spec', 'jobTemplate', 'spec', 'backoffLimit'],
+          type: 'number',
+          placeholder: '3',
+        },
         {
           key: 'restartPolicy',
           label: 'Restart Policy',
@@ -279,8 +433,20 @@ const cronJobDefinition: ResourceFormDefinition = {
           type: 'group-list',
           fields: [
             { key: 'name', label: 'Name', path: ['name'], type: 'text', placeholder: 'worker' },
-            { key: 'image', label: 'Image', path: ['image'], type: 'text', placeholder: 'busybox:latest' },
-            { key: 'command', label: 'Command', path: ['command'], type: 'text', placeholder: 'echo,Hello' },
+            {
+              key: 'image',
+              label: 'Image',
+              path: ['image'],
+              type: 'text',
+              placeholder: 'busybox:latest',
+            },
+            {
+              key: 'command',
+              label: 'Command',
+              path: ['command'],
+              type: 'text',
+              placeholder: 'echo,Hello',
+            },
           ],
           defaultValue: { name: '', image: '', command: [] },
         },
@@ -295,8 +461,26 @@ const ingressDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-ingress' },
-        { key: 'ingressClassName', label: 'Ingress Class', path: ['spec', 'ingressClassName'], type: 'text', placeholder: 'nginx' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-ingress',
+        },
+        {
+          key: 'annotations',
+          label: 'Annotations',
+          path: ['metadata', 'annotations'],
+          type: 'key-value-list',
+        },
+        {
+          key: 'ingressClassName',
+          label: 'Ingress Class',
+          path: ['spec', 'ingressClassName'],
+          type: 'text',
+          placeholder: 'nginx',
+        },
       ],
     },
     {
@@ -308,7 +492,13 @@ const ingressDefinition: ResourceFormDefinition = {
           path: ['spec', 'rules'],
           type: 'group-list',
           fields: [
-            { key: 'host', label: 'Host', path: ['host'], type: 'text', placeholder: 'my-app.example.com' },
+            {
+              key: 'host',
+              label: 'Host',
+              path: ['host'],
+              type: 'text',
+              placeholder: 'my-app.example.com',
+            },
             {
               key: 'paths',
               label: 'Paths',
@@ -327,10 +517,26 @@ const ingressDefinition: ResourceFormDefinition = {
                     { label: 'ImplementationSpecific', value: 'ImplementationSpecific' },
                   ],
                 },
-                { key: 'serviceName', label: 'Service', path: ['backend', 'service', 'name'], type: 'text', placeholder: 'my-service' },
-                { key: 'servicePort', label: 'Port', path: ['backend', 'service', 'port', 'number'], type: 'number', placeholder: '80' },
+                {
+                  key: 'serviceName',
+                  label: 'Service',
+                  path: ['backend', 'service', 'name'],
+                  type: 'text',
+                  placeholder: 'my-service',
+                },
+                {
+                  key: 'servicePort',
+                  label: 'Port',
+                  path: ['backend', 'service', 'port', 'number'],
+                  type: 'number',
+                  placeholder: '80',
+                },
               ],
-              defaultValue: { path: '/', pathType: 'Prefix', backend: { service: { name: '', port: { number: 80 } } } },
+              defaultValue: {
+                path: '/',
+                pathType: 'Prefix',
+                backend: { service: { name: '', port: { number: 80 } } },
+              },
             },
           ],
           defaultValue: { host: '', http: { paths: [] } },

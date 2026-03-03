@@ -8,6 +8,9 @@
 
 import React, { useCallback, useMemo, useRef, useEffect } from 'react';
 import * as YAML from 'yaml';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
+import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import { getFieldValue, setFieldValue } from './yamlSync';
 import type {
   ResourceFormDefinition,
@@ -70,6 +73,31 @@ function setNestedValue(
   const child = (clone[path[0]] ?? {}) as Record<string, unknown>;
   clone[path[0]] = setNestedValue(child, path.slice(1), value);
   return clone;
+}
+
+/**
+ * Build standard dropdown options for select fields.
+ * Includes an explicit empty option so users can clear a selection.
+ */
+function buildSelectOptions(field: FormFieldDefinition): DropdownOption[] {
+  const includeEmptyOption = field.key !== 'protocol';
+  return [
+    ...(includeEmptyOption ? [{ value: '', label: '-- Select --' }] : []),
+    ...(field.options?.map((opt) => ({
+      value: opt.value,
+      label: opt.label,
+    })) ?? []),
+  ];
+}
+
+/**
+ * Normalize select value for fields that have implicit defaults.
+ */
+function getSelectFieldValue(field: FormFieldDefinition, currentValue: string): string {
+  if (field.key === 'protocol' && currentValue === '') {
+    return 'TCP';
+  }
+  return currentValue;
 }
 
 // ─── Field Components ───────────────────────────────────────────────────
@@ -144,25 +172,94 @@ function NumberField({
   const yamlRef = useRef(yamlContent);
   const onChangeRef = useRef(onYamlChange);
   const pathRef = useRef(field.path);
+  const minRef = useRef(field.min);
+  const maxRef = useRef(field.max);
+  const integerRef = useRef(field.integer);
   yamlRef.current = yamlContent;
   onChangeRef.current = onYamlChange;
   pathRef.current = field.path;
+  minRef.current = field.min;
+  maxRef.current = field.max;
+  integerRef.current = field.integer;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
+    const handleInput = (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const min = minRef.current;
+      const max = maxRef.current;
+      const integerOnly = !!integerRef.current;
+
+      // Keep bounded integer fields constrained while typing.
+      if (!integerOnly) return;
+      if (target.value === '') return;
+
+      const digitsOnly = target.value.replace(/[^\d-]/g, '');
+      const normalized =
+        typeof min === 'number' && min >= 0
+          ? digitsOnly.replace(/-/g, '')
+          : digitsOnly;
+
+      if (normalized === '' || normalized === '-') {
+        target.value = '';
+        return;
+      }
+      const maxDigits =
+        typeof max === 'number' && Number.isInteger(max) && max >= 0
+          ? String(max).length
+          : undefined;
+      target.value =
+        typeof maxDigits === 'number' && normalized.length > maxDigits
+          ? normalized.slice(0, maxDigits)
+          : normalized;
+    };
+
     const handler = (e: Event) => {
       const target = e.target as HTMLInputElement;
       const raw = target.value;
+      const min = minRef.current;
+      const max = maxRef.current;
+      const hasBounds = typeof min === 'number' || typeof max === 'number';
+      const integerOnly = !!integerRef.current;
+      const restorePreviousValue = () => {
+        const previous = getFieldValue(yamlRef.current, pathRef.current);
+        target.value = previous != null ? String(previous) : '';
+      };
+
+      if (hasBounds && raw.trim() === '') {
+        restorePreviousValue();
+        return;
+      }
+
       const num = Number(raw);
+      if (hasBounds) {
+        if (Number.isNaN(num)) {
+          restorePreviousValue();
+          return;
+        }
+        if (integerOnly && !Number.isInteger(num)) {
+          restorePreviousValue();
+          return;
+        }
+        if ((typeof min === 'number' && num < min) || (typeof max === 'number' && num > max)) {
+          restorePreviousValue();
+          return;
+        }
+      }
+
       const parsed = raw === '' ? '' : isNaN(num) ? raw : num;
       const updated = setFieldValue(yamlRef.current, pathRef.current, parsed);
       if (updated !== null) onChangeRef.current(updated);
     };
+    el.addEventListener('input', handleInput);
     el.addEventListener('change', handler);
-    return () => el.removeEventListener('change', handler);
+    return () => {
+      el.removeEventListener('input', handleInput);
+      el.removeEventListener('change', handler);
+    };
   }, []);
 
   return (
@@ -173,6 +270,9 @@ function NumberField({
       data-field-key={field.key}
       defaultValue={stringValue}
       placeholder={field.placeholder}
+      min={field.min}
+      max={field.max}
+      step={field.integer ? 1 : undefined}
     />
   );
 }
@@ -191,42 +291,22 @@ function SelectField({
 }): React.ReactElement {
   const value = getFieldValue(yamlContent, field.path);
   const stringValue = value != null ? String(value) : '';
-
-  const yamlRef = useRef(yamlContent);
-  const onChangeRef = useRef(onYamlChange);
-  const pathRef = useRef(field.path);
-  yamlRef.current = yamlContent;
-  onChangeRef.current = onYamlChange;
-  pathRef.current = field.path;
-
-  const selectRef = useRef<HTMLSelectElement | null>(null);
-
-  useEffect(() => {
-    const el = selectRef.current;
-    if (!el) return;
-    const handler = (e: Event) => {
-      const target = e.target as HTMLSelectElement;
-      const updated = setFieldValue(yamlRef.current, pathRef.current, target.value);
-      if (updated !== null) onChangeRef.current(updated);
-    };
-    el.addEventListener('change', handler);
-    return () => el.removeEventListener('change', handler);
-  }, []);
+  const effectiveValue = getSelectFieldValue(field, stringValue);
+  const options = useMemo(() => buildSelectOptions(field), [field]);
 
   return (
-    <select
-      ref={selectRef}
-      className="resource-form-select"
-      data-field-key={field.key}
-      defaultValue={stringValue}
-    >
-      <option value="">-- Select --</option>
-      {field.options?.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
+    <div data-field-key={field.key} className="resource-form-dropdown">
+      <Dropdown
+        options={options}
+        value={effectiveValue}
+        onChange={(nextValue) => {
+          const normalized = Array.isArray(nextValue) ? nextValue[0] ?? '' : nextValue;
+          const updated = setFieldValue(yamlContent, field.path, normalized);
+          if (updated !== null) onYamlChange(updated);
+        }}
+        ariaLabel={field.label}
+      />
+    </div>
   );
 }
 
@@ -303,6 +383,17 @@ function KeyValueListField({
     return [];
   }, [rawValue]);
 
+  /**
+   * Resolve the add-button label for key-value lists.
+   * Labels and annotations use explicit wording; other maps stay generic.
+   */
+  const addButtonLabel = useMemo(() => {
+    const terminalPath = field.path[field.path.length - 1];
+    if (terminalPath === 'labels') return 'Add Label';
+    if (terminalPath === 'annotations') return 'Add Annotation';
+    return 'Add Entry';
+  }, [field.path]);
+
   /** Rebuild the object from the entries array and write it back to YAML. */
   const updateEntries = useCallback(
     (newEntries: [string, string][]) => {
@@ -340,7 +431,21 @@ function KeyValueListField({
 
   /** Add a new empty row. */
   const handleAdd = () => {
-    const newEntries: [string, string][] = [...entries, ['', '']];
+    const terminalPath = field.path[field.path.length - 1];
+    const baseKey =
+      terminalPath === 'labels'
+        ? 'label-key'
+        : terminalPath === 'annotations'
+          ? 'annotation-key'
+          : 'key';
+    const existingKeys = new Set(entries.map(([k]) => k));
+    let candidate = baseKey;
+    let suffix = 2;
+    while (existingKeys.has(candidate)) {
+      candidate = `${baseKey}-${suffix}`;
+      suffix += 1;
+    }
+    const newEntries: [string, string][] = [...entries, [candidate, '']];
     updateEntries(newEntries);
   };
 
@@ -372,7 +477,7 @@ function KeyValueListField({
         </div>
       ))}
       <button type="button" className="resource-form-add-btn" onClick={handleAdd}>
-        + Add Entry
+        {addButtonLabel}
       </button>
     </div>
   );
@@ -399,6 +504,7 @@ function GroupListField({
     }
     return [];
   }, [rawValue]);
+  const useExternalRemoveAction = field.key === 'containers';
 
   /** Write the full updated array back to the YAML at the group-list's path. */
   const updateItems = useCallback(
@@ -469,31 +575,39 @@ function GroupListField({
             data-field-key={subField.key}
             value={stringValue}
             placeholder={subField.placeholder}
+            min={subField.min}
+            max={subField.max}
+            step={subField.integer ? 1 : undefined}
             onChange={(e) => {
               const raw = e.target.value;
+              if (raw === '') {
+                handleSubFieldChange(itemIndex, subField, '');
+                return;
+              }
               const num = Number(raw);
-              const parsed = raw === '' ? '' : isNaN(num) ? raw : num;
-              handleSubFieldChange(itemIndex, subField, parsed);
+              if (Number.isNaN(num)) return;
+              if (subField.integer && !Number.isInteger(num)) return;
+              if (typeof subField.min === 'number' && num < subField.min) return;
+              if (typeof subField.max === 'number' && num > subField.max) return;
+              handleSubFieldChange(itemIndex, subField, num);
             }}
           />
         );
       case 'select':
         return (
-          <select
-            className="resource-form-select"
-            data-field-key={subField.key}
-            value={stringValue}
-            onChange={(e) =>
-              handleSubFieldChange(itemIndex, subField, e.target.value)
-            }
-          >
-            <option value="">-- Select --</option>
-            {subField.options?.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          <div data-field-key={subField.key} className="resource-form-dropdown">
+            <Dropdown
+              options={buildSelectOptions(subField)}
+              value={getSelectFieldValue(subField, stringValue)}
+              onChange={(nextValue) => {
+                const normalized = Array.isArray(nextValue)
+                  ? nextValue[0] ?? ''
+                  : nextValue;
+                handleSubFieldChange(itemIndex, subField, normalized);
+              }}
+              ariaLabel={subField.label}
+            />
+          </div>
         );
       case 'textarea':
         return (
@@ -507,6 +621,161 @@ function GroupListField({
             }
           />
         );
+      case 'group-list': {
+        const nestedItems = Array.isArray(subValue)
+          ? (subValue as Record<string, unknown>[])
+          : [];
+
+        /** Write an updated nested list back into the parent item. */
+        const updateNestedItems = (newNestedItems: Record<string, unknown>[]) => {
+          handleSubFieldChange(itemIndex, subField, newNestedItems);
+        };
+
+        /** Change a nested field value for one nested row. */
+        const handleNestedFieldChange = (
+          nestedIndex: number,
+          nestedField: FormFieldDefinition,
+          newValue: unknown
+        ) => {
+          const updated = nestedItems.map((nestedItem, i) => {
+            if (i !== nestedIndex) return nestedItem;
+            return setNestedValue(nestedItem, nestedField.path, newValue);
+          });
+          updateNestedItems(updated);
+        };
+
+        /** Remove a nested row. */
+        const handleNestedRemove = (nestedIndex: number) => {
+          updateNestedItems(nestedItems.filter((_, i) => i !== nestedIndex));
+        };
+
+        /** Add a nested row using the nested defaultValue. */
+        const handleNestedAdd = () => {
+          const defaultItem = (subField.defaultValue ?? {}) as Record<string, unknown>;
+          updateNestedItems([...nestedItems, { ...defaultItem }]);
+        };
+
+        /** Render a nested leaf input inside the nested group-list. */
+        const renderNestedLeafField = (
+          nestedField: FormFieldDefinition,
+          nestedItem: Record<string, unknown>,
+          nestedIndex: number
+        ): React.ReactNode => {
+          const nestedValue = getNestedValue(nestedItem, nestedField.path);
+          const nestedStringValue = nestedValue != null ? String(nestedValue) : '';
+
+          switch (nestedField.type) {
+            case 'text':
+              return (
+                <input
+                  type="text"
+                  className="resource-form-input"
+                  data-field-key={nestedField.key}
+                  value={nestedStringValue}
+                  placeholder={nestedField.placeholder}
+                  onChange={(e) =>
+                    handleNestedFieldChange(nestedIndex, nestedField, e.target.value)
+                  }
+                />
+              );
+            case 'number':
+              return (
+                <input
+                  type="number"
+                  className="resource-form-input"
+                  data-field-key={nestedField.key}
+                  value={nestedStringValue}
+                  placeholder={nestedField.placeholder}
+                  min={nestedField.min}
+                  max={nestedField.max}
+                  step={nestedField.integer ? 1 : undefined}
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw === '') {
+                      handleNestedFieldChange(nestedIndex, nestedField, '');
+                      return;
+                    }
+                    const num = Number(raw);
+                    if (Number.isNaN(num)) return;
+                    if (nestedField.integer && !Number.isInteger(num)) return;
+                    if (typeof nestedField.min === 'number' && num < nestedField.min) return;
+                    if (typeof nestedField.max === 'number' && num > nestedField.max) return;
+                    handleNestedFieldChange(nestedIndex, nestedField, num);
+                  }}
+                />
+              );
+            case 'select':
+              return (
+                <div data-field-key={nestedField.key} className="resource-form-dropdown">
+                  <Dropdown
+                    options={buildSelectOptions(nestedField)}
+                    value={getSelectFieldValue(nestedField, nestedStringValue)}
+                    onChange={(nextValue) => {
+                      const normalized = Array.isArray(nextValue)
+                        ? nextValue[0] ?? ''
+                        : nextValue;
+                      handleNestedFieldChange(nestedIndex, nestedField, normalized);
+                    }}
+                    ariaLabel={nestedField.label}
+                  />
+                </div>
+              );
+            case 'textarea':
+              return (
+                <textarea
+                  className="resource-form-textarea"
+                  data-field-key={nestedField.key}
+                  value={nestedStringValue}
+                  placeholder={nestedField.placeholder}
+                  onChange={(e) =>
+                    handleNestedFieldChange(nestedIndex, nestedField, e.target.value)
+                  }
+                />
+              );
+            default:
+              return null;
+          }
+        };
+
+        return (
+          <div data-field-key={subField.key} className="resource-form-nested-group-list">
+            {nestedItems.map((nestedItem, nestedIndex) => (
+              <div key={nestedIndex} className="resource-form-nested-group-row">
+                <div className="resource-form-nested-group-fields">
+                  {subField.fields?.map((nestedField) => (
+                    <div key={nestedField.key} className="resource-form-nested-group-field">
+                      <label className="resource-form-nested-group-label">
+                        {nestedField.label}
+                      </label>
+                      {renderNestedLeafField(nestedField, nestedItem, nestedIndex)}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className="resource-form-remove-btn resource-form-icon-btn"
+                  aria-label={`Remove ${subField.label}`}
+                  title={`Remove ${subField.label}`}
+                  onClick={() => handleNestedRemove(nestedIndex)}
+                >
+                  <CloseIcon width={12} height={12} />
+                </button>
+              </div>
+            ))}
+            <div className="resource-form-nested-group-actions">
+              <button
+                type="button"
+                className="resource-form-add-btn resource-form-icon-btn"
+                aria-label={`Add ${subField.label}`}
+                title={`Add ${subField.label}`}
+                onClick={handleNestedAdd}
+              >
+                +
+              </button>
+            </div>
+          </div>
+        );
+      }
       default:
         return null;
     }
@@ -515,31 +784,46 @@ function GroupListField({
   return (
     <div data-field-key={field.key} className="resource-form-group-container">
       {items.map((item, itemIndex) => (
-        <div key={itemIndex} className="resource-form-group-item">
-          <div className="resource-form-group-item-header">
-            <span className="resource-form-group-item-title">
-              {field.label} {itemIndex + 1}
-            </span>
-            <button
-              type="button"
-              className="resource-form-remove-btn"
-              onClick={() => handleRemoveItem(itemIndex)}
-            >
-              Remove
-            </button>
-          </div>
-          <div className="resource-form-group-item-fields">
-            {field.fields?.map((subField) => (
-              <div key={subField.key} className="resource-form-field">
-                <label className="resource-form-label">{subField.label}</label>
-                {renderSubField(subField, item, itemIndex)}
+        <div key={itemIndex} className="resource-form-group-entry">
+          <div className="resource-form-group-item">
+            {!useExternalRemoveAction && (
+              <div className="resource-form-group-item-header">
+                <span className="resource-form-group-item-title">
+                  {field.label} {itemIndex + 1}
+                </span>
+                <button
+                  type="button"
+                  className="resource-form-remove-btn"
+                  onClick={() => handleRemoveItem(itemIndex)}
+                >
+                  Remove
+                </button>
               </div>
-            ))}
+            )}
+            <div className="resource-form-group-item-fields">
+              {field.fields?.map((subField) => (
+                <div key={subField.key} className="resource-form-field">
+                  <label className="resource-form-label">{subField.label}</label>
+                  {renderSubField(subField, item, itemIndex)}
+                </div>
+              ))}
+            </div>
           </div>
+          {useExternalRemoveAction && (
+            <div className="resource-form-group-entry-actions">
+              <button
+                type="button"
+                className="resource-form-remove-btn"
+                onClick={() => handleRemoveItem(itemIndex)}
+              >
+                Remove
+              </button>
+            </div>
+          )}
         </div>
       ))}
       <button type="button" className="resource-form-add-btn" onClick={handleAddItem}>
-        + Add {field.label}
+        Add {field.label}
       </button>
     </div>
   );
