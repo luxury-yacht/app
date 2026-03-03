@@ -59,7 +59,16 @@ const wailsMock = vi.hoisted(() => ({
       apiVersion: 'apps/v1',
       category: 'Workloads',
       description: 'A Deployment manages replicated Pods',
-      yaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace',
+      yaml:
+        'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\n  labels:\n    app: my-app',
+    },
+    {
+      name: 'Service',
+      kind: 'Service',
+      apiVersion: 'v1',
+      category: 'Networking',
+      description: 'A Service exposes a network endpoint',
+      yaml: 'apiVersion: v1\nkind: Service\nmetadata:\n  name: my-service\n  namespace: my-namespace',
     },
   ]),
   ValidateResourceCreation: vi.fn().mockResolvedValue({
@@ -88,6 +97,12 @@ vi.mock('./create-resource/formDefinitions', () => ({
             title: 'Metadata',
             fields: [
               { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text' as const },
+              {
+                key: 'labels',
+                label: 'Labels',
+                path: ['metadata', 'labels'],
+                type: 'key-value-list' as const,
+              },
             ],
           },
         ],
@@ -350,7 +365,7 @@ describe('CreateResourceModal', () => {
     await flushPromises();
 
     expect(container.querySelector('.create-resource-modal')).not.toBeNull();
-    expect(container.textContent).toContain('Create Resource');
+    expect(container.textContent).toContain('Create Deployment');
     expect(container.textContent).toContain('Validate');
     expect(container.textContent).toContain('Create');
     expect(container.textContent).toContain('Cancel');
@@ -403,6 +418,47 @@ describe('CreateResourceModal', () => {
 
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     expect(editor.value).toContain('kind: Deployment');
+    await unmount();
+  });
+
+  it('updates header based on selected kind and falls back for Blank', async () => {
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const title = container.querySelector('.modal-header h2');
+    expect(title?.textContent).toBe('Create Deployment');
+
+    const templateSelect = container.querySelector(
+      '[data-testid="dropdown-Resource template"]'
+    ) as HTMLSelectElement;
+
+    await act(async () => {
+      templateSelect.value = 'Service';
+      templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(title?.textContent).toBe('Create Service');
+
+    await act(async () => {
+      templateSelect.value = '';
+      templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    expect(title?.textContent).toBe('Create Resource');
+    await unmount();
+  });
+
+  it('does not prepopulate labels on a new form template', async () => {
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show YAML'
+    ) as HTMLButtonElement | undefined;
+    expect(toggleBtn).toBeDefined();
+    await act(async () => { toggleBtn?.click(); });
+
+    const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
+    expect(editor.value).toContain('kind: Deployment');
+    expect(editor.value).not.toContain('\n  labels:');
     await unmount();
   });
 

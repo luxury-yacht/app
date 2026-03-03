@@ -985,9 +985,15 @@ spec:
     });
 
     expect(onChange).toHaveBeenCalled();
-    const updatedYaml = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as string;
-    expect(updatedYaml).toContain('annotations:');
-    expect(updatedYaml).toContain('annotation-key');
+    const annotationRows = container.querySelectorAll(
+      '[data-field-key="annotations"] .resource-form-kv-row'
+    );
+    expect(annotationRows.length).toBe(1);
+    const annotationInputs = container.querySelectorAll(
+      '[data-field-key="annotations"] .resource-form-kv-row input'
+    );
+    expect((annotationInputs[0] as HTMLInputElement).value).toBe('');
+    expect((annotationInputs[1] as HTMLInputElement).value).toBe('');
   });
 
   it('keeps annotation row visible when key and value are cleared', async () => {

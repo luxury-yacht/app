@@ -488,12 +488,12 @@ function KeyValueListField({
 
   /** Add a new empty row. */
   const handleAdd = () => {
-    const baseKey =
-      terminalPath === 'labels'
-        ? 'label-key'
-        : terminalPath === 'annotations'
-          ? 'annotation-key'
-          : 'key';
+    if (terminalPath === 'labels' || terminalPath === 'annotations') {
+      const newEntries: [string, string][] = [...draftEntries, ['', '']];
+      updateEntries(newEntries);
+      return;
+    }
+    const baseKey = 'key';
     const existingKeys = new Set(draftEntries.map(([k]) => k));
     let candidate = baseKey;
     let suffix = 2;
@@ -508,23 +508,53 @@ function KeyValueListField({
   return (
     <div data-field-key={field.key} className="resource-form-kv-container">
       {draftEntries.map(([k, v], index) => (
-        <div key={index} className="resource-form-kv-row">
-          {showInlineKeyValueLabels && <span className="resource-form-kv-inline-label">Key</span>}
-          <input
-            type="text"
-            className="resource-form-input"
-            value={k}
-            placeholder="key"
-            onChange={(e) => handleKeyChange(index, e.target.value)}
-          />
-          {showInlineKeyValueLabels && <span className="resource-form-kv-inline-label">Value</span>}
-          <input
-            type="text"
-            className="resource-form-input"
-            value={v}
-            placeholder="value"
-            onChange={(e) => handleValueChange(index, e.target.value)}
-          />
+        <div
+          key={index}
+          className={`resource-form-kv-row${showInlineKeyValueLabels ? ' resource-form-kv-row--labeled' : ''}`}
+        >
+          {showInlineKeyValueLabels ? (
+            <div className="resource-form-kv-labeled-pairs">
+              <div className="resource-form-kv-pair">
+                <span className="resource-form-kv-inline-label">Key</span>
+                <input
+                  type="text"
+                  className="resource-form-input resource-form-kv-input--25ch"
+                  value={k}
+                  placeholder="key"
+                  size={25}
+                  onChange={(e) => handleKeyChange(index, e.target.value)}
+                />
+              </div>
+              <div className="resource-form-kv-pair">
+                <span className="resource-form-kv-inline-label">Value</span>
+                <input
+                  type="text"
+                  className="resource-form-input resource-form-kv-input--25ch"
+                  value={v}
+                  placeholder="value"
+                  size={25}
+                  onChange={(e) => handleValueChange(index, e.target.value)}
+                />
+              </div>
+            </div>
+          ) : (
+            <>
+              <input
+                type="text"
+                className="resource-form-input"
+                value={k}
+                placeholder="key"
+                onChange={(e) => handleKeyChange(index, e.target.value)}
+              />
+              <input
+                type="text"
+                className="resource-form-input"
+                value={v}
+                placeholder="value"
+                onChange={(e) => handleValueChange(index, e.target.value)}
+              />
+            </>
+          )}
           <div className="resource-form-actions-inline">
             <button
               type="button"

@@ -39,7 +39,11 @@ import {
   type ObjectYamlErrorPayload,
 } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlErrors';
 import type { templates } from '@wailsjs/go/models';
-import { getFormDefinition } from './create-resource/formDefinitions';
+import {
+  getFormDefinition,
+  type FormFieldDefinition,
+  type ResourceFormDefinition,
+} from './create-resource/formDefinitions';
 import { ResourceForm } from './create-resource/ResourceForm';
 
 // Minimal YAML skeleton for the "Blank" option.
@@ -49,6 +53,46 @@ metadata:
   name:
   namespace:
 `;
+
+/**
+ * Collect absolute YAML paths for top-level form fields that represent
+ * label maps. New forms should start without pre-populated label entries.
+ */
+function collectTopLevelLabelPaths(definition?: ResourceFormDefinition): string[][] {
+  if (!definition) return [];
+  const paths: string[][] = [];
+  for (const section of definition.sections) {
+    for (const field of section.fields) {
+      const terminal = field.path[field.path.length - 1];
+      if (field.type === 'key-value-list' && terminal === 'labels') {
+        paths.push(field.path);
+      }
+    }
+  }
+  return paths;
+}
+
+/**
+ * Remove pre-populated labels from template YAML for fields rendered
+ * by the form, while preserving the rest of the template.
+ */
+function stripPrepopulatedLabels(
+  yamlContent: string,
+  definition?: ResourceFormDefinition
+): string {
+  const labelPaths = collectTopLevelLabelPaths(definition);
+  if (labelPaths.length === 0) return yamlContent;
+  try {
+    const doc = YAML.parseDocument(yamlContent);
+    if (doc.errors.length > 0) return yamlContent;
+    for (const path of labelPaths) {
+      doc.deleteIn(path as FormFieldDefinition['path']);
+    }
+    return doc.toString();
+  } catch {
+    return yamlContent;
+  }
+}
 
 interface CreateResourceModalProps {
   isOpen: boolean;
@@ -211,9 +255,9 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                 `namespace: ${initialNamespace}`
               );
             }
-            setYamlContent(templateYaml);
-
             const def = getFormDefinition(defaultTemplate.kind ?? '');
+            templateYaml = stripPrepopulatedLabels(templateYaml, def);
+            setYamlContent(templateYaml);
             setActiveView(def ? 'form' : 'yaml');
           })
           .catch(() => setAvailableTemplates([]));
@@ -331,10 +375,11 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
             `namespace: ${selectedNamespace}`
           );
         }
+        const def = getFormDefinition(template?.kind ?? '');
+        templateYaml = stripPrepopulatedLabels(templateYaml, def);
         setYamlContent(templateYaml);
 
         // Switch to form view if the template has a form definition.
-        const def = getFormDefinition(template?.kind ?? '');
         setActiveView(def ? 'form' : 'yaml');
       },
       [availableTemplates, selectedNamespace]
@@ -357,6 +402,14 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       }
       return opts;
     }, [availableTemplates]);
+
+    // Modal header reflects the selected Kind; Blank falls back to generic title.
+    const createHeaderTitle = useMemo(() => {
+      if (!selectedTemplate) return 'Create Resource';
+      const selected = availableTemplates.find((t) => t.name === selectedTemplate);
+      const resourceKind = selected?.kind || selectedTemplate;
+      return `Create ${resourceKind}`;
+    }, [availableTemplates, selectedTemplate]);
 
     // Clear validation state when YAML changes.
     const handleYamlChange = useCallback((value: string) => {
@@ -477,7 +530,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
             ref={modalRef}
           >
             <div className="modal-header">
-              <h2>Create Resource</h2>
+              <h2>{createHeaderTitle}</h2>
               <button
                 className="modal-close"
                 onClick={onClose}
