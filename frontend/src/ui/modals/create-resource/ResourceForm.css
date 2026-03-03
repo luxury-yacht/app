@@ -166,17 +166,43 @@
   gap: var(--spacing-xs);
 }
 
+.resource-form-kv-inline-label {
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .resource-form-kv-row .resource-form-input {
   flex: 1;
   min-width: 0;
 }
 
-.resource-form-kv-row .resource-form-input:first-child {
+.resource-form-kv-row .resource-form-input:nth-of-type(1) {
   flex: 0.4;
 }
 
-.resource-form-kv-row .resource-form-input:nth-child(2) {
+.resource-form-kv-row .resource-form-input:nth-of-type(2) {
   flex: 0.6;
+}
+
+.resource-form-kv-empty-spacer {
+  flex: 1;
+}
+
+.resource-form-actions-inline {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
 /* ── Group-list ──────────────────────────────────────────────────────── */
@@ -192,11 +218,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-}
-
-.resource-form-group-entry-actions {
-  display: flex;
-  justify-content: flex-end;
 }
 
 .resource-form-group-item {
@@ -228,6 +249,12 @@
   font-size: var(--font-size-normal);
   font-weight: var(--font-weight-bold);
   color: var(--color-text);
+}
+
+.resource-form-group-item-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
 .resource-form-group-item-fields {
@@ -388,11 +415,6 @@
   max-width: calc(25ch + 20px);
 }
 
-.resource-form-nested-group-actions {
-  display: flex;
-  justify-content: flex-start;
-}
-
 .resource-form-nested-group-row-actions {
   display: inline-flex;
   align-items: center;
@@ -416,7 +438,6 @@
 /* ── Buttons ─────────────────────────────────────────────────────────── */
 
 .resource-form-add-btn {
-  align-self: flex-start;
   padding: 2px 8px;
   font-size: 0.75rem;
   font-weight: 500;
@@ -463,6 +484,11 @@
   height: 24px;
   padding: 0;
   align-self: center;
+}
+
+.resource-form-icon-btn--hidden {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .resource-form-add-btn.resource-form-icon-btn {

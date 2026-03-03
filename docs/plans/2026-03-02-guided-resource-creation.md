@@ -15,6 +15,7 @@
 ## Task 1: YAML Sync Helpers
 
 **Files:**
+
 - Create: `frontend/src/ui/modals/create-resource/yamlSync.ts`
 
 **Step 1: Write the failing test**
@@ -109,9 +110,15 @@ spec:
     });
 
     it('updates a nested map value', () => {
-      const result = setFieldValue(sampleYaml, ['metadata', 'labels'], { app: 'new-app', tier: 'frontend' });
+      const result = setFieldValue(sampleYaml, ['metadata', 'labels'], {
+        app: 'new-app',
+        tier: 'frontend',
+      });
       expect(result).not.toBeNull();
-      expect(getFieldValue(result!, ['metadata', 'labels'])).toEqual({ app: 'new-app', tier: 'frontend' });
+      expect(getFieldValue(result!, ['metadata', 'labels'])).toEqual({
+        app: 'new-app',
+        tier: 'frontend',
+      });
     });
 
     it('updates a list value', () => {
@@ -119,7 +126,11 @@ spec:
         { name: 'container-a', image: 'alpine:latest' },
         { name: 'container-b', image: 'busybox:latest' },
       ];
-      const result = setFieldValue(sampleYaml, ['spec', 'template', 'spec', 'containers'], newContainers);
+      const result = setFieldValue(
+        sampleYaml,
+        ['spec', 'template', 'spec', 'containers'],
+        newContainers
+      );
       expect(result).not.toBeNull();
       const containers = getFieldValue(result!, ['spec', 'template', 'spec', 'containers']);
       expect(containers).toHaveLength(2);
@@ -187,11 +198,7 @@ export function getFieldValue(yamlContent: string, path: string[]): unknown {
  * YAML string. Preserves comments and formatting for untouched nodes.
  * Returns null if the YAML is unparseable.
  */
-export function setFieldValue(
-  yamlContent: string,
-  path: string[],
-  value: unknown
-): string | null {
+export function setFieldValue(yamlContent: string, path: string[], value: unknown): string | null {
   try {
     const doc = YAML.parseDocument(yamlContent);
     if (doc.errors.length > 0) return null;
@@ -219,6 +226,7 @@ feat: add YAML sync helpers for guided resource creation
 ## Task 2: Form Definition Types and Definitions
 
 **Files:**
+
 - Create: `frontend/src/ui/modals/create-resource/formDefinitions.ts`
 
 **Step 1: Write the failing test**
@@ -227,11 +235,23 @@ Create `frontend/src/ui/modals/create-resource/formDefinitions.test.ts`:
 
 ```typescript
 import { describe, expect, it } from 'vitest';
-import { getFormDefinition, allFormDefinitions, type ResourceFormDefinition } from './formDefinitions';
+import {
+  getFormDefinition,
+  allFormDefinitions,
+  type ResourceFormDefinition,
+} from './formDefinitions';
 
 describe('formDefinitions', () => {
   it('returns a definition for each supported kind', () => {
-    const supportedKinds = ['Deployment', 'Service', 'ConfigMap', 'Secret', 'Job', 'CronJob', 'Ingress'];
+    const supportedKinds = [
+      'Deployment',
+      'Service',
+      'ConfigMap',
+      'Secret',
+      'Job',
+      'CronJob',
+      'Ingress',
+    ];
     for (const kind of supportedKinds) {
       const def = getFormDefinition(kind);
       expect(def, `missing form definition for ${kind}`).toBeDefined();
@@ -256,7 +276,10 @@ describe('formDefinitions', () => {
             // Group-list sub-fields are scoped — only check within their parent.
             const subKeys = new Set<string>();
             for (const sub of field.fields) {
-              expect(subKeys.has(sub.key), `duplicate sub-key "${sub.key}" in ${def.kind}/${field.key}`).toBe(false);
+              expect(
+                subKeys.has(sub.key),
+                `duplicate sub-key "${sub.key}" in ${def.kind}/${field.key}`
+              ).toBe(false);
               subKeys.add(sub.key);
             }
           }
@@ -283,7 +306,10 @@ describe('formDefinitions', () => {
       for (const section of def.sections) {
         for (const field of section.fields) {
           if (field.type === 'select') {
-            expect(field.options?.length, `no options for select ${def.kind}/${field.key}`).toBeGreaterThan(0);
+            expect(
+              field.options?.length,
+              `no options for select ${def.kind}/${field.key}`
+            ).toBeGreaterThan(0);
           }
         }
       }
@@ -359,8 +385,20 @@ const deploymentDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-app' },
-        { key: 'replicas', label: 'Replicas', path: ['spec', 'replicas'], type: 'number', placeholder: '1' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-app',
+        },
+        {
+          key: 'replicas',
+          label: 'Replicas',
+          path: ['spec', 'replicas'],
+          type: 'number',
+          placeholder: '1',
+        },
         { key: 'labels', label: 'Labels', path: ['metadata', 'labels'], type: 'key-value-list' },
       ],
     },
@@ -373,15 +411,33 @@ const deploymentDefinition: ResourceFormDefinition = {
           path: ['spec', 'template', 'spec', 'containers'],
           type: 'group-list',
           fields: [
-            { key: 'name', label: 'Name', path: ['name'], type: 'text', placeholder: 'my-container' },
-            { key: 'image', label: 'Image', path: ['image'], type: 'text', placeholder: 'nginx:latest' },
+            {
+              key: 'name',
+              label: 'Name',
+              path: ['name'],
+              type: 'text',
+              placeholder: 'my-container',
+            },
+            {
+              key: 'image',
+              label: 'Image',
+              path: ['image'],
+              type: 'text',
+              placeholder: 'nginx:latest',
+            },
             {
               key: 'ports',
               label: 'Ports',
               path: ['ports'],
               type: 'group-list',
               fields: [
-                { key: 'containerPort', label: 'Port', path: ['containerPort'], type: 'number', placeholder: '80' },
+                {
+                  key: 'containerPort',
+                  label: 'Port',
+                  path: ['containerPort'],
+                  type: 'number',
+                  placeholder: '80',
+                },
                 {
                   key: 'protocol',
                   label: 'Protocol',
@@ -401,8 +457,14 @@ const deploymentDefinition: ResourceFormDefinition = {
               path: ['env'],
               type: 'group-list',
               fields: [
-                { key: 'name', label: 'Name', path: ['name'], type: 'text', placeholder: 'ENV_VAR' },
-                { key: 'value', label: 'Value', path: ['value'], type: 'text', placeholder: 'value' },
+                { key: 'name', label: 'Name', path: ['name'], type: 'text', placeholder: 'key' },
+                {
+                  key: 'value',
+                  label: 'Value',
+                  path: ['value'],
+                  type: 'text',
+                  placeholder: 'value',
+                },
               ],
               defaultValue: { name: '', value: '' },
             },
@@ -420,7 +482,13 @@ const serviceDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-service' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-service',
+        },
       ],
     },
     {
@@ -445,7 +513,13 @@ const serviceDefinition: ResourceFormDefinition = {
           type: 'group-list',
           fields: [
             { key: 'port', label: 'Port', path: ['port'], type: 'number', placeholder: '80' },
-            { key: 'targetPort', label: 'Target Port', path: ['targetPort'], type: 'number', placeholder: '80' },
+            {
+              key: 'targetPort',
+              label: 'Target Port',
+              path: ['targetPort'],
+              type: 'number',
+              placeholder: '80',
+            },
             {
               key: 'protocol',
               label: 'Protocol',
@@ -470,14 +544,18 @@ const configMapDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-config' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-config',
+        },
       ],
     },
     {
       title: 'Data',
-      fields: [
-        { key: 'data', label: 'Data', path: ['data'], type: 'key-value-list' },
-      ],
+      fields: [{ key: 'data', label: 'Data', path: ['data'], type: 'key-value-list' }],
     },
   ],
 };
@@ -488,7 +566,13 @@ const secretDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-secret' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-secret',
+        },
         {
           key: 'type',
           label: 'Type',
@@ -518,8 +602,20 @@ const jobDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-job' },
-        { key: 'backoffLimit', label: 'Backoff Limit', path: ['spec', 'backoffLimit'], type: 'number', placeholder: '3' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-job',
+        },
+        {
+          key: 'backoffLimit',
+          label: 'Backoff Limit',
+          path: ['spec', 'backoffLimit'],
+          type: 'number',
+          placeholder: '3',
+        },
         {
           key: 'restartPolicy',
           label: 'Restart Policy',
@@ -542,8 +638,20 @@ const jobDefinition: ResourceFormDefinition = {
           type: 'group-list',
           fields: [
             { key: 'name', label: 'Name', path: ['name'], type: 'text', placeholder: 'worker' },
-            { key: 'image', label: 'Image', path: ['image'], type: 'text', placeholder: 'busybox:latest' },
-            { key: 'command', label: 'Command', path: ['command'], type: 'text', placeholder: 'echo,Hello' },
+            {
+              key: 'image',
+              label: 'Image',
+              path: ['image'],
+              type: 'text',
+              placeholder: 'busybox:latest',
+            },
+            {
+              key: 'command',
+              label: 'Command',
+              path: ['command'],
+              type: 'text',
+              placeholder: 'echo,Hello',
+            },
           ],
           defaultValue: { name: '', image: '', command: [] },
         },
@@ -558,9 +666,27 @@ const cronJobDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-cronjob' },
-        { key: 'schedule', label: 'Schedule', path: ['spec', 'schedule'], type: 'text', placeholder: '0 * * * *' },
-        { key: 'backoffLimit', label: 'Backoff Limit', path: ['spec', 'jobTemplate', 'spec', 'backoffLimit'], type: 'number', placeholder: '3' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-cronjob',
+        },
+        {
+          key: 'schedule',
+          label: 'Schedule',
+          path: ['spec', 'schedule'],
+          type: 'text',
+          placeholder: '0 * * * *',
+        },
+        {
+          key: 'backoffLimit',
+          label: 'Backoff Limit',
+          path: ['spec', 'jobTemplate', 'spec', 'backoffLimit'],
+          type: 'number',
+          placeholder: '3',
+        },
         {
           key: 'restartPolicy',
           label: 'Restart Policy',
@@ -583,8 +709,20 @@ const cronJobDefinition: ResourceFormDefinition = {
           type: 'group-list',
           fields: [
             { key: 'name', label: 'Name', path: ['name'], type: 'text', placeholder: 'worker' },
-            { key: 'image', label: 'Image', path: ['image'], type: 'text', placeholder: 'busybox:latest' },
-            { key: 'command', label: 'Command', path: ['command'], type: 'text', placeholder: 'echo,Hello' },
+            {
+              key: 'image',
+              label: 'Image',
+              path: ['image'],
+              type: 'text',
+              placeholder: 'busybox:latest',
+            },
+            {
+              key: 'command',
+              label: 'Command',
+              path: ['command'],
+              type: 'text',
+              placeholder: 'echo,Hello',
+            },
           ],
           defaultValue: { name: '', image: '', command: [] },
         },
@@ -599,8 +737,20 @@ const ingressDefinition: ResourceFormDefinition = {
     {
       title: 'Metadata',
       fields: [
-        { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', placeholder: 'my-ingress' },
-        { key: 'ingressClassName', label: 'Ingress Class', path: ['spec', 'ingressClassName'], type: 'text', placeholder: 'nginx' },
+        {
+          key: 'name',
+          label: 'Name',
+          path: ['metadata', 'name'],
+          type: 'text',
+          placeholder: 'my-ingress',
+        },
+        {
+          key: 'ingressClassName',
+          label: 'Ingress Class',
+          path: ['spec', 'ingressClassName'],
+          type: 'text',
+          placeholder: 'nginx',
+        },
       ],
     },
     {
@@ -612,7 +762,13 @@ const ingressDefinition: ResourceFormDefinition = {
           path: ['spec', 'rules'],
           type: 'group-list',
           fields: [
-            { key: 'host', label: 'Host', path: ['host'], type: 'text', placeholder: 'my-app.example.com' },
+            {
+              key: 'host',
+              label: 'Host',
+              path: ['host'],
+              type: 'text',
+              placeholder: 'my-app.example.com',
+            },
             {
               key: 'paths',
               label: 'Paths',
@@ -631,10 +787,26 @@ const ingressDefinition: ResourceFormDefinition = {
                     { label: 'ImplementationSpecific', value: 'ImplementationSpecific' },
                   ],
                 },
-                { key: 'serviceName', label: 'Service', path: ['backend', 'service', 'name'], type: 'text', placeholder: 'my-service' },
-                { key: 'servicePort', label: 'Port', path: ['backend', 'service', 'port', 'number'], type: 'number', placeholder: '80' },
+                {
+                  key: 'serviceName',
+                  label: 'Service',
+                  path: ['backend', 'service', 'name'],
+                  type: 'text',
+                  placeholder: 'my-service',
+                },
+                {
+                  key: 'servicePort',
+                  label: 'Port',
+                  path: ['backend', 'service', 'port', 'number'],
+                  type: 'number',
+                  placeholder: '80',
+                },
               ],
-              defaultValue: { path: '/', pathType: 'Prefix', backend: { service: { name: '', port: { number: 80 } } } },
+              defaultValue: {
+                path: '/',
+                pathType: 'Prefix',
+                backend: { service: { name: '', port: { number: 80 } } },
+              },
             },
           ],
           defaultValue: { host: '', http: { paths: [] } },
@@ -685,6 +857,7 @@ feat: add declarative form definitions for 7 resource types
 ## Task 3: ResourceForm Renderer Component
 
 **Files:**
+
 - Create: `frontend/src/ui/modals/create-resource/ResourceForm.tsx`
 - Create: `frontend/src/ui/modals/create-resource/ResourceForm.css`
 
@@ -858,6 +1031,7 @@ Expected: Compilation error — `ResourceForm.tsx` does not exist.
 Create `frontend/src/ui/modals/create-resource/ResourceForm.tsx`. This is the generic form renderer. It reads values from YAML via `getFieldValue` and writes changes via `setFieldValue`. The component handles all 6 field types: text, number, select, textarea, key-value-list, group-list.
 
 The component should:
+
 - Accept props: `definition: ResourceFormDefinition`, `yamlContent: string`, `onYamlChange: (yaml: string) => void`
 - Parse the YAML once per render to extract all field values
 - If YAML has parse errors, show an inline message and make fields read-only
@@ -902,6 +1076,7 @@ feat: add generic ResourceForm renderer component
 ## Task 4: Integrate Tab Toggle into CreateResourceModal
 
 **Files:**
+
 - Modify: `frontend/src/ui/modals/CreateResourceModal.tsx`
 - Modify: `frontend/src/ui/modals/CreateResourceModal.css`
 
@@ -915,7 +1090,9 @@ it('shows tab strip when a supported template is selected', async () => {
   await flushPromises();
 
   // Select the Deployment template.
-  const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+  const templateSelect = container.querySelector(
+    '[data-testid="dropdown-Resource template"]'
+  ) as HTMLSelectElement;
   await act(async () => {
     templateSelect.value = 'Deployment';
     templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -942,7 +1119,9 @@ it('defaults to Form tab when a supported template is selected', async () => {
   const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
   await flushPromises();
 
-  const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+  const templateSelect = container.querySelector(
+    '[data-testid="dropdown-Resource template"]'
+  ) as HTMLSelectElement;
   await act(async () => {
     templateSelect.value = 'Deployment';
     templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -961,7 +1140,9 @@ it('switches to YAML tab when clicked', async () => {
   await flushPromises();
 
   // Select Deployment to show tabs.
-  const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+  const templateSelect = container.querySelector(
+    '[data-testid="dropdown-Resource template"]'
+  ) as HTMLSelectElement;
   await act(async () => {
     templateSelect.value = 'Deployment';
     templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -971,7 +1152,9 @@ it('switches to YAML tab when clicked', async () => {
   const yamlTab = Array.from(container.querySelectorAll('.tab-item')).find(
     (el) => el.textContent === 'YAML'
   ) as HTMLButtonElement;
-  await act(async () => { yamlTab.click(); });
+  await act(async () => {
+    yamlTab.click();
+  });
 
   // YAML editor should now be visible.
   expect(container.querySelector('[data-testid="yaml-editor"]')).not.toBeNull();
@@ -986,7 +1169,9 @@ it('form changes are reflected in YAML when switching tabs', async () => {
   await flushPromises();
 
   // Select Deployment.
-  const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+  const templateSelect = container.querySelector(
+    '[data-testid="dropdown-Resource template"]'
+  ) as HTMLSelectElement;
   await act(async () => {
     templateSelect.value = 'Deployment';
     templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1005,7 +1190,9 @@ it('form changes are reflected in YAML when switching tabs', async () => {
   const yamlTab = Array.from(container.querySelectorAll('.tab-item')).find(
     (el) => el.textContent === 'YAML'
   ) as HTMLButtonElement;
-  await act(async () => { yamlTab.click(); });
+  await act(async () => {
+    yamlTab.click();
+  });
 
   // YAML should contain the changed name.
   const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
@@ -1024,12 +1211,14 @@ Expected: New tests fail — no `.tab-strip` rendered, no Form tab behavior.
 Modify `frontend/src/ui/modals/CreateResourceModal.tsx`:
 
 1. Add imports at the top:
+
    ```typescript
    import { getFormDefinition } from './create-resource/formDefinitions';
    import { ResourceForm } from './create-resource/ResourceForm';
    ```
 
 2. Add tab state after the existing `parsedKind` useMemo:
+
    ```typescript
    // Active tab: 'form' or 'yaml'. Defaults based on whether a form definition exists.
    const [activeTab, setActiveTab] = useState<'form' | 'yaml'>('yaml');
@@ -1045,6 +1234,7 @@ Modify `frontend/src/ui/modals/CreateResourceModal.tsx`:
    ```
 
 3. When a template is selected (`handleTemplateChange`), after setting `yamlContent`, set the active tab:
+
    ```typescript
    // After setYamlContent(templateYaml):
    const def = getFormDefinition(template?.kind ?? '');
@@ -1052,32 +1242,36 @@ Modify `frontend/src/ui/modals/CreateResourceModal.tsx`:
    ```
 
 4. In the state reset block (inside the `useEffect` for `isOpen`), reset the tab:
+
    ```typescript
    setActiveTab('yaml');
    ```
 
 5. In the JSX, between the context bar and the editor, add the tab strip (conditionally rendered):
+
    ```tsx
-   {showTabs && (
-     <div className="tab-strip create-resource-tab-strip">
-       <button
-         className={`tab-item${activeTab === 'form' ? ' tab-item--active' : ''}`}
-         onClick={() => setActiveTab('form')}
-         type="button"
-         data-create-resource-focusable="true"
-       >
-         Form
-       </button>
-       <button
-         className={`tab-item${activeTab === 'yaml' ? ' tab-item--active' : ''}`}
-         onClick={() => setActiveTab('yaml')}
-         type="button"
-         data-create-resource-focusable="true"
-       >
-         YAML
-       </button>
-     </div>
-   )}
+   {
+     showTabs && (
+       <div className="tab-strip create-resource-tab-strip">
+         <button
+           className={`tab-item${activeTab === 'form' ? ' tab-item--active' : ''}`}
+           onClick={() => setActiveTab('form')}
+           type="button"
+           data-create-resource-focusable="true"
+         >
+           Form
+         </button>
+         <button
+           className={`tab-item${activeTab === 'yaml' ? ' tab-item--active' : ''}`}
+           onClick={() => setActiveTab('yaml')}
+           type="button"
+           data-create-resource-focusable="true"
+         >
+           YAML
+         </button>
+       </div>
+     );
+   }
    ```
 
 6. Conditionally render either the form or the CodeMirror editor:
@@ -1130,6 +1324,7 @@ feat: integrate form/YAML tab toggle into CreateResourceModal
 ## Task 5: Full Test Suite and Edge Cases
 
 **Files:**
+
 - Modify: `frontend/src/ui/modals/create-resource/yamlSync.test.ts`
 - Modify: `frontend/src/ui/modals/create-resource/ResourceForm.test.tsx`
 - Modify: `frontend/src/ui/modals/CreateResourceModal.test.tsx`
@@ -1171,7 +1366,9 @@ it('hides tab strip when kind is changed to unsupported in YAML', async () => {
   await flushPromises();
 
   // Select Deployment to show tabs.
-  const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+  const templateSelect = container.querySelector(
+    '[data-testid="dropdown-Resource template"]'
+  ) as HTMLSelectElement;
   await act(async () => {
     templateSelect.value = 'Deployment';
     templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -1182,7 +1379,9 @@ it('hides tab strip when kind is changed to unsupported in YAML', async () => {
   const yamlTab = Array.from(container.querySelectorAll('.tab-item')).find(
     (el) => el.textContent === 'YAML'
   ) as HTMLButtonElement;
-  await act(async () => { yamlTab.click(); });
+  await act(async () => {
+    yamlTab.click();
+  });
 
   const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
   await act(async () => {

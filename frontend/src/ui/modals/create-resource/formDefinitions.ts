@@ -119,7 +119,12 @@ const deploymentDefinition: ResourceFormDefinition = {
               type: 'text',
               placeholder: 'nginx:latest',
             },
-            { key: 'resources', label: 'Resources', path: ['resources'], type: 'container-resources' },
+            {
+              key: 'resources',
+              label: 'Resources',
+              path: ['resources'],
+              type: 'container-resources',
+            },
             {
               key: 'ports',
               label: 'Ports',
@@ -168,7 +173,7 @@ const deploymentDefinition: ResourceFormDefinition = {
                   label: 'Name',
                   path: ['name'],
                   type: 'text',
-                  placeholder: 'ENV_VAR',
+                  placeholder: 'name',
                 },
                 {
                   key: 'value',
@@ -389,7 +394,12 @@ const jobDefinition: ResourceFormDefinition = {
               type: 'text',
               placeholder: 'busybox:latest',
             },
-            { key: 'resources', label: 'Resources', path: ['resources'], type: 'container-resources' },
+            {
+              key: 'resources',
+              label: 'Resources',
+              path: ['resources'],
+              type: 'container-resources',
+            },
             {
               key: 'command',
               label: 'Command',
@@ -467,7 +477,12 @@ const cronJobDefinition: ResourceFormDefinition = {
               type: 'text',
               placeholder: 'busybox:latest',
             },
-            { key: 'resources', label: 'Resources', path: ['resources'], type: 'container-resources' },
+            {
+              key: 'resources',
+              label: 'Resources',
+              path: ['resources'],
+              type: 'container-resources',
+            },
             {
               key: 'command',
               label: 'Command',

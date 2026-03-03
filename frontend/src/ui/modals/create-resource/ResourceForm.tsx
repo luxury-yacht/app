@@ -400,9 +400,12 @@ function KeyValueListField({
   onYamlChange: (yaml: string) => void;
 }): React.ReactElement {
   const rawValue = getFieldValue(yamlContent, field.path);
+  const terminalPath = field.path[field.path.length - 1];
+  const pathKey = field.path.join('.');
+  const showInlineKeyValueLabels = terminalPath === 'labels' || terminalPath === 'annotations';
 
   // Convert the object to an array of [key, value] pairs for rendering.
-  const entries: [string, string][] = useMemo(() => {
+  const entriesFromYaml: [string, string][] = useMemo(() => {
     if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
       return Object.entries(rawValue as Record<string, unknown>).map(([k, v]) => [
         k,
@@ -411,34 +414,59 @@ function KeyValueListField({
     }
     return [];
   }, [rawValue]);
+  const [draftEntries, setDraftEntries] = useState<[string, string][]>(entriesFromYaml);
+  const lastSyncKeyRef = useRef(`${pathKey}|${yamlContent}`);
+
+  /**
+   * Build the persisted YAML map from editable rows.
+   * Empty keys are skipped so partial rows do not leak into YAML.
+   */
+  const toPersistedMap = useCallback((rows: [string, string][]): Record<string, string> => {
+    const obj: Record<string, string> = {};
+    for (const [k, v] of rows) {
+      if (k) obj[k] = v;
+    }
+    return obj;
+  }, []);
+
+  /**
+   * Resync draft rows only when the upstream YAML/path changes.
+   * Internal edits should not be overwritten until parent state updates.
+   */
+  useEffect(() => {
+    const syncKey = `${pathKey}|${yamlContent}`;
+    if (syncKey === lastSyncKeyRef.current) return;
+    lastSyncKeyRef.current = syncKey;
+    setDraftEntries(entriesFromYaml);
+  }, [entriesFromYaml, pathKey, yamlContent]);
 
   /**
    * Resolve the add-button label for key-value lists.
    * Labels and annotations use explicit wording; other maps stay generic.
    */
   const addButtonLabel = useMemo(() => {
-    const terminalPath = field.path[field.path.length - 1];
     if (terminalPath === 'labels') return 'Add Label';
     if (terminalPath === 'annotations') return 'Add Annotation';
     return 'Add Entry';
-  }, [field.path]);
+  }, [terminalPath]);
+  const removeButtonLabel = useMemo(
+    () => addButtonLabel.replace(/^Add\b/, 'Remove'),
+    [addButtonLabel]
+  );
 
-  /** Rebuild the object from the entries array and write it back to YAML. */
+  /** Persist rows to local draft state and YAML. */
   const updateEntries = useCallback(
     (newEntries: [string, string][]) => {
-      const obj: Record<string, string> = {};
-      for (const [k, v] of newEntries) {
-        if (k) obj[k] = v;
-      }
-      const updated = setFieldValue(yamlContent, field.path, obj);
+      setDraftEntries(newEntries);
+      const updated = setFieldValue(yamlContent, field.path, toPersistedMap(newEntries));
       if (updated !== null) onYamlChange(updated);
     },
-    [yamlContent, field.path, onYamlChange]
+    [yamlContent, field.path, onYamlChange, toPersistedMap]
   );
 
   /** Handle key change for a specific row. */
   const handleKeyChange = (index: number, newKey: string) => {
-    const newEntries = entries.map((entry, i) =>
+    const newEntries = draftEntries.map((entry, i) =>
       i === index ? ([newKey, entry[1]] as [string, string]) : entry
     );
     updateEntries(newEntries);
@@ -446,7 +474,7 @@ function KeyValueListField({
 
   /** Handle value change for a specific row. */
   const handleValueChange = (index: number, newValue: string) => {
-    const newEntries = entries.map((entry, i) =>
+    const newEntries = draftEntries.map((entry, i) =>
       i === index ? ([entry[0], newValue] as [string, string]) : entry
     );
     updateEntries(newEntries);
@@ -454,60 +482,98 @@ function KeyValueListField({
 
   /** Remove a row. */
   const handleRemove = (index: number) => {
-    const newEntries = entries.filter((_, i) => i !== index);
+    const newEntries = draftEntries.filter((_, i) => i !== index);
     updateEntries(newEntries);
   };
 
   /** Add a new empty row. */
   const handleAdd = () => {
-    const terminalPath = field.path[field.path.length - 1];
     const baseKey =
       terminalPath === 'labels'
         ? 'label-key'
         : terminalPath === 'annotations'
           ? 'annotation-key'
           : 'key';
-    const existingKeys = new Set(entries.map(([k]) => k));
+    const existingKeys = new Set(draftEntries.map(([k]) => k));
     let candidate = baseKey;
     let suffix = 2;
     while (existingKeys.has(candidate)) {
       candidate = `${baseKey}-${suffix}`;
       suffix += 1;
     }
-    const newEntries: [string, string][] = [...entries, [candidate, '']];
+    const newEntries: [string, string][] = [...draftEntries, [candidate, '']];
     updateEntries(newEntries);
   };
 
   return (
     <div data-field-key={field.key} className="resource-form-kv-container">
-      {entries.map(([k, v], index) => (
+      {draftEntries.map(([k, v], index) => (
         <div key={index} className="resource-form-kv-row">
+          {showInlineKeyValueLabels && <span className="resource-form-kv-inline-label">Key</span>}
           <input
             type="text"
             className="resource-form-input"
             value={k}
-            placeholder="Key"
+            placeholder="key"
             onChange={(e) => handleKeyChange(index, e.target.value)}
           />
+          {showInlineKeyValueLabels && <span className="resource-form-kv-inline-label">Value</span>}
           <input
             type="text"
             className="resource-form-input"
             value={v}
-            placeholder="Value"
+            placeholder="value"
             onChange={(e) => handleValueChange(index, e.target.value)}
           />
-          <button
-            type="button"
-            className="resource-form-remove-btn"
-            onClick={() => handleRemove(index)}
-          >
-            Remove
-          </button>
+          <div className="resource-form-actions-inline">
+            <button
+              type="button"
+              className={`resource-form-add-btn resource-form-icon-btn${index === draftEntries.length - 1 ? '' : ' resource-form-icon-btn--hidden'}`}
+              aria-label={index === draftEntries.length - 1 ? addButtonLabel : undefined}
+              title={index === draftEntries.length - 1 ? addButtonLabel : undefined}
+              onClick={index === draftEntries.length - 1 ? handleAdd : undefined}
+              disabled={index !== draftEntries.length - 1}
+              tabIndex={index === draftEntries.length - 1 ? undefined : -1}
+            >
+              <AddIcon width={12} height={12} />
+            </button>
+            <button
+              type="button"
+              className="resource-form-remove-btn resource-form-icon-btn"
+              aria-label={removeButtonLabel}
+              title={removeButtonLabel}
+              onClick={() => handleRemove(index)}
+            >
+              <CloseIcon width={12} height={12} />
+            </button>
+          </div>
         </div>
       ))}
-      <button type="button" className="resource-form-add-btn" onClick={handleAdd}>
-        {addButtonLabel}
-      </button>
+      {draftEntries.length === 0 && (
+        <div className="resource-form-kv-row">
+          <div className="resource-form-kv-empty-spacer" />
+          <div className="resource-form-actions-inline">
+            <button
+              type="button"
+              className="resource-form-add-btn resource-form-icon-btn"
+              aria-label={addButtonLabel}
+              title={addButtonLabel}
+              onClick={handleAdd}
+            >
+              <AddIcon width={12} height={12} />
+            </button>
+            <button
+              type="button"
+              className="resource-form-remove-btn resource-form-icon-btn resource-form-icon-btn--hidden"
+              aria-hidden="true"
+              tabIndex={-1}
+              disabled
+            >
+              <CloseIcon width={12} height={12} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -698,18 +764,22 @@ function GroupListField({
 
         if (!showFields) {
           return (
-            <button
-              type="button"
-              className="resource-form-add-btn"
-              onClick={() =>
-                setResourceFieldsVisible((previous) => ({
-                  ...previous,
-                  [visibilityKey]: true,
-                }))
-              }
-            >
-              Add
-            </button>
+            <div className="resource-form-actions-row">
+              <button
+                type="button"
+                className="resource-form-add-btn resource-form-icon-btn"
+                aria-label="Add Resources"
+                title="Add Resources"
+                onClick={() =>
+                  setResourceFieldsVisible((previous) => ({
+                    ...previous,
+                    [visibilityKey]: true,
+                  }))
+                }
+              >
+                <AddIcon width={12} height={12} />
+              </button>
+            </div>
           );
         }
 
@@ -797,6 +867,8 @@ function GroupListField({
           }
           updateEntries([...entries, [candidate, '']]);
         };
+        const nestedAddLabel = 'Add Entry';
+        const nestedRemoveLabel = 'Remove Entry';
 
         return (
           <div data-field-key={subField.key} className="resource-form-kv-container">
@@ -806,28 +878,65 @@ function GroupListField({
                   type="text"
                   className="resource-form-input"
                   value={k}
-                  placeholder="Key"
+                  placeholder="key"
                   onChange={(e) => handleKeyChange(entryIndex, e.target.value)}
                 />
                 <input
                   type="text"
                   className="resource-form-input"
                   value={v}
-                  placeholder="Value"
+                  placeholder="value"
                   onChange={(e) => handleValueChange(entryIndex, e.target.value)}
                 />
-                <button
-                  type="button"
-                  className="resource-form-remove-btn"
-                  onClick={() => handleRemove(entryIndex)}
-                >
-                  Remove
-                </button>
+                <div className="resource-form-actions-inline">
+                  <button
+                    type="button"
+                    className={`resource-form-add-btn resource-form-icon-btn${entryIndex === entries.length - 1 ? '' : ' resource-form-icon-btn--hidden'}`}
+                    aria-label={entryIndex === entries.length - 1 ? nestedAddLabel : undefined}
+                    title={entryIndex === entries.length - 1 ? nestedAddLabel : undefined}
+                    onClick={entryIndex === entries.length - 1 ? handleAdd : undefined}
+                    disabled={entryIndex !== entries.length - 1}
+                    tabIndex={entryIndex === entries.length - 1 ? undefined : -1}
+                  >
+                    <AddIcon width={12} height={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="resource-form-remove-btn resource-form-icon-btn"
+                    aria-label={nestedRemoveLabel}
+                    title={nestedRemoveLabel}
+                    onClick={() => handleRemove(entryIndex)}
+                  >
+                    <CloseIcon width={12} height={12} />
+                  </button>
+                </div>
               </div>
             ))}
-            <button type="button" className="resource-form-add-btn" onClick={handleAdd}>
-              Add Entry
-            </button>
+            {entries.length === 0 && (
+              <div className="resource-form-kv-row">
+                <div className="resource-form-kv-empty-spacer" />
+                <div className="resource-form-actions-inline">
+                  <button
+                    type="button"
+                    className="resource-form-add-btn resource-form-icon-btn"
+                    aria-label={nestedAddLabel}
+                    title={nestedAddLabel}
+                    onClick={handleAdd}
+                  >
+                    <AddIcon width={12} height={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="resource-form-remove-btn resource-form-icon-btn resource-form-icon-btn--hidden"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    disabled
+                  >
+                    <CloseIcon width={12} height={12} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
       }
@@ -967,17 +1076,21 @@ function GroupListField({
                   ))}
                 </div>
                 <div className="resource-form-nested-group-row-actions">
-                  {nestedIndex === nestedItems.length - 1 && (
-                    <button
-                      type="button"
-                      className="resource-form-add-btn resource-form-icon-btn"
-                      aria-label={`Add ${subField.label}`}
-                      title={`Add ${subField.label}`}
-                      onClick={handleNestedAdd}
-                    >
-                      <AddIcon width={12} height={12} />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className={`resource-form-add-btn resource-form-icon-btn${nestedIndex === nestedItems.length - 1 ? '' : ' resource-form-icon-btn--hidden'}`}
+                    aria-label={
+                      nestedIndex === nestedItems.length - 1 ? `Add ${subField.label}` : undefined
+                    }
+                    title={
+                      nestedIndex === nestedItems.length - 1 ? `Add ${subField.label}` : undefined
+                    }
+                    onClick={nestedIndex === nestedItems.length - 1 ? handleNestedAdd : undefined}
+                    disabled={nestedIndex !== nestedItems.length - 1}
+                    tabIndex={nestedIndex === nestedItems.length - 1 ? undefined : -1}
+                  >
+                    <AddIcon width={12} height={12} />
+                  </button>
                   <button
                     type="button"
                     className="resource-form-remove-btn resource-form-icon-btn"
@@ -1003,6 +1116,15 @@ function GroupListField({
                   >
                     <AddIcon width={12} height={12} />
                   </button>
+                  <button
+                    type="button"
+                    className="resource-form-remove-btn resource-form-icon-btn resource-form-icon-btn--hidden"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    disabled
+                  >
+                    <CloseIcon width={12} height={12} />
+                  </button>
                 </div>
               </div>
             )}
@@ -1025,13 +1147,28 @@ function GroupListField({
               <span className="resource-form-group-item-title">
                 {getItemTitle(item, itemIndex)}
               </span>
-              <button
-                type="button"
-                className="resource-form-remove-btn"
-                onClick={() => handleRemoveItem(itemIndex)}
-              >
-                Remove
-              </button>
+              <div className="resource-form-group-item-header-actions">
+                <button
+                  type="button"
+                  className={`resource-form-add-btn resource-form-icon-btn${itemIndex === items.length - 1 ? '' : ' resource-form-icon-btn--hidden'}`}
+                  aria-label={itemIndex === items.length - 1 ? `Add ${field.label}` : undefined}
+                  title={itemIndex === items.length - 1 ? `Add ${field.label}` : undefined}
+                  onClick={itemIndex === items.length - 1 ? handleAddItem : undefined}
+                  disabled={itemIndex !== items.length - 1}
+                  tabIndex={itemIndex === items.length - 1 ? undefined : -1}
+                >
+                  <AddIcon width={12} height={12} />
+                </button>
+                <button
+                  type="button"
+                  className="resource-form-remove-btn resource-form-icon-btn"
+                  aria-label={`Remove ${isContainerGroup ? 'Container' : field.label}`}
+                  title={`Remove ${isContainerGroup ? 'Container' : field.label}`}
+                  onClick={() => handleRemoveItem(itemIndex)}
+                >
+                  <CloseIcon width={12} height={12} />
+                </button>
+              </div>
             </div>
             <div className="resource-form-group-item-fields">
               {field.fields?.map((subField) => (
@@ -1044,9 +1181,19 @@ function GroupListField({
           </div>
         </div>
       ))}
-      <button type="button" className="resource-form-add-btn" onClick={handleAddItem}>
-        Add {field.label}
-      </button>
+      {items.length === 0 && (
+        <div className="resource-form-actions-row">
+          <button
+            type="button"
+            className="resource-form-add-btn resource-form-icon-btn"
+            aria-label={`Add ${field.label}`}
+            title={`Add ${field.label}`}
+            onClick={handleAddItem}
+          >
+            <AddIcon width={12} height={12} />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

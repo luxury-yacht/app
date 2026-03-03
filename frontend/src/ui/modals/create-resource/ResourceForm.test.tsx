@@ -166,6 +166,35 @@ describe('ResourceForm', () => {
     expect(container.textContent).toContain('Items');
   });
 
+  it('shows Key/Value labels for labels and annotations rows', async () => {
+    const yamlWithMetadataEntries = `apiVersion: v1
+kind: TestKind
+metadata:
+  name: test-app
+  labels:
+    app: demo
+  annotations:
+    owner: team
+spec:
+  replicas: 3
+  type: ClusterIP
+  items:
+  - name: first
+data:
+  KEY_A: value-a
+`;
+    await renderForm(yamlWithMetadataEntries, vi.fn());
+    const labelsField = container.querySelector('[data-field-key="labels"]') as HTMLElement;
+    const annotationsField = container.querySelector(
+      '[data-field-key="annotations"]'
+    ) as HTMLElement;
+
+    expect(labelsField.textContent).toContain('Key');
+    expect(labelsField.textContent).toContain('Value');
+    expect(annotationsField.textContent).toContain('Key');
+    expect(annotationsField.textContent).toContain('Value');
+  });
+
   it('renders text input with current value from YAML', async () => {
     await renderForm(sampleYaml, vi.fn());
     const nameInput = container.querySelector('input[data-field-key="name"]') as HTMLInputElement;
@@ -763,7 +792,7 @@ spec:
     expect(clearedCpuRequest).toBeUndefined();
   });
 
-  it('shows a single Add button and expands to labeled resource fields', async () => {
+  it('shows a single add icon button for resources and expands to labeled fields', async () => {
     const onChange = vi.fn();
     const { ResourceForm } = await import('./ResourceForm');
     const deploymentLikeDefinition: ResourceFormDefinition = {
@@ -811,10 +840,11 @@ spec:
       );
     });
 
-    const addResourcesBtn = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent?.trim() === 'Add'
-    ) as HTMLButtonElement | undefined;
+    const addResourcesBtn = container.querySelector(
+      'button[aria-label="Add Resources"]'
+    ) as HTMLButtonElement | null;
     expect(addResourcesBtn).toBeDefined();
+    expect(addResourcesBtn?.querySelector('svg')).not.toBeNull();
     expect(container.querySelector('[data-field-key="requestsCpu"]')).toBeNull();
 
     await act(async () => {
@@ -928,26 +958,25 @@ spec:
     expect(firstPort?.name).toBeUndefined();
   });
 
-  it('renders contextual add labels without plus prefixes', async () => {
+  it('renders icon add buttons with contextual aria labels', async () => {
     await renderForm(sampleYaml, vi.fn());
-    const addButtons = Array.from(container.querySelectorAll('.resource-form-add-btn')).map(
-      (button) => button.textContent?.trim() ?? ''
-    );
+    const addButtons = Array.from(
+      container.querySelectorAll('.resource-form-add-btn')
+    ) as HTMLButtonElement[];
+    const labels = addButtons.map((button) => button.getAttribute('aria-label') ?? '');
 
-    expect(addButtons).toContain('Add Label');
-    expect(addButtons).toContain('Add Annotation');
-    expect(addButtons).toContain('Add Entry');
-    expect(addButtons.some((label) => label.startsWith('+'))).toBe(false);
+    expect(labels).toContain('Add Label');
+    expect(labels).toContain('Add Annotation');
+    expect(labels).toContain('Add Entry');
+    expect(addButtons.every((button) => button.querySelector('svg') != null)).toBe(true);
   });
 
-  it('adds annotation entries when Add Annotation is clicked', async () => {
+  it('adds annotation entries when annotation add icon is clicked', async () => {
     const onChange = vi.fn();
     await renderForm(sampleYaml, onChange);
-    const addAnnotationButton = Array.from(
-      container.querySelectorAll('.resource-form-add-btn')
-    ).find((button) => button.textContent?.trim() === 'Add Annotation') as
-      | HTMLButtonElement
-      | undefined;
+    const addAnnotationButton = container.querySelector(
+      'button[aria-label="Add Annotation"]'
+    ) as HTMLButtonElement | null;
 
     expect(addAnnotationButton).toBeDefined();
 
@@ -959,6 +988,50 @@ spec:
     const updatedYaml = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as string;
     expect(updatedYaml).toContain('annotations:');
     expect(updatedYaml).toContain('annotation-key');
+  });
+
+  it('keeps annotation row visible when key and value are cleared', async () => {
+    const onChange = vi.fn();
+    const yamlWithAnnotation = `apiVersion: v1
+kind: TestKind
+metadata:
+  name: test-app
+  annotations:
+    owner: team
+spec:
+  replicas: 3
+  type: ClusterIP
+  items:
+  - name: first
+`;
+    await renderForm(yamlWithAnnotation, onChange);
+
+    const annotationInputs = container.querySelectorAll(
+      '[data-field-key="annotations"] .resource-form-kv-row input'
+    );
+    const annotationKeyInput = annotationInputs[0] as HTMLInputElement;
+    const annotationValueInput = annotationInputs[1] as HTMLInputElement;
+    expect(annotationKeyInput.value).toBe('owner');
+    expect(annotationValueInput.value).toBe('team');
+
+    await act(async () => {
+      setNativeInputValue(annotationKeyInput, '');
+      annotationKeyInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      setNativeInputValue(annotationValueInput, '');
+      annotationValueInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const rowsAfterClear = container.querySelectorAll(
+      '[data-field-key="annotations"] .resource-form-kv-row'
+    );
+    expect(rowsAfterClear.length).toBe(1);
+    const inputsAfterClear = container.querySelectorAll(
+      '[data-field-key="annotations"] .resource-form-kv-row input'
+    );
+    expect((inputsAfterClear[0] as HTMLInputElement).value).toBe('');
+    expect((inputsAfterClear[1] as HTMLInputElement).value).toBe('');
   });
 
   it('shows parse error message for invalid YAML', async () => {
