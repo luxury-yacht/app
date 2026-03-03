@@ -22,6 +22,12 @@
   flex-shrink: 0;
 }
 
+.create-resource-view-toggle {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 /* Labeled dropdown field */
 .create-resource-dropdown-field {
   display: flex;
@@ -110,11 +116,6 @@
 
 .create-resource-error-causes li {
   margin-bottom: var(--spacing-xs);
-}
-
-/* Tab strip within the create resource modal */
-.create-resource-tab-strip {
-  flex-shrink: 0;
 }
 
 /* Preserve footer alignment after removing the kind badge spacer. */

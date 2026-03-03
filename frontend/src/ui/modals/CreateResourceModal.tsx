@@ -193,7 +193,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         setRawError(null);
         setIsValidating(false);
         setIsCreating(false);
-        setActiveTab('yaml');
+        setActiveView('yaml');
         // Load templates.
         GetResourceTemplates()
           .then((templates) => {
@@ -214,7 +214,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
             setYamlContent(templateYaml);
 
             const def = getFormDefinition(defaultTemplate.kind ?? '');
-            setActiveTab(def ? 'form' : 'yaml');
+            setActiveView(def ? 'form' : 'yaml');
           })
           .catch(() => setAvailableTemplates([]));
       } else if (shouldRender) {
@@ -292,8 +292,8 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       }
     }, [yamlContent]);
 
-    // Active tab: 'form' or 'yaml'. Defaults based on whether a form definition exists.
-    const [activeTab, setActiveTab] = useState<'form' | 'yaml'>('yaml');
+    // Active view: 'form' or 'yaml'. Defaults based on whether a form definition exists.
+    const [activeView, setActiveView] = useState<'form' | 'yaml'>('yaml');
 
     // Look up form definition for the current kind.
     const formDefinition = useMemo(
@@ -301,8 +301,9 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       [parsedKind]
     );
 
-    // Whether to show the tab strip.
-    const showTabs = !!formDefinition;
+    // Form availability and currently selected view.
+    const canShowForm = !!formDefinition;
+    const showingForm = canShowForm && activeView === 'form';
 
     // Template selection handler.
     const handleTemplateChange = useCallback(
@@ -332,9 +333,9 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         }
         setYamlContent(templateYaml);
 
-        // Switch to form tab if the template has a form definition.
+        // Switch to form view if the template has a form definition.
         const def = getFormDefinition(template?.kind ?? '');
-        setActiveTab(def ? 'form' : 'yaml');
+        setActiveView(def ? 'form' : 'yaml');
       },
       [availableTemplates, selectedNamespace]
     );
@@ -525,32 +526,21 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                         ariaLabel="Resource template"
                       />
                     </div>
+                    <button
+                      type="button"
+                      className="button generic create-resource-view-toggle"
+                      onClick={() =>
+                        setActiveView((prev) => (prev === 'form' ? 'yaml' : 'form'))
+                      }
+                      disabled={!canShowForm}
+                      data-create-resource-focusable="true"
+                    >
+                      {showingForm ? 'Show YAML' : 'Show Form'}
+                    </button>
                   </div>
 
-                  {/* Tab strip — visible when a form definition exists for the selected kind */}
-                  {showTabs && (
-                    <div className="tab-strip create-resource-tab-strip">
-                      <button
-                        className={`tab-item${activeTab === 'form' ? ' tab-item--active' : ''}`}
-                        onClick={() => setActiveTab('form')}
-                        type="button"
-                        data-create-resource-focusable="true"
-                      >
-                        Form
-                      </button>
-                      <button
-                        className={`tab-item${activeTab === 'yaml' ? ' tab-item--active' : ''}`}
-                        onClick={() => setActiveTab('yaml')}
-                        type="button"
-                        data-create-resource-focusable="true"
-                      >
-                        YAML
-                      </button>
-                    </div>
-                  )}
-
                   {/* Editor section — Form view or YAML CodeMirror */}
-                  {showTabs && activeTab === 'form' && formDefinition ? (
+                  {showingForm && formDefinition ? (
                     <div className="create-resource-editor">
                       <ResourceForm
                         definition={formDefinition}

@@ -371,8 +371,13 @@ describe('CreateResourceModal', () => {
 
     const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
     expect(templateSelect.value).toBe('Deployment');
-    expect(container.querySelector('.tab-strip')).not.toBeNull();
-    expect(container.querySelector('.tab-item--active')?.textContent).toBe('Form');
+    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show YAML'
+    ) as HTMLButtonElement | undefined;
+    expect(toggleBtn).toBeDefined();
+    expect(toggleBtn?.disabled).toBe(false);
+    expect(container.querySelector('[data-testid="resource-form"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="yaml-editor"]')).toBeNull();
     await unmount();
   });
 
@@ -388,12 +393,13 @@ describe('CreateResourceModal', () => {
       select.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    // Selecting Deployment activates the Form tab; switch to YAML tab to
+    // Selecting Deployment activates form view; switch to YAML to
     // verify the template content was loaded into the editor.
-    const yamlTab = Array.from(container.querySelectorAll('.tab-item')).find(
-      (el) => el.textContent === 'YAML'
-    ) as HTMLButtonElement;
-    await act(async () => { yamlTab.click(); });
+    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show YAML'
+    ) as HTMLButtonElement | undefined;
+    expect(toggleBtn).toBeDefined();
+    await act(async () => { toggleBtn?.click(); });
 
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     expect(editor.value).toContain('kind: Deployment');
@@ -633,7 +639,7 @@ describe('CreateResourceModal', () => {
     await unmount();
   });
 
-  it('shows tab strip when a supported template is selected', async () => {
+  it('shows view toggle when a supported template is selected', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
@@ -643,14 +649,15 @@ describe('CreateResourceModal', () => {
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    const tabStrip = container.querySelector('.tab-strip');
-    expect(tabStrip).not.toBeNull();
-    expect(tabStrip?.textContent).toContain('Form');
-    expect(tabStrip?.textContent).toContain('YAML');
+    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show YAML'
+    ) as HTMLButtonElement | undefined;
+    expect(toggleBtn).toBeDefined();
+    expect(toggleBtn?.disabled).toBe(false);
     await unmount();
   });
 
-  it('does not show tab strip when Blank template is selected', async () => {
+  it('disables view toggle when Blank template is selected', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
@@ -660,12 +667,16 @@ describe('CreateResourceModal', () => {
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    const tabStrip = container.querySelector('.tab-strip');
-    expect(tabStrip).toBeNull();
+    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show Form'
+    ) as HTMLButtonElement | undefined;
+    expect(toggleBtn).toBeDefined();
+    expect(toggleBtn?.disabled).toBe(true);
+    expect(container.querySelector('[data-testid="yaml-editor"]')).not.toBeNull();
     await unmount();
   });
 
-  it('defaults to Form tab when a supported template is selected', async () => {
+  it('defaults to Form view when a supported template is selected', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
@@ -675,13 +686,16 @@ describe('CreateResourceModal', () => {
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    const activeTab = container.querySelector('.tab-item--active');
-    expect(activeTab?.textContent).toBe('Form');
+    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show YAML'
+    ) as HTMLButtonElement | undefined;
+    expect(toggleBtn).toBeDefined();
+    expect(toggleBtn?.disabled).toBe(false);
     expect(container.querySelector('[data-testid="yaml-editor"]')).toBeNull();
     await unmount();
   });
 
-  it('switches to YAML tab when clicked', async () => {
+  it('switches to YAML view when toggle is clicked', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
@@ -691,18 +705,21 @@ describe('CreateResourceModal', () => {
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    const yamlTab = Array.from(container.querySelectorAll('.tab-item')).find(
-      (el) => el.textContent === 'YAML'
-    ) as HTMLButtonElement;
-    await act(async () => { yamlTab.click(); });
+    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show YAML'
+    ) as HTMLButtonElement | undefined;
+    expect(toggleBtn).toBeDefined();
+    await act(async () => { toggleBtn?.click(); });
 
     expect(container.querySelector('[data-testid="yaml-editor"]')).not.toBeNull();
-    const activeTab = container.querySelector('.tab-item--active');
-    expect(activeTab?.textContent).toBe('YAML');
+    const showFormBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show Form'
+    ) as HTMLButtonElement | undefined;
+    expect(showFormBtn).toBeDefined();
     await unmount();
   });
 
-  it('form changes are reflected in YAML when switching tabs', async () => {
+  it('form changes are reflected in YAML when switching views', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
@@ -720,33 +737,35 @@ describe('CreateResourceModal', () => {
       });
     }
 
-    const yamlTab = Array.from(container.querySelectorAll('.tab-item')).find(
-      (el) => el.textContent === 'YAML'
-    ) as HTMLButtonElement;
-    await act(async () => { yamlTab.click(); });
+    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show YAML'
+    ) as HTMLButtonElement | undefined;
+    expect(toggleBtn).toBeDefined();
+    await act(async () => { toggleBtn?.click(); });
 
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     expect(editor.value).toContain('name: changed-name');
     await unmount();
   });
 
-  it('hides tab strip when kind is changed to unsupported in YAML', async () => {
+  it('disables view toggle when kind is changed to unsupported in YAML', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    // Select Deployment to show tabs.
+    // Select Deployment to enable form toggle.
     const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
     await act(async () => {
       templateSelect.value = 'Deployment';
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    expect(container.querySelector('.tab-strip')).not.toBeNull();
+    const showYamlBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show YAML'
+    ) as HTMLButtonElement | undefined;
+    expect(showYamlBtn).toBeDefined();
+    expect(showYamlBtn?.disabled).toBe(false);
 
     // Switch to YAML and change kind to unsupported.
-    const yamlTab = Array.from(container.querySelectorAll('.tab-item')).find(
-      (el) => el.textContent === 'YAML'
-    ) as HTMLButtonElement;
-    await act(async () => { yamlTab.click(); });
+    await act(async () => { showYamlBtn?.click(); });
 
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     // Use the native value setter + input event to trigger React's synthetic onChange.
@@ -758,8 +777,12 @@ describe('CreateResourceModal', () => {
       editor.dispatchEvent(new Event('input', { bubbles: true }));
     });
 
-    // Tab strip should disappear for unsupported kind.
-    expect(container.querySelector('.tab-strip')).toBeNull();
+    // Form toggle should be disabled for unsupported kinds.
+    const showFormBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show Form'
+    ) as HTMLButtonElement | undefined;
+    expect(showFormBtn).toBeDefined();
+    expect(showFormBtn?.disabled).toBe(true);
     await unmount();
   });
 });
