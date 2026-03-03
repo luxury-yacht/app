@@ -1,6 +1,7 @@
 import { act } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as YAML from 'yaml';
 import type { ResourceFormDefinition } from './formDefinitions';
 
 // Mock Dropdown as a simple <select> so ResourceForm tests can assert values easily.
@@ -114,6 +115,25 @@ data:
   KEY_A: value-a
   KEY_B: value-b
 `;
+
+/**
+ * Update an input's native value so React's change tracking picks it up.
+ */
+const setNativeInputValue = (element: HTMLInputElement, value: string) => {
+  const valueSetter = Object.getOwnPropertyDescriptor(element, 'value')?.set;
+  const prototype = Object.getPrototypeOf(element) as HTMLInputElement;
+  const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+
+  if (prototypeValueSetter && valueSetter !== prototypeValueSetter) {
+    prototypeValueSetter.call(element, value);
+    return;
+  }
+  if (valueSetter) {
+    valueSetter.call(element, value);
+    return;
+  }
+  element.value = value;
+};
 
 describe('ResourceForm', () => {
   let container: HTMLDivElement;
@@ -264,7 +284,7 @@ describe('ResourceForm', () => {
     expect(groupItems.length).toBe(1);
   });
 
-  it('renders container remove action outside the container card and still removes', async () => {
+  it('renders container name in the card header and removes from the header action', async () => {
     const onChange = vi.fn();
     const { ResourceForm } = await import('./ResourceForm');
     const containerDefinition: ResourceFormDefinition = {
@@ -310,22 +330,24 @@ spec:
       );
     });
 
-    const headerRemove = container.querySelector(
-      '[data-field-key="containers"] .resource-form-group-item-header .resource-form-remove-btn'
-    );
-    expect(headerRemove).toBeNull();
     const headerTitle = container.querySelector(
       '[data-field-key="containers"] .resource-form-group-item-header .resource-form-group-item-title'
-    );
-    expect(headerTitle).toBeNull();
+    ) as HTMLElement | null;
+    expect(headerTitle).not.toBeNull();
+    expect(headerTitle?.textContent?.trim()).toBe('main');
 
     const outsideRemove = container.querySelector(
       '[data-field-key="containers"] .resource-form-group-entry-actions .resource-form-remove-btn'
-    ) as HTMLButtonElement;
-    expect(outsideRemove).not.toBeNull();
+    );
+    expect(outsideRemove).toBeNull();
+
+    const headerRemove = container.querySelector(
+      '[data-field-key="containers"] .resource-form-group-item-header .resource-form-remove-btn'
+    ) as HTMLButtonElement | null;
+    expect(headerRemove).not.toBeNull();
 
     await act(async () => {
-      outsideRemove.click();
+      headerRemove?.click();
     });
 
     expect(onChange).toHaveBeenCalled();
@@ -627,6 +649,106 @@ spec:
     expect(emittedYamls.some((yaml) => yaml.includes('containerPort: 80'))).toBe(true);
     expect(emittedYamls.some((yaml) => yaml.includes('protocol: TCP'))).toBe(true);
     expect(emittedYamls.some((yaml) => yaml.includes('env:'))).toBe(true);
+  });
+
+  it('uses optional hint for port name and omits blank port name from YAML', async () => {
+    const onChange = vi.fn();
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Containers',
+          fields: [
+            {
+              key: 'containers',
+              label: 'Containers',
+              path: ['spec', 'template', 'spec', 'containers'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                {
+                  key: 'ports',
+                  label: 'Ports',
+                  path: ['ports'],
+                  type: 'group-list',
+                  fields: [
+                    {
+                      key: 'name',
+                      label: 'Name',
+                      path: ['name'],
+                      type: 'text',
+                      placeholder: 'optional',
+                      omitIfEmpty: true,
+                    },
+                    {
+                      key: 'containerPort',
+                      label: 'Port',
+                      path: ['containerPort'],
+                      type: 'number',
+                      min: 1,
+                      max: 65535,
+                      integer: true,
+                    },
+                    {
+                      key: 'protocol',
+                      label: 'Protocol',
+                      path: ['protocol'],
+                      type: 'select',
+                      options: [{ label: 'TCP', value: 'TCP' }],
+                    },
+                  ],
+                  defaultValue: { name: '', containerPort: 80, protocol: 'TCP' },
+                },
+              ],
+              defaultValue: { name: '', ports: [] },
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+`;
+
+    await act(async () => {
+      root.render(
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={deploymentLikeYaml}
+          onYamlChange={onChange}
+        />
+      );
+    });
+
+    const portNameInput = container.querySelector(
+      '[data-field-key="ports"] input[data-field-key="name"]'
+    ) as HTMLInputElement;
+    expect(portNameInput).not.toBeNull();
+    expect(portNameInput.placeholder).toBe('optional');
+    expect(portNameInput.value).toBe('http');
+
+    await act(async () => {
+      setNativeInputValue(portNameInput, '');
+      portNameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(onChange).toHaveBeenCalled();
+    const updatedYaml = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as string;
+    const parsed = YAML.parse(updatedYaml) as {
+      spec?: { template?: { spec?: { containers?: Array<{ ports?: Array<{ name?: string }> }> } } };
+    };
+    const firstPort = parsed.spec?.template?.spec?.containers?.[0]?.ports?.[0];
+    expect(firstPort?.name).toBeUndefined();
   });
 
   it('renders contextual add labels without plus prefixes', async () => {

@@ -37,6 +37,8 @@ export interface FormFieldDefinition {
   fields?: FormFieldDefinition[];
   /** Default value for the field when creating a new list item. */
   defaultValue?: unknown;
+  /** If true, empty string values are removed from YAML instead of persisted. */
+  omitIfEmpty?: boolean;
 }
 
 export interface FormSectionDefinition {
@@ -116,6 +118,14 @@ const deploymentDefinition: ResourceFormDefinition = {
               path: ['ports'],
               type: 'group-list',
               fields: [
+                {
+                  key: 'name',
+                  label: 'Name',
+                  path: ['name'],
+                  type: 'text',
+                  placeholder: 'optional',
+                  omitIfEmpty: true,
+                },
                 {
                   key: 'containerPort',
                   label: 'Port',
@@ -212,6 +222,14 @@ const serviceDefinition: ResourceFormDefinition = {
           path: ['spec', 'ports'],
           type: 'group-list',
           fields: [
+            {
+              key: 'name',
+              label: 'Name',
+              path: ['name'],
+              type: 'text',
+              placeholder: 'optional',
+              omitIfEmpty: true,
+            },
             { key: 'port', label: 'Port', path: ['port'], type: 'number', placeholder: '80' },
             {
               key: 'targetPort',

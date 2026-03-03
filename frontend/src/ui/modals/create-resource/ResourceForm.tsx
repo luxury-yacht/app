@@ -76,6 +76,40 @@ function setNestedValue(
 }
 
 /**
+ * Remove a nested key from a plain JS object using a path array.
+ * If an intermediate object becomes empty after removal, it is pruned.
+ */
+function unsetNestedValue(obj: Record<string, unknown>, path: string[]): Record<string, unknown> {
+  if (path.length === 0) return obj;
+  const clone = { ...obj };
+  const [head, ...tail] = path;
+  if (tail.length === 0) {
+    delete clone[head];
+    return clone;
+  }
+
+  const child = clone[head];
+  if (child == null || typeof child !== 'object' || Array.isArray(child)) {
+    return clone;
+  }
+
+  const nextChild = unsetNestedValue(child as Record<string, unknown>, tail);
+  if (Object.keys(nextChild).length === 0) {
+    delete clone[head];
+  } else {
+    clone[head] = nextChild;
+  }
+  return clone;
+}
+
+/**
+ * Decide whether an empty value should be omitted from YAML for this field.
+ */
+function shouldOmitEmptyValue(field: FormFieldDefinition, value: unknown): boolean {
+  return field.omitIfEmpty === true && typeof value === 'string' && value.trim() === '';
+}
+
+/**
  * Build standard dropdown options for select fields.
  * Includes an explicit empty option so users can clear a selection.
  */
@@ -504,7 +538,7 @@ function GroupListField({
     }
     return [];
   }, [rawValue]);
-  const useExternalRemoveAction = field.key === 'containers';
+  const isContainerGroup = field.key === 'containers';
 
   /** Write the full updated array back to the YAML at the group-list's path. */
   const updateItems = useCallback(
@@ -523,6 +557,9 @@ function GroupListField({
   ) => {
     const newItems = items.map((item, i) => {
       if (i !== itemIndex) return item;
+      if (shouldOmitEmptyValue(subField, newValue)) {
+        return unsetNestedValue(item, subField.path);
+      }
       return setNestedValue(item, subField.path, newValue);
     });
     updateItems(newItems);
@@ -539,6 +576,17 @@ function GroupListField({
     const defaultItem = (field.defaultValue ?? {}) as Record<string, unknown>;
     const newItems = [...items, { ...defaultItem }];
     updateItems(newItems);
+  };
+
+  /**
+   * Build the per-item header title.
+   * Container groups use the current container name so the header tracks edits.
+   */
+  const getItemTitle = (item: Record<string, unknown>, itemIndex: number): string => {
+    if (!isContainerGroup) return `${field.label} ${itemIndex + 1}`;
+    const nameValue = getNestedValue(item, ['name']);
+    const name = String(nameValue ?? '').trim();
+    return name || 'Container';
   };
 
   /**
@@ -639,6 +687,9 @@ function GroupListField({
         ) => {
           const updated = nestedItems.map((nestedItem, i) => {
             if (i !== nestedIndex) return nestedItem;
+            if (shouldOmitEmptyValue(nestedField, newValue)) {
+              return unsetNestedValue(nestedItem, nestedField.path);
+            }
             return setNestedValue(nestedItem, nestedField.path, newValue);
           });
           updateNestedItems(updated);
@@ -743,7 +794,11 @@ function GroupListField({
               <div key={nestedIndex} className="resource-form-nested-group-row">
                 <div className="resource-form-nested-group-fields">
                   {subField.fields?.map((nestedField) => (
-                    <div key={nestedField.key} className="resource-form-nested-group-field">
+                    <div
+                      key={nestedField.key}
+                      data-field-key={nestedField.key}
+                      className="resource-form-nested-group-field"
+                    >
                       <label className="resource-form-nested-group-label">
                         {nestedField.label}
                       </label>
@@ -751,28 +806,46 @@ function GroupListField({
                     </div>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  className="resource-form-remove-btn resource-form-icon-btn"
-                  aria-label={`Remove ${subField.label}`}
-                  title={`Remove ${subField.label}`}
-                  onClick={() => handleNestedRemove(nestedIndex)}
-                >
-                  <CloseIcon width={12} height={12} />
-                </button>
+                <div className="resource-form-nested-group-row-actions">
+                  {nestedIndex === nestedItems.length - 1 && (
+                    <button
+                      type="button"
+                      className="resource-form-add-btn resource-form-icon-btn"
+                      aria-label={`Add ${subField.label}`}
+                      title={`Add ${subField.label}`}
+                      onClick={handleNestedAdd}
+                    >
+                      +
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="resource-form-remove-btn resource-form-icon-btn"
+                    aria-label={`Remove ${subField.label}`}
+                    title={`Remove ${subField.label}`}
+                    onClick={() => handleNestedRemove(nestedIndex)}
+                  >
+                    <CloseIcon width={12} height={12} />
+                  </button>
+                </div>
               </div>
             ))}
-            <div className="resource-form-nested-group-actions">
-              <button
-                type="button"
-                className="resource-form-add-btn resource-form-icon-btn"
-                aria-label={`Add ${subField.label}`}
-                title={`Add ${subField.label}`}
-                onClick={handleNestedAdd}
-              >
-                +
-              </button>
-            </div>
+            {nestedItems.length === 0 && (
+              <div className="resource-form-nested-group-row">
+                <div className="resource-form-nested-group-fields" />
+                <div className="resource-form-nested-group-row-actions">
+                  <button
+                    type="button"
+                    className="resource-form-add-btn resource-form-icon-btn"
+                    aria-label={`Add ${subField.label}`}
+                    title={`Add ${subField.label}`}
+                    onClick={handleNestedAdd}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
       }
@@ -786,20 +859,20 @@ function GroupListField({
       {items.map((item, itemIndex) => (
         <div key={itemIndex} className="resource-form-group-entry">
           <div className="resource-form-group-item">
-            {!useExternalRemoveAction && (
-              <div className="resource-form-group-item-header">
-                <span className="resource-form-group-item-title">
-                  {field.label} {itemIndex + 1}
-                </span>
-                <button
-                  type="button"
-                  className="resource-form-remove-btn"
-                  onClick={() => handleRemoveItem(itemIndex)}
-                >
-                  Remove
-                </button>
-              </div>
-            )}
+            <div
+              className={`resource-form-group-item-header${isContainerGroup ? ' resource-form-group-item-header--container' : ''}`}
+            >
+              <span className="resource-form-group-item-title">
+                {getItemTitle(item, itemIndex)}
+              </span>
+              <button
+                type="button"
+                className="resource-form-remove-btn"
+                onClick={() => handleRemoveItem(itemIndex)}
+              >
+                Remove
+              </button>
+            </div>
             <div className="resource-form-group-item-fields">
               {field.fields?.map((subField) => (
                 <div key={subField.key} className="resource-form-field">
@@ -809,17 +882,6 @@ function GroupListField({
               ))}
             </div>
           </div>
-          {useExternalRemoveAction && (
-            <div className="resource-form-group-entry-actions">
-              <button
-                type="button"
-                className="resource-form-remove-btn"
-                onClick={() => handleRemoveItem(itemIndex)}
-              >
-                Remove
-              </button>
-            </div>
-          )}
         </div>
       ))}
       <button type="button" className="resource-form-add-btn" onClick={handleAddItem}>
@@ -859,16 +921,24 @@ export function ResourceForm({
       {definition.sections.map((section) => (
         <div key={section.title} className="resource-form-section">
           <h3 className="resource-form-section-title">{section.title}</h3>
-          {section.fields.map((field) => (
-            <div key={field.key} className="resource-form-field">
-              <label className="resource-form-label">{field.label}</label>
-              <FieldRenderer
-                field={field}
-                yamlContent={yamlContent}
-                onYamlChange={onYamlChange}
-              />
-            </div>
-          ))}
+          {section.fields.map((field) => {
+            const useFullWidthLayout = field.key === 'containers';
+            return (
+              <div
+                key={field.key}
+                className={`resource-form-field${useFullWidthLayout ? ' resource-form-field--full-width' : ''}`}
+              >
+                {!useFullWidthLayout && (
+                  <label className="resource-form-label">{field.label}</label>
+                )}
+                <FieldRenderer
+                  field={field}
+                  yamlContent={yamlContent}
+                  onYamlChange={onYamlChange}
+                />
+              </div>
+            );
+          })}
         </div>
       ))}
     </div>

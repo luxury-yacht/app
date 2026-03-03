@@ -41,6 +41,14 @@
   gap: 1rem;
 }
 
+.resource-form-field--full-width {
+  display: block;
+}
+
+.resource-form-field--full-width > .resource-form-group-container {
+  width: 100%;
+}
+
 .resource-form-label {
   font-size: var(--font-size-normal);
   font-weight: var(--font-weight-bold);
@@ -210,6 +218,12 @@
   margin-bottom: var(--spacing-xs);
 }
 
+.resource-form-group-item-header--container {
+  padding-bottom: 0;
+  border-bottom: none;
+  margin-bottom: var(--spacing-xs);
+}
+
 .resource-form-group-item-title {
   font-size: var(--font-size-normal);
   font-weight: var(--font-weight-bold);
@@ -245,7 +259,7 @@
 
 .resource-form-nested-group-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: var(--spacing-xs);
 }
 
@@ -259,24 +273,57 @@
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: var(--spacing-xs);
 }
 
 .resource-form-nested-group-label {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: var(--font-weight-bold);
   color: var(--color-text-secondary);
   text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.resource-form-nested-group-field .resource-form-input,
+.resource-form-nested-group-field .resource-form-dropdown {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Container port should be sized for 5 digits (1-65535). */
 .resource-form-nested-group-field input[data-field-key="containerPort"] {
-  align-self: flex-start;
+  align-self: auto;
   flex: 0 0 auto;
   width: calc(5ch + 20px);
   min-width: calc(5ch + 20px);
   max-width: calc(5ch + 20px);
+}
+
+/* Keep Port/Protocol compact in ports rows. */
+.resource-form-nested-group-list[data-field-key="ports"] .resource-form-nested-group-fields {
+  gap: var(--spacing-xl);
+}
+
+.resource-form-nested-group-list[data-field-key="ports"]
+  .resource-form-nested-group-field[data-field-key="name"],
+.resource-form-nested-group-list[data-field-key="ports"]
+  .resource-form-nested-group-field[data-field-key="containerPort"],
+.resource-form-nested-group-list[data-field-key="ports"]
+  .resource-form-nested-group-field[data-field-key="protocol"] {
+  flex: 0 0 auto;
+}
+
+/* Port name should be compact (10 chars). */
+.resource-form-nested-group-list[data-field-key="ports"]
+  .resource-form-nested-group-field
+  input[data-field-key="name"] {
+  align-self: auto;
+  flex: 0 0 auto;
+  width: calc(10ch + 20px);
+  min-width: calc(10ch + 20px);
+  max-width: calc(10ch + 20px);
 }
 
 .resource-form-nested-group-actions {
@@ -284,10 +331,17 @@
   justify-content: flex-start;
 }
 
+.resource-form-nested-group-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  margin-left: auto;
+}
+
 .resource-form-icon-btn {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
   padding: 0;
   border-radius: var(--border-radius-sm, 4px);
   display: inline-flex;
@@ -342,10 +396,11 @@
 
 .resource-form-add-btn.resource-form-icon-btn,
 .resource-form-remove-btn.resource-form-icon-btn {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
   padding: 0;
+  align-self: center;
 }
 
 .resource-form-add-btn.resource-form-icon-btn {
