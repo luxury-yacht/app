@@ -13,6 +13,21 @@ import { GlobalShortcuts } from './GlobalShortcuts';
 import { KeyCodes } from '../constants';
 import { resetClusterTabOrderCacheForTesting } from '@core/persistence/clusterTabOrder';
 
+// Capture event handlers registered via EventsOn so tests can invoke them.
+const wailsEventHandlers: Record<string, (...args: any[]) => void> = {};
+const QuitMock = vi.fn();
+
+vi.mock('@wailsjs/runtime/runtime', () => ({
+  EventsOnMultiple: () => undefined,
+  EventsOff: (eventName: string) => {
+    delete wailsEventHandlers[eventName];
+  },
+  EventsOn: (eventName: string, handler: (...args: any[]) => void) => {
+    wailsEventHandlers[eventName] = handler;
+  },
+  Quit: (...args: any[]) => QuitMock(...args),
+}));
+
 const setContextMock = vi.fn();
 let latestHelpProps: { isOpen: boolean; onClose: () => void } | null = null;
 const registeredShortcuts: Array<{
@@ -126,6 +141,11 @@ describe('GlobalShortcuts', () => {
     setContextMock.mockClear();
     setSelectedKubeconfigsMock.mockClear();
     setActiveKubeconfigMock.mockClear();
+    QuitMock.mockClear();
+    // Clear captured Wails event handlers
+    for (const key of Object.keys(wailsEventHandlers)) {
+      delete wailsEventHandlers[key];
+    }
     resetClusterTabOrderCacheForTesting();
     kubeconfigState.selectedKubeconfig = 'cluster-1';
     kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2'];
@@ -367,19 +387,36 @@ describe('GlobalShortcuts', () => {
     expect(toggleSettings).toHaveBeenCalledTimes(1);
   });
 
-  it('closes the active cluster tab when Cmd+W fires', async () => {
-    isMacPlatformMock.mockReturnValue(true);
-    registeredShortcuts.length = 0;
+  it('closes the active cluster tab on menu:close when multiple tabs open', async () => {
     kubeconfigState.selectedKubeconfig = 'cluster-2';
     kubeconfigState.selectedKubeconfigs = ['cluster-1', 'cluster-2'];
 
     await renderComponent({});
 
+    expect(wailsEventHandlers['menu:close']).toBeDefined();
+
     act(() => {
-      findShortcut('w', { meta: true }).handler();
+      wailsEventHandlers['menu:close']();
     });
 
     expect(setSelectedKubeconfigsMock).toHaveBeenCalledWith(['cluster-1']);
+    expect(QuitMock).not.toHaveBeenCalled();
+  });
+
+  it('quits the application on menu:close when one or no tabs remain', async () => {
+    kubeconfigState.selectedKubeconfig = 'cluster-1';
+    kubeconfigState.selectedKubeconfigs = ['cluster-1'];
+
+    await renderComponent({});
+
+    expect(wailsEventHandlers['menu:close']).toBeDefined();
+
+    act(() => {
+      wailsEventHandlers['menu:close']();
+    });
+
+    expect(QuitMock).toHaveBeenCalledTimes(1);
+    expect(setSelectedKubeconfigsMock).not.toHaveBeenCalled();
   });
 
   it('switches to the previous cluster tab on Cmd+Alt+Left', async () => {
