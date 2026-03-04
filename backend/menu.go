@@ -1,6 +1,8 @@
 package backend
 
 import (
+	"os"
+	"os/exec"
 	"runtime"
 
 	"github.com/wailsapp/wails/v2/pkg/menu"
@@ -12,7 +14,7 @@ import (
 func CreateMenu(app *App) *menu.Menu {
 	appMenu := menu.NewMenu()
 
-	// Application/File menu (different per OS)
+	// Application menu (macOS only) and File menu (all platforms)
 	createApplicationMenu(appMenu, app)
 
 	// Edit menu (for standard editing shortcuts)
@@ -30,30 +32,43 @@ func CreateMenu(app *App) *menu.Menu {
 	return appMenu
 }
 
-// createApplicationMenu creates the main application menu (or File menu on Windows/Linux)
+// spawnNewWindow starts a new instance of the application as a separate process
+func spawnNewWindow() {
+	execPath, err := os.Executable()
+	if err != nil {
+		println("Failed to get executable path:", err.Error())
+		return
+	}
+
+	cmd := exec.Command(execPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		println("Failed to spawn new window:", err.Error())
+	}
+}
+
+// createApplicationMenu creates the macOS app menu and the File menu (all platforms)
 func createApplicationMenu(appMenu *menu.Menu, app *App) {
-	var fileMenu *menu.Menu
+	// macOS: the application menu is separate from the File menu
+	if runtime.GOOS == "darwin" {
+		appSubmenu := appMenu.AddSubmenu("Luxury Yacht")
 
-	switch runtime.GOOS {
-	case "darwin":
-		// macOS: Use app name "Luxury Yacht" for the application menu
-		fileMenu = appMenu.AddSubmenu("Luxury Yacht")
-
-		fileMenu.AddText("About Luxury Yacht", nil, func(_ *menu.CallbackData) {
+		appSubmenu.AddText("About Luxury Yacht", nil, func(_ *menu.CallbackData) {
 			go func() {
 				app.ShowAbout()
 			}()
 		})
 
-		fileMenu.AddSeparator()
+		appSubmenu.AddSeparator()
 
-		fileMenu.AddText("Settings...", keys.CmdOrCtrl(","), func(_ *menu.CallbackData) {
+		appSubmenu.AddText("Settings...", keys.CmdOrCtrl(","), func(_ *menu.CallbackData) {
 			go func() {
 				app.ShowSettings()
 			}()
 		})
 
-		fileMenu.AddText("Hide Luxury Yacht", keys.CmdOrCtrl("h"), func(_ *menu.CallbackData) {
+		appSubmenu.AddText("Hide Luxury Yacht", keys.CmdOrCtrl("h"), func(_ *menu.CallbackData) {
 			go func() {
 				if app.Ctx != nil {
 					wailsRuntime.Hide(app.Ctx)
@@ -61,15 +76,32 @@ func createApplicationMenu(appMenu *menu.Menu, app *App) {
 			}()
 		})
 
-		fileMenu.AddText("Quit", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
+		appSubmenu.AddText("Quit", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
 			if app.Ctx != nil {
 				wailsRuntime.Quit(app.Ctx)
 			}
 		})
+	}
 
-	case "windows":
-		// Windows: Use "File" menu
-		fileMenu = appMenu.AddSubmenu("File")
+	// File menu (all platforms)
+	fileMenu := appMenu.AddSubmenu("File")
+
+	// New Window spawns a separate application process
+	fileMenu.AddText("New Window", keys.CmdOrCtrl("n"), func(_ *menu.CallbackData) {
+		go spawnNewWindow()
+	})
+
+	// Close emits an event to the frontend, which decides whether to close a
+	// cluster tab or quit the application (Chrome/VS Code style Cmd/Ctrl+W).
+	fileMenu.AddText("Close", keys.CmdOrCtrl("w"), func(_ *menu.CallbackData) {
+		if app.Ctx != nil {
+			app.emitEvent("menu:close")
+		}
+	})
+
+	// Windows/Linux: Settings and Exit/Quit also live in the File menu
+	if runtime.GOOS != "darwin" {
+		fileMenu.AddSeparator()
 
 		fileMenu.AddText("Settings...", keys.CmdOrCtrl(","), func(_ *menu.CallbackData) {
 			go func() {
@@ -79,30 +111,16 @@ func createApplicationMenu(appMenu *menu.Menu, app *App) {
 
 		fileMenu.AddSeparator()
 
-		fileMenu.AddText("Exit", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
+		exitLabel := "Quit"
+		if runtime.GOOS == "windows" {
+			exitLabel = "Exit"
+		}
+
+		fileMenu.AddText(exitLabel, keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
 			if app.Ctx != nil {
 				wailsRuntime.Quit(app.Ctx)
 			}
 		})
-
-	default: // linux and other unix-like systems
-		// Linux: Similar to Windows
-		fileMenu = appMenu.AddSubmenu("File")
-
-		fileMenu.AddText("Settings...", keys.CmdOrCtrl(","), func(_ *menu.CallbackData) {
-			go func() {
-				app.ShowSettings()
-			}()
-		})
-
-		fileMenu.AddSeparator()
-
-		fileMenu.AddText("Quit", keys.CmdOrCtrl("q"), func(_ *menu.CallbackData) {
-			if app.Ctx != nil {
-				wailsRuntime.Quit(app.Ctx)
-			}
-		})
-
 	}
 }
 
@@ -279,32 +297,12 @@ func createWindowMenu(appMenu *menu.Menu, app *App) {
 			}()
 		})
 
-		windowMenu.AddSeparator()
-
-		windowMenu.AddText("Close", keys.CmdOrCtrl("w"), func(_ *menu.CallbackData) {
-			go func() {
-				if app.Ctx != nil {
-					wailsRuntime.WindowHide(app.Ctx)
-				}
-			}()
-		})
-
 	default: // linux and other unix-like systems
 		// Linux specific Window menu items
 		windowMenu.AddText("Maximize", nil, func(_ *menu.CallbackData) {
 			go func() {
 				if app.Ctx != nil {
 					wailsRuntime.WindowToggleMaximise(app.Ctx)
-				}
-			}()
-		})
-
-		windowMenu.AddSeparator()
-
-		windowMenu.AddText("Close", keys.CmdOrCtrl("w"), func(_ *menu.CallbackData) {
-			go func() {
-				if app.Ctx != nil {
-					wailsRuntime.WindowHide(app.Ctx)
 				}
 			}()
 		})
