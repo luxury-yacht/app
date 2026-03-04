@@ -131,6 +131,14 @@ function getSelectFieldValue(field: FormFieldDefinition, currentValue: string): 
   return currentValue;
 }
 
+// Disable browser text assistance across form fields.
+const INPUT_BEHAVIOR_PROPS = {
+  autoCapitalize: 'off' as const,
+  autoCorrect: 'off' as const,
+  autoComplete: 'off' as const,
+  spellCheck: false,
+};
+
 // ─── Field Components ───────────────────────────────────────────────────
 
 /**
@@ -181,6 +189,7 @@ function TextField({
       data-field-key={field.key}
       defaultValue={stringValue}
       placeholder={field.placeholder}
+      {...INPUT_BEHAVIOR_PROPS}
     />
   );
 }
@@ -302,6 +311,7 @@ function NumberField({
       min={field.min}
       max={field.max}
       step={field.integer ? 1 : undefined}
+      {...INPUT_BEHAVIOR_PROPS}
     />
   );
 }
@@ -382,6 +392,7 @@ function TextareaField({
       data-field-key={field.key}
       defaultValue={stringValue}
       placeholder={field.placeholder}
+      {...INPUT_BEHAVIOR_PROPS}
     />
   );
 }
@@ -430,6 +441,25 @@ function KeyValueListField({
   }, []);
 
   /**
+   * Compare persisted key-value maps so draft-only rows (blank keys) can
+   * survive parent YAML resync when effective YAML data has not changed.
+   */
+  const arePersistedMapsEqual = useCallback(
+    (leftRows: [string, string][], rightRows: [string, string][]): boolean => {
+      const left = toPersistedMap(leftRows);
+      const right = toPersistedMap(rightRows);
+      const leftKeys = Object.keys(left);
+      const rightKeys = Object.keys(right);
+      if (leftKeys.length !== rightKeys.length) return false;
+      for (const key of leftKeys) {
+        if (right[key] !== left[key]) return false;
+      }
+      return true;
+    },
+    [toPersistedMap]
+  );
+
+  /**
    * Resync draft rows only when the upstream YAML/path changes.
    * Internal edits should not be overwritten until parent state updates.
    */
@@ -437,8 +467,13 @@ function KeyValueListField({
     const syncKey = `${pathKey}|${yamlContent}`;
     if (syncKey === lastSyncKeyRef.current) return;
     lastSyncKeyRef.current = syncKey;
-    setDraftEntries(entriesFromYaml);
-  }, [entriesFromYaml, pathKey, yamlContent]);
+    setDraftEntries((previousDraft) => {
+      if (arePersistedMapsEqual(previousDraft, entriesFromYaml)) {
+        return previousDraft;
+      }
+      return entriesFromYaml;
+    });
+  }, [arePersistedMapsEqual, entriesFromYaml, pathKey, yamlContent]);
 
   /**
    * Resolve the add-button label for key-value lists.
@@ -522,6 +557,7 @@ function KeyValueListField({
                   value={k}
                   placeholder="key"
                   size={25}
+                  {...INPUT_BEHAVIOR_PROPS}
                   onChange={(e) => handleKeyChange(index, e.target.value)}
                 />
               </div>
@@ -533,6 +569,7 @@ function KeyValueListField({
                   value={v}
                   placeholder="value"
                   size={25}
+                  {...INPUT_BEHAVIOR_PROPS}
                   onChange={(e) => handleValueChange(index, e.target.value)}
                 />
               </div>
@@ -544,6 +581,7 @@ function KeyValueListField({
                 className="resource-form-input"
                 value={k}
                 placeholder="key"
+                {...INPUT_BEHAVIOR_PROPS}
                 onChange={(e) => handleKeyChange(index, e.target.value)}
               />
               <input
@@ -551,6 +589,7 @@ function KeyValueListField({
                 className="resource-form-input"
                 value={v}
                 placeholder="value"
+                {...INPUT_BEHAVIOR_PROPS}
                 onChange={(e) => handleValueChange(index, e.target.value)}
               />
             </>
@@ -704,6 +743,7 @@ function GroupListField({
             data-field-key={subField.key}
             value={stringValue}
             placeholder={subField.placeholder}
+            {...INPUT_BEHAVIOR_PROPS}
             onChange={(e) => handleSubFieldChange(itemIndex, subField, e.target.value)}
           />
         );
@@ -718,6 +758,7 @@ function GroupListField({
             min={subField.min}
             max={subField.max}
             step={subField.integer ? 1 : undefined}
+            {...INPUT_BEHAVIOR_PROPS}
             onChange={(e) => {
               const raw = e.target.value;
               if (raw === '') {
@@ -754,6 +795,7 @@ function GroupListField({
             data-field-key={subField.key}
             value={stringValue}
             placeholder={subField.placeholder}
+            {...INPUT_BEHAVIOR_PROPS}
             onChange={(e) => handleSubFieldChange(itemIndex, subField, e.target.value)}
           />
         );
@@ -832,6 +874,7 @@ function GroupListField({
                         data-field-key={resourceField.key}
                         value={value != null ? String(value) : ''}
                         placeholder="optional"
+                        {...INPUT_BEHAVIOR_PROPS}
                         onChange={(e) =>
                           handleResourceValueChange(resourceField.path, e.target.value)
                         }
@@ -909,6 +952,7 @@ function GroupListField({
                   className="resource-form-input"
                   value={k}
                   placeholder="key"
+                  {...INPUT_BEHAVIOR_PROPS}
                   onChange={(e) => handleKeyChange(entryIndex, e.target.value)}
                 />
                 <input
@@ -916,6 +960,7 @@ function GroupListField({
                   className="resource-form-input"
                   value={v}
                   placeholder="value"
+                  {...INPUT_BEHAVIOR_PROPS}
                   onChange={(e) => handleValueChange(entryIndex, e.target.value)}
                 />
                 <div className="resource-form-actions-inline">
@@ -1023,6 +1068,7 @@ function GroupListField({
                   data-field-key={nestedField.key}
                   value={nestedStringValue}
                   placeholder={nestedField.placeholder}
+                  {...INPUT_BEHAVIOR_PROPS}
                   onChange={(e) =>
                     handleNestedFieldChange(nestedIndex, nestedField, e.target.value)
                   }
@@ -1039,6 +1085,7 @@ function GroupListField({
                   min={nestedField.min}
                   max={nestedField.max}
                   step={nestedField.integer ? 1 : undefined}
+                  {...INPUT_BEHAVIOR_PROPS}
                   onChange={(e) => {
                     const raw = e.target.value;
                     if (raw === '') {
@@ -1077,6 +1124,7 @@ function GroupListField({
                   data-field-key={nestedField.key}
                   value={nestedStringValue}
                   placeholder={nestedField.placeholder}
+                  {...INPUT_BEHAVIOR_PROPS}
                   onChange={(e) =>
                     handleNestedFieldChange(nestedIndex, nestedField, e.target.value)
                   }

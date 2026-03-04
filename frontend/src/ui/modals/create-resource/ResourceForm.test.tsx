@@ -1,4 +1,4 @@
-import { act } from 'react';
+import { act, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as YAML from 'yaml';
@@ -985,6 +985,37 @@ spec:
     });
 
     expect(onChange).toHaveBeenCalled();
+    const annotationRows = container.querySelectorAll(
+      '[data-field-key="annotations"] .resource-form-kv-row'
+    );
+    expect(annotationRows.length).toBe(1);
+    const annotationInputs = container.querySelectorAll(
+      '[data-field-key="annotations"] .resource-form-kv-row input'
+    );
+    expect((annotationInputs[0] as HTMLInputElement).value).toBe('');
+    expect((annotationInputs[1] as HTMLInputElement).value).toBe('');
+  });
+
+  it('keeps first added annotation row visible after parent YAML state sync', async () => {
+    const { ResourceForm } = await import('./ResourceForm');
+    const StatefulHost = () => {
+      const [yaml, setYaml] = useState(sampleYaml);
+      return <ResourceForm definition={testDefinition} yamlContent={yaml} onYamlChange={setYaml} />;
+    };
+
+    await act(async () => {
+      root.render(<StatefulHost />);
+    });
+
+    const addAnnotationButton = container.querySelector(
+      'button[aria-label="Add Annotation"]'
+    ) as HTMLButtonElement | null;
+    expect(addAnnotationButton).not.toBeNull();
+
+    await act(async () => {
+      addAnnotationButton?.click();
+    });
+
     const annotationRows = container.querySelectorAll(
       '[data-field-key="annotations"] .resource-form-kv-row'
     );
