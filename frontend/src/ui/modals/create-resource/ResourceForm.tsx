@@ -10,7 +10,7 @@ import React, { useCallback, useMemo, useRef, useEffect, useState } from 'react'
 import * as YAML from 'yaml';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { AddIcon, CloseIcon } from '@shared/components/icons/MenuIcons';
+import { AddIcon, MinusIcon } from '@shared/components/icons/MenuIcons';
 import { getFieldValue, setFieldValue } from './yamlSync';
 import type { ResourceFormDefinition, FormFieldDefinition } from './formDefinitions';
 import './ResourceForm.css';
@@ -614,7 +614,7 @@ function KeyValueListField({
               title={removeButtonLabel}
               onClick={() => handleRemove(index)}
             >
-              <CloseIcon width={12} height={12} />
+              <MinusIcon width={12} height={12} />
             </button>
           </div>
         </div>
@@ -641,7 +641,7 @@ function KeyValueListField({
               tabIndex={-1}
               disabled
             >
-              <CloseIcon width={12} height={12} />
+              <MinusIcon width={12} height={12} />
             </button>
           </div>
         </div>
@@ -913,7 +913,7 @@ function GroupListField({
                     disabled={rowIndex !== 0}
                     tabIndex={rowIndex === 0 ? undefined : -1}
                   >
-                    <CloseIcon width={12} height={12} />
+                    <MinusIcon width={12} height={12} />
                   </button>
                 </div>
               </div>
@@ -1016,7 +1016,7 @@ function GroupListField({
                     title={nestedRemoveLabel}
                     onClick={() => handleRemove(entryIndex)}
                   >
-                    <CloseIcon width={12} height={12} />
+                    <MinusIcon width={12} height={12} />
                   </button>
                 </div>
               </div>
@@ -1041,7 +1041,7 @@ function GroupListField({
                     tabIndex={-1}
                     disabled
                   >
-                    <CloseIcon width={12} height={12} />
+                    <MinusIcon width={12} height={12} />
                   </button>
                 </div>
               </div>
@@ -1213,7 +1213,7 @@ function GroupListField({
                     title={`Remove ${subField.label}`}
                     onClick={() => handleNestedRemove(nestedIndex)}
                   >
-                    <CloseIcon width={12} height={12} />
+                    <MinusIcon width={12} height={12} />
                   </button>
                 </div>
               </div>
@@ -1240,7 +1240,7 @@ function GroupListField({
                     tabIndex={-1}
                     disabled
                   >
-                    <CloseIcon width={12} height={12} />
+                    <MinusIcon width={12} height={12} />
                   </button>
                 </div>
               </div>
@@ -1283,7 +1283,7 @@ function GroupListField({
                   title={`Remove ${isContainerGroup ? 'Container' : field.label}`}
                   onClick={() => handleRemoveItem(itemIndex)}
                 >
-                  <CloseIcon width={12} height={12} />
+                  <MinusIcon width={12} height={12} />
                 </button>
               </div>
             </div>
