@@ -103,6 +103,20 @@ vi.mock('./create-resource/formDefinitions', () => ({
                 path: ['metadata', 'labels'],
                 type: 'key-value-list' as const,
               },
+              {
+                key: 'containers',
+                label: 'Containers',
+                path: ['spec', 'template', 'spec', 'containers'],
+                type: 'group-list' as const,
+                fields: [
+                  {
+                    key: 'resources',
+                    label: 'Resources',
+                    path: ['resources'],
+                    type: 'container-resources' as const,
+                  },
+                ],
+              },
             ],
           },
         ],
@@ -459,6 +473,66 @@ describe('CreateResourceModal', () => {
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     expect(editor.value).toContain('kind: Deployment');
     expect(editor.value).not.toContain('\n  labels:');
+    await unmount();
+  });
+
+  it('does not prepopulate container resource requests or limits on a new form template', async () => {
+    wailsMock.GetResourceTemplates.mockResolvedValueOnce([
+      {
+        name: 'Deployment',
+        kind: 'Deployment',
+        apiVersion: 'apps/v1',
+        category: 'Workloads',
+        description: 'A Deployment manages replicated Pods',
+        yaml:
+          'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\nspec:\n  template:\n    spec:\n      containers:\n      - name: app\n        image: nginx:latest\n        resources:\n          requests:\n            cpu: 100m\n            memory: 128Mi\n          limits:\n            cpu: 500m\n            memory: 256Mi',
+      },
+    ]);
+
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show YAML'
+    ) as HTMLButtonElement | undefined;
+    expect(toggleBtn).toBeDefined();
+    await act(async () => { toggleBtn?.click(); });
+
+    const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
+    expect(editor.value).toContain('kind: Deployment');
+    expect(editor.value).not.toContain('requests:');
+    expect(editor.value).not.toContain('limits:');
+    await unmount();
+  });
+
+  it('does not prepopulate container image or ports on a new form template', async () => {
+    wailsMock.GetResourceTemplates.mockResolvedValueOnce([
+      {
+        name: 'Deployment',
+        kind: 'Deployment',
+        apiVersion: 'apps/v1',
+        category: 'Workloads',
+        description: 'A Deployment manages replicated Pods',
+        yaml:
+          'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\nspec:\n  template:\n    spec:\n      containers:\n      - name: app\n        image: nginx:latest\n        ports:\n        - containerPort: 80',
+      },
+    ]);
+
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Show YAML'
+    ) as HTMLButtonElement | undefined;
+    expect(toggleBtn).toBeDefined();
+    await act(async () => {
+      toggleBtn?.click();
+    });
+
+    const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
+    expect(editor.value).toContain('kind: Deployment');
+    expect(editor.value).not.toContain('image:');
+    expect(editor.value).not.toContain('\n        ports:');
     await unmount();
   });
 

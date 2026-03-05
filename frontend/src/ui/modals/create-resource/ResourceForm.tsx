@@ -414,6 +414,7 @@ function KeyValueListField({
   const terminalPath = field.path[field.path.length - 1];
   const pathKey = field.path.join('.');
   const showInlineKeyValueLabels = terminalPath === 'labels' || terminalPath === 'annotations';
+  const leftAlignEmptyStateActions = terminalPath === 'labels' || terminalPath === 'annotations';
 
   // Convert the object to an array of [key, value] pairs for rendering.
   const entriesFromYaml: [string, string][] = useMemo(() => {
@@ -620,8 +621,10 @@ function KeyValueListField({
       ))}
       {draftEntries.length === 0 && (
         <div className="resource-form-kv-row">
-          <div className="resource-form-kv-empty-spacer" />
-          <div className="resource-form-actions-inline">
+          {!leftAlignEmptyStateActions && <div className="resource-form-kv-empty-spacer" />}
+          <div
+            className={`resource-form-actions-inline${leftAlignEmptyStateActions ? ' resource-form-actions-inline--left' : ''}`}
+          >
             <button
               type="button"
               className="resource-form-add-btn resource-form-icon-btn"
@@ -801,14 +804,17 @@ function GroupListField({
         );
       case 'container-resources': {
         const requestFields = [
-          { key: 'requestsCpu', label: 'CPU Request', path: ['requests', 'cpu'] },
-          { key: 'requestsMemory', label: 'Memory Request', path: ['requests', 'memory'] },
+          { key: 'requestsCpu', label: 'CPU', path: ['requests', 'cpu'] },
+          { key: 'requestsMemory', label: 'Memory', path: ['requests', 'memory'] },
         ] as const;
         const limitFields = [
-          { key: 'limitsCpu', label: 'CPU Limit', path: ['limits', 'cpu'] },
-          { key: 'limitsMemory', label: 'Memory Limit', path: ['limits', 'memory'] },
+          { key: 'limitsCpu', label: 'CPU', path: ['limits', 'cpu'] },
+          { key: 'limitsMemory', label: 'Memory', path: ['limits', 'memory'] },
         ] as const;
-        const resourceFieldRows = [requestFields, limitFields] as const;
+        const resourceFieldRows = [
+          { key: 'requests', label: 'Requests', fields: requestFields },
+          { key: 'limits', label: 'Limits', fields: limitFields },
+        ] as const;
         const allResourceFields = [...requestFields, ...limitFields] as const;
 
         const resources =
@@ -820,7 +826,8 @@ function GroupListField({
           const value = resources ? getNestedValue(resources, [...resourceField.path]) : undefined;
           return String(value ?? '').trim() !== '';
         });
-        const showFields = hasAnyValue || resourceFieldsVisible[visibilityKey] === true;
+        const visibilityOverride = resourceFieldsVisible[visibilityKey];
+        const showFields = visibilityOverride !== undefined ? visibilityOverride : hasAnyValue;
 
         const handleResourceValueChange = (resourcePath: readonly string[], rawValue: string) => {
           const absolutePath = [...subField.path, ...resourcePath];
@@ -832,6 +839,19 @@ function GroupListField({
             return setNestedValue(currentItem, absolutePath, rawValue);
           });
           updateItems(updatedItems);
+        };
+        const handleRemoveResources = () => {
+          if (hasAnyValue) {
+            const updatedItems = items.map((currentItem, i) => {
+              if (i !== itemIndex) return currentItem;
+              return unsetNestedValue(currentItem, [...subField.path]);
+            });
+            updateItems(updatedItems);
+          }
+          setResourceFieldsVisible((previous) => ({
+            ...previous,
+            [visibilityKey]: false,
+          }));
         };
 
         if (!showFields) {
@@ -857,15 +877,16 @@ function GroupListField({
 
         return (
           <div data-field-key={subField.key} className="resource-form-container-resources">
-            {resourceFieldRows.map((rowFields, rowIndex) => (
-              <div key={rowIndex} className="resource-form-container-resources-row">
-                {rowFields.map((resourceField) => {
+            {resourceFieldRows.map((row, rowIndex) => (
+              <div key={row.key} className="resource-form-container-resources-row">
+                <span className="resource-form-container-resources-row-label">{row.label}</span>
+                {row.fields.map((resourceField) => {
                   const value = resources
                     ? getNestedValue(resources, [...resourceField.path])
                     : undefined;
                   return (
-                    <div key={resourceField.key} className="resource-form-container-resources-item">
-                      <label className="resource-form-container-resources-label">
+                    <div key={resourceField.key} className="resource-form-container-resources-metric">
+                      <label className="resource-form-container-resources-metric-label">
                         {resourceField.label}
                       </label>
                       <input
@@ -882,6 +903,19 @@ function GroupListField({
                     </div>
                   );
                 })}
+                <div className="resource-form-container-resources-row-actions">
+                  <button
+                    type="button"
+                    className={`resource-form-remove-btn resource-form-icon-btn${rowIndex === 0 ? '' : ' resource-form-icon-btn--hidden'}`}
+                    aria-label={rowIndex === 0 ? 'Remove Resources' : undefined}
+                    title={rowIndex === 0 ? 'Remove Resources' : undefined}
+                    onClick={rowIndex === 0 ? handleRemoveResources : undefined}
+                    disabled={rowIndex !== 0}
+                    tabIndex={rowIndex === 0 ? undefined : -1}
+                  >
+                    <CloseIcon width={12} height={12} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1017,6 +1051,9 @@ function GroupListField({
       }
       case 'group-list': {
         const nestedItems = Array.isArray(subValue) ? (subValue as Record<string, unknown>[]) : [];
+        const nestedTerminalPath = subField.path[subField.path.length - 1];
+        const leftAlignNestedEmptyActions =
+          nestedTerminalPath === 'ports' || nestedTerminalPath === 'env';
 
         /** Write an updated nested list back into the parent item. */
         const updateNestedItems = (newNestedItems: Record<string, unknown>[]) => {
@@ -1183,8 +1220,10 @@ function GroupListField({
             ))}
             {nestedItems.length === 0 && (
               <div className="resource-form-nested-group-row">
-                <div className="resource-form-nested-group-fields" />
-                <div className="resource-form-nested-group-row-actions">
+                {!leftAlignNestedEmptyActions && <div className="resource-form-nested-group-fields" />}
+                <div
+                  className={`resource-form-nested-group-row-actions${leftAlignNestedEmptyActions ? ' resource-form-nested-group-row-actions--left' : ''}`}
+                >
                   <button
                     type="button"
                     className="resource-form-add-btn resource-form-icon-btn"

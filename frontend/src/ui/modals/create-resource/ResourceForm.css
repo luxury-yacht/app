@@ -221,6 +221,10 @@
   gap: var(--spacing-xs);
 }
 
+.resource-form-actions-inline--left {
+  margin-left: 0;
+}
+
 .resource-form-actions-row {
   display: flex;
   justify-content: flex-end;
@@ -351,32 +355,55 @@
 }
 
 .resource-form-container-resources-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content max-content max-content 1fr;
   align-items: center;
-  gap: var(--spacing-xl);
+  column-gap: var(--spacing-xs);
+  row-gap: 0.25rem;
 }
 
-.resource-form-container-resources-item {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-xs);
-}
-
-.resource-form-container-resources-label {
+.resource-form-container-resources-row-label {
   font-size: 0.75rem;
   font-weight: var(--font-weight-bold);
   color: var(--color-text-secondary);
   text-transform: uppercase;
   white-space: nowrap;
   flex-shrink: 0;
-  min-width: 10rem;
+  min-width: 5rem;
 }
 
-.resource-form-container-resources-row .resource-form-input {
+.resource-form-container-resources-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-container-resources-row
+  > .resource-form-container-resources-metric
+  + .resource-form-container-resources-metric {
+  margin-left: var(--spacing-lg);
+}
+
+.resource-form-container-resources-metric-label {
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.resource-form-container-resources .resource-form-input {
   flex: 0 0 auto;
   width: calc(8ch + 20px);
   min-width: calc(8ch + 20px);
   max-width: calc(8ch + 20px);
+}
+
+.resource-form-container-resources-row-actions {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Container port should be sized for 5 digits (1-65535). */
@@ -443,6 +470,10 @@
   align-items: center;
   gap: var(--spacing-xs);
   margin-left: auto;
+}
+
+.resource-form-nested-group-row-actions--left {
+  margin-left: 0;
 }
 
 .resource-form-icon-btn {

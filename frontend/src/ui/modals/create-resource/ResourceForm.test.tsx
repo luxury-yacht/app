@@ -195,6 +195,115 @@ data:
     expect(annotationsField.textContent).toContain('Value');
   });
 
+  it('left-aligns empty add actions for labels, annotations, ports, and env vars', async () => {
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Metadata',
+          fields: [
+            { key: 'labels', label: 'Labels', path: ['metadata', 'labels'], type: 'key-value-list' },
+            {
+              key: 'annotations',
+              label: 'Annotations',
+              path: ['metadata', 'annotations'],
+              type: 'key-value-list',
+            },
+          ],
+        },
+        {
+          title: 'Containers',
+          fields: [
+            {
+              key: 'containers',
+              label: 'Containers',
+              path: ['spec', 'template', 'spec', 'containers'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                {
+                  key: 'ports',
+                  label: 'Ports',
+                  path: ['ports'],
+                  type: 'group-list',
+                  fields: [
+                    { key: 'containerPort', label: 'Port', path: ['containerPort'], type: 'number' },
+                  ],
+                  defaultValue: { containerPort: 80 },
+                },
+                {
+                  key: 'env',
+                  label: 'Env Vars',
+                  path: ['env'],
+                  type: 'group-list',
+                  fields: [
+                    { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                    { key: 'value', label: 'Value', path: ['value'], type: 'text' },
+                  ],
+                  defaultValue: { name: '', value: '' },
+                },
+              ],
+              defaultValue: { name: '', ports: [], env: [] },
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-app
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          ports: []
+          env: []
+`;
+
+    await act(async () => {
+      root.render(
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={deploymentLikeYaml}
+          onYamlChange={vi.fn()}
+        />
+      );
+    });
+
+    expect(
+      container.querySelector('[data-field-key="labels"] .resource-form-kv-empty-spacer')
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-field-key="annotations"] .resource-form-kv-empty-spacer')
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-field-key="labels"] .resource-form-actions-inline--left')
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-field-key="annotations"] .resource-form-actions-inline--left')
+    ).not.toBeNull();
+
+    expect(
+      container.querySelector('[data-field-key="ports"] .resource-form-nested-group-fields')
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-field-key="env"] .resource-form-nested-group-fields')
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-field-key="ports"] .resource-form-nested-group-row-actions--left'
+      )
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-field-key="env"] .resource-form-nested-group-row-actions--left'
+      )
+    ).not.toBeNull();
+  });
+
   it('renders text input with current value from YAML', async () => {
     await renderForm(sampleYaml, vi.fn());
     const nameInput = container.querySelector('input[data-field-key="name"]') as HTMLInputElement;
@@ -790,6 +899,78 @@ spec:
     const clearedCpuRequest =
       cleared.spec?.template?.spec?.containers?.[0]?.resources?.requests?.cpu;
     expect(clearedCpuRequest).toBeUndefined();
+  });
+
+  it('removes container resources via the header-row remove button', async () => {
+    const onChange = vi.fn();
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Containers',
+          fields: [
+            {
+              key: 'containers',
+              label: 'Containers',
+              path: ['spec', 'template', 'spec', 'containers'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                {
+                  key: 'resources',
+                  label: 'Resources',
+                  path: ['resources'],
+                  type: 'container-resources',
+                },
+              ],
+              defaultValue: { name: '', resources: {} },
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          resources:
+            requests:
+              cpu: 100m
+            limits:
+              memory: 256Mi
+`;
+
+    await act(async () => {
+      root.render(
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={deploymentLikeYaml}
+          onYamlChange={onChange}
+        />
+      );
+    });
+
+    const removeResourcesBtn = container.querySelector(
+      'button[aria-label="Remove Resources"]'
+    ) as HTMLButtonElement | null;
+    expect(removeResourcesBtn).not.toBeNull();
+
+    await act(async () => {
+      removeResourcesBtn?.click();
+    });
+
+    expect(onChange).toHaveBeenCalled();
+    const updatedYaml = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as string;
+    const parsed = YAML.parse(updatedYaml) as {
+      spec?: { template?: { spec?: { containers?: Array<{ resources?: unknown }> } } };
+    };
+    expect(parsed.spec?.template?.spec?.containers?.[0]?.resources).toBeUndefined();
+    expect(container.querySelector('[data-field-key="requestsCpu"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Add Resources"]')).not.toBeNull();
   });
 
   it('shows a single add icon button for resources and expands to labeled fields', async () => {

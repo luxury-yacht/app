@@ -54,39 +54,90 @@ metadata:
   namespace:
 `;
 
+type TemplatePathSegment = string | number | '*';
+
 /**
- * Collect absolute YAML paths for top-level form fields that represent
- * label maps. New forms should start without pre-populated label entries.
+ * Collect field paths that should not be pre-populated in a new form.
+ * This includes Labels maps and container resource blocks.
  */
-function collectTopLevelLabelPaths(definition?: ResourceFormDefinition): string[][] {
+function collectTemplateResetPaths(definition?: ResourceFormDefinition): TemplatePathSegment[][] {
   if (!definition) return [];
-  const paths: string[][] = [];
-  for (const section of definition.sections) {
-    for (const field of section.fields) {
+  const paths: TemplatePathSegment[][] = [];
+
+  const walkFields = (fields: FormFieldDefinition[], basePath: TemplatePathSegment[]) => {
+    for (const field of fields) {
+      const absolutePath: TemplatePathSegment[] = [...basePath, ...field.path];
       const terminal = field.path[field.path.length - 1];
+
       if (field.type === 'key-value-list' && terminal === 'labels') {
-        paths.push(field.path);
+        paths.push(absolutePath);
+      }
+
+      if (field.type === 'container-resources') {
+        paths.push(absolutePath);
+      }
+
+      if (field.key === 'image' && field.type === 'text') {
+        paths.push(absolutePath);
+      }
+
+      if (field.key === 'ports' && field.type === 'group-list') {
+        paths.push(absolutePath);
+      }
+
+      if (field.type === 'group-list' && field.fields && field.fields.length > 0) {
+        walkFields(field.fields, [...absolutePath, '*']);
       }
     }
+  };
+
+  for (const section of definition.sections) {
+    walkFields(section.fields, []);
   }
+
   return paths;
 }
 
+/** Delete a path from the YAML document, expanding '*' over sequence items. */
+function deletePathWithWildcards(
+  doc: YAML.Document.Parsed,
+  path: TemplatePathSegment[]
+): void {
+  const wildcardIndex = path.findIndex((segment) => segment === '*');
+  if (wildcardIndex < 0) {
+    doc.deleteIn(path as Array<string | number>);
+    return;
+  }
+
+  const prefix = path.slice(0, wildcardIndex) as Array<string | number>;
+  const suffix = path.slice(wildcardIndex + 1);
+  const collection = doc.getIn(prefix);
+  const itemCount = Array.isArray(collection)
+    ? collection.length
+    : YAML.isSeq(collection)
+      ? collection.items.length
+      : 0;
+
+  for (let i = 0; i < itemCount; i += 1) {
+    deletePathWithWildcards(doc, [...prefix, i, ...suffix]);
+  }
+}
+
 /**
- * Remove pre-populated labels from template YAML for fields rendered
- * by the form, while preserving the rest of the template.
+ * Remove pre-populated field values that should start blank in form mode,
+ * while preserving the rest of the selected template.
  */
-function stripPrepopulatedLabels(
+function stripPrepopulatedFormValues(
   yamlContent: string,
   definition?: ResourceFormDefinition
 ): string {
-  const labelPaths = collectTopLevelLabelPaths(definition);
-  if (labelPaths.length === 0) return yamlContent;
+  const resetPaths = collectTemplateResetPaths(definition);
+  if (resetPaths.length === 0) return yamlContent;
   try {
     const doc = YAML.parseDocument(yamlContent);
     if (doc.errors.length > 0) return yamlContent;
-    for (const path of labelPaths) {
-      doc.deleteIn(path as FormFieldDefinition['path']);
+    for (const path of resetPaths) {
+      deletePathWithWildcards(doc, path);
     }
     return doc.toString();
   } catch {
@@ -256,7 +307,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
               );
             }
             const def = getFormDefinition(defaultTemplate.kind ?? '');
-            templateYaml = stripPrepopulatedLabels(templateYaml, def);
+            templateYaml = stripPrepopulatedFormValues(templateYaml, def);
             setYamlContent(templateYaml);
             setActiveView(def ? 'form' : 'yaml');
           })
@@ -376,7 +427,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
           );
         }
         const def = getFormDefinition(template?.kind ?? '');
-        templateYaml = stripPrepopulatedLabels(templateYaml, def);
+        templateYaml = stripPrepopulatedFormValues(templateYaml, def);
         setYamlContent(templateYaml);
 
         // Switch to form view if the template has a form definition.
