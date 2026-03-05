@@ -29,7 +29,8 @@ export interface FormFieldDefinition {
     | 'textarea'
     | 'key-value-list'
     | 'group-list'
-    | 'container-resources';
+    | 'container-resources'
+    | 'volume-source';
   /** Placeholder text for text/number inputs. */
   placeholder?: string;
   /** Optional minimum value for number inputs. */
@@ -187,6 +188,33 @@ const deploymentDefinition: ResourceFormDefinition = {
             },
           ],
           defaultValue: { name: '', image: '', ports: [], env: [] },
+        },
+      ],
+    },
+    {
+      title: 'Volumes',
+      fields: [
+        {
+          key: 'volumes',
+          label: 'Volumes',
+          path: ['spec', 'template', 'spec', 'volumes'],
+          type: 'group-list',
+          fields: [
+            {
+              key: 'name',
+              label: 'Name',
+              path: ['name'],
+              type: 'text',
+              placeholder: 'my-volume',
+            },
+            {
+              key: 'source',
+              label: 'Source',
+              path: ['source'],
+              type: 'volume-source',
+            },
+          ],
+          defaultValue: {},
         },
       ],
     },

@@ -131,6 +131,94 @@ function getSelectFieldValue(field: FormFieldDefinition, currentValue: string): 
   return currentValue;
 }
 
+type VolumeSourceKey = 'pvc' | 'configMap' | 'secret' | 'hostPath' | 'emptyDir';
+
+interface VolumeSourceDefinition {
+  key: VolumeSourceKey;
+  label: string;
+  valuePath: string[];
+  placeholder: string;
+}
+
+const VOLUME_SOURCE_DEFINITIONS: VolumeSourceDefinition[] = [
+  {
+    key: 'configMap',
+    label: 'ConfigMap',
+    valuePath: ['configMap', 'name'],
+    placeholder: 'my-configmap',
+  },
+  {
+    key: 'emptyDir',
+    label: 'EmptyDir',
+    valuePath: ['emptyDir', 'medium'],
+    placeholder: 'Memory (optional)',
+  },
+  {
+    key: 'hostPath',
+    label: 'Host Path',
+    valuePath: ['hostPath', 'path'],
+    placeholder: '/data',
+  },
+  {
+    key: 'pvc',
+    label: 'PVC',
+    valuePath: ['persistentVolumeClaim', 'claimName'],
+    placeholder: 'my-pvc',
+  },
+  {
+    key: 'secret',
+    label: 'Secret',
+    valuePath: ['secret', 'secretName'],
+    placeholder: 'my-secret',
+  },
+];
+
+const VOLUME_SOURCE_ROOT_PATHS: string[][] = [
+  ['persistentVolumeClaim'],
+  ['configMap'],
+  ['secret'],
+  ['hostPath'],
+  ['emptyDir'],
+];
+
+const DEFAULT_VOLUME_SOURCE_KEY: VolumeSourceKey = 'configMap';
+
+function getVolumeSourceDefinition(key: VolumeSourceKey): VolumeSourceDefinition {
+  const definition = VOLUME_SOURCE_DEFINITIONS.find((candidate) => candidate.key === key);
+  // Guard against a broken static configuration.
+  if (!definition) {
+    throw new Error(`Missing volume source definition for key: ${key}`);
+  }
+  return definition;
+}
+
+function clearVolumeSources(item: Record<string, unknown>): Record<string, unknown> {
+  let next = item;
+  for (const rootPath of VOLUME_SOURCE_ROOT_PATHS) {
+    next = unsetNestedValue(next, rootPath);
+  }
+  return next;
+}
+
+function getCurrentVolumeSource(item: Record<string, unknown>): VolumeSourceDefinition | undefined {
+  const configMap = getNestedValue(item, ['configMap', 'name']);
+  if (configMap !== undefined) return getVolumeSourceDefinition('configMap');
+
+  const emptyDir = getNestedValue(item, ['emptyDir']);
+  if (emptyDir !== undefined) return getVolumeSourceDefinition('emptyDir');
+
+  const hostPath = getNestedValue(item, ['hostPath', 'path']);
+  if (hostPath !== undefined) return getVolumeSourceDefinition('hostPath');
+
+  const pvc = getNestedValue(item, ['persistentVolumeClaim', 'claimName']);
+  if (pvc !== undefined) return getVolumeSourceDefinition('pvc');
+
+  const secret = getNestedValue(item, ['secret', 'secretName']);
+  if (secret !== undefined) return getVolumeSourceDefinition('secret');
+
+  return undefined;
+}
+
 // Disable browser text assistance across form fields.
 const INPUT_BEHAVIOR_PROPS = {
   autoCapitalize: 'off' as const,
@@ -672,6 +760,8 @@ function GroupListField({
     return [];
   }, [rawValue]);
   const isContainerGroup = field.key === 'containers';
+  const isVolumeGroup = field.key === 'volumes';
+  const usesContainerGroupStyling = isContainerGroup || isVolumeGroup;
   const [resourceFieldsVisible, setResourceFieldsVisible] = useState<Record<string, boolean>>({});
 
   /** Write the full updated array back to the YAML at the group-list's path. */
@@ -719,10 +809,12 @@ function GroupListField({
    * Container groups use the current container name so the header tracks edits.
    */
   const getItemTitle = (item: Record<string, unknown>, itemIndex: number): string => {
-    if (!isContainerGroup) return `${field.label} ${itemIndex + 1}`;
+    if (!usesContainerGroupStyling) return `${field.label} ${itemIndex + 1}`;
     const nameValue = getNestedValue(item, ['name']);
     const name = String(nameValue ?? '').trim();
-    return name || 'Container';
+    if (isContainerGroup) return name || 'Container';
+    if (isVolumeGroup) return name || 'Volume';
+    return `${field.label} ${itemIndex + 1}`;
   };
 
   /**
@@ -918,6 +1010,69 @@ function GroupListField({
                 </div>
               </div>
             ))}
+          </div>
+        );
+      }
+      case 'volume-source': {
+        const currentSource = getCurrentVolumeSource(item);
+        const effectiveSource = currentSource ?? getVolumeSourceDefinition(DEFAULT_VOLUME_SOURCE_KEY);
+        const sourceKey = effectiveSource.key;
+        const sourceValue =
+          currentSource != null
+            ? String(getNestedValue(item, currentSource.valuePath) ?? '')
+            : '';
+        const sourceOptions: DropdownOption[] = VOLUME_SOURCE_DEFINITIONS.map((definition) => ({
+          value: definition.key,
+          label: definition.label,
+        }));
+
+        const handleSourceTypeChange = (nextValue: string | string[]) => {
+          const selectedKey = Array.isArray(nextValue) ? (nextValue[0] ?? '') : nextValue;
+          const selectedDefinition =
+            VOLUME_SOURCE_DEFINITIONS.find((definition) => definition.key === selectedKey) ??
+            getVolumeSourceDefinition(DEFAULT_VOLUME_SOURCE_KEY);
+          const updatedItems = items.map((currentItem, i) => {
+            if (i !== itemIndex) return currentItem;
+            const clearedItem = clearVolumeSources(currentItem);
+            if (selectedDefinition.key === 'emptyDir') {
+              // emptyDir may have no medium set; keep the source selected with an empty object.
+              return setNestedValue(clearedItem, ['emptyDir'], {});
+            }
+            return setNestedValue(clearedItem, selectedDefinition.valuePath, '');
+          });
+          updateItems(updatedItems);
+        };
+
+        const handleSourceValueChange = (nextValue: string) => {
+          const updatedItems = items.map((currentItem, i) => {
+            if (i !== itemIndex) return currentItem;
+            const clearedItem = clearVolumeSources(currentItem);
+            if (effectiveSource.key === 'emptyDir' && nextValue.trim() === '') {
+              return setNestedValue(clearedItem, ['emptyDir'], {});
+            }
+            return setNestedValue(clearedItem, effectiveSource.valuePath, nextValue);
+          });
+          updateItems(updatedItems);
+        };
+
+        return (
+          <div data-field-key={subField.key} className="resource-form-volume-source">
+            <div className="resource-form-volume-source-dropdown">
+              <Dropdown
+                options={sourceOptions}
+                value={sourceKey}
+                onChange={handleSourceTypeChange}
+                ariaLabel={subField.label}
+              />
+            </div>
+            <input
+              type="text"
+              className="resource-form-input"
+              value={sourceValue}
+              placeholder={effectiveSource.placeholder}
+              {...INPUT_BEHAVIOR_PROPS}
+              onChange={(e) => handleSourceValueChange(e.target.value)}
+            />
           </div>
         );
       }
@@ -1259,7 +1414,7 @@ function GroupListField({
         <div key={itemIndex} className="resource-form-group-entry">
           <div className="resource-form-group-item">
             <div
-              className={`resource-form-group-item-header${isContainerGroup ? ' resource-form-group-item-header--container' : ''}`}
+              className={`resource-form-group-item-header${usesContainerGroupStyling ? ' resource-form-group-item-header--container' : ''}`}
             >
               <span className="resource-form-group-item-title">
                 {getItemTitle(item, itemIndex)}
@@ -1279,8 +1434,8 @@ function GroupListField({
                 <button
                   type="button"
                   className="resource-form-remove-btn resource-form-icon-btn"
-                  aria-label={`Remove ${isContainerGroup ? 'Container' : field.label}`}
-                  title={`Remove ${isContainerGroup ? 'Container' : field.label}`}
+                  aria-label={`Remove ${isContainerGroup ? 'Container' : isVolumeGroup ? 'Volume' : field.label}`}
+                  title={`Remove ${isContainerGroup ? 'Container' : isVolumeGroup ? 'Volume' : field.label}`}
                   onClick={() => handleRemoveItem(itemIndex)}
                 >
                   <MinusIcon width={12} height={12} />
@@ -1346,7 +1501,7 @@ export function ResourceForm({
         <div key={section.title} className="resource-form-section">
           <h3 className="resource-form-section-title">{section.title}</h3>
           {section.fields.map((field) => {
-            const useFullWidthLayout = field.key === 'containers';
+            const useFullWidthLayout = field.key === 'containers' || field.key === 'volumes';
             return (
               <div
                 key={field.key}

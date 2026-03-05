@@ -808,6 +808,185 @@ spec:
     expect(emittedYamls.some((yaml) => yaml.includes('env:'))).toBe(true);
   });
 
+  it('uses a single volume source dropdown/value pair and keeps sources mutually exclusive', async () => {
+    const onChange = vi.fn();
+    const emittedYamls: string[] = [];
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Volumes',
+          fields: [
+            {
+              key: 'volumes',
+              label: 'Volumes',
+              path: ['spec', 'template', 'spec', 'volumes'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                { key: 'source', label: 'Source', path: ['source'], type: 'volume-source' },
+              ],
+              defaultValue: {},
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+          configMap:
+            name: app-config
+`;
+
+    const Harness = () => {
+      const [yaml, setYaml] = useState(deploymentLikeYaml);
+      return (
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={yaml}
+          onYamlChange={(nextYaml) => {
+            emittedYamls.push(nextYaml);
+            setYaml(nextYaml);
+            onChange(nextYaml);
+          }}
+        />
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    const sourceSelect = container.querySelector(
+      '[data-testid="dropdown-Source"]'
+    ) as HTMLSelectElement;
+    const sourceValueInput = container.querySelector(
+      '[data-field-key="source"] input'
+    ) as HTMLInputElement;
+
+    expect(sourceSelect.value).toBe('configMap');
+    expect(sourceValueInput.value).toBe('app-config');
+
+    await act(async () => {
+      sourceSelect.value = 'secret';
+      sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const refreshedSourceValueInput = container.querySelector(
+      '[data-field-key="source"] input'
+    ) as HTMLInputElement;
+
+    await act(async () => {
+      setNativeInputValue(refreshedSourceValueInput, 'app-secret');
+      refreshedSourceValueInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const updatedYaml = emittedYamls[emittedYamls.length - 1] as string;
+    const parsed = YAML.parse(updatedYaml) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              configMap?: { name?: string };
+              secret?: { secretName?: string };
+            }>;
+          };
+        };
+      };
+    };
+
+    const firstVolume = parsed.spec?.template?.spec?.volumes?.[0];
+    expect(firstVolume?.configMap).toBeUndefined();
+    expect(firstVolume?.secret?.secretName).toBe('app-secret');
+  });
+
+  it('shows source options in alpha order and defaults to ConfigMap', async () => {
+    const emittedYamls: string[] = [];
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Volumes',
+          fields: [
+            {
+              key: 'volumes',
+              label: 'Volumes',
+              path: ['spec', 'template', 'spec', 'volumes'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                { key: 'source', label: 'Source', path: ['source'], type: 'volume-source' },
+              ],
+              defaultValue: {},
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+`;
+
+    const Harness = () => {
+      const [yaml, setYaml] = useState(deploymentLikeYaml);
+      return (
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={yaml}
+          onYamlChange={(nextYaml) => {
+            emittedYamls.push(nextYaml);
+            setYaml(nextYaml);
+          }}
+        />
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    const sourceSelect = container.querySelector(
+      '[data-testid="dropdown-Source"]'
+    ) as HTMLSelectElement;
+    expect(sourceSelect.value).toBe('configMap');
+    const optionLabels = Array.from(sourceSelect.options).map((option) => option.textContent);
+    expect(optionLabels).toEqual(['ConfigMap', 'EmptyDir', 'Host Path', 'PVC', 'Secret']);
+    expect(optionLabels).not.toContain('-- Select --');
+
+    const sourceValueInput = container.querySelector(
+      '[data-field-key="source"] input'
+    ) as HTMLInputElement;
+
+    await act(async () => {
+      setNativeInputValue(sourceValueInput, 'app-config');
+      sourceValueInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const updatedYaml = emittedYamls[emittedYamls.length - 1] as string;
+    const parsed = YAML.parse(updatedYaml) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{ configMap?: { name?: string } }>;
+          };
+        };
+      };
+    };
+    expect(parsed.spec?.template?.spec?.volumes?.[0]?.configMap?.name).toBe('app-config');
+  });
+
   it('updates container resource requests through labeled resource inputs', async () => {
     const onChange = vi.fn();
     const { ResourceForm } = await import('./ResourceForm');

@@ -346,6 +346,25 @@
   min-width: 0;
 }
 
+/* Volume source editor line: source dropdown + value input. */
+.resource-form-volume-source {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-volume-source-dropdown {
+  flex: 0 0 12rem;
+  min-width: 12rem;
+  max-width: 12rem;
+}
+
+.resource-form-volume-source-dropdown .dropdown {
+  display: block;
+  width: 100%;
+}
+
 /* Container resources editor rows inside a container card. */
 .resource-form-container-resources {
   flex: 1;
