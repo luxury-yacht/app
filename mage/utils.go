@@ -10,6 +10,31 @@ import (
 	"time"
 )
 
+// checkNodeVersion reads .nvmrc and verifies the active Node version matches.
+// Since nvm is a shell function (not a binary), we can't call "nvm use" from Go,
+// so we report a clear error telling the developer to switch manually.
+func CheckNodeVersion() error {
+	data, err := os.ReadFile(".nvmrc")
+	if err != nil {
+		return fmt.Errorf("failed to read .nvmrc: %w", err)
+	}
+	expected := strings.TrimSpace(string(data))
+	expected = strings.TrimPrefix(expected, "v")
+
+	nodeCmd := exec.Command("node", "--version")
+	out, err := nodeCmd.Output()
+	if err != nil {
+		return fmt.Errorf("node is not installed or not in PATH: %w", err)
+	}
+	actual := strings.TrimSpace(string(out))
+	actual = strings.TrimPrefix(actual, "v")
+
+	if actual != expected {
+		return fmt.Errorf("node version mismatch: .nvmrc requires v%s but current node is v%s. Run 'nvm use' to switch", expected, actual)
+	}
+	return nil
+}
+
 type wailsConfig struct {
 	Info struct {
 		ProductVersion string `json:"productVersion"`

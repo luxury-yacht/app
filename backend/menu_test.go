@@ -24,7 +24,7 @@ func TestCreateMenuTopLevelLabels(t *testing.T) {
 	var expected []string
 	switch runtime.GOOS {
 	case "darwin":
-		expected = []string{"Luxury Yacht", "Edit", "View", "Window"}
+		expected = []string{"Luxury Yacht", "File", "Edit", "View", "Window"}
 	default:
 		expected = []string{"File", "Edit", "View", "Window", "Help"}
 	}

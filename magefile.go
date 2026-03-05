@@ -117,6 +117,9 @@ func (Deps) Npm() error {
 	if err := isNpmInstalled(); err != nil {
 		return err
 	}
+	if err := mage.CheckNodeVersion(); err != nil {
+		return err
+	}
 	fmt.Println("Installing npm dependencies...")
 	return sh.RunV("npm", "install", "--prefix", cfg.FrontendDir)
 }
@@ -214,6 +217,9 @@ func (QC) Lint() error {
 	if err := isNpmInstalled(); err != nil {
 		return err
 	}
+	if err := mage.CheckNodeVersion(); err != nil {
+		return err
+	}
 	fmt.Println("\n🔎 Running npm linter...")
 	return sh.RunV("npm", "run", "lint", "--prefix", cfg.FrontendDir)
 }
@@ -221,6 +227,9 @@ func (QC) Lint() error {
 // Runs the npm linter with fix
 func (QC) LintFix() error {
 	if err := isNpmInstalled(); err != nil {
+		return err
+	}
+	if err := mage.CheckNodeVersion(); err != nil {
 		return err
 	}
 	fmt.Println("\n🔧 Running npm linter with fix...")
@@ -232,6 +241,9 @@ func (QC) Typecheck() error {
 	if err := isNpmInstalled(); err != nil {
 		return err
 	}
+	if err := mage.CheckNodeVersion(); err != nil {
+		return err
+	}
 	fmt.Println("\n🔎 Running npm typecheck...")
 	return sh.RunV("npm", "run", "typecheck", "--prefix", cfg.FrontendDir)
 }
@@ -239,6 +251,9 @@ func (QC) Typecheck() error {
 // Checks npm package updates
 func (QC) NpmUpdateCheck() error {
 	if err := isNpxInstalled(); err != nil {
+		return err
+	}
+	if err := mage.CheckNodeVersion(); err != nil {
 		return err
 	}
 	fmt.Println("\n🔎 Checking for outdated npm packages...")
@@ -251,6 +266,9 @@ func (QC) NpmUpdate() error {
 	if err := isNpxInstalled(); err != nil {
 		return err
 	}
+	if err := mage.CheckNodeVersion(); err != nil {
+		return err
+	}
 	fmt.Println("\n🔄 Updating outdated npm packages...")
 	os.Chdir(cfg.FrontendDir)
 	return sh.RunV("npx", "npm-check-updates", "-u")
@@ -259,6 +277,9 @@ func (QC) NpmUpdate() error {
 // Runs knip to find unused files, dependencies, and exports in the frontend
 func (QC) Knip() error {
 	if err := isNpxInstalled(); err != nil {
+		return err
+	}
+	if err := mage.CheckNodeVersion(); err != nil {
 		return err
 	}
 	fmt.Println("\n🔎 Running knip to find unused files, dependencies, and exports in the frontend...")
@@ -318,19 +339,25 @@ func (Test) Race() error {
 
 // Runs frontend tests
 func (Test) Frontend() error {
-	fmt.Println("\n🔎 Running frontend tests...")
 	if err := isNpmInstalled(); err != nil {
 		return err
 	}
+	if err := mage.CheckNodeVersion(); err != nil {
+		return err
+	}
+	fmt.Println("\n🔎 Running frontend tests...")
 	return sh.RunV("npm", "run", "test", "--prefix", cfg.FrontendDir)
 }
 
 // Runs frontend tests with coverage
 func (Test) FrontendCoverage() error {
-	fmt.Println("\n🔎 Running frontend tests with coverage report...")
 	if err := isNpmInstalled(); err != nil {
 		return err
 	}
+	if err := mage.CheckNodeVersion(); err != nil {
+		return err
+	}
+	fmt.Println("\n🔎 Running frontend tests with coverage report...")
 	return sh.RunV("npm", "run", "test", "--prefix", cfg.FrontendDir, "--", "--coverage")
 }
 
