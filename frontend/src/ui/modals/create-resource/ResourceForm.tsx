@@ -10,9 +10,9 @@ import React, { useCallback, useMemo, useRef, useEffect, useState } from 'react'
 import * as YAML from 'yaml';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { AddIcon, MinusIcon } from '@shared/components/icons/MenuIcons';
 import { getFieldValue, setFieldValue } from './yamlSync';
 import type { ResourceFormDefinition, FormFieldDefinition } from './formDefinitions';
+import { FormEmptyActionRow, FormGhostAddText, FormIconActionButton } from './FormActionPrimitives';
 import './ResourceForm.css';
 
 interface ResourceFormProps {
@@ -840,58 +840,34 @@ function KeyValueListField({
             </>
           )}
           <div className="resource-form-actions-inline">
-            <button
-              type="button"
-              className={`resource-form-add-btn resource-form-icon-btn${index === draftEntries.length - 1 ? '' : ' resource-form-icon-btn--hidden'}`}
-              aria-label={index === draftEntries.length - 1 ? addButtonLabel : undefined}
-              title={index === draftEntries.length - 1 ? addButtonLabel : undefined}
+            <FormIconActionButton
+              variant="add"
+              hidden={index !== draftEntries.length - 1}
+              label={index === draftEntries.length - 1 ? addButtonLabel : undefined}
               onClick={index === draftEntries.length - 1 ? handleAdd : undefined}
-              disabled={index !== draftEntries.length - 1}
-              tabIndex={index === draftEntries.length - 1 ? undefined : -1}
-            >
-              <AddIcon width={12} height={12} />
-            </button>
-            <button
-              type="button"
-              className="resource-form-remove-btn resource-form-icon-btn"
-              aria-label={removeButtonLabel}
-              title={removeButtonLabel}
+            />
+            <FormIconActionButton
+              variant="remove"
+              label={removeButtonLabel}
               onClick={() => handleRemove(index)}
-            >
-              <MinusIcon width={12} height={12} />
-            </button>
+            />
           </div>
         </div>
       ))}
       {draftEntries.length === 0 && (
-        <div className="resource-form-kv-row">
-          {!leftAlignEmptyStateActions && <div className="resource-form-kv-empty-spacer" />}
-          <div
-            className={`resource-form-actions-inline${leftAlignEmptyStateActions ? ' resource-form-actions-inline--left' : ''}`}
-          >
-            <button
-              type="button"
-              className="resource-form-add-btn resource-form-icon-btn"
-              aria-label={addButtonLabel}
-              title={addButtonLabel}
-              onClick={handleAdd}
-            >
-              <AddIcon width={12} height={12} />
-            </button>
-            {addGhostText && (
-              <span className="resource-form-action-ghost-text">{addGhostText}</span>
-            )}
-            <button
-              type="button"
-              className="resource-form-remove-btn resource-form-icon-btn resource-form-icon-btn--hidden"
-              aria-hidden="true"
-              tabIndex={-1}
-              disabled
-            >
-              <MinusIcon width={12} height={12} />
-            </button>
-          </div>
-        </div>
+        <FormEmptyActionRow
+          rowClassName="resource-form-kv-row"
+          spacerClassName={
+            !leftAlignEmptyStateActions ? 'resource-form-kv-empty-spacer' : undefined
+          }
+          actionsClassName="resource-form-actions-inline"
+          alignLeft={leftAlignEmptyStateActions}
+          alignLeftClassName="resource-form-actions-inline--left"
+          addLabel={addButtonLabel}
+          removeLabel={removeButtonLabel}
+          onAdd={handleAdd}
+          ghostText={addGhostText}
+        />
       )}
     </div>
   );
@@ -1108,21 +1084,17 @@ function GroupListField({
         if (!showFields) {
           return (
             <div className="resource-form-actions-row">
-              <button
-                type="button"
-                className="resource-form-add-btn resource-form-icon-btn"
-                aria-label="Add Resources"
-                title="Add Resources"
+              <FormIconActionButton
+                variant="add"
+                label="Add Resources"
                 onClick={() =>
                   setResourceFieldsVisible((previous) => ({
                     ...previous,
                     [visibilityKey]: true,
                   }))
                 }
-              >
-                <AddIcon width={12} height={12} />
-              </button>
-              <span className="resource-form-action-ghost-text">Add resource requests/limits</span>
+              />
+              <FormGhostAddText text="Add resource requests/limits" />
             </div>
           );
         }
@@ -1159,17 +1131,12 @@ function GroupListField({
                   );
                 })}
                 <div className="resource-form-container-resources-row-actions">
-                  <button
-                    type="button"
-                    className={`resource-form-remove-btn resource-form-icon-btn${rowIndex === 0 ? '' : ' resource-form-icon-btn--hidden'}`}
-                    aria-label={rowIndex === 0 ? 'Remove Resources' : undefined}
-                    title={rowIndex === 0 ? 'Remove Resources' : undefined}
+                  <FormIconActionButton
+                    variant="remove"
+                    hidden={rowIndex !== 0}
+                    label={rowIndex === 0 ? 'Remove Resources' : undefined}
                     onClick={rowIndex === 0 ? handleRemoveResources : undefined}
-                    disabled={rowIndex !== 0}
-                    tabIndex={rowIndex === 0 ? undefined : -1}
-                  >
-                    <MinusIcon width={12} height={12} />
-                  </button>
+                  />
                 </div>
               </div>
             ))}
@@ -1462,61 +1429,37 @@ function GroupListField({
                         </div>
                       </div>
                       <div className="resource-form-nested-group-row-actions">
-                        <button
-                          type="button"
-                          className={`resource-form-add-btn resource-form-icon-btn${rowIndex === configMapItems.length - 1 ? '' : ' resource-form-icon-btn--hidden'}`}
-                          aria-label={
-                            rowIndex === configMapItems.length - 1 ? 'Add item' : undefined
-                          }
-                          title={rowIndex === configMapItems.length - 1 ? 'Add item' : undefined}
+                        <FormIconActionButton
+                          variant="add"
+                          hidden={rowIndex !== configMapItems.length - 1}
+                          label={rowIndex === configMapItems.length - 1 ? 'Add item' : undefined}
                           onClick={
                             rowIndex === configMapItems.length - 1
                               ? handleConfigMapAddItem
                               : undefined
                           }
-                          disabled={rowIndex !== configMapItems.length - 1}
-                          tabIndex={rowIndex === configMapItems.length - 1 ? undefined : -1}
-                        >
-                          <AddIcon width={12} height={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className="resource-form-remove-btn resource-form-icon-btn"
-                          aria-label="Remove Items"
-                          title="Remove Items"
+                        />
+                        <FormIconActionButton
+                          variant="remove"
+                          label="Remove Items"
                           onClick={() => handleConfigMapRemoveItem(rowIndex)}
-                        >
-                          <MinusIcon width={12} height={12} />
-                        </button>
+                        />
                       </div>
                     </div>
                   );
                 })}
 
                 {configMapItems.length === 0 && (
-                  <div className="resource-form-nested-group-row">
-                    <div className="resource-form-nested-group-row-actions resource-form-nested-group-row-actions--left">
-                      <button
-                        type="button"
-                        className="resource-form-add-btn resource-form-icon-btn"
-                        aria-label="Add item"
-                        title="Add item"
-                        onClick={handleConfigMapAddItem}
-                      >
-                        <AddIcon width={12} height={12} />
-                      </button>
-                      <span className="resource-form-action-ghost-text">Add item</span>
-                      <button
-                        type="button"
-                        className="resource-form-remove-btn resource-form-icon-btn resource-form-icon-btn--hidden"
-                        aria-hidden="true"
-                        tabIndex={-1}
-                        disabled
-                      >
-                        <MinusIcon width={12} height={12} />
-                      </button>
-                    </div>
-                  </div>
+                  <FormEmptyActionRow
+                    rowClassName="resource-form-nested-group-row"
+                    actionsClassName="resource-form-nested-group-row-actions"
+                    alignLeft
+                    alignLeftClassName="resource-form-nested-group-row-actions--left"
+                    addLabel="Add item"
+                    removeLabel="Remove Items"
+                    onAdd={handleConfigMapAddItem}
+                    ghostText="Add item"
+                  />
                 )}
               </div>
             )}
@@ -1600,53 +1543,29 @@ function GroupListField({
                   onChange={(e) => handleValueChange(entryIndex, e.target.value)}
                 />
                 <div className="resource-form-actions-inline">
-                  <button
-                    type="button"
-                    className={`resource-form-add-btn resource-form-icon-btn${entryIndex === entries.length - 1 ? '' : ' resource-form-icon-btn--hidden'}`}
-                    aria-label={entryIndex === entries.length - 1 ? nestedAddLabel : undefined}
-                    title={entryIndex === entries.length - 1 ? nestedAddLabel : undefined}
+                  <FormIconActionButton
+                    variant="add"
+                    hidden={entryIndex !== entries.length - 1}
+                    label={entryIndex === entries.length - 1 ? nestedAddLabel : undefined}
                     onClick={entryIndex === entries.length - 1 ? handleAdd : undefined}
-                    disabled={entryIndex !== entries.length - 1}
-                    tabIndex={entryIndex === entries.length - 1 ? undefined : -1}
-                  >
-                    <AddIcon width={12} height={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="resource-form-remove-btn resource-form-icon-btn"
-                    aria-label={nestedRemoveLabel}
-                    title={nestedRemoveLabel}
+                  />
+                  <FormIconActionButton
+                    variant="remove"
+                    label={nestedRemoveLabel}
                     onClick={() => handleRemove(entryIndex)}
-                  >
-                    <MinusIcon width={12} height={12} />
-                  </button>
+                  />
                 </div>
               </div>
             ))}
             {entries.length === 0 && (
-              <div className="resource-form-kv-row">
-                <div className="resource-form-kv-empty-spacer" />
-                <div className="resource-form-actions-inline">
-                  <button
-                    type="button"
-                    className="resource-form-add-btn resource-form-icon-btn"
-                    aria-label={nestedAddLabel}
-                    title={nestedAddLabel}
-                    onClick={handleAdd}
-                  >
-                    <AddIcon width={12} height={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="resource-form-remove-btn resource-form-icon-btn resource-form-icon-btn--hidden"
-                    aria-hidden="true"
-                    tabIndex={-1}
-                    disabled
-                  >
-                    <MinusIcon width={12} height={12} />
-                  </button>
-                </div>
-              </div>
+              <FormEmptyActionRow
+                rowClassName="resource-form-kv-row"
+                spacerClassName="resource-form-kv-empty-spacer"
+                actionsClassName="resource-form-actions-inline"
+                addLabel={nestedAddLabel}
+                removeLabel={nestedRemoveLabel}
+                onAdd={handleAdd}
+              />
             )}
           </div>
         );
@@ -1799,64 +1718,36 @@ function GroupListField({
                   ))}
                 </div>
                 <div className="resource-form-nested-group-row-actions">
-                  <button
-                    type="button"
-                    className={`resource-form-add-btn resource-form-icon-btn${nestedIndex === nestedItems.length - 1 ? '' : ' resource-form-icon-btn--hidden'}`}
-                    aria-label={
-                      nestedIndex === nestedItems.length - 1 ? `Add ${subField.label}` : undefined
-                    }
-                    title={
+                  <FormIconActionButton
+                    variant="add"
+                    hidden={nestedIndex !== nestedItems.length - 1}
+                    label={
                       nestedIndex === nestedItems.length - 1 ? `Add ${subField.label}` : undefined
                     }
                     onClick={nestedIndex === nestedItems.length - 1 ? handleNestedAdd : undefined}
-                    disabled={nestedIndex !== nestedItems.length - 1}
-                    tabIndex={nestedIndex === nestedItems.length - 1 ? undefined : -1}
-                  >
-                    <AddIcon width={12} height={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="resource-form-remove-btn resource-form-icon-btn"
-                    aria-label={`Remove ${subField.label}`}
-                    title={`Remove ${subField.label}`}
+                  />
+                  <FormIconActionButton
+                    variant="remove"
+                    label={`Remove ${subField.label}`}
                     onClick={() => handleNestedRemove(nestedIndex)}
-                  >
-                    <MinusIcon width={12} height={12} />
-                  </button>
+                  />
                 </div>
               </div>
             ))}
             {nestedItems.length === 0 && (
-              <div className="resource-form-nested-group-row">
-                {!leftAlignNestedEmptyActions && (
-                  <div className="resource-form-nested-group-fields" />
-                )}
-                <div
-                  className={`resource-form-nested-group-row-actions${leftAlignNestedEmptyActions ? ' resource-form-nested-group-row-actions--left' : ''}`}
-                >
-                  <button
-                    type="button"
-                    className="resource-form-add-btn resource-form-icon-btn"
-                    aria-label={`Add ${subField.label}`}
-                    title={`Add ${subField.label}`}
-                    onClick={handleNestedAdd}
-                  >
-                    <AddIcon width={12} height={12} />
-                  </button>
-                  {nestedAddGhostText && (
-                    <span className="resource-form-action-ghost-text">{nestedAddGhostText}</span>
-                  )}
-                  <button
-                    type="button"
-                    className="resource-form-remove-btn resource-form-icon-btn resource-form-icon-btn--hidden"
-                    aria-hidden="true"
-                    tabIndex={-1}
-                    disabled
-                  >
-                    <MinusIcon width={12} height={12} />
-                  </button>
-                </div>
-              </div>
+              <FormEmptyActionRow
+                rowClassName="resource-form-nested-group-row"
+                spacerClassName={
+                  !leftAlignNestedEmptyActions ? 'resource-form-nested-group-fields' : undefined
+                }
+                actionsClassName="resource-form-nested-group-row-actions"
+                alignLeft={leftAlignNestedEmptyActions}
+                alignLeftClassName="resource-form-nested-group-row-actions--left"
+                addLabel={`Add ${subField.label}`}
+                removeLabel={`Remove ${subField.label}`}
+                onAdd={handleNestedAdd}
+                ghostText={nestedAddGhostText}
+              />
             )}
           </div>
         );
@@ -1878,26 +1769,17 @@ function GroupListField({
                 {getItemTitle(item, itemIndex)}
               </span>
               <div className="resource-form-group-item-header-actions">
-                <button
-                  type="button"
-                  className={`resource-form-add-btn resource-form-icon-btn${itemIndex === items.length - 1 ? '' : ' resource-form-icon-btn--hidden'}`}
-                  aria-label={itemIndex === items.length - 1 ? `Add ${field.label}` : undefined}
-                  title={itemIndex === items.length - 1 ? `Add ${field.label}` : undefined}
+                <FormIconActionButton
+                  variant="add"
+                  hidden={itemIndex !== items.length - 1}
+                  label={itemIndex === items.length - 1 ? `Add ${field.label}` : undefined}
                   onClick={itemIndex === items.length - 1 ? handleAddItem : undefined}
-                  disabled={itemIndex !== items.length - 1}
-                  tabIndex={itemIndex === items.length - 1 ? undefined : -1}
-                >
-                  <AddIcon width={12} height={12} />
-                </button>
-                <button
-                  type="button"
-                  className="resource-form-remove-btn resource-form-icon-btn"
-                  aria-label={`Remove ${isContainerGroup ? 'Container' : isVolumeGroup ? 'Volume' : field.label}`}
-                  title={`Remove ${isContainerGroup ? 'Container' : isVolumeGroup ? 'Volume' : field.label}`}
+                />
+                <FormIconActionButton
+                  variant="remove"
+                  label={`Remove ${isContainerGroup ? 'Container' : isVolumeGroup ? 'Volume' : field.label}`}
                   onClick={() => handleRemoveItem(itemIndex)}
-                >
-                  <MinusIcon width={12} height={12} />
-                </button>
+                />
               </div>
             </div>
             <div className="resource-form-group-item-fields">
@@ -1913,15 +1795,11 @@ function GroupListField({
       ))}
       {items.length === 0 && (
         <div className="resource-form-actions-row">
-          <button
-            type="button"
-            className="resource-form-add-btn resource-form-icon-btn"
-            aria-label={`Add ${field.label}`}
-            title={`Add ${field.label}`}
+          <FormIconActionButton
+            variant="add"
+            label={`Add ${field.label}`}
             onClick={handleAddItem}
-          >
-            <AddIcon width={12} height={12} />
-          </button>
+          />
         </div>
       )}
     </div>

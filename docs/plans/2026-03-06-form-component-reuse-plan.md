@@ -101,10 +101,10 @@ Extract the established Create Resource form UI patterns into reusable component
 
 ### Phase 1: Action Primitives
 
-- [ ] Extract `FormIconActionButton`
-- [ ] Extract `FormGhostAddText`
-- [ ] Extract `FormEmptyActionRow`
-- [ ] Replace current inline add/remove implementations in create-resource form
+- ✅ Extract `FormIconActionButton`
+- ✅ Extract `FormGhostAddText`
+- ✅ Extract `FormEmptyActionRow`
+- ✅ Replace current inline add/remove implementations in create-resource form
 
 ### Phase 2: Core Repeating Fields
 
