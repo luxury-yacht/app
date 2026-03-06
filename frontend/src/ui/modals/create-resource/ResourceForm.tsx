@@ -140,6 +140,21 @@ interface VolumeSourceDefinition {
   placeholder: string;
 }
 
+interface VolumeSourceExtraFieldDefinition {
+  key: string;
+  label: string;
+  path: string[];
+  type: 'text' | 'number' | 'select';
+  placeholder?: string;
+  options?: DropdownOption[];
+  defaultValue?: string;
+  min?: number;
+  max?: number;
+  integer?: boolean;
+  parseValue?: (rawValue: string) => unknown;
+  formatValue?: (value: unknown) => string;
+}
+
 const VOLUME_SOURCE_DEFINITIONS: VolumeSourceDefinition[] = [
   {
     key: 'configMap',
@@ -181,7 +196,119 @@ const VOLUME_SOURCE_ROOT_PATHS: string[][] = [
   ['emptyDir'],
 ];
 
+const VOLUME_SOURCE_ROOT_BY_KEY: Record<VolumeSourceKey, string[]> = {
+  configMap: ['configMap'],
+  emptyDir: ['emptyDir'],
+  hostPath: ['hostPath'],
+  pvc: ['persistentVolumeClaim'],
+  secret: ['secret'],
+};
+
 const DEFAULT_VOLUME_SOURCE_KEY: VolumeSourceKey = 'configMap';
+
+const BOOLEAN_FIELD_OPTIONS: DropdownOption[] = [
+  { value: '', label: '-- Select --' },
+  { value: 'true', label: 'True' },
+  { value: 'false', label: 'False' },
+];
+
+const OPTIONAL_BOOLEAN_FIELD_OPTIONS: DropdownOption[] = [
+  { value: '', label: '-----' },
+  { value: 'true', label: 'true' },
+  { value: 'false', label: 'false' },
+];
+
+const HOST_PATH_TYPE_OPTIONS: DropdownOption[] = [
+  { value: '', label: '-- Select --' },
+  { value: 'DirectoryOrCreate', label: 'DirectoryOrCreate' },
+  { value: 'Directory', label: 'Directory' },
+  { value: 'FileOrCreate', label: 'FileOrCreate' },
+  { value: 'File', label: 'File' },
+  { value: 'Socket', label: 'Socket' },
+  { value: 'CharDevice', label: 'CharDevice' },
+  { value: 'BlockDevice', label: 'BlockDevice' },
+];
+
+const parseBooleanFieldValue = (rawValue: string): unknown => {
+  if (rawValue === 'true') return true;
+  if (rawValue === 'false') return false;
+  return '';
+};
+
+const formatBooleanFieldValue = (value: unknown): string => {
+  if (value === true) return 'true';
+  if (value === false) return 'false';
+  return '';
+};
+
+const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraFieldDefinition[]> = {
+  configMap: [
+    {
+      key: 'optional',
+      label: 'Optional',
+      path: ['configMap', 'optional'],
+      type: 'select',
+      options: OPTIONAL_BOOLEAN_FIELD_OPTIONS,
+      parseValue: parseBooleanFieldValue,
+      formatValue: formatBooleanFieldValue,
+    },
+    {
+      key: 'defaultMode',
+      label: 'Default Mode',
+      path: ['configMap', 'defaultMode'],
+      type: 'number',
+      placeholder: '420',
+      min: 0,
+      max: 511,
+      integer: true,
+      parseValue: (rawValue: string) => {
+        if (rawValue.trim() === '') return '';
+        const parsed = Number(rawValue);
+        return Number.isInteger(parsed) ? parsed : '';
+      },
+    },
+  ],
+  emptyDir: [
+    {
+      key: 'sizeLimit',
+      label: 'Size Limit',
+      path: ['emptyDir', 'sizeLimit'],
+      type: 'text',
+      placeholder: '1Gi',
+    },
+  ],
+  hostPath: [
+    {
+      key: 'type',
+      label: 'Type',
+      path: ['hostPath', 'type'],
+      type: 'select',
+      options: HOST_PATH_TYPE_OPTIONS,
+    },
+  ],
+  pvc: [
+    {
+      key: 'readOnly',
+      label: 'Read Only',
+      path: ['persistentVolumeClaim', 'readOnly'],
+      type: 'select',
+      options: BOOLEAN_FIELD_OPTIONS,
+      parseValue: parseBooleanFieldValue,
+      formatValue: formatBooleanFieldValue,
+    },
+  ],
+  secret: [
+    {
+      key: 'optional',
+      label: 'Optional',
+      path: ['secret', 'optional'],
+      type: 'select',
+      options: OPTIONAL_BOOLEAN_FIELD_OPTIONS,
+      parseValue: parseBooleanFieldValue,
+      formatValue: formatBooleanFieldValue,
+    },
+  ],
+};
 
 function getVolumeSourceDefinition(key: VolumeSourceKey): VolumeSourceDefinition {
   const definition = VOLUME_SOURCE_DEFINITIONS.find((candidate) => candidate.key === key);
@@ -200,20 +327,44 @@ function clearVolumeSources(item: Record<string, unknown>): Record<string, unkno
   return next;
 }
 
+function clearOtherVolumeSources(
+  item: Record<string, unknown>,
+  selectedSourceKey: VolumeSourceKey
+): Record<string, unknown> {
+  let next = item;
+  for (const [sourceKey, rootPath] of Object.entries(VOLUME_SOURCE_ROOT_BY_KEY)) {
+    if (sourceKey === selectedSourceKey) continue;
+    next = unsetNestedValue(next, rootPath);
+  }
+  return next;
+}
+
+function ensureVolumeSourceRoot(
+  item: Record<string, unknown>,
+  sourceKey: VolumeSourceKey
+): Record<string, unknown> {
+  const rootPath = VOLUME_SOURCE_ROOT_BY_KEY[sourceKey];
+  const existing = getNestedValue(item, rootPath);
+  if (existing != null && typeof existing === 'object' && !Array.isArray(existing)) {
+    return item;
+  }
+  return setNestedValue(item, rootPath, {});
+}
+
 function getCurrentVolumeSource(item: Record<string, unknown>): VolumeSourceDefinition | undefined {
-  const configMap = getNestedValue(item, ['configMap', 'name']);
+  const configMap = getNestedValue(item, ['configMap']);
   if (configMap !== undefined) return getVolumeSourceDefinition('configMap');
 
   const emptyDir = getNestedValue(item, ['emptyDir']);
   if (emptyDir !== undefined) return getVolumeSourceDefinition('emptyDir');
 
-  const hostPath = getNestedValue(item, ['hostPath', 'path']);
+  const hostPath = getNestedValue(item, ['hostPath']);
   if (hostPath !== undefined) return getVolumeSourceDefinition('hostPath');
 
-  const pvc = getNestedValue(item, ['persistentVolumeClaim', 'claimName']);
+  const pvc = getNestedValue(item, ['persistentVolumeClaim']);
   if (pvc !== undefined) return getVolumeSourceDefinition('pvc');
 
-  const secret = getNestedValue(item, ['secret', 'secretName']);
+  const secret = getNestedValue(item, ['secret']);
   if (secret !== undefined) return getVolumeSourceDefinition('secret');
 
   return undefined;
@@ -573,6 +724,11 @@ function KeyValueListField({
     if (terminalPath === 'annotations') return 'Add Annotation';
     return 'Add Entry';
   }, [terminalPath]);
+  const addGhostText = useMemo(() => {
+    if (terminalPath === 'labels') return 'Add label';
+    if (terminalPath === 'annotations') return 'Add annotation';
+    return null;
+  }, [terminalPath]);
   const removeButtonLabel = useMemo(
     () => addButtonLabel.replace(/^Add\b/, 'Remove'),
     [addButtonLabel]
@@ -722,6 +878,7 @@ function KeyValueListField({
             >
               <AddIcon width={12} height={12} />
             </button>
+            {addGhostText && <span className="resource-form-action-ghost-text">{addGhostText}</span>}
             <button
               type="button"
               className="resource-form-remove-btn resource-form-icon-btn resource-form-icon-btn--hidden"
@@ -963,6 +1120,7 @@ function GroupListField({
               >
                 <AddIcon width={12} height={12} />
               </button>
+              <span className="resource-form-action-ghost-text">Add resource requests/limits</span>
             </div>
           );
         }
@@ -977,7 +1135,10 @@ function GroupListField({
                     ? getNestedValue(resources, [...resourceField.path])
                     : undefined;
                   return (
-                    <div key={resourceField.key} className="resource-form-container-resources-metric">
+                    <div
+                      key={resourceField.key}
+                      className="resource-form-container-resources-metric"
+                    >
                       <label className="resource-form-container-resources-metric-label">
                         {resourceField.label}
                       </label>
@@ -1015,30 +1176,34 @@ function GroupListField({
       }
       case 'volume-source': {
         const currentSource = getCurrentVolumeSource(item);
-        const effectiveSource = currentSource ?? getVolumeSourceDefinition(DEFAULT_VOLUME_SOURCE_KEY);
+        const effectiveSource =
+          currentSource ?? getVolumeSourceDefinition(DEFAULT_VOLUME_SOURCE_KEY);
+        const isConfigMapSource = effectiveSource.key === 'configMap';
         const sourceKey = effectiveSource.key;
-        const sourceValue =
-          currentSource != null
-            ? String(getNestedValue(item, currentSource.valuePath) ?? '')
-            : '';
+        const sourceValue = String(getNestedValue(item, effectiveSource.valuePath) ?? '');
         const sourceOptions: DropdownOption[] = VOLUME_SOURCE_DEFINITIONS.map((definition) => ({
           value: definition.key,
           label: definition.label,
         }));
+        const extraFields = VOLUME_SOURCE_EXTRA_FIELDS[effectiveSource.key] ?? [];
+        const configMapItems =
+          effectiveSource.key === 'configMap' &&
+          Array.isArray(getNestedValue(item, ['configMap', 'items']))
+            ? (getNestedValue(item, ['configMap', 'items']) as Record<string, unknown>[])
+            : [];
 
         const handleSourceTypeChange = (nextValue: string | string[]) => {
           const selectedKey = Array.isArray(nextValue) ? (nextValue[0] ?? '') : nextValue;
           const selectedDefinition =
             VOLUME_SOURCE_DEFINITIONS.find((definition) => definition.key === selectedKey) ??
             getVolumeSourceDefinition(DEFAULT_VOLUME_SOURCE_KEY);
+          if (selectedDefinition.key === sourceKey) {
+            return;
+          }
           const updatedItems = items.map((currentItem, i) => {
             if (i !== itemIndex) return currentItem;
             const clearedItem = clearVolumeSources(currentItem);
-            if (selectedDefinition.key === 'emptyDir') {
-              // emptyDir may have no medium set; keep the source selected with an empty object.
-              return setNestedValue(clearedItem, ['emptyDir'], {});
-            }
-            return setNestedValue(clearedItem, selectedDefinition.valuePath, '');
+            return ensureVolumeSourceRoot(clearedItem, selectedDefinition.key);
           });
           updateItems(updatedItems);
         };
@@ -1046,33 +1211,313 @@ function GroupListField({
         const handleSourceValueChange = (nextValue: string) => {
           const updatedItems = items.map((currentItem, i) => {
             if (i !== itemIndex) return currentItem;
-            const clearedItem = clearVolumeSources(currentItem);
+            let nextItem = clearOtherVolumeSources(currentItem, effectiveSource.key);
+            nextItem = ensureVolumeSourceRoot(nextItem, effectiveSource.key);
             if (effectiveSource.key === 'emptyDir' && nextValue.trim() === '') {
-              return setNestedValue(clearedItem, ['emptyDir'], {});
+              return nextItem;
             }
-            return setNestedValue(clearedItem, effectiveSource.valuePath, nextValue);
+            if (nextValue.trim() === '') {
+              return unsetNestedValue(nextItem, effectiveSource.valuePath);
+            }
+            return setNestedValue(nextItem, effectiveSource.valuePath, nextValue);
           });
           updateItems(updatedItems);
         };
 
-        return (
-          <div data-field-key={subField.key} className="resource-form-volume-source">
-            <div className="resource-form-volume-source-dropdown">
-              <Dropdown
-                options={sourceOptions}
-                value={sourceKey}
-                onChange={handleSourceTypeChange}
-                ariaLabel={subField.label}
-              />
+        const handleExtraFieldChange = (
+          extraField: VolumeSourceExtraFieldDefinition,
+          rawValue: string
+        ) => {
+          const normalizedRaw = rawValue.trim();
+          const updatedItems = items.map((currentItem, i) => {
+            if (i !== itemIndex) return currentItem;
+            let nextItem = clearOtherVolumeSources(currentItem, effectiveSource.key);
+            nextItem = ensureVolumeSourceRoot(nextItem, effectiveSource.key);
+            if (normalizedRaw === '') {
+              return unsetNestedValue(nextItem, extraField.path);
+            }
+            const parsedValue = extraField.parseValue ? extraField.parseValue(rawValue) : rawValue;
+            if (parsedValue === '') {
+              return unsetNestedValue(nextItem, extraField.path);
+            }
+            return setNestedValue(nextItem, extraField.path, parsedValue);
+          });
+          updateItems(updatedItems);
+        };
+
+        /** Persist ConfigMap items while preserving selected source and clearing other source roots. */
+        const updateConfigMapItems = (newItems: Record<string, unknown>[]) => {
+          const updatedItems = items.map((currentItem, i) => {
+            if (i !== itemIndex) return currentItem;
+            let nextItem = clearOtherVolumeSources(currentItem, 'configMap');
+            nextItem = ensureVolumeSourceRoot(nextItem, 'configMap');
+            if (newItems.length === 0) {
+              return unsetNestedValue(nextItem, ['configMap', 'items']);
+            }
+            return setNestedValue(nextItem, ['configMap', 'items'], newItems);
+          });
+          updateItems(updatedItems);
+        };
+
+        const handleConfigMapItemChange = (
+          rowIndex: number,
+          fieldPath: string[],
+          newValue: unknown
+        ) => {
+          const updated = configMapItems.map((entry, index) => {
+            if (index !== rowIndex) return entry;
+            if (typeof newValue === 'string' && newValue.trim() === '') {
+              return unsetNestedValue(entry, fieldPath);
+            }
+            return setNestedValue(entry, fieldPath, newValue);
+          });
+          updateConfigMapItems(updated);
+        };
+
+        const handleConfigMapAddItem = () => {
+          updateConfigMapItems([...configMapItems, {}]);
+        };
+
+        const handleConfigMapRemoveItem = (rowIndex: number) => {
+          updateConfigMapItems(configMapItems.filter((_, index) => index !== rowIndex));
+        };
+
+        const renderExtraField = (extraField: VolumeSourceExtraFieldDefinition) => {
+          const rawExtraValue = getNestedValue(item, extraField.path);
+          const extraValue =
+            rawExtraValue === undefined && extraField.defaultValue !== undefined
+              ? extraField.defaultValue
+              : extraField.formatValue
+                ? extraField.formatValue(rawExtraValue)
+                : String(rawExtraValue ?? '');
+
+          return (
+            <div
+              key={extraField.key}
+              data-field-key={extraField.key}
+              className="resource-form-volume-source-extra-field"
+            >
+              <span className="resource-form-nested-group-label">{extraField.label}</span>
+              {extraField.type === 'select' ? (
+                <div className="resource-form-volume-source-extra-dropdown">
+                  <Dropdown
+                    options={extraField.options ?? []}
+                    value={extraValue}
+                    onChange={(nextValue) => {
+                      const normalized = Array.isArray(nextValue)
+                        ? (nextValue[0] ?? '')
+                        : nextValue;
+                      handleExtraFieldChange(extraField, normalized);
+                    }}
+                    ariaLabel={extraField.label}
+                  />
+                </div>
+              ) : extraField.type === 'number' ? (
+                <input
+                  type="number"
+                  className="resource-form-input"
+                  data-field-key={extraField.key}
+                  value={extraValue}
+                  placeholder={extraField.placeholder}
+                  min={extraField.min}
+                  max={extraField.max}
+                  step={extraField.integer ? 1 : undefined}
+                  {...INPUT_BEHAVIOR_PROPS}
+                  onChange={(e) => handleExtraFieldChange(extraField, e.target.value)}
+                />
+              ) : (
+                <input
+                  type="text"
+                  className="resource-form-input"
+                  value={extraValue}
+                  placeholder={extraField.placeholder}
+                  {...INPUT_BEHAVIOR_PROPS}
+                  onChange={(e) => handleExtraFieldChange(extraField, e.target.value)}
+                />
+              )}
             </div>
-            <input
-              type="text"
-              className="resource-form-input"
-              value={sourceValue}
-              placeholder={effectiveSource.placeholder}
-              {...INPUT_BEHAVIOR_PROPS}
-              onChange={(e) => handleSourceValueChange(e.target.value)}
-            />
+          );
+        };
+
+        return (
+          <div data-field-key={subField.key} className="resource-form-volume-source-group">
+            <div className="resource-form-volume-source">
+              <div className="resource-form-volume-source-dropdown">
+                <Dropdown
+                  options={sourceOptions}
+                  value={sourceKey}
+                  onChange={handleSourceTypeChange}
+                  ariaLabel={subField.label}
+                />
+              </div>
+              {!isConfigMapSource && (
+                <input
+                  type="text"
+                  className="resource-form-input"
+                  value={sourceValue}
+                  placeholder={effectiveSource.placeholder}
+                  {...INPUT_BEHAVIOR_PROPS}
+                  onChange={(e) => handleSourceValueChange(e.target.value)}
+                />
+              )}
+            </div>
+
+            {isConfigMapSource && (
+              <div className="resource-form-volume-source-extra resource-form-volume-source-extra--configmap">
+                <div
+                  data-field-key="configMapName"
+                  className="resource-form-volume-source-extra-field"
+                >
+                  <span className="resource-form-nested-group-label">ConfigMap</span>
+                  <input
+                    type="text"
+                    className="resource-form-input"
+                    value={sourceValue}
+                    placeholder={effectiveSource.placeholder}
+                    {...INPUT_BEHAVIOR_PROPS}
+                    onChange={(e) => handleSourceValueChange(e.target.value)}
+                  />
+                </div>
+                {extraFields.map((extraField) => renderExtraField(extraField))}
+              </div>
+            )}
+
+            {!isConfigMapSource && extraFields.length > 0 && (
+              <div className="resource-form-volume-source-extra">
+                {extraFields.map((extraField) => renderExtraField(extraField))}
+              </div>
+            )}
+
+            {effectiveSource.key === 'configMap' && (
+              <div data-field-key="configMapItems" className="resource-form-nested-group-list">
+                {configMapItems.map((entry, rowIndex) => {
+                  const itemKey = String(getNestedValue(entry, ['key']) ?? '');
+                  const itemPath = String(getNestedValue(entry, ['path']) ?? '');
+                  const itemMode = String(getNestedValue(entry, ['mode']) ?? '');
+
+                  return (
+                    <div key={rowIndex} className="resource-form-nested-group-row">
+                      <div className="resource-form-nested-group-fields">
+                        <div
+                          data-field-key="configMapItemKey"
+                          className="resource-form-nested-group-field"
+                        >
+                          <label className="resource-form-nested-group-label">Key</label>
+                          <input
+                            type="text"
+                            className="resource-form-input"
+                            value={itemKey}
+                            placeholder="key"
+                            {...INPUT_BEHAVIOR_PROPS}
+                            onChange={(e) =>
+                              handleConfigMapItemChange(rowIndex, ['key'], e.target.value)
+                            }
+                          />
+                        </div>
+                        <div
+                          data-field-key="configMapItemPath"
+                          className="resource-form-nested-group-field"
+                        >
+                          <label className="resource-form-nested-group-label">Path</label>
+                          <input
+                            type="text"
+                            className="resource-form-input"
+                            value={itemPath}
+                            placeholder="path"
+                            {...INPUT_BEHAVIOR_PROPS}
+                            onChange={(e) =>
+                              handleConfigMapItemChange(rowIndex, ['path'], e.target.value)
+                            }
+                          />
+                        </div>
+                        <div
+                          data-field-key="configMapItemMode"
+                          className="resource-form-nested-group-field"
+                        >
+                          <label className="resource-form-nested-group-label">Mode</label>
+                          <input
+                            type="number"
+                            className="resource-form-input"
+                            value={itemMode}
+                            placeholder="420"
+                            min={0}
+                            max={511}
+                            step={1}
+                            {...INPUT_BEHAVIOR_PROPS}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              if (raw === '') {
+                                handleConfigMapItemChange(rowIndex, ['mode'], '');
+                                return;
+                              }
+                              const parsed = Number(raw);
+                              if (!Number.isInteger(parsed) || parsed < 0 || parsed > 511) {
+                                return;
+                              }
+                              handleConfigMapItemChange(rowIndex, ['mode'], parsed);
+                            }}
+                          />
+                        </div>
+                      </div>
+                      <div className="resource-form-nested-group-row-actions">
+                        <button
+                          type="button"
+                          className={`resource-form-add-btn resource-form-icon-btn${rowIndex === configMapItems.length - 1 ? '' : ' resource-form-icon-btn--hidden'}`}
+                          aria-label={
+                            rowIndex === configMapItems.length - 1 ? 'Add item' : undefined
+                          }
+                          title={rowIndex === configMapItems.length - 1 ? 'Add item' : undefined}
+                          onClick={
+                            rowIndex === configMapItems.length - 1
+                              ? handleConfigMapAddItem
+                              : undefined
+                          }
+                          disabled={rowIndex !== configMapItems.length - 1}
+                          tabIndex={rowIndex === configMapItems.length - 1 ? undefined : -1}
+                        >
+                          <AddIcon width={12} height={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className="resource-form-remove-btn resource-form-icon-btn"
+                          aria-label="Remove Items"
+                          title="Remove Items"
+                          onClick={() => handleConfigMapRemoveItem(rowIndex)}
+                        >
+                          <MinusIcon width={12} height={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {configMapItems.length === 0 && (
+                  <div className="resource-form-nested-group-row">
+                    <div className="resource-form-nested-group-row-actions resource-form-nested-group-row-actions--left">
+                      <button
+                        type="button"
+                        className="resource-form-add-btn resource-form-icon-btn"
+                        aria-label="Add item"
+                        title="Add item"
+                        onClick={handleConfigMapAddItem}
+                      >
+                        <AddIcon width={12} height={12} />
+                      </button>
+                      <span className="resource-form-action-ghost-text">Add item</span>
+                      <button
+                        type="button"
+                        className="resource-form-remove-btn resource-form-icon-btn resource-form-icon-btn--hidden"
+                        aria-hidden="true"
+                        tabIndex={-1}
+                        disabled
+                      >
+                        <MinusIcon width={12} height={12} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       }
@@ -1209,6 +1654,12 @@ function GroupListField({
         const nestedTerminalPath = subField.path[subField.path.length - 1];
         const leftAlignNestedEmptyActions =
           nestedTerminalPath === 'ports' || nestedTerminalPath === 'env';
+        const nestedAddGhostText =
+          nestedTerminalPath === 'ports'
+            ? 'Add port'
+            : nestedTerminalPath === 'env'
+              ? 'Add env var'
+              : null;
 
         /** Write an updated nested list back into the parent item. */
         const updateNestedItems = (newNestedItems: Record<string, unknown>[]) => {
@@ -1375,7 +1826,9 @@ function GroupListField({
             ))}
             {nestedItems.length === 0 && (
               <div className="resource-form-nested-group-row">
-                {!leftAlignNestedEmptyActions && <div className="resource-form-nested-group-fields" />}
+                {!leftAlignNestedEmptyActions && (
+                  <div className="resource-form-nested-group-fields" />
+                )}
                 <div
                   className={`resource-form-nested-group-row-actions${leftAlignNestedEmptyActions ? ' resource-form-nested-group-row-actions--left' : ''}`}
                 >
@@ -1388,6 +1841,9 @@ function GroupListField({
                   >
                     <AddIcon width={12} height={12} />
                   </button>
+                  {nestedAddGhostText && (
+                    <span className="resource-form-action-ghost-text">{nestedAddGhostText}</span>
+                  )}
                   <button
                     type="button"
                     className="resource-form-remove-btn resource-form-icon-btn resource-form-icon-btn--hidden"

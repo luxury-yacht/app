@@ -203,7 +203,12 @@ data:
         {
           title: 'Metadata',
           fields: [
-            { key: 'labels', label: 'Labels', path: ['metadata', 'labels'], type: 'key-value-list' },
+            {
+              key: 'labels',
+              label: 'Labels',
+              path: ['metadata', 'labels'],
+              type: 'key-value-list',
+            },
             {
               key: 'annotations',
               label: 'Annotations',
@@ -228,7 +233,12 @@ data:
                   path: ['ports'],
                   type: 'group-list',
                   fields: [
-                    { key: 'containerPort', label: 'Port', path: ['containerPort'], type: 'number' },
+                    {
+                      key: 'containerPort',
+                      label: 'Port',
+                      path: ['containerPort'],
+                      type: 'number',
+                    },
                   ],
                   defaultValue: { containerPort: 80 },
                 },
@@ -285,6 +295,14 @@ spec:
     expect(
       container.querySelector('[data-field-key="annotations"] .resource-form-actions-inline--left')
     ).not.toBeNull();
+    expect(
+      container.querySelector('[data-field-key="labels"] .resource-form-action-ghost-text')
+        ?.textContent
+    ).toBe('Add label');
+    expect(
+      container.querySelector('[data-field-key="annotations"] .resource-form-action-ghost-text')
+        ?.textContent
+    ).toBe('Add annotation');
 
     expect(
       container.querySelector('[data-field-key="ports"] .resource-form-nested-group-fields')
@@ -298,10 +316,18 @@ spec:
       )
     ).not.toBeNull();
     expect(
+      container.querySelector('[data-field-key="ports"] .resource-form-action-ghost-text')
+        ?.textContent
+    ).toBe('Add port');
+    expect(
       container.querySelector(
         '[data-field-key="env"] .resource-form-nested-group-row-actions--left'
       )
     ).not.toBeNull();
+    expect(
+      container.querySelector('[data-field-key="env"] .resource-form-action-ghost-text')
+        ?.textContent
+    ).toBe('Add env var');
   });
 
   it('renders text input with current value from YAML', async () => {
@@ -866,12 +892,12 @@ spec:
     const sourceSelect = container.querySelector(
       '[data-testid="dropdown-Source"]'
     ) as HTMLSelectElement;
-    const sourceValueInput = container.querySelector(
-      '[data-field-key="source"] input'
+    const configMapNameInput = container.querySelector(
+      '[data-field-key="configMapName"] input'
     ) as HTMLInputElement;
 
     expect(sourceSelect.value).toBe('configMap');
-    expect(sourceValueInput.value).toBe('app-config');
+    expect(configMapNameInput.value).toBe('app-config');
 
     await act(async () => {
       sourceSelect.value = 'secret';
@@ -965,13 +991,13 @@ spec:
     expect(optionLabels).toEqual(['ConfigMap', 'EmptyDir', 'Host Path', 'PVC', 'Secret']);
     expect(optionLabels).not.toContain('-- Select --');
 
-    const sourceValueInput = container.querySelector(
-      '[data-field-key="source"] input'
+    const configMapNameInput = container.querySelector(
+      '[data-field-key="configMapName"] input'
     ) as HTMLInputElement;
 
     await act(async () => {
-      setNativeInputValue(sourceValueInput, 'app-config');
-      sourceValueInput.dispatchEvent(new Event('input', { bubbles: true }));
+      setNativeInputValue(configMapNameInput, 'app-config');
+      configMapNameInput.dispatchEvent(new Event('input', { bubbles: true }));
     });
 
     const updatedYaml = emittedYamls[emittedYamls.length - 1] as string;
@@ -985,6 +1011,260 @@ spec:
       };
     };
     expect(parsed.spec?.template?.spec?.volumes?.[0]?.configMap?.name).toBe('app-config');
+  });
+
+  it('changes source-specific fields when Source selection changes', async () => {
+    const emittedYamls: string[] = [];
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Volumes',
+          fields: [
+            {
+              key: 'volumes',
+              label: 'Volumes',
+              path: ['spec', 'template', 'spec', 'volumes'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                { key: 'source', label: 'Source', path: ['source'], type: 'volume-source' },
+              ],
+              defaultValue: {},
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+`;
+
+    const Harness = () => {
+      const [yaml, setYaml] = useState(deploymentLikeYaml);
+      return (
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={yaml}
+          onYamlChange={(nextYaml) => {
+            emittedYamls.push(nextYaml);
+            setYaml(nextYaml);
+          }}
+        />
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    const sourceSelect = container.querySelector(
+      '[data-testid="dropdown-Source"]'
+    ) as HTMLSelectElement;
+    expect(sourceSelect.value).toBe('configMap');
+    expect(container.querySelector('[data-testid="dropdown-Optional"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="dropdown-Read Only"]')).toBeNull();
+
+    await act(async () => {
+      sourceSelect.value = 'pvc';
+      sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const pvcSourceInput = container.querySelector(
+      '[data-field-key="source"] input'
+    ) as HTMLInputElement;
+    const readOnlyDropdown = container.querySelector(
+      '[data-testid="dropdown-Read Only"]'
+    ) as HTMLSelectElement;
+    expect(readOnlyDropdown).not.toBeNull();
+    expect(container.querySelector('[data-testid="dropdown-Optional"]')).toBeNull();
+
+    await act(async () => {
+      setNativeInputValue(pvcSourceInput, 'shared-data');
+      pvcSourceInput.dispatchEvent(new Event('input', { bubbles: true }));
+      readOnlyDropdown.value = 'true';
+      readOnlyDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const updatedYaml = emittedYamls[emittedYamls.length - 1] as string;
+    const parsed = YAML.parse(updatedYaml) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              configMap?: { optional?: boolean };
+              persistentVolumeClaim?: { claimName?: string; readOnly?: boolean };
+            }>;
+          };
+        };
+      };
+    };
+    const firstVolume = parsed.spec?.template?.spec?.volumes?.[0];
+    expect(firstVolume?.configMap).toBeUndefined();
+    expect(firstVolume?.persistentVolumeClaim?.claimName).toBe('shared-data');
+    expect(firstVolume?.persistentVolumeClaim?.readOnly).toBe(true);
+  });
+
+  it('configMap source supports optional, default mode, and items fields', async () => {
+    const emittedYamls: string[] = [];
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Volumes',
+          fields: [
+            {
+              key: 'volumes',
+              label: 'Volumes',
+              path: ['spec', 'template', 'spec', 'volumes'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                { key: 'source', label: 'Source', path: ['source'], type: 'volume-source' },
+              ],
+              defaultValue: {},
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+`;
+
+    const Harness = () => {
+      const [yaml, setYaml] = useState(deploymentLikeYaml);
+      return (
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={yaml}
+          onYamlChange={(nextYaml) => {
+            emittedYamls.push(nextYaml);
+            setYaml(nextYaml);
+          }}
+        />
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    const configMapNameInput = container.querySelector(
+      '[data-field-key="configMapName"] input'
+    ) as HTMLInputElement;
+    const optionalDropdown = container.querySelector(
+      '[data-testid="dropdown-Optional"]'
+    ) as HTMLSelectElement;
+    const defaultModeInput = container.querySelector(
+      'input[data-field-key="defaultMode"]'
+    ) as HTMLInputElement;
+    const addItemsBtn = container.querySelector(
+      'button[aria-label="Add item"]'
+    ) as HTMLButtonElement;
+
+    expect(optionalDropdown).not.toBeNull();
+    expect(optionalDropdown.value).toBe('');
+    const optionalLabels = Array.from(optionalDropdown.options).map((option) => option.textContent);
+    expect(optionalLabels).toEqual(['-----', 'true', 'false']);
+    expect(optionalLabels).not.toContain('-- Select --');
+    expect(defaultModeInput).not.toBeNull();
+    expect(addItemsBtn).not.toBeNull();
+    expect(container.querySelector('.resource-form-action-ghost-text')?.textContent?.trim()).toBe(
+      'Add item'
+    );
+
+    await act(async () => {
+      setNativeInputValue(configMapNameInput, 'app-config');
+      configMapNameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      optionalDropdown.value = 'true';
+      optionalDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+      setNativeInputValue(defaultModeInput, '420');
+      defaultModeInput.dispatchEvent(new Event('change', { bubbles: true }));
+      addItemsBtn.click();
+    });
+    expect(container.querySelector('.resource-form-action-ghost-text')).toBeNull();
+
+    const itemKeyInput = container.querySelector(
+      '[data-field-key="configMapItemKey"] input'
+    ) as HTMLInputElement;
+    const itemPathInput = container.querySelector(
+      '[data-field-key="configMapItemPath"] input'
+    ) as HTMLInputElement;
+    const itemModeInput = container.querySelector(
+      '[data-field-key="configMapItemMode"] input'
+    ) as HTMLInputElement;
+
+    await act(async () => {
+      setNativeInputValue(itemKeyInput, 'app.properties');
+      itemKeyInput.dispatchEvent(new Event('input', { bubbles: true }));
+      setNativeInputValue(itemPathInput, 'config/app.properties');
+      itemPathInput.dispatchEvent(new Event('input', { bubbles: true }));
+      setNativeInputValue(itemModeInput, '384');
+      itemModeInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const updatedYaml = emittedYamls[emittedYamls.length - 1] as string;
+    const parsed = YAML.parse(updatedYaml) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              configMap?: {
+                name?: string;
+                optional?: boolean;
+                defaultMode?: number;
+                items?: Array<{ key?: string; path?: string; mode?: number }>;
+              };
+            }>;
+          };
+        };
+      };
+    };
+    const configMap = parsed.spec?.template?.spec?.volumes?.[0]?.configMap;
+    expect(configMap?.name).toBe('app-config');
+    expect(configMap?.optional).toBe(true);
+    expect(configMap?.defaultMode).toBe(420);
+    expect(configMap?.items?.[0]).toEqual({
+      key: 'app.properties',
+      path: 'config/app.properties',
+      mode: 384,
+    });
+
+    await act(async () => {
+      optionalDropdown.value = '';
+      optionalDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const yamlWithoutOptional = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedWithoutOptional = YAML.parse(yamlWithoutOptional) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              configMap?: {
+                optional?: boolean;
+              };
+            }>;
+          };
+        };
+      };
+    };
+    expect(
+      parsedWithoutOptional.spec?.template?.spec?.volumes?.[0]?.configMap?.optional
+    ).toBeUndefined();
   });
 
   it('updates container resource requests through labeled resource inputs', async () => {
@@ -1150,6 +1430,10 @@ spec:
     expect(parsed.spec?.template?.spec?.containers?.[0]?.resources).toBeUndefined();
     expect(container.querySelector('[data-field-key="requestsCpu"]')).toBeNull();
     expect(container.querySelector('button[aria-label="Add Resources"]')).not.toBeNull();
+    expect(
+      container.querySelector('.resource-form-actions-row .resource-form-action-ghost-text')
+        ?.textContent
+    ).toBe('Add resource requests/limits');
   });
 
   it('shows a single add icon button for resources and expands to labeled fields', async () => {
@@ -1205,12 +1489,17 @@ spec:
     ) as HTMLButtonElement | null;
     expect(addResourcesBtn).toBeDefined();
     expect(addResourcesBtn?.querySelector('svg')).not.toBeNull();
+    expect(
+      container.querySelector('.resource-form-actions-row .resource-form-action-ghost-text')
+        ?.textContent
+    ).toBe('Add resource requests/limits');
     expect(container.querySelector('[data-field-key="requestsCpu"]')).toBeNull();
 
     await act(async () => {
       addResourcesBtn?.click();
     });
 
+    expect(container.querySelector('.resource-form-actions-row .resource-form-action-ghost-text')).toBeNull();
     expect(container.querySelector('[data-field-key="requestsCpu"]')).not.toBeNull();
     expect(container.querySelector('[data-field-key="requestsMemory"]')).not.toBeNull();
     expect(container.querySelector('[data-field-key="limitsCpu"]')).not.toBeNull();

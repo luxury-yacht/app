@@ -346,6 +346,14 @@
   min-width: 0;
 }
 
+/* Volume source editor includes source selector plus source-specific fields. */
+.resource-form-volume-source-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
 /* Volume source editor line: source dropdown + value input. */
 .resource-form-volume-source {
   flex: 1;
@@ -363,6 +371,81 @@
 .resource-form-volume-source-dropdown .dropdown {
   display: block;
   width: 100%;
+}
+
+.resource-form-volume-source-extra {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+  flex-wrap: wrap;
+}
+
+.resource-form-volume-source-extra--configmap {
+  flex-wrap: nowrap;
+}
+
+.resource-form-volume-source-extra-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-volume-source-extra-dropdown {
+  flex: 0 0 12rem;
+  min-width: 12rem;
+  max-width: 12rem;
+}
+
+.resource-form-volume-source-extra-field[data-field-key="optional"]
+  .resource-form-volume-source-extra-dropdown {
+  flex: 0 0 auto;
+  width: calc(5ch + 40px);
+  min-width: calc(5ch + 40px);
+  max-width: calc(5ch + 40px);
+}
+
+.resource-form-volume-source-extra-dropdown .dropdown {
+  display: block;
+  width: 100%;
+}
+
+.resource-form-volume-source-extra-field[data-field-key="optional"]
+  .resource-form-volume-source-extra-dropdown
+  .dropdown-trigger {
+  width: 100%;
+  min-width: 0;
+}
+
+.resource-form-volume-source-extra-field[data-field-key="optional"]
+  .resource-form-volume-source-extra-dropdown
+  .dropdown-menu {
+  width: 100%;
+  min-width: 100%;
+}
+
+.resource-form-volume-source-extra-field .resource-form-input {
+  width: 12rem;
+  min-width: 12rem;
+  max-width: 12rem;
+}
+
+.resource-form-volume-source-extra-field input[data-field-key="defaultMode"] {
+  width: calc(3ch + 22px);
+  min-width: calc(3ch + 22px);
+  max-width: calc(3ch + 22px);
+}
+
+.resource-form-nested-group-list[data-field-key="configMapItems"]
+  .resource-form-nested-group-fields {
+  gap: var(--spacing-xl);
+}
+
+.resource-form-nested-group-list[data-field-key="configMapItems"]
+  .resource-form-nested-group-field[data-field-key="configMapItemMode"]
+  .resource-form-input {
+  width: calc(3ch + 22px);
+  min-width: calc(3ch + 22px);
+  max-width: calc(3ch + 22px);
 }
 
 /* Container resources editor rows inside a container card. */
@@ -493,6 +576,12 @@
 
 .resource-form-nested-group-row-actions--left {
   margin-left: 0;
+}
+
+.resource-form-action-ghost-text {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
 .resource-form-icon-btn {
