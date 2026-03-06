@@ -120,8 +120,8 @@ Extract the established Create Resource form UI patterns into reusable component
 
 ### Phase 4: Resources
 
-- [ ] Extract `FormContainerResourcesField`
-- [ ] Migrate existing container resources UI to the extracted field with strict visual parity checks
+- ✅ Extract `FormContainerResourcesField`
+- ✅ Migrate existing container resources UI to the extracted field with strict visual parity checks
 
 ### Follow-Up Plan (Out of Scope for This Pass)
 

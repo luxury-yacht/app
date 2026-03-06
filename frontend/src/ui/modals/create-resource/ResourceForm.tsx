@@ -12,8 +12,12 @@ import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { getFieldValue, setFieldValue } from './yamlSync';
 import type { ResourceFormDefinition, FormFieldDefinition } from './formDefinitions';
-import { FormGhostAddText, FormIconActionButton } from './FormActionPrimitives';
+import { FormIconActionButton } from './FormActionPrimitives';
 import { FormCompactNumberInput, parseCompactNumberValue } from './FormCompactNumberInput';
+import {
+  FormContainerResourcesField,
+  hasContainerResourceValues,
+} from './FormContainerResourcesField';
 import { FormKeyValueListField } from './FormKeyValueListField';
 import { FormNestedListField } from './FormNestedListField';
 import { FormTriStateBooleanDropdown } from './FormTriStateBooleanDropdown';
@@ -893,30 +897,13 @@ function GroupListField({
           />
         );
       case 'container-resources': {
-        const requestFields = [
-          { key: 'requestsCpu', label: 'CPU', path: ['requests', 'cpu'] },
-          { key: 'requestsMemory', label: 'Memory', path: ['requests', 'memory'] },
-        ] as const;
-        const limitFields = [
-          { key: 'limitsCpu', label: 'CPU', path: ['limits', 'cpu'] },
-          { key: 'limitsMemory', label: 'Memory', path: ['limits', 'memory'] },
-        ] as const;
-        const resourceFieldRows = [
-          { key: 'requests', label: 'Requests', fields: requestFields },
-          { key: 'limits', label: 'Limits', fields: limitFields },
-        ] as const;
-        const allResourceFields = [...requestFields, ...limitFields] as const;
-
         const resources =
           subValue && typeof subValue === 'object' && !Array.isArray(subValue)
             ? (subValue as Record<string, unknown>)
             : undefined;
         const visibilityKey = `${itemIndex}:${subField.key}`;
-        const hasAnyValue = allResourceFields.some((resourceField) => {
-          const value = resources ? getNestedValue(resources, [...resourceField.path]) : undefined;
-          return String(value ?? '').trim() !== '';
-        });
         const visibilityOverride = resourceFieldsVisible[visibilityKey];
+        const hasAnyValue = hasContainerResourceValues(resources);
         const showFields = visibilityOverride !== undefined ? visibilityOverride : hasAnyValue;
 
         const handleResourceValueChange = (resourcePath: readonly string[], rawValue: string) => {
@@ -930,7 +917,7 @@ function GroupListField({
           });
           updateItems(updatedItems);
         };
-        const handleRemoveResources = () => {
+        const handleRemoveResources = (hasAnyValue: boolean) => {
           if (hasAnyValue) {
             const updatedItems = items.map((currentItem, i) => {
               if (i !== itemIndex) return currentItem;
@@ -944,66 +931,20 @@ function GroupListField({
           }));
         };
 
-        if (!showFields) {
-          return (
-            <div className="resource-form-actions-row">
-              <FormIconActionButton
-                variant="add"
-                label="Add Resources"
-                onClick={() =>
-                  setResourceFieldsVisible((previous) => ({
-                    ...previous,
-                    [visibilityKey]: true,
-                  }))
-                }
-              />
-              <FormGhostAddText text="Add resource requests/limits" />
-            </div>
-          );
-        }
-
         return (
-          <div data-field-key={subField.key} className="resource-form-container-resources">
-            {resourceFieldRows.map((row, rowIndex) => (
-              <div key={row.key} className="resource-form-container-resources-row">
-                <span className="resource-form-container-resources-row-label">{row.label}</span>
-                {row.fields.map((resourceField) => {
-                  const value = resources
-                    ? getNestedValue(resources, [...resourceField.path])
-                    : undefined;
-                  return (
-                    <div
-                      key={resourceField.key}
-                      className="resource-form-container-resources-metric"
-                    >
-                      <label className="resource-form-container-resources-metric-label">
-                        {resourceField.label}
-                      </label>
-                      <input
-                        type="text"
-                        className="resource-form-input"
-                        data-field-key={resourceField.key}
-                        value={value != null ? String(value) : ''}
-                        placeholder="optional"
-                        {...INPUT_BEHAVIOR_PROPS}
-                        onChange={(e) =>
-                          handleResourceValueChange(resourceField.path, e.target.value)
-                        }
-                      />
-                    </div>
-                  );
-                })}
-                <div className="resource-form-container-resources-row-actions">
-                  <FormIconActionButton
-                    variant="remove"
-                    hidden={rowIndex !== 0}
-                    label={rowIndex === 0 ? 'Remove Resources' : undefined}
-                    onClick={rowIndex === 0 ? handleRemoveResources : undefined}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+          <FormContainerResourcesField
+            dataFieldKey={subField.key}
+            resources={resources}
+            showFields={showFields}
+            onShowFields={() =>
+              setResourceFieldsVisible((previous) => ({
+                ...previous,
+                [visibilityKey]: true,
+              }))
+            }
+            onRemoveResources={handleRemoveResources}
+            onResourceValueChange={handleResourceValueChange}
+          />
         );
       }
       case 'volume-source': {
