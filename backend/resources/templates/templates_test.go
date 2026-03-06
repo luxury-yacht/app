@@ -73,3 +73,60 @@ func TestTemplateNamesAreUnique(t *testing.T) {
 		seen[tmpl.Name] = true
 	}
 }
+
+func TestDeploymentTemplatePrepopulatesRequiredLabelAndNotOtherEditableFields(t *testing.T) {
+	tmpl := deploymentTemplate()
+
+	var parsed map[string]interface{}
+	if err := yaml.Unmarshal([]byte(tmpl.YAML), &parsed); err != nil {
+		t.Fatalf("deployment template YAML is invalid: %v", err)
+	}
+
+	metadata, ok := parsed["metadata"].(map[string]interface{})
+	if !ok {
+		t.Fatal("deployment template missing metadata object")
+	}
+	if value, exists := metadata["name"]; exists && value != nil && value != "" {
+		t.Fatalf("expected metadata.name to be blank, got %#v", value)
+	}
+	labels, ok := metadata["labels"].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected metadata.labels object to exist")
+	}
+	if value, exists := labels["app.kubernetes.io/name"]; !exists || (value != nil && value != "") {
+		t.Fatalf("expected app.kubernetes.io/name label value to be blank, got %#v", value)
+	}
+
+	spec, ok := parsed["spec"].(map[string]interface{})
+	if !ok {
+		t.Fatal("deployment template missing spec object")
+	}
+	templateSpec, ok := spec["template"].(map[string]interface{})
+	if !ok {
+		t.Fatal("deployment template missing spec.template object")
+	}
+	podSpec, ok := templateSpec["spec"].(map[string]interface{})
+	if !ok {
+		t.Fatal("deployment template missing spec.template.spec object")
+	}
+	containers, ok := podSpec["containers"].([]interface{})
+	if !ok || len(containers) == 0 {
+		t.Fatal("deployment template missing containers list")
+	}
+	firstContainer, ok := containers[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("deployment template has invalid first container structure")
+	}
+	if value, exists := firstContainer["name"]; exists && value != nil && value != "" {
+		t.Fatalf("expected first container name to be blank, got %#v", value)
+	}
+	if _, exists := firstContainer["image"]; exists {
+		t.Fatal("expected first container image to be omitted")
+	}
+	if _, exists := firstContainer["ports"]; exists {
+		t.Fatal("expected first container ports to be omitted")
+	}
+	if _, exists := firstContainer["resources"]; exists {
+		t.Fatal("expected first container resources to be omitted")
+	}
+}

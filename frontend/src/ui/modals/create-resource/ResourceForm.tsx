@@ -173,7 +173,7 @@ const VOLUME_SOURCE_DEFINITIONS: VolumeSourceDefinition[] = [
     key: 'configMap',
     label: 'ConfigMap',
     valuePath: ['configMap', 'name'],
-    placeholder: 'my-configmap',
+    placeholder: 'configmap-name',
   },
   {
     key: 'emptyDir',
@@ -191,13 +191,13 @@ const VOLUME_SOURCE_DEFINITIONS: VolumeSourceDefinition[] = [
     key: 'pvc',
     label: 'PVC',
     valuePath: ['persistentVolumeClaim', 'claimName'],
-    placeholder: 'my-pvc',
+    placeholder: 'pvc-name',
   },
   {
     key: 'secret',
     label: 'Secret',
     valuePath: ['secret', 'secretName'],
-    placeholder: 'my-secret',
+    placeholder: 'secret-name',
   },
 ];
 

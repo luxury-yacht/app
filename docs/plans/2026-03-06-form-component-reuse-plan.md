@@ -1,7 +1,7 @@
 # Form Component Reuse Plan
 
 **Date:** 2026-03-06  
-**Status:** Proposed
+**Status:** Completed
 
 ## Goal
 
@@ -16,8 +16,8 @@ Extract the established Create Resource form UI patterns into reusable component
 - No behavior or visual regressions
 - No backend changes
 - **Create Resource form only** in this plan
-- Cross-form rollout is explicitly out of scope for this plan and will be tracked separately
-- Structural wrapper extraction (`FormSectionCard`, `FormFieldRow`) is out of scope for this implementation pass and will be tracked in a follow-up plan
+- Cross-form rollout is explicitly out of scope for this plan and is tracked in `docs/plans/2026-03-06-form-component-reuse-cross-form-rollout-plan.md`
+- Structural wrapper extraction (`FormSectionCard`, `FormFieldRow`) was completed in the dedicated follow-up plan: `docs/plans/2026-03-06-form-structural-wrappers-visual-consistency-plan.md`
 
 ## Reuse Candidates (Priority Order)
 
@@ -60,7 +60,7 @@ Extract the established Create Resource form UI patterns into reusable component
 10. `FormSectionCard` and `FormFieldRow`
 
 - Base structure wrappers for section layout and row-level label/value alignment consistency.
-- Follow-up only; excluded from this plan to reduce visual-regression risk during core extraction.
+- Completed in the dedicated follow-up wrapper plan to reduce visual-regression risk during core extraction.
 
 ## Multi-Cluster Guardrails
 
@@ -141,7 +141,7 @@ Extract the established Create Resource form UI patterns into reusable component
   - If any backend files are touched, run backend verification (at minimum `go test ./...`) before completion.
 - Duplicate styling and duplicated action-row markup are materially reduced
 - Cluster safety assertions remain valid and explicitly tested
-- Structural wrappers are not extracted in this plan
+- Structural wrappers are extracted and validated via the dedicated follow-up plan
 
 ## Required Test Coverage
 

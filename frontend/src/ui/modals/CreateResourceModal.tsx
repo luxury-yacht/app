@@ -39,11 +39,7 @@ import {
   type ObjectYamlErrorPayload,
 } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlErrors';
 import type { templates } from '@wailsjs/go/models';
-import {
-  getFormDefinition,
-  type FormFieldDefinition,
-  type ResourceFormDefinition,
-} from './create-resource/formDefinitions';
+import { getFormDefinition } from './create-resource/formDefinitions';
 import { ResourceForm } from './create-resource/ResourceForm';
 
 // Minimal YAML skeleton for the "Blank" option.
@@ -53,94 +49,6 @@ metadata:
   name:
   namespace:
 `;
-
-type TemplatePathSegment = string | number | '*';
-
-/**
- * Collect field paths that should not be pre-populated in a new form.
- * This includes Labels maps and container resource blocks.
- */
-function collectTemplateResetPaths(definition?: ResourceFormDefinition): TemplatePathSegment[][] {
-  if (!definition) return [];
-  const paths: TemplatePathSegment[][] = [];
-
-  const walkFields = (fields: FormFieldDefinition[], basePath: TemplatePathSegment[]) => {
-    for (const field of fields) {
-      const absolutePath: TemplatePathSegment[] = [...basePath, ...field.path];
-      const terminal = field.path[field.path.length - 1];
-
-      if (field.type === 'key-value-list' && terminal === 'labels') {
-        paths.push(absolutePath);
-      }
-
-      if (field.type === 'container-resources') {
-        paths.push(absolutePath);
-      }
-
-      if (field.key === 'image' && field.type === 'text') {
-        paths.push(absolutePath);
-      }
-
-      if (field.key === 'ports' && field.type === 'group-list') {
-        paths.push(absolutePath);
-      }
-
-      if (field.type === 'group-list' && field.fields && field.fields.length > 0) {
-        walkFields(field.fields, [...absolutePath, '*']);
-      }
-    }
-  };
-
-  for (const section of definition.sections) {
-    walkFields(section.fields, []);
-  }
-
-  return paths;
-}
-
-/** Delete a path from the YAML document, expanding '*' over sequence items. */
-function deletePathWithWildcards(doc: YAML.Document.Parsed, path: TemplatePathSegment[]): void {
-  const wildcardIndex = path.findIndex((segment) => segment === '*');
-  if (wildcardIndex < 0) {
-    doc.deleteIn(path as Array<string | number>);
-    return;
-  }
-
-  const prefix = path.slice(0, wildcardIndex) as Array<string | number>;
-  const suffix = path.slice(wildcardIndex + 1);
-  const collection = doc.getIn(prefix);
-  const itemCount = Array.isArray(collection)
-    ? collection.length
-    : YAML.isSeq(collection)
-      ? collection.items.length
-      : 0;
-
-  for (let i = 0; i < itemCount; i += 1) {
-    deletePathWithWildcards(doc, [...prefix, i, ...suffix]);
-  }
-}
-
-/**
- * Remove pre-populated field values that should start blank in form mode,
- * while preserving the rest of the selected template.
- */
-function stripPrepopulatedFormValues(
-  yamlContent: string,
-  definition?: ResourceFormDefinition
-): string {
-  const resetPaths = collectTemplateResetPaths(definition);
-  if (resetPaths.length === 0) return yamlContent;
-  try {
-    const doc = YAML.parseDocument(yamlContent);
-    if (doc.errors.length > 0) return yamlContent;
-    for (const path of resetPaths) {
-      deletePathWithWildcards(doc, path);
-    }
-    return doc.toString();
-  } catch {
-    return yamlContent;
-  }
-}
 
 interface CreateResourceModalProps {
   isOpen: boolean;
@@ -293,7 +201,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
               );
             }
             const def = getFormDefinition(defaultTemplate.kind ?? '');
-            templateYaml = stripPrepopulatedFormValues(templateYaml, def);
             setYamlContent(templateYaml);
             setActiveView(def ? 'form' : 'yaml');
           })
@@ -413,7 +320,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
           );
         }
         const def = getFormDefinition(template?.kind ?? '');
-        templateYaml = stripPrepopulatedFormValues(templateYaml, def);
         setYamlContent(templateYaml);
 
         // Switch to form view if the template has a form definition.

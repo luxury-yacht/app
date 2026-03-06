@@ -76,7 +76,7 @@ const deploymentDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
-          placeholder: 'my-app',
+          placeholder: 'deployment-name',
         },
         {
           key: 'replicas',
@@ -111,7 +111,7 @@ const deploymentDefinition: ResourceFormDefinition = {
               label: 'Name',
               path: ['name'],
               type: 'text',
-              placeholder: 'my-container',
+              placeholder: 'container-name',
             },
             {
               key: 'image',
@@ -205,7 +205,7 @@ const deploymentDefinition: ResourceFormDefinition = {
               label: 'Name',
               path: ['name'],
               type: 'text',
-              placeholder: 'my-volume',
+              placeholder: 'volume-name',
             },
             {
               key: 'source',
@@ -232,7 +232,7 @@ const serviceDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
-          placeholder: 'my-service',
+          placeholder: 'service-name',
         },
         {
           key: 'annotations',
@@ -308,7 +308,7 @@ const configMapDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
-          placeholder: 'my-config',
+          placeholder: 'configmap-name',
         },
         {
           key: 'annotations',
@@ -336,7 +336,7 @@ const secretDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
-          placeholder: 'my-secret',
+          placeholder: 'secret-name',
         },
         {
           key: 'annotations',
@@ -378,7 +378,7 @@ const jobDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
-          placeholder: 'my-job',
+          placeholder: 'job-name',
         },
         {
           key: 'annotations',
@@ -414,7 +414,13 @@ const jobDefinition: ResourceFormDefinition = {
           path: ['spec', 'template', 'spec', 'containers'],
           type: 'group-list',
           fields: [
-            { key: 'name', label: 'Name', path: ['name'], type: 'text', placeholder: 'worker' },
+            {
+              key: 'name',
+              label: 'Name',
+              path: ['name'],
+              type: 'text',
+              placeholder: 'container-name',
+            },
             {
               key: 'image',
               label: 'Image',
@@ -454,7 +460,7 @@ const cronJobDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
-          placeholder: 'my-cronjob',
+          placeholder: 'cronjob-name',
         },
         {
           key: 'annotations',
@@ -497,7 +503,13 @@ const cronJobDefinition: ResourceFormDefinition = {
           path: ['spec', 'jobTemplate', 'spec', 'template', 'spec', 'containers'],
           type: 'group-list',
           fields: [
-            { key: 'name', label: 'Name', path: ['name'], type: 'text', placeholder: 'worker' },
+            {
+              key: 'name',
+              label: 'Name',
+              path: ['name'],
+              type: 'text',
+              placeholder: 'container-name',
+            },
             {
               key: 'image',
               label: 'Image',
@@ -537,7 +549,7 @@ const ingressDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
-          placeholder: 'my-ingress',
+          placeholder: 'ingress-name',
         },
         {
           key: 'annotations',
@@ -568,7 +580,7 @@ const ingressDefinition: ResourceFormDefinition = {
               label: 'Host',
               path: ['host'],
               type: 'text',
-              placeholder: 'my-app.example.com',
+              placeholder: 'app.example.com',
             },
             {
               key: 'paths',
@@ -593,7 +605,7 @@ const ingressDefinition: ResourceFormDefinition = {
                   label: 'Service',
                   path: ['backend', 'service', 'name'],
                   type: 'text',
-                  placeholder: 'my-service',
+                  placeholder: 'service-name',
                 },
                 {
                   key: 'servicePort',

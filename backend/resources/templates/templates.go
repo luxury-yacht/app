@@ -35,10 +35,11 @@ func deploymentTemplate() ResourceTemplate {
 		YAML: `apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-app
+  # Required.
+  name:
   namespace: my-namespace
   labels:
-    app: my-app
+    app.kubernetes.io/name:
 spec:
   # Number of desired Pod replicas.
   replicas: 1
@@ -51,17 +52,8 @@ spec:
         app: my-app
     spec:
       containers:
-      - name: my-app
-        image: nginx:latest
-        ports:
-        - containerPort: 80
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 256Mi`,
+      - name:
+`,
 	}
 }
 

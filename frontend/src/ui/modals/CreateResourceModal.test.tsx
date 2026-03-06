@@ -6,6 +6,7 @@
 
 import React, { act } from 'react';
 import ReactDOM from 'react-dom/client';
+import * as YAML from 'yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // --- Hoisted mocks ---
@@ -62,7 +63,7 @@ const wailsMock = vi.hoisted(() => ({
       apiVersion: 'apps/v1',
       category: 'Workloads',
       description: 'A Deployment manages replicated Pods',
-      yaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\n  labels:\n    app: my-app',
+      yaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name:\n  namespace: my-namespace\n  labels:\n    app.kubernetes.io/name:\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: my-app\n  template:\n    metadata:\n      labels:\n        app: my-app\n    spec:\n      containers:\n      - name:',
     },
     {
       name: 'Service',
@@ -151,7 +152,14 @@ vi.mock('./create-resource/ResourceForm', () => ({
       if (!el) return;
       const handler = (e: Event) => {
         const target = e.target as HTMLInputElement;
-        onChangeRef.current(yamlRef.current.replace(/name: [^\n]+/, `name: ${target.value}`));
+        try {
+          const doc = YAML.parseDocument(yamlRef.current);
+          doc.setIn(['metadata', 'name'], target.value);
+          onChangeRef.current(doc.toString());
+          return;
+        } catch {
+          onChangeRef.current(yamlRef.current.replace(/name: [^\n]+/, `name: ${target.value}`));
+        }
       };
       el.addEventListener('change', handler);
       return () => el.removeEventListener('change', handler);
@@ -488,7 +496,7 @@ describe('CreateResourceModal', () => {
     await unmount();
   });
 
-  it('does not prepopulate labels on a new form template', async () => {
+  it('prepopulates deployment label key and does not prepopulate other deployment editable fields', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
@@ -501,68 +509,31 @@ describe('CreateResourceModal', () => {
     });
 
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
+    const parsed = YAML.parse(editor.value) as {
+      metadata?: { name?: string | null; labels?: Record<string, unknown> };
+      spec?: {
+        template?: {
+          spec?: {
+            containers?: Array<{
+              name?: string | null;
+              image?: string;
+              ports?: unknown[];
+              resources?: Record<string, unknown>;
+            }>;
+          };
+        };
+      };
+    };
+    const firstContainer = parsed.spec?.template?.spec?.containers?.[0];
+
     expect(editor.value).toContain('kind: Deployment');
-    expect(editor.value).not.toContain('\n  labels:');
-    await unmount();
-  });
-
-  it('does not prepopulate container resource requests or limits on a new form template', async () => {
-    wailsMock.GetResourceTemplates.mockResolvedValueOnce([
-      {
-        name: 'Deployment',
-        kind: 'Deployment',
-        apiVersion: 'apps/v1',
-        category: 'Workloads',
-        description: 'A Deployment manages replicated Pods',
-        yaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\nspec:\n  template:\n    spec:\n      containers:\n      - name: app\n        image: nginx:latest\n        resources:\n          requests:\n            cpu: 100m\n            memory: 128Mi\n          limits:\n            cpu: 500m\n            memory: 256Mi',
-      },
-    ]);
-
-    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
-    await flushPromises();
-
-    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Show YAML'
-    ) as HTMLButtonElement | undefined;
-    expect(toggleBtn).toBeDefined();
-    await act(async () => {
-      toggleBtn?.click();
-    });
-
-    const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
-    expect(editor.value).toContain('kind: Deployment');
-    expect(editor.value).not.toContain('requests:');
-    expect(editor.value).not.toContain('limits:');
-    await unmount();
-  });
-
-  it('does not prepopulate container image or ports on a new form template', async () => {
-    wailsMock.GetResourceTemplates.mockResolvedValueOnce([
-      {
-        name: 'Deployment',
-        kind: 'Deployment',
-        apiVersion: 'apps/v1',
-        category: 'Workloads',
-        description: 'A Deployment manages replicated Pods',
-        yaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\nspec:\n  template:\n    spec:\n      containers:\n      - name: app\n        image: nginx:latest\n        ports:\n        - containerPort: 80',
-      },
-    ]);
-
-    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
-    await flushPromises();
-
-    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Show YAML'
-    ) as HTMLButtonElement | undefined;
-    expect(toggleBtn).toBeDefined();
-    await act(async () => {
-      toggleBtn?.click();
-    });
-
-    const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
-    expect(editor.value).toContain('kind: Deployment');
-    expect(editor.value).not.toContain('image:');
-    expect(editor.value).not.toContain('\n        ports:');
+    expect(parsed.metadata?.name ?? null).toBeNull();
+    expect(parsed.metadata?.labels).toBeDefined();
+    expect(parsed.metadata?.labels?.['app.kubernetes.io/name'] ?? null).toBeNull();
+    expect(firstContainer?.name ?? null).toBeNull();
+    expect(firstContainer?.image).toBeUndefined();
+    expect(firstContainer?.ports).toBeUndefined();
+    expect(firstContainer?.resources).toBeUndefined();
     await unmount();
   });
 
