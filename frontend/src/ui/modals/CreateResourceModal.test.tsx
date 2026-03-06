@@ -24,7 +24,10 @@ const kubeconfigMock = vi.hoisted(() => ({
   selectedClusterId: 'config:test-cluster',
   selectedClusterName: 'test-cluster',
   selectedClusterIds: ['config:test-cluster'],
-  getClusterMeta: (id: string) => ({ id, name: id === 'config:test-cluster' ? 'test-cluster' : id }),
+  getClusterMeta: (id: string) => ({
+    id,
+    name: id === 'config:test-cluster' ? 'test-cluster' : id,
+  }),
 }));
 
 const namespaceMock = vi.hoisted(() => ({
@@ -59,8 +62,7 @@ const wailsMock = vi.hoisted(() => ({
       apiVersion: 'apps/v1',
       category: 'Workloads',
       description: 'A Deployment manages replicated Pods',
-      yaml:
-        'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\n  labels:\n    app: my-app',
+      yaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\n  labels:\n    app: my-app',
     },
     {
       name: 'Service',
@@ -127,7 +129,14 @@ vi.mock('./create-resource/formDefinitions', () => ({
 }));
 
 vi.mock('./create-resource/ResourceForm', () => ({
-  ResourceForm: ({ yamlContent, onYamlChange }: { yamlContent: string; onYamlChange: (v: string) => void; definition: unknown }) => {
+  ResourceForm: ({
+    yamlContent,
+    onYamlChange,
+  }: {
+    yamlContent: string;
+    onYamlChange: (v: string) => void;
+    definition: unknown;
+  }) => {
     // Use a ref-based native event listener so that dispatching a native
     // 'change' event from tests correctly invokes onYamlChange.
     const yamlRef = React.useRef(yamlContent);
@@ -142,9 +151,7 @@ vi.mock('./create-resource/ResourceForm', () => ({
       if (!el) return;
       const handler = (e: Event) => {
         const target = e.target as HTMLInputElement;
-        onChangeRef.current(
-          yamlRef.current.replace(/name: [^\n]+/, `name: ${target.value}`)
-        );
+        onChangeRef.current(yamlRef.current.replace(/name: [^\n]+/, `name: ${target.value}`));
       };
       el.addEventListener('change', handler);
       return () => el.removeEventListener('change', handler);
@@ -398,7 +405,9 @@ describe('CreateResourceModal', () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    const templateSelect = container.querySelector(
+      '[data-testid="dropdown-Resource template"]'
+    ) as HTMLSelectElement;
     expect(templateSelect.value).toBe('Deployment');
     const toggleBtn = Array.from(container.querySelectorAll('button')).find(
       (b) => b.textContent?.trim() === 'Show YAML'
@@ -414,7 +423,9 @@ describe('CreateResourceModal', () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    const select = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    const select = container.querySelector(
+      '[data-testid="dropdown-Resource template"]'
+    ) as HTMLSelectElement;
     expect(select).not.toBeNull();
 
     await act(async () => {
@@ -428,7 +439,9 @@ describe('CreateResourceModal', () => {
       (b) => b.textContent?.trim() === 'Show YAML'
     ) as HTMLButtonElement | undefined;
     expect(toggleBtn).toBeDefined();
-    await act(async () => { toggleBtn?.click(); });
+    await act(async () => {
+      toggleBtn?.click();
+    });
 
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     expect(editor.value).toContain('kind: Deployment');
@@ -468,7 +481,9 @@ describe('CreateResourceModal', () => {
       (b) => b.textContent?.trim() === 'Show YAML'
     ) as HTMLButtonElement | undefined;
     expect(toggleBtn).toBeDefined();
-    await act(async () => { toggleBtn?.click(); });
+    await act(async () => {
+      toggleBtn?.click();
+    });
 
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     expect(editor.value).toContain('kind: Deployment');
@@ -484,8 +499,7 @@ describe('CreateResourceModal', () => {
         apiVersion: 'apps/v1',
         category: 'Workloads',
         description: 'A Deployment manages replicated Pods',
-        yaml:
-          'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\nspec:\n  template:\n    spec:\n      containers:\n      - name: app\n        image: nginx:latest\n        resources:\n          requests:\n            cpu: 100m\n            memory: 128Mi\n          limits:\n            cpu: 500m\n            memory: 256Mi',
+        yaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\nspec:\n  template:\n    spec:\n      containers:\n      - name: app\n        image: nginx:latest\n        resources:\n          requests:\n            cpu: 100m\n            memory: 128Mi\n          limits:\n            cpu: 500m\n            memory: 256Mi',
       },
     ]);
 
@@ -496,7 +510,9 @@ describe('CreateResourceModal', () => {
       (b) => b.textContent?.trim() === 'Show YAML'
     ) as HTMLButtonElement | undefined;
     expect(toggleBtn).toBeDefined();
-    await act(async () => { toggleBtn?.click(); });
+    await act(async () => {
+      toggleBtn?.click();
+    });
 
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     expect(editor.value).toContain('kind: Deployment');
@@ -513,8 +529,7 @@ describe('CreateResourceModal', () => {
         apiVersion: 'apps/v1',
         category: 'Workloads',
         description: 'A Deployment manages replicated Pods',
-        yaml:
-          'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\nspec:\n  template:\n    spec:\n      containers:\n      - name: app\n        image: nginx:latest\n        ports:\n        - containerPort: 80',
+        yaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: my-app\n  namespace: my-namespace\nspec:\n  template:\n    spec:\n      containers:\n      - name: app\n        image: nginx:latest\n        ports:\n        - containerPort: 80',
       },
     ]);
 
@@ -615,7 +630,9 @@ describe('CreateResourceModal', () => {
     const validateBtn = Array.from(container.querySelectorAll('button')).find(
       (b) => b.textContent === 'Validate'
     );
-    await act(async () => { validateBtn?.click(); });
+    await act(async () => {
+      validateBtn?.click();
+    });
     await flushPromises();
 
     expect(container.querySelector('.create-resource-validation-success')).not.toBeNull();
@@ -625,7 +642,9 @@ describe('CreateResourceModal', () => {
 
   it('shows structured error with causes on validation failure', async () => {
     wailsMock.ValidateResourceCreation.mockRejectedValueOnce(
-      new Error('ObjectYAMLError:{"code":"Invalid","message":"spec.containers required","causes":["spec.containers: Required value"]}')
+      new Error(
+        'ObjectYAMLError:{"code":"Invalid","message":"spec.containers required","causes":["spec.containers: Required value"]}'
+      )
     );
 
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
@@ -634,7 +653,9 @@ describe('CreateResourceModal', () => {
     const validateBtn = Array.from(container.querySelectorAll('button')).find(
       (b) => b.textContent === 'Validate'
     );
-    await act(async () => { validateBtn?.click(); });
+    await act(async () => {
+      validateBtn?.click();
+    });
     await flushPromises();
 
     expect(container.querySelector('.create-resource-validation-error')).not.toBeNull();
@@ -654,7 +675,9 @@ describe('CreateResourceModal', () => {
     const createBtn = Array.from(container.querySelectorAll('button')).find(
       (b) => b.textContent === 'Create'
     );
-    await act(async () => { createBtn?.click(); });
+    await act(async () => {
+      createBtn?.click();
+    });
     await flushPromises();
 
     expect(container.querySelector('.create-resource-validation-error')).not.toBeNull();
@@ -673,7 +696,9 @@ describe('CreateResourceModal', () => {
     const createBtn = Array.from(container.querySelectorAll('button')).find(
       (b) => b.textContent === 'Create'
     );
-    await act(async () => { createBtn?.click(); });
+    await act(async () => {
+      createBtn?.click();
+    });
     await flushPromises();
 
     expect(container.textContent).toContain('Forbidden');
@@ -688,7 +713,9 @@ describe('CreateResourceModal', () => {
     const createBtn = Array.from(container.querySelectorAll('button')).find(
       (b) => b.textContent === 'Create'
     );
-    await act(async () => { createBtn?.click(); });
+    await act(async () => {
+      createBtn?.click();
+    });
     await flushPromises();
 
     // Verify openWithObject receives pinned cluster context.
@@ -711,7 +738,9 @@ describe('CreateResourceModal', () => {
     const createBtn = Array.from(container.querySelectorAll('button')).find(
       (b) => b.textContent === 'Create'
     );
-    await act(async () => { createBtn?.click(); });
+    await act(async () => {
+      createBtn?.click();
+    });
     await flushPromises();
 
     expect(onClose).toHaveBeenCalled();
@@ -722,7 +751,9 @@ describe('CreateResourceModal', () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    const nsSelect = container.querySelector('[data-testid="dropdown-Target namespace"]') as HTMLSelectElement;
+    const nsSelect = container.querySelector(
+      '[data-testid="dropdown-Target namespace"]'
+    ) as HTMLSelectElement;
     expect(nsSelect).not.toBeNull();
 
     const options = Array.from(nsSelect.options).map((o) => o.text);
@@ -740,7 +771,9 @@ describe('CreateResourceModal', () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    const nsSelect = container.querySelector('[data-testid="dropdown-Target namespace"]') as HTMLSelectElement;
+    const nsSelect = container.querySelector(
+      '[data-testid="dropdown-Target namespace"]'
+    ) as HTMLSelectElement;
     expect(nsSelect.value).toBe('');
     await unmount();
   });
@@ -762,7 +795,9 @@ describe('CreateResourceModal', () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    const clusterDropdown = container.querySelector('[data-testid="dropdown-Target cluster"]') as HTMLSelectElement;
+    const clusterDropdown = container.querySelector(
+      '[data-testid="dropdown-Target cluster"]'
+    ) as HTMLSelectElement;
     expect(clusterDropdown).not.toBeNull();
     // The active cluster should be selected.
     expect(clusterDropdown.value).toBe('config:test-cluster');
@@ -773,7 +808,9 @@ describe('CreateResourceModal', () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    const templateSelect = container.querySelector(
+      '[data-testid="dropdown-Resource template"]'
+    ) as HTMLSelectElement;
     await act(async () => {
       templateSelect.value = 'Deployment';
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -791,7 +828,9 @@ describe('CreateResourceModal', () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    const templateSelect = container.querySelector(
+      '[data-testid="dropdown-Resource template"]'
+    ) as HTMLSelectElement;
     await act(async () => {
       templateSelect.value = '';
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -810,7 +849,9 @@ describe('CreateResourceModal', () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    const templateSelect = container.querySelector(
+      '[data-testid="dropdown-Resource template"]'
+    ) as HTMLSelectElement;
     await act(async () => {
       templateSelect.value = 'Deployment';
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -829,7 +870,9 @@ describe('CreateResourceModal', () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    const templateSelect = container.querySelector(
+      '[data-testid="dropdown-Resource template"]'
+    ) as HTMLSelectElement;
     await act(async () => {
       templateSelect.value = 'Deployment';
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -839,7 +882,9 @@ describe('CreateResourceModal', () => {
       (b) => b.textContent?.trim() === 'Show YAML'
     ) as HTMLButtonElement | undefined;
     expect(toggleBtn).toBeDefined();
-    await act(async () => { toggleBtn?.click(); });
+    await act(async () => {
+      toggleBtn?.click();
+    });
 
     expect(container.querySelector('[data-testid="yaml-editor"]')).not.toBeNull();
     const showFormBtn = Array.from(container.querySelectorAll('button')).find(
@@ -853,7 +898,9 @@ describe('CreateResourceModal', () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    const templateSelect = container.querySelector(
+      '[data-testid="dropdown-Resource template"]'
+    ) as HTMLSelectElement;
     await act(async () => {
       templateSelect.value = 'Deployment';
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -871,7 +918,9 @@ describe('CreateResourceModal', () => {
       (b) => b.textContent?.trim() === 'Show YAML'
     ) as HTMLButtonElement | undefined;
     expect(toggleBtn).toBeDefined();
-    await act(async () => { toggleBtn?.click(); });
+    await act(async () => {
+      toggleBtn?.click();
+    });
 
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     expect(editor.value).toContain('name: changed-name');
@@ -883,7 +932,9 @@ describe('CreateResourceModal', () => {
     await flushPromises();
 
     // Select Deployment to enable form toggle.
-    const templateSelect = container.querySelector('[data-testid="dropdown-Resource template"]') as HTMLSelectElement;
+    const templateSelect = container.querySelector(
+      '[data-testid="dropdown-Resource template"]'
+    ) as HTMLSelectElement;
     await act(async () => {
       templateSelect.value = 'Deployment';
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
@@ -895,15 +946,21 @@ describe('CreateResourceModal', () => {
     expect(showYamlBtn?.disabled).toBe(false);
 
     // Switch to YAML and change kind to unsupported.
-    await act(async () => { showYamlBtn?.click(); });
+    await act(async () => {
+      showYamlBtn?.click();
+    });
 
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     // Use the native value setter + input event to trigger React's synthetic onChange.
     const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement.prototype, 'value'
+      window.HTMLTextAreaElement.prototype,
+      'value'
     )!.set!;
     await act(async () => {
-      nativeTextAreaValueSetter.call(editor, 'apiVersion: v1\nkind: Pod\nmetadata:\n  name: test\n');
+      nativeTextAreaValueSetter.call(
+        editor,
+        'apiVersion: v1\nkind: Pod\nmetadata:\n  name: test\n'
+      );
       editor.dispatchEvent(new Event('input', { bubbles: true }));
     });
 

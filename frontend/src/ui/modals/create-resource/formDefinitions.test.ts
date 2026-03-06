@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { getFormDefinition, allFormDefinitions, type ResourceFormDefinition } from './formDefinitions';
+import {
+  getFormDefinition,
+  allFormDefinitions,
+  type ResourceFormDefinition,
+} from './formDefinitions';
 
 describe('formDefinitions', () => {
   it('returns a definition for each supported kind', () => {
-    const supportedKinds = ['Deployment', 'Service', 'ConfigMap', 'Secret', 'Job', 'CronJob', 'Ingress'];
+    const supportedKinds = [
+      'Deployment',
+      'Service',
+      'ConfigMap',
+      'Secret',
+      'Job',
+      'CronJob',
+      'Ingress',
+    ];
     for (const kind of supportedKinds) {
       const def = getFormDefinition(kind);
       expect(def, `missing form definition for ${kind}`).toBeDefined();
@@ -28,7 +40,10 @@ describe('formDefinitions', () => {
             // Group-list sub-fields are scoped — only check within their parent.
             const subKeys = new Set<string>();
             for (const sub of field.fields) {
-              expect(subKeys.has(sub.key), `duplicate sub-key "${sub.key}" in ${def.kind}/${field.key}`).toBe(false);
+              expect(
+                subKeys.has(sub.key),
+                `duplicate sub-key "${sub.key}" in ${def.kind}/${field.key}`
+              ).toBe(false);
               subKeys.add(sub.key);
             }
           }
@@ -55,7 +70,10 @@ describe('formDefinitions', () => {
       for (const section of def.sections) {
         for (const field of section.fields) {
           if (field.type === 'select') {
-            expect(field.options?.length, `no options for select ${def.kind}/${field.key}`).toBeGreaterThan(0);
+            expect(
+              field.options?.length,
+              `no options for select ${def.kind}/${field.key}`
+            ).toBeGreaterThan(0);
           }
         }
       }

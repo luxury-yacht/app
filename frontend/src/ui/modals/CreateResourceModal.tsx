@@ -99,10 +99,7 @@ function collectTemplateResetPaths(definition?: ResourceFormDefinition): Templat
 }
 
 /** Delete a path from the YAML document, expanding '*' over sequence items. */
-function deletePathWithWildcards(
-  doc: YAML.Document.Parsed,
-  path: TemplatePathSegment[]
-): void {
+function deletePathWithWildcards(doc: YAML.Document.Parsed, path: TemplatePathSegment[]): void {
   const wildcardIndex = path.findIndex((segment) => segment === '*');
   if (wildcardIndex < 0) {
     doc.deleteIn(path as Array<string | number>);
@@ -157,11 +154,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
     const { pushContext, popContext } = useKeyboardContext();
     const contextPushedRef = useRef(false);
     const modalRef = useRef<HTMLDivElement>(null);
-    const {
-      selectedClusterId,
-      selectedClusterIds,
-      getClusterMeta,
-    } = useKubeconfig();
+    const { selectedClusterId, selectedClusterIds, getClusterMeta } = useKubeconfig();
     const { selectedNamespace: activeNamespace } = useNamespace();
     const { openWithObject } = useObjectPanel();
     const { addError } = useErrorContext();
@@ -209,9 +202,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         .map((ns) => ({ value: ns.name, label: ns.name }));
     }, [namespaceDomain.data, targetClusterId]);
 
-    const defaultNamespace = isAllNamespaces(activeNamespace)
-      ? ''
-      : activeNamespace ?? '';
+    const defaultNamespace = isAllNamespaces(activeNamespace) ? '' : (activeNamespace ?? '');
     const [selectedNamespace, setSelectedNamespace] = useState(defaultNamespace);
 
     // Reset namespace when target cluster changes — the previous namespace
@@ -259,10 +250,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       [isDarkTheme]
     );
 
-    const searchExtensions = useMemo(
-      () => createSearchExtensions({ enableKeymap: false }),
-      []
-    );
+    const searchExtensions = useMemo(() => createSearchExtensions({ enableKeymap: false }), []);
 
     const editorExtensions = useMemo(
       () => [yamlLang(), EditorView.lineWrapping, highlightExtension, ...searchExtensions],
@@ -274,9 +262,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       if (isOpen) {
         setShouldRender(true);
         setIsClosing(false);
-        const initialNamespace = isAllNamespaces(activeNamespace)
-          ? ''
-          : activeNamespace ?? '';
+        const initialNamespace = isAllNamespaces(activeNamespace) ? '' : (activeNamespace ?? '');
         // Reset state on open.
         setYamlContent(BLANK_YAML);
         setSelectedTemplate('');
@@ -320,7 +306,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         }, 200);
         return () => clearTimeout(timer);
       }
-    }, [isOpen, shouldRender, activeNamespace]);
+    }, [isOpen, shouldRender, activeNamespace, selectedClusterId]);
 
     // Handle keyboard context and body overflow.
     useEffect(() => {
@@ -403,7 +389,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
     // Template selection handler.
     const handleTemplateChange = useCallback(
       (value: string | string[]) => {
-        const templateName = Array.isArray(value) ? value[0] ?? '' : value;
+        const templateName = Array.isArray(value) ? (value[0] ?? '') : value;
         setSelectedTemplate(templateName);
         // Clear previous validation state on template change.
         setValidationSuccess(null);
@@ -446,7 +432,12 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       }
       for (const [category, items] of groups) {
         // Disabled category header.
-        opts.push({ value: `_header_${category}`, label: category, disabled: true, group: 'header' });
+        opts.push({
+          value: `_header_${category}`,
+          label: category,
+          disabled: true,
+          group: 'header',
+        });
         for (const t of items) {
           opts.push({ value: t.name, label: t.name });
         }
@@ -602,7 +593,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                       <Dropdown
                         options={clusterOptions}
                         value={targetClusterId}
-                        onChange={(v) => setTargetClusterId(Array.isArray(v) ? v[0] ?? '' : v)}
+                        onChange={(v) => setTargetClusterId(Array.isArray(v) ? (v[0] ?? '') : v)}
                         placeholder="Select cluster"
                         size="compact"
                         ariaLabel="Target cluster"
@@ -613,7 +604,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                       <Dropdown
                         options={namespaceOptions}
                         value={selectedNamespace}
-                        onChange={(v) => setSelectedNamespace(Array.isArray(v) ? v[0] ?? '' : v)}
+                        onChange={(v) => setSelectedNamespace(Array.isArray(v) ? (v[0] ?? '') : v)}
                         placeholder="Select namespace"
                         size="compact"
                         ariaLabel="Target namespace"
@@ -633,9 +624,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                     <button
                       type="button"
                       className="button generic create-resource-view-toggle"
-                      onClick={() =>
-                        setActiveView((prev) => (prev === 'form' ? 'yaml' : 'form'))
-                      }
+                      onClick={() => setActiveView((prev) => (prev === 'form' ? 'yaml' : 'form'))}
                       disabled={!canShowForm}
                       data-create-resource-focusable="true"
                     >
@@ -697,9 +686,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                   )}
 
                   {/* Raw (non-structured) error */}
-                  {rawError && (
-                    <div className="create-resource-validation-error">{rawError}</div>
-                  )}
+                  {rawError && <div className="create-resource-validation-error">{rawError}</div>}
                 </>
               ) : (
                 <div className="create-resource-no-cluster">

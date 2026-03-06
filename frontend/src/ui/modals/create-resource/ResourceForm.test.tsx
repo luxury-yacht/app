@@ -145,8 +145,10 @@ describe('ResourceForm', () => {
     root = ReactDOM.createRoot(container);
   });
 
-  afterEach(() => {
-    root.unmount();
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
     container.remove();
   });
 
@@ -1499,7 +1501,9 @@ spec:
       addResourcesBtn?.click();
     });
 
-    expect(container.querySelector('.resource-form-actions-row .resource-form-action-ghost-text')).toBeNull();
+    expect(
+      container.querySelector('.resource-form-actions-row .resource-form-action-ghost-text')
+    ).toBeNull();
     expect(container.querySelector('[data-field-key="requestsCpu"]')).not.toBeNull();
     expect(container.querySelector('[data-field-key="requestsMemory"]')).not.toBeNull();
     expect(container.querySelector('[data-field-key="limitsCpu"]')).not.toBeNull();

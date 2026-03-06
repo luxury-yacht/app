@@ -1241,9 +1241,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   if (!shouldRender) return null;
 
   return (
-    <div
-      className={`modal-overlay object-diff-modal-overlay ${isClosing ? 'closing' : ''}`}
-    >
+    <div className={`modal-overlay object-diff-modal-overlay ${isClosing ? 'closing' : ''}`}>
       <div
         className={`modal-container object-diff-modal ${isClosing ? 'closing' : ''}`}
         ref={modalRef}

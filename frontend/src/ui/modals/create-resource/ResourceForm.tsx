@@ -878,7 +878,9 @@ function KeyValueListField({
             >
               <AddIcon width={12} height={12} />
             </button>
-            {addGhostText && <span className="resource-form-action-ghost-text">{addGhostText}</span>}
+            {addGhostText && (
+              <span className="resource-form-action-ghost-text">{addGhostText}</span>
+            )}
             <button
               type="button"
               className="resource-form-remove-btn resource-form-icon-btn resource-form-icon-btn--hidden"

@@ -147,9 +147,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
   if (!shouldRender) return null;
 
   return (
-    <div
-      className={`modal-overlay settings-modal-overlay ${isClosing ? 'closing' : ''}`}
-    >
+    <div className={`modal-overlay settings-modal-overlay ${isClosing ? 'closing' : ''}`}>
       <div
         className={`modal-container settings-modal ${isClosing ? 'closing' : ''}`}
         ref={modalRef}

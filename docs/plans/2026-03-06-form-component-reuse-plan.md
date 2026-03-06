@@ -17,6 +17,7 @@ Extract the established Create Resource form UI patterns into reusable component
 - No backend changes
 - **Create Resource form only** in this plan
 - Cross-form rollout is explicitly out of scope for this plan and will be tracked separately
+- Structural wrapper extraction (`FormSectionCard`, `FormFieldRow`) is out of scope for this implementation pass and will be tracked in a follow-up plan
 
 ## Reuse Candidates (Priority Order)
 
@@ -59,6 +60,7 @@ Extract the established Create Resource form UI patterns into reusable component
 10. `FormSectionCard` and `FormFieldRow`
 
 - Base structure wrappers for section layout and row-level label/value alignment consistency.
+- Follow-up only; excluded from this plan to reduce visual-regression risk during core extraction.
 
 ## Multi-Cluster Guardrails
 
@@ -90,6 +92,13 @@ Extract the established Create Resource form UI patterns into reusable component
 
 ## Phased Plan
 
+### Phase 0: Multi-Cluster Safety Gate (Required First)
+
+- [ ] Add/expand integration tests in `CreateResourceModal` flow for pinned-cluster behavior on validate/create calls
+- [ ] Add/expand integration coverage for in-flight cluster switching to verify actions remain pinned to the original cluster
+- [ ] Confirm namespace filtering assertions remain cluster-scoped
+- [ ] Complete and pass this phase before any component extraction
+
 ### Phase 1: Action Primitives
 
 - [ ] Extract `FormIconActionButton`
@@ -109,15 +118,20 @@ Extract the established Create Resource form UI patterns into reusable component
 - [ ] Extract `FormTriStateBooleanDropdown`
 - [ ] Replace existing replicas/port/mode/optional usages where applicable
 
-### Phase 4: Resources + Structural Wrappers
+### Phase 4: Resources
 
 - [ ] Extract `FormContainerResourcesField`
-- [ ] Extract `FormSectionCard` and `FormFieldRow`
-- [ ] Apply wrappers inside Create Resource only, with strict visual parity checks
+- [ ] Migrate existing container resources UI to the extracted field with strict visual parity checks
+
+### Follow-Up Plan (Out of Scope for This Pass)
+
+- [ ] Extract `FormSectionCard` and `FormFieldRow` in a dedicated visual-consistency plan
+- [ ] Track wrapper extraction in `docs/plans/2026-03-06-form-structural-wrappers-visual-consistency-plan.md`
 
 ## Acceptance Criteria
 
 - No UX or behavior regressions in Create Resource form
+- Phase 0 multi-cluster regression coverage is implemented and passing before Phase 1 extraction starts
 - Existing tests continue passing
 - `npm run typecheck` passes
 - `npm run test -- --run` passes
@@ -127,6 +141,7 @@ Extract the established Create Resource form UI patterns into reusable component
   - If any backend files are touched, run backend verification (at minimum `go test ./...`) before completion.
 - Duplicate styling and duplicated action-row markup are materially reduced
 - Cluster safety assertions remain valid and explicitly tested
+- Structural wrappers are not extracted in this plan
 
 ## Required Test Coverage
 
