@@ -12,7 +12,9 @@ import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { getFieldValue, setFieldValue } from './yamlSync';
 import type { ResourceFormDefinition, FormFieldDefinition } from './formDefinitions';
-import { FormEmptyActionRow, FormGhostAddText, FormIconActionButton } from './FormActionPrimitives';
+import { FormGhostAddText, FormIconActionButton } from './FormActionPrimitives';
+import { FormKeyValueListField } from './FormKeyValueListField';
+import { FormNestedListField } from './FormNestedListField';
 import './ResourceForm.css';
 
 interface ResourceFormProps {
@@ -786,90 +788,19 @@ function KeyValueListField({
   };
 
   return (
-    <div data-field-key={field.key} className="resource-form-kv-container">
-      {draftEntries.map(([k, v], index) => (
-        <div
-          key={index}
-          className={`resource-form-kv-row${showInlineKeyValueLabels ? ' resource-form-kv-row--labeled' : ''}`}
-        >
-          {showInlineKeyValueLabels ? (
-            <div className="resource-form-kv-labeled-pairs">
-              <div className="resource-form-kv-pair">
-                <span className="resource-form-kv-inline-label">Key</span>
-                <input
-                  type="text"
-                  className="resource-form-input resource-form-kv-input--25ch"
-                  value={k}
-                  placeholder="key"
-                  size={25}
-                  {...INPUT_BEHAVIOR_PROPS}
-                  onChange={(e) => handleKeyChange(index, e.target.value)}
-                />
-              </div>
-              <div className="resource-form-kv-pair">
-                <span className="resource-form-kv-inline-label">Value</span>
-                <input
-                  type="text"
-                  className="resource-form-input resource-form-kv-input--25ch"
-                  value={v}
-                  placeholder="value"
-                  size={25}
-                  {...INPUT_BEHAVIOR_PROPS}
-                  onChange={(e) => handleValueChange(index, e.target.value)}
-                />
-              </div>
-            </div>
-          ) : (
-            <>
-              <input
-                type="text"
-                className="resource-form-input"
-                value={k}
-                placeholder="key"
-                {...INPUT_BEHAVIOR_PROPS}
-                onChange={(e) => handleKeyChange(index, e.target.value)}
-              />
-              <input
-                type="text"
-                className="resource-form-input"
-                value={v}
-                placeholder="value"
-                {...INPUT_BEHAVIOR_PROPS}
-                onChange={(e) => handleValueChange(index, e.target.value)}
-              />
-            </>
-          )}
-          <div className="resource-form-actions-inline">
-            <FormIconActionButton
-              variant="add"
-              hidden={index !== draftEntries.length - 1}
-              label={index === draftEntries.length - 1 ? addButtonLabel : undefined}
-              onClick={index === draftEntries.length - 1 ? handleAdd : undefined}
-            />
-            <FormIconActionButton
-              variant="remove"
-              label={removeButtonLabel}
-              onClick={() => handleRemove(index)}
-            />
-          </div>
-        </div>
-      ))}
-      {draftEntries.length === 0 && (
-        <FormEmptyActionRow
-          rowClassName="resource-form-kv-row"
-          spacerClassName={
-            !leftAlignEmptyStateActions ? 'resource-form-kv-empty-spacer' : undefined
-          }
-          actionsClassName="resource-form-actions-inline"
-          alignLeft={leftAlignEmptyStateActions}
-          alignLeftClassName="resource-form-actions-inline--left"
-          addLabel={addButtonLabel}
-          removeLabel={removeButtonLabel}
-          onAdd={handleAdd}
-          ghostText={addGhostText}
-        />
-      )}
-    </div>
+    <FormKeyValueListField
+      dataFieldKey={field.key}
+      entries={draftEntries}
+      onKeyChange={handleKeyChange}
+      onValueChange={handleValueChange}
+      onRemove={handleRemove}
+      onAdd={handleAdd}
+      addButtonLabel={addButtonLabel}
+      removeButtonLabel={removeButtonLabel}
+      showInlineKeyValueLabels={showInlineKeyValueLabels}
+      leftAlignEmptyStateActions={leftAlignEmptyStateActions}
+      addGhostText={addGhostText}
+    />
   );
 }
 
@@ -1358,110 +1289,86 @@ function GroupListField({
             )}
 
             {effectiveSource.key === 'configMap' && (
-              <div data-field-key="configMapItems" className="resource-form-nested-group-list">
-                {configMapItems.map((entry, rowIndex) => {
+              <FormNestedListField
+                dataFieldKey="configMapItems"
+                items={configMapItems}
+                addLabel="Add item"
+                removeLabel="Remove Items"
+                onAdd={handleConfigMapAddItem}
+                onRemove={handleConfigMapRemoveItem}
+                leftAlignEmptyStateActions
+                addGhostText="Add item"
+                renderFields={(entry, rowIndex) => {
                   const itemKey = String(getNestedValue(entry, ['key']) ?? '');
                   const itemPath = String(getNestedValue(entry, ['path']) ?? '');
                   const itemMode = String(getNestedValue(entry, ['mode']) ?? '');
 
                   return (
-                    <div key={rowIndex} className="resource-form-nested-group-row">
-                      <div className="resource-form-nested-group-fields">
-                        <div
-                          data-field-key="configMapItemKey"
-                          className="resource-form-nested-group-field"
-                        >
-                          <label className="resource-form-nested-group-label">Key</label>
-                          <input
-                            type="text"
-                            className="resource-form-input"
-                            value={itemKey}
-                            placeholder="key"
-                            {...INPUT_BEHAVIOR_PROPS}
-                            onChange={(e) =>
-                              handleConfigMapItemChange(rowIndex, ['key'], e.target.value)
-                            }
-                          />
-                        </div>
-                        <div
-                          data-field-key="configMapItemPath"
-                          className="resource-form-nested-group-field"
-                        >
-                          <label className="resource-form-nested-group-label">Path</label>
-                          <input
-                            type="text"
-                            className="resource-form-input"
-                            value={itemPath}
-                            placeholder="path"
-                            {...INPUT_BEHAVIOR_PROPS}
-                            onChange={(e) =>
-                              handleConfigMapItemChange(rowIndex, ['path'], e.target.value)
-                            }
-                          />
-                        </div>
-                        <div
-                          data-field-key="configMapItemMode"
-                          className="resource-form-nested-group-field"
-                        >
-                          <label className="resource-form-nested-group-label">Mode</label>
-                          <input
-                            type="number"
-                            className="resource-form-input"
-                            value={itemMode}
-                            placeholder="420"
-                            min={0}
-                            max={511}
-                            step={1}
-                            {...INPUT_BEHAVIOR_PROPS}
-                            onChange={(e) => {
-                              const raw = e.target.value;
-                              if (raw === '') {
-                                handleConfigMapItemChange(rowIndex, ['mode'], '');
-                                return;
-                              }
-                              const parsed = Number(raw);
-                              if (!Number.isInteger(parsed) || parsed < 0 || parsed > 511) {
-                                return;
-                              }
-                              handleConfigMapItemChange(rowIndex, ['mode'], parsed);
-                            }}
-                          />
-                        </div>
-                      </div>
-                      <div className="resource-form-nested-group-row-actions">
-                        <FormIconActionButton
-                          variant="add"
-                          hidden={rowIndex !== configMapItems.length - 1}
-                          label={rowIndex === configMapItems.length - 1 ? 'Add item' : undefined}
-                          onClick={
-                            rowIndex === configMapItems.length - 1
-                              ? handleConfigMapAddItem
-                              : undefined
+                    <>
+                      <div
+                        data-field-key="configMapItemKey"
+                        className="resource-form-nested-group-field"
+                      >
+                        <label className="resource-form-nested-group-label">Key</label>
+                        <input
+                          type="text"
+                          className="resource-form-input"
+                          value={itemKey}
+                          placeholder="key"
+                          {...INPUT_BEHAVIOR_PROPS}
+                          onChange={(e) =>
+                            handleConfigMapItemChange(rowIndex, ['key'], e.target.value)
                           }
                         />
-                        <FormIconActionButton
-                          variant="remove"
-                          label="Remove Items"
-                          onClick={() => handleConfigMapRemoveItem(rowIndex)}
+                      </div>
+                      <div
+                        data-field-key="configMapItemPath"
+                        className="resource-form-nested-group-field"
+                      >
+                        <label className="resource-form-nested-group-label">Path</label>
+                        <input
+                          type="text"
+                          className="resource-form-input"
+                          value={itemPath}
+                          placeholder="path"
+                          {...INPUT_BEHAVIOR_PROPS}
+                          onChange={(e) =>
+                            handleConfigMapItemChange(rowIndex, ['path'], e.target.value)
+                          }
                         />
                       </div>
-                    </div>
+                      <div
+                        data-field-key="configMapItemMode"
+                        className="resource-form-nested-group-field"
+                      >
+                        <label className="resource-form-nested-group-label">Mode</label>
+                        <input
+                          type="number"
+                          className="resource-form-input"
+                          value={itemMode}
+                          placeholder="420"
+                          min={0}
+                          max={511}
+                          step={1}
+                          {...INPUT_BEHAVIOR_PROPS}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === '') {
+                              handleConfigMapItemChange(rowIndex, ['mode'], '');
+                              return;
+                            }
+                            const parsed = Number(raw);
+                            if (!Number.isInteger(parsed) || parsed < 0 || parsed > 511) {
+                              return;
+                            }
+                            handleConfigMapItemChange(rowIndex, ['mode'], parsed);
+                          }}
+                        />
+                      </div>
+                    </>
                   );
-                })}
-
-                {configMapItems.length === 0 && (
-                  <FormEmptyActionRow
-                    rowClassName="resource-form-nested-group-row"
-                    actionsClassName="resource-form-nested-group-row-actions"
-                    alignLeft
-                    alignLeftClassName="resource-form-nested-group-row-actions--left"
-                    addLabel="Add item"
-                    removeLabel="Remove Items"
-                    onAdd={handleConfigMapAddItem}
-                    ghostText="Add item"
-                  />
-                )}
-              </div>
+                }}
+              />
             )}
           </div>
         );
@@ -1523,51 +1430,16 @@ function GroupListField({
         const nestedRemoveLabel = 'Remove Entry';
 
         return (
-          <div data-field-key={subField.key} className="resource-form-kv-container">
-            {entries.map(([k, v], entryIndex) => (
-              <div key={entryIndex} className="resource-form-kv-row">
-                <input
-                  type="text"
-                  className="resource-form-input"
-                  value={k}
-                  placeholder="key"
-                  {...INPUT_BEHAVIOR_PROPS}
-                  onChange={(e) => handleKeyChange(entryIndex, e.target.value)}
-                />
-                <input
-                  type="text"
-                  className="resource-form-input"
-                  value={v}
-                  placeholder="value"
-                  {...INPUT_BEHAVIOR_PROPS}
-                  onChange={(e) => handleValueChange(entryIndex, e.target.value)}
-                />
-                <div className="resource-form-actions-inline">
-                  <FormIconActionButton
-                    variant="add"
-                    hidden={entryIndex !== entries.length - 1}
-                    label={entryIndex === entries.length - 1 ? nestedAddLabel : undefined}
-                    onClick={entryIndex === entries.length - 1 ? handleAdd : undefined}
-                  />
-                  <FormIconActionButton
-                    variant="remove"
-                    label={nestedRemoveLabel}
-                    onClick={() => handleRemove(entryIndex)}
-                  />
-                </div>
-              </div>
-            ))}
-            {entries.length === 0 && (
-              <FormEmptyActionRow
-                rowClassName="resource-form-kv-row"
-                spacerClassName="resource-form-kv-empty-spacer"
-                actionsClassName="resource-form-actions-inline"
-                addLabel={nestedAddLabel}
-                removeLabel={nestedRemoveLabel}
-                onAdd={handleAdd}
-              />
-            )}
-          </div>
+          <FormKeyValueListField
+            dataFieldKey={subField.key}
+            entries={entries}
+            onKeyChange={handleKeyChange}
+            onValueChange={handleValueChange}
+            onRemove={handleRemove}
+            onAdd={handleAdd}
+            addButtonLabel={nestedAddLabel}
+            removeButtonLabel={nestedRemoveLabel}
+          />
         );
       }
       case 'group-list': {
@@ -1700,56 +1572,30 @@ function GroupListField({
         };
 
         return (
-          <div data-field-key={subField.key} className="resource-form-nested-group-list">
-            {nestedItems.map((nestedItem, nestedIndex) => (
-              <div key={nestedIndex} className="resource-form-nested-group-row">
-                <div className="resource-form-nested-group-fields">
-                  {subField.fields?.map((nestedField) => (
-                    <div
-                      key={nestedField.key}
-                      data-field-key={nestedField.key}
-                      className="resource-form-nested-group-field"
-                    >
-                      <label className="resource-form-nested-group-label">
-                        {nestedField.label}
-                      </label>
-                      {renderNestedLeafField(nestedField, nestedItem, nestedIndex)}
-                    </div>
-                  ))}
-                </div>
-                <div className="resource-form-nested-group-row-actions">
-                  <FormIconActionButton
-                    variant="add"
-                    hidden={nestedIndex !== nestedItems.length - 1}
-                    label={
-                      nestedIndex === nestedItems.length - 1 ? `Add ${subField.label}` : undefined
-                    }
-                    onClick={nestedIndex === nestedItems.length - 1 ? handleNestedAdd : undefined}
-                  />
-                  <FormIconActionButton
-                    variant="remove"
-                    label={`Remove ${subField.label}`}
-                    onClick={() => handleNestedRemove(nestedIndex)}
-                  />
-                </div>
-              </div>
-            ))}
-            {nestedItems.length === 0 && (
-              <FormEmptyActionRow
-                rowClassName="resource-form-nested-group-row"
-                spacerClassName={
-                  !leftAlignNestedEmptyActions ? 'resource-form-nested-group-fields' : undefined
-                }
-                actionsClassName="resource-form-nested-group-row-actions"
-                alignLeft={leftAlignNestedEmptyActions}
-                alignLeftClassName="resource-form-nested-group-row-actions--left"
-                addLabel={`Add ${subField.label}`}
-                removeLabel={`Remove ${subField.label}`}
-                onAdd={handleNestedAdd}
-                ghostText={nestedAddGhostText}
-              />
+          <FormNestedListField
+            dataFieldKey={subField.key}
+            items={nestedItems}
+            addLabel={`Add ${subField.label}`}
+            removeLabel={`Remove ${subField.label}`}
+            onAdd={handleNestedAdd}
+            onRemove={handleNestedRemove}
+            leftAlignEmptyStateActions={leftAlignNestedEmptyActions}
+            addGhostText={nestedAddGhostText}
+            renderFields={(nestedItem, nestedIndex) => (
+              <>
+                {subField.fields?.map((nestedField) => (
+                  <div
+                    key={nestedField.key}
+                    data-field-key={nestedField.key}
+                    className="resource-form-nested-group-field"
+                  >
+                    <label className="resource-form-nested-group-label">{nestedField.label}</label>
+                    {renderNestedLeafField(nestedField, nestedItem, nestedIndex)}
+                  </div>
+                ))}
+              </>
             )}
-          </div>
+          />
         );
       }
       default:

@@ -108,9 +108,9 @@ Extract the established Create Resource form UI patterns into reusable component
 
 ### Phase 2: Core Repeating Fields
 
-- [ ] Extract `FormKeyValueListField`
-- [ ] Extract `FormNestedListField`
-- [ ] Migrate labels/annotations, ports/env vars, and ConfigMap items
+- ✅ Extract `FormKeyValueListField`
+- ✅ Extract `FormNestedListField`
+- ✅ Migrate labels/annotations, ports/env vars, and ConfigMap items
 
 ### Phase 3: Specialized Inputs
 
