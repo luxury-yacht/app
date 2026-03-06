@@ -18,8 +18,10 @@ import {
   FormContainerResourcesField,
   hasContainerResourceValues,
 } from './FormContainerResourcesField';
+import { FormFieldRow } from './FormFieldRow';
 import { FormKeyValueListField } from './FormKeyValueListField';
 import { FormNestedListField } from './FormNestedListField';
+import { FormSectionCard } from './FormSectionCard';
 import { FormTriStateBooleanDropdown } from './FormTriStateBooleanDropdown';
 import './ResourceForm.css';
 
@@ -1520,10 +1522,9 @@ function GroupListField({
             </div>
             <div className="resource-form-group-item-fields">
               {field.fields?.map((subField) => (
-                <div key={subField.key} className="resource-form-field">
-                  <label className="resource-form-label">{subField.label}</label>
+                <FormFieldRow key={subField.key} label={subField.label}>
                   {renderSubField(subField, item, itemIndex)}
-                </div>
+                </FormFieldRow>
               ))}
             </div>
           </div>
@@ -1570,27 +1571,20 @@ export function ResourceForm({
   return (
     <div className="resource-form">
       {definition.sections.map((section) => (
-        <div key={section.title} className="resource-form-section">
-          <h3 className="resource-form-section-title">{section.title}</h3>
+        <FormSectionCard key={section.title} title={section.title}>
           {section.fields.map((field) => {
             const useFullWidthLayout = field.key === 'containers' || field.key === 'volumes';
             return (
-              <div
-                key={field.key}
-                className={`resource-form-field${useFullWidthLayout ? ' resource-form-field--full-width' : ''}`}
-              >
-                {!useFullWidthLayout && (
-                  <label className="resource-form-label">{field.label}</label>
-                )}
+              <FormFieldRow key={field.key} label={field.label} fullWidth={useFullWidthLayout}>
                 <FieldRenderer
                   field={field}
                   yamlContent={yamlContent}
                   onYamlChange={onYamlChange}
                 />
-              </div>
+              </FormFieldRow>
             );
           })}
-        </div>
+        </FormSectionCard>
       ))}
     </div>
   );

@@ -125,8 +125,8 @@ Extract the established Create Resource form UI patterns into reusable component
 
 ### Follow-Up Plan (Out of Scope for This Pass)
 
-- [ ] Extract `FormSectionCard` and `FormFieldRow` in a dedicated visual-consistency plan
-- [ ] Track wrapper extraction in `docs/plans/2026-03-06-form-structural-wrappers-visual-consistency-plan.md`
+- ✅ Extract `FormSectionCard` and `FormFieldRow` in a dedicated visual-consistency plan
+- ✅ Track wrapper extraction in `docs/plans/2026-03-06-form-structural-wrappers-visual-consistency-plan.md`
 
 ## Acceptance Criteria
 

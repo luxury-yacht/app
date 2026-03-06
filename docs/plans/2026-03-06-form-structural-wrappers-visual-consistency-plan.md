@@ -1,7 +1,7 @@
 # Form Structural Wrapper Visual Consistency Plan
 
 **Date:** 2026-03-06  
-**Status:** Proposed
+**Status:** Completed
 
 ## Goal
 
@@ -42,20 +42,20 @@ Extract `FormSectionCard` and `FormFieldRow` into reusable structural wrappers w
 
 ### Phase 1: `FormFieldRow` Extraction
 
-- [ ] Introduce `FormFieldRow` wrapper with pass-through class hooks.
-- [ ] Migrate one low-risk row family first (metadata key/value).
-- [ ] Keep DOM structure and classes equivalent where tests depend on selectors.
+- ✅ Introduce `FormFieldRow` wrapper with pass-through class hooks.
+- ✅ Migrate one low-risk row family first (metadata key/value).
+- ✅ Keep DOM structure and classes equivalent where tests depend on selectors.
 
 ### Phase 2: `FormSectionCard` Extraction
 
-- [ ] Introduce `FormSectionCard` wrapper with title/action slots.
-- [ ] Migrate container and volumes sections.
-- [ ] Preserve existing remove/add action placement and header behavior.
+- ✅ Introduce `FormSectionCard` wrapper with title/action slots.
+- ✅ Migrate container and volumes sections.
+- ✅ Preserve existing remove/add action placement and header behavior.
 
 ### Phase 3: Remaining Row Migration
 
-- [ ] Migrate ports, env vars, resources, and volume-source-specific rows.
-- [ ] Remove duplicated row scaffolding after parity checks pass.
+- ✅ Migrate ports, env vars, resources, and volume-source-specific rows.
+- ✅ Remove duplicated row scaffolding after parity checks pass.
 
 ## Test Gates (Run Per Phase)
 
