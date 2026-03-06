@@ -114,9 +114,9 @@ Extract the established Create Resource form UI patterns into reusable component
 
 ### Phase 3: Specialized Inputs
 
-- [ ] Extract `FormCompactNumberInput`
-- [ ] Extract `FormTriStateBooleanDropdown`
-- [ ] Replace existing replicas/port/mode/optional usages where applicable
+- ✅ Extract `FormCompactNumberInput`
+- ✅ Extract `FormTriStateBooleanDropdown`
+- ✅ Replace existing replicas/port/mode/optional usages where applicable
 
 ### Phase 4: Resources
 

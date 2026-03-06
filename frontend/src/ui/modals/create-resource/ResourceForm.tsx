@@ -13,8 +13,10 @@ import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { getFieldValue, setFieldValue } from './yamlSync';
 import type { ResourceFormDefinition, FormFieldDefinition } from './formDefinitions';
 import { FormGhostAddText, FormIconActionButton } from './FormActionPrimitives';
+import { FormCompactNumberInput, parseCompactNumberValue } from './FormCompactNumberInput';
 import { FormKeyValueListField } from './FormKeyValueListField';
 import { FormNestedListField } from './FormNestedListField';
+import { FormTriStateBooleanDropdown } from './FormTriStateBooleanDropdown';
 import './ResourceForm.css';
 
 interface ResourceFormProps {
@@ -146,7 +148,7 @@ interface VolumeSourceExtraFieldDefinition {
   key: string;
   label: string;
   path: string[];
-  type: 'text' | 'number' | 'select';
+  type: 'text' | 'number' | 'select' | 'tri-state-boolean';
   placeholder?: string;
   options?: DropdownOption[];
   defaultValue?: string;
@@ -155,6 +157,9 @@ interface VolumeSourceExtraFieldDefinition {
   integer?: boolean;
   parseValue?: (rawValue: string) => unknown;
   formatValue?: (value: unknown) => string;
+  emptyLabel?: string;
+  trueLabel?: string;
+  falseLabel?: string;
 }
 
 const VOLUME_SOURCE_DEFINITIONS: VolumeSourceDefinition[] = [
@@ -208,18 +213,6 @@ const VOLUME_SOURCE_ROOT_BY_KEY: Record<VolumeSourceKey, string[]> = {
 
 const DEFAULT_VOLUME_SOURCE_KEY: VolumeSourceKey = 'configMap';
 
-const BOOLEAN_FIELD_OPTIONS: DropdownOption[] = [
-  { value: '', label: '-- Select --' },
-  { value: 'true', label: 'True' },
-  { value: 'false', label: 'False' },
-];
-
-const OPTIONAL_BOOLEAN_FIELD_OPTIONS: DropdownOption[] = [
-  { value: '', label: '-----' },
-  { value: 'true', label: 'true' },
-  { value: 'false', label: 'false' },
-];
-
 const HOST_PATH_TYPE_OPTIONS: DropdownOption[] = [
   { value: '', label: '-- Select --' },
   { value: 'DirectoryOrCreate', label: 'DirectoryOrCreate' },
@@ -231,28 +224,16 @@ const HOST_PATH_TYPE_OPTIONS: DropdownOption[] = [
   { value: 'BlockDevice', label: 'BlockDevice' },
 ];
 
-const parseBooleanFieldValue = (rawValue: string): unknown => {
-  if (rawValue === 'true') return true;
-  if (rawValue === 'false') return false;
-  return '';
-};
-
-const formatBooleanFieldValue = (value: unknown): string => {
-  if (value === true) return 'true';
-  if (value === false) return 'false';
-  return '';
-};
-
 const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraFieldDefinition[]> = {
   configMap: [
     {
       key: 'optional',
       label: 'Optional',
       path: ['configMap', 'optional'],
-      type: 'select',
-      options: OPTIONAL_BOOLEAN_FIELD_OPTIONS,
-      parseValue: parseBooleanFieldValue,
-      formatValue: formatBooleanFieldValue,
+      type: 'tri-state-boolean',
+      emptyLabel: '-----',
+      trueLabel: 'true',
+      falseLabel: 'false',
     },
     {
       key: 'defaultMode',
@@ -293,10 +274,10 @@ const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraField
       key: 'readOnly',
       label: 'Read Only',
       path: ['persistentVolumeClaim', 'readOnly'],
-      type: 'select',
-      options: BOOLEAN_FIELD_OPTIONS,
-      parseValue: parseBooleanFieldValue,
-      formatValue: formatBooleanFieldValue,
+      type: 'tri-state-boolean',
+      emptyLabel: '-- Select --',
+      trueLabel: 'True',
+      falseLabel: 'False',
     },
   ],
   secret: [
@@ -304,10 +285,10 @@ const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraField
       key: 'optional',
       label: 'Optional',
       path: ['secret', 'optional'],
-      type: 'select',
-      options: OPTIONAL_BOOLEAN_FIELD_OPTIONS,
-      parseValue: parseBooleanFieldValue,
-      formatValue: formatBooleanFieldValue,
+      type: 'tri-state-boolean',
+      emptyLabel: '-----',
+      trueLabel: 'true',
+      falseLabel: 'false',
     },
   ],
 };
@@ -468,34 +449,6 @@ function NumberField({
   useEffect(() => {
     const el = inputRef.current;
     if (!el) return;
-    const handleInput = (e: Event) => {
-      const target = e.target as HTMLInputElement;
-      const min = minRef.current;
-      const max = maxRef.current;
-      const integerOnly = !!integerRef.current;
-
-      // Keep bounded integer fields constrained while typing.
-      if (!integerOnly) return;
-      if (target.value === '') return;
-
-      const digitsOnly = target.value.replace(/[^\d-]/g, '');
-      const normalized =
-        typeof min === 'number' && min >= 0 ? digitsOnly.replace(/-/g, '') : digitsOnly;
-
-      if (normalized === '' || normalized === '-') {
-        target.value = '';
-        return;
-      }
-      const maxDigits =
-        typeof max === 'number' && Number.isInteger(max) && max >= 0
-          ? String(max).length
-          : undefined;
-      target.value =
-        typeof maxDigits === 'number' && normalized.length > maxDigits
-          ? normalized.slice(0, maxDigits)
-          : normalized;
-    };
-
     const handler = (e: Event) => {
       const target = e.target as HTMLInputElement;
       const raw = target.value;
@@ -507,52 +460,34 @@ function NumberField({
         const previous = getFieldValue(yamlRef.current, pathRef.current);
         target.value = previous != null ? String(previous) : '';
       };
-
-      if (hasBounds && raw.trim() === '') {
+      const parsed = parseCompactNumberValue(
+        raw,
+        { min, max, integer: integerOnly },
+        { allowEmpty: !hasBounds }
+      );
+      if (parsed === null) {
         restorePreviousValue();
         return;
       }
 
-      const num = Number(raw);
-      if (hasBounds) {
-        if (Number.isNaN(num)) {
-          restorePreviousValue();
-          return;
-        }
-        if (integerOnly && !Number.isInteger(num)) {
-          restorePreviousValue();
-          return;
-        }
-        if ((typeof min === 'number' && num < min) || (typeof max === 'number' && num > max)) {
-          restorePreviousValue();
-          return;
-        }
-      }
-
-      const parsed = raw === '' ? '' : isNaN(num) ? raw : num;
       const updated = setFieldValue(yamlRef.current, pathRef.current, parsed);
       if (updated !== null) onChangeRef.current(updated);
     };
-    el.addEventListener('input', handleInput);
     el.addEventListener('change', handler);
     return () => {
-      el.removeEventListener('input', handleInput);
       el.removeEventListener('change', handler);
     };
   }, []);
 
   return (
-    <input
-      ref={inputRef}
-      type="number"
-      className="resource-form-input"
-      data-field-key={field.key}
+    <FormCompactNumberInput
+      inputRef={inputRef}
+      dataFieldKey={field.key}
       defaultValue={stringValue}
       placeholder={field.placeholder}
       min={field.min}
       max={field.max}
-      step={field.integer ? 1 : undefined}
-      {...INPUT_BEHAVIOR_PROPS}
+      integer={field.integer}
     />
   );
 }
@@ -910,28 +845,25 @@ function GroupListField({
         );
       case 'number':
         return (
-          <input
-            type="number"
-            className="resource-form-input"
-            data-field-key={subField.key}
+          <FormCompactNumberInput
+            dataFieldKey={subField.key}
             value={stringValue}
             placeholder={subField.placeholder}
             min={subField.min}
             max={subField.max}
-            step={subField.integer ? 1 : undefined}
-            {...INPUT_BEHAVIOR_PROPS}
+            integer={subField.integer}
             onChange={(e) => {
-              const raw = e.target.value;
-              if (raw === '') {
-                handleSubFieldChange(itemIndex, subField, '');
-                return;
-              }
-              const num = Number(raw);
-              if (Number.isNaN(num)) return;
-              if (subField.integer && !Number.isInteger(num)) return;
-              if (typeof subField.min === 'number' && num < subField.min) return;
-              if (typeof subField.max === 'number' && num > subField.max) return;
-              handleSubFieldChange(itemIndex, subField, num);
+              const parsed = parseCompactNumberValue(
+                e.target.value,
+                {
+                  min: subField.min,
+                  max: subField.max,
+                  integer: subField.integer,
+                },
+                { allowEmpty: true }
+              );
+              if (parsed === null) return;
+              handleSubFieldChange(itemIndex, subField, parsed);
             }}
           />
         );
@@ -1126,18 +1058,23 @@ function GroupListField({
 
         const handleExtraFieldChange = (
           extraField: VolumeSourceExtraFieldDefinition,
-          rawValue: string
+          nextValue: unknown
         ) => {
-          const normalizedRaw = rawValue.trim();
           const updatedItems = items.map((currentItem, i) => {
             if (i !== itemIndex) return currentItem;
             let nextItem = clearOtherVolumeSources(currentItem, effectiveSource.key);
             nextItem = ensureVolumeSourceRoot(nextItem, effectiveSource.key);
-            if (normalizedRaw === '') {
+            if (nextValue === undefined || nextValue === null) {
               return unsetNestedValue(nextItem, extraField.path);
             }
-            const parsedValue = extraField.parseValue ? extraField.parseValue(rawValue) : rawValue;
-            if (parsedValue === '') {
+            if (typeof nextValue === 'string' && nextValue.trim() === '') {
+              return unsetNestedValue(nextItem, extraField.path);
+            }
+            const parsedValue =
+              typeof nextValue === 'string' && extraField.parseValue
+                ? extraField.parseValue(nextValue)
+                : nextValue;
+            if (parsedValue === '' || parsedValue === undefined || parsedValue === null) {
               return unsetNestedValue(nextItem, extraField.path);
             }
             return setNestedValue(nextItem, extraField.path, parsedValue);
@@ -1184,12 +1121,13 @@ function GroupListField({
 
         const renderExtraField = (extraField: VolumeSourceExtraFieldDefinition) => {
           const rawExtraValue = getNestedValue(item, extraField.path);
-          const extraValue =
+          const resolvedExtraValue =
             rawExtraValue === undefined && extraField.defaultValue !== undefined
               ? extraField.defaultValue
-              : extraField.formatValue
-                ? extraField.formatValue(rawExtraValue)
-                : String(rawExtraValue ?? '');
+              : rawExtraValue;
+          const stringExtraValue = extraField.formatValue
+            ? extraField.formatValue(resolvedExtraValue)
+            : String(resolvedExtraValue ?? '');
 
           return (
             <div
@@ -1202,7 +1140,7 @@ function GroupListField({
                 <div className="resource-form-volume-source-extra-dropdown">
                   <Dropdown
                     options={extraField.options ?? []}
-                    value={extraValue}
+                    value={stringExtraValue}
                     onChange={(nextValue) => {
                       const normalized = Array.isArray(nextValue)
                         ? (nextValue[0] ?? '')
@@ -1212,24 +1150,43 @@ function GroupListField({
                     ariaLabel={extraField.label}
                   />
                 </div>
+              ) : extraField.type === 'tri-state-boolean' ? (
+                <FormTriStateBooleanDropdown
+                  className="resource-form-volume-source-extra-dropdown"
+                  value={resolvedExtraValue}
+                  emptyLabel={extraField.emptyLabel}
+                  trueLabel={extraField.trueLabel}
+                  falseLabel={extraField.falseLabel}
+                  ariaLabel={extraField.label}
+                  onChange={(nextValue) => handleExtraFieldChange(extraField, nextValue)}
+                />
               ) : extraField.type === 'number' ? (
-                <input
-                  type="number"
-                  className="resource-form-input"
-                  data-field-key={extraField.key}
-                  value={extraValue}
+                <FormCompactNumberInput
+                  dataFieldKey={extraField.key}
+                  value={stringExtraValue}
                   placeholder={extraField.placeholder}
                   min={extraField.min}
                   max={extraField.max}
-                  step={extraField.integer ? 1 : undefined}
-                  {...INPUT_BEHAVIOR_PROPS}
-                  onChange={(e) => handleExtraFieldChange(extraField, e.target.value)}
+                  integer={extraField.integer}
+                  onChange={(event) => {
+                    const parsed = parseCompactNumberValue(
+                      event.target.value,
+                      {
+                        min: extraField.min,
+                        max: extraField.max,
+                        integer: extraField.integer,
+                      },
+                      { allowEmpty: true }
+                    );
+                    if (parsed === null) return;
+                    handleExtraFieldChange(extraField, parsed);
+                  }}
                 />
               ) : (
                 <input
                   type="text"
                   className="resource-form-input"
-                  value={extraValue}
+                  value={stringExtraValue}
                   placeholder={extraField.placeholder}
                   {...INPUT_BEHAVIOR_PROPS}
                   onChange={(e) => handleExtraFieldChange(extraField, e.target.value)}
@@ -1342,25 +1299,20 @@ function GroupListField({
                         className="resource-form-nested-group-field"
                       >
                         <label className="resource-form-nested-group-label">Mode</label>
-                        <input
-                          type="number"
-                          className="resource-form-input"
+                        <FormCompactNumberInput
                           value={itemMode}
+                          dataFieldKey="configMapItemMode"
                           placeholder="420"
                           min={0}
                           max={511}
-                          step={1}
-                          {...INPUT_BEHAVIOR_PROPS}
+                          integer
                           onChange={(e) => {
-                            const raw = e.target.value;
-                            if (raw === '') {
-                              handleConfigMapItemChange(rowIndex, ['mode'], '');
-                              return;
-                            }
-                            const parsed = Number(raw);
-                            if (!Number.isInteger(parsed) || parsed < 0 || parsed > 511) {
-                              return;
-                            }
+                            const parsed = parseCompactNumberValue(
+                              e.target.value,
+                              { min: 0, max: 511, integer: true },
+                              { allowEmpty: true }
+                            );
+                            if (parsed === null) return;
                             handleConfigMapItemChange(rowIndex, ['mode'], parsed);
                           }}
                         />
@@ -1512,28 +1464,25 @@ function GroupListField({
               );
             case 'number':
               return (
-                <input
-                  type="number"
-                  className="resource-form-input"
-                  data-field-key={nestedField.key}
+                <FormCompactNumberInput
+                  dataFieldKey={nestedField.key}
                   value={nestedStringValue}
                   placeholder={nestedField.placeholder}
                   min={nestedField.min}
                   max={nestedField.max}
-                  step={nestedField.integer ? 1 : undefined}
-                  {...INPUT_BEHAVIOR_PROPS}
+                  integer={nestedField.integer}
                   onChange={(e) => {
-                    const raw = e.target.value;
-                    if (raw === '') {
-                      handleNestedFieldChange(nestedIndex, nestedField, '');
-                      return;
-                    }
-                    const num = Number(raw);
-                    if (Number.isNaN(num)) return;
-                    if (nestedField.integer && !Number.isInteger(num)) return;
-                    if (typeof nestedField.min === 'number' && num < nestedField.min) return;
-                    if (typeof nestedField.max === 'number' && num > nestedField.max) return;
-                    handleNestedFieldChange(nestedIndex, nestedField, num);
+                    const parsed = parseCompactNumberValue(
+                      e.target.value,
+                      {
+                        min: nestedField.min,
+                        max: nestedField.max,
+                        integer: nestedField.integer,
+                      },
+                      { allowEmpty: true }
+                    );
+                    if (parsed === null) return;
+                    handleNestedFieldChange(nestedIndex, nestedField, parsed);
                   }}
                 />
               );
