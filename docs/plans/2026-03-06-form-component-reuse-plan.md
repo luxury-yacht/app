@@ -94,10 +94,10 @@ Extract the established Create Resource form UI patterns into reusable component
 
 ### Phase 0: Multi-Cluster Safety Gate (Required First)
 
-- [ ] Add/expand integration tests in `CreateResourceModal` flow for pinned-cluster behavior on validate/create calls
-- [ ] Add/expand integration coverage for in-flight cluster switching to verify actions remain pinned to the original cluster
-- [ ] Confirm namespace filtering assertions remain cluster-scoped
-- [ ] Complete and pass this phase before any component extraction
+- ✅ Add/expand integration tests in `CreateResourceModal` flow for pinned-cluster behavior on validate/create calls
+- ✅ Add/expand integration coverage for in-flight cluster switching to verify actions remain pinned to the original cluster
+- ✅ Confirm namespace filtering assertions remain cluster-scoped
+- ✅ Complete and pass this phase before any component extraction
 
 ### Phase 1: Action Primitives
 

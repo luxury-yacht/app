@@ -314,6 +314,11 @@ vi.mock('@codemirror/view', () => ({
 type CreateResourceModalModule = typeof import('./CreateResourceModal');
 type CreateResourceModalComponent = CreateResourceModalModule['default'];
 type ModalProps = React.ComponentProps<CreateResourceModalComponent>;
+type Deferred<T> = {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason?: unknown) => void;
+};
 
 const renderModal = async (props: ModalProps) => {
   const container = document.createElement('div');
@@ -347,6 +352,16 @@ const flushPromises = async () => {
   await act(async () => {
     await Promise.resolve();
   });
+};
+
+const createDeferred = <T,>(): Deferred<T> => {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 };
 
 // --- Tests ---
@@ -589,6 +604,72 @@ describe('CreateResourceModal', () => {
     await unmount();
   });
 
+  it('keeps validate pinned to the original cluster during an in-flight cluster switch', async () => {
+    kubeconfigMock.selectedClusterIds = ['config:test-cluster', 'config:other-cluster'];
+    kubeconfigMock.getClusterMeta = (id: string) => ({
+      id,
+      name: id === 'config:test-cluster' ? 'test-cluster' : 'other-cluster',
+    });
+    const validateDeferred = createDeferred<{
+      name: string;
+      namespace: string;
+      kind: string;
+      apiVersion: string;
+      resourceVersion: string;
+    }>();
+    wailsMock.ValidateResourceCreation.mockImplementationOnce(() => validateDeferred.promise);
+
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const validateBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Validate'
+    ) as HTMLButtonElement | undefined;
+    const clusterSelect = container.querySelector(
+      '[data-testid="dropdown-Target cluster"]'
+    ) as HTMLSelectElement;
+
+    await act(async () => {
+      validateBtn?.click();
+    });
+    await flushPromises();
+
+    await act(async () => {
+      clusterSelect.value = 'config:other-cluster';
+      clusterSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    await act(async () => {
+      validateDeferred.resolve({
+        name: 'my-app',
+        namespace: 'default',
+        kind: 'Deployment',
+        apiVersion: 'apps/v1',
+        resourceVersion: '1',
+      });
+      await validateDeferred.promise;
+    });
+    await flushPromises();
+
+    expect(wailsMock.ValidateResourceCreation).toHaveBeenCalledTimes(1);
+    expect(wailsMock.ValidateResourceCreation).toHaveBeenCalledWith(
+      'config:test-cluster',
+      expect.objectContaining({ yaml: expect.any(String) })
+    );
+
+    await act(async () => {
+      validateBtn?.click();
+    });
+    await flushPromises();
+
+    expect(wailsMock.ValidateResourceCreation).toHaveBeenCalledTimes(2);
+    expect(wailsMock.ValidateResourceCreation).toHaveBeenLastCalledWith(
+      'config:other-cluster',
+      expect.objectContaining({ yaml: expect.any(String) })
+    );
+    await unmount();
+  });
+
   it('calls CreateResource with correct clusterId', async () => {
     const onClose = vi.fn();
     const { container, unmount } = await renderModal({ isOpen: true, onClose });
@@ -607,6 +688,69 @@ describe('CreateResourceModal', () => {
       'config:test-cluster',
       expect.objectContaining({ yaml: expect.any(String) })
     );
+    await unmount();
+  });
+
+  it('keeps create pinned to the original cluster during an in-flight cluster switch', async () => {
+    kubeconfigMock.selectedClusterIds = ['config:test-cluster', 'config:other-cluster'];
+    kubeconfigMock.getClusterMeta = (id: string) => ({
+      id,
+      name: id === 'config:test-cluster' ? 'test-cluster' : 'other-cluster',
+    });
+    const createCallDeferred = createDeferred<{
+      name: string;
+      namespace: string;
+      kind: string;
+      apiVersion: string;
+      resourceVersion: string;
+    }>();
+    wailsMock.CreateResource.mockImplementationOnce(() => createCallDeferred.promise);
+
+    const onClose = vi.fn();
+    const { container, unmount } = await renderModal({ isOpen: true, onClose });
+    await flushPromises();
+
+    const createBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent === 'Create'
+    ) as HTMLButtonElement | undefined;
+    const clusterSelect = container.querySelector(
+      '[data-testid="dropdown-Target cluster"]'
+    ) as HTMLSelectElement;
+
+    await act(async () => {
+      createBtn?.click();
+    });
+    await flushPromises();
+
+    await act(async () => {
+      clusterSelect.value = 'config:other-cluster';
+      clusterSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    await act(async () => {
+      createCallDeferred.resolve({
+        name: 'my-app',
+        namespace: 'default',
+        kind: 'Deployment',
+        apiVersion: 'apps/v1',
+        resourceVersion: '1',
+      });
+      await createCallDeferred.promise;
+    });
+    await flushPromises();
+
+    expect(wailsMock.CreateResource).toHaveBeenCalledTimes(1);
+    expect(wailsMock.CreateResource).toHaveBeenCalledWith(
+      'config:test-cluster',
+      expect.objectContaining({ yaml: expect.any(String) })
+    );
+    expect(objectPanelMock.openWithObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clusterId: 'config:test-cluster',
+        clusterName: 'test-cluster',
+      })
+    );
+    expect(onClose).toHaveBeenCalled();
     await unmount();
   });
 
@@ -762,6 +906,37 @@ describe('CreateResourceModal', () => {
     expect(options).toContain('kube-system');
     // Should NOT include namespaces from other clusters.
     expect(options).not.toContain('other-ns');
+    await unmount();
+  });
+
+  it('re-scopes namespace options and clears namespace selection when target cluster changes', async () => {
+    kubeconfigMock.selectedClusterIds = ['config:test-cluster', 'config:other-cluster'];
+    kubeconfigMock.getClusterMeta = (id: string) => ({
+      id,
+      name: id === 'config:test-cluster' ? 'test-cluster' : 'other-cluster',
+    });
+
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const clusterSelect = container.querySelector(
+      '[data-testid="dropdown-Target cluster"]'
+    ) as HTMLSelectElement;
+    const nsSelect = container.querySelector(
+      '[data-testid="dropdown-Target namespace"]'
+    ) as HTMLSelectElement;
+    expect(nsSelect.value).toBe('default');
+
+    await act(async () => {
+      clusterSelect.value = 'config:other-cluster';
+      clusterSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(nsSelect.value).toBe('');
+    const options = Array.from(nsSelect.options).map((o) => o.text);
+    expect(options).toContain('other-ns');
+    expect(options).not.toContain('kube-system');
+    expect(options).not.toContain('default');
     await unmount();
   });
 
