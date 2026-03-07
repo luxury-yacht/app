@@ -1,8 +1,6 @@
-1. GroupListField is still a ~750-line god component
+1. ✅ GroupListField is still a ~750-line god component
 
-The extraction of FormVolumeSourceField helped, but GroupListField still contains renderSubField (handles 8 field types), a fully recursive nested case 'group-list' with its own renderNestedLeafField,
-and ~120 lines of hardcoded volume mount special cases. The volume source extraction removed data from the file but didn't address the structural problem — the renderer is still one giant function with
-deeply nested closures.
+Extracted the nested group-list rendering (~290 lines) into NestedGroupListField.tsx. GroupListField dropped from ~630 to ~340 lines. Moved shared helpers (shouldOmitEmptyValue, buildSelectOptions, getSelectFieldValue, fieldFlexStyle) to formUtils.ts. Removed hardcoded availableVolumeNames — disableAdd is now computed generically from dynamic options resolution. Added disabledGhostText to FormFieldDefinition for definition-driven disabled state messaging.
 
 2. ✅ Volume mount logic is still hardcoded against field keys in the renderer
 

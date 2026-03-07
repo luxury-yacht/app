@@ -8,6 +8,8 @@
  */
 
 import React from 'react';
+import type { FormFieldDefinition, FormFieldOption } from './formDefinitions';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 
 // ─── Browser Assistance Disabling ───────────────────────────────────────
 
@@ -154,4 +156,45 @@ export function fixedWidthStyle(field: { inputWidth?: string }): React.CSSProper
     minWidth: field.inputWidth,
     maxWidth: field.inputWidth,
   };
+}
+
+/**
+ * Decide whether an empty value should be omitted from YAML for this field.
+ */
+export function shouldOmitEmptyValue(field: FormFieldDefinition, value: unknown): boolean {
+  return field.omitIfEmpty === true && typeof value === 'string' && value.trim() === '';
+}
+
+/**
+ * Build standard dropdown options for select fields.
+ * Includes an explicit empty option unless the definition opts out.
+ */
+export function buildSelectOptions(field: FormFieldDefinition): DropdownOption[] {
+  const includeEmptyOption = field.includeEmptyOption !== false;
+  return [
+    ...(includeEmptyOption ? [{ value: '', label: '-----' }] : []),
+    ...(field.options?.map((opt: FormFieldOption) => ({
+      value: opt.value,
+      label: opt.label,
+    })) ?? []),
+  ];
+}
+
+/**
+ * Normalize select value for fields that have an implicit default.
+ */
+export function getSelectFieldValue(field: FormFieldDefinition, currentValue: string): string {
+  if (field.implicitDefault && currentValue === '') {
+    return field.implicitDefault;
+  }
+  return currentValue;
+}
+
+/**
+ * Build inline style for a nested group-list field wrapper from its definition.
+ * Controls the flex sizing of the wrapper div.
+ */
+export function fieldFlexStyle(field: { fieldFlex?: string }): React.CSSProperties | undefined {
+  if (!field.fieldFlex) return undefined;
+  return { flex: field.fieldFlex };
 }

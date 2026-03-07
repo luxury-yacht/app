@@ -92,6 +92,8 @@ export interface FormFieldDefinition {
   addLabel?: string;
   /** Ghost helper text shown next to empty-state add actions. */
   addGhostText?: string;
+  /** Ghost text shown when adding is disabled (e.g., dynamic options are empty). */
+  disabledGhostText?: string;
   /** Whether key-value rows render with inline "Key"/"Value" labels. */
   inlineLabels?: boolean;
   /** Whether empty-state add actions are left-aligned. */
@@ -329,6 +331,7 @@ const deploymentDefinition: ResourceFormDefinition = {
               type: 'group-list',
               leftAlignEmptyActions: true,
               addGhostText: 'Add volume mount',
+              disabledGhostText: 'Add a Volume below to enable Volume Mounts',
               fieldGap: 'wide',
               wrapFields: true,
               rowAlign: 'start',

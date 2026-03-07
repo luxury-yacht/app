@@ -20,7 +20,7 @@ import {
 } from './FormContainerResourcesField';
 import { FormFieldRow } from './FormFieldRow';
 import { FormKeyValueListField } from './FormKeyValueListField';
-import { FormNestedListField } from './FormNestedListField';
+import { NestedGroupListField } from './NestedGroupListField';
 import { FormSectionCard } from './FormSectionCard';
 import { FormVolumeSourceField } from './FormVolumeSourceField';
 import {
@@ -33,6 +33,9 @@ import {
   toPersistedMap,
   arePersistedMapsEqual,
   fixedWidthStyle,
+  shouldOmitEmptyValue,
+  buildSelectOptions,
+  getSelectFieldValue,
 } from './formUtils';
 import './ResourceForm.css';
 
@@ -62,48 +65,7 @@ function isYamlValid(yamlContent: string): boolean {
   }
 }
 
-/**
- * Decide whether an empty value should be omitted from YAML for this field.
- */
-function shouldOmitEmptyValue(field: FormFieldDefinition, value: unknown): boolean {
-  return field.omitIfEmpty === true && typeof value === 'string' && value.trim() === '';
-}
-
 const DEFAULT_SELECTOR_ENTRY: [string, string] = ['app.kubernetes.io/name', ''];
-
-/**
- * Build standard dropdown options for select fields.
- * Includes an explicit empty option unless the definition opts out.
- */
-function buildSelectOptions(field: FormFieldDefinition): DropdownOption[] {
-  const includeEmptyOption = field.includeEmptyOption !== false;
-  return [
-    ...(includeEmptyOption ? [{ value: '', label: '-----' }] : []),
-    ...(field.options?.map((opt) => ({
-      value: opt.value,
-      label: opt.label,
-    })) ?? []),
-  ];
-}
-
-/**
- * Normalize select value for fields that have an implicit default.
- */
-function getSelectFieldValue(field: FormFieldDefinition, currentValue: string): string {
-  if (field.implicitDefault && currentValue === '') {
-    return field.implicitDefault;
-  }
-  return currentValue;
-}
-
-/**
- * Build inline style for a nested group-list field wrapper from its definition.
- * Controls the flex sizing of the wrapper div.
- */
-function fieldFlexStyle(field: { fieldFlex?: string }): React.CSSProperties | undefined {
-  if (!field.fieldFlex) return undefined;
-  return { flex: field.fieldFlex };
-}
 
 // ─── Field Components ───────────────────────────────────────────────────
 
@@ -617,17 +579,6 @@ function GroupListField({
   }, [rawValue]);
   const hasItemTitle = !!field.itemTitleField;
   const [resourceFieldsVisible, setResourceFieldsVisible] = useState<Record<string, boolean>>({});
-  const availableVolumeNames = useMemo(() => {
-    const templateVolumes = getFieldValue(yamlContent, ['spec', 'template', 'spec', 'volumes']);
-    if (!Array.isArray(templateVolumes)) return [] as string[];
-    const names = new Set<string>();
-    for (const volume of templateVolumes) {
-      if (!volume || typeof volume !== 'object' || Array.isArray(volume)) continue;
-      const name = String((volume as Record<string, unknown>).name ?? '').trim();
-      if (name) names.add(name);
-    }
-    return Array.from(names);
-  }, [yamlContent]);
 
   /** Write the full updated array back to the YAML at the group-list's path. */
   const updateItems = useCallback(
@@ -890,291 +841,12 @@ function GroupListField({
       }
       case 'group-list': {
         const nestedItems = Array.isArray(subValue) ? (subValue as Record<string, unknown>[]) : [];
-        // Disable adding nested items when a dynamic-options field has no available options.
-        const hasDynamicField = subField.fields?.some((f) => f.dynamicOptionsPath);
-        const dynamicOptionsEmpty = hasDynamicField && availableVolumeNames.length === 0;
-        const disableAdd = dynamicOptionsEmpty === true;
-        const leftAlignNestedEmptyActions = subField.leftAlignEmptyActions === true;
-        const nestedAddGhostText =
-          disableAdd
-            ? 'Add a Volume below to enable Volume Mounts'
-            : (subField.addGhostText ?? null);
-
-        /** Write an updated nested list back into the parent item. */
-        const updateNestedItems = (newNestedItems: Record<string, unknown>[]) => {
-          handleSubFieldChange(itemIndex, subField, newNestedItems);
-        };
-
-        /** Change a nested field value for one nested row. */
-        const handleNestedFieldChange = (
-          nestedIndex: number,
-          nestedField: FormFieldDefinition,
-          newValue: unknown
-        ) => {
-          const updated = nestedItems.map((nestedItem, i) => {
-            if (i !== nestedIndex) return nestedItem;
-            if (shouldOmitEmptyValue(nestedField, newValue)) {
-              return unsetNestedValue(nestedItem, nestedField.path);
-            }
-            return setNestedValue(nestedItem, nestedField.path, newValue);
-          });
-          updateNestedItems(updated);
-        };
-
-        /** Remove a nested row. */
-        const handleNestedRemove = (nestedIndex: number) => {
-          updateNestedItems(nestedItems.filter((_, i) => i !== nestedIndex));
-        };
-
-        /** Add a nested row using the nested defaultValue. */
-        const handleNestedAdd = () => {
-          if (disableAdd) return;
-          const defaultItem = (subField.defaultValue ?? {}) as Record<string, unknown>;
-          updateNestedItems([...nestedItems, { ...defaultItem }]);
-        };
-
-        const updateNestedItem = (
-          nestedIndex: number,
-          updater: (nestedItem: Record<string, unknown>) => Record<string, unknown>
-        ) => {
-          const updated = nestedItems.map((nestedItem, i) =>
-            i === nestedIndex ? updater(nestedItem) : nestedItem
-          );
-          updateNestedItems(updated);
-        };
-
-        /**
-         * Resolve dynamic select options from a YAML path.
-         * Returns static options from the field definition if no dynamic path is set.
-         */
-        const resolveDynamicOptions = (nestedField: FormFieldDefinition, currentValue: string): DropdownOption[] => {
-          if (!nestedField.dynamicOptionsPath || !nestedField.dynamicOptionsField) {
-            return buildSelectOptions(nestedField);
-          }
-          const sourceArray = getFieldValue(yamlContent, nestedField.dynamicOptionsPath);
-          const names: string[] = [];
-          if (Array.isArray(sourceArray)) {
-            for (const entry of sourceArray) {
-              if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
-              const name = String((entry as Record<string, unknown>)[nestedField.dynamicOptionsField] ?? '').trim();
-              if (name) names.push(name);
-            }
-          }
-          const options: DropdownOption[] = [
-            { value: '', label: '-----' },
-            ...names.map((name) => ({ value: name, label: name })),
-          ];
-          // Preserve current value even if it's no longer in the options.
-          if (currentValue.trim() !== '' && !options.some((opt) => opt.value === currentValue)) {
-            options.push({ value: currentValue, label: currentValue });
-          }
-          return options;
-        };
-
-        /** Render a nested leaf input inside the nested group-list. */
-        const renderNestedLeafField = (
-          nestedField: FormFieldDefinition,
-          nestedItem: Record<string, unknown>,
-          nestedIndex: number
-        ): React.ReactNode => {
-          const nestedValue = getNestedValue(nestedItem, nestedField.path);
-          const nestedStringValue = nestedValue != null ? String(nestedValue) : '';
-
-          switch (nestedField.type) {
-            case 'text': {
-              // Text field with alternate path toggle (e.g., subPath/subPathExpr).
-              if (nestedField.alternatePath) {
-                const altPath = nestedField.alternatePath;
-                const usesAlternate = getNestedValue(nestedItem, altPath) !== undefined;
-                const activePath = usesAlternate ? altPath : nestedField.path;
-                const activeValue = String(getNestedValue(nestedItem, activePath) ?? '');
-                const handleToggle = (nextUsesAlternate: boolean) => {
-                  updateNestedItem(nestedIndex, (currentNestedItem) => {
-                    const currentPrimary = String(getNestedValue(currentNestedItem, nestedField.path) ?? '');
-                    const currentAlternate = String(getNestedValue(currentNestedItem, altPath) ?? '');
-                    const nextValue = nextUsesAlternate ? currentPrimary : currentAlternate;
-                    let next = unsetNestedValue(currentNestedItem, nestedField.path);
-                    next = unsetNestedValue(next, altPath);
-                    if (nextValue.trim() === '') return next;
-                    return setNestedValue(next, [nextUsesAlternate ? altPath[0] : nestedField.path[0]], nextValue);
-                  });
-                };
-                return (
-                  <div className="resource-form-volume-mount-subpath-control">
-                    <input
-                      type="text"
-                      className="resource-form-input"
-                      style={fixedWidthStyle(nestedField)}
-                      data-field-key={nestedField.key}
-                      value={activeValue}
-                      placeholder={nestedField.placeholder}
-                      {...INPUT_BEHAVIOR_PROPS}
-                      onChange={(event) => {
-                        const nextValue = event.target.value;
-                        updateNestedItem(nestedIndex, (currentNestedItem) => {
-                          let next = unsetNestedValue(currentNestedItem, nestedField.path);
-                          next = unsetNestedValue(next, altPath);
-                          if (nextValue.trim() === '') return next;
-                          return setNestedValue(next, activePath, nextValue);
-                        });
-                      }}
-                    />
-                    <label className="resource-form-field-label resource-form-volume-mount-subpath-toggle">
-                      <input
-                        type="checkbox"
-                        data-field-key={`${nestedField.key}ExprToggle`}
-                        checked={usesAlternate}
-                        onChange={(event) => handleToggle(event.target.checked)}
-                        onClick={(event) =>
-                          handleToggle((event.currentTarget as HTMLInputElement).checked)
-                        }
-                      />
-                      <span>{nestedField.alternateLabel ?? 'Use Alternate'}</span>
-                    </label>
-                  </div>
-                );
-              }
-              return (
-                <input
-                  type="text"
-                  className="resource-form-input"
-                  style={fixedWidthStyle(nestedField)}
-                  data-field-key={nestedField.key}
-                  value={nestedStringValue}
-                  placeholder={nestedField.placeholder}
-                  {...INPUT_BEHAVIOR_PROPS}
-                  onChange={(e) =>
-                    handleNestedFieldChange(nestedIndex, nestedField, e.target.value)
-                  }
-                />
-              );
-            }
-            case 'number':
-              return (
-                <FormCompactNumberInput
-                  dataFieldKey={nestedField.key}
-                  value={nestedStringValue}
-                  placeholder={nestedField.placeholder}
-                  min={nestedField.min}
-                  max={nestedField.max}
-                  integer={nestedField.integer}
-                  style={fixedWidthStyle(nestedField)}
-                  onChange={(e) => {
-                    const parsed = parseCompactNumberValue(
-                      e.target.value,
-                      {
-                        min: nestedField.min,
-                        max: nestedField.max,
-                        integer: nestedField.integer,
-                      },
-                      { allowEmpty: true }
-                    );
-                    if (parsed === null) return;
-                    handleNestedFieldChange(nestedIndex, nestedField, parsed);
-                  }}
-                />
-              );
-            case 'select': {
-              const options = resolveDynamicOptions(nestedField, nestedStringValue);
-              return (
-                <div data-field-key={nestedField.key} className="resource-form-dropdown" style={fixedWidthStyle(nestedField)}>
-                  <Dropdown
-                    options={options}
-                    value={nestedField.dynamicOptionsPath ? nestedStringValue : getSelectFieldValue(nestedField, nestedStringValue)}
-                    onChange={(nextValue) => {
-                      const normalized = Array.isArray(nextValue)
-                        ? (nextValue[0] ?? '')
-                        : nextValue;
-                      handleNestedFieldChange(nestedIndex, nestedField, normalized);
-                    }}
-                    ariaLabel={nestedField.label}
-                  />
-                </div>
-              );
-            }
-            case 'boolean-toggle': {
-              const checked = getNestedValue(nestedItem, nestedField.path) === true;
-              const handleBooleanChange = (nextChecked: boolean) => {
-                updateNestedItem(nestedIndex, (currentNestedItem) => {
-                  if (nextChecked) {
-                    return setNestedValue(currentNestedItem, nestedField.path, true);
-                  }
-                  return unsetNestedValue(currentNestedItem, nestedField.path);
-                });
-              };
-              return (
-                <label className="resource-form-field-label resource-form-volume-mount-inline-toggle">
-                  <input
-                    type="checkbox"
-                    className="resource-form-checkbox"
-                    data-field-key={nestedField.key}
-                    checked={checked}
-                    onChange={(event) => handleBooleanChange(event.target.checked)}
-                    onClick={(event) =>
-                      handleBooleanChange((event.currentTarget as HTMLInputElement).checked)
-                    }
-                  />
-                  <span>{nestedField.label}</span>
-                </label>
-              );
-            }
-            case 'textarea':
-              return (
-                <textarea
-                  className="resource-form-textarea"
-                  data-field-key={nestedField.key}
-                  value={nestedStringValue}
-                  placeholder={nestedField.placeholder}
-                  {...INPUT_BEHAVIOR_PROPS}
-                  onChange={(e) =>
-                    handleNestedFieldChange(nestedIndex, nestedField, e.target.value)
-                  }
-                />
-              );
-            default:
-              return null;
-          }
-        };
-
         return (
-          <FormNestedListField
-            dataFieldKey={subField.key}
-            items={nestedItems}
-            addLabel={`Add ${subField.label}`}
-            removeLabel={`Remove ${subField.label}`}
-            onAdd={handleNestedAdd}
-            onRemove={handleNestedRemove}
-            leftAlignEmptyStateActions={leftAlignNestedEmptyActions}
-            addGhostText={nestedAddGhostText}
-            addDisabled={disableAdd}
-            fieldGap={subField.fieldGap}
-            wrapFields={subField.wrapFields}
-            rowAlign={subField.rowAlign}
-            renderFields={(nestedItem, nestedIndex) => (
-              <>
-                {subField.fields?.map((nestedField) => {
-                  const hideFieldLabel = nestedField.type === 'boolean-toggle';
-                  return (
-                    <div
-                      key={nestedField.key}
-                      data-field-key={nestedField.key}
-                      className={`resource-form-nested-group-field${hideFieldLabel ? ' resource-form-nested-group-field--no-label' : ''}`}
-                      style={fieldFlexStyle(nestedField)}
-                    >
-                      {!hideFieldLabel ? (
-                        <label
-                          className="resource-form-field-label"
-                          style={nestedField.labelWidth ? { minWidth: nestedField.labelWidth } : undefined}
-                        >
-                          {nestedField.label}
-                        </label>
-                      ) : null}
-                      {renderNestedLeafField(nestedField, nestedItem, nestedIndex)}
-                    </div>
-                  );
-                })}
-              </>
-            )}
+          <NestedGroupListField
+            subField={subField}
+            nestedItems={nestedItems}
+            yamlContent={yamlContent}
+            onNestedItemsChange={(newItems) => handleSubFieldChange(itemIndex, subField, newItems)}
           />
         );
       }
