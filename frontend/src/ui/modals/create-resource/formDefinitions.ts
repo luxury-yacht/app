@@ -28,6 +28,7 @@ export interface FormFieldDefinition {
     | 'select'
     | 'textarea'
     | 'key-value-list'
+    | 'selector-list'
     | 'group-list'
     | 'container-resources'
     | 'volume-source';
@@ -45,6 +46,10 @@ export interface FormFieldDefinition {
   fields?: FormFieldDefinition[];
   /** Default value for the field when creating a new list item. */
   defaultValue?: unknown;
+  /** Additional map paths kept in sync with this field's map value. */
+  mirrorPaths?: string[][];
+  /** Map path whose keys should be excluded from this field's editable rows. */
+  excludedKeysSourcePath?: string[];
   /** If true, empty string values are removed from YAML instead of persisted. */
   omitIfEmpty?: boolean;
 }
@@ -88,7 +93,23 @@ const deploymentDefinition: ResourceFormDefinition = {
           max: 999,
           integer: true,
         },
-        { key: 'labels', label: 'Labels', path: ['metadata', 'labels'], type: 'key-value-list' },
+        {
+          key: 'selectors',
+          label: 'Selectors',
+          path: ['spec', 'selector', 'matchLabels'],
+          type: 'selector-list',
+          mirrorPaths: [
+            ['metadata', 'labels'],
+            ['spec', 'template', 'metadata', 'labels'],
+          ],
+        },
+        {
+          key: 'labels',
+          label: 'Labels',
+          path: ['metadata', 'labels'],
+          type: 'key-value-list',
+          excludedKeysSourcePath: ['spec', 'selector', 'matchLabels'],
+        },
         {
           key: 'annotations',
           label: 'Annotations',

@@ -101,10 +101,34 @@ func TestDeploymentTemplatePrepopulatesRequiredLabelAndNotOtherEditableFields(t 
 	if !ok {
 		t.Fatal("deployment template missing spec object")
 	}
+	selector, ok := spec["selector"].(map[string]interface{})
+	if !ok {
+		t.Fatal("deployment template missing spec.selector object")
+	}
+	matchLabels, ok := selector["matchLabels"].(map[string]interface{})
+	if !ok {
+		t.Fatal("deployment template missing spec.selector.matchLabels object")
+	}
+	if value, exists := matchLabels["app.kubernetes.io/name"]; !exists || (value != nil && value != "") {
+		t.Fatalf("expected selector app.kubernetes.io/name value to be blank, got %#v", value)
+	}
+
 	templateSpec, ok := spec["template"].(map[string]interface{})
 	if !ok {
 		t.Fatal("deployment template missing spec.template object")
 	}
+	templateMetadata, ok := templateSpec["metadata"].(map[string]interface{})
+	if !ok {
+		t.Fatal("deployment template missing spec.template.metadata object")
+	}
+	templateLabels, ok := templateMetadata["labels"].(map[string]interface{})
+	if !ok {
+		t.Fatal("deployment template missing spec.template.metadata.labels object")
+	}
+	if value, exists := templateLabels["app.kubernetes.io/name"]; !exists || (value != nil && value != "") {
+		t.Fatalf("expected template label app.kubernetes.io/name value to be blank, got %#v", value)
+	}
+
 	podSpec, ok := templateSpec["spec"].(map[string]interface{})
 	if !ok {
 		t.Fatal("deployment template missing spec.template.spec object")

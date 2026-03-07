@@ -116,6 +116,22 @@ function shouldOmitEmptyValue(field: FormFieldDefinition, value: unknown): boole
   return field.omitIfEmpty === true && typeof value === 'string' && value.trim() === '';
 }
 
+const DEFAULT_SELECTOR_ENTRY: [string, string] = ['app.kubernetes.io/name', ''];
+
+function toStringMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => [
+      key,
+      String(entryValue ?? ''),
+    ])
+  );
+}
+
+function toMapEntries(value: unknown): [string, string][] {
+  return Object.entries(toStringMap(value));
+}
+
 /**
  * Build standard dropdown options for select fields.
  * Includes an explicit empty option so users can clear a selection.
@@ -593,6 +609,14 @@ function KeyValueListField({
   onYamlChange: (yaml: string) => void;
 }): React.ReactElement {
   const rawValue = getFieldValue(yamlContent, field.path);
+  const excludedKeysSourceValue =
+    field.excludedKeysSourcePath && field.excludedKeysSourcePath.length > 0
+      ? getFieldValue(yamlContent, field.excludedKeysSourcePath)
+      : undefined;
+  const excludedKeys = useMemo(
+    () => new Set(Object.keys(toStringMap(excludedKeysSourceValue))),
+    [excludedKeysSourceValue]
+  );
   const terminalPath = field.path[field.path.length - 1];
   const pathKey = field.path.join('.');
   const showInlineKeyValueLabels = terminalPath === 'labels' || terminalPath === 'annotations';
@@ -600,14 +624,8 @@ function KeyValueListField({
 
   // Convert the object to an array of [key, value] pairs for rendering.
   const entriesFromYaml: [string, string][] = useMemo(() => {
-    if (rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue)) {
-      return Object.entries(rawValue as Record<string, unknown>).map(([k, v]) => [
-        k,
-        String(v ?? ''),
-      ]);
-    }
-    return [];
-  }, [rawValue]);
+    return toMapEntries(rawValue).filter(([key]) => !excludedKeys.has(key));
+  }, [excludedKeys, rawValue]);
   const [draftEntries, setDraftEntries] = useState<[string, string][]>(entriesFromYaml);
   const lastSyncKeyRef = useRef(`${pathKey}|${yamlContent}`);
 
@@ -615,13 +633,17 @@ function KeyValueListField({
    * Build the persisted YAML map from editable rows.
    * Empty keys are skipped so partial rows do not leak into YAML.
    */
-  const toPersistedMap = useCallback((rows: [string, string][]): Record<string, string> => {
-    const obj: Record<string, string> = {};
-    for (const [k, v] of rows) {
-      if (k) obj[k] = v;
-    }
-    return obj;
-  }, []);
+  const toPersistedMap = useCallback(
+    (rows: [string, string][]): Record<string, string> => {
+      const obj: Record<string, string> = {};
+      for (const [k, v] of rows) {
+        if (excludedKeys.has(k)) continue;
+        if (k) obj[k] = v;
+      }
+      return obj;
+    },
+    [excludedKeys]
+  );
 
   /**
    * Compare persisted key-value maps so draft-only rows (blank keys) can
@@ -680,11 +702,21 @@ function KeyValueListField({
   /** Persist rows to local draft state and YAML. */
   const updateEntries = useCallback(
     (newEntries: [string, string][]) => {
-      setDraftEntries(newEntries);
-      const updated = setFieldValue(yamlContent, field.path, toPersistedMap(newEntries));
+      const editableEntries = newEntries.filter(
+        ([key]) => key.trim() === '' || !excludedKeys.has(key)
+      );
+      setDraftEntries(editableEntries);
+      const nextMap = toPersistedMap(editableEntries);
+      const existingMap = toStringMap(getFieldValue(yamlContent, field.path));
+      for (const [key, value] of Object.entries(existingMap)) {
+        if (excludedKeys.has(key)) {
+          nextMap[key] = value;
+        }
+      }
+      const updated = setFieldValue(yamlContent, field.path, nextMap);
       if (updated !== null) onYamlChange(updated);
     },
-    [yamlContent, field.path, onYamlChange, toPersistedMap]
+    [excludedKeys, yamlContent, field.path, onYamlChange, toPersistedMap]
   );
 
   /** Handle key change for a specific row. */
@@ -741,6 +773,136 @@ function KeyValueListField({
       showInlineKeyValueLabels={showInlineKeyValueLabels}
       leftAlignEmptyStateActions={leftAlignEmptyStateActions}
       addGhostText={addGhostText}
+    />
+  );
+}
+
+/**
+ * Deployment selectors field. Keeps selector entries synced across
+ * metadata.labels, spec.selector.matchLabels, and spec.template.metadata.labels.
+ */
+function SelectorListField({
+  field,
+  yamlContent,
+  onYamlChange,
+}: {
+  field: FormFieldDefinition;
+  yamlContent: string;
+  onYamlChange: (yaml: string) => void;
+}): React.ReactElement {
+  const basePathKey = field.path.join('.');
+  const mirrorPathKeys = useMemo(
+    () => (field.mirrorPaths ?? []).map((path) => path.join('.')).join('|'),
+    [field.mirrorPaths]
+  );
+  const syncKey = `${basePathKey}|${mirrorPathKeys}`;
+  const sourceValues = useMemo(
+    () => [
+      getFieldValue(yamlContent, field.path),
+      ...(field.mirrorPaths ?? []).map((path) => getFieldValue(yamlContent, path)),
+    ],
+    [yamlContent, field.path, field.mirrorPaths]
+  );
+
+  const entriesFromYaml: [string, string][] = useMemo(() => {
+    for (const sourceValue of sourceValues) {
+      const entries = toMapEntries(sourceValue);
+      if (entries.length > 0) return entries;
+    }
+    return [DEFAULT_SELECTOR_ENTRY];
+  }, [sourceValues]);
+  const [draftEntries, setDraftEntries] = useState<[string, string][]>(entriesFromYaml);
+  const lastSyncKeyRef = useRef(`${syncKey}|${yamlContent}`);
+
+  const toPersistedMap = useCallback((rows: [string, string][]): Record<string, string> => {
+    const obj: Record<string, string> = {};
+    for (const [key, value] of rows) {
+      if (key) obj[key] = value;
+    }
+    return obj;
+  }, []);
+
+  const arePersistedMapsEqual = useCallback(
+    (leftRows: [string, string][], rightRows: [string, string][]): boolean => {
+      const left = toPersistedMap(leftRows);
+      const right = toPersistedMap(rightRows);
+      const leftKeys = Object.keys(left);
+      const rightKeys = Object.keys(right);
+      if (leftKeys.length !== rightKeys.length) return false;
+      for (const key of leftKeys) {
+        if (left[key] !== right[key]) return false;
+      }
+      return true;
+    },
+    [toPersistedMap]
+  );
+
+  useEffect(() => {
+    const currentSyncKey = `${syncKey}|${yamlContent}`;
+    if (currentSyncKey === lastSyncKeyRef.current) return;
+    lastSyncKeyRef.current = currentSyncKey;
+    setDraftEntries((previousDraft) => {
+      if (arePersistedMapsEqual(previousDraft, entriesFromYaml)) {
+        return previousDraft;
+      }
+      return entriesFromYaml;
+    });
+  }, [arePersistedMapsEqual, entriesFromYaml, syncKey, yamlContent]);
+
+  const updateEntries = useCallback(
+    (newEntries: [string, string][]) => {
+      const normalizedEntries = newEntries.length > 0 ? newEntries : [DEFAULT_SELECTOR_ENTRY];
+      setDraftEntries(normalizedEntries);
+      const persisted = toPersistedMap(normalizedEntries);
+      const syncPaths = [field.path, ...(field.mirrorPaths ?? [])];
+      let nextYaml = yamlContent;
+      for (const syncPath of syncPaths) {
+        const updated = setFieldValue(nextYaml, syncPath, persisted);
+        if (updated === null) return;
+        nextYaml = updated;
+      }
+      onYamlChange(nextYaml);
+    },
+    [field.path, field.mirrorPaths, onYamlChange, toPersistedMap, yamlContent]
+  );
+
+  const handleKeyChange = (index: number, newKey: string) => {
+    const nextEntries = draftEntries.map((entry, i) =>
+      i === index ? ([newKey, entry[1]] as [string, string]) : entry
+    );
+    updateEntries(nextEntries);
+  };
+
+  const handleValueChange = (index: number, newValue: string) => {
+    const nextEntries = draftEntries.map((entry, i) =>
+      i === index ? ([entry[0], newValue] as [string, string]) : entry
+    );
+    updateEntries(nextEntries);
+  };
+
+  const handleRemove = (index: number) => {
+    if (draftEntries.length <= 1) return;
+    updateEntries(draftEntries.filter((_, i) => i !== index));
+  };
+
+  const handleAdd = () => {
+    updateEntries([...draftEntries, ['', '']]);
+  };
+
+  return (
+    <FormKeyValueListField
+      dataFieldKey={field.key}
+      entries={draftEntries}
+      onKeyChange={handleKeyChange}
+      onValueChange={handleValueChange}
+      onRemove={handleRemove}
+      onAdd={handleAdd}
+      addButtonLabel="Add Selector"
+      removeButtonLabel="Remove Selector"
+      showInlineKeyValueLabels
+      leftAlignEmptyStateActions
+      addGhostText="Add selector"
+      canRemoveEntry={() => draftEntries.length > 1}
     />
   );
 }
@@ -1615,6 +1777,10 @@ function FieldRenderer({
     case 'key-value-list':
       return (
         <KeyValueListField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />
+      );
+    case 'selector-list':
+      return (
+        <SelectorListField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />
       );
     case 'group-list':
       return <GroupListField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />;

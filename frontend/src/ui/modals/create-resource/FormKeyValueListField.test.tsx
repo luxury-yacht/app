@@ -99,4 +99,37 @@ describe('FormKeyValueListField', () => {
     });
     expect(onAdd).toHaveBeenCalledTimes(1);
   });
+
+  it('supports non-removable rows while preserving action alignment', async () => {
+    const onRemove = vi.fn();
+
+    await act(async () => {
+      root.render(
+        <FormKeyValueListField
+          dataFieldKey="selectors"
+          entries={[['app.kubernetes.io/name', '']]}
+          onKeyChange={vi.fn()}
+          onValueChange={vi.fn()}
+          onRemove={onRemove}
+          onAdd={vi.fn()}
+          addButtonLabel="Add Selector"
+          removeButtonLabel="Remove Selector"
+          canRemoveEntry={() => false}
+          showInlineKeyValueLabels
+        />
+      );
+    });
+
+    const removeButton = container.querySelector(
+      'button.resource-form-remove-btn'
+    ) as HTMLButtonElement;
+    expect(removeButton.className).toContain('resource-form-icon-btn--hidden');
+    expect(removeButton.disabled).toBe(true);
+
+    await act(async () => {
+      removeButton.click();
+    });
+
+    expect(onRemove).not.toHaveBeenCalled();
+  });
 });

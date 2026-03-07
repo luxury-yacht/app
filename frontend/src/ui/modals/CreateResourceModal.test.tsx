@@ -63,7 +63,7 @@ const wailsMock = vi.hoisted(() => ({
       apiVersion: 'apps/v1',
       category: 'Workloads',
       description: 'A Deployment manages replicated Pods',
-      yaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name:\n  namespace: my-namespace\n  labels:\n    app.kubernetes.io/name:\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: my-app\n  template:\n    metadata:\n      labels:\n        app: my-app\n    spec:\n      containers:\n      - name:',
+      yaml: 'apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name:\n  namespace: my-namespace\n  labels:\n    app.kubernetes.io/name:\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app.kubernetes.io/name:\n  template:\n    metadata:\n      labels:\n        app.kubernetes.io/name:\n    spec:\n      containers:\n      - name:',
     },
     {
       name: 'Service',

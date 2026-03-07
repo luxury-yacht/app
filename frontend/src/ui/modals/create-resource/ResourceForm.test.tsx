@@ -332,6 +332,158 @@ spec:
     ).toBe('Add env var');
   });
 
+  it('keeps deployment selectors separate from labels and prevents removing the last selector', async () => {
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Metadata',
+          fields: [
+            { key: 'replicas', label: 'Replicas', path: ['spec', 'replicas'], type: 'number' },
+            {
+              key: 'selectors',
+              label: 'Selectors',
+              path: ['spec', 'selector', 'matchLabels'],
+              type: 'selector-list',
+              mirrorPaths: [
+                ['metadata', 'labels'],
+                ['spec', 'template', 'metadata', 'labels'],
+              ],
+            },
+            {
+              key: 'labels',
+              label: 'Labels',
+              path: ['metadata', 'labels'],
+              type: 'key-value-list',
+              excludedKeysSourcePath: ['spec', 'selector', 'matchLabels'],
+            },
+          ],
+        },
+      ],
+    };
+
+    const yaml = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test
+  labels:
+    app.kubernetes.io/name: app
+    team: platform
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: app
+`;
+
+    await act(async () => {
+      root.render(
+        <ResourceForm definition={deploymentDefinition} yamlContent={yaml} onYamlChange={vi.fn()} />
+      );
+    });
+
+    const selectorInputs = container.querySelectorAll(
+      '[data-field-key="selectors"] .resource-form-kv-row input'
+    );
+    expect(selectorInputs.length).toBe(2);
+    expect((selectorInputs[0] as HTMLInputElement).value).toBe('app.kubernetes.io/name');
+    expect((selectorInputs[1] as HTMLInputElement).value).toBe('app');
+
+    const labelInputs = container.querySelectorAll(
+      '[data-field-key="labels"] .resource-form-kv-row input'
+    );
+    expect(labelInputs.length).toBe(2);
+    expect((labelInputs[0] as HTMLInputElement).value).toBe('team');
+    expect((labelInputs[1] as HTMLInputElement).value).toBe('platform');
+
+    const selectorRemoveButton = container.querySelector(
+      '[data-field-key="selectors"] button.resource-form-remove-btn'
+    ) as HTMLButtonElement;
+    expect(selectorRemoveButton.className).toContain('resource-form-icon-btn--hidden');
+    expect(selectorRemoveButton.disabled).toBe(true);
+  });
+
+  it('syncs selector edits to metadata, selector.matchLabels, and pod template labels', async () => {
+    const { ResourceForm } = await import('./ResourceForm');
+    const onChange = vi.fn();
+    const deploymentDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Metadata',
+          fields: [
+            {
+              key: 'selectors',
+              label: 'Selectors',
+              path: ['spec', 'selector', 'matchLabels'],
+              type: 'selector-list',
+              mirrorPaths: [
+                ['metadata', 'labels'],
+                ['spec', 'template', 'metadata', 'labels'],
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const yaml = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test
+  labels:
+    app.kubernetes.io/name:
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name:
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name:
+`;
+
+    await act(async () => {
+      root.render(
+        <ResourceForm
+          definition={deploymentDefinition}
+          yamlContent={yaml}
+          onYamlChange={onChange}
+        />
+      );
+    });
+
+    const selectorInputs = container.querySelectorAll(
+      '[data-field-key="selectors"] .resource-form-kv-row input'
+    );
+    const selectorValueInput = selectorInputs[1] as HTMLInputElement;
+    expect(selectorValueInput).toBeDefined();
+    await act(async () => {
+      setNativeInputValue(selectorValueInput, 'api');
+      selectorValueInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(onChange).toHaveBeenCalled();
+    const updatedYaml = onChange.mock.calls[onChange.mock.calls.length - 1]?.[0] as string;
+    const parsed = YAML.parse(updatedYaml) as {
+      metadata?: { labels?: Record<string, string> };
+      spec?: {
+        selector?: { matchLabels?: Record<string, string> };
+        template?: { metadata?: { labels?: Record<string, string> } };
+      };
+    };
+
+    expect(parsed.metadata?.labels?.['app.kubernetes.io/name']).toBe('api');
+    expect(parsed.spec?.selector?.matchLabels?.['app.kubernetes.io/name']).toBe('api');
+    expect(parsed.spec?.template?.metadata?.labels?.['app.kubernetes.io/name']).toBe('api');
+  });
+
   it('renders text input with current value from YAML', async () => {
     await renderForm(sampleYaml, vi.fn());
     const nameInput = container.querySelector('input[data-field-key="name"]') as HTMLInputElement;

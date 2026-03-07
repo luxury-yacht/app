@@ -45,11 +45,11 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: my-app
+      app.kubernetes.io/name:
   template:
     metadata:
       labels:
-        app: my-app
+        app.kubernetes.io/name:
     spec:
       containers:
       - name:
