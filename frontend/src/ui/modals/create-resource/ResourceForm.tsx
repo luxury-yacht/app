@@ -1883,16 +1883,19 @@ function GroupListField({
               });
             };
             return (
-              <input
-                type="checkbox"
-                className="resource-form-checkbox"
-                data-field-key="readOnly"
-                checked={checked}
-                onChange={(event) => handleReadOnlyChange(event.target.checked)}
-                onClick={(event) =>
-                  handleReadOnlyChange((event.currentTarget as HTMLInputElement).checked)
-                }
-              />
+              <label className="resource-form-volume-mount-inline-toggle">
+                <input
+                  type="checkbox"
+                  className="resource-form-checkbox"
+                  data-field-key="readOnly"
+                  checked={checked}
+                  onChange={(event) => handleReadOnlyChange(event.target.checked)}
+                  onClick={(event) =>
+                    handleReadOnlyChange((event.currentTarget as HTMLInputElement).checked)
+                  }
+                />
+                <span>Read Only</span>
+              </label>
             );
           }
 
@@ -1951,7 +1954,7 @@ function GroupListField({
                       handleSubPathExprToggle((event.currentTarget as HTMLInputElement).checked)
                     }
                   />
-                  <span>Expr</span>
+                  <span>Use Expression</span>
                 </label>
               </div>
             );
@@ -2043,16 +2046,23 @@ function GroupListField({
             addDisabled={disableVolumeMountAdd}
             renderFields={(nestedItem, nestedIndex) => (
               <>
-                {subField.fields?.map((nestedField) => (
-                  <div
-                    key={nestedField.key}
-                    data-field-key={nestedField.key}
-                    className="resource-form-nested-group-field"
-                  >
-                    <label className="resource-form-nested-group-label">{nestedField.label}</label>
-                    {renderNestedLeafField(nestedField, nestedItem, nestedIndex)}
-                  </div>
-                ))}
+                {subField.fields?.map((nestedField) => {
+                  const hideFieldLabel = isVolumeMountsList && nestedField.key === 'readOnly';
+                  return (
+                    <div
+                      key={nestedField.key}
+                      data-field-key={nestedField.key}
+                      className={`resource-form-nested-group-field${hideFieldLabel ? ' resource-form-nested-group-field--no-label' : ''}`}
+                    >
+                      {!hideFieldLabel ? (
+                        <label className="resource-form-nested-group-label">
+                          {nestedField.label}
+                        </label>
+                      ) : null}
+                      {renderNestedLeafField(nestedField, nestedItem, nestedIndex)}
+                    </div>
+                  );
+                })}
               </>
             )}
           />
