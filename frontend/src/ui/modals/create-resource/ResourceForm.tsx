@@ -252,7 +252,7 @@ const HOST_PATH_TYPE_OPTIONS: DropdownOption[] = [
 ];
 
 const EMPTY_DIR_MEDIUM_OPTIONS: DropdownOption[] = [
-  { value: '', label: 'Node filesystem (default)' },
+  { value: '', label: 'Node Filesystem' },
   { value: 'Memory', label: 'Memory' },
 ];
 
@@ -337,6 +337,14 @@ const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraField
   ],
   secret: [
     {
+      key: 'secretName',
+      label: 'Secret',
+      path: ['secret', 'secretName'],
+      type: 'text',
+      placeholder: 'secret-name',
+      required: true,
+    },
+    {
       key: 'optional',
       label: 'Optional',
       path: ['secret', 'optional'],
@@ -344,6 +352,21 @@ const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraField
       emptyLabel: '-----',
       trueLabel: 'true',
       falseLabel: 'false',
+    },
+    {
+      key: 'defaultMode',
+      label: 'Default Mode',
+      path: ['secret', 'defaultMode'],
+      type: 'number',
+      placeholder: '420',
+      min: 0,
+      max: 511,
+      integer: true,
+      parseValue: (rawValue: string) => {
+        if (rawValue.trim() === '') return '';
+        const parsed = Number(rawValue);
+        return Number.isInteger(parsed) ? parsed : '';
+      },
     },
   ],
 };
@@ -1186,6 +1209,7 @@ function GroupListField({
         const effectiveSource =
           currentSource ?? getVolumeSourceDefinition(DEFAULT_VOLUME_SOURCE_KEY);
         const isConfigMapSource = effectiveSource.key === 'configMap';
+        const isSecretSource = effectiveSource.key === 'secret';
         const sourceKey = effectiveSource.key;
         const sourceValue = String(getNestedValue(item, effectiveSource.valuePath) ?? '');
         const sourceOptions: DropdownOption[] = VOLUME_SOURCE_DEFINITIONS.map((definition) => ({
@@ -1193,10 +1217,18 @@ function GroupListField({
           label: definition.label,
         }));
         const extraFields = VOLUME_SOURCE_EXTRA_FIELDS[effectiveSource.key] ?? [];
+        const visibleExtraFields = isSecretSource
+          ? extraFields.filter((extraField) => extraField.key !== 'secretName')
+          : extraFields;
         const configMapItems =
           effectiveSource.key === 'configMap' &&
           Array.isArray(getNestedValue(item, ['configMap', 'items']))
             ? (getNestedValue(item, ['configMap', 'items']) as Record<string, unknown>[])
+            : [];
+        const secretItems =
+          effectiveSource.key === 'secret' &&
+          Array.isArray(getNestedValue(item, ['secret', 'items']))
+            ? (getNestedValue(item, ['secret', 'items']) as Record<string, unknown>[])
             : [];
 
         const handleSourceTypeChange = (nextValue: string | string[]) => {
@@ -1217,6 +1249,9 @@ function GroupListField({
             if (selectedDefinition.key === 'pvc') {
               return setNestedValue(withSourceRoot, ['persistentVolumeClaim', 'claimName'], '');
             }
+            if (selectedDefinition.key === 'secret') {
+              return setNestedValue(withSourceRoot, ['secret', 'secretName'], '');
+            }
             return withSourceRoot;
           });
           updateItems(updatedItems);
@@ -1229,6 +1264,9 @@ function GroupListField({
             nextItem = ensureVolumeSourceRoot(nextItem, effectiveSource.key);
             if (effectiveSource.key === 'emptyDir' && nextValue.trim() === '') {
               return nextItem;
+            }
+            if (effectiveSource.key === 'secret' && nextValue.trim() === '') {
+              return setNestedValue(nextItem, ['secret', 'secretName'], '');
             }
             if (nextValue.trim() === '') {
               return unsetNestedValue(nextItem, effectiveSource.valuePath);
@@ -1258,6 +1296,12 @@ function GroupListField({
                 extraField.path.join('.') === 'persistentVolumeClaim.claimName'
               ) {
                 return setNestedValue(nextItem, ['persistentVolumeClaim', 'claimName'], '');
+              }
+              if (
+                effectiveSource.key === 'secret' &&
+                extraField.path.join('.') === 'secret.secretName'
+              ) {
+                return setNestedValue(nextItem, ['secret', 'secretName'], '');
               }
               const removed = unsetNestedValue(nextItem, extraField.path);
               return effectiveSource.key === 'emptyDir'
@@ -1317,6 +1361,43 @@ function GroupListField({
 
         const handleConfigMapRemoveItem = (rowIndex: number) => {
           updateConfigMapItems(configMapItems.filter((_, index) => index !== rowIndex));
+        };
+
+        /** Persist Secret items while preserving selected source and clearing other source roots. */
+        const updateSecretItems = (newItems: Record<string, unknown>[]) => {
+          const updatedItems = items.map((currentItem, i) => {
+            if (i !== itemIndex) return currentItem;
+            let nextItem = clearOtherVolumeSources(currentItem, 'secret');
+            nextItem = ensureVolumeSourceRoot(nextItem, 'secret');
+            if (newItems.length === 0) {
+              return unsetNestedValue(nextItem, ['secret', 'items']);
+            }
+            return setNestedValue(nextItem, ['secret', 'items'], newItems);
+          });
+          updateItems(updatedItems);
+        };
+
+        const handleSecretItemChange = (
+          rowIndex: number,
+          fieldPath: string[],
+          newValue: unknown
+        ) => {
+          const updated = secretItems.map((entry, index) => {
+            if (index !== rowIndex) return entry;
+            if (typeof newValue === 'string' && newValue.trim() === '') {
+              return unsetNestedValue(entry, fieldPath);
+            }
+            return setNestedValue(entry, fieldPath, newValue);
+          });
+          updateSecretItems(updated);
+        };
+
+        const handleSecretAddItem = () => {
+          updateSecretItems([...secretItems, {}]);
+        };
+
+        const handleSecretRemoveItem = (rowIndex: number) => {
+          updateSecretItems(secretItems.filter((_, index) => index !== rowIndex));
         };
 
         const renderExtraField = (extraField: VolumeSourceExtraFieldDefinition) => {
@@ -1412,7 +1493,8 @@ function GroupListField({
               {!isConfigMapSource &&
                 effectiveSource.key !== 'emptyDir' &&
                 effectiveSource.key !== 'hostPath' &&
-                effectiveSource.key !== 'pvc' && (
+                effectiveSource.key !== 'pvc' &&
+                effectiveSource.key !== 'secret' && (
                   <input
                     type="text"
                     className="resource-form-input"
@@ -1424,29 +1506,33 @@ function GroupListField({
                 )}
             </div>
 
-            {isConfigMapSource && (
+            {(isConfigMapSource || isSecretSource) && (
               <div className="resource-form-volume-source-extra resource-form-volume-source-extra--configmap">
                 <div
-                  data-field-key="configMapName"
+                  data-field-key={isConfigMapSource ? 'configMapName' : 'secretName'}
                   className="resource-form-volume-source-extra-field"
                 >
-                  <span className="resource-form-nested-group-label">ConfigMap</span>
+                  <span className="resource-form-nested-group-label">
+                    {isConfigMapSource ? 'ConfigMap' : 'Secret'}
+                  </span>
                   <input
                     type="text"
                     className="resource-form-input"
                     value={sourceValue}
                     placeholder={effectiveSource.placeholder}
+                    required={isSecretSource}
+                    aria-required={isSecretSource}
                     {...INPUT_BEHAVIOR_PROPS}
                     onChange={(e) => handleSourceValueChange(e.target.value)}
                   />
                 </div>
-                {extraFields.map((extraField) => renderExtraField(extraField))}
+                {visibleExtraFields.map((extraField) => renderExtraField(extraField))}
               </div>
             )}
 
-            {!isConfigMapSource && extraFields.length > 0 && (
+            {!isConfigMapSource && !isSecretSource && visibleExtraFields.length > 0 && (
               <div className="resource-form-volume-source-extra">
-                {extraFields.map((extraField) => renderExtraField(extraField))}
+                {visibleExtraFields.map((extraField) => renderExtraField(extraField))}
               </div>
             )}
 
@@ -1519,6 +1605,84 @@ function GroupListField({
                             );
                             if (parsed === null) return;
                             handleConfigMapItemChange(rowIndex, ['mode'], parsed);
+                          }}
+                        />
+                      </div>
+                    </>
+                  );
+                }}
+              />
+            )}
+
+            {effectiveSource.key === 'secret' && (
+              <FormNestedListField
+                dataFieldKey="secretItems"
+                items={secretItems}
+                addLabel="Add item"
+                removeLabel="Remove Items"
+                onAdd={handleSecretAddItem}
+                onRemove={handleSecretRemoveItem}
+                leftAlignEmptyStateActions
+                addGhostText="Add item"
+                renderFields={(entry, rowIndex) => {
+                  const itemKey = String(getNestedValue(entry, ['key']) ?? '');
+                  const itemPath = String(getNestedValue(entry, ['path']) ?? '');
+                  const itemMode = String(getNestedValue(entry, ['mode']) ?? '');
+
+                  return (
+                    <>
+                      <div
+                        data-field-key="secretItemKey"
+                        className="resource-form-nested-group-field"
+                      >
+                        <label className="resource-form-nested-group-label">Key</label>
+                        <input
+                          type="text"
+                          className="resource-form-input"
+                          value={itemKey}
+                          placeholder="key"
+                          {...INPUT_BEHAVIOR_PROPS}
+                          onChange={(e) =>
+                            handleSecretItemChange(rowIndex, ['key'], e.target.value)
+                          }
+                        />
+                      </div>
+                      <div
+                        data-field-key="secretItemPath"
+                        className="resource-form-nested-group-field"
+                      >
+                        <label className="resource-form-nested-group-label">Path</label>
+                        <input
+                          type="text"
+                          className="resource-form-input"
+                          value={itemPath}
+                          placeholder="path"
+                          {...INPUT_BEHAVIOR_PROPS}
+                          onChange={(e) =>
+                            handleSecretItemChange(rowIndex, ['path'], e.target.value)
+                          }
+                        />
+                      </div>
+                      <div
+                        data-field-key="secretItemMode"
+                        className="resource-form-nested-group-field"
+                      >
+                        <label className="resource-form-nested-group-label">Mode</label>
+                        <FormCompactNumberInput
+                          dataFieldKey="secretItemMode"
+                          value={itemMode}
+                          placeholder="420"
+                          min={0}
+                          max={511}
+                          integer
+                          onChange={(event) => {
+                            const parsed = parseCompactNumberValue(
+                              event.target.value,
+                              { min: 0, max: 511, integer: true },
+                              { allowEmpty: true }
+                            );
+                            if (parsed === null) return;
+                            handleSecretItemChange(rowIndex, ['mode'], parsed);
                           }}
                         />
                       </div>

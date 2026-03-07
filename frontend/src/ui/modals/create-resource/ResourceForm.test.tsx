@@ -1058,13 +1058,13 @@ spec:
       sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    const refreshedSourceValueInput = container.querySelector(
-      '[data-field-key="source"] input'
+    const secretNameInput = container.querySelector(
+      '[data-field-key="secretName"] input'
     ) as HTMLInputElement;
 
     await act(async () => {
-      setNativeInputValue(refreshedSourceValueInput, 'app-secret');
-      refreshedSourceValueInput.dispatchEvent(new Event('input', { bubbles: true }));
+      setNativeInputValue(secretNameInput, 'app-secret');
+      secretNameInput.dispatchEvent(new Event('input', { bubbles: true }));
     });
 
     const updatedYaml = emittedYamls[emittedYamls.length - 1] as string;
@@ -1432,6 +1432,182 @@ spec:
     expect(
       parsedWithoutOptional.spec?.template?.spec?.volumes?.[0]?.configMap?.optional
     ).toBeUndefined();
+  });
+
+  it('secret source supports required name, optional, default mode, and items fields', async () => {
+    const emittedYamls: string[] = [];
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Volumes',
+          fields: [
+            {
+              key: 'volumes',
+              label: 'Volumes',
+              path: ['spec', 'template', 'spec', 'volumes'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                { key: 'source', label: 'Source', path: ['source'], type: 'volume-source' },
+              ],
+              defaultValue: {},
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+`;
+
+    const Harness = () => {
+      const [yaml, setYaml] = useState(deploymentLikeYaml);
+      return (
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={yaml}
+          onYamlChange={(nextYaml) => {
+            emittedYamls.push(nextYaml);
+            setYaml(nextYaml);
+          }}
+        />
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    const sourceSelect = container.querySelector(
+      '[data-testid="dropdown-Source"]'
+    ) as HTMLSelectElement;
+    await act(async () => {
+      sourceSelect.value = 'secret';
+      sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.resource-form-volume-source > input')).toBeNull();
+    const secretSourceExtras = container.querySelector(
+      '.resource-form-volume-source-extra--configmap'
+    ) as HTMLDivElement;
+    const secretNameInput = container.querySelector(
+      '[data-field-key="secretName"] input'
+    ) as HTMLInputElement;
+    const optionalDropdown = container.querySelector(
+      '[data-testid="dropdown-Optional"]'
+    ) as HTMLSelectElement;
+    const defaultModeInput = container.querySelector(
+      'input[data-field-key="defaultMode"]'
+    ) as HTMLInputElement;
+    const addItemsBtn = container.querySelector(
+      'button[aria-label="Add item"]'
+    ) as HTMLButtonElement;
+
+    expect(secretNameInput).not.toBeNull();
+    expect(secretSourceExtras).not.toBeNull();
+    expect(secretSourceExtras.contains(secretNameInput)).toBe(true);
+    expect(secretNameInput.required).toBe(true);
+    expect(optionalDropdown).not.toBeNull();
+    expect(defaultModeInput).not.toBeNull();
+    expect(addItemsBtn).not.toBeNull();
+
+    await act(async () => {
+      setNativeInputValue(secretNameInput, 'app-secret');
+      secretNameInput.dispatchEvent(new Event('input', { bubbles: true }));
+      optionalDropdown.value = 'true';
+      optionalDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+      setNativeInputValue(defaultModeInput, '420');
+      defaultModeInput.dispatchEvent(new Event('change', { bubbles: true }));
+      addItemsBtn.click();
+    });
+
+    const itemKeyInput = container.querySelector(
+      '[data-field-key="secretItemKey"] input'
+    ) as HTMLInputElement;
+    const itemPathInput = container.querySelector(
+      '[data-field-key="secretItemPath"] input'
+    ) as HTMLInputElement;
+    const itemModeInput = container.querySelector(
+      '[data-field-key="secretItemMode"] input'
+    ) as HTMLInputElement;
+
+    await act(async () => {
+      setNativeInputValue(itemKeyInput, 'token');
+      itemKeyInput.dispatchEvent(new Event('input', { bubbles: true }));
+      setNativeInputValue(itemPathInput, 'secrets/token');
+      itemPathInput.dispatchEvent(new Event('input', { bubbles: true }));
+      setNativeInputValue(itemModeInput, '384');
+      itemModeInput.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const yamlWithValues = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedWithValues = YAML.parse(yamlWithValues) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              secret?: {
+                secretName?: string;
+                optional?: boolean;
+                defaultMode?: number;
+                items?: Array<{ key?: string; path?: string; mode?: number }>;
+              };
+            }>;
+          };
+        };
+      };
+    };
+    const secretWithValues = parsedWithValues.spec?.template?.spec?.volumes?.[0]?.secret;
+    expect(secretWithValues?.secretName).toBe('app-secret');
+    expect(secretWithValues?.optional).toBe(true);
+    expect(secretWithValues?.defaultMode).toBe(420);
+    expect(secretWithValues?.items?.[0]).toEqual({
+      key: 'token',
+      path: 'secrets/token',
+      mode: 384,
+    });
+
+    const removeItemBtn = container.querySelector(
+      'button[aria-label="Remove Items"]'
+    ) as HTMLButtonElement;
+    await act(async () => {
+      optionalDropdown.value = '';
+      optionalDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+      setNativeInputValue(defaultModeInput, '');
+      defaultModeInput.dispatchEvent(new Event('change', { bubbles: true }));
+      removeItemBtn.click();
+    });
+
+    const yamlWithoutOptionals = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedWithoutOptionals = YAML.parse(yamlWithoutOptionals) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              secret?: {
+                secretName?: string;
+                optional?: boolean;
+                defaultMode?: number;
+                items?: Array<{ key?: string; path?: string; mode?: number }>;
+              };
+            }>;
+          };
+        };
+      };
+    };
+    const secretWithoutOptionals =
+      parsedWithoutOptionals.spec?.template?.spec?.volumes?.[0]?.secret;
+    expect(secretWithoutOptionals?.secretName).toBe('app-secret');
+    expect(secretWithoutOptionals?.optional).toBeUndefined();
+    expect(secretWithoutOptionals?.defaultMode).toBeUndefined();
+    expect(secretWithoutOptionals?.items).toBeUndefined();
   });
 
   it('emptyDir source exposes medium and sizeLimit and preserves emptyDir root when blank', async () => {
