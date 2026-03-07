@@ -410,13 +410,13 @@
 }
 
 .resource-form-volume-source-extra-dropdown .dropdown {
-  display: block;
-  width: 100%;
+  display: inline-block;
+  width: auto;
 }
 
 .resource-form-volume-source-extra-dropdown .dropdown-menu {
   width: 100%;
-  min-width: 100%;
+  min-width: 0;
 }
 
 .resource-form-volume-source-extra-field[data-field-key="optional"]
@@ -434,9 +434,9 @@
 }
 
 .resource-form-volume-source-extra-field .resource-form-input {
-  width: 12rem;
-  min-width: 12rem;
-  max-width: 12rem;
+  width: 20rem;
+  min-width: 20rem;
+  max-width: 20rem;
 }
 
 .resource-form-volume-source-extra-field input[data-field-key="defaultMode"] {

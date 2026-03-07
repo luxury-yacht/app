@@ -175,6 +175,7 @@ interface VolumeSourceExtraFieldDefinition {
   label: string;
   path: string[];
   type: 'text' | 'number' | 'select' | 'tri-state-boolean';
+  required?: boolean;
   placeholder?: string;
   options?: DropdownOption[];
   defaultValue?: string;
@@ -240,7 +241,7 @@ const VOLUME_SOURCE_ROOT_BY_KEY: Record<VolumeSourceKey, string[]> = {
 const DEFAULT_VOLUME_SOURCE_KEY: VolumeSourceKey = 'configMap';
 
 const HOST_PATH_TYPE_OPTIONS: DropdownOption[] = [
-  { value: '', label: '-- Select --' },
+  { value: '', label: '-----' },
   { value: 'DirectoryOrCreate', label: 'DirectoryOrCreate' },
   { value: 'Directory', label: 'Directory' },
   { value: 'FileOrCreate', label: 'FileOrCreate' },
@@ -248,6 +249,11 @@ const HOST_PATH_TYPE_OPTIONS: DropdownOption[] = [
   { value: 'Socket', label: 'Socket' },
   { value: 'CharDevice', label: 'CharDevice' },
   { value: 'BlockDevice', label: 'BlockDevice' },
+];
+
+const EMPTY_DIR_MEDIUM_OPTIONS: DropdownOption[] = [
+  { value: '', label: 'Node filesystem (default)' },
+  { value: 'Memory', label: 'Memory' },
 ];
 
 const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraFieldDefinition[]> = {
@@ -279,6 +285,13 @@ const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraField
   ],
   emptyDir: [
     {
+      key: 'medium',
+      label: 'Medium',
+      path: ['emptyDir', 'medium'],
+      type: 'select',
+      options: EMPTY_DIR_MEDIUM_OPTIONS,
+    },
+    {
       key: 'sizeLimit',
       label: 'Size Limit',
       path: ['emptyDir', 'sizeLimit'],
@@ -287,6 +300,14 @@ const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraField
     },
   ],
   hostPath: [
+    {
+      key: 'path',
+      label: 'Path',
+      path: ['hostPath', 'path'],
+      type: 'text',
+      placeholder: '/data',
+      required: true,
+    },
     {
       key: 'type',
       label: 'Type',
@@ -1181,7 +1202,11 @@ function GroupListField({
           const updatedItems = items.map((currentItem, i) => {
             if (i !== itemIndex) return currentItem;
             const clearedItem = clearVolumeSources(currentItem);
-            return ensureVolumeSourceRoot(clearedItem, selectedDefinition.key);
+            const withSourceRoot = ensureVolumeSourceRoot(clearedItem, selectedDefinition.key);
+            if (selectedDefinition.key === 'hostPath') {
+              return setNestedValue(withSourceRoot, ['hostPath', 'path'], '');
+            }
+            return withSourceRoot;
           });
           updateItems(updatedItems);
         };
@@ -1210,18 +1235,30 @@ function GroupListField({
             if (i !== itemIndex) return currentItem;
             let nextItem = clearOtherVolumeSources(currentItem, effectiveSource.key);
             nextItem = ensureVolumeSourceRoot(nextItem, effectiveSource.key);
+            const unsetExtraField = () => {
+              if (
+                effectiveSource.key === 'hostPath' &&
+                extraField.path.join('.') === 'hostPath.path'
+              ) {
+                return setNestedValue(nextItem, ['hostPath', 'path'], '');
+              }
+              const removed = unsetNestedValue(nextItem, extraField.path);
+              return effectiveSource.key === 'emptyDir'
+                ? ensureVolumeSourceRoot(removed, 'emptyDir')
+                : removed;
+            };
             if (nextValue === undefined || nextValue === null) {
-              return unsetNestedValue(nextItem, extraField.path);
+              return unsetExtraField();
             }
             if (typeof nextValue === 'string' && nextValue.trim() === '') {
-              return unsetNestedValue(nextItem, extraField.path);
+              return unsetExtraField();
             }
             const parsedValue =
               typeof nextValue === 'string' && extraField.parseValue
                 ? extraField.parseValue(nextValue)
                 : nextValue;
             if (parsedValue === '' || parsedValue === undefined || parsedValue === null) {
-              return unsetNestedValue(nextItem, extraField.path);
+              return unsetExtraField();
             }
             return setNestedValue(nextItem, extraField.path, parsedValue);
           });
@@ -1334,6 +1371,8 @@ function GroupListField({
                   className="resource-form-input"
                   value={stringExtraValue}
                   placeholder={extraField.placeholder}
+                  required={extraField.required === true}
+                  aria-required={extraField.required === true}
                   {...INPUT_BEHAVIOR_PROPS}
                   onChange={(e) => handleExtraFieldChange(extraField, e.target.value)}
                 />
@@ -1353,16 +1392,18 @@ function GroupListField({
                   ariaLabel={subField.label}
                 />
               </div>
-              {!isConfigMapSource && (
-                <input
-                  type="text"
-                  className="resource-form-input"
-                  value={sourceValue}
-                  placeholder={effectiveSource.placeholder}
-                  {...INPUT_BEHAVIOR_PROPS}
-                  onChange={(e) => handleSourceValueChange(e.target.value)}
-                />
-              )}
+              {!isConfigMapSource &&
+                effectiveSource.key !== 'emptyDir' &&
+                effectiveSource.key !== 'hostPath' && (
+                  <input
+                    type="text"
+                    className="resource-form-input"
+                    value={sourceValue}
+                    placeholder={effectiveSource.placeholder}
+                    {...INPUT_BEHAVIOR_PROPS}
+                    onChange={(e) => handleSourceValueChange(e.target.value)}
+                  />
+                )}
             </div>
 
             {isConfigMapSource && (

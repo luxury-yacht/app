@@ -1421,6 +1421,266 @@ spec:
     ).toBeUndefined();
   });
 
+  it('emptyDir source exposes medium and sizeLimit and preserves emptyDir root when blank', async () => {
+    const emittedYamls: string[] = [];
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Volumes',
+          fields: [
+            {
+              key: 'volumes',
+              label: 'Volumes',
+              path: ['spec', 'template', 'spec', 'volumes'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                { key: 'source', label: 'Source', path: ['source'], type: 'volume-source' },
+              ],
+              defaultValue: {},
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+`;
+
+    const Harness = () => {
+      const [yaml, setYaml] = useState(deploymentLikeYaml);
+      return (
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={yaml}
+          onYamlChange={(nextYaml) => {
+            emittedYamls.push(nextYaml);
+            setYaml(nextYaml);
+          }}
+        />
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    const sourceSelect = container.querySelector(
+      '[data-testid="dropdown-Source"]'
+    ) as HTMLSelectElement;
+
+    await act(async () => {
+      sourceSelect.value = 'emptyDir';
+      sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.resource-form-volume-source > input')).toBeNull();
+
+    const mediumDropdown = container.querySelector(
+      '[data-testid="dropdown-Medium"]'
+    ) as HTMLSelectElement;
+    const sizeLimitInput = container.querySelector(
+      '[data-field-key="sizeLimit"] input'
+    ) as HTMLInputElement;
+
+    expect(mediumDropdown).not.toBeNull();
+    expect(sizeLimitInput).not.toBeNull();
+
+    await act(async () => {
+      mediumDropdown.value = 'Memory';
+      mediumDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+      setNativeInputValue(sizeLimitInput, '1Gi');
+      sizeLimitInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const yamlWithValues = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedWithValues = YAML.parse(yamlWithValues) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              emptyDir?: {
+                medium?: string;
+                sizeLimit?: string;
+              };
+            }>;
+          };
+        };
+      };
+    };
+    const withValuesEmptyDir = parsedWithValues.spec?.template?.spec?.volumes?.[0]?.emptyDir;
+    expect(withValuesEmptyDir?.medium).toBe('Memory');
+    expect(withValuesEmptyDir?.sizeLimit).toBe('1Gi');
+
+    await act(async () => {
+      mediumDropdown.value = '';
+      mediumDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+      setNativeInputValue(sizeLimitInput, '');
+      sizeLimitInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const yamlWithoutValues = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedWithoutValues = YAML.parse(yamlWithoutValues) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              emptyDir?: Record<string, unknown>;
+            }>;
+          };
+        };
+      };
+    };
+    const emptyDir = parsedWithoutValues.spec?.template?.spec?.volumes?.[0]?.emptyDir;
+    expect(emptyDir).toBeDefined();
+    expect(Object.keys(emptyDir ?? {})).toHaveLength(0);
+  });
+
+  it('hostPath source renders labeled Path and Type on the same extra row and omits optional type when blank', async () => {
+    const emittedYamls: string[] = [];
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Volumes',
+          fields: [
+            {
+              key: 'volumes',
+              label: 'Volumes',
+              path: ['spec', 'template', 'spec', 'volumes'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                { key: 'source', label: 'Source', path: ['source'], type: 'volume-source' },
+              ],
+              defaultValue: {},
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+`;
+
+    const Harness = () => {
+      const [yaml, setYaml] = useState(deploymentLikeYaml);
+      return (
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={yaml}
+          onYamlChange={(nextYaml) => {
+            emittedYamls.push(nextYaml);
+            setYaml(nextYaml);
+          }}
+        />
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    const sourceSelect = container.querySelector(
+      '[data-testid="dropdown-Source"]'
+    ) as HTMLSelectElement;
+
+    await act(async () => {
+      sourceSelect.value = 'hostPath';
+      sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    expect(container.querySelector('.resource-form-volume-source > input')).toBeNull();
+
+    const hostPathExtras = container.querySelector(
+      '.resource-form-volume-source-extra'
+    ) as HTMLDivElement;
+    const hostPathInput = container.querySelector(
+      '[data-field-key="path"] input'
+    ) as HTMLInputElement;
+    const hostPathTypeSelect = container.querySelector(
+      '[data-testid="dropdown-Type"]'
+    ) as HTMLSelectElement;
+    const pathLabel = container.querySelector(
+      '[data-field-key="path"] .resource-form-nested-group-label'
+    ) as HTMLSpanElement;
+
+    expect(hostPathInput).not.toBeNull();
+    expect(hostPathExtras).not.toBeNull();
+    expect(hostPathInput.required).toBe(true);
+    expect(hostPathTypeSelect).not.toBeNull();
+    expect(pathLabel.textContent).toBe('Path');
+    expect(hostPathExtras.contains(hostPathInput)).toBe(true);
+    expect(hostPathExtras.contains(hostPathTypeSelect)).toBe(true);
+
+    const yamlAfterSwitch = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedAfterSwitch = YAML.parse(yamlAfterSwitch) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{ hostPath?: { path?: string } }>;
+          };
+        };
+      };
+    };
+    expect(parsedAfterSwitch.spec?.template?.spec?.volumes?.[0]?.hostPath?.path).toBe('');
+
+    await act(async () => {
+      setNativeInputValue(hostPathInput, '/data');
+      hostPathInput.dispatchEvent(new Event('input', { bubbles: true }));
+      hostPathTypeSelect.value = 'Directory';
+      hostPathTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const yamlWithType = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedWithType = YAML.parse(yamlWithType) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{ hostPath?: { path?: string; type?: string } }>;
+          };
+        };
+      };
+    };
+    const hostPathWithType = parsedWithType.spec?.template?.spec?.volumes?.[0]?.hostPath;
+    expect(hostPathWithType?.path).toBe('/data');
+    expect(hostPathWithType?.type).toBe('Directory');
+
+    await act(async () => {
+      hostPathTypeSelect.value = '';
+      hostPathTypeSelect.dispatchEvent(new Event('change', { bubbles: true }));
+      setNativeInputValue(hostPathInput, '');
+      hostPathInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const yamlWithoutType = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedWithoutType = YAML.parse(yamlWithoutType) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{ hostPath?: { path?: string; type?: string } }>;
+          };
+        };
+      };
+    };
+    const hostPathWithoutType = parsedWithoutType.spec?.template?.spec?.volumes?.[0]?.hostPath;
+    expect(hostPathWithoutType?.type).toBeUndefined();
+    expect(hostPathWithoutType?.path).toBe('');
+  });
+
   it('updates container resource requests through labeled resource inputs', async () => {
     const onChange = vi.fn();
     const { ResourceForm } = await import('./ResourceForm');
