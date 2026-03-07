@@ -589,21 +589,50 @@
   max-width: calc(25ch + 20px);
 }
 
-/* Keep volume mount name/path spacing and widths consistent with other container rows. */
+/* Volume mounts: line 1 Name, line 2 Path + Read Only, line 3 SubPath + Expr. */
 .resource-form-nested-group-list[data-field-key="volumeMounts"] .resource-form-nested-group-fields {
   gap: var(--spacing-xl);
+  flex-wrap: wrap;
+  row-gap: var(--spacing-xs);
 }
 
 .resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="name"],
+  .resource-form-nested-group-field[data-field-key="name"] {
+  flex: 0 0 100%;
+}
+
 .resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="mountPath"] {
+  .resource-form-nested-group-field[data-field-key="mountPath"],
+.resource-form-nested-group-list[data-field-key="volumeMounts"]
+  .resource-form-nested-group-field[data-field-key="readOnly"] {
   flex: 0 0 auto;
 }
 
 .resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field
-  input[data-field-key="name"],
+  .resource-form-nested-group-field[data-field-key="subPath"] {
+  flex: 0 0 100%;
+}
+
+.resource-form-nested-group-list[data-field-key="volumeMounts"]
+  .resource-form-nested-group-field[data-field-key="mountPath"]
+  .resource-form-nested-group-label,
+.resource-form-nested-group-list[data-field-key="volumeMounts"]
+  .resource-form-nested-group-field[data-field-key="subPath"]
+  .resource-form-nested-group-label {
+  min-width: 4rem;
+}
+
+.resource-form-nested-group-list[data-field-key="volumeMounts"]
+  .resource-form-nested-group-field[data-field-key="name"]
+  .resource-form-dropdown,
+.resource-form-nested-group-list[data-field-key="volumeMounts"]
+  .resource-form-nested-group-field[data-field-key="name"]
+  .resource-form-dropdown
+  .dropdown,
+.resource-form-nested-group-list[data-field-key="volumeMounts"]
+  .resource-form-nested-group-field[data-field-key="name"]
+  .resource-form-dropdown
+  .dropdown-trigger,
 .resource-form-nested-group-list[data-field-key="volumeMounts"]
   .resource-form-nested-group-field
   input[data-field-key="mountPath"] {
@@ -612,6 +641,45 @@
   width: calc(25ch + 20px);
   min-width: calc(25ch + 20px);
   max-width: calc(25ch + 20px);
+}
+
+.resource-form-nested-group-list[data-field-key="volumeMounts"]
+  .resource-form-nested-group-field[data-field-key="name"]
+  .resource-form-dropdown
+  .dropdown-menu {
+  width: 100%;
+  min-width: 100%;
+}
+
+.resource-form-volume-mount-subpath-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-volume-mount-subpath-control input[data-field-key="subPath"] {
+  align-self: auto;
+  flex: 0 0 auto;
+  width: calc(25ch + 20px);
+  min-width: calc(25ch + 20px);
+  max-width: calc(25ch + 20px);
+}
+
+.resource-form-volume-mount-subpath-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.resource-form-volume-mount-subpath-toggle input[type="checkbox"],
+.resource-form-checkbox {
+  width: 14px;
+  height: 14px;
 }
 
 .resource-form-nested-group-row-actions {
@@ -669,6 +737,13 @@
 .resource-form-add-btn:active {
   color: var(--color-success);
   background: var(--color-success-bg);
+}
+
+.resource-form-add-btn:disabled {
+  color: var(--color-text-secondary);
+  background: transparent;
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .resource-form-remove-btn {

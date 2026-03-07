@@ -263,6 +263,8 @@ data:
                   fields: [
                     { key: 'name', label: 'Name', path: ['name'], type: 'text' },
                     { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
+                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'text' },
+                    { key: 'subPath', label: 'Sub Path', path: ['subPath'], type: 'text' },
                   ],
                   defaultValue: { name: '', mountPath: '' },
                 },
@@ -353,7 +355,11 @@ spec:
     expect(
       container.querySelector('[data-field-key="volumeMounts"] .resource-form-action-ghost-text')
         ?.textContent
-    ).toBe('Add volume mount');
+    ).toBe('Add a Volume below to enable Volume Mounts');
+    const addVolumeMountsButton = container.querySelector(
+      'button[aria-label="Add Volume Mounts"]'
+    ) as HTMLButtonElement;
+    expect(addVolumeMountsButton.disabled).toBe(true);
   });
 
   it('keeps deployment selectors separate from labels and prevents removing the last selector', async () => {
@@ -762,6 +768,8 @@ spec:
                   fields: [
                     { key: 'name', label: 'Name', path: ['name'], type: 'text' },
                     { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
+                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'text' },
+                    { key: 'subPath', label: 'Sub Path', path: ['subPath'], type: 'text' },
                   ],
                   defaultValue: { name: '', mountPath: '' },
                 },
@@ -793,6 +801,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/data
+      volumes:
+        - name: data
+        - name: cache
 `;
 
     await act(async () => {
@@ -817,9 +828,9 @@ spec:
     const envValueInput = container.querySelector(
       '[data-field-key="env"] input[data-field-key="value"]'
     ) as HTMLInputElement;
-    const mountNameInput = container.querySelector(
-      '[data-field-key="volumeMounts"] input[data-field-key="name"]'
-    ) as HTMLInputElement;
+    const mountNameSelect = container.querySelector(
+      '[data-field-key="volumeMounts"] [data-field-key="name"] select'
+    ) as HTMLSelectElement;
     const mountPathInput = container.querySelector(
       '[data-field-key="volumeMounts"] input[data-field-key="mountPath"]'
     ) as HTMLInputElement;
@@ -839,7 +850,9 @@ spec:
     expect(limitValueInput.value).toBe('256Mi');
     expect(envNameInput.value).toBe('LOG_LEVEL');
     expect(envValueInput.value).toBe('debug');
-    expect(mountNameInput.value).toBe('data');
+    expect(mountNameSelect.value).toBe('data');
+    const mountNameOptions = Array.from(mountNameSelect.options).map((option) => option.value);
+    expect(mountNameOptions).toEqual(['', 'data', 'cache']);
     expect(mountPathInput.value).toBe('/var/data');
     const addPortsButton = container.querySelector(
       'button[aria-label="Add Ports"]'
@@ -856,6 +869,181 @@ spec:
     expect(addEnvVarsButton.querySelector('svg')).not.toBeNull();
     expect(addVolumeMountsButton).not.toBeNull();
     expect(addVolumeMountsButton.querySelector('svg')).not.toBeNull();
+    expect(addVolumeMountsButton.disabled).toBe(false);
+  });
+
+  it('supports volume mount readOnly and subPath/subPathExpr toggle behavior', async () => {
+    const emittedYamls: string[] = [];
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Containers',
+          fields: [
+            {
+              key: 'containers',
+              label: 'Containers',
+              path: ['spec', 'template', 'spec', 'containers'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                {
+                  key: 'volumeMounts',
+                  label: 'Volume Mounts',
+                  path: ['volumeMounts'],
+                  type: 'group-list',
+                  fields: [
+                    { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                    { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
+                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'text' },
+                    { key: 'subPath', label: 'Sub Path', path: ['subPath'], type: 'text' },
+                  ],
+                  defaultValue: { name: '', mountPath: '' },
+                },
+              ],
+              defaultValue: { name: '', volumeMounts: [] },
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          volumeMounts:
+            - name: data
+              mountPath: /var/data
+      volumes:
+        - name: data
+`;
+
+    const Harness = () => {
+      const [yaml, setYaml] = useState(deploymentLikeYaml);
+      return (
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={yaml}
+          onYamlChange={(nextYaml) => {
+            emittedYamls.push(nextYaml);
+            setYaml(nextYaml);
+          }}
+        />
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    const readOnlySelector = '[data-field-key="volumeMounts"] input[data-field-key="readOnly"]';
+    const subPathSelector = '[data-field-key="volumeMounts"] input[data-field-key="subPath"]';
+    const subPathExprToggleSelector =
+      '[data-field-key="volumeMounts"] input[data-field-key="subPathExprToggle"]';
+    expect((container.querySelector(readOnlySelector) as HTMLInputElement).checked).toBe(false);
+    expect((container.querySelector(subPathExprToggleSelector) as HTMLInputElement).checked).toBe(
+      false
+    );
+
+    await act(async () => {
+      const readOnlyCheckbox = container.querySelector(readOnlySelector) as HTMLInputElement;
+      readOnlyCheckbox.click();
+    });
+    await act(async () => {
+      const subPathInput = container.querySelector(subPathSelector) as HTMLInputElement;
+      setNativeInputValue(subPathInput, 'logs');
+      subPathInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      const subPathExprToggle = container.querySelector(
+        subPathExprToggleSelector
+      ) as HTMLInputElement;
+      subPathExprToggle.click();
+    });
+
+    const yamlWithExpr = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedWithExpr = YAML.parse(yamlWithExpr) as {
+      spec?: {
+        template?: {
+          spec?: {
+            containers?: Array<{
+              volumeMounts?: Array<{
+                readOnly?: boolean;
+                subPath?: string;
+                subPathExpr?: string;
+              }>;
+            }>;
+          };
+        };
+      };
+    };
+    const mountWithExpr = parsedWithExpr.spec?.template?.spec?.containers?.[0]?.volumeMounts?.[0];
+    expect(mountWithExpr?.readOnly).toBe(true);
+    expect(mountWithExpr?.subPath).toBeUndefined();
+    expect(mountWithExpr?.subPathExpr).toBe('logs');
+
+    await act(async () => {
+      const subPathExprToggle = container.querySelector(
+        subPathExprToggleSelector
+      ) as HTMLInputElement;
+      subPathExprToggle.click();
+    });
+
+    const yamlWithSubPath = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedWithSubPath = YAML.parse(yamlWithSubPath) as {
+      spec?: {
+        template?: {
+          spec?: {
+            containers?: Array<{
+              volumeMounts?: Array<{
+                readOnly?: boolean;
+                subPath?: string;
+                subPathExpr?: string;
+              }>;
+            }>;
+          };
+        };
+      };
+    };
+    const mountWithSubPath =
+      parsedWithSubPath.spec?.template?.spec?.containers?.[0]?.volumeMounts?.[0];
+    expect(mountWithSubPath?.readOnly).toBe(true);
+    expect(mountWithSubPath?.subPath).toBe('logs');
+    expect(mountWithSubPath?.subPathExpr).toBeUndefined();
+
+    await act(async () => {
+      const readOnlyCheckbox = container.querySelector(readOnlySelector) as HTMLInputElement;
+      const subPathInput = container.querySelector(subPathSelector) as HTMLInputElement;
+      readOnlyCheckbox.click();
+      setNativeInputValue(subPathInput, '');
+      subPathInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const yamlWithoutOptionalValues = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedWithoutOptionalValues = YAML.parse(yamlWithoutOptionalValues) as {
+      spec?: {
+        template?: {
+          spec?: {
+            containers?: Array<{
+              volumeMounts?: Array<{
+                readOnly?: boolean;
+                subPath?: string;
+                subPathExpr?: string;
+              }>;
+            }>;
+          };
+        };
+      };
+    };
+    const mountWithoutOptionalValues =
+      parsedWithoutOptionalValues.spec?.template?.spec?.containers?.[0]?.volumeMounts?.[0];
+    expect(mountWithoutOptionalValues?.readOnly).toBeUndefined();
+    expect(mountWithoutOptionalValues?.subPath).toBeUndefined();
+    expect(mountWithoutOptionalValues?.subPathExpr).toBeUndefined();
   });
 
   it('removes empty protocol option and defaults protocol to TCP when missing', async () => {
@@ -998,6 +1186,8 @@ spec:
                   fields: [
                     { key: 'name', label: 'Name', path: ['name'], type: 'text' },
                     { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
+                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'text' },
+                    { key: 'subPath', label: 'Sub Path', path: ['subPath'], type: 'text' },
                   ],
                   defaultValue: { name: '', mountPath: '' },
                 },
@@ -1018,6 +1208,8 @@ spec:
           ports: []
           env: []
           volumeMounts: []
+      volumes:
+        - name: data
 `;
 
     await act(async () => {

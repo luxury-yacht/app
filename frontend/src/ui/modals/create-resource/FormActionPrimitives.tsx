@@ -9,6 +9,7 @@ interface FormIconActionButtonProps {
   onClick?: () => void;
   hidden?: boolean;
   placeholder?: boolean;
+  disabled?: boolean;
   className?: string;
 }
 
@@ -25,6 +26,7 @@ interface FormEmptyActionRowProps {
   addLabel: string;
   removeLabel?: string;
   onAdd: () => void;
+  addDisabled?: boolean;
   ghostText?: string | null;
   includeRemovePlaceholder?: boolean;
 }
@@ -38,13 +40,14 @@ export function FormIconActionButton({
   onClick,
   hidden = false,
   placeholder = false,
+  disabled = false,
   className,
 }: FormIconActionButtonProps): React.ReactElement {
   const variantClass = variant === 'add' ? 'resource-form-add-btn' : 'resource-form-remove-btn';
   const hiddenClass = hidden ? ' resource-form-icon-btn--hidden' : '';
   const extraClass = className ? ` ${className}` : '';
   const resolvedClassName = `${variantClass} resource-form-icon-btn${hiddenClass}${extraClass}`;
-  const inactive = hidden || placeholder;
+  const inactive = hidden || placeholder || disabled;
   const resolvedLabel = placeholder ? undefined : label;
 
   return (
@@ -87,6 +90,7 @@ export function FormEmptyActionRow({
   addLabel,
   removeLabel,
   onAdd,
+  addDisabled = false,
   ghostText,
   includeRemovePlaceholder = true,
 }: FormEmptyActionRowProps): React.ReactElement {
@@ -97,7 +101,12 @@ export function FormEmptyActionRow({
     <div className={rowClassName}>
       {spacerClassName ? <div className={spacerClassName} /> : null}
       <div className={`${actionsClassName}${actionsAlignmentClass}`}>
-        <FormIconActionButton variant="add" label={addLabel} onClick={onAdd} />
+        <FormIconActionButton
+          variant="add"
+          label={addLabel}
+          onClick={onAdd}
+          disabled={addDisabled}
+        />
         <FormGhostAddText text={ghostText} />
         {includeRemovePlaceholder ? (
           <FormIconActionButton variant="remove" label={resolvedRemoveLabel} hidden placeholder />

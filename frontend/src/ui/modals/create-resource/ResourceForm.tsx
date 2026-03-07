@@ -1025,6 +1025,17 @@ function GroupListField({
   const isVolumeGroup = field.key === 'volumes';
   const usesContainerGroupStyling = isContainerGroup || isVolumeGroup;
   const [resourceFieldsVisible, setResourceFieldsVisible] = useState<Record<string, boolean>>({});
+  const availableVolumeNames = useMemo(() => {
+    const templateVolumes = getFieldValue(yamlContent, ['spec', 'template', 'spec', 'volumes']);
+    if (!Array.isArray(templateVolumes)) return [] as string[];
+    const names = new Set<string>();
+    for (const volume of templateVolumes) {
+      if (!volume || typeof volume !== 'object' || Array.isArray(volume)) continue;
+      const name = String((volume as Record<string, unknown>).name ?? '').trim();
+      if (name) names.add(name);
+    }
+    return Array.from(names);
+  }, [yamlContent]);
 
   /** Write the full updated array back to the YAML at the group-list's path. */
   const updateItems = useCallback(
@@ -1766,6 +1777,8 @@ function GroupListField({
       case 'group-list': {
         const nestedItems = Array.isArray(subValue) ? (subValue as Record<string, unknown>[]) : [];
         const nestedTerminalPath = subField.path[subField.path.length - 1];
+        const isVolumeMountsList = nestedTerminalPath === 'volumeMounts';
+        const disableVolumeMountAdd = isVolumeMountsList && availableVolumeNames.length === 0;
         const leftAlignNestedEmptyActions =
           nestedTerminalPath === 'ports' ||
           nestedTerminalPath === 'env' ||
@@ -1776,7 +1789,9 @@ function GroupListField({
             : nestedTerminalPath === 'env'
               ? 'Add env var'
               : nestedTerminalPath === 'volumeMounts'
-                ? 'Add volume mount'
+                ? disableVolumeMountAdd
+                  ? 'Add a Volume below to enable Volume Mounts'
+                  : 'Add volume mount'
                 : null;
 
         /** Write an updated nested list back into the parent item. */
@@ -1807,8 +1822,19 @@ function GroupListField({
 
         /** Add a nested row using the nested defaultValue. */
         const handleNestedAdd = () => {
+          if (disableVolumeMountAdd) return;
           const defaultItem = (subField.defaultValue ?? {}) as Record<string, unknown>;
           updateNestedItems([...nestedItems, { ...defaultItem }]);
+        };
+
+        const updateNestedItem = (
+          nestedIndex: number,
+          updater: (nestedItem: Record<string, unknown>) => Record<string, unknown>
+        ) => {
+          const updated = nestedItems.map((nestedItem, i) =>
+            i === nestedIndex ? updater(nestedItem) : nestedItem
+          );
+          updateNestedItems(updated);
         };
 
         /** Render a nested leaf input inside the nested group-list. */
@@ -1819,6 +1845,117 @@ function GroupListField({
         ): React.ReactNode => {
           const nestedValue = getNestedValue(nestedItem, nestedField.path);
           const nestedStringValue = nestedValue != null ? String(nestedValue) : '';
+
+          if (isVolumeMountsList && nestedField.key === 'name') {
+            const options: DropdownOption[] = [
+              { value: '', label: '-----' },
+              ...availableVolumeNames.map((name) => ({ value: name, label: name })),
+            ];
+            if (
+              nestedStringValue.trim() !== '' &&
+              !options.some((option) => option.value === nestedStringValue)
+            ) {
+              options.push({ value: nestedStringValue, label: nestedStringValue });
+            }
+            return (
+              <div data-field-key={nestedField.key} className="resource-form-dropdown">
+                <Dropdown
+                  options={options}
+                  value={nestedStringValue}
+                  onChange={(nextValue) => {
+                    const normalized = Array.isArray(nextValue) ? (nextValue[0] ?? '') : nextValue;
+                    handleNestedFieldChange(nestedIndex, nestedField, normalized);
+                  }}
+                  ariaLabel={nestedField.label}
+                />
+              </div>
+            );
+          }
+
+          if (isVolumeMountsList && nestedField.key === 'readOnly') {
+            const checked = getNestedValue(nestedItem, ['readOnly']) === true;
+            const handleReadOnlyChange = (nextChecked: boolean) => {
+              updateNestedItem(nestedIndex, (currentNestedItem) => {
+                if (nextChecked) {
+                  return setNestedValue(currentNestedItem, ['readOnly'], true);
+                }
+                return unsetNestedValue(currentNestedItem, ['readOnly']);
+              });
+            };
+            return (
+              <input
+                type="checkbox"
+                className="resource-form-checkbox"
+                data-field-key="readOnly"
+                checked={checked}
+                onChange={(event) => handleReadOnlyChange(event.target.checked)}
+                onClick={(event) =>
+                  handleReadOnlyChange((event.currentTarget as HTMLInputElement).checked)
+                }
+              />
+            );
+          }
+
+          if (isVolumeMountsList && nestedField.key === 'subPath') {
+            const usesSubPathExpr = getNestedValue(nestedItem, ['subPathExpr']) !== undefined;
+            const pathKey = usesSubPathExpr ? 'subPathExpr' : 'subPath';
+            const pathValue = String(getNestedValue(nestedItem, [pathKey]) ?? '');
+            const handleSubPathExprToggle = (nextUsesSubPathExpr: boolean) => {
+              updateNestedItem(nestedIndex, (currentNestedItem) => {
+                const currentSubPath = String(getNestedValue(currentNestedItem, ['subPath']) ?? '');
+                const currentSubPathExpr = String(
+                  getNestedValue(currentNestedItem, ['subPathExpr']) ?? ''
+                );
+                const nextValue = nextUsesSubPathExpr ? currentSubPath : currentSubPathExpr;
+                let nextNestedItem = unsetNestedValue(currentNestedItem, ['subPath']);
+                nextNestedItem = unsetNestedValue(nextNestedItem, ['subPathExpr']);
+                if (nextValue.trim() === '') {
+                  return nextNestedItem;
+                }
+                return setNestedValue(
+                  nextNestedItem,
+                  [nextUsesSubPathExpr ? 'subPathExpr' : 'subPath'],
+                  nextValue
+                );
+              });
+            };
+
+            return (
+              <div className="resource-form-volume-mount-subpath-control">
+                <input
+                  type="text"
+                  className="resource-form-input"
+                  data-field-key="subPath"
+                  value={pathValue}
+                  placeholder={nestedField.placeholder}
+                  {...INPUT_BEHAVIOR_PROPS}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    updateNestedItem(nestedIndex, (currentNestedItem) => {
+                      let nextNestedItem = unsetNestedValue(currentNestedItem, ['subPath']);
+                      nextNestedItem = unsetNestedValue(nextNestedItem, ['subPathExpr']);
+                      if (nextValue.trim() === '') {
+                        return nextNestedItem;
+                      }
+                      return setNestedValue(nextNestedItem, [pathKey], nextValue);
+                    });
+                  }}
+                />
+                <label className="resource-form-volume-mount-subpath-toggle">
+                  <input
+                    type="checkbox"
+                    data-field-key="subPathExprToggle"
+                    checked={usesSubPathExpr}
+                    onChange={(event) => handleSubPathExprToggle(event.target.checked)}
+                    onClick={(event) =>
+                      handleSubPathExprToggle((event.currentTarget as HTMLInputElement).checked)
+                    }
+                  />
+                  <span>Expr</span>
+                </label>
+              </div>
+            );
+          }
 
           switch (nestedField.type) {
             case 'text':
@@ -1903,6 +2040,7 @@ function GroupListField({
             onRemove={handleNestedRemove}
             leftAlignEmptyStateActions={leftAlignNestedEmptyActions}
             addGhostText={nestedAddGhostText}
+            addDisabled={disableVolumeMountAdd}
             renderFields={(nestedItem, nestedIndex) => (
               <>
                 {subField.fields?.map((nestedField) => (
