@@ -296,7 +296,12 @@ data:
                   fields: [
                     { key: 'name', label: 'Name', path: ['name'], type: 'select' },
                     { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
-                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'boolean-toggle' },
+                    {
+                      key: 'readOnly',
+                      label: 'Read Only',
+                      path: ['readOnly'],
+                      type: 'boolean-toggle',
+                    },
                     {
                       key: 'subPath',
                       label: 'Sub Path',
@@ -817,7 +822,12 @@ spec:
                       dynamicOptionsField: 'name',
                     },
                     { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
-                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'boolean-toggle' },
+                    {
+                      key: 'readOnly',
+                      label: 'Read Only',
+                      path: ['readOnly'],
+                      type: 'boolean-toggle',
+                    },
                     {
                       key: 'subPath',
                       label: 'Sub Path',
@@ -952,7 +962,12 @@ spec:
                   fields: [
                     { key: 'name', label: 'Name', path: ['name'], type: 'text' },
                     { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
-                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'boolean-toggle' },
+                    {
+                      key: 'readOnly',
+                      label: 'Read Only',
+                      path: ['readOnly'],
+                      type: 'boolean-toggle',
+                    },
                     {
                       key: 'subPath',
                       label: 'Sub Path',

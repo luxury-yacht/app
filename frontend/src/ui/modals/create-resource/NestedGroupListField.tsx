@@ -84,8 +84,7 @@ export function NestedGroupListField({
   // Disable adding nested items when a dynamic-options field has no available options.
   const dynamicField = subField.fields?.find((f) => f.dynamicOptionsPath);
   const disableAdd =
-    dynamicField !== undefined &&
-    resolveDynamicOptions(dynamicField, '', yamlContent).length <= 1;
+    dynamicField !== undefined && resolveDynamicOptions(dynamicField, '', yamlContent).length <= 1;
   const leftAlignNestedEmptyActions = subField.leftAlignEmptyActions === true;
   const nestedAddGhostText = disableAdd
     ? (subField.disabledGhostText ?? null)
@@ -332,9 +331,7 @@ export function NestedGroupListField({
                   <label
                     className="resource-form-field-label"
                     style={
-                      nestedField.labelWidth
-                        ? { minWidth: nestedField.labelWidth }
-                        : undefined
+                      nestedField.labelWidth ? { minWidth: nestedField.labelWidth } : undefined
                     }
                   >
                     {nestedField.label}

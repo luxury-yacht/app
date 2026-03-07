@@ -684,7 +684,11 @@ function GroupListField({
         );
       case 'select':
         return (
-          <div data-field-key={subField.key} className="resource-form-dropdown" style={fixedWidthStyle(subField)}>
+          <div
+            data-field-key={subField.key}
+            className="resource-form-dropdown"
+            style={fixedWidthStyle(subField)}
+          >
             <Dropdown
               options={buildSelectOptions(subField)}
               value={getSelectFieldValue(subField, stringValue)}

@@ -406,7 +406,6 @@
   max-width: 16rem;
 }
 
-
 /* Container resources editor rows inside a container card. */
 .resource-form-container-resources {
   flex: 1;
@@ -454,8 +453,6 @@
   display: inline-flex;
   align-items: center;
 }
-
-
 
 .resource-form-volume-mount-subpath-control {
   display: inline-flex;

@@ -366,10 +366,16 @@ export function FormVolumeSourceField({
       : [];
 
   const configMapHandlers = makeSourceItemsHandlers(
-    'configMap', ['configMap', 'items'], configMapItems, updateItem
+    'configMap',
+    ['configMap', 'items'],
+    configMapItems,
+    updateItem
   );
   const secretHandlers = makeSourceItemsHandlers(
-    'secret', ['secret', 'items'], secretItems, updateItem
+    'secret',
+    ['secret', 'items'],
+    secretItems,
+    updateItem
   );
 
   // ── Source type change handler ──────────────────────────────────────
@@ -419,18 +425,12 @@ export function FormVolumeSourceField({
 
   // ── Extra field change handler ──────────────────────────────────────
 
-  const handleExtraFieldChange = (
-    extraField: FormFieldDefinition,
-    nextValue: unknown
-  ) => {
+  const handleExtraFieldChange = (extraField: FormFieldDefinition, nextValue: unknown) => {
     updateItem((currentItem) => {
       let nextItem = clearOtherVolumeSources(currentItem, effectiveSource.key);
       nextItem = ensureVolumeSourceRoot(nextItem, effectiveSource.key);
       const unsetExtraField = () => {
-        if (
-          effectiveSource.key === 'hostPath' &&
-          extraField.path.join('.') === 'hostPath.path'
-        ) {
+        if (effectiveSource.key === 'hostPath' && extraField.path.join('.') === 'hostPath.path') {
           return setNestedValue(nextItem, ['hostPath', 'path'], '');
         }
         if (
@@ -439,10 +439,7 @@ export function FormVolumeSourceField({
         ) {
           return setNestedValue(nextItem, ['persistentVolumeClaim', 'claimName'], '');
         }
-        if (
-          effectiveSource.key === 'secret' &&
-          extraField.path.join('.') === 'secret.secretName'
-        ) {
+        if (effectiveSource.key === 'secret' && extraField.path.join('.') === 'secret.secretName') {
           return setNestedValue(nextItem, ['secret', 'secretName'], '');
         }
         const removed = unsetNestedValue(nextItem, extraField.path);
@@ -487,14 +484,15 @@ export function FormVolumeSourceField({
       >
         <span className="resource-form-field-label">{extraField.label}</span>
         {extraField.type === 'select' ? (
-          <div className="resource-form-volume-source-extra-dropdown" style={fixedWidthStyle(extraField)}>
+          <div
+            className="resource-form-volume-source-extra-dropdown"
+            style={fixedWidthStyle(extraField)}
+          >
             <Dropdown
               options={extraField.options ?? []}
               value={stringExtraValue}
               onChange={(nextValue) => {
-                const normalized = Array.isArray(nextValue)
-                  ? (nextValue[0] ?? '')
-                  : nextValue;
+                const normalized = Array.isArray(nextValue) ? (nextValue[0] ?? '') : nextValue;
                 handleExtraFieldChange(extraField, normalized);
               }}
               ariaLabel={extraField.label}
@@ -503,7 +501,11 @@ export function FormVolumeSourceField({
         ) : extraField.type === 'tri-state-boolean' ? (
           <FormTriStateBooleanDropdown
             className="resource-form-volume-source-extra-dropdown"
-            style={extraField.dropdownWidth ? fixedWidthStyle({ inputWidth: extraField.dropdownWidth }) : undefined}
+            style={
+              extraField.dropdownWidth
+                ? fixedWidthStyle({ inputWidth: extraField.dropdownWidth })
+                : undefined
+            }
             value={resolvedExtraValue}
             emptyLabel={extraField.emptyLabel}
             trueLabel={extraField.trueLabel}

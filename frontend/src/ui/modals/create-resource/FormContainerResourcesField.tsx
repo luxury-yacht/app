@@ -70,16 +70,14 @@ export function FormContainerResourcesField({
     <div data-field-key={dataFieldKey} className="resource-form-container-resources">
       {RESOURCE_FIELD_ROWS.map((row, rowIndex) => (
         <div key={row.key} className="resource-form-container-resources-row">
-          <span className="resource-form-field-label resource-form-container-resources-row-label">{row.label}</span>
+          <span className="resource-form-field-label resource-form-container-resources-row-label">
+            {row.label}
+          </span>
           {row.fields.map((resourceField) => {
-            const value = resources
-              ? getNestedValue(resources, resourceField.path)
-              : undefined;
+            const value = resources ? getNestedValue(resources, resourceField.path) : undefined;
             return (
               <div key={resourceField.key} className="resource-form-container-resources-metric">
-                <label className="resource-form-field-label">
-                  {resourceField.label}
-                </label>
+                <label className="resource-form-field-label">{resourceField.label}</label>
                 <input
                   type="text"
                   className="resource-form-input"

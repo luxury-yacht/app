@@ -46,9 +46,8 @@ export function FormNestedListField<TItem>({
           ...(wrapFields ? { flexWrap: 'wrap', rowGap: 'var(--spacing-xs)' } : undefined),
         }
       : undefined;
-  const rowStyle: React.CSSProperties | undefined = rowAlign === 'start'
-    ? { alignItems: 'flex-start' }
-    : undefined;
+  const rowStyle: React.CSSProperties | undefined =
+    rowAlign === 'start' ? { alignItems: 'flex-start' } : undefined;
 
   return (
     <div data-field-key={dataFieldKey} className="resource-form-nested-group-list">
