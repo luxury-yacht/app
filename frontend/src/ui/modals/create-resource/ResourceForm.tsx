@@ -143,7 +143,7 @@ function toMapEntries(value: unknown): [string, string][] {
 function buildSelectOptions(field: FormFieldDefinition): DropdownOption[] {
   const includeEmptyOption = field.key !== 'protocol';
   return [
-    ...(includeEmptyOption ? [{ value: '', label: '-- Select --' }] : []),
+    ...(includeEmptyOption ? [{ value: '', label: '-----' }] : []),
     ...(field.options?.map((opt) => ({
       value: opt.value,
       label: opt.label,
@@ -318,13 +318,21 @@ const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraField
   ],
   pvc: [
     {
+      key: 'claimName',
+      label: 'Claim',
+      path: ['persistentVolumeClaim', 'claimName'],
+      type: 'text',
+      placeholder: 'pvc-name',
+      required: true,
+    },
+    {
       key: 'readOnly',
       label: 'Read Only',
       path: ['persistentVolumeClaim', 'readOnly'],
       type: 'tri-state-boolean',
-      emptyLabel: '-- Select --',
-      trueLabel: 'True',
-      falseLabel: 'False',
+      emptyLabel: '-----',
+      trueLabel: 'true',
+      falseLabel: 'false',
     },
   ],
   secret: [
@@ -1206,6 +1214,9 @@ function GroupListField({
             if (selectedDefinition.key === 'hostPath') {
               return setNestedValue(withSourceRoot, ['hostPath', 'path'], '');
             }
+            if (selectedDefinition.key === 'pvc') {
+              return setNestedValue(withSourceRoot, ['persistentVolumeClaim', 'claimName'], '');
+            }
             return withSourceRoot;
           });
           updateItems(updatedItems);
@@ -1241,6 +1252,12 @@ function GroupListField({
                 extraField.path.join('.') === 'hostPath.path'
               ) {
                 return setNestedValue(nextItem, ['hostPath', 'path'], '');
+              }
+              if (
+                effectiveSource.key === 'pvc' &&
+                extraField.path.join('.') === 'persistentVolumeClaim.claimName'
+              ) {
+                return setNestedValue(nextItem, ['persistentVolumeClaim', 'claimName'], '');
               }
               const removed = unsetNestedValue(nextItem, extraField.path);
               return effectiveSource.key === 'emptyDir'
@@ -1394,7 +1411,8 @@ function GroupListField({
               </div>
               {!isConfigMapSource &&
                 effectiveSource.key !== 'emptyDir' &&
-                effectiveSource.key !== 'hostPath' && (
+                effectiveSource.key !== 'hostPath' &&
+                effectiveSource.key !== 'pvc' && (
                   <input
                     type="text"
                     className="resource-form-input"

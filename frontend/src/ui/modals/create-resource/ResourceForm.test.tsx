@@ -1230,18 +1230,31 @@ spec:
       sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    const pvcSourceInput = container.querySelector(
-      '[data-field-key="source"] input'
+    expect(container.querySelector('.resource-form-volume-source > input')).toBeNull();
+    const pvcSourceExtras = container.querySelector(
+      '.resource-form-volume-source-extra'
+    ) as HTMLDivElement;
+    const pvcClaimInput = container.querySelector(
+      '[data-field-key="claimName"] input'
     ) as HTMLInputElement;
     const readOnlyDropdown = container.querySelector(
       '[data-testid="dropdown-Read Only"]'
     ) as HTMLSelectElement;
+    const claimLabel = container.querySelector(
+      '[data-field-key="claimName"] .resource-form-nested-group-label'
+    ) as HTMLSpanElement;
+    expect(pvcSourceExtras).not.toBeNull();
+    expect(pvcClaimInput).not.toBeNull();
+    expect(pvcClaimInput.required).toBe(true);
     expect(readOnlyDropdown).not.toBeNull();
+    expect(claimLabel.textContent).toBe('Claim');
+    expect(pvcSourceExtras.contains(pvcClaimInput)).toBe(true);
+    expect(pvcSourceExtras.contains(readOnlyDropdown)).toBe(true);
     expect(container.querySelector('[data-testid="dropdown-Optional"]')).toBeNull();
 
     await act(async () => {
-      setNativeInputValue(pvcSourceInput, 'shared-data');
-      pvcSourceInput.dispatchEvent(new Event('input', { bubbles: true }));
+      setNativeInputValue(pvcClaimInput, 'shared-data');
+      pvcClaimInput.dispatchEvent(new Event('input', { bubbles: true }));
       readOnlyDropdown.value = 'true';
       readOnlyDropdown.dispatchEvent(new Event('change', { bubbles: true }));
     });
