@@ -26,6 +26,7 @@ export interface FormFieldDefinition {
     | 'text'
     | 'number'
     | 'select'
+    | 'namespace-select'
     | 'textarea'
     | 'key-value-list'
     | 'selector-list'
@@ -82,6 +83,12 @@ const deploymentDefinition: ResourceFormDefinition = {
           path: ['metadata', 'name'],
           type: 'text',
           placeholder: 'deployment-name',
+        },
+        {
+          key: 'namespace',
+          label: 'Namespace',
+          path: ['metadata', 'namespace'],
+          type: 'namespace-select',
         },
         {
           key: 'replicas',
@@ -256,6 +263,12 @@ const serviceDefinition: ResourceFormDefinition = {
           placeholder: 'service-name',
         },
         {
+          key: 'namespace',
+          label: 'Namespace',
+          path: ['metadata', 'namespace'],
+          type: 'namespace-select',
+        },
+        {
           key: 'annotations',
           label: 'Annotations',
           path: ['metadata', 'annotations'],
@@ -332,6 +345,12 @@ const configMapDefinition: ResourceFormDefinition = {
           placeholder: 'configmap-name',
         },
         {
+          key: 'namespace',
+          label: 'Namespace',
+          path: ['metadata', 'namespace'],
+          type: 'namespace-select',
+        },
+        {
           key: 'annotations',
           label: 'Annotations',
           path: ['metadata', 'annotations'],
@@ -358,6 +377,12 @@ const secretDefinition: ResourceFormDefinition = {
           path: ['metadata', 'name'],
           type: 'text',
           placeholder: 'secret-name',
+        },
+        {
+          key: 'namespace',
+          label: 'Namespace',
+          path: ['metadata', 'namespace'],
+          type: 'namespace-select',
         },
         {
           key: 'annotations',
@@ -400,6 +425,12 @@ const jobDefinition: ResourceFormDefinition = {
           path: ['metadata', 'name'],
           type: 'text',
           placeholder: 'job-name',
+        },
+        {
+          key: 'namespace',
+          label: 'Namespace',
+          path: ['metadata', 'namespace'],
+          type: 'namespace-select',
         },
         {
           key: 'annotations',
@@ -482,6 +513,12 @@ const cronJobDefinition: ResourceFormDefinition = {
           path: ['metadata', 'name'],
           type: 'text',
           placeholder: 'cronjob-name',
+        },
+        {
+          key: 'namespace',
+          label: 'Namespace',
+          path: ['metadata', 'namespace'],
+          type: 'namespace-select',
         },
         {
           key: 'annotations',
@@ -571,6 +608,12 @@ const ingressDefinition: ResourceFormDefinition = {
           path: ['metadata', 'name'],
           type: 'text',
           placeholder: 'ingress-name',
+        },
+        {
+          key: 'namespace',
+          label: 'Namespace',
+          path: ['metadata', 'namespace'],
+          type: 'namespace-select',
         },
         {
           key: 'annotations',

@@ -113,6 +113,28 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
     const defaultNamespace = isAllNamespaces(activeNamespace) ? '' : (activeNamespace ?? '');
     const [selectedNamespace, setSelectedNamespace] = useState(defaultNamespace);
 
+    const extractNamespaceFromYaml = useCallback((content: string): string | null => {
+      try {
+        const doc = YAML.parseDocument(content);
+        if (doc.errors.length > 0) return null;
+        const namespace = doc.getIn(['metadata', 'namespace']);
+        return typeof namespace === 'string' ? namespace : '';
+      } catch {
+        return null;
+      }
+    }, []);
+
+    const applyNamespaceToYaml = useCallback((content: string, namespace: string): string => {
+      try {
+        const doc = YAML.parseDocument(content);
+        if (doc.errors.length > 0) return content;
+        doc.setIn(['metadata', 'namespace'], namespace);
+        return doc.toString();
+      } catch {
+        return content;
+      }
+    }, []);
+
     // Reset namespace when target cluster changes — the previous namespace
     // may not exist in the new cluster.
     const prevTargetClusterRef = useRef(targetClusterId);
@@ -120,8 +142,9 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       if (prevTargetClusterRef.current !== targetClusterId) {
         prevTargetClusterRef.current = targetClusterId;
         setSelectedNamespace('');
+        setYamlContent((previousYaml) => applyNamespaceToYaml(previousYaml, ''));
       }
-    }, [targetClusterId]);
+    }, [applyNamespaceToYaml, targetClusterId]);
 
     // Client-side YAML parse error.
     const [parseError, setParseError] = useState<string | null>(null);
@@ -193,13 +216,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
             if (!defaultTemplate) return;
 
             setSelectedTemplate(defaultTemplate.name);
-            let templateYaml = defaultTemplate.yaml;
-            if (initialNamespace) {
-              templateYaml = templateYaml.replace(
-                /namespace:\s*my-namespace/,
-                `namespace: ${initialNamespace}`
-              );
-            }
+            const templateYaml = applyNamespaceToYaml(defaultTemplate.yaml, initialNamespace);
             const def = getFormDefinition(defaultTemplate.kind ?? '');
             setYamlContent(templateYaml);
             setActiveView(def ? 'form' : 'yaml');
@@ -213,7 +230,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         }, 200);
         return () => clearTimeout(timer);
       }
-    }, [isOpen, shouldRender, activeNamespace, selectedClusterId]);
+    }, [isOpen, shouldRender, activeNamespace, selectedClusterId, applyNamespaceToYaml]);
 
     // Handle keyboard context and body overflow.
     useEffect(() => {
@@ -311,21 +328,15 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         const template = availableTemplates.find((t) => t.name === templateName);
         if (!template) return;
 
-        // Replace the namespace placeholder with the selected namespace.
-        let templateYaml = template.yaml;
-        if (selectedNamespace) {
-          templateYaml = templateYaml.replace(
-            /namespace:\s*my-namespace/,
-            `namespace: ${selectedNamespace}`
-          );
-        }
+        // Keep the selected namespace when changing kinds.
+        const templateYaml = applyNamespaceToYaml(template.yaml, selectedNamespace);
         const def = getFormDefinition(template?.kind ?? '');
         setYamlContent(templateYaml);
 
         // Switch to form view if the template has a form definition.
         setActiveView(def ? 'form' : 'yaml');
       },
-      [availableTemplates, selectedNamespace]
+      [availableTemplates, selectedNamespace, applyNamespaceToYaml]
     );
 
     // Template dropdown options — disabled category headers + template entries.
@@ -360,12 +371,19 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
     }, [availableTemplates, selectedTemplate]);
 
     // Clear validation state when YAML changes.
-    const handleYamlChange = useCallback((value: string) => {
-      setYamlContent(value);
-      setValidationSuccess(null);
-      setValidationError(null);
-      setRawError(null);
-    }, []);
+    const handleYamlChange = useCallback(
+      (value: string) => {
+        setYamlContent(value);
+        const parsedNamespace = extractNamespaceFromYaml(value);
+        if (parsedNamespace !== null) {
+          setSelectedNamespace(parsedNamespace);
+        }
+        setValidationSuccess(null);
+        setValidationError(null);
+        setRawError(null);
+      },
+      [extractNamespaceFromYaml]
+    );
 
     // Shared error handling for validate/create responses.
     const handleBackendError = useCallback((err: unknown) => {
@@ -387,11 +405,12 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       setValidationSuccess(null);
       setValidationError(null);
       setRawError(null);
+      const requestNamespace = extractNamespaceFromYaml(yamlContent) ?? selectedNamespace;
 
       try {
         const resp = await ValidateResourceCreation(targetClusterId, {
           yaml: yamlContent,
-          namespace: selectedNamespace,
+          namespace: requestNamespace,
         });
         setValidationSuccess(
           `Validation passed: ${resp.kind}/${resp.name}` +
@@ -402,7 +421,13 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       } finally {
         setIsValidating(false);
       }
-    }, [targetClusterId, yamlContent, selectedNamespace, handleBackendError]);
+    }, [
+      targetClusterId,
+      yamlContent,
+      selectedNamespace,
+      extractNamespaceFromYaml,
+      handleBackendError,
+    ]);
 
     // Create button handler.
     const handleCreate = useCallback(async () => {
@@ -411,6 +436,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       // Capture cluster context before async call for multi-cluster safety.
       const capturedClusterId = targetClusterId;
       const capturedClusterName = targetClusterName || targetClusterId;
+      const requestNamespace = extractNamespaceFromYaml(yamlContent) ?? selectedNamespace;
 
       setIsCreating(true);
       setValidationSuccess(null);
@@ -420,7 +446,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       try {
         const resp = await CreateResource(capturedClusterId, {
           yaml: yamlContent,
-          namespace: selectedNamespace,
+          namespace: requestNamespace,
         });
 
         // 1. Open the new object in the Object Panel with pinned cluster context.
@@ -458,6 +484,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       targetClusterName,
       yamlContent,
       selectedNamespace,
+      extractNamespaceFromYaml,
       openWithObject,
       onClose,
       addError,
@@ -492,7 +519,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
             <div className="modal-content create-resource-content">
               {hasCluster ? (
                 <>
-                  {/* Context bar: cluster, namespace, and kind dropdowns */}
+                  {/* Context bar: cluster and kind dropdowns */}
                   <div className="create-resource-context-bar">
                     <div className="create-resource-dropdown-field">
                       <span className="create-resource-dropdown-label">Cluster</span>
@@ -503,17 +530,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                         placeholder="Select cluster"
                         size="compact"
                         ariaLabel="Target cluster"
-                      />
-                    </div>
-                    <div className="create-resource-dropdown-field">
-                      <span className="create-resource-dropdown-label">Namespace</span>
-                      <Dropdown
-                        options={namespaceOptions}
-                        value={selectedNamespace}
-                        onChange={(v) => setSelectedNamespace(Array.isArray(v) ? (v[0] ?? '') : v)}
-                        placeholder="Select namespace"
-                        size="compact"
-                        ariaLabel="Target namespace"
                       />
                     </div>
                     <div className="create-resource-dropdown-field">
@@ -545,6 +561,8 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                         definition={formDefinition}
                         yamlContent={yamlContent}
                         onYamlChange={handleYamlChange}
+                        namespaceOptions={namespaceOptions}
+                        onNamespaceChange={setSelectedNamespace}
                       />
                     </div>
                   ) : (

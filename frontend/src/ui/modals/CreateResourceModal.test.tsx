@@ -133,10 +133,14 @@ vi.mock('./create-resource/ResourceForm', () => ({
   ResourceForm: ({
     yamlContent,
     onYamlChange,
+    namespaceOptions = [],
+    onNamespaceChange,
   }: {
     yamlContent: string;
     onYamlChange: (v: string) => void;
     definition: unknown;
+    namespaceOptions?: Array<{ value: string; label: string }>;
+    onNamespaceChange?: (namespace: string) => void;
   }) => {
     // Use a ref-based native event listener so that dispatching a native
     // 'change' event from tests correctly invokes onYamlChange.
@@ -173,6 +177,37 @@ vi.mock('./create-resource/ResourceForm', () => ({
           data-testid="form-name-input"
           defaultValue="mock-form"
         />
+        <select
+          data-testid="dropdown-Form namespace"
+          value={(() => {
+            try {
+              const parsed = YAML.parse(yamlContent) as {
+                metadata?: { namespace?: string | null };
+              };
+              return parsed.metadata?.namespace ?? '';
+            } catch {
+              return '';
+            }
+          })()}
+          onChange={(event) => {
+            const nextNamespace = event.target.value;
+            try {
+              const doc = YAML.parseDocument(yamlContent);
+              doc.setIn(['metadata', 'namespace'], nextNamespace);
+              onYamlChange(doc.toString());
+            } catch {
+              onYamlChange(yamlContent);
+            }
+            onNamespaceChange?.(nextNamespace);
+          }}
+        >
+          <option value="">Select namespace</option>
+          {namespaceOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
     );
   },
@@ -867,7 +902,7 @@ describe('CreateResourceModal', () => {
     await flushPromises();
 
     const nsSelect = container.querySelector(
-      '[data-testid="dropdown-Target namespace"]'
+      '[data-testid="dropdown-Form namespace"]'
     ) as HTMLSelectElement;
     expect(nsSelect).not.toBeNull();
 
@@ -894,7 +929,7 @@ describe('CreateResourceModal', () => {
       '[data-testid="dropdown-Target cluster"]'
     ) as HTMLSelectElement;
     const nsSelect = container.querySelector(
-      '[data-testid="dropdown-Target namespace"]'
+      '[data-testid="dropdown-Form namespace"]'
     ) as HTMLSelectElement;
     expect(nsSelect.value).toBe('default');
 
@@ -918,7 +953,7 @@ describe('CreateResourceModal', () => {
     await flushPromises();
 
     const nsSelect = container.querySelector(
-      '[data-testid="dropdown-Target namespace"]'
+      '[data-testid="dropdown-Form namespace"]'
     ) as HTMLSelectElement;
     expect(nsSelect.value).toBe('');
     await unmount();

@@ -32,6 +32,10 @@ interface ResourceFormProps {
   yamlContent: string;
   /** Callback invoked with updated YAML when a field value changes. */
   onYamlChange: (yaml: string) => void;
+  /** Namespace options scoped to the currently selected cluster. */
+  namespaceOptions?: DropdownOption[];
+  /** Optional callback for namespace selection changes. */
+  onNamespaceChange?: (namespace: string) => void;
 }
 
 /**
@@ -541,6 +545,43 @@ function SelectField({
           const updated = setFieldValue(yamlContent, field.path, normalized);
           if (updated !== null) onYamlChange(updated);
         }}
+        ariaLabel={field.label}
+      />
+    </div>
+  );
+}
+
+/**
+ * Namespace dropdown field component.
+ */
+function NamespaceSelectField({
+  field,
+  yamlContent,
+  onYamlChange,
+  namespaceOptions = [],
+  onNamespaceChange,
+}: {
+  field: FormFieldDefinition;
+  yamlContent: string;
+  onYamlChange: (yaml: string) => void;
+  namespaceOptions?: DropdownOption[];
+  onNamespaceChange?: (namespace: string) => void;
+}): React.ReactElement {
+  const value = getFieldValue(yamlContent, field.path);
+  const stringValue = value != null ? String(value) : '';
+
+  return (
+    <div data-field-key={field.key} className="resource-form-dropdown">
+      <Dropdown
+        options={namespaceOptions}
+        value={stringValue}
+        onChange={(nextValue) => {
+          const normalized = Array.isArray(nextValue) ? (nextValue[0] ?? '') : nextValue;
+          const updated = setFieldValue(yamlContent, field.path, normalized);
+          if (updated !== null) onYamlChange(updated);
+          onNamespaceChange?.(normalized);
+        }}
+        placeholder="Select namespace"
         ariaLabel={field.label}
       />
     </div>
@@ -1716,6 +1757,8 @@ export function ResourceForm({
   definition,
   yamlContent,
   onYamlChange,
+  namespaceOptions = [],
+  onNamespaceChange,
 }: ResourceFormProps): React.ReactElement {
   const valid = isYamlValid(yamlContent);
 
@@ -1742,6 +1785,8 @@ export function ResourceForm({
                   field={field}
                   yamlContent={yamlContent}
                   onYamlChange={onYamlChange}
+                  namespaceOptions={namespaceOptions}
+                  onNamespaceChange={onNamespaceChange}
                 />
               </FormFieldRow>
             );
@@ -1760,10 +1805,14 @@ function FieldRenderer({
   field,
   yamlContent,
   onYamlChange,
+  namespaceOptions,
+  onNamespaceChange,
 }: {
   field: FormFieldDefinition;
   yamlContent: string;
   onYamlChange: (yaml: string) => void;
+  namespaceOptions?: DropdownOption[];
+  onNamespaceChange?: (namespace: string) => void;
 }): React.ReactElement | null {
   switch (field.type) {
     case 'text':
@@ -1772,6 +1821,16 @@ function FieldRenderer({
       return <NumberField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />;
     case 'select':
       return <SelectField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />;
+    case 'namespace-select':
+      return (
+        <NamespaceSelectField
+          field={field}
+          yamlContent={yamlContent}
+          onYamlChange={onYamlChange}
+          namespaceOptions={namespaceOptions}
+          onNamespaceChange={onNamespaceChange}
+        />
+      );
     case 'textarea':
       return <TextareaField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />;
     case 'key-value-list':
