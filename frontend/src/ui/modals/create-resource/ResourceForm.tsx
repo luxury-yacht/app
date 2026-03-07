@@ -811,9 +811,10 @@ function GroupListField({
         return (
           <FormVolumeSourceField
             item={item}
-            items={items}
-            itemIndex={itemIndex}
-            updateItems={updateItems}
+            updateItem={(updater) => {
+              const newItems = items.map((it, i) => (i === itemIndex ? updater(it) : it));
+              updateItems(newItems);
+            }}
             dataFieldKey={subField.key}
             ariaLabel={subField.label}
           />
@@ -889,11 +890,13 @@ function GroupListField({
       }
       case 'group-list': {
         const nestedItems = Array.isArray(subValue) ? (subValue as Record<string, unknown>[]) : [];
-        const isVolumeMountsList = subField.path[subField.path.length - 1] === 'volumeMounts';
-        const disableVolumeMountAdd = isVolumeMountsList && availableVolumeNames.length === 0;
+        // Disable adding nested items when a dynamic-options field has no available options.
+        const hasDynamicField = subField.fields?.some((f) => f.dynamicOptionsPath);
+        const dynamicOptionsEmpty = hasDynamicField && availableVolumeNames.length === 0;
+        const disableAdd = dynamicOptionsEmpty === true;
         const leftAlignNestedEmptyActions = subField.leftAlignEmptyActions === true;
         const nestedAddGhostText =
-          disableVolumeMountAdd
+          disableAdd
             ? 'Add a Volume below to enable Volume Mounts'
             : (subField.addGhostText ?? null);
 
@@ -925,7 +928,7 @@ function GroupListField({
 
         /** Add a nested row using the nested defaultValue. */
         const handleNestedAdd = () => {
-          if (disableVolumeMountAdd) return;
+          if (disableAdd) return;
           const defaultItem = (subField.defaultValue ?? {}) as Record<string, unknown>;
           updateNestedItems([...nestedItems, { ...defaultItem }]);
         };
@@ -940,6 +943,34 @@ function GroupListField({
           updateNestedItems(updated);
         };
 
+        /**
+         * Resolve dynamic select options from a YAML path.
+         * Returns static options from the field definition if no dynamic path is set.
+         */
+        const resolveDynamicOptions = (nestedField: FormFieldDefinition, currentValue: string): DropdownOption[] => {
+          if (!nestedField.dynamicOptionsPath || !nestedField.dynamicOptionsField) {
+            return buildSelectOptions(nestedField);
+          }
+          const sourceArray = getFieldValue(yamlContent, nestedField.dynamicOptionsPath);
+          const names: string[] = [];
+          if (Array.isArray(sourceArray)) {
+            for (const entry of sourceArray) {
+              if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+              const name = String((entry as Record<string, unknown>)[nestedField.dynamicOptionsField] ?? '').trim();
+              if (name) names.push(name);
+            }
+          }
+          const options: DropdownOption[] = [
+            { value: '', label: '-----' },
+            ...names.map((name) => ({ value: name, label: name })),
+          ];
+          // Preserve current value even if it's no longer in the options.
+          if (currentValue.trim() !== '' && !options.some((opt) => opt.value === currentValue)) {
+            options.push({ value: currentValue, label: currentValue });
+          }
+          return options;
+        };
+
         /** Render a nested leaf input inside the nested group-list. */
         const renderNestedLeafField = (
           nestedField: FormFieldDefinition,
@@ -949,123 +980,60 @@ function GroupListField({
           const nestedValue = getNestedValue(nestedItem, nestedField.path);
           const nestedStringValue = nestedValue != null ? String(nestedValue) : '';
 
-          if (isVolumeMountsList && nestedField.key === 'name') {
-            const options: DropdownOption[] = [
-              { value: '', label: '-----' },
-              ...availableVolumeNames.map((name) => ({ value: name, label: name })),
-            ];
-            if (
-              nestedStringValue.trim() !== '' &&
-              !options.some((option) => option.value === nestedStringValue)
-            ) {
-              options.push({ value: nestedStringValue, label: nestedStringValue });
-            }
-            return (
-              <div data-field-key={nestedField.key} className="resource-form-dropdown" style={fixedWidthStyle(nestedField)}>
-                <Dropdown
-                  options={options}
-                  value={nestedStringValue}
-                  onChange={(nextValue) => {
-                    const normalized = Array.isArray(nextValue) ? (nextValue[0] ?? '') : nextValue;
-                    handleNestedFieldChange(nestedIndex, nestedField, normalized);
-                  }}
-                  ariaLabel={nestedField.label}
-                />
-              </div>
-            );
-          }
-
-          if (isVolumeMountsList && nestedField.key === 'readOnly') {
-            const checked = getNestedValue(nestedItem, ['readOnly']) === true;
-            const handleReadOnlyChange = (nextChecked: boolean) => {
-              updateNestedItem(nestedIndex, (currentNestedItem) => {
-                if (nextChecked) {
-                  return setNestedValue(currentNestedItem, ['readOnly'], true);
-                }
-                return unsetNestedValue(currentNestedItem, ['readOnly']);
-              });
-            };
-            return (
-              <label className="resource-form-field-label resource-form-volume-mount-inline-toggle">
-                <input
-                  type="checkbox"
-                  className="resource-form-checkbox"
-                  data-field-key="readOnly"
-                  checked={checked}
-                  onChange={(event) => handleReadOnlyChange(event.target.checked)}
-                  onClick={(event) =>
-                    handleReadOnlyChange((event.currentTarget as HTMLInputElement).checked)
-                  }
-                />
-                <span>Read Only</span>
-              </label>
-            );
-          }
-
-          if (isVolumeMountsList && nestedField.key === 'subPath') {
-            const usesSubPathExpr = getNestedValue(nestedItem, ['subPathExpr']) !== undefined;
-            const pathKey = usesSubPathExpr ? 'subPathExpr' : 'subPath';
-            const pathValue = String(getNestedValue(nestedItem, [pathKey]) ?? '');
-            const handleSubPathExprToggle = (nextUsesSubPathExpr: boolean) => {
-              updateNestedItem(nestedIndex, (currentNestedItem) => {
-                const currentSubPath = String(getNestedValue(currentNestedItem, ['subPath']) ?? '');
-                const currentSubPathExpr = String(
-                  getNestedValue(currentNestedItem, ['subPathExpr']) ?? ''
-                );
-                const nextValue = nextUsesSubPathExpr ? currentSubPath : currentSubPathExpr;
-                let nextNestedItem = unsetNestedValue(currentNestedItem, ['subPath']);
-                nextNestedItem = unsetNestedValue(nextNestedItem, ['subPathExpr']);
-                if (nextValue.trim() === '') {
-                  return nextNestedItem;
-                }
-                return setNestedValue(
-                  nextNestedItem,
-                  [nextUsesSubPathExpr ? 'subPathExpr' : 'subPath'],
-                  nextValue
-                );
-              });
-            };
-
-            return (
-              <div className="resource-form-volume-mount-subpath-control">
-                <input
-                  type="text"
-                  className="resource-form-input"
-                  style={fixedWidthStyle(nestedField)}
-                  data-field-key="subPath"
-                  value={pathValue}
-                  placeholder={nestedField.placeholder}
-                  {...INPUT_BEHAVIOR_PROPS}
-                  onChange={(event) => {
-                    const nextValue = event.target.value;
-                    updateNestedItem(nestedIndex, (currentNestedItem) => {
-                      let nextNestedItem = unsetNestedValue(currentNestedItem, ['subPath']);
-                      nextNestedItem = unsetNestedValue(nextNestedItem, ['subPathExpr']);
-                      if (nextValue.trim() === '') {
-                        return nextNestedItem;
-                      }
-                      return setNestedValue(nextNestedItem, [pathKey], nextValue);
-                    });
-                  }}
-                />
-                <label className="resource-form-field-label resource-form-volume-mount-subpath-toggle">
-                  <input
-                    type="checkbox"
-                    data-field-key="subPathExprToggle"
-                    checked={usesSubPathExpr}
-                    onChange={(event) => handleSubPathExprToggle(event.target.checked)}
-                    onClick={(event) =>
-                      handleSubPathExprToggle((event.currentTarget as HTMLInputElement).checked)
-                    }
-                  />
-                  <span>Use Expression</span>
-                </label>
-              </div>
-            );
-          }
-
           switch (nestedField.type) {
-            case 'text':
+            case 'text': {
+              // Text field with alternate path toggle (e.g., subPath/subPathExpr).
+              if (nestedField.alternatePath) {
+                const altPath = nestedField.alternatePath;
+                const usesAlternate = getNestedValue(nestedItem, altPath) !== undefined;
+                const activePath = usesAlternate ? altPath : nestedField.path;
+                const activeValue = String(getNestedValue(nestedItem, activePath) ?? '');
+                const handleToggle = (nextUsesAlternate: boolean) => {
+                  updateNestedItem(nestedIndex, (currentNestedItem) => {
+                    const currentPrimary = String(getNestedValue(currentNestedItem, nestedField.path) ?? '');
+                    const currentAlternate = String(getNestedValue(currentNestedItem, altPath) ?? '');
+                    const nextValue = nextUsesAlternate ? currentPrimary : currentAlternate;
+                    let next = unsetNestedValue(currentNestedItem, nestedField.path);
+                    next = unsetNestedValue(next, altPath);
+                    if (nextValue.trim() === '') return next;
+                    return setNestedValue(next, [nextUsesAlternate ? altPath[0] : nestedField.path[0]], nextValue);
+                  });
+                };
+                return (
+                  <div className="resource-form-volume-mount-subpath-control">
+                    <input
+                      type="text"
+                      className="resource-form-input"
+                      style={fixedWidthStyle(nestedField)}
+                      data-field-key={nestedField.key}
+                      value={activeValue}
+                      placeholder={nestedField.placeholder}
+                      {...INPUT_BEHAVIOR_PROPS}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        updateNestedItem(nestedIndex, (currentNestedItem) => {
+                          let next = unsetNestedValue(currentNestedItem, nestedField.path);
+                          next = unsetNestedValue(next, altPath);
+                          if (nextValue.trim() === '') return next;
+                          return setNestedValue(next, activePath, nextValue);
+                        });
+                      }}
+                    />
+                    <label className="resource-form-field-label resource-form-volume-mount-subpath-toggle">
+                      <input
+                        type="checkbox"
+                        data-field-key={`${nestedField.key}ExprToggle`}
+                        checked={usesAlternate}
+                        onChange={(event) => handleToggle(event.target.checked)}
+                        onClick={(event) =>
+                          handleToggle((event.currentTarget as HTMLInputElement).checked)
+                        }
+                      />
+                      <span>{nestedField.alternateLabel ?? 'Use Alternate'}</span>
+                    </label>
+                  </div>
+                );
+              }
               return (
                 <input
                   type="text"
@@ -1080,6 +1048,7 @@ function GroupListField({
                   }
                 />
               );
+            }
             case 'number':
               return (
                 <FormCompactNumberInput
@@ -1105,12 +1074,13 @@ function GroupListField({
                   }}
                 />
               );
-            case 'select':
+            case 'select': {
+              const options = resolveDynamicOptions(nestedField, nestedStringValue);
               return (
                 <div data-field-key={nestedField.key} className="resource-form-dropdown" style={fixedWidthStyle(nestedField)}>
                   <Dropdown
-                    options={buildSelectOptions(nestedField)}
-                    value={getSelectFieldValue(nestedField, nestedStringValue)}
+                    options={options}
+                    value={nestedField.dynamicOptionsPath ? nestedStringValue : getSelectFieldValue(nestedField, nestedStringValue)}
                     onChange={(nextValue) => {
                       const normalized = Array.isArray(nextValue)
                         ? (nextValue[0] ?? '')
@@ -1121,6 +1091,33 @@ function GroupListField({
                   />
                 </div>
               );
+            }
+            case 'boolean-toggle': {
+              const checked = getNestedValue(nestedItem, nestedField.path) === true;
+              const handleBooleanChange = (nextChecked: boolean) => {
+                updateNestedItem(nestedIndex, (currentNestedItem) => {
+                  if (nextChecked) {
+                    return setNestedValue(currentNestedItem, nestedField.path, true);
+                  }
+                  return unsetNestedValue(currentNestedItem, nestedField.path);
+                });
+              };
+              return (
+                <label className="resource-form-field-label resource-form-volume-mount-inline-toggle">
+                  <input
+                    type="checkbox"
+                    className="resource-form-checkbox"
+                    data-field-key={nestedField.key}
+                    checked={checked}
+                    onChange={(event) => handleBooleanChange(event.target.checked)}
+                    onClick={(event) =>
+                      handleBooleanChange((event.currentTarget as HTMLInputElement).checked)
+                    }
+                  />
+                  <span>{nestedField.label}</span>
+                </label>
+              );
+            }
             case 'textarea':
               return (
                 <textarea
@@ -1149,14 +1146,14 @@ function GroupListField({
             onRemove={handleNestedRemove}
             leftAlignEmptyStateActions={leftAlignNestedEmptyActions}
             addGhostText={nestedAddGhostText}
-            addDisabled={disableVolumeMountAdd}
+            addDisabled={disableAdd}
             fieldGap={subField.fieldGap}
             wrapFields={subField.wrapFields}
             rowAlign={subField.rowAlign}
             renderFields={(nestedItem, nestedIndex) => (
               <>
                 {subField.fields?.map((nestedField) => {
-                  const hideFieldLabel = isVolumeMountsList && nestedField.key === 'readOnly';
+                  const hideFieldLabel = nestedField.type === 'boolean-toggle';
                   return (
                     <div
                       key={nestedField.key}

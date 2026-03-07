@@ -514,38 +514,8 @@
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
 
-.resource-form-add-btn {
-  padding: 2px 8px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 4px;
-  border: none;
-  cursor: pointer;
-  white-space: nowrap;
-  background: transparent;
-  color: var(--color-text-secondary);
-  transition:
-    color var(--duration-fast, 150ms) var(--ease-out, ease),
-    background-color var(--duration-fast, 150ms) var(--ease-out, ease);
-}
-
-.resource-form-add-btn:hover {
-  color: var(--color-success);
-  background: var(--color-success-bg);
-}
-
-.resource-form-add-btn:active {
-  color: var(--color-success);
-  background: var(--color-success-bg);
-}
-
-.resource-form-add-btn:disabled {
-  color: var(--color-text-secondary);
-  background: transparent;
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
+/* Shared base for add/remove action buttons. */
+.resource-form-add-btn,
 .resource-form-remove-btn {
   padding: 2px 8px;
   font-size: 0.75rem;
@@ -559,6 +529,19 @@
   transition:
     color var(--duration-fast, 150ms) var(--ease-out, ease),
     background-color var(--duration-fast, 150ms) var(--ease-out, ease);
+}
+
+.resource-form-add-btn:hover,
+.resource-form-add-btn:active {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+}
+
+.resource-form-add-btn:disabled {
+  color: var(--color-text-secondary);
+  background: transparent;
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .resource-form-add-btn.resource-form-icon-btn,

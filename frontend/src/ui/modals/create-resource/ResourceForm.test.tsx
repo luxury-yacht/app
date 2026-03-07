@@ -294,10 +294,17 @@ data:
                   leftAlignEmptyActions: true,
                   addGhostText: 'Add volume mount',
                   fields: [
-                    { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                    { key: 'name', label: 'Name', path: ['name'], type: 'select' },
                     { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
-                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'text' },
-                    { key: 'subPath', label: 'Sub Path', path: ['subPath'], type: 'text' },
+                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'boolean-toggle' },
+                    {
+                      key: 'subPath',
+                      label: 'Sub Path',
+                      path: ['subPath'],
+                      type: 'text',
+                      alternatePath: ['subPathExpr'],
+                      alternateLabel: 'Use Expression',
+                    },
                   ],
                   defaultValue: { name: '', mountPath: '' },
                 },
@@ -388,11 +395,11 @@ spec:
     expect(
       container.querySelector('[data-field-key="volumeMounts"] .resource-form-action-ghost-text')
         ?.textContent
-    ).toBe('Add a Volume below to enable Volume Mounts');
+    ).toBe('Add volume mount');
     const addVolumeMountsButton = container.querySelector(
       'button[aria-label="Add Volume Mounts"]'
     ) as HTMLButtonElement;
-    expect(addVolumeMountsButton.disabled).toBe(true);
+    expect(addVolumeMountsButton.disabled).toBe(false);
   });
 
   it('keeps deployment selectors separate from labels and prevents removing the last selector', async () => {
@@ -801,10 +808,24 @@ spec:
                   path: ['volumeMounts'],
                   type: 'group-list',
                   fields: [
-                    { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                    {
+                      key: 'name',
+                      label: 'Name',
+                      path: ['name'],
+                      type: 'select',
+                      dynamicOptionsPath: ['spec', 'template', 'spec', 'volumes'],
+                      dynamicOptionsField: 'name',
+                    },
                     { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
-                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'text' },
-                    { key: 'subPath', label: 'Sub Path', path: ['subPath'], type: 'text' },
+                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'boolean-toggle' },
+                    {
+                      key: 'subPath',
+                      label: 'Sub Path',
+                      path: ['subPath'],
+                      type: 'text',
+                      alternatePath: ['subPathExpr'],
+                      alternateLabel: 'Use Expression',
+                    },
                   ],
                   defaultValue: { name: '', mountPath: '' },
                 },
@@ -931,8 +952,15 @@ spec:
                   fields: [
                     { key: 'name', label: 'Name', path: ['name'], type: 'text' },
                     { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
-                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'text' },
-                    { key: 'subPath', label: 'Sub Path', path: ['subPath'], type: 'text' },
+                    { key: 'readOnly', label: 'Read Only', path: ['readOnly'], type: 'boolean-toggle' },
+                    {
+                      key: 'subPath',
+                      label: 'Sub Path',
+                      path: ['subPath'],
+                      type: 'text',
+                      alternatePath: ['subPathExpr'],
+                      alternateLabel: 'Use Expression',
+                    },
                   ],
                   defaultValue: { name: '', mountPath: '' },
                 },

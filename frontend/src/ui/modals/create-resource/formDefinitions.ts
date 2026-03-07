@@ -32,7 +32,9 @@ export interface FormFieldDefinition {
     | 'selector-list'
     | 'group-list'
     | 'container-resources'
-    | 'volume-source';
+    | 'volume-source'
+    | 'tri-state-boolean'
+    | 'boolean-toggle';
   /** Placeholder text for text/number inputs. */
   placeholder?: string;
   /** Optional minimum value for number inputs. */
@@ -41,8 +43,14 @@ export interface FormFieldDefinition {
   max?: number;
   /** Whether number values must be integers. */
   integer?: boolean;
+  /** Whether this field is required. */
+  required?: boolean;
   /** Options for 'select' type fields. */
   options?: FormFieldOption[];
+  /** Custom parser for the raw input value before persisting (e.g., string to integer). */
+  parseValue?: (rawValue: string) => unknown;
+  /** Custom formatter for converting the stored value to a display string. */
+  formatValue?: (value: unknown) => string;
   /** Sub-field definitions for 'group-list' type fields. */
   fields?: FormFieldDefinition[];
   /** Default value for the field when creating a new list item. */
@@ -53,6 +61,20 @@ export interface FormFieldDefinition {
   excludedKeysSourcePath?: string[];
   /** If true, empty string values are removed from YAML instead of persisted. */
   omitIfEmpty?: boolean;
+  /**
+   * Alternate YAML path for text fields with a toggle (e.g., subPath/subPathExpr).
+   * When set, a toggle checkbox is shown that switches between path and alternatePath.
+   */
+  alternatePath?: string[];
+  /** Label for the alternate path toggle checkbox (e.g., 'Use Expression'). */
+  alternateLabel?: string;
+  /**
+   * YAML path to an array whose items provide dynamic options for select fields.
+   * The renderer reads this path from the document root and extracts option values.
+   */
+  dynamicOptionsPath?: string[];
+  /** Field name within each dynamic options item to use as value and label. */
+  dynamicOptionsField?: string;
 
   // ─── Renderer configuration ───────────────────────────────────────────
   // These properties let the form definition control renderer behavior
@@ -77,12 +99,24 @@ export interface FormFieldDefinition {
   /** Whether new entries use blank keys instead of auto-generated 'key-N' names. */
   blankNewKeys?: boolean;
 
+  // ─── Tri-state boolean ──────────────────────────────────────────────
+  // Used by 'tri-state-boolean' fields (e.g., volume source optional/readOnly).
+
+  /** Label shown when value is undefined/null. */
+  emptyLabel?: string;
+  /** Label for the true option. */
+  trueLabel?: string;
+  /** Label for the false option. */
+  falseLabel?: string;
+
   // ─── Layout / sizing ───────────────────────────────────────────────
   // Drive input widths and nested-list layout from the definition
   // instead of coupling CSS selectors to specific data-field-key values.
 
   /** Fixed CSS width for the input element (e.g., '6ch', 'calc(5ch + 20px)'). */
   inputWidth?: string;
+  /** Fixed CSS width for the dropdown wrapper (e.g., 'calc(5ch + 40px)'). */
+  dropdownWidth?: string;
   /** Flex shorthand for nested group-list field wrappers (e.g., '0 0 auto', '0 0 100%'). */
   fieldFlex?: string;
   /** Use wide gap between nested group-list fields (var(--spacing-xl) instead of default). */
@@ -303,8 +337,9 @@ const deploymentDefinition: ResourceFormDefinition = {
                   key: 'name',
                   label: 'Name',
                   path: ['name'],
-                  type: 'text',
-                  placeholder: 'volume-name',
+                  type: 'select',
+                  dynamicOptionsPath: ['spec', 'template', 'spec', 'volumes'],
+                  dynamicOptionsField: 'name',
                   fieldFlex: '0 0 100%',
                   inputWidth: 'calc(30ch + 20px)',
                 },
@@ -322,7 +357,7 @@ const deploymentDefinition: ResourceFormDefinition = {
                   key: 'readOnly',
                   label: 'Read Only',
                   path: ['readOnly'],
-                  type: 'text',
+                  type: 'boolean-toggle',
                   fieldFlex: '0 0 auto',
                 },
                 {
@@ -331,6 +366,8 @@ const deploymentDefinition: ResourceFormDefinition = {
                   path: ['subPath'],
                   type: 'text',
                   placeholder: 'optional',
+                  alternatePath: ['subPathExpr'],
+                  alternateLabel: 'Use Expression',
                   fieldFlex: '0 0 100%',
                   inputWidth: 'calc(30ch + 20px)',
                   labelWidth: '4rem',

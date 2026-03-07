@@ -8,10 +8,10 @@
 
 import React from 'react';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
-import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { FormCompactNumberInput, parseCompactNumberValue } from './FormCompactNumberInput';
 import { FormTriStateBooleanDropdown } from './FormTriStateBooleanDropdown';
 import { FormVolumeItemListField } from './FormVolumeItemListField';
+import type { FormFieldDefinition, FormFieldOption } from './formDefinitions';
 import {
   INPUT_BEHAVIOR_PROPS,
   getNestedValue,
@@ -29,29 +29,6 @@ interface VolumeSourceDefinition {
   label: string;
   valuePath: string[];
   placeholder: string;
-}
-
-interface VolumeSourceExtraFieldDefinition {
-  key: string;
-  label: string;
-  path: string[];
-  type: 'text' | 'number' | 'select' | 'tri-state-boolean';
-  required?: boolean;
-  placeholder?: string;
-  options?: DropdownOption[];
-  defaultValue?: string;
-  min?: number;
-  max?: number;
-  integer?: boolean;
-  parseValue?: (rawValue: string) => unknown;
-  formatValue?: (value: unknown) => string;
-  emptyLabel?: string;
-  trueLabel?: string;
-  falseLabel?: string;
-  /** Fixed CSS width for the input element. */
-  inputWidth?: string;
-  /** Fixed CSS width for the dropdown wrapper. */
-  dropdownWidth?: string;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────
@@ -89,14 +66,6 @@ const VOLUME_SOURCE_DEFINITIONS: VolumeSourceDefinition[] = [
   },
 ];
 
-const VOLUME_SOURCE_ROOT_PATHS: string[][] = [
-  ['persistentVolumeClaim'],
-  ['configMap'],
-  ['secret'],
-  ['hostPath'],
-  ['emptyDir'],
-];
-
 const VOLUME_SOURCE_ROOT_BY_KEY: Record<VolumeSourceKey, string[]> = {
   configMap: ['configMap'],
   emptyDir: ['emptyDir'],
@@ -107,7 +76,13 @@ const VOLUME_SOURCE_ROOT_BY_KEY: Record<VolumeSourceKey, string[]> = {
 
 const DEFAULT_VOLUME_SOURCE_KEY: VolumeSourceKey = 'configMap';
 
-const HOST_PATH_TYPE_OPTIONS: DropdownOption[] = [
+/** Static dropdown options for the volume source type selector. */
+const VOLUME_SOURCE_OPTIONS: FormFieldOption[] = VOLUME_SOURCE_DEFINITIONS.map((definition) => ({
+  value: definition.key,
+  label: definition.label,
+}));
+
+const HOST_PATH_TYPE_OPTIONS: FormFieldOption[] = [
   { value: '', label: '-----' },
   { value: 'DirectoryOrCreate', label: 'DirectoryOrCreate' },
   { value: 'Directory', label: 'Directory' },
@@ -118,12 +93,12 @@ const HOST_PATH_TYPE_OPTIONS: DropdownOption[] = [
   { value: 'BlockDevice', label: 'BlockDevice' },
 ];
 
-const EMPTY_DIR_MEDIUM_OPTIONS: DropdownOption[] = [
+const EMPTY_DIR_MEDIUM_OPTIONS: FormFieldOption[] = [
   { value: '', label: 'Node Filesystem' },
   { value: 'Memory', label: 'Memory' },
 ];
 
-const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraFieldDefinition[]> = {
+const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, FormFieldDefinition[]> = {
   configMap: [
     {
       key: 'optional',
@@ -255,7 +230,7 @@ function getVolumeSourceDefinition(key: VolumeSourceKey): VolumeSourceDefinition
 
 function clearVolumeSources(item: Record<string, unknown>): Record<string, unknown> {
   let next = item;
-  for (const rootPath of VOLUME_SOURCE_ROOT_PATHS) {
+  for (const rootPath of Object.values(VOLUME_SOURCE_ROOT_BY_KEY)) {
     next = unsetNestedValue(next, rootPath);
   }
   return next;
@@ -312,16 +287,51 @@ export function getCurrentVolumeSource(
 interface FormVolumeSourceFieldProps {
   /** The current volume item data. */
   item: Record<string, unknown>;
-  /** All volume items in the array. */
-  items: Record<string, unknown>[];
-  /** Index of this volume in the items array. */
-  itemIndex: number;
-  /** Callback to update the entire items array. */
-  updateItems: (items: Record<string, unknown>[]) => void;
+  /** Callback to update this volume item. Receives an updater function. */
+  updateItem: (updater: (item: Record<string, unknown>) => Record<string, unknown>) => void;
   /** data-field-key for the wrapper element. */
   dataFieldKey: string;
   /** Accessible label for the source type dropdown. */
   ariaLabel: string;
+}
+
+/**
+ * Build handlers for a source-specific items list (ConfigMap items or Secret items).
+ * Eliminates duplication between configMap and secret item management.
+ */
+function makeSourceItemsHandlers(
+  sourceKey: VolumeSourceKey,
+  itemsPath: string[],
+  currentItems: Record<string, unknown>[],
+  updateItem: (updater: (item: Record<string, unknown>) => Record<string, unknown>) => void
+) {
+  const update = (newItems: Record<string, unknown>[]) => {
+    updateItem((currentItem) => {
+      let nextItem = clearOtherVolumeSources(currentItem, sourceKey);
+      nextItem = ensureVolumeSourceRoot(nextItem, sourceKey);
+      if (newItems.length === 0) {
+        return unsetNestedValue(nextItem, itemsPath);
+      }
+      return setNestedValue(nextItem, itemsPath, newItems);
+    });
+  };
+
+  const handleFieldChange = (rowIndex: number, fieldPath: string[], newValue: unknown) => {
+    const updated = currentItems.map((entry, index) => {
+      if (index !== rowIndex) return entry;
+      if (typeof newValue === 'string' && newValue.trim() === '') {
+        return unsetNestedValue(entry, fieldPath);
+      }
+      return setNestedValue(entry, fieldPath, newValue);
+    });
+    update(updated);
+  };
+
+  const handleAdd = () => update([...currentItems, {}]);
+  const handleRemove = (rowIndex: number) =>
+    update(currentItems.filter((_, index) => index !== rowIndex));
+
+  return { handleFieldChange, handleAdd, handleRemove };
 }
 
 /**
@@ -330,9 +340,7 @@ interface FormVolumeSourceFieldProps {
  */
 export function FormVolumeSourceField({
   item,
-  items,
-  itemIndex,
-  updateItems,
+  updateItem,
   dataFieldKey,
   ariaLabel,
 }: FormVolumeSourceFieldProps): React.ReactElement {
@@ -342,28 +350,27 @@ export function FormVolumeSourceField({
   const isSecretSource = effectiveSource.key === 'secret';
   const sourceKey = effectiveSource.key;
   const sourceValue = String(getNestedValue(item, effectiveSource.valuePath) ?? '');
-  const sourceOptions: DropdownOption[] = VOLUME_SOURCE_DEFINITIONS.map((definition) => ({
-    value: definition.key,
-    label: definition.label,
-  }));
   const extraFields = VOLUME_SOURCE_EXTRA_FIELDS[effectiveSource.key] ?? [];
   const visibleExtraFields = isSecretSource
     ? extraFields.filter((extraField) => extraField.key !== 'secretName')
     : extraFields;
 
-  // ConfigMap items list.
+  // ConfigMap/Secret items lists.
   const configMapItems =
-    effectiveSource.key === 'configMap' &&
-    Array.isArray(getNestedValue(item, ['configMap', 'items']))
+    isConfigMapSource && Array.isArray(getNestedValue(item, ['configMap', 'items']))
       ? (getNestedValue(item, ['configMap', 'items']) as Record<string, unknown>[])
       : [];
-
-  // Secret items list.
   const secretItems =
-    effectiveSource.key === 'secret' &&
-    Array.isArray(getNestedValue(item, ['secret', 'items']))
+    isSecretSource && Array.isArray(getNestedValue(item, ['secret', 'items']))
       ? (getNestedValue(item, ['secret', 'items']) as Record<string, unknown>[])
       : [];
+
+  const configMapHandlers = makeSourceItemsHandlers(
+    'configMap', ['configMap', 'items'], configMapItems, updateItem
+  );
+  const secretHandlers = makeSourceItemsHandlers(
+    'secret', ['secret', 'items'], secretItems, updateItem
+  );
 
   // ── Source type change handler ──────────────────────────────────────
 
@@ -375,8 +382,7 @@ export function FormVolumeSourceField({
     if (selectedDefinition.key === sourceKey) {
       return;
     }
-    const updatedItems = items.map((currentItem, i) => {
-      if (i !== itemIndex) return currentItem;
+    updateItem((currentItem) => {
       const clearedItem = clearVolumeSources(currentItem);
       const withSourceRoot = ensureVolumeSourceRoot(clearedItem, selectedDefinition.key);
       if (selectedDefinition.key === 'hostPath') {
@@ -390,14 +396,12 @@ export function FormVolumeSourceField({
       }
       return withSourceRoot;
     });
-    updateItems(updatedItems);
   };
 
   // ── Source value change handler ─────────────────────────────────────
 
   const handleSourceValueChange = (nextValue: string) => {
-    const updatedItems = items.map((currentItem, i) => {
-      if (i !== itemIndex) return currentItem;
+    updateItem((currentItem) => {
       let nextItem = clearOtherVolumeSources(currentItem, effectiveSource.key);
       nextItem = ensureVolumeSourceRoot(nextItem, effectiveSource.key);
       if (effectiveSource.key === 'emptyDir' && nextValue.trim() === '') {
@@ -411,17 +415,15 @@ export function FormVolumeSourceField({
       }
       return setNestedValue(nextItem, effectiveSource.valuePath, nextValue);
     });
-    updateItems(updatedItems);
   };
 
   // ── Extra field change handler ──────────────────────────────────────
 
   const handleExtraFieldChange = (
-    extraField: VolumeSourceExtraFieldDefinition,
+    extraField: FormFieldDefinition,
     nextValue: unknown
   ) => {
-    const updatedItems = items.map((currentItem, i) => {
-      if (i !== itemIndex) return currentItem;
+    updateItem((currentItem) => {
       let nextItem = clearOtherVolumeSources(currentItem, effectiveSource.key);
       nextItem = ensureVolumeSourceRoot(nextItem, effectiveSource.key);
       const unsetExtraField = () => {
@@ -463,88 +465,11 @@ export function FormVolumeSourceField({
       }
       return setNestedValue(nextItem, extraField.path, parsedValue);
     });
-    updateItems(updatedItems);
-  };
-
-  // ── ConfigMap items handlers ────────────────────────────────────────
-
-  const updateConfigMapItems = (newItems: Record<string, unknown>[]) => {
-    const updatedItems = items.map((currentItem, i) => {
-      if (i !== itemIndex) return currentItem;
-      let nextItem = clearOtherVolumeSources(currentItem, 'configMap');
-      nextItem = ensureVolumeSourceRoot(nextItem, 'configMap');
-      if (newItems.length === 0) {
-        return unsetNestedValue(nextItem, ['configMap', 'items']);
-      }
-      return setNestedValue(nextItem, ['configMap', 'items'], newItems);
-    });
-    updateItems(updatedItems);
-  };
-
-  const handleConfigMapItemChange = (
-    rowIndex: number,
-    fieldPath: string[],
-    newValue: unknown
-  ) => {
-    const updated = configMapItems.map((entry, index) => {
-      if (index !== rowIndex) return entry;
-      if (typeof newValue === 'string' && newValue.trim() === '') {
-        return unsetNestedValue(entry, fieldPath);
-      }
-      return setNestedValue(entry, fieldPath, newValue);
-    });
-    updateConfigMapItems(updated);
-  };
-
-  const handleConfigMapAddItem = () => {
-    updateConfigMapItems([...configMapItems, {}]);
-  };
-
-  const handleConfigMapRemoveItem = (rowIndex: number) => {
-    updateConfigMapItems(configMapItems.filter((_, index) => index !== rowIndex));
-  };
-
-  // ── Secret items handlers ───────────────────────────────────────────
-
-  const updateSecretItems = (newItems: Record<string, unknown>[]) => {
-    const updatedItems = items.map((currentItem, i) => {
-      if (i !== itemIndex) return currentItem;
-      let nextItem = clearOtherVolumeSources(currentItem, 'secret');
-      nextItem = ensureVolumeSourceRoot(nextItem, 'secret');
-      if (newItems.length === 0) {
-        return unsetNestedValue(nextItem, ['secret', 'items']);
-      }
-      return setNestedValue(nextItem, ['secret', 'items'], newItems);
-    });
-    updateItems(updatedItems);
-  };
-
-  const handleSecretItemChange = (
-    rowIndex: number,
-    fieldPath: string[],
-    newValue: unknown
-  ) => {
-    const updated = secretItems.map((entry, index) => {
-      if (index !== rowIndex) return entry;
-      if (typeof newValue === 'string' && newValue.trim() === '') {
-        return unsetNestedValue(entry, fieldPath);
-      }
-      return setNestedValue(entry, fieldPath, newValue);
-    });
-    updateSecretItems(updated);
-  };
-
-  const handleSecretAddItem = () => {
-    updateSecretItems([...secretItems, {}]);
-  };
-
-  const handleSecretRemoveItem = (rowIndex: number) => {
-    updateSecretItems(secretItems.filter((_, index) => index !== rowIndex));
   };
 
   // ── Extra field renderer ────────────────────────────────────────────
 
-  const renderExtraField = (extraField: VolumeSourceExtraFieldDefinition) => {
+  const renderExtraField = (extraField: FormFieldDefinition) => {
     const rawExtraValue = getNestedValue(item, extraField.path);
     const resolvedExtraValue =
       rawExtraValue === undefined && extraField.defaultValue !== undefined
@@ -633,26 +558,12 @@ export function FormVolumeSourceField({
       <div className="resource-form-volume-source">
         <div className="resource-form-volume-source-dropdown">
           <Dropdown
-            options={sourceOptions}
+            options={VOLUME_SOURCE_OPTIONS}
             value={sourceKey}
             onChange={handleSourceTypeChange}
             ariaLabel={ariaLabel}
           />
         </div>
-        {!isConfigMapSource &&
-          effectiveSource.key !== 'emptyDir' &&
-          effectiveSource.key !== 'hostPath' &&
-          effectiveSource.key !== 'pvc' &&
-          effectiveSource.key !== 'secret' && (
-            <input
-              type="text"
-              className="resource-form-input"
-              value={sourceValue}
-              placeholder={effectiveSource.placeholder}
-              {...INPUT_BEHAVIOR_PROPS}
-              onChange={(e) => handleSourceValueChange(e.target.value)}
-            />
-          )}
       </div>
 
       {(isConfigMapSource || isSecretSource) && (
@@ -685,23 +596,23 @@ export function FormVolumeSourceField({
         </div>
       )}
 
-      {effectiveSource.key === 'configMap' && (
+      {isConfigMapSource && (
         <FormVolumeItemListField
           dataFieldKey="configMapItems"
           items={configMapItems}
-          onAdd={handleConfigMapAddItem}
-          onRemove={handleConfigMapRemoveItem}
-          onFieldChange={handleConfigMapItemChange}
+          onAdd={configMapHandlers.handleAdd}
+          onRemove={configMapHandlers.handleRemove}
+          onFieldChange={configMapHandlers.handleFieldChange}
         />
       )}
 
-      {effectiveSource.key === 'secret' && (
+      {isSecretSource && (
         <FormVolumeItemListField
           dataFieldKey="secretItems"
           items={secretItems}
-          onAdd={handleSecretAddItem}
-          onRemove={handleSecretRemoveItem}
-          onFieldChange={handleSecretItemChange}
+          onAdd={secretHandlers.handleAdd}
+          onRemove={secretHandlers.handleRemove}
+          onFieldChange={secretHandlers.handleFieldChange}
         />
       )}
     </div>
