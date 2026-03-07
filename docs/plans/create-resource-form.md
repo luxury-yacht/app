@@ -114,7 +114,7 @@ Minor Issues
 
 Recommendations Summary (prioritized)
 
-1. Extract FormVolumeSourceField from the 500-line inline block — this is the biggest single win for readability and reusability
+1. ✅ Extract FormVolumeSourceField from the 500-line inline block — this is the biggest single win for readability and reusability
 2. ✅ Create formUtils.ts for shared utilities: getNestedValue, setNestedValue, unsetNestedValue, INPUT_BEHAVIOR_PROPS, toStringMap, toMapEntries, toPersistedMap, arePersistedMapsEqual
 3. ✅ Add definition-driven sizing to FormFieldDefinition (e.g., width?: string, implicitDefault?: string, includeEmptyOption?: boolean, itemTitleField?: string, addLabel?: string) to eliminate hardcoded
    field-key checks in the renderer

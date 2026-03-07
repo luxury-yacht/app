@@ -7,6 +7,8 @@
  * and FormContainerResourcesField.tsx.
  */
 
+import React from 'react';
+
 // ─── Browser Assistance Disabling ───────────────────────────────────────
 
 /** Shared props to disable browser text assistance across form inputs. */
@@ -136,4 +138,20 @@ export function arePersistedMapsEqual(
     if (right[key] !== left[key]) return false;
   }
   return true;
+}
+
+// ─── Inline Style Utilities ─────────────────────────────────────────────
+
+/**
+ * Build inline style for a fixed-width input element.
+ * Returns undefined when no inputWidth is set, so React skips the style prop.
+ */
+export function fixedWidthStyle(field: { inputWidth?: string }): React.CSSProperties | undefined {
+  if (!field.inputWidth) return undefined;
+  return {
+    flex: '0 0 auto',
+    width: field.inputWidth,
+    minWidth: field.inputWidth,
+    maxWidth: field.inputWidth,
+  };
 }
