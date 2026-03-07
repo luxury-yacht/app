@@ -369,8 +369,13 @@
 }
 
 .resource-form-volume-source-dropdown .dropdown {
-  display: block;
+  display: inline-block;
+  width: auto;
+}
+
+.resource-form-volume-source-dropdown .dropdown-menu {
   width: 100%;
+  min-width: 0;
 }
 
 .resource-form-volume-source-extra {
@@ -407,6 +412,11 @@
 .resource-form-volume-source-extra-dropdown .dropdown {
   display: block;
   width: 100%;
+}
+
+.resource-form-volume-source-extra-dropdown .dropdown-menu {
+  width: 100%;
+  min-width: 100%;
 }
 
 .resource-form-volume-source-extra-field[data-field-key="optional"]

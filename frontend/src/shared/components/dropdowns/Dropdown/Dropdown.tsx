@@ -13,6 +13,31 @@ import { useAriaAnnouncements } from './hooks/useAriaAnnouncements';
 import '@styles/components/dropdowns.css';
 import { useKeyboardContext, useShortcuts } from '@ui/shortcuts';
 
+const CLIPPING_OVERFLOW_VALUES = new Set(['auto', 'scroll', 'hidden', 'clip']);
+
+function clipsOverflow(value: string): boolean {
+  return CLIPPING_OVERFLOW_VALUES.has(value);
+}
+
+/**
+ * Finds the nearest ancestor that can clip dropdown content.
+ * This lets us position menus correctly inside scrollable containers (like modal form panes).
+ */
+function getNearestClippingRect(node: HTMLElement): DOMRect | null {
+  let current: HTMLElement | null = node.parentElement;
+  while (current) {
+    const style = window.getComputedStyle(current);
+    const clipsY = clipsOverflow(style.overflowY);
+    const clipsX = clipsOverflow(style.overflowX);
+    const clipsBoth = clipsOverflow(style.overflow);
+    if (clipsY || clipsX || clipsBoth) {
+      return current.getBoundingClientRect();
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
 const Dropdown: React.FC<DropdownProps> = ({
   options,
   value,
@@ -204,12 +229,14 @@ const Dropdown: React.FC<DropdownProps> = ({
     if (isOpen && triggerRef.current && menuRef.current) {
       const triggerRect = triggerRef.current.getBoundingClientRect();
       const menuHeight = menuRef.current.offsetHeight;
-      const viewportHeight = window.innerHeight;
+      const clippingRect = getNearestClippingRect(triggerRef.current);
+      const boundaryTop = clippingRect?.top ?? 0;
+      const boundaryBottom = clippingRect?.bottom ?? window.innerHeight;
 
-      const spaceBelow = viewportHeight - triggerRect.bottom;
-      const spaceAbove = triggerRect.top;
+      const spaceBelow = boundaryBottom - triggerRect.bottom;
+      const spaceAbove = triggerRect.top - boundaryTop;
 
-      if (spaceBelow < menuHeight && spaceAbove > spaceBelow) {
+      if (spaceBelow < menuHeight && spaceAbove > 0) {
         setDropdownPosition('top');
       } else {
         setDropdownPosition('bottom');
