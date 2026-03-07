@@ -197,7 +197,7 @@ data:
     expect(annotationsField.textContent).toContain('Value');
   });
 
-  it('left-aligns empty add actions for labels, annotations, ports, and env vars', async () => {
+  it('left-aligns empty add actions for labels, annotations, ports, env vars, and volume mounts', async () => {
     const { ResourceForm } = await import('./ResourceForm');
     const deploymentLikeDefinition: ResourceFormDefinition = {
       kind: 'Deployment',
@@ -255,8 +255,19 @@ data:
                   ],
                   defaultValue: { name: '', value: '' },
                 },
+                {
+                  key: 'volumeMounts',
+                  label: 'Volume Mounts',
+                  path: ['volumeMounts'],
+                  type: 'group-list',
+                  fields: [
+                    { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                    { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
+                  ],
+                  defaultValue: { name: '', mountPath: '' },
+                },
               ],
-              defaultValue: { name: '', ports: [], env: [] },
+              defaultValue: { name: '', ports: [], env: [], volumeMounts: [] },
             },
           ],
         },
@@ -273,6 +284,7 @@ spec:
         - name: api
           ports: []
           env: []
+          volumeMounts: []
 `;
 
     await act(async () => {
@@ -313,6 +325,9 @@ spec:
       container.querySelector('[data-field-key="env"] .resource-form-nested-group-fields')
     ).toBeNull();
     expect(
+      container.querySelector('[data-field-key="volumeMounts"] .resource-form-nested-group-fields')
+    ).toBeNull();
+    expect(
       container.querySelector(
         '[data-field-key="ports"] .resource-form-nested-group-row-actions--left'
       )
@@ -330,6 +345,15 @@ spec:
       container.querySelector('[data-field-key="env"] .resource-form-action-ghost-text')
         ?.textContent
     ).toBe('Add env var');
+    expect(
+      container.querySelector(
+        '[data-field-key="volumeMounts"] .resource-form-nested-group-row-actions--left'
+      )
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-field-key="volumeMounts"] .resource-form-action-ghost-text')
+        ?.textContent
+    ).toBe('Add volume mount');
   });
 
   it('keeps deployment selectors separate from labels and prevents removing the last selector', async () => {
@@ -673,7 +697,7 @@ spec:
     expect(updatedYaml).not.toContain('- name: main');
   });
 
-  it('reflects existing ports/env vars from YAML and renders add buttons', async () => {
+  it('reflects existing ports/env vars/volume mounts from YAML and renders add buttons', async () => {
     const { ResourceForm } = await import('./ResourceForm');
     const deploymentLikeDefinition: ResourceFormDefinition = {
       kind: 'Deployment',
@@ -730,8 +754,19 @@ spec:
                   ],
                   defaultValue: { name: '', value: '' },
                 },
+                {
+                  key: 'volumeMounts',
+                  label: 'Volume Mounts',
+                  path: ['volumeMounts'],
+                  type: 'group-list',
+                  fields: [
+                    { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                    { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
+                  ],
+                  defaultValue: { name: '', mountPath: '' },
+                },
               ],
-              defaultValue: { name: '', ports: [], env: [] },
+              defaultValue: { name: '', ports: [], env: [], volumeMounts: [] },
             },
           ],
         },
@@ -755,6 +790,9 @@ spec:
           env:
             - name: LOG_LEVEL
               value: debug
+          volumeMounts:
+            - name: data
+              mountPath: /var/data
 `;
 
     await act(async () => {
@@ -779,6 +817,12 @@ spec:
     const envValueInput = container.querySelector(
       '[data-field-key="env"] input[data-field-key="value"]'
     ) as HTMLInputElement;
+    const mountNameInput = container.querySelector(
+      '[data-field-key="volumeMounts"] input[data-field-key="name"]'
+    ) as HTMLInputElement;
+    const mountPathInput = container.querySelector(
+      '[data-field-key="volumeMounts"] input[data-field-key="mountPath"]'
+    ) as HTMLInputElement;
     const requestValueInput = container.querySelector(
       '[data-field-key="requestsCpu"]'
     ) as HTMLInputElement;
@@ -795,16 +839,23 @@ spec:
     expect(limitValueInput.value).toBe('256Mi');
     expect(envNameInput.value).toBe('LOG_LEVEL');
     expect(envValueInput.value).toBe('debug');
+    expect(mountNameInput.value).toBe('data');
+    expect(mountPathInput.value).toBe('/var/data');
     const addPortsButton = container.querySelector(
       'button[aria-label="Add Ports"]'
     ) as HTMLButtonElement;
     const addEnvVarsButton = container.querySelector(
       'button[aria-label="Add Env Vars"]'
     ) as HTMLButtonElement;
+    const addVolumeMountsButton = container.querySelector(
+      'button[aria-label="Add Volume Mounts"]'
+    ) as HTMLButtonElement;
     expect(addPortsButton).not.toBeNull();
     expect(addPortsButton.querySelector('svg')).not.toBeNull();
     expect(addEnvVarsButton).not.toBeNull();
     expect(addEnvVarsButton.querySelector('svg')).not.toBeNull();
+    expect(addVolumeMountsButton).not.toBeNull();
+    expect(addVolumeMountsButton.querySelector('svg')).not.toBeNull();
   });
 
   it('removes empty protocol option and defaults protocol to TCP when missing', async () => {
@@ -887,7 +938,7 @@ spec:
     expect(optionLabels).not.toContain('-- Select --');
   });
 
-  it('adds new ports/env vars rows from nested add buttons', async () => {
+  it('adds new ports/env vars/volume mounts rows from nested add buttons', async () => {
     const onChange = vi.fn();
     const { ResourceForm } = await import('./ResourceForm');
     const deploymentLikeDefinition: ResourceFormDefinition = {
@@ -939,8 +990,19 @@ spec:
                   ],
                   defaultValue: { name: '', value: '' },
                 },
+                {
+                  key: 'volumeMounts',
+                  label: 'Volume Mounts',
+                  path: ['volumeMounts'],
+                  type: 'group-list',
+                  fields: [
+                    { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                    { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
+                  ],
+                  defaultValue: { name: '', mountPath: '' },
+                },
               ],
-              defaultValue: { name: '', ports: [], env: [] },
+              defaultValue: { name: '', ports: [], env: [], volumeMounts: [] },
             },
           ],
         },
@@ -955,6 +1017,7 @@ spec:
         - name: api
           ports: []
           env: []
+          volumeMounts: []
 `;
 
     await act(async () => {
@@ -973,12 +1036,17 @@ spec:
     const addEnvVars = container.querySelector(
       'button[aria-label="Add Env Vars"]'
     ) as HTMLButtonElement | null;
+    const addVolumeMounts = container.querySelector(
+      'button[aria-label="Add Volume Mounts"]'
+    ) as HTMLButtonElement | null;
     expect(addPorts).not.toBeNull();
     expect(addEnvVars).not.toBeNull();
+    expect(addVolumeMounts).not.toBeNull();
 
     await act(async () => {
       addPorts?.click();
       addEnvVars?.click();
+      addVolumeMounts?.click();
     });
 
     expect(onChange).toHaveBeenCalled();
@@ -986,6 +1054,7 @@ spec:
     expect(emittedYamls.some((yaml) => yaml.includes('containerPort: 80'))).toBe(true);
     expect(emittedYamls.some((yaml) => yaml.includes('protocol: TCP'))).toBe(true);
     expect(emittedYamls.some((yaml) => yaml.includes('env:'))).toBe(true);
+    expect(emittedYamls.some((yaml) => yaml.includes('volumeMounts:'))).toBe(true);
   });
 
   it('uses a single volume source dropdown/value pair and keeps sources mutually exclusive', async () => {
@@ -1276,6 +1345,260 @@ spec:
     expect(firstVolume?.configMap).toBeUndefined();
     expect(firstVolume?.persistentVolumeClaim?.claimName).toBe('shared-data');
     expect(firstVolume?.persistentVolumeClaim?.readOnly).toBe(true);
+  });
+
+  it('pvc source keeps required claimName when blank and omits readOnly when unset', async () => {
+    const emittedYamls: string[] = [];
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Volumes',
+          fields: [
+            {
+              key: 'volumes',
+              label: 'Volumes',
+              path: ['spec', 'template', 'spec', 'volumes'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                { key: 'source', label: 'Source', path: ['source'], type: 'volume-source' },
+              ],
+              defaultValue: {},
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+`;
+
+    const Harness = () => {
+      const [yaml, setYaml] = useState(deploymentLikeYaml);
+      return (
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={yaml}
+          onYamlChange={(nextYaml) => {
+            emittedYamls.push(nextYaml);
+            setYaml(nextYaml);
+          }}
+        />
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    const sourceSelect = container.querySelector(
+      '[data-testid="dropdown-Source"]'
+    ) as HTMLSelectElement;
+
+    await act(async () => {
+      sourceSelect.value = 'pvc';
+      sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const claimInput = container.querySelector(
+      '[data-field-key="claimName"] input'
+    ) as HTMLInputElement;
+    const readOnlyDropdown = container.querySelector(
+      '[data-testid="dropdown-Read Only"]'
+    ) as HTMLSelectElement;
+    expect(claimInput.required).toBe(true);
+
+    await act(async () => {
+      setNativeInputValue(claimInput, 'shared-data');
+      claimInput.dispatchEvent(new Event('input', { bubbles: true }));
+      readOnlyDropdown.value = 'true';
+      readOnlyDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    await act(async () => {
+      setNativeInputValue(claimInput, '');
+      claimInput.dispatchEvent(new Event('input', { bubbles: true }));
+      readOnlyDropdown.value = '';
+      readOnlyDropdown.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const updatedYaml = emittedYamls[emittedYamls.length - 1] as string;
+    const parsed = YAML.parse(updatedYaml) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              persistentVolumeClaim?: { claimName?: string; readOnly?: boolean };
+            }>;
+          };
+        };
+      };
+    };
+    const pvc = parsed.spec?.template?.spec?.volumes?.[0]?.persistentVolumeClaim;
+    expect(pvc?.claimName).toBe('');
+    expect(pvc?.readOnly).toBeUndefined();
+  });
+
+  it('switching volume source clears previous source roots and preserves selected source root', async () => {
+    const emittedYamls: string[] = [];
+    const { ResourceForm } = await import('./ResourceForm');
+    const deploymentLikeDefinition: ResourceFormDefinition = {
+      kind: 'Deployment',
+      sections: [
+        {
+          title: 'Volumes',
+          fields: [
+            {
+              key: 'volumes',
+              label: 'Volumes',
+              path: ['spec', 'template', 'spec', 'volumes'],
+              type: 'group-list',
+              fields: [
+                { key: 'name', label: 'Name', path: ['name'], type: 'text' },
+                { key: 'source', label: 'Source', path: ['source'], type: 'volume-source' },
+              ],
+              defaultValue: {},
+            },
+          ],
+        },
+      ],
+    };
+    const deploymentLikeYaml = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      volumes:
+        - name: data
+          configMap:
+            name: app-config
+`;
+
+    const Harness = () => {
+      const [yaml, setYaml] = useState(deploymentLikeYaml);
+      return (
+        <ResourceForm
+          definition={deploymentLikeDefinition}
+          yamlContent={yaml}
+          onYamlChange={(nextYaml) => {
+            emittedYamls.push(nextYaml);
+            setYaml(nextYaml);
+          }}
+        />
+      );
+    };
+
+    await act(async () => {
+      root.render(<Harness />);
+    });
+
+    const sourceSelect = container.querySelector(
+      '[data-testid="dropdown-Source"]'
+    ) as HTMLSelectElement;
+
+    await act(async () => {
+      sourceSelect.value = 'secret';
+      sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const secretNameInput = container.querySelector(
+      '[data-field-key="secretName"] input'
+    ) as HTMLInputElement;
+    await act(async () => {
+      setNativeInputValue(secretNameInput, 'app-secret');
+      secretNameInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    const yamlAfterSecret = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedAfterSecret = YAML.parse(yamlAfterSecret) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              configMap?: { name?: string };
+              secret?: { secretName?: string };
+            }>;
+          };
+        };
+      };
+    };
+    const volumeAfterSecret = parsedAfterSecret.spec?.template?.spec?.volumes?.[0];
+    expect(volumeAfterSecret?.configMap).toBeUndefined();
+    expect(volumeAfterSecret?.secret?.secretName).toBe('app-secret');
+
+    await act(async () => {
+      sourceSelect.value = 'hostPath';
+      sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const yamlAfterHostPath = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedAfterHostPath = YAML.parse(yamlAfterHostPath) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              secret?: { secretName?: string };
+              hostPath?: { path?: string };
+            }>;
+          };
+        };
+      };
+    };
+    const volumeAfterHostPath = parsedAfterHostPath.spec?.template?.spec?.volumes?.[0];
+    expect(volumeAfterHostPath?.secret).toBeUndefined();
+    expect(volumeAfterHostPath?.hostPath?.path).toBe('');
+
+    await act(async () => {
+      sourceSelect.value = 'pvc';
+      sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const yamlAfterPvc = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedAfterPvc = YAML.parse(yamlAfterPvc) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              hostPath?: { path?: string };
+              persistentVolumeClaim?: { claimName?: string };
+            }>;
+          };
+        };
+      };
+    };
+    const volumeAfterPvc = parsedAfterPvc.spec?.template?.spec?.volumes?.[0];
+    expect(volumeAfterPvc?.hostPath).toBeUndefined();
+    expect(volumeAfterPvc?.persistentVolumeClaim?.claimName).toBe('');
+
+    await act(async () => {
+      sourceSelect.value = 'emptyDir';
+      sourceSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    const yamlAfterEmptyDir = emittedYamls[emittedYamls.length - 1] as string;
+    const parsedAfterEmptyDir = YAML.parse(yamlAfterEmptyDir) as {
+      spec?: {
+        template?: {
+          spec?: {
+            volumes?: Array<{
+              persistentVolumeClaim?: { claimName?: string };
+              emptyDir?: Record<string, unknown>;
+            }>;
+          };
+        };
+      };
+    };
+    const volumeAfterEmptyDir = parsedAfterEmptyDir.spec?.template?.spec?.volumes?.[0];
+    expect(volumeAfterEmptyDir?.persistentVolumeClaim).toBeUndefined();
+    expect(volumeAfterEmptyDir?.emptyDir).toBeDefined();
+    expect(Object.keys(volumeAfterEmptyDir?.emptyDir ?? {})).toHaveLength(0);
   });
 
   it('configMap source supports optional, default mode, and items fields', async () => {

@@ -1767,13 +1767,17 @@ function GroupListField({
         const nestedItems = Array.isArray(subValue) ? (subValue as Record<string, unknown>[]) : [];
         const nestedTerminalPath = subField.path[subField.path.length - 1];
         const leftAlignNestedEmptyActions =
-          nestedTerminalPath === 'ports' || nestedTerminalPath === 'env';
+          nestedTerminalPath === 'ports' ||
+          nestedTerminalPath === 'env' ||
+          nestedTerminalPath === 'volumeMounts';
         const nestedAddGhostText =
           nestedTerminalPath === 'ports'
             ? 'Add port'
             : nestedTerminalPath === 'env'
               ? 'Add env var'
-              : null;
+              : nestedTerminalPath === 'volumeMounts'
+                ? 'Add volume mount'
+                : null;
 
         /** Write an updated nested list back into the parent item. */
         const updateNestedItems = (newNestedItems: Record<string, unknown>[]) => {
