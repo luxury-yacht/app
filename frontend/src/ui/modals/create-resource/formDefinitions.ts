@@ -53,6 +53,46 @@ export interface FormFieldDefinition {
   excludedKeysSourcePath?: string[];
   /** If true, empty string values are removed from YAML instead of persisted. */
   omitIfEmpty?: boolean;
+
+  // ─── Renderer configuration ───────────────────────────────────────────
+  // These properties let the form definition control renderer behavior
+  // that was previously hardcoded against specific field keys.
+
+  /** Whether to include an empty "-----" option in select dropdowns. Defaults true. */
+  includeEmptyOption?: boolean;
+  /** Implicit default value for select fields when none is set in YAML (e.g., 'TCP'). */
+  implicitDefault?: string;
+  /** Sub-field key used as the group-list card header title (e.g., 'name' for containers). */
+  itemTitleField?: string;
+  /** Fallback title shown when itemTitleField value is empty (e.g., 'Container'). */
+  itemTitleFallback?: string;
+  /** Label for the add button in lists (e.g., 'Add Label'). */
+  addLabel?: string;
+  /** Ghost helper text shown next to empty-state add actions. */
+  addGhostText?: string;
+  /** Whether key-value rows render with inline "Key"/"Value" labels. */
+  inlineLabels?: boolean;
+  /** Whether empty-state add actions are left-aligned. */
+  leftAlignEmptyActions?: boolean;
+  /** Whether new entries use blank keys instead of auto-generated 'key-N' names. */
+  blankNewKeys?: boolean;
+
+  // ─── Layout / sizing ───────────────────────────────────────────────
+  // Drive input widths and nested-list layout from the definition
+  // instead of coupling CSS selectors to specific data-field-key values.
+
+  /** Fixed CSS width for the input element (e.g., '6ch', 'calc(5ch + 20px)'). */
+  inputWidth?: string;
+  /** Flex shorthand for nested group-list field wrappers (e.g., '0 0 auto', '0 0 100%'). */
+  fieldFlex?: string;
+  /** Use wide gap between nested group-list fields (var(--spacing-xl) instead of default). */
+  fieldGap?: 'wide';
+  /** Wrap nested group-list fields to multiple lines. */
+  wrapFields?: boolean;
+  /** Align nested group-list rows to the start (top) instead of center. */
+  rowAlign?: 'start';
+  /** Minimum width for nested field labels (e.g., '4rem'). */
+  labelWidth?: string;
 }
 
 export interface FormSectionDefinition {
@@ -99,6 +139,7 @@ const deploymentDefinition: ResourceFormDefinition = {
           min: 0,
           max: 999,
           integer: true,
+          inputWidth: '6ch',
         },
         {
           key: 'selectors',
@@ -109,6 +150,10 @@ const deploymentDefinition: ResourceFormDefinition = {
             ['metadata', 'labels'],
             ['spec', 'template', 'metadata', 'labels'],
           ],
+          addLabel: 'Add Selector',
+          addGhostText: 'Add selector',
+          inlineLabels: true,
+          leftAlignEmptyActions: true,
         },
         {
           key: 'labels',
@@ -116,12 +161,22 @@ const deploymentDefinition: ResourceFormDefinition = {
           path: ['metadata', 'labels'],
           type: 'key-value-list',
           excludedKeysSourcePath: ['spec', 'selector', 'matchLabels'],
+          addLabel: 'Add Label',
+          addGhostText: 'Add label',
+          inlineLabels: true,
+          leftAlignEmptyActions: true,
+          blankNewKeys: true,
         },
         {
           key: 'annotations',
           label: 'Annotations',
           path: ['metadata', 'annotations'],
           type: 'key-value-list',
+          addLabel: 'Add Annotation',
+          addGhostText: 'Add annotation',
+          inlineLabels: true,
+          leftAlignEmptyActions: true,
+          blankNewKeys: true,
         },
       ],
     },
@@ -133,6 +188,8 @@ const deploymentDefinition: ResourceFormDefinition = {
           label: 'Containers',
           path: ['spec', 'template', 'spec', 'containers'],
           type: 'group-list',
+          itemTitleField: 'name',
+          itemTitleFallback: 'Container',
           fields: [
             {
               key: 'name',
@@ -153,6 +210,9 @@ const deploymentDefinition: ResourceFormDefinition = {
               label: 'Env Vars',
               path: ['env'],
               type: 'group-list',
+              leftAlignEmptyActions: true,
+              addGhostText: 'Add env var',
+              fieldGap: 'wide',
               fields: [
                 {
                   key: 'name',
@@ -160,6 +220,8 @@ const deploymentDefinition: ResourceFormDefinition = {
                   path: ['name'],
                   type: 'text',
                   placeholder: 'name',
+                  fieldFlex: '0 0 auto',
+                  inputWidth: 'calc(25ch + 20px)',
                 },
                 {
                   key: 'value',
@@ -167,6 +229,8 @@ const deploymentDefinition: ResourceFormDefinition = {
                   path: ['value'],
                   type: 'text',
                   placeholder: 'value',
+                  fieldFlex: '0 0 auto',
+                  inputWidth: 'calc(25ch + 20px)',
                 },
               ],
               defaultValue: { name: '', value: '' },
@@ -176,6 +240,9 @@ const deploymentDefinition: ResourceFormDefinition = {
               label: 'Ports',
               path: ['ports'],
               type: 'group-list',
+              leftAlignEmptyActions: true,
+              addGhostText: 'Add port',
+              fieldGap: 'wide',
               fields: [
                 {
                   key: 'name',
@@ -184,6 +251,8 @@ const deploymentDefinition: ResourceFormDefinition = {
                   type: 'text',
                   placeholder: 'optional',
                   omitIfEmpty: true,
+                  fieldFlex: '0 0 auto',
+                  inputWidth: 'calc(10ch + 20px)',
                 },
                 {
                   key: 'containerPort',
@@ -194,12 +263,17 @@ const deploymentDefinition: ResourceFormDefinition = {
                   min: 1,
                   max: 65535,
                   integer: true,
+                  fieldFlex: '0 0 auto',
+                  inputWidth: 'calc(5ch + 20px)',
                 },
                 {
                   key: 'protocol',
                   label: 'Protocol',
                   path: ['protocol'],
                   type: 'select',
+                  includeEmptyOption: false,
+                  implicitDefault: 'TCP',
+                  fieldFlex: '0 0 auto',
                   options: [
                     { label: 'TCP', value: 'TCP' },
                     { label: 'UDP', value: 'UDP' },
@@ -219,6 +293,11 @@ const deploymentDefinition: ResourceFormDefinition = {
               label: 'Vol Mounts',
               path: ['volumeMounts'],
               type: 'group-list',
+              leftAlignEmptyActions: true,
+              addGhostText: 'Add volume mount',
+              fieldGap: 'wide',
+              wrapFields: true,
+              rowAlign: 'start',
               fields: [
                 {
                   key: 'name',
@@ -226,6 +305,8 @@ const deploymentDefinition: ResourceFormDefinition = {
                   path: ['name'],
                   type: 'text',
                   placeholder: 'volume-name',
+                  fieldFlex: '0 0 100%',
+                  inputWidth: 'calc(30ch + 20px)',
                 },
                 {
                   key: 'mountPath',
@@ -233,12 +314,16 @@ const deploymentDefinition: ResourceFormDefinition = {
                   path: ['mountPath'],
                   type: 'text',
                   placeholder: '/mnt/data',
+                  fieldFlex: '0 0 auto',
+                  inputWidth: 'calc(30ch + 20px)',
+                  labelWidth: '4rem',
                 },
                 {
                   key: 'readOnly',
                   label: 'Read Only',
                   path: ['readOnly'],
                   type: 'text',
+                  fieldFlex: '0 0 auto',
                 },
                 {
                   key: 'subPath',
@@ -246,6 +331,9 @@ const deploymentDefinition: ResourceFormDefinition = {
                   path: ['subPath'],
                   type: 'text',
                   placeholder: 'optional',
+                  fieldFlex: '0 0 100%',
+                  inputWidth: 'calc(30ch + 20px)',
+                  labelWidth: '4rem',
                 },
               ],
               defaultValue: { name: '', mountPath: '' },
@@ -263,6 +351,8 @@ const deploymentDefinition: ResourceFormDefinition = {
           label: 'Volumes',
           path: ['spec', 'template', 'spec', 'volumes'],
           type: 'group-list',
+          itemTitleField: 'name',
+          itemTitleFallback: 'Volume',
           fields: [
             {
               key: 'name',
@@ -309,6 +399,11 @@ const serviceDefinition: ResourceFormDefinition = {
           label: 'Annotations',
           path: ['metadata', 'annotations'],
           type: 'key-value-list',
+          addLabel: 'Add Annotation',
+          addGhostText: 'Add annotation',
+          inlineLabels: true,
+          leftAlignEmptyActions: true,
+          blankNewKeys: true,
         },
       ],
     },
@@ -354,6 +449,8 @@ const serviceDefinition: ResourceFormDefinition = {
               label: 'Protocol',
               path: ['protocol'],
               type: 'select',
+              includeEmptyOption: false,
+              implicitDefault: 'TCP',
               options: [
                 { label: 'TCP', value: 'TCP' },
                 { label: 'UDP', value: 'UDP' },
@@ -391,6 +488,11 @@ const configMapDefinition: ResourceFormDefinition = {
           label: 'Annotations',
           path: ['metadata', 'annotations'],
           type: 'key-value-list',
+          addLabel: 'Add Annotation',
+          addGhostText: 'Add annotation',
+          inlineLabels: true,
+          leftAlignEmptyActions: true,
+          blankNewKeys: true,
         },
       ],
     },
@@ -425,6 +527,11 @@ const secretDefinition: ResourceFormDefinition = {
           label: 'Annotations',
           path: ['metadata', 'annotations'],
           type: 'key-value-list',
+          addLabel: 'Add Annotation',
+          addGhostText: 'Add annotation',
+          inlineLabels: true,
+          leftAlignEmptyActions: true,
+          blankNewKeys: true,
         },
         {
           key: 'type',
@@ -473,6 +580,11 @@ const jobDefinition: ResourceFormDefinition = {
           label: 'Annotations',
           path: ['metadata', 'annotations'],
           type: 'key-value-list',
+          addLabel: 'Add Annotation',
+          addGhostText: 'Add annotation',
+          inlineLabels: true,
+          leftAlignEmptyActions: true,
+          blankNewKeys: true,
         },
         {
           key: 'backoffLimit',
@@ -501,6 +613,8 @@ const jobDefinition: ResourceFormDefinition = {
           label: 'Containers',
           path: ['spec', 'template', 'spec', 'containers'],
           type: 'group-list',
+          itemTitleField: 'name',
+          itemTitleFallback: 'Container',
           fields: [
             {
               key: 'name',
@@ -561,6 +675,11 @@ const cronJobDefinition: ResourceFormDefinition = {
           label: 'Annotations',
           path: ['metadata', 'annotations'],
           type: 'key-value-list',
+          addLabel: 'Add Annotation',
+          addGhostText: 'Add annotation',
+          inlineLabels: true,
+          leftAlignEmptyActions: true,
+          blankNewKeys: true,
         },
         {
           key: 'schedule',
@@ -596,6 +715,8 @@ const cronJobDefinition: ResourceFormDefinition = {
           label: 'Containers',
           path: ['spec', 'jobTemplate', 'spec', 'template', 'spec', 'containers'],
           type: 'group-list',
+          itemTitleField: 'name',
+          itemTitleFallback: 'Container',
           fields: [
             {
               key: 'name',
@@ -656,6 +777,11 @@ const ingressDefinition: ResourceFormDefinition = {
           label: 'Annotations',
           path: ['metadata', 'annotations'],
           type: 'key-value-list',
+          addLabel: 'Add Annotation',
+          addGhostText: 'Add annotation',
+          inlineLabels: true,
+          leftAlignEmptyActions: true,
+          blankNewKeys: true,
         },
         {
           key: 'ingressClassName',

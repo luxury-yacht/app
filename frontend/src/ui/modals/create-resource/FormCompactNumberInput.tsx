@@ -1,4 +1,5 @@
 import React from 'react';
+import { INPUT_BEHAVIOR_PROPS } from './formUtils';
 
 interface CompactNumberConstraints {
   min?: number;
@@ -16,16 +17,10 @@ interface FormCompactNumberInputProps extends CompactNumberConstraints {
   defaultValue?: string;
   placeholder?: string;
   className?: string;
+  style?: React.CSSProperties;
   inputRef?: React.Ref<HTMLInputElement>;
   onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }
-
-const INPUT_BEHAVIOR_PROPS = {
-  autoCapitalize: 'off' as const,
-  autoCorrect: 'off' as const,
-  autoComplete: 'off' as const,
-  spellCheck: false,
-};
 
 /**
  * Keep integer-only number inputs constrained while typing.
@@ -111,6 +106,7 @@ export function FormCompactNumberInput({
   max,
   integer,
   className = 'resource-form-input',
+  style,
   inputRef,
   onChange,
 }: FormCompactNumberInputProps): React.ReactElement {
@@ -119,6 +115,7 @@ export function FormCompactNumberInput({
       ref={inputRef}
       type="number"
       className={className}
+      style={style}
       data-field-key={dataFieldKey}
       value={value}
       defaultValue={defaultValue}

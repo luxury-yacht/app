@@ -1,5 +1,6 @@
 import React from 'react';
 import { FormEmptyActionRow, FormIconActionButton } from './FormActionPrimitives';
+import { INPUT_BEHAVIOR_PROPS } from './formUtils';
 
 interface FormKeyValueListFieldProps {
   dataFieldKey: string;
@@ -15,13 +16,6 @@ interface FormKeyValueListFieldProps {
   leftAlignEmptyStateActions?: boolean;
   addGhostText?: string | null;
 }
-
-const INPUT_BEHAVIOR_PROPS = {
-  autoCapitalize: 'off' as const,
-  autoCorrect: 'off' as const,
-  autoComplete: 'off' as const,
-  spellCheck: false,
-};
 
 /**
  * Reusable key-value list editor used by metadata maps and nested map fields.
@@ -52,7 +46,7 @@ export function FormKeyValueListField({
             {showInlineKeyValueLabels ? (
               <div className="resource-form-kv-labeled-pairs">
                 <div className="resource-form-kv-pair">
-                  <span className="resource-form-kv-inline-label">Key</span>
+                  <span className="resource-form-field-label">Key</span>
                   <input
                     type="text"
                     className="resource-form-input resource-form-kv-input--25ch"
@@ -64,7 +58,7 @@ export function FormKeyValueListField({
                   />
                 </div>
                 <div className="resource-form-kv-pair">
-                  <span className="resource-form-kv-inline-label">Value</span>
+                  <span className="resource-form-field-label">Value</span>
                   <input
                     type="text"
                     className="resource-form-input resource-form-kv-input--25ch"

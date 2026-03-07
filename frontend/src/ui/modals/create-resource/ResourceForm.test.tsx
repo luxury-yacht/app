@@ -45,12 +45,27 @@ const testDefinition: ResourceFormDefinition = {
           type: 'text',
           placeholder: 'test-name',
         },
-        { key: 'labels', label: 'Labels', path: ['metadata', 'labels'], type: 'key-value-list' },
+        {
+          key: 'labels',
+          label: 'Labels',
+          path: ['metadata', 'labels'],
+          type: 'key-value-list',
+          addLabel: 'Add Label',
+          addGhostText: 'Add label',
+          inlineLabels: true,
+          leftAlignEmptyActions: true,
+          blankNewKeys: true,
+        },
         {
           key: 'annotations',
           label: 'Annotations',
           path: ['metadata', 'annotations'],
           type: 'key-value-list',
+          addLabel: 'Add Annotation',
+          addGhostText: 'Add annotation',
+          inlineLabels: true,
+          leftAlignEmptyActions: true,
+          blankNewKeys: true,
         },
         {
           key: 'replicas',
@@ -210,12 +225,22 @@ data:
               label: 'Labels',
               path: ['metadata', 'labels'],
               type: 'key-value-list',
+              addLabel: 'Add Label',
+              addGhostText: 'Add label',
+              inlineLabels: true,
+              leftAlignEmptyActions: true,
+              blankNewKeys: true,
             },
             {
               key: 'annotations',
               label: 'Annotations',
               path: ['metadata', 'annotations'],
               type: 'key-value-list',
+              addLabel: 'Add Annotation',
+              addGhostText: 'Add annotation',
+              inlineLabels: true,
+              leftAlignEmptyActions: true,
+              blankNewKeys: true,
             },
           ],
         },
@@ -227,6 +252,8 @@ data:
               label: 'Containers',
               path: ['spec', 'template', 'spec', 'containers'],
               type: 'group-list',
+              itemTitleField: 'name',
+              itemTitleFallback: 'Container',
               fields: [
                 { key: 'name', label: 'Name', path: ['name'], type: 'text' },
                 {
@@ -234,6 +261,8 @@ data:
                   label: 'Ports',
                   path: ['ports'],
                   type: 'group-list',
+                  leftAlignEmptyActions: true,
+                  addGhostText: 'Add port',
                   fields: [
                     {
                       key: 'containerPort',
@@ -249,6 +278,8 @@ data:
                   label: 'Env Vars',
                   path: ['env'],
                   type: 'group-list',
+                  leftAlignEmptyActions: true,
+                  addGhostText: 'Add env var',
                   fields: [
                     { key: 'name', label: 'Name', path: ['name'], type: 'text' },
                     { key: 'value', label: 'Value', path: ['value'], type: 'text' },
@@ -260,6 +291,8 @@ data:
                   label: 'Volume Mounts',
                   path: ['volumeMounts'],
                   type: 'group-list',
+                  leftAlignEmptyActions: true,
+                  addGhostText: 'Add volume mount',
                   fields: [
                     { key: 'name', label: 'Name', path: ['name'], type: 'text' },
                     { key: 'mountPath', label: 'Path', path: ['mountPath'], type: 'text' },
@@ -646,6 +679,8 @@ spec:
               label: 'Containers',
               path: ['spec', 'containers'],
               type: 'group-list',
+              itemTitleField: 'name',
+              itemTitleFallback: 'Container',
               fields: [
                 {
                   key: 'name',
@@ -1085,6 +1120,8 @@ spec:
                         { label: 'TCP', value: 'TCP' },
                         { label: 'UDP', value: 'UDP' },
                       ],
+                      includeEmptyOption: false,
+                      implicitDefault: 'TCP',
                     },
                   ],
                   defaultValue: { containerPort: 80, protocol: 'TCP' },
@@ -1502,7 +1539,7 @@ spec:
       '[data-testid="dropdown-Read Only"]'
     ) as HTMLSelectElement;
     const claimLabel = container.querySelector(
-      '[data-field-key="claimName"] .resource-form-nested-group-label'
+      '[data-field-key="claimName"] .resource-form-field-label'
     ) as HTMLSpanElement;
     expect(pvcSourceExtras).not.toBeNull();
     expect(pvcClaimInput).not.toBeNull();
@@ -1879,15 +1916,12 @@ spec:
     });
     expect(container.querySelector('.resource-form-action-ghost-text')).toBeNull();
 
-    const itemKeyInput = container.querySelector(
-      '[data-field-key="configMapItemKey"] input'
-    ) as HTMLInputElement;
-    const itemPathInput = container.querySelector(
-      '[data-field-key="configMapItemPath"] input'
-    ) as HTMLInputElement;
-    const itemModeInput = container.querySelector(
-      '[data-field-key="configMapItemMode"] input'
-    ) as HTMLInputElement;
+    const configMapItemInputs = container.querySelectorAll(
+      '[data-field-key="configMapItems"] .resource-form-nested-group-field input'
+    );
+    const itemKeyInput = configMapItemInputs[0] as HTMLInputElement;
+    const itemPathInput = configMapItemInputs[1] as HTMLInputElement;
+    const itemModeInput = configMapItemInputs[2] as HTMLInputElement;
 
     await act(async () => {
       setNativeInputValue(itemKeyInput, 'app.properties');
@@ -2043,15 +2077,12 @@ spec:
       addItemsBtn.click();
     });
 
-    const itemKeyInput = container.querySelector(
-      '[data-field-key="secretItemKey"] input'
-    ) as HTMLInputElement;
-    const itemPathInput = container.querySelector(
-      '[data-field-key="secretItemPath"] input'
-    ) as HTMLInputElement;
-    const itemModeInput = container.querySelector(
-      '[data-field-key="secretItemMode"] input'
-    ) as HTMLInputElement;
+    const secretItemInputs = container.querySelectorAll(
+      '[data-field-key="secretItems"] .resource-form-nested-group-field input'
+    );
+    const itemKeyInput = secretItemInputs[0] as HTMLInputElement;
+    const itemPathInput = secretItemInputs[1] as HTMLInputElement;
+    const itemModeInput = secretItemInputs[2] as HTMLInputElement;
 
     await act(async () => {
       setNativeInputValue(itemKeyInput, 'token');
@@ -2319,7 +2350,7 @@ spec:
       '[data-testid="dropdown-Type"]'
     ) as HTMLSelectElement;
     const pathLabel = container.querySelector(
-      '[data-field-key="path"] .resource-form-nested-group-label'
+      '[data-field-key="path"] .resource-form-field-label'
     ) as HTMLSpanElement;
 
     expect(hostPathInput).not.toBeNull();

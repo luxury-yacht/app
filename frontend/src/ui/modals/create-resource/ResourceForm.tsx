@@ -23,6 +23,17 @@ import { FormKeyValueListField } from './FormKeyValueListField';
 import { FormNestedListField } from './FormNestedListField';
 import { FormSectionCard } from './FormSectionCard';
 import { FormTriStateBooleanDropdown } from './FormTriStateBooleanDropdown';
+import { FormVolumeItemListField } from './FormVolumeItemListField';
+import {
+  INPUT_BEHAVIOR_PROPS,
+  getNestedValue,
+  setNestedValue,
+  unsetNestedValue,
+  toStringMap,
+  toMapEntries,
+  toPersistedMap,
+  arePersistedMapsEqual,
+} from './formUtils';
 import './ResourceForm.css';
 
 interface ResourceFormProps {
@@ -52,68 +63,6 @@ function isYamlValid(yamlContent: string): boolean {
 }
 
 /**
- * Get a nested value from a plain JS object using a path array.
- * Used for reading sub-field values from group-list items.
- */
-function getNestedValue(obj: Record<string, unknown>, path: string[]): unknown {
-  let current: unknown = obj;
-  for (const segment of path) {
-    if (current == null || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[segment];
-  }
-  return current;
-}
-
-/**
- * Set a nested value in a plain JS object using a path array.
- * Returns a shallow-cloned copy with the value set. Used for
- * updating sub-field values within group-list items.
- */
-function setNestedValue(
-  obj: Record<string, unknown>,
-  path: string[],
-  value: unknown
-): Record<string, unknown> {
-  if (path.length === 0) return obj;
-  const clone = { ...obj };
-  if (path.length === 1) {
-    clone[path[0]] = value;
-    return clone;
-  }
-  // Recursively clone and set nested objects.
-  const child = (clone[path[0]] ?? {}) as Record<string, unknown>;
-  clone[path[0]] = setNestedValue(child, path.slice(1), value);
-  return clone;
-}
-
-/**
- * Remove a nested key from a plain JS object using a path array.
- * If an intermediate object becomes empty after removal, it is pruned.
- */
-function unsetNestedValue(obj: Record<string, unknown>, path: string[]): Record<string, unknown> {
-  if (path.length === 0) return obj;
-  const clone = { ...obj };
-  const [head, ...tail] = path;
-  if (tail.length === 0) {
-    delete clone[head];
-    return clone;
-  }
-
-  const child = clone[head];
-  if (child == null || typeof child !== 'object' || Array.isArray(child)) {
-    return clone;
-  }
-
-  const nextChild = unsetNestedValue(child as Record<string, unknown>, tail);
-  if (Object.keys(nextChild).length === 0) {
-    delete clone[head];
-  } else {
-    clone[head] = nextChild;
-  }
-  return clone;
-}
-
-/**
  * Decide whether an empty value should be omitted from YAML for this field.
  */
 function shouldOmitEmptyValue(field: FormFieldDefinition, value: unknown): boolean {
@@ -122,26 +71,12 @@ function shouldOmitEmptyValue(field: FormFieldDefinition, value: unknown): boole
 
 const DEFAULT_SELECTOR_ENTRY: [string, string] = ['app.kubernetes.io/name', ''];
 
-function toStringMap(value: unknown): Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).map(([key, entryValue]) => [
-      key,
-      String(entryValue ?? ''),
-    ])
-  );
-}
-
-function toMapEntries(value: unknown): [string, string][] {
-  return Object.entries(toStringMap(value));
-}
-
 /**
  * Build standard dropdown options for select fields.
- * Includes an explicit empty option so users can clear a selection.
+ * Includes an explicit empty option unless the definition opts out.
  */
 function buildSelectOptions(field: FormFieldDefinition): DropdownOption[] {
-  const includeEmptyOption = field.key !== 'protocol';
+  const includeEmptyOption = field.includeEmptyOption !== false;
   return [
     ...(includeEmptyOption ? [{ value: '', label: '-----' }] : []),
     ...(field.options?.map((opt) => ({
@@ -152,13 +87,36 @@ function buildSelectOptions(field: FormFieldDefinition): DropdownOption[] {
 }
 
 /**
- * Normalize select value for fields that have implicit defaults.
+ * Normalize select value for fields that have an implicit default.
  */
 function getSelectFieldValue(field: FormFieldDefinition, currentValue: string): string {
-  if (field.key === 'protocol' && currentValue === '') {
-    return 'TCP';
+  if (field.implicitDefault && currentValue === '') {
+    return field.implicitDefault;
   }
   return currentValue;
+}
+
+/**
+ * Build inline style for a fixed-width input from a FormFieldDefinition.
+ * Returns undefined when no inputWidth is set, so React skips the style prop.
+ */
+function fixedWidthStyle(field: { inputWidth?: string }): React.CSSProperties | undefined {
+  if (!field.inputWidth) return undefined;
+  return {
+    flex: '0 0 auto',
+    width: field.inputWidth,
+    minWidth: field.inputWidth,
+    maxWidth: field.inputWidth,
+  };
+}
+
+/**
+ * Build inline style for a nested group-list field wrapper from its definition.
+ * Controls the flex sizing of the wrapper div.
+ */
+function fieldFlexStyle(field: { fieldFlex?: string }): React.CSSProperties | undefined {
+  if (!field.fieldFlex) return undefined;
+  return { flex: field.fieldFlex };
 }
 
 type VolumeSourceKey = 'pvc' | 'configMap' | 'secret' | 'hostPath' | 'emptyDir';
@@ -187,6 +145,10 @@ interface VolumeSourceExtraFieldDefinition {
   emptyLabel?: string;
   trueLabel?: string;
   falseLabel?: string;
+  /** Fixed CSS width for the input element. */
+  inputWidth?: string;
+  /** Fixed CSS width for the dropdown wrapper. */
+  dropdownWidth?: string;
 }
 
 const VOLUME_SOURCE_DEFINITIONS: VolumeSourceDefinition[] = [
@@ -266,6 +228,7 @@ const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraField
       emptyLabel: '-----',
       trueLabel: 'true',
       falseLabel: 'false',
+      dropdownWidth: 'calc(5ch + 40px)',
     },
     {
       key: 'defaultMode',
@@ -276,6 +239,7 @@ const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraField
       min: 0,
       max: 511,
       integer: true,
+      inputWidth: 'calc(3ch + 22px)',
       parseValue: (rawValue: string) => {
         if (rawValue.trim() === '') return '';
         const parsed = Number(rawValue);
@@ -352,6 +316,7 @@ const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraField
       emptyLabel: '-----',
       trueLabel: 'true',
       falseLabel: 'false',
+      dropdownWidth: 'calc(5ch + 40px)',
     },
     {
       key: 'defaultMode',
@@ -362,6 +327,7 @@ const VOLUME_SOURCE_EXTRA_FIELDS: Record<VolumeSourceKey, VolumeSourceExtraField
       min: 0,
       max: 511,
       integer: true,
+      inputWidth: 'calc(3ch + 22px)',
       parseValue: (rawValue: string) => {
         if (rawValue.trim() === '') return '';
         const parsed = Number(rawValue);
@@ -431,14 +397,6 @@ function getCurrentVolumeSource(item: Record<string, unknown>): VolumeSourceDefi
   return undefined;
 }
 
-// Disable browser text assistance across form fields.
-const INPUT_BEHAVIOR_PROPS = {
-  autoCapitalize: 'off' as const,
-  autoCorrect: 'off' as const,
-  autoComplete: 'off' as const,
-  spellCheck: false,
-};
-
 // ─── Field Components ───────────────────────────────────────────────────
 
 /**
@@ -486,6 +444,7 @@ function TextField({
       ref={inputRef}
       type="text"
       className="resource-form-input"
+      style={fixedWidthStyle(field)}
       data-field-key={field.key}
       defaultValue={stringValue}
       placeholder={field.placeholder}
@@ -566,6 +525,7 @@ function NumberField({
       min={field.min}
       max={field.max}
       integer={field.integer}
+      style={fixedWidthStyle(field)}
     />
   );
 }
@@ -710,10 +670,9 @@ function KeyValueListField({
     () => new Set(Object.keys(toStringMap(excludedKeysSourceValue))),
     [excludedKeysSourceValue]
   );
-  const terminalPath = field.path[field.path.length - 1];
   const pathKey = field.path.join('.');
-  const showInlineKeyValueLabels = terminalPath === 'labels' || terminalPath === 'annotations';
-  const leftAlignEmptyStateActions = terminalPath === 'labels' || terminalPath === 'annotations';
+  const showInlineKeyValueLabels = field.inlineLabels === true;
+  const leftAlignEmptyStateActions = field.leftAlignEmptyActions === true;
 
   // Convert the object to an array of [key, value] pairs for rendering.
   const entriesFromYaml: [string, string][] = useMemo(() => {
@@ -721,41 +680,6 @@ function KeyValueListField({
   }, [excludedKeys, rawValue]);
   const [draftEntries, setDraftEntries] = useState<[string, string][]>(entriesFromYaml);
   const lastSyncKeyRef = useRef(`${pathKey}|${yamlContent}`);
-
-  /**
-   * Build the persisted YAML map from editable rows.
-   * Empty keys are skipped so partial rows do not leak into YAML.
-   */
-  const toPersistedMap = useCallback(
-    (rows: [string, string][]): Record<string, string> => {
-      const obj: Record<string, string> = {};
-      for (const [k, v] of rows) {
-        if (excludedKeys.has(k)) continue;
-        if (k) obj[k] = v;
-      }
-      return obj;
-    },
-    [excludedKeys]
-  );
-
-  /**
-   * Compare persisted key-value maps so draft-only rows (blank keys) can
-   * survive parent YAML resync when effective YAML data has not changed.
-   */
-  const arePersistedMapsEqual = useCallback(
-    (leftRows: [string, string][], rightRows: [string, string][]): boolean => {
-      const left = toPersistedMap(leftRows);
-      const right = toPersistedMap(rightRows);
-      const leftKeys = Object.keys(left);
-      const rightKeys = Object.keys(right);
-      if (leftKeys.length !== rightKeys.length) return false;
-      for (const key of leftKeys) {
-        if (right[key] !== left[key]) return false;
-      }
-      return true;
-    },
-    [toPersistedMap]
-  );
 
   /**
    * Resync draft rows only when the upstream YAML/path changes.
@@ -766,31 +690,16 @@ function KeyValueListField({
     if (syncKey === lastSyncKeyRef.current) return;
     lastSyncKeyRef.current = syncKey;
     setDraftEntries((previousDraft) => {
-      if (arePersistedMapsEqual(previousDraft, entriesFromYaml)) {
+      if (arePersistedMapsEqual(previousDraft, entriesFromYaml, excludedKeys)) {
         return previousDraft;
       }
       return entriesFromYaml;
     });
-  }, [arePersistedMapsEqual, entriesFromYaml, pathKey, yamlContent]);
+  }, [excludedKeys, entriesFromYaml, pathKey, yamlContent]);
 
-  /**
-   * Resolve the add-button label for key-value lists.
-   * Labels and annotations use explicit wording; other maps stay generic.
-   */
-  const addButtonLabel = useMemo(() => {
-    if (terminalPath === 'labels') return 'Add Label';
-    if (terminalPath === 'annotations') return 'Add Annotation';
-    return 'Add Entry';
-  }, [terminalPath]);
-  const addGhostText = useMemo(() => {
-    if (terminalPath === 'labels') return 'Add label';
-    if (terminalPath === 'annotations') return 'Add annotation';
-    return null;
-  }, [terminalPath]);
-  const removeButtonLabel = useMemo(
-    () => addButtonLabel.replace(/^Add\b/, 'Remove'),
-    [addButtonLabel]
-  );
+  const addButtonLabel = field.addLabel ?? 'Add Entry';
+  const addGhostText = field.addGhostText ?? null;
+  const removeButtonLabel = addButtonLabel.replace(/^Add\b/, 'Remove');
 
   /** Persist rows to local draft state and YAML. */
   const updateEntries = useCallback(
@@ -799,7 +708,7 @@ function KeyValueListField({
         ([key]) => key.trim() === '' || !excludedKeys.has(key)
       );
       setDraftEntries(editableEntries);
-      const nextMap = toPersistedMap(editableEntries);
+      const nextMap = toPersistedMap(editableEntries, excludedKeys);
       const existingMap = toStringMap(getFieldValue(yamlContent, field.path));
       for (const [key, value] of Object.entries(existingMap)) {
         if (excludedKeys.has(key)) {
@@ -809,7 +718,7 @@ function KeyValueListField({
       const updated = setFieldValue(yamlContent, field.path, nextMap);
       if (updated !== null) onYamlChange(updated);
     },
-    [excludedKeys, yamlContent, field.path, onYamlChange, toPersistedMap]
+    [excludedKeys, yamlContent, field.path, onYamlChange]
   );
 
   /** Handle key change for a specific row. */
@@ -836,7 +745,7 @@ function KeyValueListField({
 
   /** Add a new empty row. */
   const handleAdd = () => {
-    if (terminalPath === 'labels' || terminalPath === 'annotations') {
+    if (field.blankNewKeys) {
       const newEntries: [string, string][] = [...draftEntries, ['', '']];
       updateEntries(newEntries);
       return;
@@ -907,29 +816,6 @@ function SelectorListField({
   const [draftEntries, setDraftEntries] = useState<[string, string][]>(entriesFromYaml);
   const lastSyncKeyRef = useRef(`${syncKey}|${yamlContent}`);
 
-  const toPersistedMap = useCallback((rows: [string, string][]): Record<string, string> => {
-    const obj: Record<string, string> = {};
-    for (const [key, value] of rows) {
-      if (key) obj[key] = value;
-    }
-    return obj;
-  }, []);
-
-  const arePersistedMapsEqual = useCallback(
-    (leftRows: [string, string][], rightRows: [string, string][]): boolean => {
-      const left = toPersistedMap(leftRows);
-      const right = toPersistedMap(rightRows);
-      const leftKeys = Object.keys(left);
-      const rightKeys = Object.keys(right);
-      if (leftKeys.length !== rightKeys.length) return false;
-      for (const key of leftKeys) {
-        if (left[key] !== right[key]) return false;
-      }
-      return true;
-    },
-    [toPersistedMap]
-  );
-
   useEffect(() => {
     const currentSyncKey = `${syncKey}|${yamlContent}`;
     if (currentSyncKey === lastSyncKeyRef.current) return;
@@ -940,7 +826,7 @@ function SelectorListField({
       }
       return entriesFromYaml;
     });
-  }, [arePersistedMapsEqual, entriesFromYaml, syncKey, yamlContent]);
+  }, [entriesFromYaml, syncKey, yamlContent]);
 
   const updateEntries = useCallback(
     (newEntries: [string, string][]) => {
@@ -956,7 +842,7 @@ function SelectorListField({
       }
       onYamlChange(nextYaml);
     },
-    [field.path, field.mirrorPaths, onYamlChange, toPersistedMap, yamlContent]
+    [field.path, field.mirrorPaths, onYamlChange, yamlContent]
   );
 
   const handleKeyChange = (index: number, newKey: string) => {
@@ -1021,9 +907,7 @@ function GroupListField({
     }
     return [];
   }, [rawValue]);
-  const isContainerGroup = field.key === 'containers';
-  const isVolumeGroup = field.key === 'volumes';
-  const usesContainerGroupStyling = isContainerGroup || isVolumeGroup;
+  const hasItemTitle = !!field.itemTitleField;
   const [resourceFieldsVisible, setResourceFieldsVisible] = useState<Record<string, boolean>>({});
   const availableVolumeNames = useMemo(() => {
     const templateVolumes = getFieldValue(yamlContent, ['spec', 'template', 'spec', 'volumes']);
@@ -1082,12 +966,10 @@ function GroupListField({
    * Container groups use the current container name so the header tracks edits.
    */
   const getItemTitle = (item: Record<string, unknown>, itemIndex: number): string => {
-    if (!usesContainerGroupStyling) return `${field.label} ${itemIndex + 1}`;
-    const nameValue = getNestedValue(item, ['name']);
+    if (!field.itemTitleField) return `${field.label} ${itemIndex + 1}`;
+    const nameValue = getNestedValue(item, [field.itemTitleField]);
     const name = String(nameValue ?? '').trim();
-    if (isContainerGroup) return name || 'Container';
-    if (isVolumeGroup) return name || 'Volume';
-    return `${field.label} ${itemIndex + 1}`;
+    return name || field.itemTitleFallback || `${field.label} ${itemIndex + 1}`;
   };
 
   /**
@@ -1108,6 +990,7 @@ function GroupListField({
           <input
             type="text"
             className="resource-form-input"
+            style={fixedWidthStyle(subField)}
             data-field-key={subField.key}
             value={stringValue}
             placeholder={subField.placeholder}
@@ -1124,6 +1007,7 @@ function GroupListField({
             min={subField.min}
             max={subField.max}
             integer={subField.integer}
+            style={fixedWidthStyle(subField)}
             onChange={(e) => {
               const parsed = parseCompactNumberValue(
                 e.target.value,
@@ -1141,7 +1025,7 @@ function GroupListField({
         );
       case 'select':
         return (
-          <div data-field-key={subField.key} className="resource-form-dropdown">
+          <div data-field-key={subField.key} className="resource-form-dropdown" style={fixedWidthStyle(subField)}>
             <Dropdown
               options={buildSelectOptions(subField)}
               value={getSelectFieldValue(subField, stringValue)}
@@ -1427,9 +1311,9 @@ function GroupListField({
               data-field-key={extraField.key}
               className="resource-form-volume-source-extra-field"
             >
-              <span className="resource-form-nested-group-label">{extraField.label}</span>
+              <span className="resource-form-field-label">{extraField.label}</span>
               {extraField.type === 'select' ? (
-                <div className="resource-form-volume-source-extra-dropdown">
+                <div className="resource-form-volume-source-extra-dropdown" style={fixedWidthStyle(extraField)}>
                   <Dropdown
                     options={extraField.options ?? []}
                     value={stringExtraValue}
@@ -1445,6 +1329,7 @@ function GroupListField({
               ) : extraField.type === 'tri-state-boolean' ? (
                 <FormTriStateBooleanDropdown
                   className="resource-form-volume-source-extra-dropdown"
+                  style={extraField.dropdownWidth ? fixedWidthStyle({ inputWidth: extraField.dropdownWidth }) : undefined}
                   value={resolvedExtraValue}
                   emptyLabel={extraField.emptyLabel}
                   trueLabel={extraField.trueLabel}
@@ -1460,6 +1345,7 @@ function GroupListField({
                   min={extraField.min}
                   max={extraField.max}
                   integer={extraField.integer}
+                  style={fixedWidthStyle(extraField)}
                   onChange={(event) => {
                     const parsed = parseCompactNumberValue(
                       event.target.value,
@@ -1478,6 +1364,7 @@ function GroupListField({
                 <input
                   type="text"
                   className="resource-form-input"
+                  style={fixedWidthStyle(extraField)}
                   value={stringExtraValue}
                   placeholder={extraField.placeholder}
                   required={extraField.required === true}
@@ -1523,7 +1410,7 @@ function GroupListField({
                   data-field-key={isConfigMapSource ? 'configMapName' : 'secretName'}
                   className="resource-form-volume-source-extra-field"
                 >
-                  <span className="resource-form-nested-group-label">
+                  <span className="resource-form-field-label">
                     {isConfigMapSource ? 'ConfigMap' : 'Secret'}
                   </span>
                   <input
@@ -1548,158 +1435,22 @@ function GroupListField({
             )}
 
             {effectiveSource.key === 'configMap' && (
-              <FormNestedListField
+              <FormVolumeItemListField
                 dataFieldKey="configMapItems"
                 items={configMapItems}
-                addLabel="Add item"
-                removeLabel="Remove Items"
                 onAdd={handleConfigMapAddItem}
                 onRemove={handleConfigMapRemoveItem}
-                leftAlignEmptyStateActions
-                addGhostText="Add item"
-                renderFields={(entry, rowIndex) => {
-                  const itemKey = String(getNestedValue(entry, ['key']) ?? '');
-                  const itemPath = String(getNestedValue(entry, ['path']) ?? '');
-                  const itemMode = String(getNestedValue(entry, ['mode']) ?? '');
-
-                  return (
-                    <>
-                      <div
-                        data-field-key="configMapItemKey"
-                        className="resource-form-nested-group-field"
-                      >
-                        <label className="resource-form-nested-group-label">Key</label>
-                        <input
-                          type="text"
-                          className="resource-form-input"
-                          value={itemKey}
-                          placeholder="key"
-                          {...INPUT_BEHAVIOR_PROPS}
-                          onChange={(e) =>
-                            handleConfigMapItemChange(rowIndex, ['key'], e.target.value)
-                          }
-                        />
-                      </div>
-                      <div
-                        data-field-key="configMapItemPath"
-                        className="resource-form-nested-group-field"
-                      >
-                        <label className="resource-form-nested-group-label">Path</label>
-                        <input
-                          type="text"
-                          className="resource-form-input"
-                          value={itemPath}
-                          placeholder="path"
-                          {...INPUT_BEHAVIOR_PROPS}
-                          onChange={(e) =>
-                            handleConfigMapItemChange(rowIndex, ['path'], e.target.value)
-                          }
-                        />
-                      </div>
-                      <div
-                        data-field-key="configMapItemMode"
-                        className="resource-form-nested-group-field"
-                      >
-                        <label className="resource-form-nested-group-label">Mode</label>
-                        <FormCompactNumberInput
-                          value={itemMode}
-                          dataFieldKey="configMapItemMode"
-                          placeholder="420"
-                          min={0}
-                          max={511}
-                          integer
-                          onChange={(e) => {
-                            const parsed = parseCompactNumberValue(
-                              e.target.value,
-                              { min: 0, max: 511, integer: true },
-                              { allowEmpty: true }
-                            );
-                            if (parsed === null) return;
-                            handleConfigMapItemChange(rowIndex, ['mode'], parsed);
-                          }}
-                        />
-                      </div>
-                    </>
-                  );
-                }}
+                onFieldChange={handleConfigMapItemChange}
               />
             )}
 
             {effectiveSource.key === 'secret' && (
-              <FormNestedListField
+              <FormVolumeItemListField
                 dataFieldKey="secretItems"
                 items={secretItems}
-                addLabel="Add item"
-                removeLabel="Remove Items"
                 onAdd={handleSecretAddItem}
                 onRemove={handleSecretRemoveItem}
-                leftAlignEmptyStateActions
-                addGhostText="Add item"
-                renderFields={(entry, rowIndex) => {
-                  const itemKey = String(getNestedValue(entry, ['key']) ?? '');
-                  const itemPath = String(getNestedValue(entry, ['path']) ?? '');
-                  const itemMode = String(getNestedValue(entry, ['mode']) ?? '');
-
-                  return (
-                    <>
-                      <div
-                        data-field-key="secretItemKey"
-                        className="resource-form-nested-group-field"
-                      >
-                        <label className="resource-form-nested-group-label">Key</label>
-                        <input
-                          type="text"
-                          className="resource-form-input"
-                          value={itemKey}
-                          placeholder="key"
-                          {...INPUT_BEHAVIOR_PROPS}
-                          onChange={(e) =>
-                            handleSecretItemChange(rowIndex, ['key'], e.target.value)
-                          }
-                        />
-                      </div>
-                      <div
-                        data-field-key="secretItemPath"
-                        className="resource-form-nested-group-field"
-                      >
-                        <label className="resource-form-nested-group-label">Path</label>
-                        <input
-                          type="text"
-                          className="resource-form-input"
-                          value={itemPath}
-                          placeholder="path"
-                          {...INPUT_BEHAVIOR_PROPS}
-                          onChange={(e) =>
-                            handleSecretItemChange(rowIndex, ['path'], e.target.value)
-                          }
-                        />
-                      </div>
-                      <div
-                        data-field-key="secretItemMode"
-                        className="resource-form-nested-group-field"
-                      >
-                        <label className="resource-form-nested-group-label">Mode</label>
-                        <FormCompactNumberInput
-                          dataFieldKey="secretItemMode"
-                          value={itemMode}
-                          placeholder="420"
-                          min={0}
-                          max={511}
-                          integer
-                          onChange={(event) => {
-                            const parsed = parseCompactNumberValue(
-                              event.target.value,
-                              { min: 0, max: 511, integer: true },
-                              { allowEmpty: true }
-                            );
-                            if (parsed === null) return;
-                            handleSecretItemChange(rowIndex, ['mode'], parsed);
-                          }}
-                        />
-                      </div>
-                    </>
-                  );
-                }}
+                onFieldChange={handleSecretItemChange}
               />
             )}
           </div>
@@ -1776,23 +1527,13 @@ function GroupListField({
       }
       case 'group-list': {
         const nestedItems = Array.isArray(subValue) ? (subValue as Record<string, unknown>[]) : [];
-        const nestedTerminalPath = subField.path[subField.path.length - 1];
-        const isVolumeMountsList = nestedTerminalPath === 'volumeMounts';
+        const isVolumeMountsList = subField.path[subField.path.length - 1] === 'volumeMounts';
         const disableVolumeMountAdd = isVolumeMountsList && availableVolumeNames.length === 0;
-        const leftAlignNestedEmptyActions =
-          nestedTerminalPath === 'ports' ||
-          nestedTerminalPath === 'env' ||
-          nestedTerminalPath === 'volumeMounts';
+        const leftAlignNestedEmptyActions = subField.leftAlignEmptyActions === true;
         const nestedAddGhostText =
-          nestedTerminalPath === 'ports'
-            ? 'Add port'
-            : nestedTerminalPath === 'env'
-              ? 'Add env var'
-              : nestedTerminalPath === 'volumeMounts'
-                ? disableVolumeMountAdd
-                  ? 'Add a Volume below to enable Volume Mounts'
-                  : 'Add volume mount'
-                : null;
+          disableVolumeMountAdd
+            ? 'Add a Volume below to enable Volume Mounts'
+            : (subField.addGhostText ?? null);
 
         /** Write an updated nested list back into the parent item. */
         const updateNestedItems = (newNestedItems: Record<string, unknown>[]) => {
@@ -1858,7 +1599,7 @@ function GroupListField({
               options.push({ value: nestedStringValue, label: nestedStringValue });
             }
             return (
-              <div data-field-key={nestedField.key} className="resource-form-dropdown">
+              <div data-field-key={nestedField.key} className="resource-form-dropdown" style={fixedWidthStyle(nestedField)}>
                 <Dropdown
                   options={options}
                   value={nestedStringValue}
@@ -1883,7 +1624,7 @@ function GroupListField({
               });
             };
             return (
-              <label className="resource-form-volume-mount-inline-toggle">
+              <label className="resource-form-field-label resource-form-volume-mount-inline-toggle">
                 <input
                   type="checkbox"
                   className="resource-form-checkbox"
@@ -1928,6 +1669,7 @@ function GroupListField({
                 <input
                   type="text"
                   className="resource-form-input"
+                  style={fixedWidthStyle(nestedField)}
                   data-field-key="subPath"
                   value={pathValue}
                   placeholder={nestedField.placeholder}
@@ -1944,7 +1686,7 @@ function GroupListField({
                     });
                   }}
                 />
-                <label className="resource-form-volume-mount-subpath-toggle">
+                <label className="resource-form-field-label resource-form-volume-mount-subpath-toggle">
                   <input
                     type="checkbox"
                     data-field-key="subPathExprToggle"
@@ -1966,6 +1708,7 @@ function GroupListField({
                 <input
                   type="text"
                   className="resource-form-input"
+                  style={fixedWidthStyle(nestedField)}
                   data-field-key={nestedField.key}
                   value={nestedStringValue}
                   placeholder={nestedField.placeholder}
@@ -1984,6 +1727,7 @@ function GroupListField({
                   min={nestedField.min}
                   max={nestedField.max}
                   integer={nestedField.integer}
+                  style={fixedWidthStyle(nestedField)}
                   onChange={(e) => {
                     const parsed = parseCompactNumberValue(
                       e.target.value,
@@ -2001,7 +1745,7 @@ function GroupListField({
               );
             case 'select':
               return (
-                <div data-field-key={nestedField.key} className="resource-form-dropdown">
+                <div data-field-key={nestedField.key} className="resource-form-dropdown" style={fixedWidthStyle(nestedField)}>
                   <Dropdown
                     options={buildSelectOptions(nestedField)}
                     value={getSelectFieldValue(nestedField, nestedStringValue)}
@@ -2044,6 +1788,9 @@ function GroupListField({
             leftAlignEmptyStateActions={leftAlignNestedEmptyActions}
             addGhostText={nestedAddGhostText}
             addDisabled={disableVolumeMountAdd}
+            fieldGap={subField.fieldGap}
+            wrapFields={subField.wrapFields}
+            rowAlign={subField.rowAlign}
             renderFields={(nestedItem, nestedIndex) => (
               <>
                 {subField.fields?.map((nestedField) => {
@@ -2053,9 +1800,13 @@ function GroupListField({
                       key={nestedField.key}
                       data-field-key={nestedField.key}
                       className={`resource-form-nested-group-field${hideFieldLabel ? ' resource-form-nested-group-field--no-label' : ''}`}
+                      style={fieldFlexStyle(nestedField)}
                     >
                       {!hideFieldLabel ? (
-                        <label className="resource-form-nested-group-label">
+                        <label
+                          className="resource-form-field-label"
+                          style={nestedField.labelWidth ? { minWidth: nestedField.labelWidth } : undefined}
+                        >
                           {nestedField.label}
                         </label>
                       ) : null}
@@ -2079,7 +1830,7 @@ function GroupListField({
         <div key={itemIndex} className="resource-form-group-entry">
           <div className="resource-form-group-item">
             <div
-              className={`resource-form-group-item-header${usesContainerGroupStyling ? ' resource-form-group-item-header--container' : ''}`}
+              className={`resource-form-group-item-header${hasItemTitle ? ' resource-form-group-item-header--container' : ''}`}
             >
               <span className="resource-form-group-item-title">
                 {getItemTitle(item, itemIndex)}
@@ -2093,7 +1844,7 @@ function GroupListField({
                 />
                 <FormIconActionButton
                   variant="remove"
-                  label={`Remove ${isContainerGroup ? 'Container' : isVolumeGroup ? 'Volume' : field.label}`}
+                  label={`Remove ${field.itemTitleFallback || field.label}`}
                   onClick={() => handleRemoveItem(itemIndex)}
                 />
               </div>

@@ -6,6 +6,7 @@ interface FormTriStateBooleanDropdownProps {
   onChange: (value: boolean | undefined) => void;
   ariaLabel: string;
   className?: string;
+  style?: React.CSSProperties;
   emptyLabel?: string;
   trueLabel?: string;
   falseLabel?: string;
@@ -29,6 +30,7 @@ export function FormTriStateBooleanDropdown({
   onChange,
   ariaLabel,
   className = 'resource-form-dropdown',
+  style,
   emptyLabel = '-----',
   trueLabel = 'true',
   falseLabel = 'false',
@@ -43,7 +45,7 @@ export function FormTriStateBooleanDropdown({
   );
 
   return (
-    <div className={className}>
+    <div className={className} style={style}>
       <Dropdown
         options={options}
         value={normalizeTriStateValue(value)}

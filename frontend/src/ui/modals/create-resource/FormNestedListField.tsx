@@ -12,6 +12,12 @@ interface FormNestedListFieldProps<TItem> {
   leftAlignEmptyStateActions?: boolean;
   addGhostText?: string | null;
   addDisabled?: boolean;
+  /** Use wide gap between fields (var(--spacing-xl)). */
+  fieldGap?: 'wide';
+  /** Wrap fields to multiple lines. */
+  wrapFields?: boolean;
+  /** Align rows to the start (top) instead of center. */
+  rowAlign?: 'start';
 }
 
 /**
@@ -28,12 +34,29 @@ export function FormNestedListField<TItem>({
   leftAlignEmptyStateActions = false,
   addGhostText = null,
   addDisabled = false,
+  fieldGap,
+  wrapFields,
+  rowAlign,
 }: FormNestedListFieldProps<TItem>): React.ReactElement {
+  // Build inline styles for layout overrides driven by form definitions.
+  const fieldsStyle: React.CSSProperties | undefined =
+    fieldGap || wrapFields
+      ? {
+          ...(fieldGap === 'wide' ? { gap: 'var(--spacing-xl)' } : undefined),
+          ...(wrapFields ? { flexWrap: 'wrap', rowGap: 'var(--spacing-xs)' } : undefined),
+        }
+      : undefined;
+  const rowStyle: React.CSSProperties | undefined = rowAlign === 'start'
+    ? { alignItems: 'flex-start' }
+    : undefined;
+
   return (
     <div data-field-key={dataFieldKey} className="resource-form-nested-group-list">
       {items.map((item, index) => (
-        <div key={index} className="resource-form-nested-group-row">
-          <div className="resource-form-nested-group-fields">{renderFields(item, index)}</div>
+        <div key={index} className="resource-form-nested-group-row" style={rowStyle}>
+          <div className="resource-form-nested-group-fields" style={fieldsStyle}>
+            {renderFields(item, index)}
+          </div>
           <div className="resource-form-nested-group-row-actions">
             <FormIconActionButton
               variant="add"

@@ -8,7 +8,6 @@
   flex-direction: column;
   gap: var(--spacing-sm);
   overflow-y: auto;
-  /* padding: var(--spacing-sm); */
   height: 100%;
 }
 
@@ -107,14 +106,6 @@
   -moz-appearance: textfield;
 }
 
-/* Deployment replicas should be compact (0-999). */
-.resource-form-field input[data-field-key="replicas"] {
-  flex: 0 0 6ch;
-  width: 6ch;
-  min-width: 6ch;
-  max-width: 6ch;
-}
-
 /* Resource form dropdowns should use the shared Dropdown component. */
 .resource-form-dropdown {
   flex: 1;
@@ -151,6 +142,17 @@
   min-height: 80px;
 }
 
+/* ── Shared small-caps field label ───────────────────────────────────── */
+
+.resource-form-field-label {
+  font-size: 0.75rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* ── Key-value list ──────────────────────────────────────────────────── */
 
 .resource-form-kv-container {
@@ -182,13 +184,7 @@
   gap: var(--spacing-xs);
 }
 
-.resource-form-kv-inline-label {
-  font-size: 0.75rem;
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  white-space: nowrap;
-}
+/* Inherits .resource-form-field-label via class composition in JSX. */
 
 .resource-form-kv-row .resource-form-input {
   flex: 1;
@@ -331,14 +327,7 @@
   gap: var(--spacing-xs);
 }
 
-.resource-form-nested-group-label {
-  font-size: 0.75rem;
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
+/* Inherits .resource-form-field-label via class composition in JSX. */
 
 .resource-form-nested-group-field .resource-form-input,
 .resource-form-nested-group-field .resource-form-dropdown {
@@ -401,14 +390,6 @@
   max-width: 12rem;
 }
 
-.resource-form-volume-source-extra-field[data-field-key="optional"]
-  .resource-form-volume-source-extra-dropdown {
-  flex: 0 0 auto;
-  width: calc(5ch + 40px);
-  min-width: calc(5ch + 40px);
-  max-width: calc(5ch + 40px);
-}
-
 .resource-form-volume-source-extra-dropdown .dropdown {
   display: inline-block;
   width: auto;
@@ -419,56 +400,12 @@
   min-width: 0;
 }
 
-.resource-form-volume-source-extra-field[data-field-key="optional"]
-  .resource-form-volume-source-extra-dropdown
-  .dropdown-trigger {
-  width: 100%;
-  min-width: 0;
-}
-
-.resource-form-volume-source-extra-field[data-field-key="optional"]
-  .resource-form-volume-source-extra-dropdown
-  .dropdown-menu {
-  width: 100%;
-  min-width: 100%;
-}
-
 .resource-form-volume-source-extra-field .resource-form-input {
   width: 16rem;
   min-width: 16rem;
   max-width: 16rem;
 }
 
-.resource-form-volume-source-extra-field input[data-field-key="defaultMode"] {
-  width: calc(3ch + 22px);
-  min-width: calc(3ch + 22px);
-  max-width: calc(3ch + 22px);
-}
-
-.resource-form-nested-group-list[data-field-key="configMapItems"]
-  .resource-form-nested-group-fields {
-  gap: var(--spacing-xl);
-}
-
-.resource-form-nested-group-list[data-field-key="secretItems"] .resource-form-nested-group-fields {
-  gap: var(--spacing-xl);
-}
-
-.resource-form-nested-group-list[data-field-key="configMapItems"]
-  .resource-form-nested-group-field[data-field-key="configMapItemMode"]
-  .resource-form-input {
-  width: calc(3ch + 22px);
-  min-width: calc(3ch + 22px);
-  max-width: calc(3ch + 22px);
-}
-
-.resource-form-nested-group-list[data-field-key="secretItems"]
-  .resource-form-nested-group-field[data-field-key="secretItemMode"]
-  .resource-form-input {
-  width: calc(3ch + 22px);
-  min-width: calc(3ch + 22px);
-  max-width: calc(3ch + 22px);
-}
 
 /* Container resources editor rows inside a container card. */
 .resource-form-container-resources {
@@ -486,13 +423,8 @@
   row-gap: 0.25rem;
 }
 
+/* Inherits .resource-form-field-label; extra min-width for alignment. */
 .resource-form-container-resources-row-label {
-  font-size: 0.75rem;
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  white-space: nowrap;
-  flex-shrink: 0;
   min-width: 5rem;
 }
 
@@ -508,14 +440,7 @@
   margin-left: var(--spacing-lg);
 }
 
-.resource-form-container-resources-metric-label {
-  font-size: 0.75rem;
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
+/* Inherits .resource-form-field-label via class composition in JSX. */
 
 .resource-form-container-resources .resource-form-input {
   flex: 0 0 auto;
@@ -530,135 +455,7 @@
   align-items: center;
 }
 
-/* Container port should be sized for 5 digits (1-65535). */
-.resource-form-nested-group-field input[data-field-key="containerPort"] {
-  align-self: auto;
-  flex: 0 0 auto;
-  width: calc(5ch + 20px);
-  min-width: calc(5ch + 20px);
-  max-width: calc(5ch + 20px);
-}
 
-/* Keep Port/Protocol compact in ports rows. */
-.resource-form-nested-group-list[data-field-key="ports"] .resource-form-nested-group-fields {
-  gap: var(--spacing-xl);
-}
-
-.resource-form-nested-group-list[data-field-key="ports"]
-  .resource-form-nested-group-field[data-field-key="name"],
-.resource-form-nested-group-list[data-field-key="ports"]
-  .resource-form-nested-group-field[data-field-key="containerPort"],
-.resource-form-nested-group-list[data-field-key="ports"]
-  .resource-form-nested-group-field[data-field-key="protocol"] {
-  flex: 0 0 auto;
-}
-
-/* Port name should be compact (10 chars). */
-.resource-form-nested-group-list[data-field-key="ports"]
-  .resource-form-nested-group-field
-  input[data-field-key="name"] {
-  align-self: auto;
-  flex: 0 0 auto;
-  width: calc(10ch + 20px);
-  min-width: calc(10ch + 20px);
-  max-width: calc(10ch + 20px);
-}
-
-/* Keep env var name/value spacing wide and input widths fixed. */
-.resource-form-nested-group-list[data-field-key="env"] .resource-form-nested-group-fields {
-  gap: var(--spacing-xl);
-}
-
-.resource-form-nested-group-list[data-field-key="env"]
-  .resource-form-nested-group-field[data-field-key="name"],
-.resource-form-nested-group-list[data-field-key="env"]
-  .resource-form-nested-group-field[data-field-key="value"] {
-  flex: 0 0 auto;
-}
-
-.resource-form-nested-group-list[data-field-key="env"]
-  .resource-form-nested-group-field
-  input[data-field-key="name"],
-.resource-form-nested-group-list[data-field-key="env"]
-  .resource-form-nested-group-field
-  input[data-field-key="value"] {
-  align-self: auto;
-  flex: 0 0 auto;
-  width: calc(25ch + 20px);
-  min-width: calc(25ch + 20px);
-  max-width: calc(25ch + 20px);
-}
-
-/* Volume mounts: line 1 Name, line 2 Path + Read Only, line 3 SubPath + Expr. */
-.resource-form-nested-group-list[data-field-key="volumeMounts"] .resource-form-nested-group-fields {
-  gap: var(--spacing-xl);
-  flex-wrap: wrap;
-  row-gap: var(--spacing-xs);
-}
-
-.resource-form-nested-group-list[data-field-key="volumeMounts"] .resource-form-nested-group-row {
-  align-items: flex-start;
-}
-
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-row-actions {
-  align-self: flex-start;
-}
-
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="name"] {
-  flex: 0 0 100%;
-}
-
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="mountPath"],
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="readOnly"] {
-  flex: 0 0 auto;
-}
-
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="subPath"] {
-  flex: 0 0 100%;
-}
-
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="mountPath"]
-  .resource-form-nested-group-label,
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="subPath"]
-  .resource-form-nested-group-label {
-  min-width: 4rem;
-}
-
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="name"]
-  .resource-form-dropdown,
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="name"]
-  .resource-form-dropdown
-  .dropdown,
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="name"]
-  .resource-form-dropdown
-  .dropdown-trigger,
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field
-  input[data-field-key="mountPath"] {
-  align-self: auto;
-  flex: 0 0 auto;
-  width: calc(30ch + 20px);
-  min-width: calc(30ch + 20px);
-  max-width: calc(30ch + 20px);
-}
-
-.resource-form-nested-group-list[data-field-key="volumeMounts"]
-  .resource-form-nested-group-field[data-field-key="name"]
-  .resource-form-dropdown
-  .dropdown-menu {
-  width: 100%;
-  min-width: 100%;
-}
 
 .resource-form-volume-mount-subpath-control {
   display: inline-flex;
@@ -666,23 +463,12 @@
   gap: var(--spacing-xl);
 }
 
-.resource-form-volume-mount-subpath-control input[data-field-key="subPath"] {
-  align-self: auto;
-  flex: 0 0 auto;
-  width: calc(30ch + 20px);
-  min-width: calc(30ch + 20px);
-  max-width: calc(30ch + 20px);
-}
-
+/* Inherits .resource-form-field-label font styles; adds layout for toggle labels. */
 .resource-form-volume-mount-inline-toggle,
 .resource-form-volume-mount-subpath-toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.75rem;
-  font-weight: var(--font-weight-bold);
-  color: var(--color-text-secondary);
-  text-transform: uppercase;
   white-space: nowrap;
 }
 

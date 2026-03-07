@@ -1,5 +1,6 @@
 import React from 'react';
 import { FormGhostAddText, FormIconActionButton } from './FormActionPrimitives';
+import { getNestedValue, INPUT_BEHAVIOR_PROPS } from './formUtils';
 
 interface ResourceMetricDefinition {
   key: string;
@@ -34,23 +35,11 @@ const RESOURCE_FIELD_ROWS = [
 const ALL_RESOURCE_FIELDS = [...REQUEST_FIELDS, ...LIMIT_FIELDS] as const;
 
 /**
- * Read a nested value using a path array from a resource object.
- */
-function getNestedResourceValue(obj: Record<string, unknown>, path: readonly string[]): unknown {
-  let current: unknown = obj;
-  for (const segment of path) {
-    if (current == null || typeof current !== 'object') return undefined;
-    current = (current as Record<string, unknown>)[segment];
-  }
-  return current;
-}
-
-/**
  * Returns true when any requests/limits field has a non-empty value.
  */
 export function hasContainerResourceValues(resources?: Record<string, unknown>): boolean {
   return ALL_RESOURCE_FIELDS.some((resourceField) => {
-    const value = resources ? getNestedResourceValue(resources, resourceField.path) : undefined;
+    const value = resources ? getNestedValue(resources, resourceField.path) : undefined;
     return String(value ?? '').trim() !== '';
   });
 }
@@ -81,14 +70,14 @@ export function FormContainerResourcesField({
     <div data-field-key={dataFieldKey} className="resource-form-container-resources">
       {RESOURCE_FIELD_ROWS.map((row, rowIndex) => (
         <div key={row.key} className="resource-form-container-resources-row">
-          <span className="resource-form-container-resources-row-label">{row.label}</span>
+          <span className="resource-form-field-label resource-form-container-resources-row-label">{row.label}</span>
           {row.fields.map((resourceField) => {
             const value = resources
-              ? getNestedResourceValue(resources, resourceField.path)
+              ? getNestedValue(resources, resourceField.path)
               : undefined;
             return (
               <div key={resourceField.key} className="resource-form-container-resources-metric">
-                <label className="resource-form-container-resources-metric-label">
+                <label className="resource-form-field-label">
                   {resourceField.label}
                 </label>
                 <input
@@ -97,10 +86,7 @@ export function FormContainerResourcesField({
                   data-field-key={resourceField.key}
                   value={value != null ? String(value) : ''}
                   placeholder="optional"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  autoComplete="off"
-                  spellCheck={false}
+                  {...INPUT_BEHAVIOR_PROPS}
                   onChange={(event) =>
                     onResourceValueChange(resourceField.path, event.target.value)
                   }
