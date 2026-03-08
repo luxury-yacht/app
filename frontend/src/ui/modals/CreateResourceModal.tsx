@@ -206,6 +206,8 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         setIsValidating(false);
         setIsCreating(false);
         setActiveView('yaml');
+        setYamlPanelOpen(false);
+        setYamlPanelClosing(false);
         // Load templates.
         GetResourceTemplates()
           .then((templates) => {
@@ -261,6 +263,10 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       key: 'Escape',
       handler: () => {
         if (!isOpen) return false;
+        if (yamlPanelOpen) {
+          handleYamlPanelClose();
+          return true;
+        }
         onClose();
         return true;
       },
@@ -299,6 +305,10 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
 
     // Active view: 'form' or 'yaml'. Defaults based on whether a form definition exists.
     const [activeView, setActiveView] = useState<'form' | 'yaml'>('yaml');
+
+    // YAML panel visibility. Hidden by default; toggled via "Show/Hide YAML" button.
+    const [yamlPanelOpen, setYamlPanelOpen] = useState(false);
+    const [yamlPanelClosing, setYamlPanelClosing] = useState(false);
 
     // Look up form definition for the current kind.
     const formDefinition = useMemo(
@@ -384,6 +394,15 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       },
       [extractNamespaceFromYaml]
     );
+
+    /** Close the YAML panel with exit animation. */
+    const handleYamlPanelClose = useCallback(() => {
+      setYamlPanelClosing(true);
+      setTimeout(() => {
+        setYamlPanelOpen(false);
+        setYamlPanelClosing(false);
+      }, 300);
+    }, []);
 
     // Shared error handling for validate/create responses.
     const handleBackendError = useCallback((err: unknown) => {
@@ -499,9 +518,9 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
 
     return (
       <>
-        <div className={`modal-overlay ${isClosing ? 'closing' : ''}`}>
+        <div className={`modal-overlay ${isClosing ? 'closing' : ''}${yamlPanelOpen ? ' yaml-panel-open' : ''}`}>
           <div
-            className={`modal-container create-resource-modal ${isClosing ? 'closing' : ''}`}
+            className={`modal-container create-resource-modal ${isClosing ? 'closing' : ''}${yamlPanelOpen ? ' yaml-panel-visible' : ''}`}
             ref={modalRef}
           >
             <div className="modal-header">
@@ -551,6 +570,20 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                       data-create-resource-focusable="true"
                     >
                       {showingForm ? 'Show YAML' : 'Show Form'}
+                    </button>
+                    <button
+                      type="button"
+                      className="button generic create-resource-view-toggle"
+                      onClick={() => {
+                        if (yamlPanelOpen) {
+                          handleYamlPanelClose();
+                        } else {
+                          setYamlPanelOpen(true);
+                        }
+                      }}
+                      data-create-resource-focusable="true"
+                    >
+                      {yamlPanelOpen ? 'Hide YAML' : 'Show YAML'}
                     </button>
                   </div>
 
@@ -644,6 +677,32 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                 {isCreating ? 'Creating...' : 'Create'}
               </button>
             </div>
+
+            {/* YAML side panel — anchored to the modal's right edge */}
+            {yamlPanelOpen && (
+              <div
+                className={`yaml-panel ${yamlPanelClosing ? 'closing' : 'opening'}`}
+              >
+                <div className="yaml-panel-header" />
+                <div className="yaml-panel-editor">
+                  <CodeMirror
+                    value={yamlContent}
+                    height="100%"
+                    editable={!isBusy}
+                    basicSetup={{
+                      highlightActiveLine: true,
+                      highlightActiveLineGutter: true,
+                      lineNumbers: true,
+                      foldGutter: false,
+                      searchKeymap: false,
+                    }}
+                    theme={codeMirrorTheme}
+                    extensions={editorExtensions}
+                    onChange={handleYamlChange}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </>

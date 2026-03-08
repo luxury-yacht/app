@@ -122,3 +122,103 @@
 .create-resource-footer-cancel {
   margin-right: auto;
 }
+
+/* ── YAML side panel ──────────────────────────────────────────────────── */
+
+/* Allow the panel to extend beyond the modal's right edge. */
+.create-resource-modal.yaml-panel-visible {
+  position: relative;
+  overflow: visible;
+}
+
+.yaml-panel {
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: 100%;
+  width: 700px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-left: none;
+  border-radius: 0 12px 12px 0;
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+}
+
+.yaml-panel.opening {
+  animation: yamlPanelOpen var(--duration-slow, 300ms) var(--ease-out) both;
+}
+
+.yaml-panel.closing {
+  animation: yamlPanelClose var(--duration-slow, 300ms) var(--ease-out) both;
+}
+
+@keyframes yamlPanelOpen {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes yamlPanelClose {
+  from {
+    clip-path: inset(0 0 0 0);
+  }
+  to {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+
+.yaml-panel-header {
+  flex-shrink: 0;
+  height: 40px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.yaml-panel-editor {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.yaml-panel-editor .cm-editor {
+  height: 100%;
+}
+
+/* When YAML panel is open, shift the modal left to make room.
+   The modal and panel combined need ~1632px (900 + 700 + 32 gap).
+   Below that width, the panel simply overlaps the form. */
+.yaml-panel-open .create-resource-modal {
+  transition: transform var(--duration-slow, 300ms) var(--ease-out);
+}
+
+@media (min-width: 1632px) {
+  .yaml-panel-open .create-resource-modal {
+    transform: translateX(calc(-50% - 16px));
+  }
+
+  .yaml-panel {
+    width: 700px;
+  }
+}
+
+@media (min-width: 1832px) {
+  .yaml-panel {
+    width: 900px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yaml-panel.opening,
+  .yaml-panel.closing {
+    animation-duration: 0.01ms;
+  }
+
+  .yaml-panel-open .create-resource-modal {
+    transition-duration: 0.01ms;
+  }
+}
