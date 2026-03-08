@@ -201,7 +201,7 @@
 .yaml-panel-editor {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .yaml-panel-editor .cm-editor {
