@@ -35,13 +35,12 @@
   white-space: nowrap;
 }
 
-/* Labeled dropdown field */
+/* Labeled dropdown field — sized to content so both dropdowns
+   group together on the left of the context bar. */
 .create-resource-dropdown-field {
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
-  flex: 1;
-  min-width: 0;
 }
 
 .create-resource-dropdown-label {
