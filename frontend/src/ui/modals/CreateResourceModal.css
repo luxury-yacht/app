@@ -4,6 +4,9 @@
   max-width: 900px;
   width: 90vw;
   height: 80vh;
+  /* Transition lives on the base class so max-width animates in BOTH
+     directions — when yaml-panel-visible is added AND removed. */
+  transition: max-width var(--duration-slow, 300ms) var(--ease-out);
 }
 
 .create-resource-content {
@@ -147,7 +150,6 @@
    900 (form) + 700 (yaml) + 2rem (content padding). */
 .create-resource-modal.yaml-panel-visible {
   max-width: calc(1600px + 2rem);
-  transition: max-width var(--duration-slow, 300ms) var(--ease-out);
 }
 
 /* YAML panel — absolutely positioned inside .create-resource-middle
@@ -213,7 +215,7 @@
     animation-duration: 0.01ms;
   }
 
-  .create-resource-modal.yaml-panel-visible {
+  .create-resource-modal {
     transition-duration: 0.01ms;
   }
 }
