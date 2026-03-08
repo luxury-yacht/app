@@ -1005,7 +1005,7 @@ describe('CreateResourceModal', () => {
     await unmount();
   });
 
-  it('disables view toggle when Blank template is selected', async () => {
+  it('shows inline YAML editor when Blank template is selected', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
@@ -1017,11 +1017,7 @@ describe('CreateResourceModal', () => {
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
     });
 
-    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Show Form'
-    ) as HTMLButtonElement | undefined;
-    expect(toggleBtn).toBeDefined();
-    expect(toggleBtn?.disabled).toBe(true);
+    // No form definition for blank → inline YAML editor is shown.
     expect(container.querySelector('[data-testid="yaml-editor"]')).not.toBeNull();
     await unmount();
   });
@@ -1047,17 +1043,9 @@ describe('CreateResourceModal', () => {
     await unmount();
   });
 
-  it('switches to YAML view when toggle is clicked', async () => {
+  it('opens YAML panel when Show YAML is clicked', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
-
-    const templateSelect = container.querySelector(
-      '[data-testid="dropdown-Resource template"]'
-    ) as HTMLSelectElement;
-    await act(async () => {
-      templateSelect.value = 'Deployment';
-      templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
-    });
 
     const toggleBtn = Array.from(container.querySelectorAll('button')).find(
       (b) => b.textContent?.trim() === 'Show YAML'
@@ -1067,11 +1055,11 @@ describe('CreateResourceModal', () => {
       toggleBtn?.click();
     });
 
-    expect(container.querySelector('[data-testid="yaml-editor"]')).not.toBeNull();
-    const showFormBtn = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Show Form'
+    // Panel is now open; button text changes to "Hide YAML".
+    const hideBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.trim() === 'Hide YAML'
     ) as HTMLButtonElement | undefined;
-    expect(showFormBtn).toBeDefined();
+    expect(hideBtn).toBeDefined();
     await unmount();
   });
 
@@ -1108,49 +1096,22 @@ describe('CreateResourceModal', () => {
     await unmount();
   });
 
-  it('disables view toggle when kind is changed to unsupported in YAML', async () => {
+  it('falls back to inline YAML editor when kind has no form definition', async () => {
     const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
     await flushPromises();
 
-    // Select Deployment to enable form toggle.
+    // Default template is Deployment (has form definition) → no inline YAML editor.
+    expect(container.querySelector('[data-testid="yaml-editor"]')).toBeNull();
+
+    // Select Blank (no form definition) → inline YAML editor is shown.
     const templateSelect = container.querySelector(
       '[data-testid="dropdown-Resource template"]'
     ) as HTMLSelectElement;
     await act(async () => {
-      templateSelect.value = 'Deployment';
+      templateSelect.value = '';
       templateSelect.dispatchEvent(new Event('change', { bubbles: true }));
     });
-    const showYamlBtn = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Show YAML'
-    ) as HTMLButtonElement | undefined;
-    expect(showYamlBtn).toBeDefined();
-    expect(showYamlBtn?.disabled).toBe(false);
-
-    // Switch to YAML and change kind to unsupported.
-    await act(async () => {
-      showYamlBtn?.click();
-    });
-
-    const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
-    // Use the native value setter + input event to trigger React's synthetic onChange.
-    const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement.prototype,
-      'value'
-    )!.set!;
-    await act(async () => {
-      nativeTextAreaValueSetter.call(
-        editor,
-        'apiVersion: v1\nkind: Pod\nmetadata:\n  name: test\n'
-      );
-      editor.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
-    // Form toggle should be disabled for unsupported kinds.
-    const showFormBtn = Array.from(container.querySelectorAll('button')).find(
-      (b) => b.textContent?.trim() === 'Show Form'
-    ) as HTMLButtonElement | undefined;
-    expect(showFormBtn).toBeDefined();
-    expect(showFormBtn?.disabled).toBe(true);
+    expect(container.querySelector('[data-testid="yaml-editor"]')).not.toBeNull();
     await unmount();
   });
 });

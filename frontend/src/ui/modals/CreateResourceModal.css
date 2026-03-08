@@ -14,12 +14,16 @@
   min-height: 0;
 }
 
-/* Context bar — cluster, namespace, and kind dropdowns side by side */
+/* Context bar — cluster, namespace, and kind dropdowns side by side.
+   Lives outside .modal-content as a direct child of .modal-container
+   so it spans the full modal width (including the YAML panel area). */
 .create-resource-context-bar {
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
   flex-shrink: 0;
+  padding: var(--spacing-sm) 1rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .create-resource-view-toggle {
@@ -46,10 +50,12 @@
   white-space: nowrap;
 }
 
-/* YAML editor container */
+/* YAML editor container — capped at 900px so the YAML panel overlays
+   from the right at narrow viewports and sits beside it at wide ones. */
 .create-resource-editor {
   flex: 1;
   min-height: 0;
+  max-width: 900px;
   border: 1px solid var(--color-border);
   border-radius: 6px;
   overflow: hidden;
@@ -123,28 +129,42 @@
   margin-right: auto;
 }
 
-/* ── YAML side panel ──────────────────────────────────────────────────── */
+/* ── Middle wrapper & YAML side panel ──────────────────────────────────── */
 
-/* Allow the panel to extend beyond the modal's right edge. */
-.create-resource-modal.yaml-panel-visible {
+/* Middle wrapper: holds .modal-content and the absolutely positioned
+   .yaml-panel.  Lives between the context bar and footer in the modal
+   flex column.  position: relative makes it the containing block for
+   the panel so the panel is NOT clipped by .modal-content's overflow. */
+.create-resource-middle {
+  flex: 1;
+  min-height: 0;
   position: relative;
-  overflow: visible;
+  display: flex;
+  overflow: hidden;
 }
 
+/* When YAML panel is open, expand the modal to fit both columns.
+   900 (form) + 700 (yaml) + 2rem (content padding). */
+.create-resource-modal.yaml-panel-visible {
+  max-width: calc(1600px + 2rem);
+  transition: max-width var(--duration-slow, 300ms) var(--ease-out);
+}
+
+/* YAML panel — absolutely positioned inside .create-resource-middle
+   (outside .modal-content) so it overlays the form from the right
+   without being clipped by .modal-content's overflow. */
 .yaml-panel {
   position: absolute;
-  top: -1px;
-  bottom: -1px;
-  left: 100%;
+  top: 0;
+  right: 0;
+  bottom: 0;
   width: 700px;
+  max-width: 100%;
+  border-left: 1px solid var(--color-border);
   background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-left: none;
-  border-radius: 0 12px 12px 0;
   display: flex;
   flex-direction: column;
-  pointer-events: auto;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+  z-index: 1;
 }
 
 .yaml-panel.opening {
@@ -155,6 +175,7 @@
   animation: yamlPanelClose var(--duration-slow, 300ms) var(--ease-out) both;
 }
 
+/* Reveal from the left edge (form/panel divider), growing rightward. */
 @keyframes yamlPanelOpen {
   from {
     clip-path: inset(0 100% 0 0);
@@ -173,12 +194,6 @@
   }
 }
 
-.yaml-panel-header {
-  flex-shrink: 0;
-  height: 40px;
-  border-bottom: 1px solid var(--color-border);
-}
-
 .yaml-panel-editor {
   flex: 1;
   min-height: 0;
@@ -189,36 +204,13 @@
   height: 100%;
 }
 
-/* When YAML panel is open, shift the modal left to make room.
-   The modal and panel combined need ~1632px (900 + 700 + 32 gap).
-   Below that width, the panel simply overlaps the form. */
-.yaml-panel-open .create-resource-modal {
-  transition: transform var(--duration-slow, 300ms) var(--ease-out);
-}
-
-@media (min-width: 1632px) {
-  .yaml-panel-open .create-resource-modal {
-    transform: translateX(calc(-50% - 16px));
-  }
-
-  .yaml-panel {
-    width: 700px;
-  }
-}
-
-@media (min-width: 1832px) {
-  .yaml-panel {
-    width: 900px;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .yaml-panel.opening,
   .yaml-panel.closing {
     animation-duration: 0.01ms;
   }
 
-  .yaml-panel-open .create-resource-modal {
+  .create-resource-modal.yaml-panel-visible {
     transition-duration: 0.01ms;
   }
 }
