@@ -520,7 +520,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       <>
         <div className={`modal-overlay ${isClosing ? 'closing' : ''}`}>
           <div
-            className={`modal-container create-resource-modal ${isClosing ? 'closing' : ''}${yamlPanelOpen ? ' yaml-panel-visible' : ''}`}
+            className={`modal-container create-resource-modal ${isClosing ? 'closing' : ''}${yamlPanelOpen && !yamlPanelClosing ? ' yaml-panel-visible' : ''}`}
             ref={modalRef}
           >
             <div className="modal-header">

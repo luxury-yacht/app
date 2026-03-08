@@ -167,30 +167,33 @@
   z-index: 1;
 }
 
+/* Opening: panel width grows from 0 → 700px, anchored at right: 0,
+   so it appears to emerge from the modal's expanding right edge. */
 .yaml-panel.opening {
   animation: yamlPanelOpen var(--duration-slow, 300ms) var(--ease-out) both;
 }
 
+/* Closing: panel width shrinks from 700px → 0.  The modal's max-width
+   transition runs simultaneously (yaml-panel-visible removed immediately). */
 .yaml-panel.closing {
   animation: yamlPanelClose var(--duration-slow, 300ms) var(--ease-out) both;
 }
 
-/* Reveal from the left edge (form/panel divider), growing rightward. */
 @keyframes yamlPanelOpen {
   from {
-    clip-path: inset(0 100% 0 0);
+    width: 0;
   }
   to {
-    clip-path: inset(0 0 0 0);
+    width: 700px;
   }
 }
 
 @keyframes yamlPanelClose {
   from {
-    clip-path: inset(0 0 0 0);
+    width: 700px;
   }
   to {
-    clip-path: inset(0 100% 0 0);
+    width: 0;
   }
 }
 
