@@ -208,6 +208,8 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         setActiveView('yaml');
         setYamlPanelOpen(false);
         setYamlPanelClosing(false);
+        setYamlPanelReady(false);
+        setYamlPanelWidth(700);
         // Load templates.
         GetResourceTemplates()
           .then((templates) => {
@@ -309,6 +311,34 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
     // YAML panel visibility. Hidden by default; toggled via "Show/Hide YAML" button.
     const [yamlPanelOpen, setYamlPanelOpen] = useState(false);
     const [yamlPanelClosing, setYamlPanelClosing] = useState(false);
+    // true once the open animation finishes — switches from animation to inline width.
+    const [yamlPanelReady, setYamlPanelReady] = useState(false);
+    // User-controlled panel width for overlay mode (300–700px).
+    const [yamlPanelWidth, setYamlPanelWidth] = useState(700);
+    // Tracked width of the middle wrapper for auto-fill calculations.
+    const middleRef = useRef<HTMLDivElement>(null);
+    const [middleWidth, setMiddleWidth] = useState(0);
+
+    // Track the middle wrapper's width so the panel can auto-fill available space.
+    useEffect(() => {
+      const el = middleRef.current;
+      if (!el || !yamlPanelOpen || typeof ResizeObserver === 'undefined') return;
+      const observer = new ResizeObserver((entries) => {
+        setMiddleWidth(entries[0]?.contentRect.width ?? 0);
+      });
+      observer.observe(el);
+      return () => observer.disconnect();
+    }, [yamlPanelOpen]);
+
+    // Available space beside the form (900px + 1rem left padding + 1rem gap).
+    const availableForPanel = middleWidth - 900 - 32;
+    // When there's at least 300px beside the form, auto-fill up to 700px.
+    const panelAutoFills = yamlPanelReady && availableForPanel >= 300;
+    const effectivePanelWidth = panelAutoFills
+      ? Math.min(availableForPanel, 700)
+      : yamlPanelWidth;
+    // Only resizable when the panel must overlay the form.
+    const panelResizable = yamlPanelReady && !panelAutoFills;
 
     // Look up form definition for the current kind.
     const formDefinition = useMemo(
@@ -395,13 +425,53 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       [extractNamespaceFromYaml]
     );
 
+    // Capture the panel's rendered width at close time so the close animation
+    // starts from the correct size (which may differ from yamlPanelWidth).
+    const closingWidthRef = useRef(700);
+
     /** Close the YAML panel with exit animation. */
     const handleYamlPanelClose = useCallback(() => {
+      const panelEl = middleRef.current?.querySelector('.yaml-panel') as HTMLElement | null;
+      closingWidthRef.current = panelEl?.getBoundingClientRect().width ?? 700;
       setYamlPanelClosing(true);
       setTimeout(() => {
         setYamlPanelOpen(false);
         setYamlPanelClosing(false);
+        setYamlPanelReady(false);
       }, 300);
+    }, []);
+
+    /** After the open animation finishes, switch to inline-width control. */
+    const handlePanelAnimationEnd = useCallback(() => {
+      if (!yamlPanelClosing) {
+        setYamlPanelReady(true);
+      }
+    }, [yamlPanelClosing]);
+
+    /** Drag the panel's left edge to resize (300–700px). */
+    const handleResizePointerDown = useCallback((e: React.PointerEvent) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const panelEl = (e.target as HTMLElement).closest('.yaml-panel') as HTMLElement;
+      const startWidth = panelEl.getBoundingClientRect().width;
+
+      const handleMove = (moveEvent: PointerEvent) => {
+        // Dragging left → wider, dragging right → narrower.
+        const delta = startX - moveEvent.clientX;
+        setYamlPanelWidth(Math.min(700, Math.max(300, Math.round(startWidth + delta))));
+      };
+
+      const handleUp = () => {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        document.removeEventListener('pointermove', handleMove);
+        document.removeEventListener('pointerup', handleUp);
+      };
+
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('pointermove', handleMove);
+      document.addEventListener('pointerup', handleUp);
     }, []);
 
     // Shared error handling for validate/create responses.
@@ -578,7 +648,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                 </div>
 
                 {/* Middle area: form content + YAML panel side by side */}
-                <div className="create-resource-middle">
+                <div className="create-resource-middle" ref={middleRef}>
                   <div className="modal-content create-resource-content">
                     {/* Editor section — Form view or YAML CodeMirror */}
                     {showingForm && formDefinition ? (
@@ -639,11 +709,26 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                     {rawError && <div className="create-resource-validation-error">{rawError}</div>}
                   </div>
 
-                  {/* YAML side panel — flex sibling of modal-content */}
+                  {/* YAML side panel — absolutely positioned inside .create-resource-middle */}
                   {yamlPanelOpen && (
                     <div
-                      className={`yaml-panel ${yamlPanelClosing ? 'closing' : 'opening'}`}
+                      className={`yaml-panel ${yamlPanelClosing ? 'closing' : yamlPanelReady ? '' : 'opening'}`}
+                      style={
+                        yamlPanelClosing
+                          ? { width: closingWidthRef.current }
+                          : yamlPanelReady
+                            ? { width: effectivePanelWidth }
+                            : undefined
+                      }
+                      onAnimationEnd={handlePanelAnimationEnd}
                     >
+                      {/* Resize handle — only when panel overlays the form */}
+                      {panelResizable && (
+                        <div
+                          className="yaml-panel-resize-handle"
+                          onPointerDown={handleResizePointerDown}
+                        />
+                      )}
                       <div className="yaml-panel-editor">
                         <CodeMirror
                           value={yamlContent}

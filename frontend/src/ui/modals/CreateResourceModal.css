@@ -180,22 +180,36 @@
   animation: yamlPanelClose var(--duration-slow, 300ms) var(--ease-out) both;
 }
 
+/* Open: animate from 0 to the element's computed width (700px from CSS).
+   Close: animate from the element's current width (inline style) to 0. */
 @keyframes yamlPanelOpen {
   from {
     width: 0;
   }
-  to {
-    width: 700px;
-  }
 }
 
 @keyframes yamlPanelClose {
-  from {
-    width: 700px;
-  }
   to {
     width: 0;
   }
+}
+
+/* Resize handle on the panel's left edge. */
+.yaml-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 2;
+}
+
+.yaml-panel-resize-handle:hover,
+.yaml-panel-resize-handle:active {
+  background: var(--color-accent);
+  opacity: 0.4;
+  border-radius: 3px;
 }
 
 .yaml-panel-editor {
