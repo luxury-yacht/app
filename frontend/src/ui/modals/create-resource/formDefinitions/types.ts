@@ -135,6 +135,10 @@ export interface FormFieldDefinition {
   groupWithNext?: boolean;
   /** Indent this field so it appears as a child of the field above. Hides the label and uses empty space in its place. */
   indented?: boolean;
+  /** Additional YAML paths to unset when this field is cleared (e.g., parent object paths). */
+  clearPaths?: string[][];
+  /** YAML paths to unset when specific values are selected (e.g., remove rollingUpdate when Recreate). */
+  clearPathsOnValues?: Record<string, string[][]>;
   /** Only show this field when the value at the given YAML path matches one of the listed values. */
   visibleWhen?: {
     path: string[];

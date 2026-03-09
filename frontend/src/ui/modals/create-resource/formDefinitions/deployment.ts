@@ -317,11 +317,14 @@ export const deploymentDefinition: ResourceFormDefinition = {
           path: ['spec', 'strategy', 'type'],
           type: 'select',
           dropdownWidth: 'calc(11ch + 40px)',
+          clearPaths: [['spec', 'strategy']],
+          clearPathsOnValues: {
+            Recreate: [['spec', 'strategy', 'rollingUpdate']],
+          },
           options: [
             { label: 'RollingUpdate', value: 'RollingUpdate' },
             { label: 'Recreate', value: 'Recreate' },
           ],
-          implicitDefault: 'RollingUpdate',
           groupWithNext: true,
         },
         {
@@ -333,7 +336,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
           omitIfEmpty: true,
           inputWidth: 'calc(6ch + 20px)',
           groupWithNext: true,
-          visibleWhen: { path: ['spec', 'strategy', 'type'], values: ['RollingUpdate', ''] },
+          visibleWhen: { path: ['spec', 'strategy', 'type'], values: ['RollingUpdate'] },
         },
         {
           key: 'maxUnavailable',
@@ -343,7 +346,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
           placeholder: '25%',
           omitIfEmpty: true,
           inputWidth: 'calc(6ch + 20px)',
-          visibleWhen: { path: ['spec', 'strategy', 'type'], values: ['RollingUpdate', ''] },
+          visibleWhen: { path: ['spec', 'strategy', 'type'], values: ['RollingUpdate'] },
         },
         {
           key: 'serviceAccountName',
@@ -356,7 +359,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
         },
         {
           key: 'terminationGracePeriodSeconds',
-          label: 'Grace Period',
+          label: 'Term Grace Per',
           path: ['spec', 'template', 'spec', 'terminationGracePeriodSeconds'],
           type: 'number',
           placeholder: '30',

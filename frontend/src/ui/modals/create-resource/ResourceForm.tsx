@@ -263,12 +263,28 @@ function SelectField({
           // When the user selects the empty "-----" option, remove the key
           // from YAML instead of writing an empty string.
           if (normalized === '') {
-            const updated = unsetFieldValue(yamlContent, field.path);
-            if (updated !== null) onYamlChange(updated);
+            let nextYaml = yamlContent;
+            // Unset the field itself first, then any additional clearPaths.
+            const pathsToUnset = [field.path, ...(field.clearPaths ?? [])];
+            for (const p of pathsToUnset) {
+              const updated = unsetFieldValue(nextYaml, p);
+              if (updated !== null) nextYaml = updated;
+            }
+            onYamlChange(nextYaml);
             return;
           }
-          const updated = setFieldValue(yamlContent, field.path, normalized);
-          if (updated !== null) onYamlChange(updated);
+          let nextYaml = yamlContent;
+          const updated = setFieldValue(nextYaml, field.path, normalized);
+          if (updated !== null) nextYaml = updated;
+          // Clear paths associated with the selected value (e.g., remove rollingUpdate when Recreate).
+          const valueClearPaths = field.clearPathsOnValues?.[normalized];
+          if (valueClearPaths) {
+            for (const p of valueClearPaths) {
+              const cleared = unsetFieldValue(nextYaml, p);
+              if (cleared !== null) nextYaml = cleared;
+            }
+          }
+          onYamlChange(nextYaml);
         }}
         ariaLabel={field.label}
       />
