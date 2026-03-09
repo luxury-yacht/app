@@ -110,13 +110,15 @@ export function FormCommandInputField({
     <div className="resource-form-command-input" data-field-key={field.key}>
       <div className="resource-form-command-input-row">
         <div className="resource-form-command-input-mode">
-          <Dropdown
-            options={MODE_OPTIONS}
-            value={mode}
-            onChange={handleModeChange}
-            size="compact"
-            ariaLabel={`${field.label} input mode`}
-          />
+          <div className="resource-form-dropdown">
+            <Dropdown
+              options={MODE_OPTIONS}
+              value={mode}
+              onChange={handleModeChange}
+              size="compact"
+              ariaLabel={`${field.label} input mode`}
+            />
+          </div>
         </div>
         {!isTextarea && (
           <input

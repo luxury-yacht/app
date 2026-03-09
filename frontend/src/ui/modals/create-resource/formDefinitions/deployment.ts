@@ -109,7 +109,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
               label: 'Pull Policy',
               path: ['imagePullPolicy'],
               type: 'select',
-              dropdownWidth: 'calc(12ch + 40px)',
+              dropdownWidth: 'calc(10ch + 40px)',
               options: [
                 { label: 'Always', value: 'Always' },
                 { label: 'IfNotPresent', value: 'IfNotPresent' },

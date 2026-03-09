@@ -712,12 +712,12 @@
   flex: 0 0 auto;
 }
 
-/* Keep the mode dropdown at a fixed width so the layout is stable. */
+/* Keep the mode dropdown at a fixed width — sized to fit "Shell Script". */
 .resource-form-command-input-mode .resource-form-dropdown {
   flex: 0 0 auto;
-  width: calc(12ch + 40px);
-  min-width: calc(12ch + 40px);
-  max-width: calc(12ch + 40px);
+  width: calc(10ch + 40px);
+  min-width: calc(10ch + 40px);
+  max-width: calc(10ch + 40px);
 }
 
 .resource-form-command-input-row > .resource-form-input {
