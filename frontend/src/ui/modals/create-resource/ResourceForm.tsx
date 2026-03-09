@@ -774,7 +774,7 @@ function GroupListField({
           <div
             data-field-key={subField.key}
             className="resource-form-dropdown"
-            style={fixedWidthStyle(subField)}
+            style={fixedWidthStyle(subField.dropdownWidth ? { inputWidth: subField.dropdownWidth } : subField)}
           >
             <Dropdown
               options={buildSelectOptions(subField)}
@@ -998,11 +998,36 @@ function GroupListField({
               </div>
             </div>
             <div className="resource-form-group-item-fields">
-              {field.fields?.map((subField) => (
-                <FormFieldRow key={subField.key} label={subField.label}>
-                  {renderSubField(subField, item, itemIndex)}
-                </FormFieldRow>
-              ))}
+              {(() => {
+                const subFields = field.fields ?? [];
+                const rows: React.ReactNode[] = [];
+                let i = 0;
+                while (i < subFields.length) {
+                  const subField = subFields[i];
+                  // When groupWithNext is set, combine this field and the next
+                  // into a single row so they render side by side.
+                  if (subField.groupWithNext && i + 1 < subFields.length) {
+                    const nextField = subFields[i + 1];
+                    rows.push(
+                      <FormFieldRow key={subField.key} label={subField.label}>
+                        {renderSubField(subField, item, itemIndex)}
+                        <FormFieldRow label={nextField.label} className="resource-form-field--inline">
+                          {renderSubField(nextField, item, itemIndex)}
+                        </FormFieldRow>
+                      </FormFieldRow>
+                    );
+                    i += 2;
+                  } else {
+                    rows.push(
+                      <FormFieldRow key={subField.key} label={subField.label}>
+                        {renderSubField(subField, item, itemIndex)}
+                      </FormFieldRow>
+                    );
+                    i += 1;
+                  }
+                }
+                return rows;
+              })()}
             </div>
           </div>
         </div>

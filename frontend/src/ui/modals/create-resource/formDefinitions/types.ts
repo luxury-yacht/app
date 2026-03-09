@@ -129,6 +129,8 @@ export interface FormFieldDefinition {
   labelWidth?: string;
   /** Whether this field should use full-width layout (spanning the entire section). */
   fullWidth?: boolean;
+  /** Group this field with the next field on the same row (shares a single FormFieldRow). */
+  groupWithNext?: boolean;
 }
 
 export interface FormSectionDefinition {

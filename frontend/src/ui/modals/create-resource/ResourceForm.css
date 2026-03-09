@@ -299,6 +299,19 @@
   min-width: 6rem;
 }
 
+/* Inline grouped field — sits beside the previous field on the same row. */
+.resource-form-field--inline {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex: 0 0 auto;
+}
+
+.resource-form-field--inline > .resource-form-label {
+  min-width: auto;
+}
+
 /* Nested group-list controls (e.g., container ports/env vars). */
 .resource-form-nested-group-list {
   flex: 1;

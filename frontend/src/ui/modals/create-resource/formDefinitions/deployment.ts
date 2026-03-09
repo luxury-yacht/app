@@ -31,6 +31,14 @@ export const deploymentDefinition: ResourceFormDefinition = {
           inputWidth: '6ch',
         },
         {
+          key: 'serviceAccountName',
+          label: 'Service Account',
+          path: ['spec', 'template', 'spec', 'serviceAccountName'],
+          type: 'text',
+          placeholder: 'default',
+          omitIfEmpty: true,
+        },
+        {
           key: 'selectors',
           label: 'Selectors',
           path: ['spec', 'selector', 'matchLabels'],
@@ -94,6 +102,33 @@ export const deploymentDefinition: ResourceFormDefinition = {
               path: ['image'],
               type: 'text',
               placeholder: 'repo/image:tag',
+              groupWithNext: true,
+            },
+            {
+              key: 'imagePullPolicy',
+              label: 'Pull Policy',
+              path: ['imagePullPolicy'],
+              type: 'select',
+              dropdownWidth: 'calc(12ch + 40px)',
+              options: [
+                { label: 'Always', value: 'Always' },
+                { label: 'IfNotPresent', value: 'IfNotPresent' },
+                { label: 'Never', value: 'Never' },
+              ],
+            },
+            {
+              key: 'command',
+              label: 'Command',
+              path: ['command'],
+              type: 'string-list',
+              placeholder: '/bin/sh, -c',
+            },
+            {
+              key: 'args',
+              label: 'Args',
+              path: ['args'],
+              type: 'string-list',
+              placeholder: 'arg1, arg2',
             },
             {
               key: 'env',
