@@ -87,6 +87,7 @@ export const jobDefinition: ResourceFormDefinition = {
               path: ['command'],
               type: 'command-input',
               placeholder: 'echo Hello',
+              omitIfEmpty: false,
             },
           ],
           defaultValue: { name: '', image: '' },

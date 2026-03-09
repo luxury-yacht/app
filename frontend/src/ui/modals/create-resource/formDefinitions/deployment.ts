@@ -122,6 +122,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
               path: ['command'],
               type: 'command-input',
               placeholder: '/bin/sh -c',
+              omitIfEmpty: false,
             },
             {
               key: 'args',
@@ -129,6 +130,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
               path: ['args'],
               type: 'command-input',
               placeholder: '--port=8080 --log-level=info',
+              omitIfEmpty: false,
             },
             {
               key: 'env',

@@ -999,6 +999,21 @@ function GroupListField({
             field={subField}
             value={subValue}
             onChange={(newValue) => handleSubFieldChange(itemIndex, subField, newValue)}
+            onAdd={() => {
+              // Set an empty array directly, bypassing shouldOmitEmptyValue.
+              const updatedItems = items.map((currentItem, i) => {
+                if (i !== itemIndex) return currentItem;
+                return setNestedValue(currentItem, subField.path, []);
+              });
+              updateItems(updatedItems);
+            }}
+            onRemove={() => {
+              const updatedItems = items.map((currentItem, i) => {
+                if (i !== itemIndex) return currentItem;
+                return unsetNestedValue(currentItem, subField.path);
+              });
+              updateItems(updatedItems);
+            }}
           />
         );
       default:

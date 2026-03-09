@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type { FormFieldDefinition } from './formDefinitions';
+import { FormGhostAddText, FormIconActionButton } from './FormActionPrimitives';
 import { INPUT_BEHAVIOR_PROPS } from './formUtils';
 import {
   type CommandInputMode,
@@ -25,6 +26,10 @@ interface FormCommandInputFieldProps {
   value: unknown;
   /** Called with the new string[] (or empty []) when the user commits a change. */
   onChange: (newValue: unknown) => void;
+  /** Called to add the field (bypasses omit-empty logic). */
+  onAdd?: () => void;
+  /** Called to remove the field entirely from the container. */
+  onRemove?: () => void;
 }
 
 const MODE_OPTIONS: DropdownOption[] = [
@@ -43,7 +48,12 @@ export function FormCommandInputField({
   field,
   value,
   onChange,
+  onAdd,
+  onRemove,
 }: FormCommandInputFieldProps): React.ReactElement {
+  // Whether the field has a value set in YAML.
+  const hasValue = value !== undefined;
+
   // Normalise the external value to a string array.
   const arrValue: string[] = useMemo(
     () => (Array.isArray(value) ? value.map(String) : []),
@@ -97,6 +107,23 @@ export function FormCommandInputField({
     [rawText, mode, arrValue, onChange]
   );
 
+  // ── No value set — show add button ──────────────────────────────────
+
+  if (!hasValue && onAdd) {
+    return (
+      <div className="resource-form-probe-empty">
+        <FormIconActionButton
+          variant="add"
+          label={`Add ${field.label.toLowerCase()}`}
+          onClick={onAdd}
+        />
+        <FormGhostAddText text={`Add ${field.label.toLowerCase()}`} />
+      </div>
+    );
+  }
+
+  // ── Value exists — show editor ──────────────────────────────────────
+
   const isTextarea = mode !== 'command';
 
   const placeholder =
@@ -139,6 +166,15 @@ export function FormCommandInputField({
               }
             }}
           />
+        )}
+        {onRemove && (
+          <div className="resource-form-probe-actions">
+            <FormIconActionButton
+              variant="remove"
+              label={`Remove ${field.label.toLowerCase()}`}
+              onClick={onRemove}
+            />
+          </div>
         )}
       </div>
       {isTextarea && (
