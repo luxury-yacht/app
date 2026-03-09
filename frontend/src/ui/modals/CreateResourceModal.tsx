@@ -716,9 +716,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                       style={
                         yamlPanelClosing
                           ? { width: closingWidthRef.current }
-                          : yamlPanelReady
-                            ? { width: effectivePanelWidth }
-                            : undefined
+                          : { width: effectivePanelWidth }
                       }
                       onAnimationEnd={handlePanelAnimationEnd}
                     >

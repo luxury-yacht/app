@@ -4,9 +4,6 @@
   max-width: 900px;
   width: 90vw;
   height: 80vh;
-  /* Transition lives on the base class so max-width animates in BOTH
-     directions — when yaml-panel-visible is added AND removed. */
-  transition: max-width var(--duration-slow, 300ms) var(--ease-out);
 }
 
 .create-resource-content {
@@ -175,8 +172,7 @@
   animation: yamlPanelOpen var(--duration-slow, 300ms) var(--ease-out) both;
 }
 
-/* Closing: panel width shrinks from 700px → 0.  The modal's max-width
-   transition runs simultaneously (yaml-panel-visible removed immediately). */
+/* Closing: panel width shrinks from 700px → 0. */
 .yaml-panel.closing {
   animation: yamlPanelClose var(--duration-slow, 300ms) var(--ease-out) both;
 }
@@ -227,9 +223,5 @@
   .yaml-panel.opening,
   .yaml-panel.closing {
     animation-duration: 0.01ms;
-  }
-
-  .create-resource-modal {
-    transition-duration: 0.01ms;
   }
 }
