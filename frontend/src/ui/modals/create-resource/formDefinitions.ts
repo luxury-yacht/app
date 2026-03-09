@@ -239,7 +239,7 @@ const deploymentDefinition: ResourceFormDefinition = {
               label: 'Image',
               path: ['image'],
               type: 'text',
-              placeholder: 'nginx:latest',
+              placeholder: 'repo/image:tag',
             },
             {
               key: 'env',

@@ -39,7 +39,7 @@ func DeploymentFixture(namespace, name string, opts ...DeploymentOption) *appsv1
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
 						Name:  "app",
-						Image: "nginx:latest",
+						Image: "repo/image:tag",
 					}},
 				},
 			},
@@ -97,7 +97,7 @@ func StatefulSetFixture(namespace, name string, opts ...StatefulSetOption) *apps
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
 						Name:  "app",
-						Image: "nginx:latest",
+						Image: "repo/image:tag",
 					}},
 				},
 			},
@@ -140,7 +140,7 @@ func DaemonSetFixture(namespace, name string, opts ...DaemonSetOption) *appsv1.D
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
 						Name:  "agent",
-						Image: "nginx:latest",
+						Image: "repo/image:tag",
 					}},
 				},
 			},
@@ -349,7 +349,7 @@ func PodFixture(namespace, name string, opts ...PodOption) *corev1.Pod {
 			NodeName: "worker-1",
 			Containers: []corev1.Container{{
 				Name:  "app",
-				Image: "nginx:latest",
+				Image: "repo/image:tag",
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("100m"),

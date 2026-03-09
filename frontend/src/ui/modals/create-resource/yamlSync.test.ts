@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - name: my-app
-        image: nginx:latest
+        image: repo/image:tag
         ports:
         - containerPort: 80
 `;

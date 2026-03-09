@@ -98,7 +98,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:latest`
+        image: repo/image:tag`
 
 func TestValidateResourceCreationSuccess(t *testing.T) {
 	app, _, clusterID := setupCreationTestApp(t)
@@ -232,7 +232,7 @@ spec:
     spec:
       containers:
       - name: app
-        image: nginx:latest`,
+        image: repo/image:tag`,
 	}
 
 	_, err := app.CreateResource(clusterID, req)
