@@ -64,6 +64,7 @@ export const cronJobDefinition: ResourceFormDefinition = {
           label: 'Containers',
           path: ['spec', 'jobTemplate', 'spec', 'template', 'spec', 'containers'],
           type: 'group-list',
+          fullWidth: true,
           itemTitleField: 'name',
           itemTitleFallback: 'Container',
           fields: [
@@ -91,8 +92,8 @@ export const cronJobDefinition: ResourceFormDefinition = {
               key: 'command',
               label: 'Command',
               path: ['command'],
-              type: 'text',
-              placeholder: 'echo,Hello',
+              type: 'string-list',
+              placeholder: 'echo, Hello',
             },
           ],
           defaultValue: { name: '', image: '', command: [] },

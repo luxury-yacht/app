@@ -47,6 +47,7 @@ export const ingressDefinition: ResourceFormDefinition = {
           label: 'Rules',
           path: ['spec', 'rules'],
           type: 'group-list',
+          fullWidth: true,
           fields: [
             {
               key: 'host',

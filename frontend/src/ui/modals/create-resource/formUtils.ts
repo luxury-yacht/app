@@ -190,6 +190,44 @@ export function getSelectFieldValue(field: FormFieldDefinition, currentValue: st
   return currentValue;
 }
 
+// ─── Validation Utilities ────────────────────────────────────────────────
+
+/**
+ * Walk a form definition and return a list of human-readable error strings
+ * for required fields that are empty or missing in the given YAML content.
+ */
+export function getRequiredFieldErrors(
+  definition: { sections: Array<{ fields: FormFieldDefinition[] }> },
+  yamlContent: string,
+  getFieldValueFn: (yaml: string, path: string[]) => unknown
+): string[] {
+  const errors: string[] = [];
+
+  const checkField = (field: FormFieldDefinition, parentLabel?: string) => {
+    if (field.required) {
+      const value = getFieldValueFn(yamlContent, field.path);
+      const isEmpty =
+        value === undefined ||
+        value === null ||
+        (typeof value === 'string' && value.trim() === '');
+      if (isEmpty) {
+        const label = parentLabel ? `${parentLabel} > ${field.label}` : field.label;
+        errors.push(`${label} is required`);
+      }
+    }
+    // Recurse into sub-fields (group-list items are not checked here since
+    // they represent per-item fields whose count is dynamic).
+  };
+
+  for (const section of definition.sections) {
+    for (const field of section.fields) {
+      checkField(field);
+    }
+  }
+
+  return errors;
+}
+
 /**
  * Build inline style for a nested group-list field wrapper from its definition.
  * Controls the flex sizing of the wrapper div.

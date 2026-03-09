@@ -42,3 +42,19 @@ export function setFieldValue(yamlContent: string, path: string[], value: unknow
     return null;
   }
 }
+
+/**
+ * Remove a value from a YAML string at the given path. If the parent
+ * map becomes empty after removal, the parent key is also removed.
+ * Returns null if the YAML is unparseable.
+ */
+export function unsetFieldValue(yamlContent: string, path: string[]): string | null {
+  try {
+    const doc = YAML.parseDocument(yamlContent);
+    if (doc.errors.length > 0) return null;
+    doc.deleteIn(path);
+    return doc.toString();
+  } catch {
+    return null;
+  }
+}

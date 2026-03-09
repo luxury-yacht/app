@@ -123,6 +123,15 @@
   margin-bottom: var(--spacing-xs);
 }
 
+.create-resource-required-errors {
+  font-size: 0.8rem;
+  color: var(--color-error);
+  margin-right: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Preserve footer alignment after removing the kind badge spacer. */
 .create-resource-footer-cancel {
   margin-right: auto;

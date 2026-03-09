@@ -10,7 +10,7 @@ import React, { useCallback, useMemo, useRef, useEffect, useState } from 'react'
 import * as YAML from 'yaml';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
-import { getFieldValue, setFieldValue } from './yamlSync';
+import { getFieldValue, setFieldValue, unsetFieldValue } from './yamlSync';
 import type { ResourceFormDefinition, FormFieldDefinition } from './formDefinitions';
 import { FormIconActionButton } from './FormActionPrimitives';
 import { FormCompactNumberInput, parseCompactNumberValue } from './FormCompactNumberInput';
@@ -91,9 +91,11 @@ function TextField({
   const yamlRef = useRef(yamlContent);
   const onChangeRef = useRef(onYamlChange);
   const pathRef = useRef(field.path);
+  const omitRef = useRef(field.omitIfEmpty);
   yamlRef.current = yamlContent;
   onChangeRef.current = onYamlChange;
   pathRef.current = field.path;
+  omitRef.current = field.omitIfEmpty;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -102,6 +104,13 @@ function TextField({
     if (!el) return;
     const handler = (e: Event) => {
       const target = e.target as HTMLInputElement;
+      // When omitIfEmpty is set and the value is blank, remove the key from YAML
+      // instead of writing an empty string (which Kubernetes may reject).
+      if (omitRef.current && target.value.trim() === '') {
+        const updated = unsetFieldValue(yamlRef.current, pathRef.current);
+        if (updated !== null) onChangeRef.current(updated);
+        return;
+      }
       const updated = setFieldValue(yamlRef.current, pathRef.current, target.value);
       if (updated !== null) onChangeRef.current(updated);
     };
@@ -271,6 +280,60 @@ function NamespaceSelectField({
 }
 
 /**
+ * String-list field component. Displays a comma-separated text input
+ * that reads/writes as a YAML sequence (string[]).
+ */
+function StringListField({
+  field,
+  yamlContent,
+  onYamlChange,
+}: {
+  field: FormFieldDefinition;
+  yamlContent: string;
+  onYamlChange: (yaml: string) => void;
+}): React.ReactElement {
+  const value = getFieldValue(yamlContent, field.path);
+  const stringValue = Array.isArray(value) ? (value as string[]).join(', ') : '';
+
+  const yamlRef = useRef(yamlContent);
+  const onChangeRef = useRef(onYamlChange);
+  const pathRef = useRef(field.path);
+  yamlRef.current = yamlContent;
+  onChangeRef.current = onYamlChange;
+  pathRef.current = field.path;
+
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    const handler = (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      const raw = target.value.trim();
+      // Parse comma-separated values into a string array, filtering empty entries.
+      const items = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+      const updated = setFieldValue(yamlRef.current, pathRef.current, items);
+      if (updated !== null) onChangeRef.current(updated);
+    };
+    el.addEventListener('change', handler);
+    return () => el.removeEventListener('change', handler);
+  }, []);
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      className="resource-form-input"
+      style={fixedWidthStyle(field)}
+      data-field-key={field.key}
+      defaultValue={stringValue}
+      placeholder={field.placeholder}
+      {...INPUT_BEHAVIOR_PROPS}
+    />
+  );
+}
+
+/**
  * Textarea field component.
  */
 function TextareaField({
@@ -288,9 +351,11 @@ function TextareaField({
   const yamlRef = useRef(yamlContent);
   const onChangeRef = useRef(onYamlChange);
   const pathRef = useRef(field.path);
+  const omitRef = useRef(field.omitIfEmpty);
   yamlRef.current = yamlContent;
   onChangeRef.current = onYamlChange;
   pathRef.current = field.path;
+  omitRef.current = field.omitIfEmpty;
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -299,6 +364,11 @@ function TextareaField({
     if (!el) return;
     const handler = (e: Event) => {
       const target = e.target as HTMLTextAreaElement;
+      if (omitRef.current && target.value.trim() === '') {
+        const updated = unsetFieldValue(yamlRef.current, pathRef.current);
+        if (updated !== null) onChangeRef.current(updated);
+        return;
+      }
       const updated = setFieldValue(yamlRef.current, pathRef.current, target.value);
       if (updated !== null) onChangeRef.current(updated);
     };
@@ -854,7 +924,33 @@ function GroupListField({
           />
         );
       }
+      case 'string-list': {
+        // Comma-separated text input that reads/writes a YAML sequence.
+        const listItems = Array.isArray(subValue) ? (subValue as string[]) : [];
+        const csvValue = listItems.join(', ');
+        return (
+          <input
+            type="text"
+            className="resource-form-input"
+            style={fixedWidthStyle(subField)}
+            data-field-key={subField.key}
+            value={csvValue}
+            placeholder={subField.placeholder}
+            {...INPUT_BEHAVIOR_PROPS}
+            onChange={(e) => {
+              const raw = e.target.value.trim();
+              const items = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+              handleSubFieldChange(itemIndex, subField, items);
+            }}
+          />
+        );
+      }
       default:
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(
+            `GroupListField: unhandled sub-field type "${subField.type}" for key "${subField.key}"`
+          );
+        }
         return null;
     }
   };
@@ -939,7 +1035,7 @@ export function ResourceForm({
       {definition.sections.map((section) => (
         <FormSectionCard key={section.title} title={section.title}>
           {section.fields.map((field) => {
-            const useFullWidthLayout = field.key === 'containers' || field.key === 'volumes';
+            const useFullWidthLayout = field.fullWidth === true;
             return (
               <FormFieldRow key={field.key} label={field.label} fullWidth={useFullWidthLayout}>
                 <FieldRenderer
@@ -1004,7 +1100,14 @@ function FieldRenderer({
       );
     case 'group-list':
       return <GroupListField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />;
+    case 'string-list':
+      return (
+        <StringListField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />
+      );
     default:
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`FieldRenderer: unhandled field type "${field.type}" for key "${field.key}"`);
+      }
       return null;
   }
 }

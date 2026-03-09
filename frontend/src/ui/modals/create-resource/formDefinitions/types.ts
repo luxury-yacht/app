@@ -31,7 +31,8 @@ export interface FormFieldDefinition {
     | 'container-resources'
     | 'volume-source'
     | 'tri-state-boolean'
-    | 'boolean-toggle';
+    | 'boolean-toggle'
+    | 'string-list';
   /** Placeholder text for text/number inputs. */
   placeholder?: string;
   /** Optional minimum value for number inputs. */
@@ -126,6 +127,8 @@ export interface FormFieldDefinition {
   rowAlign?: 'start';
   /** Minimum width for nested field labels (e.g., '4rem'). */
   labelWidth?: string;
+  /** Whether this field should use full-width layout (spanning the entire section). */
+  fullWidth?: boolean;
 }
 
 export interface FormSectionDefinition {

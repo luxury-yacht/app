@@ -57,6 +57,7 @@ export const jobDefinition: ResourceFormDefinition = {
           label: 'Containers',
           path: ['spec', 'template', 'spec', 'containers'],
           type: 'group-list',
+          fullWidth: true,
           itemTitleField: 'name',
           itemTitleFallback: 'Container',
           fields: [
@@ -84,8 +85,8 @@ export const jobDefinition: ResourceFormDefinition = {
               key: 'command',
               label: 'Command',
               path: ['command'],
-              type: 'text',
-              placeholder: 'echo,Hello',
+              type: 'string-list',
+              placeholder: 'echo, Hello',
             },
           ],
           defaultValue: { name: '', image: '', command: [] },

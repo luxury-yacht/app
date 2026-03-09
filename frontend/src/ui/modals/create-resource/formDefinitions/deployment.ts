@@ -77,6 +77,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
           label: 'Containers',
           path: ['spec', 'template', 'spec', 'containers'],
           type: 'group-list',
+          fullWidth: true,
           itemTitleField: 'name',
           itemTitleFallback: 'Container',
           fields: [
@@ -244,6 +245,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
           label: 'Volumes',
           path: ['spec', 'template', 'spec', 'volumes'],
           type: 'group-list',
+          fullWidth: true,
           itemTitleField: 'name',
           itemTitleFallback: 'Volume',
           fields: [

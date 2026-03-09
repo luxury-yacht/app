@@ -297,7 +297,33 @@ export function NestedGroupListField({
             onChange={(e) => handleNestedFieldChange(nestedIndex, nestedField, e.target.value)}
           />
         );
+      case 'string-list': {
+        // Comma-separated text input that reads/writes a YAML sequence.
+        const listItems = Array.isArray(nestedValue) ? (nestedValue as string[]) : [];
+        const csvValue = listItems.join(', ');
+        return (
+          <input
+            type="text"
+            className="resource-form-input"
+            style={fixedWidthStyle(nestedField)}
+            data-field-key={nestedField.key}
+            value={csvValue}
+            placeholder={nestedField.placeholder}
+            {...INPUT_BEHAVIOR_PROPS}
+            onChange={(e) => {
+              const raw = e.target.value.trim();
+              const items = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+              handleNestedFieldChange(nestedIndex, nestedField, items);
+            }}
+          />
+        );
+      }
       default:
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(
+            `NestedGroupListField: unhandled field type "${nestedField.type}" for key "${nestedField.key}"`
+          );
+        }
         return null;
     }
   };

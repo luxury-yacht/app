@@ -41,6 +41,8 @@ import {
 import type { templates } from '@wailsjs/go/models';
 import { getFormDefinition } from './create-resource/formDefinitions';
 import { ResourceForm } from './create-resource/ResourceForm';
+import { getRequiredFieldErrors } from './create-resource/formUtils';
+import { getFieldValue } from './create-resource/yamlSync';
 
 // Minimal YAML skeleton for the "Blank" option.
 const BLANK_YAML = `apiVersion:
@@ -352,6 +354,12 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
       () => (parsedKind ? getFormDefinition(parsedKind) : undefined),
       [parsedKind]
     );
+
+    // Client-side required-field validation (only when a form definition exists).
+    const requiredFieldErrors = useMemo(() => {
+      if (!formDefinition) return [];
+      return getRequiredFieldErrors(formDefinition, yamlContent, getFieldValue);
+    }, [formDefinition, yamlContent]);
 
     // Form availability and currently selected view.
     const canShowForm = !!formDefinition;
@@ -776,6 +784,11 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
             )}
 
             <div className="modal-footer">
+              {requiredFieldErrors.length > 0 && showingForm && (
+                <span className="create-resource-required-errors">
+                  {requiredFieldErrors.join(', ')}
+                </span>
+              )}
               <button
                 className="button generic create-resource-footer-cancel"
                 onClick={onClose}

@@ -264,21 +264,11 @@ function ensureVolumeSourceRoot(
 export function getCurrentVolumeSource(
   item: Record<string, unknown>
 ): VolumeSourceDefinition | undefined {
-  const configMap = getNestedValue(item, ['configMap']);
-  if (configMap !== undefined) return getVolumeSourceDefinition('configMap');
-
-  const emptyDir = getNestedValue(item, ['emptyDir']);
-  if (emptyDir !== undefined) return getVolumeSourceDefinition('emptyDir');
-
-  const hostPath = getNestedValue(item, ['hostPath']);
-  if (hostPath !== undefined) return getVolumeSourceDefinition('hostPath');
-
-  const pvc = getNestedValue(item, ['persistentVolumeClaim']);
-  if (pvc !== undefined) return getVolumeSourceDefinition('pvc');
-
-  const secret = getNestedValue(item, ['secret']);
-  if (secret !== undefined) return getVolumeSourceDefinition('secret');
-
+  for (const [sourceKey, rootPath] of Object.entries(VOLUME_SOURCE_ROOT_BY_KEY)) {
+    if (getNestedValue(item, rootPath) !== undefined) {
+      return getVolumeSourceDefinition(sourceKey as VolumeSourceKey);
+    }
+  }
   return undefined;
 }
 
