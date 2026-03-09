@@ -145,10 +145,11 @@
   overflow: hidden;
 }
 
-/* When YAML panel is open, expand the modal to fit both columns.
-   900 (form) + 700 (yaml) + 2rem (content padding). */
+/* When YAML panel is open, keep the closed-state 900px width until the
+   app window exceeds its 1100px minimum width, then grow while preserving
+   roughly 100px of gutter on each side, up to the full two-column cap. */
 .create-resource-modal.yaml-panel-visible {
-  max-width: calc(1600px + 2rem);
+  max-width: min(calc(100vw - 200px), calc(1600px + 2rem));
 }
 
 /* YAML panel — absolutely positioned inside .create-resource-middle

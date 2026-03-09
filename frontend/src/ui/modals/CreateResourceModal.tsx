@@ -332,11 +332,11 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
 
     // Available space beside the form (900px + 1rem left padding + 1rem gap).
     const availableForPanel = middleWidth - 900 - 32;
-    // When there's at least 300px beside the form, auto-fill up to 700px.
-    const panelAutoFills = yamlPanelReady && availableForPanel >= 300;
-    const effectivePanelWidth = panelAutoFills
-      ? Math.min(availableForPanel, 700)
-      : yamlPanelWidth;
+    // Only switch out of overlay mode once there is enough side space to fit
+    // the panel's current width. That avoids the abrupt 700px -> ~300px snap
+    // when the modal first crosses the side-by-side breakpoint.
+    const panelAutoFills = yamlPanelReady && availableForPanel >= yamlPanelWidth;
+    const effectivePanelWidth = panelAutoFills ? Math.min(availableForPanel, 700) : yamlPanelWidth;
     // Only resizable when the panel must overlay the form.
     const panelResizable = yamlPanelReady && !panelAutoFills;
 
