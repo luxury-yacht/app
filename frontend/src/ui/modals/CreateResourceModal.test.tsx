@@ -90,6 +90,12 @@ const wailsMock = vi.hoisted(() => ({
   }),
 }));
 
+const codeMirrorMock = vi.hoisted(() => ({
+  renders: [] as Array<{ extensions?: unknown[] }>,
+}));
+
+const lineWrappingExtension = vi.hoisted(() => ({ name: 'lineWrapping' }));
+
 vi.mock('./create-resource/formDefinitions', () => ({
   getFormDefinition: (kind: string) => {
     if (kind === 'Deployment') {
@@ -335,13 +341,24 @@ vi.mock('@shared/components/dropdowns/Dropdown', () => ({
 // Mock CodeMirror to avoid JSDOM limitations.
 vi.mock('@uiw/react-codemirror', () => ({
   __esModule: true,
-  default: ({ value, onChange }: { value: string; onChange?: (v: string) => void }) => (
-    <textarea
-      data-testid="yaml-editor"
-      value={value}
-      onChange={(e) => onChange?.(e.target.value)}
-    />
-  ),
+  default: ({
+    value,
+    onChange,
+    extensions,
+  }: {
+    value: string;
+    onChange?: (v: string) => void;
+    extensions?: unknown[];
+  }) => {
+    codeMirrorMock.renders.push({ extensions });
+    return (
+      <textarea
+        data-testid="yaml-editor"
+        value={value}
+        onChange={(e) => onChange?.(e.target.value)}
+      />
+    );
+  },
 }));
 
 vi.mock('@codemirror/lang-yaml', () => ({
@@ -349,7 +366,7 @@ vi.mock('@codemirror/lang-yaml', () => ({
 }));
 
 vi.mock('@codemirror/view', () => ({
-  EditorView: { lineWrapping: [] },
+  EditorView: { lineWrapping: lineWrappingExtension },
 }));
 
 // --- Test helpers ---
@@ -419,6 +436,7 @@ describe('CreateResourceModal', () => {
     wailsMock.GetResourceTemplates.mockClear();
     wailsMock.ValidateResourceCreation.mockClear();
     wailsMock.CreateResource.mockClear();
+    codeMirrorMock.renders = [];
     kubeconfigMock.selectedClusterId = 'config:test-cluster';
     kubeconfigMock.selectedClusterName = 'test-cluster';
     kubeconfigMock.selectedClusterIds = ['config:test-cluster'];
@@ -503,6 +521,36 @@ describe('CreateResourceModal', () => {
 
     const editor = container.querySelector('[data-testid="yaml-editor"]') as HTMLTextAreaElement;
     expect(editor.value).toContain('kind: Deployment');
+    await unmount();
+  });
+
+  it('defaults the YAML side panel to unwrapped lines and toggles wrapping on demand', async () => {
+    const { container, unmount } = await renderModal({ isOpen: true, onClose: vi.fn() });
+    await flushPromises();
+
+    const toggleBtn = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Show YAML'
+    ) as HTMLButtonElement | undefined;
+
+    await act(async () => {
+      toggleBtn?.click();
+    });
+
+    const wrapCheckbox = container.querySelector(
+      '.yaml-panel-wrap-toggle input[type="checkbox"]'
+    ) as HTMLInputElement;
+    const latestExtensions = () =>
+      codeMirrorMock.renders[codeMirrorMock.renders.length - 1]?.extensions ?? [];
+
+    expect(wrapCheckbox.checked).toBe(false);
+    expect(latestExtensions()).not.toContain(lineWrappingExtension);
+
+    await act(async () => {
+      wrapCheckbox.click();
+    });
+
+    expect(wrapCheckbox.checked).toBe(true);
+    expect(latestExtensions()).toContain(lineWrappingExtension);
     await unmount();
   });
 

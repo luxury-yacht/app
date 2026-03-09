@@ -183,9 +183,13 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
 
     const searchExtensions = useMemo(() => createSearchExtensions({ enableKeymap: false }), []);
 
-    const editorExtensions = useMemo(
-      () => [yamlLang(), EditorView.lineWrapping, highlightExtension, ...searchExtensions],
+    const baseEditorExtensions = useMemo(
+      () => [yamlLang(), highlightExtension, ...searchExtensions],
       [highlightExtension, searchExtensions]
+    );
+    const wrappedEditorExtensions = useMemo(
+      () => [...baseEditorExtensions, EditorView.lineWrapping],
+      [baseEditorExtensions]
     );
 
     // Handle open/close animation and state reset.
@@ -210,6 +214,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
         setYamlPanelClosing(false);
         setYamlPanelReady(false);
         setYamlPanelWidth(700);
+        setYamlPanelWrap(false);
         // Load templates.
         GetResourceTemplates()
           .then((templates) => {
@@ -315,6 +320,8 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
     const [yamlPanelReady, setYamlPanelReady] = useState(false);
     // User-controlled panel width for overlay mode (300–700px).
     const [yamlPanelWidth, setYamlPanelWidth] = useState(700);
+    // YAML side panel can optionally soft-wrap lines; default is off.
+    const [yamlPanelWrap, setYamlPanelWrap] = useState(false);
     // Tracked width of the middle wrapper for auto-fill calculations.
     const middleRef = useRef<HTMLDivElement>(null);
     const [middleWidth, setMiddleWidth] = useState(0);
@@ -675,7 +682,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                             searchKeymap: false,
                           }}
                           theme={codeMirrorTheme}
-                          extensions={editorExtensions}
+                          extensions={wrappedEditorExtensions}
                           onChange={handleYamlChange}
                         />
                       </div>
@@ -727,6 +734,16 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                           onPointerDown={handleResizePointerDown}
                         />
                       )}
+                      <div className="yaml-panel-toolbar">
+                        <label className="yaml-panel-wrap-toggle">
+                          <input
+                            type="checkbox"
+                            checked={yamlPanelWrap}
+                            onChange={(event) => setYamlPanelWrap(event.target.checked)}
+                          />
+                          <span>Wrap</span>
+                        </label>
+                      </div>
                       <div className="yaml-panel-editor">
                         <CodeMirror
                           value={yamlContent}
@@ -740,7 +757,9 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
                             searchKeymap: false,
                           }}
                           theme={codeMirrorTheme}
-                          extensions={editorExtensions}
+                          extensions={
+                            yamlPanelWrap ? wrappedEditorExtensions : baseEditorExtensions
+                          }
                           onChange={handleYamlChange}
                         />
                       </div>
