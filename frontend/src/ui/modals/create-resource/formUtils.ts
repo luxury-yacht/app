@@ -160,9 +160,15 @@ export function fixedWidthStyle(field: { inputWidth?: string }): React.CSSProper
 
 /**
  * Decide whether an empty value should be omitted from YAML for this field.
+ * By default, all non-required fields omit empty values (empty strings and
+ * empty arrays). Set `omitIfEmpty: false` on a field to opt out.
  */
 export function shouldOmitEmptyValue(field: FormFieldDefinition, value: unknown): boolean {
-  return field.omitIfEmpty === true && typeof value === 'string' && value.trim() === '';
+  if (field.required === true) return false;
+  if (field.omitIfEmpty === false) return false;
+  if (typeof value === 'string' && value.trim() === '') return true;
+  if (Array.isArray(value) && value.length === 0) return true;
+  return false;
 }
 
 /**

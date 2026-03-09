@@ -191,19 +191,34 @@ describe('formUtils', () => {
   // ─── Field value utilities ────────────────────────────────────────────
 
   describe('shouldOmitEmptyValue', () => {
-    it('returns true when omitIfEmpty and value is blank', () => {
-      const field = { key: 'f', label: 'F', path: ['f'], type: 'text', omitIfEmpty: true } as FormFieldDefinition;
+    it('returns true for empty strings on non-required fields by default', () => {
+      const field = { key: 'f', label: 'F', path: ['f'], type: 'text' } as FormFieldDefinition;
       expect(shouldOmitEmptyValue(field, '')).toBe(true);
       expect(shouldOmitEmptyValue(field, '  ')).toBe(true);
     });
 
-    it('returns false when omitIfEmpty but value is non-empty', () => {
-      const field = { key: 'f', label: 'F', path: ['f'], type: 'text', omitIfEmpty: true } as FormFieldDefinition;
+    it('returns true for empty arrays on non-required fields', () => {
+      const field = { key: 'f', label: 'F', path: ['f'], type: 'string-list' } as FormFieldDefinition;
+      expect(shouldOmitEmptyValue(field, [])).toBe(true);
+    });
+
+    it('returns false when value is non-empty', () => {
+      const field = { key: 'f', label: 'F', path: ['f'], type: 'text' } as FormFieldDefinition;
       expect(shouldOmitEmptyValue(field, 'hello')).toBe(false);
     });
 
-    it('returns false when omitIfEmpty is not set', () => {
-      const field = { key: 'f', label: 'F', path: ['f'], type: 'text' } as FormFieldDefinition;
+    it('returns false for non-empty arrays', () => {
+      const field = { key: 'f', label: 'F', path: ['f'], type: 'string-list' } as FormFieldDefinition;
+      expect(shouldOmitEmptyValue(field, ['a'])).toBe(false);
+    });
+
+    it('returns false for required fields even when empty', () => {
+      const field = { key: 'f', label: 'F', path: ['f'], type: 'text', required: true } as FormFieldDefinition;
+      expect(shouldOmitEmptyValue(field, '')).toBe(false);
+    });
+
+    it('returns false when omitIfEmpty is explicitly false', () => {
+      const field = { key: 'f', label: 'F', path: ['f'], type: 'text', omitIfEmpty: false } as FormFieldDefinition;
       expect(shouldOmitEmptyValue(field, '')).toBe(false);
     });
   });

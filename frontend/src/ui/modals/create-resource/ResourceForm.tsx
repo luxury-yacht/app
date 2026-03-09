@@ -91,11 +91,11 @@ function TextField({
   const yamlRef = useRef(yamlContent);
   const onChangeRef = useRef(onYamlChange);
   const pathRef = useRef(field.path);
-  const omitRef = useRef(field.omitIfEmpty);
+  const omitRef = useRef(field.required !== true && field.omitIfEmpty !== false);
   yamlRef.current = yamlContent;
   onChangeRef.current = onYamlChange;
   pathRef.current = field.path;
-  omitRef.current = field.omitIfEmpty;
+  omitRef.current = field.required !== true && field.omitIfEmpty !== false;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -104,8 +104,8 @@ function TextField({
     if (!el) return;
     const handler = (e: Event) => {
       const target = e.target as HTMLInputElement;
-      // When omitIfEmpty is set and the value is blank, remove the key from YAML
-      // instead of writing an empty string (which Kubernetes may reject).
+      // When the value is blank and the field should omit empties, remove the
+      // key from YAML instead of writing an empty string.
       if (omitRef.current && target.value.trim() === '') {
         const updated = unsetFieldValue(yamlRef.current, pathRef.current);
         if (updated !== null) onChangeRef.current(updated);
@@ -153,14 +153,14 @@ function NumberField({
   const minRef = useRef(field.min);
   const maxRef = useRef(field.max);
   const integerRef = useRef(field.integer);
-  const omitRef = useRef(field.omitIfEmpty);
+  const omitRef = useRef(field.required !== true && field.omitIfEmpty !== false);
   yamlRef.current = yamlContent;
   onChangeRef.current = onYamlChange;
   pathRef.current = field.path;
   minRef.current = field.min;
   maxRef.current = field.max;
   integerRef.current = field.integer;
-  omitRef.current = field.omitIfEmpty;
+  omitRef.current = field.required !== true && field.omitIfEmpty !== false;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -188,9 +188,9 @@ function NumberField({
         return;
       }
 
-      // When the field is cleared and omitIfEmpty is set (or there are no bounds),
-      // remove the key from YAML instead of writing an empty string.
-      if (parsed === '' && (omitRef.current || !hasBounds)) {
+      // When the field is cleared and should omit empties, remove the key
+      // from YAML instead of writing an empty string.
+      if (parsed === '' && omitRef.current) {
         const updated = unsetFieldValue(yamlRef.current, pathRef.current);
         if (updated !== null) onChangeRef.current(updated);
         return;
@@ -315,9 +315,11 @@ function StringListField({
   const yamlRef = useRef(yamlContent);
   const onChangeRef = useRef(onYamlChange);
   const pathRef = useRef(field.path);
+  const omitRef = useRef(field.required !== true && field.omitIfEmpty !== false);
   yamlRef.current = yamlContent;
   onChangeRef.current = onYamlChange;
   pathRef.current = field.path;
+  omitRef.current = field.required !== true && field.omitIfEmpty !== false;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -329,6 +331,12 @@ function StringListField({
       const raw = target.value.trim();
       // Parse comma-separated values into a string array, filtering empty entries.
       const items = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+      // When empty and the field should omit empties, remove the key from YAML.
+      if (items.length === 0 && omitRef.current) {
+        const updated = unsetFieldValue(yamlRef.current, pathRef.current);
+        if (updated !== null) onChangeRef.current(updated);
+        return;
+      }
       const updated = setFieldValue(yamlRef.current, pathRef.current, items);
       if (updated !== null) onChangeRef.current(updated);
     };
@@ -368,11 +376,11 @@ function TextareaField({
   const yamlRef = useRef(yamlContent);
   const onChangeRef = useRef(onYamlChange);
   const pathRef = useRef(field.path);
-  const omitRef = useRef(field.omitIfEmpty);
+  const omitRef = useRef(field.required !== true && field.omitIfEmpty !== false);
   yamlRef.current = yamlContent;
   onChangeRef.current = onYamlChange;
   pathRef.current = field.path;
-  omitRef.current = field.omitIfEmpty;
+  omitRef.current = field.required !== true && field.omitIfEmpty !== false;
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
