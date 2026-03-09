@@ -12,12 +12,14 @@ export const deploymentDefinition: ResourceFormDefinition = {
           path: ['metadata', 'name'],
           type: 'text',
           placeholder: 'deployment-name',
+          tooltip: 'Unique name for this Deployment within the namespace.',
         },
         {
           key: 'namespace',
           label: 'Namespace',
           path: ['metadata', 'namespace'],
           type: 'namespace-select',
+          tooltip: 'The namespace this Deployment will be created in.',
         },
         {
           key: 'replicas',
@@ -29,6 +31,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
           max: 999,
           integer: true,
           inputWidth: '6ch',
+          tooltip: 'Number of desired pod instances to run.',
         },
         {
           key: 'selectors',
@@ -43,6 +46,8 @@ export const deploymentDefinition: ResourceFormDefinition = {
           addGhostText: 'Add selector',
           inlineLabels: true,
           leftAlignEmptyActions: true,
+          tooltip:
+            'Label selectors that determine which pods belong to this Deployment. Automatically mirrored to pod template labels.',
         },
         {
           key: 'labels',
@@ -55,6 +60,8 @@ export const deploymentDefinition: ResourceFormDefinition = {
           inlineLabels: true,
           leftAlignEmptyActions: true,
           blankNewKeys: true,
+          tooltip:
+            'Additional key-value pairs attached to this Deployment for organization and selection. Selector labels are excluded.',
         },
         {
           key: 'annotations',
@@ -66,6 +73,8 @@ export const deploymentDefinition: ResourceFormDefinition = {
           inlineLabels: true,
           leftAlignEmptyActions: true,
           blankNewKeys: true,
+          tooltip:
+            'Arbitrary key-value metadata for tools, libraries, and external systems. Not used for selection.',
         },
       ],
     },
@@ -317,7 +326,8 @@ export const deploymentDefinition: ResourceFormDefinition = {
           path: ['spec', 'strategy', 'type'],
           type: 'select',
           dropdownWidth: 'calc(11ch + 40px)',
-          tooltip: 'RollingUpdate gradually replaces pods. Recreate kills all existing pods before creating new ones.',
+          tooltip:
+            'RollingUpdate gradually replaces pods. Recreate kills all existing pods before creating new ones.',
           clearPaths: [['spec', 'strategy']],
           clearPathsOnValues: {
             Recreate: [['spec', 'strategy', 'rollingUpdate']],
@@ -338,6 +348,8 @@ export const deploymentDefinition: ResourceFormDefinition = {
           inputWidth: 'calc(6ch + 20px)',
           groupWithNext: true,
           visibleWhen: { path: ['spec', 'strategy', 'type'], values: ['RollingUpdate'] },
+          tooltip:
+            'Maximum number of pods that can be created above the desired count during a rolling update. Can be a number or percentage.',
         },
         {
           key: 'maxUnavailable',
@@ -348,6 +360,8 @@ export const deploymentDefinition: ResourceFormDefinition = {
           omitIfEmpty: true,
           inputWidth: 'calc(6ch + 20px)',
           visibleWhen: { path: ['spec', 'strategy', 'type'], values: ['RollingUpdate'] },
+          tooltip:
+            'Maximum number of pods that can be unavailable during a rolling update. Can be a number or percentage.',
         },
         {
           key: 'serviceAccountName',
@@ -357,16 +371,19 @@ export const deploymentDefinition: ResourceFormDefinition = {
           type: 'text',
           placeholder: 'default',
           omitIfEmpty: true,
+          tooltip: 'The service account the pod runs as. Controls API access and mounted secrets.',
         },
         {
           key: 'terminationGracePeriodSeconds',
-          label: 'Term Grace Per',
+          label: 'Term Grace Period',
           path: ['spec', 'template', 'spec', 'terminationGracePeriodSeconds'],
           type: 'number',
           placeholder: '30',
           min: 0,
           integer: true,
           inputWidth: '6ch',
+          tooltip:
+            'Seconds to wait for a pod to shut down gracefully before it is forcefully killed. Default is 30.',
         },
         {
           key: 'nodeSelector',
@@ -378,6 +395,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
           inlineLabels: true,
           leftAlignEmptyActions: true,
           blankNewKeys: true,
+          tooltip: 'Key-value pairs that constrain which nodes the pod can be scheduled on.',
         },
         {
           key: 'priorityClassName',
@@ -386,6 +404,8 @@ export const deploymentDefinition: ResourceFormDefinition = {
           type: 'text',
           placeholder: 'optional',
           omitIfEmpty: true,
+          tooltip:
+            'Assigns a priority class to the pod, affecting scheduling and preemption order.',
         },
         {
           key: 'dnsPolicy',
@@ -398,7 +418,8 @@ export const deploymentDefinition: ResourceFormDefinition = {
             { label: 'ClusterFirstWithHostNet', value: 'ClusterFirstWithHostNet' },
             { label: 'None', value: 'None' },
           ],
-          implicitDefault: 'ClusterFirst',
+          tooltip:
+            'Controls how DNS resolution works inside the pod. ClusterFirst uses the cluster DNS service.',
         },
         {
           key: 'restartPolicy',
@@ -410,7 +431,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
             { label: 'OnFailure', value: 'OnFailure' },
             { label: 'Never', value: 'Never' },
           ],
-          implicitDefault: 'Always',
+          tooltip: 'When to restart containers in the pod. Always is required for Deployments.',
         },
       ],
     },

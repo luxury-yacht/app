@@ -1214,7 +1214,7 @@ export function ResourceForm({
                   />
                 )}
                 {grouped.slice(1).map((gf) => (
-                  <FormFieldRow key={gf.key} label={gf.label} className="resource-form-field--inline">
+                  <FormFieldRow key={gf.key} label={gf.label} tooltip={gf.tooltip} className="resource-form-field--inline">
                     <FieldRenderer
                       field={gf}
                       yamlContent={yamlContent}
