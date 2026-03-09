@@ -1,8 +1,10 @@
 import React from 'react';
+import Tooltip from '@shared/components/Tooltip';
 
 interface FormFieldRowProps {
   children: React.ReactNode;
   label?: string;
+  tooltip?: string;
   fullWidth?: boolean;
   className?: string;
   labelClassName?: string;
@@ -15,6 +17,7 @@ interface FormFieldRowProps {
 export function FormFieldRow({
   children,
   label,
+  tooltip,
   fullWidth = false,
   className,
   labelClassName = 'resource-form-label',
@@ -24,7 +27,12 @@ export function FormFieldRow({
 
   return (
     <div className={`resource-form-field${fullWidthClass}${extraClass}`}>
-      {!fullWidth && label !== undefined ? <label className={labelClassName}>{label}</label> : null}
+      {!fullWidth && label !== undefined ? (
+        <label className={labelClassName}>
+          {label}
+          {tooltip && <Tooltip content={tooltip} placement="top" />}
+        </label>
+      ) : null}
       {children}
     </div>
   );

@@ -133,6 +133,8 @@ export interface FormFieldDefinition {
   fullWidth?: boolean;
   /** Group this field with the next field on the same row (shares a single FormFieldRow). */
   groupWithNext?: boolean;
+  /** Tooltip text shown via a circled "i" icon next to the label. */
+  tooltip?: string;
   /** Indent this field so it appears as a child of the field above. Hides the label and uses empty space in its place. */
   indented?: boolean;
   /** Additional YAML paths to unset when this field is cleared (e.g., parent object paths). */

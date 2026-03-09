@@ -41,8 +41,10 @@
   font-size: 10px;
   font-style: normal;
   font-weight: 700;
+  text-transform: none;
   cursor: default;
   vertical-align: middle;
   line-height: 1;
+  padding-top: 1px;
   color: var(--color-text-tertiary);
 }

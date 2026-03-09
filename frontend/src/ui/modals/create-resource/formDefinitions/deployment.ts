@@ -317,6 +317,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
           path: ['spec', 'strategy', 'type'],
           type: 'select',
           dropdownWidth: 'calc(11ch + 40px)',
+          tooltip: 'RollingUpdate gradually replaces pods. Recreate kills all existing pods before creating new ones.',
           clearPaths: [['spec', 'strategy']],
           clearPathsOnValues: {
             Recreate: [['spec', 'strategy', 'rollingUpdate']],

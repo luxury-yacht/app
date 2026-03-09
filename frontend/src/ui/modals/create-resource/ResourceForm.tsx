@@ -1193,7 +1193,7 @@ export function ResourceForm({
             const firstField = grouped[0];
             const isIndented = firstField.indented === true;
             rows.push(
-              <FormFieldRow key={firstField.key} label={isIndented ? '' : firstField.label}>
+              <FormFieldRow key={firstField.key} label={isIndented ? '' : firstField.label} tooltip={isIndented ? undefined : firstField.tooltip}>
                 {isIndented ? (
                   <FormFieldRow label={firstField.label} className="resource-form-field--inline">
                     <FieldRenderer
@@ -1231,7 +1231,7 @@ export function ResourceForm({
             // Indented fields hide the label and show empty space in its place.
             const label = field.indented ? '' : field.label;
             rows.push(
-              <FormFieldRow key={field.key} label={label} fullWidth={useFullWidthLayout}>
+              <FormFieldRow key={field.key} label={label} tooltip={field.tooltip} fullWidth={useFullWidthLayout}>
                 <FieldRenderer
                   field={field}
                   yamlContent={yamlContent}

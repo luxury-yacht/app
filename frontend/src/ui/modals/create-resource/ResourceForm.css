@@ -49,6 +49,9 @@
 }
 
 .resource-form-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   font-size: var(--font-size-normal);
   font-weight: var(--font-weight-bold);
   color: var(--color-text-secondary);
