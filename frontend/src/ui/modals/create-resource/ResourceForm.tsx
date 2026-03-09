@@ -1127,7 +1127,7 @@ export function ResourceForm({
   }
 
   return (
-    <div className="resource-form">
+    <div className="resource-form" data-tab-native="true">
       {definition.sections.map((section) => (
         <FormSectionCard key={section.title} title={section.title}>
           {section.fields.map((field) => {
