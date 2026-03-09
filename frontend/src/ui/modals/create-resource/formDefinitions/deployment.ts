@@ -34,6 +34,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
           key: 'serviceAccountName',
           label: 'Service Account',
           path: ['spec', 'template', 'spec', 'serviceAccountName'],
+          mirrorPaths: [['spec', 'template', 'spec', 'serviceAccount']],
           type: 'text',
           placeholder: 'default',
           omitIfEmpty: true,

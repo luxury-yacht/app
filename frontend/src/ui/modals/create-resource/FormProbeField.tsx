@@ -83,6 +83,15 @@ function extractTimingFields(probe: Record<string, unknown>): Record<string, unk
   return timing;
 }
 
+/** Parse a port value: returns a number for numeric input, a string for named ports, or undefined if empty. */
+function parsePortValue(raw: string): number | string | undefined {
+  const trimmed = raw.trim();
+  if (trimmed === '') return undefined;
+  const num = Number(trimmed);
+  if (!Number.isNaN(num) && Number.isInteger(num) && num >= 1 && num <= 65535) return num;
+  return trimmed;
+}
+
 /** Check whether a probe has any meaningful values set. */
 export function hasProbeValues(probe: Record<string, unknown> | undefined): boolean {
   if (!probe) return false;
@@ -241,22 +250,15 @@ export function FormProbeField({
             </div>
             <div className="resource-form-probe-field">
               <label className="resource-form-field-label">Port</label>
-              <FormCompactNumberInput
-                dataFieldKey="httpGetPort"
+              <input
+                type="text"
+                className="resource-form-input"
+                style={{ flex: '0 0 auto', width: 'calc(8ch + 20px)', minWidth: 'calc(8ch + 20px)', maxWidth: 'calc(8ch + 20px)' }}
+                data-field-key="httpGetPort"
                 value={String(getNestedValue(probe, ['httpGet', 'port']) ?? '')}
                 placeholder="80"
-                min={1}
-                max={65535}
-                integer
-                style={{ flex: '0 0 auto', width: 'calc(5ch + 20px)', minWidth: 'calc(5ch + 20px)', maxWidth: 'calc(5ch + 20px)' }}
-                onChange={(e) => {
-                  const parsed = parseCompactNumberValue(
-                    e.target.value,
-                    { min: 1, max: 65535, integer: true },
-                    { allowEmpty: true }
-                  );
-                  if (parsed !== null) handleFieldChange(['httpGet', 'port'], parsed === '' ? undefined : parsed);
-                }}
+                {...INPUT_BEHAVIOR_PROPS}
+                onChange={(e) => handleFieldChange(['httpGet', 'port'], parsePortValue(e.target.value))}
               />
             </div>
             <div className="resource-form-probe-field">
@@ -283,22 +285,15 @@ export function FormProbeField({
         {probeType === 'tcpSocket' && (
           <div className="resource-form-probe-field">
             <label className="resource-form-field-label">Port</label>
-            <FormCompactNumberInput
-              dataFieldKey="tcpSocketPort"
+            <input
+              type="text"
+              className="resource-form-input"
+              style={{ flex: '0 0 auto', width: 'calc(8ch + 20px)', minWidth: 'calc(8ch + 20px)', maxWidth: 'calc(8ch + 20px)' }}
+              data-field-key="tcpSocketPort"
               value={String(getNestedValue(probe, ['tcpSocket', 'port']) ?? '')}
               placeholder="80"
-              min={1}
-              max={65535}
-              integer
-              style={{ flex: '0 0 auto', width: 'calc(5ch + 20px)', minWidth: 'calc(5ch + 20px)', maxWidth: 'calc(5ch + 20px)' }}
-              onChange={(e) => {
-                const parsed = parseCompactNumberValue(
-                  e.target.value,
-                  { min: 1, max: 65535, integer: true },
-                  { allowEmpty: true }
-                );
-                if (parsed !== null) handleFieldChange(['tcpSocket', 'port'], parsed === '' ? undefined : parsed);
-              }}
+              {...INPUT_BEHAVIOR_PROPS}
+              onChange={(e) => handleFieldChange(['tcpSocket', 'port'], parsePortValue(e.target.value))}
             />
           </div>
         )}
@@ -329,22 +324,15 @@ export function FormProbeField({
           <>
             <div className="resource-form-probe-field">
               <label className="resource-form-field-label">Port</label>
-              <FormCompactNumberInput
-                dataFieldKey="grpcPort"
+              <input
+                type="text"
+                className="resource-form-input"
+                style={{ flex: '0 0 auto', width: 'calc(8ch + 20px)', minWidth: 'calc(8ch + 20px)', maxWidth: 'calc(8ch + 20px)' }}
+                data-field-key="grpcPort"
                 value={String(getNestedValue(probe, ['grpc', 'port']) ?? '')}
                 placeholder="50051"
-                min={1}
-                max={65535}
-                integer
-                style={{ flex: '0 0 auto', width: 'calc(5ch + 20px)', minWidth: 'calc(5ch + 20px)', maxWidth: 'calc(5ch + 20px)' }}
-                onChange={(e) => {
-                  const parsed = parseCompactNumberValue(
-                    e.target.value,
-                    { min: 1, max: 65535, integer: true },
-                    { allowEmpty: true }
-                  );
-                  if (parsed !== null) handleFieldChange(['grpc', 'port'], parsed === '' ? undefined : parsed);
-                }}
+                {...INPUT_BEHAVIOR_PROPS}
+                onChange={(e) => handleFieldChange(['grpc', 'port'], parsePortValue(e.target.value))}
               />
             </div>
             <div className="resource-form-probe-field">

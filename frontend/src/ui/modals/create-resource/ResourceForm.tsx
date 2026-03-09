@@ -93,10 +93,12 @@ function TextField({
   const yamlRef = useRef(yamlContent);
   const onChangeRef = useRef(onYamlChange);
   const pathRef = useRef(field.path);
+  const mirrorPathsRef = useRef(field.mirrorPaths);
   const omitRef = useRef(field.required !== true && field.omitIfEmpty !== false);
   yamlRef.current = yamlContent;
   onChangeRef.current = onYamlChange;
   pathRef.current = field.path;
+  mirrorPathsRef.current = field.mirrorPaths;
   omitRef.current = field.required !== true && field.omitIfEmpty !== false;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -106,15 +108,24 @@ function TextField({
     if (!el) return;
     const handler = (e: Event) => {
       const target = e.target as HTMLInputElement;
+      const allPaths = [pathRef.current, ...(mirrorPathsRef.current ?? [])];
       // When the value is blank and the field should omit empties, remove the
       // key from YAML instead of writing an empty string.
       if (omitRef.current && target.value.trim() === '') {
-        const updated = unsetFieldValue(yamlRef.current, pathRef.current);
-        if (updated !== null) onChangeRef.current(updated);
+        let nextYaml = yamlRef.current;
+        for (const p of allPaths) {
+          const updated = unsetFieldValue(nextYaml, p);
+          if (updated !== null) nextYaml = updated;
+        }
+        onChangeRef.current(nextYaml);
         return;
       }
-      const updated = setFieldValue(yamlRef.current, pathRef.current, target.value);
-      if (updated !== null) onChangeRef.current(updated);
+      let nextYaml = yamlRef.current;
+      for (const p of allPaths) {
+        const updated = setFieldValue(nextYaml, p, target.value);
+        if (updated !== null) nextYaml = updated;
+      }
+      onChangeRef.current(nextYaml);
     };
     el.addEventListener('change', handler);
     return () => el.removeEventListener('change', handler);
