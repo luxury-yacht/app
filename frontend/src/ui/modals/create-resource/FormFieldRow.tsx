@@ -24,7 +24,7 @@ export function FormFieldRow({
 
   return (
     <div className={`resource-form-field${fullWidthClass}${extraClass}`}>
-      {!fullWidth && label ? <label className={labelClassName}>{label}</label> : null}
+      {!fullWidth && label !== undefined ? <label className={labelClassName}>{label}</label> : null}
       {children}
     </div>
   );

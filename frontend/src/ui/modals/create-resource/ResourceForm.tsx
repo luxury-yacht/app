@@ -250,7 +250,11 @@ function SelectField({
   const options = useMemo(() => buildSelectOptions(field), [field]);
 
   return (
-    <div data-field-key={field.key} className="resource-form-dropdown">
+    <div
+      data-field-key={field.key}
+      className="resource-form-dropdown"
+      style={fixedWidthStyle(field.dropdownWidth ? { inputWidth: field.dropdownWidth } : field)}
+    >
       <Dropdown
         options={options}
         value={effectiveValue}
@@ -1139,12 +1143,79 @@ export function ResourceForm({
 
   return (
     <div className="resource-form" data-tab-native="true">
-      {definition.sections.map((section) => (
-        <FormSectionCard key={section.title} title={section.title}>
-          {section.fields.map((field) => {
-            const useFullWidthLayout = field.fullWidth === true;
-            return (
-              <FormFieldRow key={field.key} label={field.label} fullWidth={useFullWidthLayout}>
+      {definition.sections.map((section) => {
+        // Filter out fields whose visibleWhen condition is not met.
+        // Track original indices so groupWithNext only chains originally-adjacent fields.
+        const visibleWithIndices = section.fields
+          .map((f, idx) => ({ field: f, originalIndex: idx }))
+          .filter(({ field: f }) => {
+            if (!f.visibleWhen) return true;
+            const currentValue = getFieldValue(yamlContent, f.visibleWhen.path);
+            const strValue = currentValue != null ? String(currentValue) : '';
+            return f.visibleWhen.values.includes(strValue);
+          });
+        const sectionFields = visibleWithIndices.map(({ field: f }) => f);
+        const originalIndices = visibleWithIndices.map(({ originalIndex }) => originalIndex);
+        const rows: React.ReactElement[] = [];
+        let i = 0;
+        while (i < sectionFields.length) {
+          const field = sectionFields[i];
+          const useFullWidthLayout = field.fullWidth === true;
+
+          // Collect consecutive groupWithNext fields into a single row.
+          // Only chain fields that were originally adjacent (not brought together by filtering).
+          if (field.groupWithNext && i + 1 < sectionFields.length &&
+              originalIndices[i + 1] === originalIndices[i] + 1) {
+            const grouped: FormFieldDefinition[] = [field];
+            while (
+              i + grouped.length < sectionFields.length &&
+              sectionFields[i + grouped.length - 1].groupWithNext &&
+              originalIndices[i + grouped.length] === originalIndices[i + grouped.length - 1] + 1
+            ) {
+              grouped.push(sectionFields[i + grouped.length]);
+            }
+            const firstField = grouped[0];
+            const isIndented = firstField.indented === true;
+            rows.push(
+              <FormFieldRow key={firstField.key} label={isIndented ? '' : firstField.label}>
+                {isIndented ? (
+                  <FormFieldRow label={firstField.label} className="resource-form-field--inline">
+                    <FieldRenderer
+                      field={firstField}
+                      yamlContent={yamlContent}
+                      onYamlChange={onYamlChange}
+                      namespaceOptions={namespaceOptions}
+                      onNamespaceChange={onNamespaceChange}
+                    />
+                  </FormFieldRow>
+                ) : (
+                  <FieldRenderer
+                    field={firstField}
+                    yamlContent={yamlContent}
+                    onYamlChange={onYamlChange}
+                    namespaceOptions={namespaceOptions}
+                    onNamespaceChange={onNamespaceChange}
+                  />
+                )}
+                {grouped.slice(1).map((gf) => (
+                  <FormFieldRow key={gf.key} label={gf.label} className="resource-form-field--inline">
+                    <FieldRenderer
+                      field={gf}
+                      yamlContent={yamlContent}
+                      onYamlChange={onYamlChange}
+                      namespaceOptions={namespaceOptions}
+                      onNamespaceChange={onNamespaceChange}
+                    />
+                  </FormFieldRow>
+                ))}
+              </FormFieldRow>
+            );
+            i += grouped.length;
+          } else {
+            // Indented fields hide the label and show empty space in its place.
+            const label = field.indented ? '' : field.label;
+            rows.push(
+              <FormFieldRow key={field.key} label={label} fullWidth={useFullWidthLayout}>
                 <FieldRenderer
                   field={field}
                   yamlContent={yamlContent}
@@ -1154,9 +1225,15 @@ export function ResourceForm({
                 />
               </FormFieldRow>
             );
-          })}
-        </FormSectionCard>
-      ))}
+            i += 1;
+          }
+        }
+        return (
+          <FormSectionCard key={section.title} title={section.title}>
+            {rows}
+          </FormSectionCard>
+        );
+      })}
     </div>
   );
 }

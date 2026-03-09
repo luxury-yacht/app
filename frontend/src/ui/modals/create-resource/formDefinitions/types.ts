@@ -133,6 +133,13 @@ export interface FormFieldDefinition {
   fullWidth?: boolean;
   /** Group this field with the next field on the same row (shares a single FormFieldRow). */
   groupWithNext?: boolean;
+  /** Indent this field so it appears as a child of the field above. Hides the label and uses empty space in its place. */
+  indented?: boolean;
+  /** Only show this field when the value at the given YAML path matches one of the listed values. */
+  visibleWhen?: {
+    path: string[];
+    values: string[];
+  };
 }
 
 export interface FormSectionDefinition {
