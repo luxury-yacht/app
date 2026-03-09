@@ -11,6 +11,7 @@ import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import { getFieldValue } from './yamlSync';
 import type { FormFieldDefinition } from './formDefinitions';
+import { FormCommandInputField } from './FormCommandInputField';
 import { FormCompactNumberInput, parseCompactNumberValue } from './FormCompactNumberInput';
 import { FormNestedListField } from './FormNestedListField';
 import {
@@ -318,6 +319,14 @@ export function NestedGroupListField({
           />
         );
       }
+      case 'command-input':
+        return (
+          <FormCommandInputField
+            field={nestedField}
+            value={nestedValue}
+            onChange={(newValue) => handleNestedFieldChange(nestedIndex, nestedField, newValue)}
+          />
+        );
       default:
         if (process.env.NODE_ENV !== 'production') {
           console.warn(

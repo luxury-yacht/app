@@ -120,15 +120,15 @@ export const deploymentDefinition: ResourceFormDefinition = {
               key: 'command',
               label: 'Command',
               path: ['command'],
-              type: 'string-list',
-              placeholder: '/bin/sh, -c',
+              type: 'command-input',
+              placeholder: '/bin/sh -c',
             },
             {
               key: 'args',
               label: 'Args',
               path: ['args'],
-              type: 'string-list',
-              placeholder: 'arg1, arg2',
+              type: 'command-input',
+              placeholder: '--port=8080 --log-level=info',
             },
             {
               key: 'env',
@@ -212,6 +212,18 @@ export const deploymentDefinition: ResourceFormDefinition = {
               label: 'Resources',
               path: ['resources'],
               type: 'container-resources',
+            },
+            {
+              key: 'readinessProbe',
+              label: 'Readiness',
+              path: ['readinessProbe'],
+              type: 'probe',
+            },
+            {
+              key: 'livenessProbe',
+              label: 'Liveness',
+              path: ['livenessProbe'],
+              type: 'probe',
             },
             {
               key: 'volumeMounts',

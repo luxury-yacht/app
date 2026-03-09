@@ -32,7 +32,9 @@ export interface FormFieldDefinition {
     | 'volume-source'
     | 'tri-state-boolean'
     | 'boolean-toggle'
-    | 'string-list';
+    | 'string-list'
+    | 'command-input'
+    | 'probe';
   /** Placeholder text for text/number inputs. */
   placeholder?: string;
   /** Optional minimum value for number inputs. */

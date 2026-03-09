@@ -14,10 +14,12 @@ import { getFieldValue, setFieldValue, unsetFieldValue } from './yamlSync';
 import type { ResourceFormDefinition, FormFieldDefinition } from './formDefinitions';
 import { FormIconActionButton } from './FormActionPrimitives';
 import { FormCompactNumberInput, parseCompactNumberValue } from './FormCompactNumberInput';
+import { FormCommandInputField } from './FormCommandInputField';
 import {
   FormContainerResourcesField,
   hasContainerResourceValues,
 } from './FormContainerResourcesField';
+import { FormProbeField } from './FormProbeField';
 import { FormFieldRow } from './FormFieldRow';
 import { FormKeyValueListField } from './FormKeyValueListField';
 import { NestedGroupListField } from './NestedGroupListField';
@@ -857,6 +859,27 @@ function GroupListField({
           />
         );
       }
+      case 'probe': {
+        const probeValue =
+          subValue && typeof subValue === 'object' && !Array.isArray(subValue)
+            ? (subValue as Record<string, unknown>)
+            : undefined;
+        return (
+          <FormProbeField
+            dataFieldKey={subField.key}
+            probe={probeValue}
+            label={subField.label}
+            onProbeChange={(newProbe) => handleSubFieldChange(itemIndex, subField, newProbe)}
+            onRemoveProbe={() => {
+              const updatedItems = items.map((currentItem, i) => {
+                if (i !== itemIndex) return currentItem;
+                return unsetNestedValue(currentItem, subField.path);
+              });
+              updateItems(updatedItems);
+            }}
+          />
+        );
+      }
       case 'volume-source':
         return (
           <FormVolumeSourceField
@@ -970,6 +993,14 @@ function GroupListField({
           />
         );
       }
+      case 'command-input':
+        return (
+          <FormCommandInputField
+            field={subField}
+            value={subValue}
+            onChange={(newValue) => handleSubFieldChange(itemIndex, subField, newValue)}
+          />
+        );
       default:
         if (process.env.NODE_ENV !== 'production') {
           console.warn(
@@ -1154,6 +1185,25 @@ function FieldRenderer({
       return (
         <StringListField field={field} yamlContent={yamlContent} onYamlChange={onYamlChange} />
       );
+    case 'command-input': {
+      const cmdValue = getFieldValue(yamlContent, field.path);
+      return (
+        <FormCommandInputField
+          field={field}
+          value={cmdValue}
+          onChange={(newValue) => {
+            const arr = newValue as string[];
+            if (shouldOmitEmptyValue(field, arr)) {
+              const updated = unsetFieldValue(yamlContent, field.path);
+              if (updated !== null) onYamlChange(updated);
+            } else {
+              const updated = setFieldValue(yamlContent, field.path, arr);
+              if (updated !== null) onYamlChange(updated);
+            }
+          }}
+        />
+      );
+    }
     default:
       if (process.env.NODE_ENV !== 'production') {
         console.warn(`FieldRenderer: unhandled field type "${field.type}" for key "${field.key}"`);
