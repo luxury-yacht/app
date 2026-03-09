@@ -89,7 +89,7 @@ export const jobDefinition: ResourceFormDefinition = {
               placeholder: 'echo, Hello',
             },
           ],
-          defaultValue: { name: '', image: '', command: [] },
+          defaultValue: { name: '', image: '' },
         },
       ],
     },

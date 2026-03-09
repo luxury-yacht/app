@@ -784,11 +784,6 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
             )}
 
             <div className="modal-footer">
-              {requiredFieldErrors.length > 0 && showingForm && (
-                <span className="create-resource-required-errors">
-                  {requiredFieldErrors.join(', ')}
-                </span>
-              )}
               <button
                 className="button generic create-resource-footer-cancel"
                 onClick={onClose}
@@ -796,6 +791,11 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
               >
                 Cancel
               </button>
+              {requiredFieldErrors.length > 0 && showingForm && (
+                <span className="create-resource-required-errors">
+                  {requiredFieldErrors.join(', ')}
+                </span>
+              )}
               <button
                 className="button generic"
                 disabled={!hasTarget || isBusy}

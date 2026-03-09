@@ -141,7 +141,9 @@ spec:
       containers:
       - name: worker
         image: busybox:latest
-        command: ["echo", "Hello from the job"]
+        command:
+        - echo
+        - Hello from the job
       restartPolicy: Never`,
 	}
 }
@@ -168,7 +170,9 @@ spec:
           containers:
           - name: worker
             image: busybox:latest
-            command: ["echo", "Scheduled task"]
+            command:
+            - echo
+            - Scheduled task
           restartPolicy: Never`,
 	}
 }

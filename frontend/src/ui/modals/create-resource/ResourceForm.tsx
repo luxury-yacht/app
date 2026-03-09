@@ -153,12 +153,14 @@ function NumberField({
   const minRef = useRef(field.min);
   const maxRef = useRef(field.max);
   const integerRef = useRef(field.integer);
+  const omitRef = useRef(field.omitIfEmpty);
   yamlRef.current = yamlContent;
   onChangeRef.current = onYamlChange;
   pathRef.current = field.path;
   minRef.current = field.min;
   maxRef.current = field.max;
   integerRef.current = field.integer;
+  omitRef.current = field.omitIfEmpty;
 
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -183,6 +185,14 @@ function NumberField({
       );
       if (parsed === null) {
         restorePreviousValue();
+        return;
+      }
+
+      // When the field is cleared and omitIfEmpty is set (or there are no bounds),
+      // remove the key from YAML instead of writing an empty string.
+      if (parsed === '' && (omitRef.current || !hasBounds)) {
+        const updated = unsetFieldValue(yamlRef.current, pathRef.current);
+        if (updated !== null) onChangeRef.current(updated);
         return;
       }
 
@@ -233,6 +243,13 @@ function SelectField({
         value={effectiveValue}
         onChange={(nextValue) => {
           const normalized = Array.isArray(nextValue) ? (nextValue[0] ?? '') : nextValue;
+          // When the user selects the empty "-----" option, remove the key
+          // from YAML instead of writing an empty string.
+          if (normalized === '') {
+            const updated = unsetFieldValue(yamlContent, field.path);
+            if (updated !== null) onYamlChange(updated);
+            return;
+          }
           const updated = setFieldValue(yamlContent, field.path, normalized);
           if (updated !== null) onYamlChange(updated);
         }}

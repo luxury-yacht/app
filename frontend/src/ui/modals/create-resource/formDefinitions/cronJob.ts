@@ -96,7 +96,7 @@ export const cronJobDefinition: ResourceFormDefinition = {
               placeholder: 'echo, Hello',
             },
           ],
-          defaultValue: { name: '', image: '', command: [] },
+          defaultValue: { name: '', image: '' },
         },
       ],
     },

@@ -123,18 +123,22 @@
   margin-bottom: var(--spacing-xs);
 }
 
+/* Preserve footer alignment after removing the kind badge spacer.
+   When required-field errors are present, the errors span absorbs
+   the remaining space instead of the cancel button. */
+.create-resource-footer-cancel {
+  margin-right: auto;
+}
+
 .create-resource-required-errors {
   font-size: 0.8rem;
   color: var(--color-error);
-  margin-right: auto;
+  flex: 1;
+  min-width: 0;
+  text-align: right;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* Preserve footer alignment after removing the kind badge spacer. */
-.create-resource-footer-cancel {
-  margin-right: auto;
 }
 
 /* ── Middle wrapper & YAML side panel ──────────────────────────────────── */
