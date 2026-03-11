@@ -798,7 +798,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
               )}
               <button
                 className="button generic"
-                disabled={!hasTarget || isBusy}
+                disabled={!hasTarget || isBusy || (showingForm && requiredFieldErrors.length > 0)}
                 onClick={handleValidate}
                 data-create-resource-focusable="true"
               >
@@ -806,7 +806,7 @@ const CreateResourceModal: React.FC<CreateResourceModalProps> = React.memo(
               </button>
               <button
                 className="button action"
-                disabled={!hasTarget || isBusy}
+                disabled={!hasTarget || isBusy || (showingForm && requiredFieldErrors.length > 0)}
                 onClick={handleCreate}
                 data-create-resource-focusable="true"
               >

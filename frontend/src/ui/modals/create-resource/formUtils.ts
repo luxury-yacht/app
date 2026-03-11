@@ -213,9 +213,7 @@ export function getRequiredFieldErrors(
     if (field.required) {
       const value = getFieldValueFn(yamlContent, field.path);
       const isEmpty =
-        value === undefined ||
-        value === null ||
-        (typeof value === 'string' && value.trim() === '');
+        value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
       if (isEmpty) {
         const label = parentLabel ? `${parentLabel} > ${field.label}` : field.label;
         errors.push(`${label} is required`);

@@ -11,6 +11,7 @@ export const ingressDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
+          required: true,
           placeholder: 'ingress-name',
         },
         {

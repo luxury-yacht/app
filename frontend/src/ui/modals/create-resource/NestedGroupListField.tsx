@@ -313,7 +313,12 @@ export function NestedGroupListField({
             {...INPUT_BEHAVIOR_PROPS}
             onChange={(e) => {
               const raw = e.target.value.trim();
-              const items = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+              const items = raw
+                ? raw
+                    .split(',')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                : [];
               handleNestedFieldChange(nestedIndex, nestedField, items);
             }}
           />

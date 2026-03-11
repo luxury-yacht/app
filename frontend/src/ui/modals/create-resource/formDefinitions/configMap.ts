@@ -11,6 +11,7 @@ export const configMapDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
+          required: true,
           placeholder: 'configmap-name',
         },
         {

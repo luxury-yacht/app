@@ -51,7 +51,7 @@ describe('commandInputUtils', () => {
     });
 
     it('handles tabs as whitespace', () => {
-      expect(shellTokenize("a\tb")).toEqual(['a', 'b']);
+      expect(shellTokenize('a\tb')).toEqual(['a', 'b']);
     });
   });
 

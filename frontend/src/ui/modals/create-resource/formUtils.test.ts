@@ -198,7 +198,12 @@ describe('formUtils', () => {
     });
 
     it('returns true for empty arrays on non-required fields', () => {
-      const field = { key: 'f', label: 'F', path: ['f'], type: 'string-list' } as FormFieldDefinition;
+      const field = {
+        key: 'f',
+        label: 'F',
+        path: ['f'],
+        type: 'string-list',
+      } as FormFieldDefinition;
       expect(shouldOmitEmptyValue(field, [])).toBe(true);
     });
 
@@ -208,17 +213,34 @@ describe('formUtils', () => {
     });
 
     it('returns false for non-empty arrays', () => {
-      const field = { key: 'f', label: 'F', path: ['f'], type: 'string-list' } as FormFieldDefinition;
+      const field = {
+        key: 'f',
+        label: 'F',
+        path: ['f'],
+        type: 'string-list',
+      } as FormFieldDefinition;
       expect(shouldOmitEmptyValue(field, ['a'])).toBe(false);
     });
 
     it('returns false for required fields even when empty', () => {
-      const field = { key: 'f', label: 'F', path: ['f'], type: 'text', required: true } as FormFieldDefinition;
+      const field = {
+        key: 'f',
+        label: 'F',
+        path: ['f'],
+        type: 'text',
+        required: true,
+      } as FormFieldDefinition;
       expect(shouldOmitEmptyValue(field, '')).toBe(false);
     });
 
     it('returns false when omitIfEmpty is explicitly false', () => {
-      const field = { key: 'f', label: 'F', path: ['f'], type: 'text', omitIfEmpty: false } as FormFieldDefinition;
+      const field = {
+        key: 'f',
+        label: 'F',
+        path: ['f'],
+        type: 'text',
+        omitIfEmpty: false,
+      } as FormFieldDefinition;
       expect(shouldOmitEmptyValue(field, '')).toBe(false);
     });
   });
@@ -226,7 +248,10 @@ describe('formUtils', () => {
   describe('buildSelectOptions', () => {
     it('includes an empty option by default', () => {
       const field = {
-        key: 'f', label: 'F', path: ['f'], type: 'select',
+        key: 'f',
+        label: 'F',
+        path: ['f'],
+        type: 'select',
         options: [{ label: 'A', value: 'a' }],
       } as FormFieldDefinition;
       const opts = buildSelectOptions(field);
@@ -236,7 +261,10 @@ describe('formUtils', () => {
 
     it('excludes the empty option when includeEmptyOption is false', () => {
       const field = {
-        key: 'f', label: 'F', path: ['f'], type: 'select',
+        key: 'f',
+        label: 'F',
+        path: ['f'],
+        type: 'select',
         options: [{ label: 'A', value: 'a' }],
         includeEmptyOption: false,
       } as FormFieldDefinition;
@@ -255,7 +283,11 @@ describe('formUtils', () => {
 
     it('returns the implicitDefault when value is empty', () => {
       const field = {
-        key: 'f', label: 'F', path: ['f'], type: 'select', implicitDefault: 'TCP',
+        key: 'f',
+        label: 'F',
+        path: ['f'],
+        type: 'select',
+        implicitDefault: 'TCP',
       } as FormFieldDefinition;
       expect(getSelectFieldValue(field, '')).toBe('TCP');
       expect(getSelectFieldValue(field, 'UDP')).toBe('UDP');
@@ -269,8 +301,19 @@ describe('formUtils', () => {
       sections: [
         {
           fields: [
-            { key: 'name', label: 'Name', path: ['metadata', 'name'], type: 'text', required: true } as FormFieldDefinition,
-            { key: 'ns', label: 'Namespace', path: ['metadata', 'namespace'], type: 'text' } as FormFieldDefinition,
+            {
+              key: 'name',
+              label: 'Name',
+              path: ['metadata', 'name'],
+              type: 'text',
+              required: true,
+            } as FormFieldDefinition,
+            {
+              key: 'ns',
+              label: 'Namespace',
+              path: ['metadata', 'namespace'],
+              type: 'text',
+            } as FormFieldDefinition,
           ],
         },
       ],

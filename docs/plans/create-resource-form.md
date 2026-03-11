@@ -1,39 +1,51 @@
-1. ✅ GroupListField is still a ~750-line god component
+⏺ Deployment Form Assessment
 
-Extracted the nested group-list rendering (~290 lines) into NestedGroupListField.tsx. GroupListField dropped from ~630 to ~340 lines. Moved shared helpers (shouldOmitEmptyValue, buildSelectOptions, getSelectFieldValue, fieldFlexStyle) to formUtils.ts. Removed hardcoded availableVolumeNames — disableAdd is now computed generically from dynamic options resolution. Added disabledGhostText to FormFieldDefinition for definition-driven disabled state messaging.
+The form architecture is solid — declarative definitions, YAML as source of truth, server-side dry-run validation, multi-cluster awareness. But it covers roughly 30–40% of the Kubernetes Deployment API surface that
+production teams commonly use.
 
-2. ✅ Volume mount logic is still hardcoded against field keys in the renderer
+What's well covered
 
-Added `boolean-toggle` field type, `alternatePath`/`alternateLabel` for text-with-toggle, and `dynamicOptionsPath`/`dynamicOptionsField` for runtime-resolved select options. All `isVolumeMountsList` hardcoded checks removed from renderNestedLeafField; behavior now driven entirely by formDefinitions.
+Metadata, replicas, selectors/labels/annotations, containers (name, image, pullPolicy, command/args, literal env vars, ports, resources, readiness/liveness probes, volumeMounts), 5 volume types (configMap, secret, PVC,
+hostPath, emptyDir), strategy (rollingUpdate/recreate with conditional fields), serviceAccountName, terminationGracePeriod, nodeSelector, priorityClassName, dnsPolicy, restartPolicy.
 
-3. ✅ Dead code in FormVolumeSourceField JSX
+Critical gaps for production use
 
-Removed the unreachable fallback text input.
+High impact — commonly needed:
 
-4. ✅ VolumeSourceExtraFieldDefinition is a parallel type system
+- No envFrom (sourcing env from ConfigMaps/Secrets) — nearly every production deployment uses this
+- No startupProbe
+- No pod or container securityContext (runAsUser, runAsNonRoot, readOnlyRootFilesystem, capabilities, etc.)
+- No affinity / tolerations / topologySpreadConstraints
+- No initContainers
+- No imagePullSecrets
+- No pod template annotations (used by Prometheus, Vault, Datadog, etc.)
+- Only 5 of ~25 volume source types (missing NFS, projected, CSI, downwardAPI)
+- Missing minReadySeconds, progressDeadlineSeconds, revisionHistoryLimit
 
-Eliminated VolumeSourceExtraFieldDefinition; extra fields now use FormFieldDefinition directly.
+Bugs found
 
-5. ✅ ConfigMap/Secret items handlers are copy-pasted
+┌─────┬──────────────────────────────────────────────────────────────────────────────────────────┬──────────┐
+│ # │ Issue │ Severity │
+├─────┼──────────────────────────────────────────────────────────────────────────────────────────┼──────────┤
+│ 1 │ name field not marked required: true — no client-side error shown │ Medium │
+├─────┼──────────────────────────────────────────────────────────────────────────────────────────┼──────────┤
+│ 2 │ env only supports literal values, no valueFrom (secretKeyRef, configMapKeyRef, fieldRef) │ High │
+├─────┼──────────────────────────────────────────────────────────────────────────────────────────┼──────────┤
+│ 3 │ restartPolicy dropdown allows OnFailure/Never which are invalid for Deployments │ Medium │
+├─────┼──────────────────────────────────────────────────────────────────────────────────────────┼──────────┤
+│ 4 │ serviceAccountName mirrors to deprecated serviceAccount field (removed in k8s 1.24) │ Medium │
+├─────┼──────────────────────────────────────────────────────────────────────────────────────────┼──────────┤
+│ 5 │ Port protocol dropdown missing SCTP │ Low │
+└─────┴──────────────────────────────────────────────────────────────────────────────────────────┴──────────┘
 
-Replaced with makeSourceItemsHandlers factory.
+Test coverage gaps
 
-6. ✅ Leaky prop interface on FormVolumeSourceField
+- FormProbeField — zero unit tests
+- FormVolumeSourceField — zero unit tests
+- NestedGroupListField — zero unit tests
+- getRequiredFieldErrors doesn't recurse into group-list sub-fields (container name/image never validated client-side)
 
-Changed from items/itemIndex/updateItems to item/updateItem callback pattern.
+Bottom line
 
-7. ✅ Three redundant constants for the same mapping
-
-Removed VOLUME_SOURCE_ROOT_PATHS; derived from Object.values(VOLUME_SOURCE_ROOT_BY_KEY).
-
-8. ✅ sourceOptions is recomputed every render
-
-Moved to module-level VOLUME_SOURCE_OPTIONS constant.
-
-9. ✅ CSS button duplication
-
-Consolidated .resource-form-add-btn and .resource-form-remove-btn shared base styles.
-
----
-
-Of these, item 1 is the remaining work — decomposing GroupListField into smaller, focused components.
+The form is a good v1 for basic deployments — users can create simple workloads and fall back to the YAML editor for advanced config. But it's not production-complete for teams that need security contexts, affinity
+rules, init containers, or env sourcing from secrets/configmaps. The bugs listed above should be fixed regardless of scope.

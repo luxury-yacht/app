@@ -363,7 +363,12 @@ function StringListField({
       const target = e.target as HTMLInputElement;
       const raw = target.value.trim();
       // Parse comma-separated values into a string array, filtering empty entries.
-      const items = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+      const items = raw
+        ? raw
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : [];
       // When empty and the field should omit empties, remove the key from YAML.
       if (items.length === 0 && omitRef.current) {
         const updated = unsetFieldValue(yamlRef.current, pathRef.current);
@@ -815,7 +820,9 @@ function GroupListField({
           <div
             data-field-key={subField.key}
             className="resource-form-dropdown"
-            style={fixedWidthStyle(subField.dropdownWidth ? { inputWidth: subField.dropdownWidth } : subField)}
+            style={fixedWidthStyle(
+              subField.dropdownWidth ? { inputWidth: subField.dropdownWidth } : subField
+            )}
           >
             <Dropdown
               options={buildSelectOptions(subField)}
@@ -1018,7 +1025,12 @@ function GroupListField({
             {...INPUT_BEHAVIOR_PROPS}
             onChange={(e) => {
               const raw = e.target.value.trim();
-              const items = raw ? raw.split(',').map((s) => s.trim()).filter(Boolean) : [];
+              const items = raw
+                ? raw
+                    .split(',')
+                    .map((s) => s.trim())
+                    .filter(Boolean)
+                : [];
               handleSubFieldChange(itemIndex, subField, items);
             }}
           />
@@ -1096,7 +1108,10 @@ function GroupListField({
                     rows.push(
                       <FormFieldRow key={subField.key} label={subField.label}>
                         {renderSubField(subField, item, itemIndex)}
-                        <FormFieldRow label={nextField.label} className="resource-form-field--inline">
+                        <FormFieldRow
+                          label={nextField.label}
+                          className="resource-form-field--inline"
+                        >
                           {renderSubField(nextField, item, itemIndex)}
                         </FormFieldRow>
                       </FormFieldRow>
@@ -1180,8 +1195,11 @@ export function ResourceForm({
 
           // Collect consecutive groupWithNext fields into a single row.
           // Only chain fields that were originally adjacent (not brought together by filtering).
-          if (field.groupWithNext && i + 1 < sectionFields.length &&
-              originalIndices[i + 1] === originalIndices[i] + 1) {
+          if (
+            field.groupWithNext &&
+            i + 1 < sectionFields.length &&
+            originalIndices[i + 1] === originalIndices[i] + 1
+          ) {
             const grouped: FormFieldDefinition[] = [field];
             while (
               i + grouped.length < sectionFields.length &&
@@ -1193,7 +1211,11 @@ export function ResourceForm({
             const firstField = grouped[0];
             const isIndented = firstField.indented === true;
             rows.push(
-              <FormFieldRow key={firstField.key} label={isIndented ? '' : firstField.label} tooltip={isIndented ? undefined : firstField.tooltip}>
+              <FormFieldRow
+                key={firstField.key}
+                label={isIndented ? '' : firstField.label}
+                tooltip={isIndented ? undefined : firstField.tooltip}
+              >
                 {isIndented ? (
                   <FormFieldRow label={firstField.label} className="resource-form-field--inline">
                     <FieldRenderer
@@ -1214,7 +1236,12 @@ export function ResourceForm({
                   />
                 )}
                 {grouped.slice(1).map((gf) => (
-                  <FormFieldRow key={gf.key} label={gf.label} tooltip={gf.tooltip} className="resource-form-field--inline">
+                  <FormFieldRow
+                    key={gf.key}
+                    label={gf.label}
+                    tooltip={gf.tooltip}
+                    className="resource-form-field--inline"
+                  >
                     <FieldRenderer
                       field={gf}
                       yamlContent={yamlContent}
@@ -1231,7 +1258,12 @@ export function ResourceForm({
             // Indented fields hide the label and show empty space in its place.
             const label = field.indented ? '' : field.label;
             rows.push(
-              <FormFieldRow key={field.key} label={label} tooltip={field.tooltip} fullWidth={useFullWidthLayout}>
+              <FormFieldRow
+                key={field.key}
+                label={label}
+                tooltip={field.tooltip}
+                fullWidth={useFullWidthLayout}
+              >
                 <FieldRenderer
                   field={field}
                   yamlContent={yamlContent}
@@ -1245,7 +1277,11 @@ export function ResourceForm({
           }
         }
         return (
-          <FormSectionCard key={section.title} title={section.title} labelWidth={section.labelWidth}>
+          <FormSectionCard
+            key={section.title}
+            title={section.title}
+            labelWidth={section.labelWidth}
+          >
             {rows}
           </FormSectionCard>
         );

@@ -11,6 +11,7 @@ export const secretDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
+          required: true,
           placeholder: 'secret-name',
         },
         {

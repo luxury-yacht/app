@@ -11,6 +11,7 @@ export const cronJobDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
+          required: true,
           placeholder: 'cronjob-name',
         },
         {

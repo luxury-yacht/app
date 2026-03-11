@@ -11,6 +11,7 @@ export const jobDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
+          required: true,
           placeholder: 'job-name',
         },
         {

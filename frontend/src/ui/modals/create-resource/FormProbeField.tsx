@@ -240,7 +240,12 @@ export function FormProbeField({
               <input
                 type="text"
                 className="resource-form-input"
-                style={{ flex: '0 0 auto', width: 'calc(16ch + 20px)', minWidth: 'calc(16ch + 20px)', maxWidth: 'calc(16ch + 20px)' }}
+                style={{
+                  flex: '0 0 auto',
+                  width: 'calc(16ch + 20px)',
+                  minWidth: 'calc(16ch + 20px)',
+                  maxWidth: 'calc(16ch + 20px)',
+                }}
                 data-field-key="httpGetPath"
                 value={String(getNestedValue(probe, ['httpGet', 'path']) ?? '')}
                 placeholder="/health"
@@ -253,12 +258,19 @@ export function FormProbeField({
               <input
                 type="text"
                 className="resource-form-input"
-                style={{ flex: '0 0 auto', width: 'calc(8ch + 20px)', minWidth: 'calc(8ch + 20px)', maxWidth: 'calc(8ch + 20px)' }}
+                style={{
+                  flex: '0 0 auto',
+                  width: 'calc(8ch + 20px)',
+                  minWidth: 'calc(8ch + 20px)',
+                  maxWidth: 'calc(8ch + 20px)',
+                }}
                 data-field-key="httpGetPort"
                 value={String(getNestedValue(probe, ['httpGet', 'port']) ?? '')}
                 placeholder="80"
                 {...INPUT_BEHAVIOR_PROPS}
-                onChange={(e) => handleFieldChange(['httpGet', 'port'], parsePortValue(e.target.value))}
+                onChange={(e) =>
+                  handleFieldChange(['httpGet', 'port'], parsePortValue(e.target.value))
+                }
               />
             </div>
             <div className="resource-form-probe-field">
@@ -288,12 +300,19 @@ export function FormProbeField({
             <input
               type="text"
               className="resource-form-input"
-              style={{ flex: '0 0 auto', width: 'calc(8ch + 20px)', minWidth: 'calc(8ch + 20px)', maxWidth: 'calc(8ch + 20px)' }}
+              style={{
+                flex: '0 0 auto',
+                width: 'calc(8ch + 20px)',
+                minWidth: 'calc(8ch + 20px)',
+                maxWidth: 'calc(8ch + 20px)',
+              }}
               data-field-key="tcpSocketPort"
               value={String(getNestedValue(probe, ['tcpSocket', 'port']) ?? '')}
               placeholder="80"
               {...INPUT_BEHAVIOR_PROPS}
-              onChange={(e) => handleFieldChange(['tcpSocket', 'port'], parsePortValue(e.target.value))}
+              onChange={(e) =>
+                handleFieldChange(['tcpSocket', 'port'], parsePortValue(e.target.value))
+              }
             />
           </div>
         )}
@@ -327,12 +346,19 @@ export function FormProbeField({
               <input
                 type="text"
                 className="resource-form-input"
-                style={{ flex: '0 0 auto', width: 'calc(8ch + 20px)', minWidth: 'calc(8ch + 20px)', maxWidth: 'calc(8ch + 20px)' }}
+                style={{
+                  flex: '0 0 auto',
+                  width: 'calc(8ch + 20px)',
+                  minWidth: 'calc(8ch + 20px)',
+                  maxWidth: 'calc(8ch + 20px)',
+                }}
                 data-field-key="grpcPort"
                 value={String(getNestedValue(probe, ['grpc', 'port']) ?? '')}
                 placeholder="50051"
                 {...INPUT_BEHAVIOR_PROPS}
-                onChange={(e) => handleFieldChange(['grpc', 'port'], parsePortValue(e.target.value))}
+                onChange={(e) =>
+                  handleFieldChange(['grpc', 'port'], parsePortValue(e.target.value))
+                }
               />
             </div>
             <div className="resource-form-probe-field">
@@ -340,7 +366,12 @@ export function FormProbeField({
               <input
                 type="text"
                 className="resource-form-input"
-                style={{ flex: '0 0 auto', width: 'calc(16ch + 20px)', minWidth: 'calc(16ch + 20px)', maxWidth: 'calc(16ch + 20px)' }}
+                style={{
+                  flex: '0 0 auto',
+                  width: 'calc(16ch + 20px)',
+                  minWidth: 'calc(16ch + 20px)',
+                  maxWidth: 'calc(16ch + 20px)',
+                }}
                 data-field-key="grpcService"
                 value={String(getNestedValue(probe, ['grpc', 'service']) ?? '')}
                 placeholder="optional"
@@ -362,7 +393,9 @@ export function FormProbeField({
 
       {/* Row 2: timing fields */}
       <div className="resource-form-probe-timing">
-        <label className="resource-form-field-label resource-form-probe-timing-row-label">Timings (seconds)</label>
+        <label className="resource-form-field-label resource-form-probe-timing-row-label">
+          Timings (seconds)
+        </label>
         {TIMING_FIELDS.map((tf) => (
           <div key={tf.key} className="resource-form-probe-timing-field">
             <label className="resource-form-field-label">{tf.label}</label>
@@ -372,7 +405,12 @@ export function FormProbeField({
               placeholder={tf.placeholder}
               min={0}
               integer
-              style={{ flex: '0 0 auto', width: 'calc(4ch + 20px)', minWidth: 'calc(4ch + 20px)', maxWidth: 'calc(4ch + 20px)' }}
+              style={{
+                flex: '0 0 auto',
+                width: 'calc(4ch + 20px)',
+                minWidth: 'calc(4ch + 20px)',
+                maxWidth: 'calc(4ch + 20px)',
+              }}
               onChange={(e) => handleTimingChange(tf.key, e.target.value)}
             />
           </div>
@@ -381,7 +419,9 @@ export function FormProbeField({
 
       {/* Row 3: threshold fields */}
       <div className="resource-form-probe-timing">
-        <label className="resource-form-field-label resource-form-probe-timing-row-label">Thresholds</label>
+        <label className="resource-form-field-label resource-form-probe-timing-row-label">
+          Thresholds
+        </label>
         {THRESHOLD_FIELDS.map((tf) => (
           <div key={tf.key} className="resource-form-probe-timing-field">
             <label className="resource-form-field-label">{tf.label}</label>
@@ -391,7 +431,12 @@ export function FormProbeField({
               placeholder={tf.placeholder}
               min={0}
               integer
-              style={{ flex: '0 0 auto', width: 'calc(4ch + 20px)', minWidth: 'calc(4ch + 20px)', maxWidth: 'calc(4ch + 20px)' }}
+              style={{
+                flex: '0 0 auto',
+                width: 'calc(4ch + 20px)',
+                minWidth: 'calc(4ch + 20px)',
+                maxWidth: 'calc(4ch + 20px)',
+              }}
               onChange={(e) => handleTimingChange(tf.key, e.target.value)}
             />
           </div>

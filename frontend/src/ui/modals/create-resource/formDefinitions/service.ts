@@ -11,6 +11,7 @@ export const serviceDefinition: ResourceFormDefinition = {
           label: 'Name',
           path: ['metadata', 'name'],
           type: 'text',
+          required: true,
           placeholder: 'service-name',
         },
         {
@@ -79,6 +80,7 @@ export const serviceDefinition: ResourceFormDefinition = {
               options: [
                 { label: 'TCP', value: 'TCP' },
                 { label: 'UDP', value: 'UDP' },
+                { label: 'SCTP', value: 'SCTP' },
               ],
             },
           ],

@@ -79,4 +79,14 @@ describe('formDefinitions', () => {
       }
     }
   });
+
+  it('all definitions mark name as required', () => {
+    for (const def of allFormDefinitions) {
+      const nameField = def.sections
+        .flatMap((s) => s.fields)
+        .find((f) => f.key === 'name' && f.path.join('.') === 'metadata.name');
+      expect(nameField, `${def.kind} should have a name field`).toBeDefined();
+      expect(nameField!.required, `${def.kind} name field should be required`).toBe(true);
+    }
+  });
 });
