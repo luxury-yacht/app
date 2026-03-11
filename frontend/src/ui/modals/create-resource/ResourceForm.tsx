@@ -1245,7 +1245,7 @@ export function ResourceForm({
           }
         }
         return (
-          <FormSectionCard key={section.title} title={section.title}>
+          <FormSectionCard key={section.title} title={section.title} labelWidth={section.labelWidth}>
             {rows}
           </FormSectionCard>
         );

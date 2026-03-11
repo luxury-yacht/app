@@ -319,6 +319,7 @@ export const deploymentDefinition: ResourceFormDefinition = {
     },
     {
       title: 'Advanced',
+      labelWidth: '10rem',
       fields: [
         {
           key: 'strategyType',

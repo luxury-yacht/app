@@ -153,6 +153,8 @@ export interface FormSectionDefinition {
   title: string;
   /** Fields in this section. */
   fields: FormFieldDefinition[];
+  /** Override min-width for field labels in this section (e.g., '10rem'). */
+  labelWidth?: string;
 }
 
 export interface ResourceFormDefinition {

@@ -56,7 +56,7 @@
   font-weight: var(--font-weight-bold);
   color: var(--color-text-secondary);
   text-transform: uppercase;
-  min-width: 8rem;
+  min-width: var(--section-label-width, 8rem);
   text-align: left;
   padding-top: 6px;
   flex-shrink: 0;

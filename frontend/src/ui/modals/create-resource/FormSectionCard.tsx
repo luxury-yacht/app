@@ -6,6 +6,8 @@ interface FormSectionCardProps {
   className?: string;
   titleClassName?: string;
   titleAction?: React.ReactNode;
+  /** Override label min-width for fields in this section. */
+  labelWidth?: string;
 }
 
 /**
@@ -18,11 +20,15 @@ export function FormSectionCard({
   className,
   titleClassName = 'resource-form-section-title',
   titleAction,
+  labelWidth,
 }: FormSectionCardProps): React.ReactElement {
   const extraClass = className ? ` ${className}` : '';
+  const style = labelWidth
+    ? ({ '--section-label-width': labelWidth } as React.CSSProperties)
+    : undefined;
 
   return (
-    <div className={`resource-form-section${extraClass}`}>
+    <div className={`resource-form-section${extraClass}`} style={style}>
       <h3 className={titleClassName}>
         {title}
         {titleAction}
