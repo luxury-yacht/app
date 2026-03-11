@@ -84,6 +84,14 @@ export function makeContainerSubFields(volumesPath: string[]): FormFieldDefiniti
       ],
       defaultValue: { name: '', value: '' },
     },
+    // envFrom — bulk import env vars from ConfigMaps/Secrets.
+    // Rendered by FormEnvFromField; handles configMapRef/secretRef switching internally.
+    {
+      key: 'envFrom',
+      label: 'Env From',
+      path: ['envFrom'],
+      type: 'env-from',
+    },
     {
       key: 'ports',
       label: 'Ports',

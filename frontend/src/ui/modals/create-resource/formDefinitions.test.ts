@@ -143,6 +143,33 @@ describe('shared field coverage across pod-template definitions', () => {
         expect(findSubField(containers, 'volumeMounts')).toBeDefined();
       });
 
+      it('has containers with envFrom field of type env-from', () => {
+        const containers = findField(def, 'containers')!;
+        const envFrom = findSubField(containers, 'envFrom');
+        expect(envFrom).toBeDefined();
+        expect(envFrom!.type).toBe('env-from');
+      });
+
+      it('has initContainers section with correct path and properties', () => {
+        const initContainers = findField(def, 'initContainers')!;
+        expect(initContainers).toBeDefined();
+        expect(initContainers.type).toBe('group-list');
+        expect(initContainers.fullWidth).toBe(true);
+        expect(initContainers.itemTitleField).toBe('name');
+        expect(initContainers.itemTitleFallback).toBe('Init Container');
+      });
+
+      it('initContainers has key sub-fields matching containers', () => {
+        const initContainers = findField(def, 'initContainers')!;
+        expect(findSubField(initContainers, 'readinessProbe')).toBeDefined();
+        expect(findSubField(initContainers, 'livenessProbe')).toBeDefined();
+        expect(findSubField(initContainers, 'startupProbe')).toBeDefined();
+        expect(findSubField(initContainers, 'env')).toBeDefined();
+        expect(findSubField(initContainers, 'ports')).toBeDefined();
+        expect(findSubField(initContainers, 'volumeMounts')).toBeDefined();
+        expect(findSubField(initContainers, 'envFrom')).toBeDefined();
+      });
+
       it('has volumeMount name sub-field with correct dynamicOptionsPath', () => {
         const containers = findField(def, 'containers')!;
         const volumeMountName = findNestedSubField(containers, 'volumeMounts', 'name');
@@ -178,6 +205,11 @@ describe('shared field coverage across pod-template definitions', () => {
 describe('Deployment-specific fields', () => {
   const def = getFormDefinition('Deployment')!;
 
+  it('initContainers uses Deployment path', () => {
+    const initContainers = findField(def, 'initContainers')!;
+    expect(initContainers.path).toEqual(['spec', 'template', 'spec', 'initContainers']);
+  });
+
   it('has minReadySeconds at spec.minReadySeconds', () => {
     const field = findField(def, 'minReadySeconds');
     expect(field).toBeDefined();
@@ -203,6 +235,11 @@ describe('Deployment-specific fields', () => {
 
 describe('Job-specific fields', () => {
   const def = getFormDefinition('Job')!;
+
+  it('initContainers uses Job path', () => {
+    const initContainers = findField(def, 'initContainers')!;
+    expect(initContainers.path).toEqual(['spec', 'template', 'spec', 'initContainers']);
+  });
 
   it('has labels in Metadata section', () => {
     const metadataSection = def.sections.find((s) => s.title === 'Metadata')!;
@@ -245,6 +282,13 @@ describe('Job-specific fields', () => {
 
 describe('CronJob-specific fields', () => {
   const def = getFormDefinition('CronJob')!;
+
+  it('initContainers uses CronJob path', () => {
+    const initContainers = findField(def, 'initContainers')!;
+    expect(initContainers.path).toEqual([
+      'spec', 'jobTemplate', 'spec', 'template', 'spec', 'initContainers',
+    ]);
+  });
 
   it('has labels in Metadata section', () => {
     const metadataSection = def.sections.find((s) => s.title === 'Metadata')!;

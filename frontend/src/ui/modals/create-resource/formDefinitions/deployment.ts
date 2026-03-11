@@ -110,6 +110,22 @@ export const deploymentDefinition: ResourceFormDefinition = {
       ],
     },
     {
+      title: 'Init Containers',
+      fields: [
+        {
+          key: 'initContainers',
+          label: 'Init Containers',
+          path: ['spec', 'template', 'spec', 'initContainers'],
+          type: 'group-list',
+          fullWidth: true,
+          itemTitleField: 'name',
+          itemTitleFallback: 'Init Container',
+          fields: makeContainerSubFields(volumesPath),
+          defaultValue: containerDefaultValue,
+        },
+      ],
+    },
+    {
       title: 'Volumes',
       fields: [
         {

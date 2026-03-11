@@ -34,7 +34,8 @@ export interface FormFieldDefinition {
     | 'boolean-toggle'
     | 'string-list'
     | 'command-input'
-    | 'probe';
+    | 'probe'
+    | 'env-from';
   /** Placeholder text for text/number inputs. */
   placeholder?: string;
   /** Optional minimum value for number inputs. */

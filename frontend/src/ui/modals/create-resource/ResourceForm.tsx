@@ -25,6 +25,7 @@ import { FormKeyValueListField } from './FormKeyValueListField';
 import { NestedGroupListField } from './NestedGroupListField';
 import { FormSectionCard } from './FormSectionCard';
 import { FormVolumeSourceField } from './FormVolumeSourceField';
+import { FormEnvFromField } from './FormEnvFromField';
 import {
   INPUT_BEHAVIOR_PROPS,
   getNestedValue,
@@ -1059,6 +1060,28 @@ function GroupListField({
             }}
           />
         );
+      case 'env-from': {
+        // subValue = getNestedValue(item, subField.path), already computed above.
+        const envFromItems = Array.isArray(subValue) ? (subValue as Record<string, unknown>[]) : [];
+        return (
+          <FormEnvFromField
+            dataFieldKey={subField.key}
+            items={envFromItems}
+            onChange={(newItems) => {
+              if (newItems.length > 0) {
+                handleSubFieldChange(itemIndex, subField, newItems);
+              } else {
+                // Empty array → remove the key from YAML entirely.
+                const updatedItems = items.map((currentItem, i) => {
+                  if (i !== itemIndex) return currentItem;
+                  return unsetNestedValue(currentItem, subField.path);
+                });
+                updateItems(updatedItems);
+              }
+            }}
+          />
+        );
+      }
       default:
         if (process.env.NODE_ENV !== 'production') {
           console.warn(

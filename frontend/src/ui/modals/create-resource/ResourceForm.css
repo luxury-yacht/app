@@ -746,3 +746,43 @@
   border-radius: var(--border-radius-sm, 4px);
   font-size: 0.85rem;
 }
+
+/* ── Env From field (envFrom source rows) ─────────────────────────────── */
+
+.resource-form-env-from {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-env-from-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-env-from-source {
+  flex: 0 0 10rem;
+  min-width: 10rem;
+}
+
+.resource-form-env-from-source .dropdown {
+  display: inline-block;
+  width: auto;
+}
+
+.resource-form-env-from-source .dropdown-menu {
+  width: 100%;
+  min-width: 0;
+}
+
+.resource-form-env-from-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.resource-form-env-from-prefix {
+  flex: 0 0 10rem;
+  min-width: 10rem;
+}

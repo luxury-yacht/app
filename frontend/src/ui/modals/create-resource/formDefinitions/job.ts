@@ -150,6 +150,22 @@ export const jobDefinition: ResourceFormDefinition = {
       ],
     },
     {
+      title: 'Init Containers',
+      fields: [
+        {
+          key: 'initContainers',
+          label: 'Init Containers',
+          path: [...podSpecPrefix, 'initContainers'],
+          type: 'group-list',
+          fullWidth: true,
+          itemTitleField: 'name',
+          itemTitleFallback: 'Init Container',
+          fields: makeContainerSubFields(volumesPath),
+          defaultValue: containerDefaultValue,
+        },
+      ],
+    },
+    {
       title: 'Volumes',
       fields: [
         {
