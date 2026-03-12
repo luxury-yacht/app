@@ -1132,27 +1132,53 @@ function GroupListField({
           />
         );
       case 'capabilities': {
-        const capObj =
+        const secCtx =
           subValue && typeof subValue === 'object' && !Array.isArray(subValue)
             ? (subValue as Record<string, unknown>)
             : undefined;
 
-        // Empty state — show "+ Add capabilities" button like probe/command.
-        if (!capObj) {
+        // Empty state — show "+ Add security settings" button like probe/command.
+        if (!secCtx) {
           return (
             <div className="resource-form-actions-row">
               <FormIconActionButton
                 variant="add"
-                label="Add capabilities"
+                label="Add security settings"
                 onClick={() => handleSubFieldChange(itemIndex, subField, {})}
               />
-              <span className="resource-form-action-ghost-text">Add capabilities</span>
+              <span className="resource-form-action-ghost-text">Add security settings</span>
             </div>
           );
         }
 
-        const capAdd = Array.isArray(capObj.add) ? (capObj.add as string[]) : [];
-        const capDrop = Array.isArray(capObj.drop) ? (capObj.drop as string[]) : [];
+        // Helper to update a single key on the securityContext object.
+        // Removes the key when value is undefined/empty, and removes the
+        // entire securityContext when no keys remain.
+        const updateSecCtx = (key: string, val: unknown): void => {
+          const next = { ...secCtx };
+          if (val === undefined || val === '') {
+            delete next[key];
+          } else {
+            next[key] = val;
+          }
+          if (Object.keys(next).length === 0) {
+            const updatedItems = items.map((currentItem, i) => {
+              if (i !== itemIndex) return currentItem;
+              return unsetNestedValue(currentItem, subField.path);
+            });
+            updateItems(updatedItems);
+          } else {
+            handleSubFieldChange(itemIndex, subField, next);
+          }
+        };
+
+        // Capabilities sub-object.
+        const capsObj =
+          secCtx.capabilities && typeof secCtx.capabilities === 'object'
+            ? (secCtx.capabilities as Record<string, unknown>)
+            : undefined;
+        const capAdd = Array.isArray(capsObj?.add) ? (capsObj!.add as string[]) : [];
+        const capDrop = Array.isArray(capsObj?.drop) ? (capsObj!.drop as string[]) : [];
         const capOptions = LINUX_CAPABILITIES.map((o) => o.value);
 
         const updateCap = (newAdd: string[], newDrop: string[]): void => {
@@ -1160,14 +1186,9 @@ function GroupListField({
           if (newAdd.length > 0) newCap.add = newAdd;
           if (newDrop.length > 0) newCap.drop = newDrop;
           if (Object.keys(newCap).length === 0) {
-            // Nothing left — remove the whole capabilities object.
-            const updatedItems = items.map((currentItem, i) => {
-              if (i !== itemIndex) return currentItem;
-              return unsetNestedValue(currentItem, subField.path);
-            });
-            updateItems(updatedItems);
+            updateSecCtx('capabilities', undefined);
           } else {
-            handleSubFieldChange(itemIndex, subField, newCap);
+            updateSecCtx('capabilities', newCap);
           }
         };
 
@@ -1176,7 +1197,7 @@ function GroupListField({
             <div className="tag-picker-capabilities-header">
               <FormIconActionButton
                 variant="remove"
-                label="Remove capabilities"
+                label="Remove security settings"
                 onClick={() => {
                   const updatedItems = items.map((currentItem, i) => {
                     if (i !== itemIndex) return currentItem;
@@ -1186,6 +1207,64 @@ function GroupListField({
                 }}
               />
             </div>
+            <FormFieldRow label="Run As User">
+              <input
+                className="resource-form-input"
+                type="number"
+                value={secCtx.runAsUser !== undefined ? String(secCtx.runAsUser) : ''}
+                placeholder="UID"
+                aria-label="Run As User"
+                style={{ width: '8ch', flex: '0 0 auto' }}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  updateSecCtx('runAsUser', v === '' ? undefined : Number(v));
+                }}
+                {...INPUT_BEHAVIOR_PROPS}
+              />
+            </FormFieldRow>
+            <FormFieldRow label="Run As Group">
+              <input
+                className="resource-form-input"
+                type="number"
+                value={secCtx.runAsGroup !== undefined ? String(secCtx.runAsGroup) : ''}
+                placeholder="GID"
+                aria-label="Run As Group"
+                style={{ width: '8ch', flex: '0 0 auto' }}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  updateSecCtx('runAsGroup', v === '' ? undefined : Number(v));
+                }}
+                {...INPUT_BEHAVIOR_PROPS}
+              />
+            </FormFieldRow>
+            <FormFieldRow label="Run As Non-Root">
+              <FormTriStateBooleanDropdown
+                value={secCtx.runAsNonRoot}
+                onChange={(val) => updateSecCtx('runAsNonRoot', val)}
+                ariaLabel="Run As Non-Root"
+              />
+            </FormFieldRow>
+            <FormFieldRow label="Privileged">
+              <FormTriStateBooleanDropdown
+                value={secCtx.privileged}
+                onChange={(val) => updateSecCtx('privileged', val)}
+                ariaLabel="Privileged"
+              />
+            </FormFieldRow>
+            <FormFieldRow label="Allow Privilege Escalation">
+              <FormTriStateBooleanDropdown
+                value={secCtx.allowPrivilegeEscalation}
+                onChange={(val) => updateSecCtx('allowPrivilegeEscalation', val)}
+                ariaLabel="Allow Privilege Escalation"
+              />
+            </FormFieldRow>
+            <FormFieldRow label="Read-Only Root FS">
+              <FormTriStateBooleanDropdown
+                value={secCtx.readOnlyRootFilesystem}
+                onChange={(val) => updateSecCtx('readOnlyRootFilesystem', val)}
+                ariaLabel="Read-Only Root FS"
+              />
+            </FormFieldRow>
             <FormFieldRow label="Add">
               <TagPickerInput
                 options={capOptions}

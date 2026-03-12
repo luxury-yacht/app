@@ -213,40 +213,17 @@ describe('shared field coverage across pod-template definitions', () => {
         expect(findField(def, 'serviceAccountName')).toBeDefined();
       });
 
-      it('has container securityContext fields', () => {
+      it('has container securityContext field', () => {
         const containers = findField(def, 'containers')!;
-        // Number fields.
-        const runAsUser = findSubField(containers, 'secRunAsUser');
-        expect(runAsUser).toBeDefined();
-        expect(runAsUser!.type).toBe('number');
-        expect(runAsUser!.path).toEqual(['securityContext', 'runAsUser']);
-        const runAsGroup = findSubField(containers, 'secRunAsGroup');
-        expect(runAsGroup).toBeDefined();
-        expect(runAsGroup!.type).toBe('number');
-        // Tri-state booleans.
-        const runAsNonRoot = findSubField(containers, 'secRunAsNonRoot');
-        expect(runAsNonRoot).toBeDefined();
-        expect(runAsNonRoot!.type).toBe('tri-state-boolean');
-        const privileged = findSubField(containers, 'secPrivileged');
-        expect(privileged).toBeDefined();
-        expect(privileged!.type).toBe('tri-state-boolean');
-        const allowPrivEsc = findSubField(containers, 'secAllowPrivEsc');
-        expect(allowPrivEsc).toBeDefined();
-        expect(allowPrivEsc!.type).toBe('tri-state-boolean');
-        const readOnlyRoot = findSubField(containers, 'secReadOnlyRoot');
-        expect(readOnlyRoot).toBeDefined();
-        expect(readOnlyRoot!.type).toBe('tri-state-boolean');
-        // Capabilities.
-        const cap = findSubField(containers, 'secCapabilities');
-        expect(cap).toBeDefined();
-        expect(cap!.type).toBe('capabilities');
+        const sec = findSubField(containers, 'securityContext');
+        expect(sec).toBeDefined();
+        expect(sec!.type).toBe('capabilities');
+        expect(sec!.path).toEqual(['securityContext']);
       });
 
-      it('has initContainers securityContext fields', () => {
+      it('has initContainers securityContext field', () => {
         const initContainers = findField(def, 'initContainers')!;
-        expect(findSubField(initContainers, 'secRunAsUser')).toBeDefined();
-        expect(findSubField(initContainers, 'secRunAsNonRoot')).toBeDefined();
-        expect(findSubField(initContainers, 'secCapabilities')).toBeDefined();
+        expect(findSubField(initContainers, 'securityContext')).toBeDefined();
       });
 
       it('has pod securityContext fields in Advanced', () => {

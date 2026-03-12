@@ -245,54 +245,12 @@ export function makeContainerSubFields(volumesPath: string[]): FormFieldDefiniti
       defaultValue: { name: '', mountPath: '' },
     },
     // ── Container Security Context ──────────────────────────────────────
+    // All security context fields are rendered together inside the
+    // collapsible 'capabilities' field type in ResourceForm.tsx.
     {
-      key: 'secRunAsUser',
-      label: 'Run As User',
-      path: ['securityContext', 'runAsUser'],
-      type: 'number',
-      placeholder: 'UID',
-      omitIfEmpty: true,
-      groupWithNext: true,
-      inputWidth: '8ch',
-    },
-    {
-      key: 'secRunAsGroup',
-      label: 'Run As Group',
-      path: ['securityContext', 'runAsGroup'],
-      type: 'number',
-      placeholder: 'GID',
-      omitIfEmpty: true,
-      inputWidth: '8ch',
-    },
-    {
-      key: 'secRunAsNonRoot',
-      label: 'Run As Non-Root',
-      path: ['securityContext', 'runAsNonRoot'],
-      type: 'tri-state-boolean',
-    },
-    {
-      key: 'secPrivileged',
-      label: 'Privileged',
-      path: ['securityContext', 'privileged'],
-      type: 'tri-state-boolean',
-      groupWithNext: true,
-    },
-    {
-      key: 'secAllowPrivEsc',
-      label: 'Allow Privilege Escalation',
-      path: ['securityContext', 'allowPrivilegeEscalation'],
-      type: 'tri-state-boolean',
-    },
-    {
-      key: 'secReadOnlyRoot',
-      label: 'Read-Only Root FS',
-      path: ['securityContext', 'readOnlyRootFilesystem'],
-      type: 'tri-state-boolean',
-    },
-    {
-      key: 'secCapabilities',
-      label: 'Capabilities',
-      path: ['securityContext', 'capabilities'],
+      key: 'securityContext',
+      label: 'Security',
+      path: ['securityContext'],
       type: 'capabilities',
     },
   ];
