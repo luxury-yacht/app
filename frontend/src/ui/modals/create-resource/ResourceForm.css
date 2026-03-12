@@ -319,6 +319,7 @@
   min-width: auto;
 }
 
+
 /* Nested group-list controls (e.g., container ports/env vars). */
 .resource-form-nested-group-list {
   flex: 1;
@@ -935,7 +936,13 @@
 .tag-picker-capabilities-first-row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--spacing-lg);
+}
+
+.tag-picker-capabilities-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
 }
 
 .tag-picker-capabilities-remove {
