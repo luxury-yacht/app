@@ -76,15 +76,10 @@ describe('FormEnvFromField', () => {
     items: Record<string, unknown>[],
     onChange?: (newItems: Record<string, unknown>[]) => void
   ) => {
-    const mockOnChange =
-      onChange ?? vi.fn<(newItems: Record<string, unknown>[]) => void>();
+    const mockOnChange = onChange ?? vi.fn<(newItems: Record<string, unknown>[]) => void>();
     act(() => {
       root.render(
-        <FormEnvFromField
-          dataFieldKey="envFrom"
-          items={items}
-          onChange={mockOnChange}
-        />
+        <FormEnvFromField dataFieldKey="envFrom" items={items} onChange={mockOnChange} />
       );
     });
     return mockOnChange;
@@ -220,17 +215,9 @@ describe('FormEnvFromField', () => {
 
   it('remove button removes item', () => {
     const onChange = vi.fn();
-    render(
-      [
-        { configMapRef: { name: 'cm1' } },
-        { secretRef: { name: 's1' } },
-      ],
-      onChange
-    );
+    render([{ configMapRef: { name: 'cm1' } }, { secretRef: { name: 's1' } }], onChange);
     // Remove the first item.
-    const removeBtn = container.querySelector(
-      '[data-field-key="envFromRemove-0"]'
-    ) as HTMLElement;
+    const removeBtn = container.querySelector('[data-field-key="envFromRemove-0"]') as HTMLElement;
     act(() => removeBtn.click());
     expect(onChange).toHaveBeenCalledTimes(1);
     const newItems = onChange.mock.calls[0][0];
@@ -239,10 +226,7 @@ describe('FormEnvFromField', () => {
   });
 
   it('renders multiple items', () => {
-    render([
-      { configMapRef: { name: 'cm1' } },
-      { secretRef: { name: 's1' }, prefix: 'SEC_' },
-    ]);
+    render([{ configMapRef: { name: 'cm1' } }, { secretRef: { name: 's1' }, prefix: 'SEC_' }]);
     // Two rows should be rendered.
     const rows = container.querySelectorAll('.resource-form-env-from-row');
     expect(rows.length).toBe(2);

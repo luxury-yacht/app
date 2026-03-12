@@ -35,7 +35,7 @@ All paths relative to `frontend/src/ui/modals/create-resource/`.
 **Files:**
 - Modify: `formDefinitions/types.ts:22-38`
 
-- [ ] **Step 1: Add `'env-var'` to the type union**
+- [x] **Step 1: Add `'env-var'` to the type union**
 
 In `formDefinitions/types.ts`, add `| 'env-var'` after `| 'env-from'` on line 38:
 
@@ -45,7 +45,7 @@ In `formDefinitions/types.ts`, add `| 'env-var'` after `| 'env-from'` on line 38
     | 'env-var';
 ```
 
-- [ ] **Step 2: Run TypeScript check**
+- [x] **Step 2: Run TypeScript check**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: PASS (no type errors)
@@ -57,7 +57,7 @@ Expected: PASS (no type errors)
 **Files:**
 - Create: `FormEnvVarField.test.tsx`
 
-- [ ] **Step 1: Create the test file with all test cases**
+- [x] **Step 1: Create the test file with all test cases**
 
 Create `frontend/src/ui/modals/create-resource/FormEnvVarField.test.tsx`:
 
@@ -429,7 +429,7 @@ describe('FormEnvVarField', () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `cd frontend && npx vitest run src/ui/modals/create-resource/FormEnvVarField.test.tsx`
 Expected: FAIL — `FormEnvVarField` module does not exist yet.
@@ -441,7 +441,7 @@ Expected: FAIL — `FormEnvVarField` module does not exist yet.
 **Files:**
 - Create: `FormEnvVarField.tsx`
 
-- [ ] **Step 1: Create the component file**
+- [x] **Step 1: Create the component file**
 
 Create `frontend/src/ui/modals/create-resource/FormEnvVarField.tsx`:
 
@@ -707,7 +707,7 @@ export function FormEnvVarField({
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they pass**
+- [x] **Step 2: Run the tests to verify they pass**
 
 Run: `cd frontend && npx vitest run src/ui/modals/create-resource/FormEnvVarField.test.tsx`
 Expected: PASS — all 15 tests green.
@@ -721,7 +721,7 @@ Expected: PASS — all 15 tests green.
 **Files:**
 - Modify: `ResourceForm.css:789` (append after the env-from CSS block)
 
-- [ ] **Step 1: Add the CSS classes**
+- [x] **Step 1: Add the CSS classes**
 
 Append the following after the existing `.resource-form-env-from-prefix` block (after line 788) in `frontend/src/ui/modals/create-resource/ResourceForm.css`:
 
@@ -778,7 +778,7 @@ Append the following after the existing `.resource-form-env-from-prefix` block (
 }
 ```
 
-- [ ] **Step 2: Verify existing tests still pass**
+- [x] **Step 2: Verify existing tests still pass**
 
 Run: `cd frontend && npx vitest run src/ui/modals/create-resource/FormEnvVarField.test.tsx`
 Expected: PASS (CSS changes don't affect test behavior, but confirm nothing broke)
@@ -791,7 +791,7 @@ Expected: PASS (CSS changes don't affect test behavior, but confirm nothing brok
 - Modify: `ResourceForm.tsx:28` (add import)
 - Modify: `ResourceForm.tsx:1084` (add case before `default`)
 
-- [ ] **Step 1: Add the import**
+- [x] **Step 1: Add the import**
 
 In `frontend/src/ui/modals/create-resource/ResourceForm.tsx`, add the import after the existing `FormEnvFromField` import on line 28:
 
@@ -806,7 +806,7 @@ import { FormEnvFromField } from './FormEnvFromField';
 import { FormEnvVarField } from './FormEnvVarField';
 ```
 
-- [ ] **Step 2: Add the `'env-var'` case**
+- [x] **Step 2: Add the `'env-var'` case**
 
 In the same file, inside the `renderSubField` closure in `GroupListField`, add the `'env-var'` case immediately after the `'env-from'` case closing brace (after line 1084). Insert before the `default:` case:
 
@@ -835,7 +835,7 @@ In the same file, inside the `renderSubField` closure in `GroupListField`, add t
       }
 ```
 
-- [ ] **Step 3: Run TypeScript check**
+- [x] **Step 3: Run TypeScript check**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: PASS
@@ -847,7 +847,7 @@ Expected: PASS
 **Files:**
 - Modify: `formDefinitions/shared.ts:57-86`
 
-- [ ] **Step 1: Replace the env group-list field with `'env-var'` type**
+- [x] **Step 1: Replace the env group-list field with `'env-var'` type**
 
 In `frontend/src/ui/modals/create-resource/formDefinitions/shared.ts`, replace the env field (lines 57-86):
 
@@ -899,7 +899,7 @@ With:
     },
 ```
 
-- [ ] **Step 2: Run TypeScript check**
+- [x] **Step 2: Run TypeScript check**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: PASS
@@ -911,7 +911,7 @@ Expected: PASS
 **Files:**
 - Modify: `formDefinitions.test.ts:146-151` (add tests near existing env-from assertion)
 
-- [ ] **Step 1: Add env-var type assertions**
+- [x] **Step 1: Add env-var type assertions**
 
 In `frontend/src/ui/modals/create-resource/formDefinitions.test.ts`, add the following test immediately after the existing `'has containers with envFrom field of type env-from'` test (after line 151):
 
@@ -931,7 +931,7 @@ In `frontend/src/ui/modals/create-resource/formDefinitions.test.ts`, add the fol
       });
 ```
 
-- [ ] **Step 2: Run all form definition tests**
+- [x] **Step 2: Run all form definition tests**
 
 Run: `cd frontend && npx vitest run src/ui/modals/create-resource/formDefinitions.test.ts`
 Expected: PASS — all existing + 6 new tests (2 per resource type) pass.
@@ -940,7 +940,7 @@ Expected: PASS — all existing + 6 new tests (2 per resource type) pass.
 
 ### Task 8: Run full test suite
 
-- [ ] **Step 1: Run all create-resource tests**
+- [x] **Step 1: Run all create-resource tests**
 
 Run: `cd frontend && npx vitest run src/ui/modals/create-resource/`
 Expected: PASS — all tests pass including:
@@ -950,12 +950,12 @@ Expected: PASS — all tests pass including:
 - `ResourceForm.test.tsx` (existing tests)
 - All other test files in the directory
 
-- [ ] **Step 2: Run TypeScript check**
+- [x] **Step 2: Run TypeScript check**
 
 Run: `cd frontend && npx tsc --noEmit`
 Expected: PASS
 
-- [ ] **Step 3: Run linting**
+- [x] **Step 3: Run linting**
 
 Run: `cd frontend && npx eslint src/ui/modals/create-resource/FormEnvVarField.tsx src/ui/modals/create-resource/FormEnvVarField.test.tsx src/ui/modals/create-resource/ResourceForm.tsx src/ui/modals/create-resource/formDefinitions/shared.ts`
 Expected: PASS (no lint errors)

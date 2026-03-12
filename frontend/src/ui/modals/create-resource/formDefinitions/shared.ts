@@ -54,35 +54,13 @@ export function makeContainerSubFields(volumesPath: string[]): FormFieldDefiniti
       placeholder: '--port=8080 --log-level=info',
       omitIfEmpty: false,
     },
+    // env — individual env vars with optional valueFrom (configMapKeyRef/secretKeyRef).
+    // Rendered by FormEnvVarField; handles source type switching internally.
     {
       key: 'env',
       label: 'Env Vars',
       path: ['env'],
-      type: 'group-list',
-      leftAlignEmptyActions: true,
-      addGhostText: 'Add env var',
-      fieldGap: 'wide',
-      fields: [
-        {
-          key: 'name',
-          label: 'Name',
-          path: ['name'],
-          type: 'text',
-          placeholder: 'name',
-          fieldFlex: '0 0 auto',
-          inputWidth: 'calc(25ch + 20px)',
-        },
-        {
-          key: 'value',
-          label: 'Value',
-          path: ['value'],
-          type: 'text',
-          placeholder: 'value',
-          fieldFlex: '0 0 auto',
-          inputWidth: 'calc(25ch + 20px)',
-        },
-      ],
-      defaultValue: { name: '', value: '' },
+      type: 'env-var',
     },
     // envFrom — bulk import env vars from ConfigMaps/Secrets.
     // Rendered by FormEnvFromField; handles configMapRef/secretRef switching internally.
@@ -299,8 +277,7 @@ export function makeAdvancedPodSpecFields(podSpecPrefix: string[]): FormFieldDef
       type: 'text',
       placeholder: 'optional',
       omitIfEmpty: true,
-      tooltip:
-        'Assigns a priority class to the pod, affecting scheduling and preemption order.',
+      tooltip: 'Assigns a priority class to the pod, affecting scheduling and preemption order.',
     },
     {
       key: 'dnsPolicy',

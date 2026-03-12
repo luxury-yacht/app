@@ -138,18 +138,13 @@ export function FormEnvFromField({
               <Dropdown
                 options={sourceTypeOptions}
                 value={sourceType}
-                onChange={(val) =>
-                  handleSourceTypeChange(index, val as SourceType)
-                }
+                onChange={(val) => handleSourceTypeChange(index, val as SourceType)}
                 ariaLabel={`Env source type ${rowLabel}`}
               />
             </div>
 
             {/* Name input */}
-            <div
-              data-field-key={`envFromName-${index}`}
-              className="resource-form-env-from-name"
-            >
+            <div data-field-key={`envFromName-${index}`} className="resource-form-env-from-name">
               <input
                 {...INPUT_BEHAVIOR_PROPS}
                 className="resource-form-input"
@@ -192,11 +187,7 @@ export function FormEnvFromField({
       })}
 
       {/* Add button */}
-      <button
-        type="button"
-        className="resource-form-add-btn"
-        onClick={handleAdd}
-      >
+      <button type="button" className="resource-form-add-btn" onClick={handleAdd}>
         Add env source
       </button>
     </div>

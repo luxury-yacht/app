@@ -786,3 +786,53 @@
   flex: 0 0 10rem;
   min-width: 10rem;
 }
+
+/* ── Env Var field (env var rows with source switching) ────────────────── */
+
+.resource-form-env-var {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-env-var-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.resource-form-env-var-name {
+  flex: 0 0 auto;
+  width: calc(25ch + 20px);
+}
+
+.resource-form-env-var-source {
+  flex: 0 0 10rem;
+  min-width: 10rem;
+}
+
+.resource-form-env-var-source .dropdown {
+  display: inline-block;
+  width: auto;
+}
+
+.resource-form-env-var-source .dropdown-menu {
+  width: 100%;
+  min-width: 0;
+}
+
+.resource-form-env-var-value {
+  flex: 1;
+  min-width: 0;
+}
+
+.resource-form-env-var-ref-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.resource-form-env-var-ref-key {
+  flex: 1;
+  min-width: 0;
+}

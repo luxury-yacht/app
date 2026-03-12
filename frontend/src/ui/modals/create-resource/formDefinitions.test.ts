@@ -113,7 +113,11 @@ const findSubField = (field: FieldDef, key: string): FieldDef | undefined => {
 };
 
 /** Find a sub-sub-field (two levels deep, e.g. containers → volumeMounts → name). */
-const findNestedSubField = (field: FieldDef, subKey: string, nestedKey: string): FieldDef | undefined => {
+const findNestedSubField = (
+  field: FieldDef,
+  subKey: string,
+  nestedKey: string
+): FieldDef | undefined => {
   const sub = findSubField(field, subKey);
   return sub?.fields?.find((f) => f.key === nestedKey);
 };
@@ -148,6 +152,20 @@ describe('shared field coverage across pod-template definitions', () => {
         const envFrom = findSubField(containers, 'envFrom');
         expect(envFrom).toBeDefined();
         expect(envFrom!.type).toBe('env-from');
+      });
+
+      it('has containers with env field of type env-var', () => {
+        const containers = findField(def, 'containers')!;
+        const env = findSubField(containers, 'env');
+        expect(env).toBeDefined();
+        expect(env!.type).toBe('env-var');
+      });
+
+      it('has initContainers with env field of type env-var', () => {
+        const initContainers = findField(def, 'initContainers')!;
+        const env = findSubField(initContainers, 'env');
+        expect(env).toBeDefined();
+        expect(env!.type).toBe('env-var');
       });
 
       it('has initContainers section with correct path and properties', () => {
@@ -286,7 +304,12 @@ describe('CronJob-specific fields', () => {
   it('initContainers uses CronJob path', () => {
     const initContainers = findField(def, 'initContainers')!;
     expect(initContainers.path).toEqual([
-      'spec', 'jobTemplate', 'spec', 'template', 'spec', 'initContainers',
+      'spec',
+      'jobTemplate',
+      'spec',
+      'template',
+      'spec',
+      'initContainers',
     ]);
   });
 
@@ -344,11 +367,25 @@ describe('CronJob-specific fields', () => {
 
   it('has podAnnotations at correct CronJob path', () => {
     const field = findField(def, 'podAnnotations');
-    expect(field!.path).toEqual(['spec', 'jobTemplate', 'spec', 'template', 'metadata', 'annotations']);
+    expect(field!.path).toEqual([
+      'spec',
+      'jobTemplate',
+      'spec',
+      'template',
+      'metadata',
+      'annotations',
+    ]);
   });
 
   it('has imagePullSecrets at correct CronJob path', () => {
     const field = findField(def, 'imagePullSecrets');
-    expect(field!.path).toEqual(['spec', 'jobTemplate', 'spec', 'template', 'spec', 'imagePullSecrets']);
+    expect(field!.path).toEqual([
+      'spec',
+      'jobTemplate',
+      'spec',
+      'template',
+      'spec',
+      'imagePullSecrets',
+    ]);
   });
 });
