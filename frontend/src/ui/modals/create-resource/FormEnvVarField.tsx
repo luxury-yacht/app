@@ -251,7 +251,6 @@ export function FormEnvVarField({
       {items.length === 0 && (
         <FormEmptyActionRow
           rowClassName="resource-form-nested-group-row"
-          spacerClassName="resource-form-nested-group-fields"
           actionsClassName="resource-form-nested-group-row-actions"
           alignLeft
           alignLeftClassName="resource-form-nested-group-row-actions--left"
