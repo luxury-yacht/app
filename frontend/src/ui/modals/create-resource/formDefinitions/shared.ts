@@ -4,7 +4,7 @@ import type { FormFieldDefinition, FormFieldOption } from './types';
 // Linux capabilities (used by securityContext tag-picker fields)
 // ---------------------------------------------------------------------------
 
-const LINUX_CAPABILITIES: FormFieldOption[] = [
+export const LINUX_CAPABILITIES: FormFieldOption[] = [
   'ALL',
   'AUDIT_CONTROL',
   'AUDIT_READ',
@@ -290,23 +290,10 @@ export function makeContainerSubFields(volumesPath: string[]): FormFieldDefiniti
       type: 'tri-state-boolean',
     },
     {
-      key: 'secCapAdd',
+      key: 'secCapabilities',
       label: 'Capabilities',
-      path: ['securityContext', 'capabilities', 'add'],
-      type: 'tag-picker',
-      options: LINUX_CAPABILITIES,
-      addLabel: 'Add',
-      placeholder: 'Search capabilities',
-    },
-    {
-      key: 'secCapDrop',
-      label: 'Capabilities Drop',
-      path: ['securityContext', 'capabilities', 'drop'],
-      type: 'tag-picker',
-      options: LINUX_CAPABILITIES,
-      addLabel: 'Drop',
-      placeholder: 'Search capabilities',
-      indented: true,
+      path: ['securityContext', 'capabilities'],
+      type: 'capabilities',
     },
   ];
 }

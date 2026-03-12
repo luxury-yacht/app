@@ -30,6 +30,7 @@ import { FormEnvVarField } from './FormEnvVarField';
 import { FormTriStateBooleanDropdown } from './FormTriStateBooleanDropdown';
 import { FormAffinityField } from './FormAffinityField';
 import { TagPickerInput } from './TagPickerInput';
+import { LINUX_CAPABILITIES } from './formDefinitions/shared';
 import {
   INPUT_BEHAVIOR_PROPS,
   getNestedValue,
@@ -1130,32 +1131,103 @@ function GroupListField({
             falseLabel={subField.falseLabel}
           />
         );
-      case 'tag-picker': {
-        const tagItems = Array.isArray(subValue) ? (subValue as string[]) : [];
-        const tagOptions = (subField.options ?? []).map((o) => o.value);
+      case 'capabilities': {
+        const capObj =
+          subValue && typeof subValue === 'object' && !Array.isArray(subValue)
+            ? (subValue as Record<string, unknown>)
+            : undefined;
+
+        // Empty state — show "+ Add capabilities" button like probe/command.
+        if (!capObj) {
+          return (
+            <div className="resource-form-actions-row">
+              <FormIconActionButton
+                variant="add"
+                label="Add capabilities"
+                onClick={() => handleSubFieldChange(itemIndex, subField, {})}
+              />
+              <span className="resource-form-action-ghost-text">Add capabilities</span>
+            </div>
+          );
+        }
+
+        const capAdd = Array.isArray(capObj.add) ? (capObj.add as string[]) : [];
+        const capDrop = Array.isArray(capObj.drop) ? (capObj.drop as string[]) : [];
+        const capOptions = LINUX_CAPABILITIES.map((o) => o.value);
+
+        const updateCap = (newAdd: string[], newDrop: string[]): void => {
+          const newCap: Record<string, unknown> = {};
+          if (newAdd.length > 0) newCap.add = newAdd;
+          if (newDrop.length > 0) newCap.drop = newDrop;
+          if (Object.keys(newCap).length === 0) {
+            // Nothing left — remove the whole capabilities object.
+            const updatedItems = items.map((currentItem, i) => {
+              if (i !== itemIndex) return currentItem;
+              return unsetNestedValue(currentItem, subField.path);
+            });
+            updateItems(updatedItems);
+          } else {
+            handleSubFieldChange(itemIndex, subField, newCap);
+          }
+        };
+
         return (
-          <>
-            {subField.addLabel && (
-              <label className="resource-form-label">{subField.addLabel}</label>
-            )}
-            <TagPickerInput
-              options={tagOptions}
-              value={tagItems}
-              onChange={(newItems) => {
-                if (newItems.length > 0) {
-                  handleSubFieldChange(itemIndex, subField, newItems);
-                } else {
+          <div className="tag-picker-capabilities">
+            <div className="tag-picker-capabilities-header">
+              <FormIconActionButton
+                variant="remove"
+                label="Remove capabilities"
+                onClick={() => {
                   const updatedItems = items.map((currentItem, i) => {
                     if (i !== itemIndex) return currentItem;
                     return unsetNestedValue(currentItem, subField.path);
                   });
                   updateItems(updatedItems);
-                }
-              }}
-              placeholder={subField.placeholder}
-              ariaLabel={subField.label}
-            />
-          </>
+                }}
+              />
+            </div>
+            <FormFieldRow label="Add">
+              <TagPickerInput
+                options={capOptions}
+                value={capAdd}
+                onChange={(newAdd) => updateCap(newAdd, capDrop)}
+                placeholder="Search capabilities"
+                ariaLabel="capabilities to add"
+              />
+            </FormFieldRow>
+            <FormFieldRow label="Drop">
+              <TagPickerInput
+                options={capOptions}
+                value={capDrop}
+                onChange={(newDrop) => updateCap(capAdd, newDrop)}
+                placeholder="Search capabilities"
+                ariaLabel="capabilities to drop"
+              />
+            </FormFieldRow>
+          </div>
+        );
+      }
+      case 'tag-picker': {
+        const tagItems = Array.isArray(subValue) ? (subValue as string[]) : [];
+        const tagOptions = (subField.options ?? []).map((o) => o.value);
+        return (
+          <TagPickerInput
+            options={tagOptions}
+            value={tagItems}
+            onChange={(newItems) => {
+              if (newItems.length > 0) {
+                handleSubFieldChange(itemIndex, subField, newItems);
+              } else {
+                const updatedItems = items.map((currentItem, i) => {
+                  if (i !== itemIndex) return currentItem;
+                  return unsetNestedValue(currentItem, subField.path);
+                });
+                updateItems(updatedItems);
+              }
+            }}
+            placeholder={subField.placeholder}
+            ariaLabel={subField.label}
+          />
         );
       }
       default:

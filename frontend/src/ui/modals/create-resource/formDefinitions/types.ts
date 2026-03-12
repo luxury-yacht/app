@@ -38,7 +38,8 @@ export interface FormFieldDefinition {
     | 'env-from'
     | 'env-var'
     | 'affinity'
-    | 'tag-picker';
+    | 'tag-picker'
+    | 'capabilities';
   /** Placeholder text for text/number inputs. */
   placeholder?: string;
   /** Optional minimum value for number inputs. */

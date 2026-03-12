@@ -236,21 +236,17 @@ describe('shared field coverage across pod-template definitions', () => {
         const readOnlyRoot = findSubField(containers, 'secReadOnlyRoot');
         expect(readOnlyRoot).toBeDefined();
         expect(readOnlyRoot!.type).toBe('tri-state-boolean');
-        // String lists.
-        const capAdd = findSubField(containers, 'secCapAdd');
-        expect(capAdd).toBeDefined();
-        expect(capAdd!.type).toBe('tag-picker');
-        const capDrop = findSubField(containers, 'secCapDrop');
-        expect(capDrop).toBeDefined();
-        expect(capDrop!.type).toBe('tag-picker');
+        // Capabilities.
+        const cap = findSubField(containers, 'secCapabilities');
+        expect(cap).toBeDefined();
+        expect(cap!.type).toBe('capabilities');
       });
 
       it('has initContainers securityContext fields', () => {
         const initContainers = findField(def, 'initContainers')!;
         expect(findSubField(initContainers, 'secRunAsUser')).toBeDefined();
         expect(findSubField(initContainers, 'secRunAsNonRoot')).toBeDefined();
-        expect(findSubField(initContainers, 'secCapAdd')).toBeDefined();
-        expect(findSubField(initContainers, 'secCapDrop')).toBeDefined();
+        expect(findSubField(initContainers, 'secCapabilities')).toBeDefined();
       });
 
       it('has pod securityContext fields in Advanced', () => {

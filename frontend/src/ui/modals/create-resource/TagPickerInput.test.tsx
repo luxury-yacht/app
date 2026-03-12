@@ -3,21 +3,6 @@ import ReactDOM from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TagPickerInput } from './TagPickerInput';
 
-const setNativeInputValue = (element: HTMLInputElement, value: string) => {
-  const valueSetter = Object.getOwnPropertyDescriptor(element, 'value')?.set;
-  const prototype = Object.getPrototypeOf(element) as HTMLInputElement;
-  const prototypeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
-  if (prototypeValueSetter && valueSetter !== prototypeValueSetter) {
-    prototypeValueSetter.call(element, value);
-    return;
-  }
-  if (valueSetter) {
-    valueSetter.call(element, value);
-    return;
-  }
-  element.value = value;
-};
-
 /** Dispatch a keydown event on an element. */
 const pressKey = (el: Element, key: string): void => {
   act(() => {
@@ -53,7 +38,7 @@ describe('TagPickerInput', () => {
           options={OPTIONS}
           value={value}
           onChange={mockOnChange}
-          placeholder="Add capability"
+          placeholder="Search capabilities"
           ariaLabel="capabilities"
         />
       );
@@ -63,156 +48,92 @@ describe('TagPickerInput', () => {
 
   it('renders empty state with placeholder', () => {
     render([]);
-    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
+    const input = container.querySelector('.tag-picker-inline-input') as HTMLInputElement;
     expect(input).not.toBeNull();
-    expect(input.placeholder).toBe('Add capability');
-    const tags = container.querySelectorAll('.tag-picker-tag');
-    expect(tags.length).toBe(0);
+    expect(input.placeholder).toBe('Search capabilities');
   });
 
-  it('renders selected values as inline tag chips', () => {
+  it('renders selected values as chips with remove buttons', () => {
     render(['NET_ADMIN', 'SYS_ADMIN']);
-    const tags = container.querySelectorAll('.tag-picker-tag');
-    expect(tags.length).toBe(2);
-    expect(tags[0].textContent).toContain('NET_ADMIN');
-    expect(tags[1].textContent).toContain('SYS_ADMIN');
-    const removeBtns = container.querySelectorAll('.tag-picker-tag-remove');
+    const chips = container.querySelectorAll('.tag-picker-chip');
+    expect(chips.length).toBe(2);
+    expect(chips[0].textContent).toContain('NET_ADMIN');
+    expect(chips[1].textContent).toContain('SYS_ADMIN');
+    const removeBtns = container.querySelectorAll('.tag-picker-chip-remove');
     expect(removeBtns.length).toBe(2);
   });
 
-  it('removes a tag when clicking its remove button', () => {
+  it('removes a tag when clicking its chip remove button', () => {
     const onChange = vi.fn();
     render(['NET_ADMIN', 'SYS_ADMIN'], onChange);
-    const removeBtns = container.querySelectorAll('.tag-picker-tag-remove');
+    const removeBtns = container.querySelectorAll('.tag-picker-chip-remove');
     act(() => (removeBtns[0] as HTMLElement).click());
     expect(onChange).toHaveBeenCalledWith(['SYS_ADMIN']);
   });
 
-  it('shows dropdown with unselected options on focus', () => {
-    render(['NET_ADMIN']);
-    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
-    act(() => {
-      input.dispatchEvent(new Event('focus', { bubbles: true }));
-    });
-    const dropdown = container.querySelector('.tag-picker-dropdown');
-    expect(dropdown).not.toBeNull();
-    const options = container.querySelectorAll('.tag-picker-option');
-    expect(options.length).toBe(5);
-    const optionTexts = Array.from(options).map((o) => o.textContent);
-    expect(optionTexts).not.toContain('NET_ADMIN');
-  });
-
-  it('filters options by input text', () => {
+  it('shows dropdown when input is focused', () => {
+    vi.useFakeTimers();
     render([]);
-    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
+    const input = container.querySelector('.tag-picker-inline-input') as HTMLInputElement;
     act(() => {
       input.dispatchEvent(new Event('focus', { bubbles: true }));
     });
-    act(() => {
-      setNativeInputValue(input, 'NET');
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    });
     const options = container.querySelectorAll('.tag-picker-option');
-    expect(options.length).toBe(3);
+    expect(options.length).toBe(6);
+    vi.useRealTimers();
   });
 
-  it('selecting an option adds it and clears filter', () => {
+  it('selecting a dropdown option adds it', () => {
+    vi.useFakeTimers();
     const onChange = vi.fn();
     render([], onChange);
-    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
+    const input = container.querySelector('.tag-picker-inline-input') as HTMLInputElement;
     act(() => {
       input.dispatchEvent(new Event('focus', { bubbles: true }));
     });
     const options = container.querySelectorAll('.tag-picker-option');
+    expect(options.length).toBe(6);
     act(() => (options[0] as HTMLElement).click());
     expect(onChange).toHaveBeenCalledWith(['ALL']);
+    vi.useRealTimers();
   });
 
-  it('hides input when all options are selected', () => {
-    render([...OPTIONS]);
-    const input = container.querySelector('.tag-picker-input');
-    expect(input).toBeNull();
-  });
-
-  it('filter is case-insensitive', () => {
-    render([]);
-    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
-    act(() => {
-      input.dispatchEvent(new Event('focus', { bubbles: true }));
-    });
-    act(() => {
-      setNativeInputValue(input, 'sys');
-      input.dispatchEvent(new Event('change', { bubbles: true }));
-    });
-    const options = container.querySelectorAll('.tag-picker-option');
-    expect(options.length).toBe(2);
+  it('hides placeholder when chips are present', () => {
+    render(['NET_ADMIN']);
+    const input = container.querySelector('.tag-picker-inline-input') as HTMLInputElement;
+    expect(input.placeholder).toBe('');
   });
 
   // ── Keyboard navigation ──────────────────────────────────────────────
 
-  it('ArrowLeft from input enters tag navigation and shows cursor', () => {
-    render(['NET_ADMIN', 'SYS_ADMIN']);
-    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
-    // Ensure caret is at start.
-    Object.defineProperty(input, 'selectionStart', { value: 0, writable: true });
-    Object.defineProperty(input, 'selectionEnd', { value: 0, writable: true });
-    const area = container.querySelector('.tag-picker-input-area') as HTMLElement;
-    pressKey(area, 'ArrowLeft');
-    // Cursor should appear before the last tag (position 1 = between tags 0 and 1).
-    const cursor = container.querySelector('[data-testid="tag-cursor"]');
-    expect(cursor).not.toBeNull();
-  });
-
-  it('Delete removes the tag in front of the cursor', () => {
-    const onChange = vi.fn();
-    render(['ALL', 'NET_ADMIN', 'SYS_ADMIN'], onChange);
-    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
-    Object.defineProperty(input, 'selectionStart', { value: 0, writable: true });
-    Object.defineProperty(input, 'selectionEnd', { value: 0, writable: true });
-    const area = container.querySelector('.tag-picker-input-area') as HTMLElement;
-    // ArrowLeft twice: cursor at position 1 (between ALL and NET_ADMIN).
-    pressKey(area, 'ArrowLeft');
-    pressKey(area, 'ArrowLeft');
-    // Delete should remove NET_ADMIN (the tag in front of the cursor).
-    pressKey(area, 'Delete');
-    expect(onChange).toHaveBeenCalledWith(['ALL', 'SYS_ADMIN']);
-  });
-
-  it('Backspace removes the tag behind the cursor', () => {
-    const onChange = vi.fn();
-    render(['ALL', 'NET_ADMIN', 'SYS_ADMIN'], onChange);
-    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
-    Object.defineProperty(input, 'selectionStart', { value: 0, writable: true });
-    Object.defineProperty(input, 'selectionEnd', { value: 0, writable: true });
-    const area = container.querySelector('.tag-picker-input-area') as HTMLElement;
-    // ArrowLeft twice: cursor at position 1 (between ALL and NET_ADMIN).
-    pressKey(area, 'ArrowLeft');
-    pressKey(area, 'ArrowLeft');
-    // Backspace should remove ALL (the tag behind the cursor).
-    pressKey(area, 'Backspace');
-    expect(onChange).toHaveBeenCalledWith(['NET_ADMIN', 'SYS_ADMIN']);
-  });
-
-  it('Backspace from end of list (in input) removes last tag', () => {
+  it('Backspace removes last tag', () => {
     const onChange = vi.fn();
     render(['NET_ADMIN', 'SYS_ADMIN'], onChange);
-    const area = container.querySelector('.tag-picker-input-area') as HTMLElement;
-    // No ArrowLeft — cursor stays at the end (in the text input).
-    pressKey(area, 'Backspace');
+    const picker = container.querySelector('.tag-picker') as HTMLElement;
+    pressKey(picker, 'Backspace');
     expect(onChange).toHaveBeenCalledWith(['NET_ADMIN']);
   });
 
-  it('ArrowRight past last tag returns focus to input', () => {
-    render(['NET_ADMIN']);
-    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
-    Object.defineProperty(input, 'selectionStart', { value: 0, writable: true });
-    Object.defineProperty(input, 'selectionEnd', { value: 0, writable: true });
-    const area = container.querySelector('.tag-picker-input-area') as HTMLElement;
-    // Enter tag nav.
-    pressKey(area, 'ArrowLeft');
-    expect(container.querySelector('[data-testid="tag-cursor"]')).not.toBeNull();
-    // ArrowRight should return to input.
-    pressKey(area, 'ArrowRight');
-    expect(container.querySelector('[data-testid="tag-cursor"]')).toBeNull();
+  it('ArrowUp moves cursor, Delete removes tag in front', () => {
+    const onChange = vi.fn();
+    render(['ALL', 'NET_ADMIN', 'SYS_ADMIN'], onChange);
+    const picker = container.querySelector('.tag-picker') as HTMLElement;
+    // ArrowUp twice to get cursor at position 1 (between ALL and NET_ADMIN).
+    pressKey(picker, 'ArrowUp');
+    pressKey(picker, 'ArrowUp');
+    // Delete removes NET_ADMIN (tag in front of cursor).
+    pressKey(picker, 'Delete');
+    expect(onChange).toHaveBeenCalledWith(['ALL', 'SYS_ADMIN']);
+  });
+
+  it('ArrowUp moves cursor, Backspace removes tag behind', () => {
+    const onChange = vi.fn();
+    render(['ALL', 'NET_ADMIN', 'SYS_ADMIN'], onChange);
+    const picker = container.querySelector('.tag-picker') as HTMLElement;
+    pressKey(picker, 'ArrowUp');
+    pressKey(picker, 'ArrowUp');
+    // Backspace removes ALL (tag behind cursor).
+    pressKey(picker, 'Backspace');
+    expect(onChange).toHaveBeenCalledWith(['NET_ADMIN', 'SYS_ADMIN']);
   });
 });

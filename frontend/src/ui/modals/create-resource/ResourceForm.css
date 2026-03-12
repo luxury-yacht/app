@@ -923,13 +923,26 @@
 
 /* ── Tag Picker Input ──────────────────────────────────────────────────── */
 
+/* Capabilities field — collapsible wrapper with Add/Drop tag pickers. */
+.tag-picker-capabilities {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tag-picker-capabilities-header {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Outer wrapper — positions the dropdown relative to the chip area. */
 .tag-picker {
   flex: 1;
   position: relative;
 }
 
-/* Container that wraps inline tag chips + the text input. Inherits base
-   input styles from .resource-form-input rule above. */
+/* Chip container — shared input styles applied via .tag-picker-input-area rule above. */
 .tag-picker-input-area {
   display: flex;
   flex-wrap: wrap;
@@ -938,64 +951,75 @@
   cursor: text;
 }
 
-/* Inline tag chip inside the input area. */
-.tag-picker-tag {
+/* Chips — small inline tags with ✕ remove button. */
+.tag-picker-chip {
   display: inline-flex;
   align-items: center;
   gap: 2px;
   padding: 1px 6px;
-  border-radius: var(--radius-sm);
   background: var(--color-bg-secondary);
+  border-radius: var(--border-radius-sm, 4px);
   font-size: var(--font-size-sm);
-  line-height: 1.4;
+  color: var(--color-text);
   white-space: nowrap;
 }
 
-/* Blinking cursor shown between tags during keyboard navigation. */
-.tag-picker-cursor {
-  width: 1.5px;
-  align-self: stretch;
-  background: var(--color-text);
-  animation: tag-picker-blink 1s step-end infinite;
-}
-
-@keyframes tag-picker-blink {
-  50% { opacity: 0; }
-}
-
-.tag-picker-tag-remove {
+.tag-picker-chip-remove {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: none;
-  border: none;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  padding: 0 1px;
-  font-size: 10px;
-  line-height: 1;
-}
-
-.tag-picker-tag-remove:hover {
-  color: var(--color-text);
-}
-
-/* The actual text input that sits inline after the chips — must be
-   fully invisible so only the outer input-area shows the border. */
-.tag-picker-input,
-.tag-picker-input:focus,
-.tag-picker-input:hover {
-  flex: 1;
-  min-width: 60px;
-  border: none;
-  outline: none;
-  box-shadow: none;
-  background: transparent;
-  font-size: var(--font-size-sm);
   padding: 0;
-  color: var(--color-text);
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
 }
 
+.tag-picker-chip-remove:hover {
+  color: var(--color-error);
+}
+
+/* Cursor indicator between chips during keyboard navigation. */
+.tag-picker-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--color-accent);
+}
+
+/* Inline text input inside the chip container — no border of its own. */
+.tag-picker-inline-input {
+  flex: 1;
+  min-width: 4ch;
+  border: none;
+  box-shadow: none;
+  outline: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-size-normal, 0.875rem);
+  font-family: inherit;
+  padding: 0;
+}
+
+.tag-picker-inline-input:focus {
+  border: none;
+  box-shadow: none;
+}
+
+.tag-picker-inline-input:hover {
+  border: none;
+  box-shadow: none;
+}
+
+.tag-picker-inline-input::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.5;
+}
+
+/* Dropdown below the chip container. */
 .tag-picker-dropdown {
   position: absolute;
   top: 100%;
@@ -1017,7 +1041,6 @@
   font-size: var(--font-size-sm);
 }
 
-.tag-picker-option:hover,
-.tag-picker-option--highlighted {
+.tag-picker-option:hover {
   background: var(--color-bg-secondary);
 }
