@@ -1255,11 +1255,11 @@ function GroupListField({
                   style={{ flex: '0 0 auto' }}
                 />
               </FormFieldRow>
-              <FormFieldRow label="Allow Privilege Escalation" className="resource-form-field--inline">
+              <FormFieldRow label="Privilege Escalation" className="resource-form-field--inline">
                 <FormTriStateBooleanDropdown
                   value={secCtx.allowPrivilegeEscalation}
                   onChange={(val) => updateSecCtx('allowPrivilegeEscalation', val)}
-                  ariaLabel="Allow Privilege Escalation"
+                  ariaLabel="Privilege Escalation"
                   style={{ flex: '0 0 auto' }}
                 />
               </FormFieldRow>
