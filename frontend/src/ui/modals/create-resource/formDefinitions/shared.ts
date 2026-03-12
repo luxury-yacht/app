@@ -1,4 +1,52 @@
-import type { FormFieldDefinition } from './types';
+import type { FormFieldDefinition, FormFieldOption } from './types';
+
+// ---------------------------------------------------------------------------
+// Linux capabilities (used by securityContext tag-picker fields)
+// ---------------------------------------------------------------------------
+
+const LINUX_CAPABILITIES: FormFieldOption[] = [
+  'ALL',
+  'AUDIT_CONTROL',
+  'AUDIT_READ',
+  'AUDIT_WRITE',
+  'BLOCK_SUSPEND',
+  'BPF',
+  'CHECKPOINT_RESTORE',
+  'CHOWN',
+  'DAC_OVERRIDE',
+  'DAC_READ_SEARCH',
+  'FOWNER',
+  'FSETID',
+  'IPC_LOCK',
+  'IPC_OWNER',
+  'KILL',
+  'LEASE',
+  'LINUX_IMMUTABLE',
+  'MAC_ADMIN',
+  'MAC_OVERRIDE',
+  'MKNOD',
+  'NET_ADMIN',
+  'NET_BIND_SERVICE',
+  'NET_BROADCAST',
+  'NET_RAW',
+  'PERFMON',
+  'SETFCAP',
+  'SETGID',
+  'SETPCAP',
+  'SETUID',
+  'SYS_ADMIN',
+  'SYS_BOOT',
+  'SYS_CHROOT',
+  'SYS_MODULE',
+  'SYS_NICE',
+  'SYS_PACCT',
+  'SYS_PTRACE',
+  'SYS_RAWIO',
+  'SYS_RESOURCE',
+  'SYS_TIME',
+  'SYS_TTY_CONFIG',
+  'WAKE_ALARM',
+].map((cap) => ({ label: cap, value: cap }));
 
 // ---------------------------------------------------------------------------
 // Container sub-fields
@@ -243,19 +291,22 @@ export function makeContainerSubFields(volumesPath: string[]): FormFieldDefiniti
     },
     {
       key: 'secCapAdd',
-      label: 'Capabilities Add',
+      label: 'Capabilities',
       path: ['securityContext', 'capabilities', 'add'],
-      type: 'string-list',
-      addLabel: 'Add Capability',
-      placeholder: 'e.g. NET_BIND_SERVICE',
+      type: 'tag-picker',
+      options: LINUX_CAPABILITIES,
+      addLabel: 'Add',
+      placeholder: 'Search capabilities',
     },
     {
       key: 'secCapDrop',
       label: 'Capabilities Drop',
       path: ['securityContext', 'capabilities', 'drop'],
-      type: 'string-list',
-      addLabel: 'Add Capability',
-      placeholder: 'e.g. ALL',
+      type: 'tag-picker',
+      options: LINUX_CAPABILITIES,
+      addLabel: 'Drop',
+      placeholder: 'Search capabilities',
+      indented: true,
     },
   ];
 }
@@ -464,6 +515,62 @@ export function makeAdvancedPodSpecFields(podSpecPrefix: string[]): FormFieldDef
       path: [...podSpecPrefix, 'affinity'],
       type: 'affinity',
       fullWidth: true,
+    },
+    // ── Topology Spread Constraints ──────────────────────────────────────
+    {
+      key: 'topologySpreadConstraints',
+      label: 'Topology Spread',
+      path: [...podSpecPrefix, 'topologySpreadConstraints'],
+      type: 'group-list',
+      fullWidth: true,
+      itemTitleField: 'topologyKey',
+      itemTitleFallback: 'Constraint',
+      addLabel: 'Add Constraint',
+      defaultValue: { maxSkew: 1, whenUnsatisfiable: 'DoNotSchedule' },
+      fields: [
+        {
+          key: 'topologyKey',
+          label: 'Topology Key',
+          path: ['topologyKey'],
+          type: 'text',
+          placeholder: 'e.g. topology.kubernetes.io/zone',
+          fieldFlex: '1 1 auto',
+        },
+        {
+          key: 'maxSkew',
+          label: 'Max Skew',
+          path: ['maxSkew'],
+          type: 'number',
+          placeholder: '1',
+          min: 1,
+          integer: true,
+          fieldFlex: '0 0 auto',
+          inputWidth: 'calc(4ch + 20px)',
+        },
+        {
+          key: 'whenUnsatisfiable',
+          label: 'When Unsatisfiable',
+          path: ['whenUnsatisfiable'],
+          type: 'select',
+          options: [
+            { value: 'DoNotSchedule', label: 'DoNotSchedule' },
+            { value: 'ScheduleAnyway', label: 'ScheduleAnyway' },
+          ],
+          includeEmptyOption: false,
+          implicitDefault: 'DoNotSchedule',
+          fieldFlex: '0 0 auto',
+          dropdownWidth: 'calc(16ch + 40px)',
+        },
+        {
+          key: 'matchLabels',
+          label: 'Match Labels',
+          path: ['labelSelector', 'matchLabels'],
+          type: 'key-value-list',
+          addLabel: 'Add Label',
+          inlineLabels: true,
+          blankNewKeys: true,
+        },
+      ],
     },
   ];
 }

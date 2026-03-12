@@ -239,10 +239,10 @@ describe('shared field coverage across pod-template definitions', () => {
         // String lists.
         const capAdd = findSubField(containers, 'secCapAdd');
         expect(capAdd).toBeDefined();
-        expect(capAdd!.type).toBe('string-list');
+        expect(capAdd!.type).toBe('tag-picker');
         const capDrop = findSubField(containers, 'secCapDrop');
         expect(capDrop).toBeDefined();
-        expect(capDrop!.type).toBe('string-list');
+        expect(capDrop!.type).toBe('tag-picker');
       });
 
       it('has initContainers securityContext fields', () => {
@@ -287,6 +287,26 @@ describe('shared field coverage across pod-template definitions', () => {
         expect(affinity).toBeDefined();
         expect(affinity!.type).toBe('affinity');
         expect(affinity!.fullWidth).toBe(true);
+      });
+
+      it('has topologySpreadConstraints field as group-list', () => {
+        const tsc = findField(def, 'topologySpreadConstraints');
+        expect(tsc).toBeDefined();
+        expect(tsc!.type).toBe('group-list');
+        expect(tsc!.fullWidth).toBe(true);
+        // Check sub-fields.
+        const topoKey = findSubField(tsc!, 'topologyKey');
+        expect(topoKey).toBeDefined();
+        expect(topoKey!.type).toBe('text');
+        const maxSkew = findSubField(tsc!, 'maxSkew');
+        expect(maxSkew).toBeDefined();
+        expect(maxSkew!.type).toBe('number');
+        const whenUnsatisfiable = findSubField(tsc!, 'whenUnsatisfiable');
+        expect(whenUnsatisfiable).toBeDefined();
+        expect(whenUnsatisfiable!.type).toBe('select');
+        const matchLabels = findSubField(tsc!, 'matchLabels');
+        expect(matchLabels).toBeDefined();
+        expect(matchLabels!.type).toBe('key-value-list');
       });
     });
   }

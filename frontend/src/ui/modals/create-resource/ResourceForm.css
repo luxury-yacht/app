@@ -65,7 +65,8 @@
 /* ── Inputs ──────────────────────────────────────────────────────────── */
 
 .resource-form-input,
-.resource-form-textarea {
+.resource-form-textarea,
+.tag-picker-input-area {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
@@ -83,13 +84,15 @@
 }
 
 .resource-form-input:focus,
-.resource-form-textarea:focus {
+.resource-form-textarea:focus,
+.tag-picker-input-area:focus-within {
   border-color: var(--color-accent);
   box-shadow: 0 0 0 1px var(--color-accent);
 }
 
 .resource-form-input:hover:not(:focus),
-.resource-form-textarea:hover:not(:focus) {
+.resource-form-textarea:hover:not(:focus),
+.tag-picker-input-area:hover:not(:focus-within) {
   border-color: var(--color-text-secondary);
 }
 
@@ -916,4 +919,92 @@
 .resource-form-affinity-expr-values {
   flex: 1;
   min-width: 0;
+}
+
+/* ── Tag Picker Input ──────────────────────────────────────────────────── */
+
+.tag-picker {
+  flex: 1;
+  position: relative;
+}
+
+/* Container that wraps inline tag chips + the text input. Inherits base
+   input styles from .resource-form-input rule above. */
+.tag-picker-input-area {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  cursor: text;
+}
+
+/* Inline tag chip inside the input area. */
+.tag-picker-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-secondary);
+  font-size: var(--font-size-sm);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.tag-picker-tag-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0 1px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.tag-picker-tag-remove:hover {
+  color: var(--color-text);
+}
+
+/* The actual text input that sits inline after the chips — must be
+   fully invisible so only the outer input-area shows the border. */
+.tag-picker-input,
+.tag-picker-input:focus,
+.tag-picker-input:hover {
+  flex: 1;
+  min-width: 60px;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  font-size: var(--font-size-sm);
+  padding: 0;
+  color: var(--color-text);
+}
+
+.tag-picker-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  margin-top: 2px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.tag-picker-option {
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+}
+
+.tag-picker-option:hover {
+  background: var(--color-bg-secondary);
 }

@@ -16,7 +16,7 @@ High impact — commonly needed:
 - No startupProbe ✅ Phase 2
 - No pod or container securityContext (runAsUser, runAsNonRoot, readOnlyRootFilesystem, capabilities, etc.) ✅ Phase 3C
 - No affinity / tolerations ✅ Phase 3D
-- No topologySpreadConstraints — not yet implemented
+- No topologySpreadConstraints ✅ Phase 3D
 - No initContainers ✅ Phase 3A
 - No imagePullSecrets ✅ Phase 2
 - No pod template annotations (used by Prometheus, Vault, Datadog, etc.) ✅ Phase 2
@@ -50,12 +50,11 @@ Test coverage gaps
 
 Remaining work
 
-- topologySpreadConstraints — not yet implemented
 - Additional volume source types (NFS, projected, CSI, downwardAPI, etc.) — still at the original 5
 
 Bottom line
 
-The form now covers the large majority of production Kubernetes use cases. Env sourcing (envFrom + valueFrom), security contexts, affinity/tolerations, init containers, probes, and pod-level settings are all supported.
-The two remaining gaps (topologySpreadConstraints and additional volume types) are lower priority — most teams can use the YAML editor for these less common configurations.
+The form now covers the large majority of production Kubernetes use cases. Env sourcing (envFrom + valueFrom), security contexts, affinity/tolerations/topologySpreadConstraints, init containers, probes, and pod-level
+settings are all supported. The one remaining gap (additional volume types) is lower priority — most teams can use the YAML editor for less common volume sources.
 
-311 tests passing across 19 test files. TypeScript clean, lint clean.
+314 tests passing across 19 test files. TypeScript clean, lint clean.

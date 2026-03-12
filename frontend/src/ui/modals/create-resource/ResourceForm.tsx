@@ -29,6 +29,7 @@ import { FormEnvFromField } from './FormEnvFromField';
 import { FormEnvVarField } from './FormEnvVarField';
 import { FormTriStateBooleanDropdown } from './FormTriStateBooleanDropdown';
 import { FormAffinityField } from './FormAffinityField';
+import { TagPickerInput } from './TagPickerInput';
 import {
   INPUT_BEHAVIOR_PROPS,
   getNestedValue,
@@ -1129,6 +1130,34 @@ function GroupListField({
             falseLabel={subField.falseLabel}
           />
         );
+      case 'tag-picker': {
+        const tagItems = Array.isArray(subValue) ? (subValue as string[]) : [];
+        const tagOptions = (subField.options ?? []).map((o) => o.value);
+        return (
+          <>
+            {subField.addLabel && (
+              <label className="resource-form-label">{subField.addLabel}</label>
+            )}
+            <TagPickerInput
+              options={tagOptions}
+              value={tagItems}
+              onChange={(newItems) => {
+                if (newItems.length > 0) {
+                  handleSubFieldChange(itemIndex, subField, newItems);
+                } else {
+                  const updatedItems = items.map((currentItem, i) => {
+                    if (i !== itemIndex) return currentItem;
+                    return unsetNestedValue(currentItem, subField.path);
+                  });
+                  updateItems(updatedItems);
+                }
+              }}
+              placeholder={subField.placeholder}
+              ariaLabel={subField.label}
+            />
+          </>
+        );
+      }
       default:
         if (process.env.NODE_ENV !== 'production') {
           console.warn(
@@ -1188,8 +1217,11 @@ function GroupListField({
                     );
                     i += 2;
                   } else {
+                    // When indented, hide the label (show empty space) so the field
+                    // appears visually nested under the field above it.
+                    const label = subField.indented ? '' : subField.label;
                     rows.push(
-                      <FormFieldRow key={subField.key} label={subField.label}>
+                      <FormFieldRow key={subField.key} label={label}>
                         {renderSubField(subField, item, itemIndex)}
                       </FormFieldRow>
                     );
