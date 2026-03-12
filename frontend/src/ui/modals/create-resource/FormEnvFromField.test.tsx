@@ -217,7 +217,7 @@ describe('FormEnvFromField', () => {
     const onChange = vi.fn();
     render([{ configMapRef: { name: 'cm1' } }, { secretRef: { name: 's1' } }], onChange);
     // Remove the first item.
-    const removeBtn = container.querySelector('[data-field-key="envFromRemove-0"]') as HTMLElement;
+    const removeBtn = container.querySelector('.resource-form-remove-btn') as HTMLElement;
     act(() => removeBtn.click());
     expect(onChange).toHaveBeenCalledTimes(1);
     const newItems = onChange.mock.calls[0][0];

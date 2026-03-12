@@ -371,7 +371,7 @@ describe('FormEnvVarField', () => {
       onChange
     );
     // Remove the first item.
-    const removeBtn = container.querySelector('[data-field-key="envVarRemove-0"]') as HTMLElement;
+    const removeBtn = container.querySelector('.resource-form-remove-btn') as HTMLElement;
     act(() => removeBtn.click());
     expect(onChange).toHaveBeenCalledTimes(1);
     const newItems = onChange.mock.calls[0][0];

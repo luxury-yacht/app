@@ -5,10 +5,14 @@
  * (ConfigMap/Secret), a name input, an optional prefix input, and
  * a remove button. Handles the YAML mapping between the flat UI model
  * and the nested configMapRef/secretRef structure.
+ *
+ * Uses the same FormIconActionButton add/remove pattern as every other
+ * nested list field (ports, env vars, volume mounts, etc.).
  */
 
 import React from 'react';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import { FormEmptyActionRow, FormIconActionButton } from './FormActionPrimitives';
 import { INPUT_BEHAVIOR_PROPS } from './formUtils';
 
 // ---------------------------------------------------------------------------
@@ -130,6 +134,7 @@ export function FormEnvFromField({
         const prefix = (item.prefix as string) ?? '';
         // 1-based label for accessibility (e.g., "Env source type 1").
         const rowLabel = index + 1;
+        const isLast = index === items.length - 1;
 
         return (
           <div key={index} className="resource-form-env-from-row">
@@ -172,24 +177,38 @@ export function FormEnvFromField({
               />
             </div>
 
-            {/* Remove button */}
-            <button
-              data-field-key={`envFromRemove-${index}`}
-              type="button"
-              className="resource-form-icon-btn"
-              onClick={() => handleRemove(index)}
-              aria-label={`Remove env source ${rowLabel}`}
-            >
-              ✕
-            </button>
+            {/* Add/remove buttons — same pattern as FormNestedListField */}
+            <div className="resource-form-nested-group-row-actions">
+              <FormIconActionButton
+                variant="add"
+                hidden={!isLast}
+                label={isLast ? 'Add Env Source' : undefined}
+                onClick={isLast ? handleAdd : undefined}
+              />
+              <FormIconActionButton
+                variant="remove"
+                label={`Remove env source ${rowLabel}`}
+                onClick={() => handleRemove(index)}
+              />
+            </div>
           </div>
         );
       })}
 
-      {/* Add button */}
-      <button type="button" className="resource-form-add-btn" onClick={handleAdd}>
-        Add env source
-      </button>
+      {/* Empty state — same pattern as FormNestedListField */}
+      {items.length === 0 && (
+        <FormEmptyActionRow
+          rowClassName="resource-form-nested-group-row"
+          spacerClassName="resource-form-nested-group-fields"
+          actionsClassName="resource-form-nested-group-row-actions"
+          alignLeft
+          alignLeftClassName="resource-form-nested-group-row-actions--left"
+          addLabel="Add Env Source"
+          removeLabel="Remove Env Source"
+          onAdd={handleAdd}
+          ghostText="Add env source"
+        />
+      )}
     </div>
   );
 }

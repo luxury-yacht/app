@@ -5,10 +5,14 @@
  * dropdown (Value/ConfigMap/Secret), and dynamic fields depending on the
  * source. Handles the YAML mapping between the flat UI model and the nested
  * valueFrom.configMapKeyRef / valueFrom.secretKeyRef structure.
+ *
+ * Uses the same FormIconActionButton add/remove pattern as every other
+ * nested list field (ports, envFrom, volume mounts, etc.).
  */
 
 import React from 'react';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import { FormEmptyActionRow, FormIconActionButton } from './FormActionPrimitives';
 import { INPUT_BEHAVIOR_PROPS } from './formUtils';
 
 // ---------------------------------------------------------------------------
@@ -150,6 +154,7 @@ export function FormEnvVarField({
         const envName = (item.name as string) ?? '';
         // 1-based label for accessibility (e.g., "Env var source 1").
         const rowLabel = index + 1;
+        const isLast = index === items.length - 1;
 
         return (
           <div key={index} className="resource-form-env-var-row">
@@ -224,24 +229,38 @@ export function FormEnvVarField({
               </>
             )}
 
-            {/* Remove button */}
-            <button
-              data-field-key={`envVarRemove-${index}`}
-              type="button"
-              className="resource-form-icon-btn"
-              onClick={() => handleRemove(index)}
-              aria-label={`Remove env var ${rowLabel}`}
-            >
-              ✕
-            </button>
+            {/* Add/remove buttons — same pattern as FormNestedListField */}
+            <div className="resource-form-nested-group-row-actions">
+              <FormIconActionButton
+                variant="add"
+                hidden={!isLast}
+                label={isLast ? 'Add Env Var' : undefined}
+                onClick={isLast ? handleAdd : undefined}
+              />
+              <FormIconActionButton
+                variant="remove"
+                label={`Remove env var ${rowLabel}`}
+                onClick={() => handleRemove(index)}
+              />
+            </div>
           </div>
         );
       })}
 
-      {/* Add button */}
-      <button type="button" className="resource-form-add-btn" onClick={handleAdd}>
-        Add env var
-      </button>
+      {/* Empty state — same pattern as FormNestedListField */}
+      {items.length === 0 && (
+        <FormEmptyActionRow
+          rowClassName="resource-form-nested-group-row"
+          spacerClassName="resource-form-nested-group-fields"
+          actionsClassName="resource-form-nested-group-row-actions"
+          alignLeft
+          alignLeftClassName="resource-form-nested-group-row-actions--left"
+          addLabel="Add Env Var"
+          removeLabel="Remove Env Var"
+          onAdd={handleAdd}
+          ghostText="Add env var"
+        />
+      )}
     </div>
   );
 }
