@@ -18,6 +18,13 @@ const setNativeInputValue = (element: HTMLInputElement, value: string) => {
   element.value = value;
 };
 
+/** Dispatch a keydown event on an element. */
+const pressKey = (el: Element, key: string): void => {
+  act(() => {
+    el.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+  });
+};
+
 describe('TagPickerInput', () => {
   let container: HTMLDivElement;
   let root: ReactDOM.Root;
@@ -69,7 +76,6 @@ describe('TagPickerInput', () => {
     expect(tags.length).toBe(2);
     expect(tags[0].textContent).toContain('NET_ADMIN');
     expect(tags[1].textContent).toContain('SYS_ADMIN');
-    // Each tag should have a remove button.
     const removeBtns = container.querySelectorAll('.tag-picker-tag-remove');
     expect(removeBtns.length).toBe(2);
   });
@@ -124,7 +130,6 @@ describe('TagPickerInput', () => {
 
   it('hides input when all options are selected', () => {
     render([...OPTIONS]);
-    // No input should be present since all options are selected.
     const input = container.querySelector('.tag-picker-input');
     expect(input).toBeNull();
   });
@@ -141,5 +146,73 @@ describe('TagPickerInput', () => {
     });
     const options = container.querySelectorAll('.tag-picker-option');
     expect(options.length).toBe(2);
+  });
+
+  // ── Keyboard navigation ──────────────────────────────────────────────
+
+  it('ArrowLeft from input enters tag navigation and shows cursor', () => {
+    render(['NET_ADMIN', 'SYS_ADMIN']);
+    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
+    // Ensure caret is at start.
+    Object.defineProperty(input, 'selectionStart', { value: 0, writable: true });
+    Object.defineProperty(input, 'selectionEnd', { value: 0, writable: true });
+    const area = container.querySelector('.tag-picker-input-area') as HTMLElement;
+    pressKey(area, 'ArrowLeft');
+    // Cursor should appear before the last tag (position 1 = between tags 0 and 1).
+    const cursor = container.querySelector('[data-testid="tag-cursor"]');
+    expect(cursor).not.toBeNull();
+  });
+
+  it('Delete removes the tag in front of the cursor', () => {
+    const onChange = vi.fn();
+    render(['ALL', 'NET_ADMIN', 'SYS_ADMIN'], onChange);
+    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
+    Object.defineProperty(input, 'selectionStart', { value: 0, writable: true });
+    Object.defineProperty(input, 'selectionEnd', { value: 0, writable: true });
+    const area = container.querySelector('.tag-picker-input-area') as HTMLElement;
+    // ArrowLeft twice: cursor at position 1 (between ALL and NET_ADMIN).
+    pressKey(area, 'ArrowLeft');
+    pressKey(area, 'ArrowLeft');
+    // Delete should remove NET_ADMIN (the tag in front of the cursor).
+    pressKey(area, 'Delete');
+    expect(onChange).toHaveBeenCalledWith(['ALL', 'SYS_ADMIN']);
+  });
+
+  it('Backspace removes the tag behind the cursor', () => {
+    const onChange = vi.fn();
+    render(['ALL', 'NET_ADMIN', 'SYS_ADMIN'], onChange);
+    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
+    Object.defineProperty(input, 'selectionStart', { value: 0, writable: true });
+    Object.defineProperty(input, 'selectionEnd', { value: 0, writable: true });
+    const area = container.querySelector('.tag-picker-input-area') as HTMLElement;
+    // ArrowLeft twice: cursor at position 1 (between ALL and NET_ADMIN).
+    pressKey(area, 'ArrowLeft');
+    pressKey(area, 'ArrowLeft');
+    // Backspace should remove ALL (the tag behind the cursor).
+    pressKey(area, 'Backspace');
+    expect(onChange).toHaveBeenCalledWith(['NET_ADMIN', 'SYS_ADMIN']);
+  });
+
+  it('Backspace from end of list (in input) removes last tag', () => {
+    const onChange = vi.fn();
+    render(['NET_ADMIN', 'SYS_ADMIN'], onChange);
+    const area = container.querySelector('.tag-picker-input-area') as HTMLElement;
+    // No ArrowLeft — cursor stays at the end (in the text input).
+    pressKey(area, 'Backspace');
+    expect(onChange).toHaveBeenCalledWith(['NET_ADMIN']);
+  });
+
+  it('ArrowRight past last tag returns focus to input', () => {
+    render(['NET_ADMIN']);
+    const input = container.querySelector('.tag-picker-input') as HTMLInputElement;
+    Object.defineProperty(input, 'selectionStart', { value: 0, writable: true });
+    Object.defineProperty(input, 'selectionEnd', { value: 0, writable: true });
+    const area = container.querySelector('.tag-picker-input-area') as HTMLElement;
+    // Enter tag nav.
+    pressKey(area, 'ArrowLeft');
+    expect(container.querySelector('[data-testid="tag-cursor"]')).not.toBeNull();
+    // ArrowRight should return to input.
+    pressKey(area, 'ArrowRight');
+    expect(container.querySelector('[data-testid="tag-cursor"]')).toBeNull();
   });
 });

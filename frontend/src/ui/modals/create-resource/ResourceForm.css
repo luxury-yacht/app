@@ -951,6 +951,18 @@
   white-space: nowrap;
 }
 
+/* Blinking cursor shown between tags during keyboard navigation. */
+.tag-picker-cursor {
+  width: 1.5px;
+  align-self: stretch;
+  background: var(--color-text);
+  animation: tag-picker-blink 1s step-end infinite;
+}
+
+@keyframes tag-picker-blink {
+  50% { opacity: 0; }
+}
+
 .tag-picker-tag-remove {
   display: inline-flex;
   align-items: center;
@@ -1005,6 +1017,7 @@
   font-size: var(--font-size-sm);
 }
 
-.tag-picker-option:hover {
+.tag-picker-option:hover,
+.tag-picker-option--highlighted {
   background: var(--color-bg-secondary);
 }
