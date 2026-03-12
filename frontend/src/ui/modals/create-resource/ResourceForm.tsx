@@ -1221,28 +1221,28 @@ function GroupListField({
                 }}
                 {...INPUT_BEHAVIOR_PROPS}
               />
-            </FormFieldRow>
-            <FormFieldRow label="Run As Group">
-              <input
-                className="resource-form-input"
-                type="number"
-                value={secCtx.runAsGroup !== undefined ? String(secCtx.runAsGroup) : ''}
-                placeholder="GID"
-                aria-label="Run As Group"
-                style={{ width: '8ch', flex: '0 0 auto' }}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  updateSecCtx('runAsGroup', v === '' ? undefined : Number(v));
-                }}
-                {...INPUT_BEHAVIOR_PROPS}
-              />
-            </FormFieldRow>
-            <FormFieldRow label="Run As Non-Root">
-              <FormTriStateBooleanDropdown
-                value={secCtx.runAsNonRoot}
-                onChange={(val) => updateSecCtx('runAsNonRoot', val)}
-                ariaLabel="Run As Non-Root"
-              />
+              <FormFieldRow label="Run As Group" className="resource-form-field--inline">
+                <input
+                  className="resource-form-input"
+                  type="number"
+                  value={secCtx.runAsGroup !== undefined ? String(secCtx.runAsGroup) : ''}
+                  placeholder="GID"
+                  aria-label="Run As Group"
+                  style={{ width: '8ch', flex: '0 0 auto' }}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    updateSecCtx('runAsGroup', v === '' ? undefined : Number(v));
+                  }}
+                  {...INPUT_BEHAVIOR_PROPS}
+                />
+              </FormFieldRow>
+              <FormFieldRow label="Run As Non-Root" className="resource-form-field--inline">
+                <FormTriStateBooleanDropdown
+                  value={secCtx.runAsNonRoot}
+                  onChange={(val) => updateSecCtx('runAsNonRoot', val)}
+                  ariaLabel="Run As Non-Root"
+                />
+              </FormFieldRow>
             </FormFieldRow>
             <FormFieldRow label="Privileged">
               <FormTriStateBooleanDropdown
