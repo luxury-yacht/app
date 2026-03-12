@@ -511,6 +511,11 @@
   margin-left: 0;
 }
 
+/* Tri-state boolean dropdown — dim the displayed value when unset (-----). */
+.resource-form-dropdown--unset .dropdown-value {
+  color: var(--color-text-secondary);
+}
+
 .resource-form-action-ghost-text {
   font-size: 0.75rem;
   color: var(--color-text-secondary);

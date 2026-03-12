@@ -44,18 +44,21 @@ export function FormTriStateBooleanDropdown({
     [emptyLabel, trueLabel, falseLabel]
   );
 
+  const normalized = normalizeTriStateValue(value);
+  const unsetClass = normalized === '' ? ' resource-form-dropdown--unset' : '';
+
   return (
-    <div className={className} style={style}>
+    <div className={`${className}${unsetClass}`} style={style}>
       <Dropdown
         options={options}
-        value={normalizeTriStateValue(value)}
+        value={normalized}
         onChange={(nextValue) => {
-          const normalized = Array.isArray(nextValue) ? (nextValue[0] ?? '') : nextValue;
-          if (normalized === 'true') {
+          const next = Array.isArray(nextValue) ? (nextValue[0] ?? '') : nextValue;
+          if (next === 'true') {
             onChange(true);
             return;
           }
-          if (normalized === 'false') {
+          if (next === 'false') {
             onChange(false);
             return;
           }
