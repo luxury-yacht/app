@@ -1249,21 +1249,22 @@ function GroupListField({
                 value={secCtx.privileged}
                 onChange={(val) => updateSecCtx('privileged', val)}
                 ariaLabel="Privileged"
+                style={{ flex: '0 0 auto' }}
               />
-            </FormFieldRow>
-            <FormFieldRow label="Allow Privilege Escalation">
-              <FormTriStateBooleanDropdown
-                value={secCtx.allowPrivilegeEscalation}
-                onChange={(val) => updateSecCtx('allowPrivilegeEscalation', val)}
-                ariaLabel="Allow Privilege Escalation"
-              />
-            </FormFieldRow>
-            <FormFieldRow label="Read-Only Root FS">
-              <FormTriStateBooleanDropdown
-                value={secCtx.readOnlyRootFilesystem}
-                onChange={(val) => updateSecCtx('readOnlyRootFilesystem', val)}
-                ariaLabel="Read-Only Root FS"
-              />
+              <FormFieldRow label="Allow Privilege Escalation" className="resource-form-field--inline">
+                <FormTriStateBooleanDropdown
+                  value={secCtx.allowPrivilegeEscalation}
+                  onChange={(val) => updateSecCtx('allowPrivilegeEscalation', val)}
+                  ariaLabel="Allow Privilege Escalation"
+                />
+              </FormFieldRow>
+              <FormFieldRow label="Read-Only Root FS" className="resource-form-field--inline">
+                <FormTriStateBooleanDropdown
+                  value={secCtx.readOnlyRootFilesystem}
+                  onChange={(val) => updateSecCtx('readOnlyRootFilesystem', val)}
+                  ariaLabel="Read-Only Root FS"
+                />
+              </FormFieldRow>
             </FormFieldRow>
             <FormFieldRow label="Add">
               <TagPickerInput
