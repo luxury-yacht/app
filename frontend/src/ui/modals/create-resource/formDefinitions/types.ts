@@ -36,7 +36,8 @@ export interface FormFieldDefinition {
     | 'command-input'
     | 'probe'
     | 'env-from'
-    | 'env-var';
+    | 'env-var'
+    | 'affinity';
   /** Placeholder text for text/number inputs. */
   placeholder?: string;
   /** Optional minimum value for number inputs. */

@@ -27,6 +27,8 @@ import { FormSectionCard } from './FormSectionCard';
 import { FormVolumeSourceField } from './FormVolumeSourceField';
 import { FormEnvFromField } from './FormEnvFromField';
 import { FormEnvVarField } from './FormEnvVarField';
+import { FormTriStateBooleanDropdown } from './FormTriStateBooleanDropdown';
+import { FormAffinityField } from './FormAffinityField';
 import {
   INPUT_BEHAVIOR_PROPS,
   getNestedValue,
@@ -1105,6 +1107,28 @@ function GroupListField({
           />
         );
       }
+      case 'tri-state-boolean':
+        return (
+          <FormTriStateBooleanDropdown
+            value={subValue}
+            onChange={(val) => {
+              if (val === undefined) {
+                // Unset → remove the key from the item.
+                const updatedItems = items.map((currentItem, i) => {
+                  if (i !== itemIndex) return currentItem;
+                  return unsetNestedValue(currentItem, subField.path);
+                });
+                updateItems(updatedItems);
+              } else {
+                handleSubFieldChange(itemIndex, subField, val);
+              }
+            }}
+            ariaLabel={subField.label}
+            emptyLabel={subField.emptyLabel}
+            trueLabel={subField.trueLabel}
+            falseLabel={subField.falseLabel}
+          />
+        );
       default:
         if (process.env.NODE_ENV !== 'production') {
           console.warn(
@@ -1399,6 +1423,48 @@ function FieldRenderer({
               if (updated !== null) onYamlChange(updated);
             } else {
               const updated = setFieldValue(yamlContent, field.path, arr);
+              if (updated !== null) onYamlChange(updated);
+            }
+          }}
+        />
+      );
+    }
+    case 'tri-state-boolean': {
+      const triValue = getFieldValue(yamlContent, field.path);
+      return (
+        <FormTriStateBooleanDropdown
+          value={triValue}
+          onChange={(val) => {
+            if (val === undefined) {
+              const updated = unsetFieldValue(yamlContent, field.path);
+              if (updated !== null) onYamlChange(updated);
+            } else {
+              const updated = setFieldValue(yamlContent, field.path, val);
+              if (updated !== null) onYamlChange(updated);
+            }
+          }}
+          ariaLabel={field.label}
+          emptyLabel={field.emptyLabel}
+          trueLabel={field.trueLabel}
+          falseLabel={field.falseLabel}
+        />
+      );
+    }
+    case 'affinity': {
+      const affinityValue = (getFieldValue(yamlContent, field.path) ?? {}) as Record<
+        string,
+        unknown
+      >;
+      return (
+        <FormAffinityField
+          dataFieldKey={field.key}
+          value={affinityValue}
+          onChange={(newValue) => {
+            if (Object.keys(newValue).length > 0) {
+              const updated = setFieldValue(yamlContent, field.path, newValue);
+              if (updated !== null) onYamlChange(updated);
+            } else {
+              const updated = unsetFieldValue(yamlContent, field.path);
               if (updated !== null) onYamlChange(updated);
             }
           }}

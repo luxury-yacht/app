@@ -212,6 +212,82 @@ describe('shared field coverage across pod-template definitions', () => {
       it('has serviceAccountName', () => {
         expect(findField(def, 'serviceAccountName')).toBeDefined();
       });
+
+      it('has container securityContext fields', () => {
+        const containers = findField(def, 'containers')!;
+        // Number fields.
+        const runAsUser = findSubField(containers, 'secRunAsUser');
+        expect(runAsUser).toBeDefined();
+        expect(runAsUser!.type).toBe('number');
+        expect(runAsUser!.path).toEqual(['securityContext', 'runAsUser']);
+        const runAsGroup = findSubField(containers, 'secRunAsGroup');
+        expect(runAsGroup).toBeDefined();
+        expect(runAsGroup!.type).toBe('number');
+        // Tri-state booleans.
+        const runAsNonRoot = findSubField(containers, 'secRunAsNonRoot');
+        expect(runAsNonRoot).toBeDefined();
+        expect(runAsNonRoot!.type).toBe('tri-state-boolean');
+        const privileged = findSubField(containers, 'secPrivileged');
+        expect(privileged).toBeDefined();
+        expect(privileged!.type).toBe('tri-state-boolean');
+        const allowPrivEsc = findSubField(containers, 'secAllowPrivEsc');
+        expect(allowPrivEsc).toBeDefined();
+        expect(allowPrivEsc!.type).toBe('tri-state-boolean');
+        const readOnlyRoot = findSubField(containers, 'secReadOnlyRoot');
+        expect(readOnlyRoot).toBeDefined();
+        expect(readOnlyRoot!.type).toBe('tri-state-boolean');
+        // String lists.
+        const capAdd = findSubField(containers, 'secCapAdd');
+        expect(capAdd).toBeDefined();
+        expect(capAdd!.type).toBe('string-list');
+        const capDrop = findSubField(containers, 'secCapDrop');
+        expect(capDrop).toBeDefined();
+        expect(capDrop!.type).toBe('string-list');
+      });
+
+      it('has initContainers securityContext fields', () => {
+        const initContainers = findField(def, 'initContainers')!;
+        expect(findSubField(initContainers, 'secRunAsUser')).toBeDefined();
+        expect(findSubField(initContainers, 'secRunAsNonRoot')).toBeDefined();
+        expect(findSubField(initContainers, 'secCapAdd')).toBeDefined();
+        expect(findSubField(initContainers, 'secCapDrop')).toBeDefined();
+      });
+
+      it('has pod securityContext fields in Advanced', () => {
+        const podRunAsUser = findField(def, 'podSecRunAsUser');
+        expect(podRunAsUser).toBeDefined();
+        expect(podRunAsUser!.type).toBe('number');
+        const podRunAsNonRoot = findField(def, 'podSecRunAsNonRoot');
+        expect(podRunAsNonRoot).toBeDefined();
+        expect(podRunAsNonRoot!.type).toBe('tri-state-boolean');
+        const fsGroup = findField(def, 'podSecFsGroup');
+        expect(fsGroup).toBeDefined();
+        expect(fsGroup!.type).toBe('number');
+      });
+
+      it('has tolerations field as group-list', () => {
+        const tolerations = findField(def, 'tolerations');
+        expect(tolerations).toBeDefined();
+        expect(tolerations!.type).toBe('group-list');
+        expect(tolerations!.fullWidth).toBe(true);
+        // Check sub-fields.
+        const key = findSubField(tolerations!, 'key');
+        expect(key).toBeDefined();
+        expect(key!.type).toBe('text');
+        const operator = findSubField(tolerations!, 'operator');
+        expect(operator).toBeDefined();
+        expect(operator!.type).toBe('select');
+        const effect = findSubField(tolerations!, 'effect');
+        expect(effect).toBeDefined();
+        expect(effect!.type).toBe('select');
+      });
+
+      it('has affinity field of type affinity', () => {
+        const affinity = findField(def, 'affinity');
+        expect(affinity).toBeDefined();
+        expect(affinity!.type).toBe('affinity');
+        expect(affinity!.fullWidth).toBe(true);
+      });
     });
   }
 });
