@@ -1194,33 +1194,22 @@ function GroupListField({
 
         return (
           <div className="tag-picker-capabilities">
-            <div className="tag-picker-capabilities-header">
-              <FormIconActionButton
-                variant="remove"
-                label="Remove security settings"
-                onClick={() => {
-                  const updatedItems = items.map((currentItem, i) => {
-                    if (i !== itemIndex) return currentItem;
-                    return unsetNestedValue(currentItem, subField.path);
-                  });
-                  updateItems(updatedItems);
-                }}
-              />
-            </div>
-            <FormFieldRow label="Run As User">
-              <input
-                className="resource-form-input"
-                type="number"
-                value={secCtx.runAsUser !== undefined ? String(secCtx.runAsUser) : ''}
-                placeholder="UID"
-                aria-label="Run As User"
-                style={{ width: '8ch', flex: '0 0 auto' }}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  updateSecCtx('runAsUser', v === '' ? undefined : Number(v));
-                }}
-                {...INPUT_BEHAVIOR_PROPS}
-              />
+            <div className="tag-picker-capabilities-first-row">
+              <FormFieldRow label="Run As User" className="resource-form-field--inline">
+                <input
+                  className="resource-form-input"
+                  type="number"
+                  value={secCtx.runAsUser !== undefined ? String(secCtx.runAsUser) : ''}
+                  placeholder="UID"
+                  aria-label="Run As User"
+                  style={{ width: '8ch', flex: '0 0 auto' }}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    updateSecCtx('runAsUser', v === '' ? undefined : Number(v));
+                  }}
+                  {...INPUT_BEHAVIOR_PROPS}
+                />
+              </FormFieldRow>
               <FormFieldRow label="Run As Group" className="resource-form-field--inline">
                 <input
                   className="resource-form-input"
@@ -1241,9 +1230,22 @@ function GroupListField({
                   value={secCtx.runAsNonRoot}
                   onChange={(val) => updateSecCtx('runAsNonRoot', val)}
                   ariaLabel="Run As Non-Root"
+                  style={{ flex: '0 0 auto' }}
                 />
               </FormFieldRow>
-            </FormFieldRow>
+              <FormIconActionButton
+                variant="remove"
+                label="Remove security settings"
+                className="tag-picker-capabilities-remove"
+                onClick={() => {
+                  const updatedItems = items.map((currentItem, i) => {
+                    if (i !== itemIndex) return currentItem;
+                    return unsetNestedValue(currentItem, subField.path);
+                  });
+                  updateItems(updatedItems);
+                }}
+              />
+            </div>
             <FormFieldRow label="Privileged">
               <FormTriStateBooleanDropdown
                 value={secCtx.privileged}

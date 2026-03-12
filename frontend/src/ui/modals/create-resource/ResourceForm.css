@@ -932,9 +932,14 @@
   gap: 0.5rem;
 }
 
-.tag-picker-capabilities-header {
+.tag-picker-capabilities-first-row {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tag-picker-capabilities-remove {
+  margin-left: auto;
 }
 
 /* Outer wrapper — positions the dropdown relative to the chip area. */
