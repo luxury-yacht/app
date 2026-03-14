@@ -142,11 +142,41 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
 
               <div className="about-description">
                 <p>Version {appInfo?.version || 'Loading...'}</p>
+                {/* Version status indicator */}
+                {appInfo?.update ? (
+                  appInfo.update.isUpdateAvailable ? (
+                    <p className="about-update-available">
+                      Update available:{' '}
+                      <a
+                        href={appInfo.update.releaseUrl}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          BrowserOpenURL(appInfo.update!.releaseUrl);
+                        }}
+                      >
+                        {appInfo.update.latestVersion}
+                      </a>
+                    </p>
+                  ) : !appInfo.update.error ? (
+                    <p className="about-up-to-date">Up to date</p>
+                  ) : null
+                ) : null}
                 {appInfo?.isBeta && appInfo?.expiryDate ? (
-                  <p style={{ color: 'var(--color-warning)', fontSize: '0.9em' }}>
+                  <p className="about-beta-expiry">
                     Beta expires: {new Date(appInfo.expiryDate).toLocaleDateString()}
                   </p>
                 ) : null}
+                <p>
+                  <a
+                    href="https://luxury-yacht.app"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      BrowserOpenURL('https://luxury-yacht.app');
+                    }}
+                  >
+                    luxury-yacht.app
+                  </a>
+                </p>
                 <p>
                   Built with{' '}
                   <a
