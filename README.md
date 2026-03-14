@@ -61,7 +61,7 @@ Luxury Yacht is built with [Wails](https://wails.io/), a framework for building 
 To install Wails:
 
 ```bash
- go install github.com/wailsapp/wails/v2/cmd/wails@2.11.0
+ go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
 ```
 
 Once Wails is installed, run `wails doctor` to see what other dependencies are required for your OS.
