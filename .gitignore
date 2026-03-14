@@ -59,6 +59,9 @@ Thumbs.db
 # Logs
 *.log
 
+# Storybook build output
+#storybook-static/
+
 # Temporary and cache files
 *.tmp
 *.temp

@@ -158,7 +158,9 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
                       </a>
                     </p>
                   ) : !appInfo.update.error ? (
-                    <p className="about-up-to-date">Up to date</p>
+                    <p className="about-up-to-date">
+                      <span className="about-up-to-date-icon">&#x2714;</span> Up to date
+                    </p>
                   ) : null
                 ) : null}
                 {appInfo?.isBeta && appInfo?.expiryDate ? (

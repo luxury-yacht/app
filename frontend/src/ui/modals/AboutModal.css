@@ -123,6 +123,10 @@
   font-size: 0.9em;
 }
 
+.about-up-to-date-icon {
+  margin-right: 0.25em;
+}
+
 .about-beta-expiry {
   color: var(--color-warning);
   font-size: 0.9em;

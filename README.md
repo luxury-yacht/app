@@ -98,6 +98,18 @@ mage dev
 
 Note that hot-reload of the Go backend will cause the app to restart, while changes to frontend code will be reflected immediately without an app restart.
 
+### Storybook
+
+[Storybook](https://storybook.js.org/) is available for developing and previewing UI components in isolation.
+
+> *NOTE*: you may need to run `nvm install` in the repo root to install the correct version of node from `.nvmrc`
+
+```bash
+mage storybook
+```
+
+This starts the Storybook dev server at [http://localhost:6006](http://localhost:6006).
+
 ### Build
 
 ```bash
