@@ -60,7 +60,7 @@ export const UpdateAvailable: Story = {
           update: new backend.UpdateInfo({
             currentVersion: '1.3.13',
             latestVersion: '2.0.0',
-            releaseUrl: 'https://github.com/mmobeus-dev/luxury-yacht-app/releases/tag/v2.0.0',
+            releaseUrl: 'https://github.com/luxury-yacht/app/releases/tag/v2.0.0',
             isUpdateAvailable: true,
           }),
         })
