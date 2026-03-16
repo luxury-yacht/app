@@ -9,8 +9,8 @@ require (
 	github.com/magefile/mage v1.15.0
 	github.com/stretchr/testify v1.11.1
 	github.com/wailsapp/wails/v2 v2.11.0
-	golang.org/x/sync v0.19.0
-	golang.org/x/text v0.34.0
+	golang.org/x/sync v0.20.0
+	golang.org/x/text v0.35.0
 	gopkg.in/yaml.v2 v2.4.0
 	helm.sh/helm/v3 v3.20.0
 	k8s.io/api v0.35.2
