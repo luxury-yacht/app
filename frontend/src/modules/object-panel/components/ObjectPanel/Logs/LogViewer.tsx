@@ -432,7 +432,8 @@ const LogViewer: React.FC<LogViewerProps> = ({
       } else if (autoRefresh) {
         await refreshOrchestrator.restartStreamingDomain(LOG_DOMAIN, logScope);
       } else {
-        await refreshOrchestrator.refreshStreamingDomainOnce(LOG_DOMAIN, logScope);
+        // Streaming domain is stopped when autoRefresh is off, so fetch directly.
+        await fetchLogs({ isManual: true });
       }
     } catch (refreshError) {
       console.error('Failed to refresh logs', refreshError);
