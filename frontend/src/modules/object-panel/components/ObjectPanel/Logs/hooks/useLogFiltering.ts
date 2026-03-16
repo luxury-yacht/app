@@ -136,6 +136,7 @@ export function useLogFiltering({
           _timestamp: entry.timestamp,
           _pod: isWorkload ? entry.pod : 'undefined',
           _container: entry.container,
+          _seq: entry._seq,
         });
       } catch {
         // Not JSON, ignore

@@ -12,6 +12,7 @@ export interface ParsedLogEntry {
   _timestamp?: string;
   _rawLine: string;
   _lineNumber: number;
+  _seq?: number;
 }
 
 export type CopyFeedback = 'idle' | 'copied' | 'error';

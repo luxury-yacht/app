@@ -84,6 +84,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const logsContentRef = useRef<HTMLDivElement>(null);
   const previousLogCountRef = useRef<number>(0);
   const filterInputRef = useRef<HTMLInputElement>(null);
+  const seqCounterRef = useRef(0);
 
   const resourceKindKey = resourceKind?.toLowerCase() ?? '';
   const isWorkload = resourceKindKey !== 'pod';
@@ -115,7 +116,37 @@ const LogViewer: React.FC<LogViewerProps> = ({
 
   const logSnapshot = useRefreshScopedDomain(LOG_DOMAIN, logScope ?? INACTIVE_SCOPE);
   const payloadEntries = logScope ? logSnapshot.data?.entries : undefined;
-  const logEntries: ObjectLogEntry[] = useMemo(() => payloadEntries ?? [], [payloadEntries]);
+  const rawLogEntries: ObjectLogEntry[] = useMemo(() => payloadEntries ?? [], [payloadEntries]);
+
+  // When autoScroll is off the user is reading in place. Buffer truncation
+  // in LogStreamManager removes entries from the front, which would shift
+  // the content and cause the viewport to jump. Prevent this by keeping a
+  // stable list that only grows (appends) while autoScroll is off.
+  const stableEntriesRef = useRef<ObjectLogEntry[]>([]);
+  const logEntries: ObjectLogEntry[] = useMemo(() => {
+    if (autoScroll) {
+      stableEntriesRef.current = rawLogEntries;
+      return rawLogEntries;
+    }
+
+    const stable = stableEntriesRef.current;
+    if (stable.length === 0 || rawLogEntries.length === 0) {
+      stableEntriesRef.current = rawLogEntries;
+      return rawLogEntries;
+    }
+
+    // Find entries newer than the last one in our stable list.
+    const lastStableSeq = stable[stable.length - 1]._seq ?? 0;
+    const newEntries = rawLogEntries.filter((e) => (e._seq ?? 0) > lastStableSeq);
+
+    if (newEntries.length === 0) {
+      return stable;
+    }
+
+    const merged = [...stable, ...newEntries];
+    stableEntriesRef.current = merged;
+    return merged;
+  }, [autoScroll, rawLogEntries]);
   const snapshotStatus = logScope ? logSnapshot.status : 'idle';
   const snapshotError = logScope ? logSnapshot.error : null;
   // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
@@ -244,6 +275,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
           container: entry.container ?? '',
           line: entry.line ?? '',
           isInit: Boolean(entry.isInit),
+          _seq: ++seqCounterRef.current,
         }));
 
         const generatedAt = Date.now();
@@ -676,6 +708,18 @@ const LogViewer: React.FC<LogViewerProps> = ({
     };
   }, [namespace, podName, isWorkload, resolvedClusterId]);
 
+  // When auto-refresh is re-enabled, the stream restarts with a fresh
+  // (smaller) batch. Reset the previous log count so the auto-scroll
+  // effect treats it as an initial load and scrolls to the bottom.
+  const prevAutoRefreshRef = useRef(autoRefresh);
+  useEffect(() => {
+    const wasOff = !prevAutoRefreshRef.current;
+    prevAutoRefreshRef.current = autoRefresh;
+    if (wasOff && autoRefresh && autoScroll) {
+      previousLogCountRef.current = 0;
+    }
+  }, [autoRefresh, autoScroll]);
+
   // Track previous view to detect view switches
   const previousIsParsedViewRef = useRef(isParsedView);
 
@@ -1101,7 +1145,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
             <GridTable
               data={parsedLogs}
               columns={tableColumns}
-              keyExtractor={(_item: ParsedLogEntry, index: number) => `log-${index}`}
+              keyExtractor={(item: ParsedLogEntry, index: number) => `log-${item._seq ?? index}`}
               className="parsed-logs-table"
               tableClassName="gridtable-parsed-logs"
               virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
@@ -1110,6 +1154,10 @@ const LogViewer: React.FC<LogViewerProps> = ({
             <div className={`pod-logs-text ${!wrapText ? 'no-wrap' : ''}`}>
               {displayLogs
                 ? displayLogs.split('\n').map((line, index) => {
+                    // Stable key: use _seq from the source entry so buffer
+                    // truncation doesn't shift every key and cause scroll jumps.
+                    const entryKey = filteredEntries[index]?._seq ?? index;
+
                     // For workload logs, apply color to pod name and timestamp
                     // Note: Lines only have pod info if backend successfully found pods for the workload
                     if (isWorkload && line.includes('[') && line.includes('/')) {
@@ -1126,7 +1174,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
                         const podColor = podColors[pod] || podColors['__fallback__'];
 
                         return (
-                          <div key={index} className="pod-log-line">
+                          <div key={entryKey} className="pod-log-line">
                             {timestamp && (
                               <span
                                 className="pod-log-metadata pod-color-text"
@@ -1167,7 +1215,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
                         const containerLabel = containerMatch ? containerMatch[1] : '';
                         const remainder = containerMatch ? containerMatch[2] : workingLine;
                         return (
-                          <div key={index} className="pod-log-line">
+                          <div key={entryKey} className="pod-log-line">
                             {timestampPrefix && (
                               <span className="pod-log-metadata">{timestampPrefix}</span>
                             )}
@@ -1181,7 +1229,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
                     }
 
                     return (
-                      <div key={index} className="pod-log-line">
+                      <div key={entryKey} className="pod-log-line">
                         {line || '\u00A0'}
                       </div>
                     );

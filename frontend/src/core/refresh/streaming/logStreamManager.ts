@@ -207,6 +207,8 @@ export class LogStreamManager {
   private connections = new Map<string, LogStreamConnection>();
   private buffers = new Map<string, ObjectLogEntry[]>();
   private bufferMeta = new Map<string, { total: number; truncated: boolean }>();
+  /** Monotonically increasing counter for stable entry keys across buffer truncations. */
+  private seqCounter = 0;
   private lastNotifiedErrors = new Map<string, string>();
   private suspendedForVisibility = false;
   private suspendedScopes = new Set<string>();
@@ -310,6 +312,7 @@ export class LogStreamManager {
       container: entry.container ?? '',
       line: entry.line ?? '',
       isInit: Boolean(entry.isInit),
+      _seq: ++this.seqCounter,
     }));
 
     const previousMeta = this.bufferMeta.get(scope);
