@@ -10,6 +10,7 @@ import '@styles/index.css';
 import './App.css';
 import { errorHandler } from '@utils/errorHandler';
 import { KeyboardProvider, GlobalShortcuts } from '@ui/shortcuts';
+import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
 import {
   refreshOrchestrator,
   initializeAutoRefresh,
@@ -251,6 +252,7 @@ function AppContent() {
         isObjectPanelOpen={viewState.showObjectPanel}
         isSettingsOpen={viewState.isSettingsOpen}
       />
+      <TextContextMenu />
       <AppLayout />
     </>
   );

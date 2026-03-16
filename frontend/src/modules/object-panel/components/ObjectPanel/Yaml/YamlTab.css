@@ -169,3 +169,13 @@
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
 }
+
+/* Allow text selection in the CodeMirror editor (overrides the global
+   user-select:none on .app). In edit mode contenteditable already
+   enables selection; this rule covers read-only mode. */
+.codemirror-shell .cm-editor .cm-content {
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
