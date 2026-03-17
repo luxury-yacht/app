@@ -273,7 +273,8 @@ export const hydrateAppPreferences = async (options?: {
       backendSettings?.defaultObjectPanelPosition
     ),
     objectPanelDockedRightWidth:
-      backendSettings?.objectPanelDockedRightWidth ?? DEFAULT_PREFERENCES.objectPanelDockedRightWidth,
+      backendSettings?.objectPanelDockedRightWidth ??
+      DEFAULT_PREFERENCES.objectPanelDockedRightWidth,
     objectPanelDockedBottomHeight:
       backendSettings?.objectPanelDockedBottomHeight ??
       DEFAULT_PREFERENCES.objectPanelDockedBottomHeight,

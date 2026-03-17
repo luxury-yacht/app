@@ -28,7 +28,12 @@ import { DockablePanelHeader } from './DockablePanelHeader';
 import { useDockablePanelDragResize } from './useDockablePanelDragResize';
 import { useDockablePanelMaximize } from './useDockablePanelMaximize';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
-import { PANEL_DEFAULTS, getPanelSizeConstraints, getContentBounds, LAYOUT } from './dockablePanelLayout';
+import {
+  PANEL_DEFAULTS,
+  getPanelSizeConstraints,
+  getContentBounds,
+  LAYOUT,
+} from './dockablePanelLayout';
 import { getGroupForPanel, getGroupTabs } from './tabGroupState';
 import type { PanelSizeConstraints } from './dockablePanelLayout';
 import type { TabInfo } from './DockableTabBar';

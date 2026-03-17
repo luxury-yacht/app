@@ -146,7 +146,15 @@ export function useLogStreamFallback({
         preserveState: true,
       });
     };
-  }, [autoRefresh, dispatch, fallbackActive, fallbackRecoveringRef, isActive, logScope, showPreviousLogs]);
+  }, [
+    autoRefresh,
+    dispatch,
+    fallbackActive,
+    fallbackRecoveringRef,
+    isActive,
+    logScope,
+    showPreviousLogs,
+  ]);
 
   // --- Reset primed ref when fallback or previous-logs mode changes ---
   useEffect(() => {

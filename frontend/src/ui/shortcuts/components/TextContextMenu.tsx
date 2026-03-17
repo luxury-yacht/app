@@ -19,7 +19,13 @@ interface TextContextMenuState {
 
 /** Input types that represent textual content (not buttons, checkboxes, etc.). */
 const TEXTUAL_INPUT_TYPES = new Set([
-  'text', 'search', 'url', 'email', 'password', 'tel', 'number',
+  'text',
+  'search',
+  'url',
+  'email',
+  'password',
+  'tel',
+  'number',
 ]);
 
 function isTextualInput(el: HTMLInputElement): boolean {
@@ -123,10 +129,7 @@ const TextContextMenu: React.FC = () => {
         label: 'Select All',
         onClick: () => {
           const el = targetRef.current;
-          if (
-            el instanceof HTMLInputElement ||
-            el instanceof HTMLTextAreaElement
-          ) {
+          if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
             el.focus();
             el.select();
           } else {
@@ -144,13 +147,7 @@ const TextContextMenu: React.FC = () => {
 
   if (!menu) return null;
 
-  return (
-    <ContextMenu
-      items={menu.items}
-      position={menu.position}
-      onClose={handleClose}
-    />
-  );
+  return <ContextMenu items={menu.items} position={menu.position} onClose={handleClose} />;
 };
 
 function focusTarget(target: Element | null): void {

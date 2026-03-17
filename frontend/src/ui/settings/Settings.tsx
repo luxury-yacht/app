@@ -1496,7 +1496,9 @@ function Settings({ onClose }: SettingsProps) {
               type="number"
               min={0}
               max={9999}
-              className={panelLayoutWarning?.fields.has('dockedBottomHeight') ? 'opd-input-warn' : ''}
+              className={
+                panelLayoutWarning?.fields.has('dockedBottomHeight') ? 'opd-input-warn' : ''
+              }
               value={panelLayoutInputs.dockedBottomHeight}
               onChange={(e) => handlePanelLayoutInput('dockedBottomHeight', e.target.value)}
               onBlur={() => handlePanelLayoutBlur('dockedBottomHeight')}
