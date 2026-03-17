@@ -34,7 +34,14 @@ type settingsPreferences struct {
 	Theme                    string           `json:"theme"`
 	UseShortResourceNames    bool             `json:"useShortResourceNames"`
 	Refresh                  *settingsRefresh `json:"refresh"`
-	GridTablePersistenceMode string           `json:"gridTablePersistenceMode"`
+	GridTablePersistenceMode       string           `json:"gridTablePersistenceMode"`
+	DefaultObjectPanelPosition     string           `json:"defaultObjectPanelPosition"`
+	ObjectPanelDockedRightWidth    int              `json:"objectPanelDockedRightWidth"`
+	ObjectPanelDockedBottomHeight  int              `json:"objectPanelDockedBottomHeight"`
+	ObjectPanelFloatingWidth       int              `json:"objectPanelFloatingWidth"`
+	ObjectPanelFloatingHeight      int              `json:"objectPanelFloatingHeight"`
+	ObjectPanelFloatingX           int              `json:"objectPanelFloatingX"`
+	ObjectPanelFloatingY           int              `json:"objectPanelFloatingY"`
 
 	// Migration: old single-value palette fields, read-only, omitted when zero.
 	PaletteHue        int `json:"paletteHue,omitempty"`
@@ -86,7 +93,14 @@ func defaultSettingsFile() *settingsFile {
 		Preferences: settingsPreferences{
 			Theme:                    "system",
 			Refresh:                  &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
-			GridTablePersistenceMode: "shared",
+			GridTablePersistenceMode:    "shared",
+			DefaultObjectPanelPosition:    "right",
+			ObjectPanelDockedRightWidth:   400,
+			ObjectPanelDockedBottomHeight: 300,
+			ObjectPanelFloatingWidth:      600,
+			ObjectPanelFloatingHeight:     400,
+			ObjectPanelFloatingX:          100,
+			ObjectPanelFloatingY:          100,
 		},
 		Kubeconfig: settingsKubeconfig{
 			SearchPaths: defaultKubeconfigSearchPaths(),
@@ -113,6 +127,27 @@ func normalizeSettingsFile(settings *settingsFile) *settingsFile {
 	}
 	if settings.Preferences.GridTablePersistenceMode == "" {
 		settings.Preferences.GridTablePersistenceMode = "shared"
+	}
+	if settings.Preferences.DefaultObjectPanelPosition == "" {
+		settings.Preferences.DefaultObjectPanelPosition = "right"
+	}
+	if settings.Preferences.ObjectPanelDockedRightWidth <= 0 {
+		settings.Preferences.ObjectPanelDockedRightWidth = 400
+	}
+	if settings.Preferences.ObjectPanelDockedBottomHeight <= 0 {
+		settings.Preferences.ObjectPanelDockedBottomHeight = 300
+	}
+	if settings.Preferences.ObjectPanelFloatingWidth <= 0 {
+		settings.Preferences.ObjectPanelFloatingWidth = 600
+	}
+	if settings.Preferences.ObjectPanelFloatingHeight <= 0 {
+		settings.Preferences.ObjectPanelFloatingHeight = 400
+	}
+	if settings.Preferences.ObjectPanelFloatingX < 0 {
+		settings.Preferences.ObjectPanelFloatingX = 100
+	}
+	if settings.Preferences.ObjectPanelFloatingY < 0 {
+		settings.Preferences.ObjectPanelFloatingY = 100
 	}
 	if settings.Kubeconfig.SearchPaths == nil {
 		settings.Kubeconfig.SearchPaths = defaultKubeconfigSearchPaths()
@@ -282,6 +317,13 @@ func getDefaultAppSettings() *AppSettings {
 		RefreshBackgroundClustersEnabled: true,
 		MetricsRefreshIntervalMs:         defaultMetricsIntervalMs(),
 		GridTablePersistenceMode:         "shared",
+		DefaultObjectPanelPosition:       "right",
+		ObjectPanelDockedRightWidth:      400,
+		ObjectPanelDockedBottomHeight:    300,
+		ObjectPanelFloatingWidth:         600,
+		ObjectPanelFloatingHeight:        400,
+		ObjectPanelFloatingX:             100,
+		ObjectPanelFloatingY:             100,
 	}
 }
 
@@ -299,6 +341,13 @@ func (a *App) loadAppSettings() error {
 		RefreshBackgroundClustersEnabled: settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:         settings.Preferences.Refresh.MetricsIntervalMs,
 		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
+		DefaultObjectPanelPosition:       settings.Preferences.DefaultObjectPanelPosition,
+		ObjectPanelDockedRightWidth:      settings.Preferences.ObjectPanelDockedRightWidth,
+		ObjectPanelDockedBottomHeight:    settings.Preferences.ObjectPanelDockedBottomHeight,
+		ObjectPanelFloatingWidth:         settings.Preferences.ObjectPanelFloatingWidth,
+		ObjectPanelFloatingHeight:        settings.Preferences.ObjectPanelFloatingHeight,
+		ObjectPanelFloatingX:             settings.Preferences.ObjectPanelFloatingX,
+		ObjectPanelFloatingY:             settings.Preferences.ObjectPanelFloatingY,
 		PaletteHueLight:                  settings.Preferences.PaletteHueLight,
 		PaletteSaturationLight:           settings.Preferences.PaletteSaturationLight,
 		PaletteBrightnessLight:           settings.Preferences.PaletteBrightnessLight,
@@ -333,6 +382,13 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
 	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
+	settings.Preferences.DefaultObjectPanelPosition = a.appSettings.DefaultObjectPanelPosition
+	settings.Preferences.ObjectPanelDockedRightWidth = a.appSettings.ObjectPanelDockedRightWidth
+	settings.Preferences.ObjectPanelDockedBottomHeight = a.appSettings.ObjectPanelDockedBottomHeight
+	settings.Preferences.ObjectPanelFloatingWidth = a.appSettings.ObjectPanelFloatingWidth
+	settings.Preferences.ObjectPanelFloatingHeight = a.appSettings.ObjectPanelFloatingHeight
+	settings.Preferences.ObjectPanelFloatingX = a.appSettings.ObjectPanelFloatingX
+	settings.Preferences.ObjectPanelFloatingY = a.appSettings.ObjectPanelFloatingY
 	// Write per-theme palette fields; leave old fields zeroed so omitempty drops them.
 	settings.Preferences.PaletteHueLight = a.appSettings.PaletteHueLight
 	settings.Preferences.PaletteSaturationLight = a.appSettings.PaletteSaturationLight
@@ -498,6 +554,66 @@ func (a *App) SetGridTablePersistenceMode(mode string) error {
 
 	a.logger.Info(fmt.Sprintf("Grid table persistence mode changed to: %s", mode), "Settings")
 	a.appSettings.GridTablePersistenceMode = mode
+	return a.saveAppSettings()
+}
+
+// SetDefaultObjectPanelPosition persists the default object panel position.
+func (a *App) SetDefaultObjectPanelPosition(position string) error {
+	if position != "right" && position != "bottom" && position != "floating" {
+		return fmt.Errorf("invalid default object panel position: %s", position)
+	}
+
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(fmt.Sprintf("Default object panel position changed to: %s", position), "Settings")
+	a.appSettings.DefaultObjectPanelPosition = position
+	return a.saveAppSettings()
+}
+
+// SetObjectPanelLayout persists the default object panel dimensions and floating position.
+func (a *App) SetObjectPanelLayout(dockedRightWidth, dockedBottomHeight, floatingWidth, floatingHeight, floatingX, floatingY int) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	// Clamp dimensions to reasonable minimums
+	if dockedRightWidth < 200 {
+		dockedRightWidth = 200
+	}
+	if dockedBottomHeight < 150 {
+		dockedBottomHeight = 150
+	}
+	if floatingWidth < 300 {
+		floatingWidth = 300
+	}
+	if floatingHeight < 200 {
+		floatingHeight = 200
+	}
+	if floatingX < 0 {
+		floatingX = 0
+	}
+	if floatingY < 0 {
+		floatingY = 0
+	}
+
+	a.appSettings.ObjectPanelDockedRightWidth = dockedRightWidth
+	a.appSettings.ObjectPanelDockedBottomHeight = dockedBottomHeight
+	a.appSettings.ObjectPanelFloatingWidth = floatingWidth
+	a.appSettings.ObjectPanelFloatingHeight = floatingHeight
+	a.appSettings.ObjectPanelFloatingX = floatingX
+	a.appSettings.ObjectPanelFloatingY = floatingY
 	return a.saveAppSettings()
 }
 

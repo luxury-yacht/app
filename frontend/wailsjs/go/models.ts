@@ -511,6 +511,13 @@ export namespace types {
 	    refreshBackgroundClustersEnabled: boolean;
 	    metricsRefreshIntervalMs: number;
 	    gridTablePersistenceMode: string;
+	    defaultObjectPanelPosition: string;
+	    objectPanelDockedRightWidth: number;
+	    objectPanelDockedBottomHeight: number;
+	    objectPanelFloatingWidth: number;
+	    objectPanelFloatingHeight: number;
+	    objectPanelFloatingX: number;
+	    objectPanelFloatingY: number;
 	    paletteHueLight: number;
 	    paletteSaturationLight: number;
 	    paletteBrightnessLight: number;
@@ -536,6 +543,13 @@ export namespace types {
 	        this.refreshBackgroundClustersEnabled = source["refreshBackgroundClustersEnabled"];
 	        this.metricsRefreshIntervalMs = source["metricsRefreshIntervalMs"];
 	        this.gridTablePersistenceMode = source["gridTablePersistenceMode"];
+	        this.defaultObjectPanelPosition = source["defaultObjectPanelPosition"];
+	        this.objectPanelDockedRightWidth = source["objectPanelDockedRightWidth"];
+	        this.objectPanelDockedBottomHeight = source["objectPanelDockedBottomHeight"];
+	        this.objectPanelFloatingWidth = source["objectPanelFloatingWidth"];
+	        this.objectPanelFloatingHeight = source["objectPanelFloatingHeight"];
+	        this.objectPanelFloatingX = source["objectPanelFloatingX"];
+	        this.objectPanelFloatingY = source["objectPanelFloatingY"];
 	        this.paletteHueLight = source["paletteHueLight"];
 	        this.paletteSaturationLight = source["paletteSaturationLight"];
 	        this.paletteBrightnessLight = source["paletteBrightnessLight"];

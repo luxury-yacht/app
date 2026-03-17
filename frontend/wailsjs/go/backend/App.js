@@ -422,6 +422,10 @@ export function SetClusterTabOrder(arg1) {
   return window['go']['backend']['App']['SetClusterTabOrder'](arg1);
 }
 
+export function SetDefaultObjectPanelPosition(arg1) {
+  return window['go']['backend']['App']['SetDefaultObjectPanelPosition'](arg1);
+}
+
 export function SetGridTablePersistence(arg1, arg2) {
   return window['go']['backend']['App']['SetGridTablePersistence'](arg1, arg2);
 }
@@ -444,6 +448,10 @@ export function SetLinkColor(arg1, arg2) {
 
 export function SetLogsPanelVisible(arg1) {
   return window['go']['backend']['App']['SetLogsPanelVisible'](arg1);
+}
+
+export function SetObjectPanelLayout(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['backend']['App']['SetObjectPanelLayout'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function SetPaletteTint(arg1, arg2, arg3, arg4) {

@@ -12,6 +12,7 @@ import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPan
 import { types } from '@wailsjs/go/models';
 import { TriggerCronJob, SuspendCronJob } from '@wailsjs/go/backend/App';
 import { DockablePanel, useDockablePanelContext } from '@ui/dockable';
+import { getDefaultObjectPanelPosition } from '@core/settings/appPreferences';
 import { errorHandler } from '@utils/errorHandler';
 import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
@@ -183,7 +184,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   const objectData = objectRef;
   const { closePanel } = useObjectPanelState();
   const { tabGroups, getPreferredOpenGroupKey } = useDockablePanelContext();
-  const openTargetGroupKey = getPreferredOpenGroupKey('right');
+  const openTargetGroupKey = getPreferredOpenGroupKey(getDefaultObjectPanelPosition());
   const openTargetPosition: DockPosition =
     openTargetGroupKey === 'right' || openTargetGroupKey === 'bottom'
       ? openTargetGroupKey

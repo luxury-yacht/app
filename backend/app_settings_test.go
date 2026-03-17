@@ -89,6 +89,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 		RefreshBackgroundClustersEnabled: false,
 		MetricsRefreshIntervalMs:         7000,
 		GridTablePersistenceMode:         "namespaced",
+		DefaultObjectPanelPosition:       "floating",
 		PaletteHueLight:                  200,
 		PaletteSaturationLight:           60,
 		PaletteBrightnessLight:           -20,
@@ -110,6 +111,7 @@ func TestAppSaveAndLoadAppSettingsRoundTrip(t *testing.T) {
 	require.False(t, app.appSettings.RefreshBackgroundClustersEnabled)
 	require.Equal(t, 7000, app.appSettings.MetricsRefreshIntervalMs)
 	require.Equal(t, "namespaced", app.appSettings.GridTablePersistenceMode)
+	require.Equal(t, "floating", app.appSettings.DefaultObjectPanelPosition)
 	require.Equal(t, 200, app.appSettings.PaletteHueLight)
 	require.Equal(t, 60, app.appSettings.PaletteSaturationLight)
 	require.Equal(t, -20, app.appSettings.PaletteBrightnessLight)
@@ -228,6 +230,32 @@ func TestAppSetGridTablePersistenceModeRejectsInvalidValues(t *testing.T) {
 	require.Contains(t, err.Error(), "invalid grid table persistence mode")
 }
 
+func TestAppSetDefaultObjectPanelPositionPersists(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	require.NoError(t, app.SetDefaultObjectPanelPosition("bottom"))
+	require.Equal(t, "bottom", app.appSettings.DefaultObjectPanelPosition)
+
+	app.appSettings = nil
+	require.NoError(t, app.loadAppSettings())
+	require.Equal(t, "bottom", app.appSettings.DefaultObjectPanelPosition)
+
+	entries := app.logger.GetEntries()
+	require.NotEmpty(t, entries)
+	last := entries[len(entries)-1]
+	require.Contains(t, last.Message, "Default object panel position changed to: bottom")
+}
+
+func TestAppSetDefaultObjectPanelPositionRejectsInvalidValues(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	err := app.SetDefaultObjectPanelPosition("invalid")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid default object panel position")
+}
+
 func TestAppGetThemeInfoReflectsCurrentSettings(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
@@ -283,6 +311,7 @@ func TestLoadSettingsFileNormalizesDefaults(t *testing.T) {
 	require.True(t, settings.Preferences.Refresh.Auto)
 	require.True(t, settings.Preferences.Refresh.Background)
 	require.Equal(t, "shared", settings.Preferences.GridTablePersistenceMode)
+	require.Equal(t, "right", settings.Preferences.DefaultObjectPanelPosition)
 	require.Equal(t, defaultKubeconfigSearchPaths(), settings.Kubeconfig.SearchPaths)
 }
 

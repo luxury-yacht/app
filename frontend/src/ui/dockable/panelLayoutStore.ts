@@ -5,6 +5,7 @@
  */
 
 import { getContentBounds } from './dockablePanelLayout';
+import { getObjectPanelLayoutDefaults } from '@core/settings/appPreferences';
 
 export type DockPosition = 'right' | 'bottom' | 'floating';
 
@@ -42,6 +43,8 @@ export interface PanelLayoutStore {
   ) => void;
   getAllPanelStates: () => Record<string, PanelLayoutState>;
   restorePanelStates: (states: Record<string, PanelLayoutState>) => void;
+  /** Apply updated layout defaults to all open object panels. */
+  applyObjectPanelLayoutDefaults: () => void;
 }
 
 /**
@@ -70,18 +73,32 @@ export function createPanelLayoutStore(): PanelLayoutStore {
 
   const getInitialState = (panelId: string): PanelLayoutState => {
     if (!panelStates.has(panelId)) {
-      const defaultFloatingWidth = 600;
-      const defaultFloatingHeight = 400;
-      const content = getContentBounds();
-      const centerX = Math.max(100, (content.width - defaultFloatingWidth) / 2);
-      const centerY = Math.max(100, (content.height - defaultFloatingHeight) / 2);
+      // Object panels (prefixed "obj:") use user-configured defaults.
+      const isObjectPanel = panelId.startsWith('obj:');
+      const layout = isObjectPanel ? getObjectPanelLayoutDefaults() : null;
+
+      const defaultFloatingWidth = layout?.floatingWidth ?? 600;
+      const defaultFloatingHeight = layout?.floatingHeight ?? 400;
+      const defaultRightWidth = layout?.dockedRightWidth ?? 400;
+      const defaultBottomHeight = layout?.dockedBottomHeight ?? 300;
+
+      let floatX: number;
+      let floatY: number;
+      if (layout) {
+        floatX = layout.floatingX;
+        floatY = layout.floatingY;
+      } else {
+        const content = getContentBounds();
+        floatX = Math.max(100, (content.width - defaultFloatingWidth) / 2);
+        floatY = Math.max(100, (content.height - defaultFloatingHeight) / 2);
+      }
 
       panelStates.set(panelId, {
         position: 'right',
         floatingSize: { width: defaultFloatingWidth, height: defaultFloatingHeight },
-        rightSize: { width: 400, height: 300 },
-        bottomSize: { width: 400, height: 300 },
-        floatingPosition: { x: centerX, y: centerY },
+        rightSize: { width: defaultRightWidth, height: 300 },
+        bottomSize: { width: 400, height: defaultBottomHeight },
+        floatingPosition: { x: floatX, y: floatY },
         isOpen: false,
         isInitialized: false,
         zIndex: zIndexCounter++,
@@ -192,6 +209,18 @@ export function createPanelLayoutStore(): PanelLayoutStore {
       Object.entries(states).forEach(([panelId, state]) => {
         panelStates.set(panelId, { ...state });
         notifyListeners(panelId);
+      });
+    },
+    applyObjectPanelLayoutDefaults: () => {
+      const layout = getObjectPanelLayoutDefaults();
+      panelStates.forEach((state, panelId) => {
+        if (!panelId.startsWith('obj:')) return;
+        updateState(panelId, {
+          rightSize: { width: layout.dockedRightWidth, height: state.rightSize.height },
+          bottomSize: { width: state.bottomSize.width, height: layout.dockedBottomHeight },
+          floatingSize: { width: layout.floatingWidth, height: layout.floatingHeight },
+          floatingPosition: { x: layout.floatingX, y: layout.floatingY },
+        });
       });
     },
   };

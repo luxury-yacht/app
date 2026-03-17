@@ -216,6 +216,8 @@ export function SetBackgroundRefreshEnabled(arg1:boolean):Promise<void>;
 
 export function SetClusterTabOrder(arg1:Array<string>):Promise<void>;
 
+export function SetDefaultObjectPanelPosition(arg1:string):Promise<void>;
+
 export function SetGridTablePersistence(arg1:string,arg2:json.RawMessage):Promise<void>;
 
 export function SetGridTablePersistenceMode(arg1:string):Promise<void>;
@@ -227,6 +229,8 @@ export function SetKubeconfigSearchPaths(arg1:Array<string>):Promise<void>;
 export function SetLinkColor(arg1:string,arg2:string):Promise<void>;
 
 export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
+
+export function SetObjectPanelLayout(arg1:number,arg2:number,arg3:number,arg4:number,arg5:number,arg6:number):Promise<void>;
 
 export function SetPaletteTint(arg1:string,arg2:number,arg3:number,arg4:number):Promise<void>;
 

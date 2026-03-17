@@ -81,6 +81,46 @@
   margin: 0;
 }
 
+.setting-item-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.setting-item-inline input[type="number"] {
+  width: 9ch;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* Object Panel Defaults — fixed-width labels for column alignment */
+.object-panel-defaults .opd-row-label {
+  display: inline-block;
+  width: 5em;
+  flex-shrink: 0;
+}
+
+.object-panel-defaults .opd-field-label {
+  display: inline-block;
+  width: 4em;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+[data-theme="dark"] .setting-item-inline input[type="number"] {
+  color-scheme: dark;
+}
+
+.setting-item-inline input[type="number"]::-webkit-inner-spin-button,
+.setting-item-inline input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: auto;
+  appearance: auto;
+  opacity: 1;
+}
+
 /* Palette Tint Controls — 4-column grid: label | control | value | reset */
 .palette-tint-controls {
   display: grid;

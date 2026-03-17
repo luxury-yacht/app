@@ -53,6 +53,17 @@ import {
   setGridTablePersistenceMode,
   type GridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
+import {
+  getDefaultObjectPanelPosition,
+  setDefaultObjectPanelPosition,
+  getObjectPanelLayoutDefaults,
+  setObjectPanelLayoutDefaults,
+  type ObjectPanelPosition,
+  type ObjectPanelLayoutDefaults,
+} from '@core/settings/appPreferences';
+import { getActivePanelLayoutStore } from '@ui/dockable/panelLayoutStore';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -60,6 +71,12 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 interface SettingsProps {
   onClose?: () => void;
 }
+
+const objectPanelPositionOptions: DropdownOption[] = [
+  { value: 'right', label: 'Docked Right' },
+  { value: 'bottom', label: 'Docked Bottom' },
+  { value: 'floating', label: 'Floating' },
+];
 
 function Settings({ onClose }: SettingsProps) {
   const [themeInfo, setThemeInfo] = useState<types.ThemeInfo | null>(null);
@@ -70,6 +87,12 @@ function Settings({ onClose }: SettingsProps) {
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
+  );
+  const [objectPanelPosition, setObjectPanelPositionState] = useState<ObjectPanelPosition>(() =>
+    getDefaultObjectPanelPosition()
+  );
+  const [panelLayout, setPanelLayout] = useState<ObjectPanelLayoutDefaults>(() =>
+    getObjectPanelLayoutDefaults()
   );
   // Track kubeconfig search paths for the settings panel.
   const [kubeconfigPaths, setKubeconfigPaths] = useState<string[]>([]);
@@ -138,6 +161,17 @@ function Settings({ onClose }: SettingsProps) {
     loadAppSettings();
     loadKubeconfigPaths();
     setPersistenceMode(getGridTablePersistenceMode());
+    setObjectPanelPositionState(getDefaultObjectPanelPosition());
+    const loadedLayout = getObjectPanelLayoutDefaults();
+    setPanelLayout(loadedLayout);
+    setPanelLayoutInputs({
+      dockedRightWidth: String(loadedLayout.dockedRightWidth),
+      dockedBottomHeight: String(loadedLayout.dockedBottomHeight),
+      floatingWidth: String(loadedLayout.floatingWidth),
+      floatingHeight: String(loadedLayout.floatingHeight),
+      floatingX: String(loadedLayout.floatingX),
+      floatingY: String(loadedLayout.floatingY),
+    });
 
     // Initialize system theme listener using shared utility
     const themeCleanup = initSystemThemeListener();
@@ -247,6 +281,44 @@ function Settings({ onClose }: SettingsProps) {
     const mode: GridTablePersistenceMode = checked ? 'namespaced' : 'shared';
     setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
+  };
+
+  const handleObjectPanelPositionChange = (position: ObjectPanelPosition) => {
+    setObjectPanelPositionState(position);
+    setDefaultObjectPanelPosition(position);
+  };
+
+  // Track raw input strings so users can freely backspace/clear without
+  // the value snapping back to 0 on every keystroke.
+  const [panelLayoutInputs, setPanelLayoutInputs] = useState<
+    Record<keyof ObjectPanelLayoutDefaults, string>
+  >(() => {
+    const defaults = getObjectPanelLayoutDefaults();
+    return {
+      dockedRightWidth: String(defaults.dockedRightWidth),
+      dockedBottomHeight: String(defaults.dockedBottomHeight),
+      floatingWidth: String(defaults.floatingWidth),
+      floatingHeight: String(defaults.floatingHeight),
+      floatingX: String(defaults.floatingX),
+      floatingY: String(defaults.floatingY),
+    };
+  });
+
+  const handlePanelLayoutInput = (field: keyof ObjectPanelLayoutDefaults, raw: string) => {
+    setPanelLayoutInputs((prev) => ({ ...prev, [field]: raw }));
+    const parsed = parseInt(raw, 10);
+    if (!Number.isNaN(parsed)) {
+      const clamped = Math.max(0, Math.min(9999, parsed));
+      const updated = { ...panelLayout, [field]: clamped };
+      setPanelLayout(updated);
+      setObjectPanelLayoutDefaults(updated);
+      getActivePanelLayoutStore().applyObjectPanelLayoutDefaults();
+    }
+  };
+
+  const handlePanelLayoutBlur = (field: keyof ObjectPanelLayoutDefaults) => {
+    // On blur, normalize the display to the current numeric value.
+    setPanelLayoutInputs((prev) => ({ ...prev, [field]: String(panelLayout[field]) }));
   };
 
   // Debounced persistence for palette tint — avoids hammering the backend during fast drags.
@@ -1351,6 +1423,103 @@ function Settings({ onClose }: SettingsProps) {
               />
               Use short resource names (e.g., "sts" for StatefulSets)
             </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>Object Panel Defaults</h3>
+        <div className="settings-items object-panel-defaults">
+          <div className="setting-item setting-item-inline">
+            <span className="opd-row-label">Position</span>
+            <Dropdown
+              options={objectPanelPositionOptions}
+              value={objectPanelPosition}
+              onChange={(val) => handleObjectPanelPositionChange(val as ObjectPanelPosition)}
+              variant="outlined"
+              ariaLabel="Default Object Panel position"
+            />
+          </div>
+          <div className="setting-item setting-item-inline">
+            <span className="opd-row-label">Docked</span>
+            <span className="opd-field-label">Width</span>
+            <input
+              id="panel-docked-right-width"
+              type="number"
+              min={0}
+              max={9999}
+              value={panelLayoutInputs.dockedRightWidth}
+              onChange={(e) => handlePanelLayoutInput('dockedRightWidth', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('dockedRightWidth')}
+              aria-label="Docked right width"
+            />
+            <span>px</span>
+            <span className="opd-field-label">Height</span>
+            <input
+              id="panel-docked-bottom-height"
+              type="number"
+              min={0}
+              max={9999}
+              value={panelLayoutInputs.dockedBottomHeight}
+              onChange={(e) => handlePanelLayoutInput('dockedBottomHeight', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('dockedBottomHeight')}
+              aria-label="Docked bottom height"
+            />
+            <span>px</span>
+          </div>
+          <div className="setting-item setting-item-inline">
+            <span className="opd-row-label">Floating</span>
+            <span className="opd-field-label">Width</span>
+            <input
+              id="panel-floating-width"
+              type="number"
+              min={0}
+              max={9999}
+              value={panelLayoutInputs.floatingWidth}
+              onChange={(e) => handlePanelLayoutInput('floatingWidth', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('floatingWidth')}
+              aria-label="Floating width"
+            />
+            <span>px</span>
+            <span className="opd-field-label">Height</span>
+            <input
+              id="panel-floating-height"
+              type="number"
+              min={0}
+              max={9999}
+              value={panelLayoutInputs.floatingHeight}
+              onChange={(e) => handlePanelLayoutInput('floatingHeight', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('floatingHeight')}
+              aria-label="Floating height"
+            />
+            <span>px</span>
+          </div>
+          <div className="setting-item setting-item-inline">
+            <span className="opd-row-label"></span>
+            <span className="opd-field-label">Top</span>
+            <input
+              id="panel-floating-y"
+              type="number"
+              min={0}
+              max={9999}
+              value={panelLayoutInputs.floatingY}
+              onChange={(e) => handlePanelLayoutInput('floatingY', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('floatingY')}
+              aria-label="Floating top position"
+            />
+            <span>px</span>
+            <span className="opd-field-label">Left</span>
+            <input
+              id="panel-floating-x"
+              type="number"
+              min={0}
+              max={9999}
+              value={panelLayoutInputs.floatingX}
+              onChange={(e) => handlePanelLayoutInput('floatingX', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('floatingX')}
+              aria-label="Floating left position"
+            />
+            <span>px</span>
           </div>
         </div>
       </div>
