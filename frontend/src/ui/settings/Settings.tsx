@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   GetKubeconfigSearchPaths,
   GetThemeInfo,
@@ -62,6 +62,7 @@ import {
   type ObjectPanelLayoutDefaults,
 } from '@core/settings/appPreferences';
 import { getActivePanelLayoutStore } from '@ui/dockable/panelLayoutStore';
+import { getContentBounds } from '@ui/dockable/dockablePanelLayout';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
@@ -320,6 +321,40 @@ function Settings({ onClose }: SettingsProps) {
     // On blur, normalize the display to the current numeric value.
     setPanelLayoutInputs((prev) => ({ ...prev, [field]: String(panelLayout[field]) }));
   };
+
+  // Warn when configured values exceed the current visible area.
+  const panelLayoutWarning = useMemo(() => {
+    const content = getContentBounds();
+    const issues: string[] = [];
+    const fields = new Set<keyof ObjectPanelLayoutDefaults>();
+    if (panelLayout.dockedRightWidth > content.width) {
+      issues.push('docked width exceeds content area');
+      fields.add('dockedRightWidth');
+    }
+    if (panelLayout.dockedBottomHeight > content.height) {
+      issues.push('docked height exceeds content area');
+      fields.add('dockedBottomHeight');
+    }
+    if (panelLayout.floatingWidth > content.width) {
+      issues.push('floating width exceeds content area');
+      fields.add('floatingWidth');
+    }
+    if (panelLayout.floatingHeight > content.height) {
+      issues.push('floating height exceeds content area');
+      fields.add('floatingHeight');
+    }
+    if (panelLayout.floatingX + panelLayout.floatingWidth > content.width) {
+      issues.push('floating panel extends beyond right edge');
+      fields.add('floatingX');
+      fields.add('floatingWidth');
+    }
+    if (panelLayout.floatingY + panelLayout.floatingHeight > content.height) {
+      issues.push('floating panel extends beyond bottom edge');
+      fields.add('floatingY');
+      fields.add('floatingHeight');
+    }
+    return issues.length > 0 ? { issues, fields } : null;
+  }, [panelLayout]);
 
   // Debounced persistence for palette tint — avoids hammering the backend during fast drags.
   const debouncePalettePersist = useCallback(
@@ -1448,18 +1483,20 @@ function Settings({ onClose }: SettingsProps) {
               type="number"
               min={0}
               max={9999}
+              className={panelLayoutWarning?.fields.has('dockedRightWidth') ? 'opd-input-warn' : ''}
               value={panelLayoutInputs.dockedRightWidth}
               onChange={(e) => handlePanelLayoutInput('dockedRightWidth', e.target.value)}
               onBlur={() => handlePanelLayoutBlur('dockedRightWidth')}
               aria-label="Docked right width"
             />
-            <span>px</span>
+            <span className="opd-unit-gap">px</span>
             <span className="opd-field-label">Height</span>
             <input
               id="panel-docked-bottom-height"
               type="number"
               min={0}
               max={9999}
+              className={panelLayoutWarning?.fields.has('dockedBottomHeight') ? 'opd-input-warn' : ''}
               value={panelLayoutInputs.dockedBottomHeight}
               onChange={(e) => handlePanelLayoutInput('dockedBottomHeight', e.target.value)}
               onBlur={() => handlePanelLayoutBlur('dockedBottomHeight')}
@@ -1475,18 +1512,20 @@ function Settings({ onClose }: SettingsProps) {
               type="number"
               min={0}
               max={9999}
+              className={panelLayoutWarning?.fields.has('floatingWidth') ? 'opd-input-warn' : ''}
               value={panelLayoutInputs.floatingWidth}
               onChange={(e) => handlePanelLayoutInput('floatingWidth', e.target.value)}
               onBlur={() => handlePanelLayoutBlur('floatingWidth')}
               aria-label="Floating width"
             />
-            <span>px</span>
+            <span className="opd-unit-gap">px</span>
             <span className="opd-field-label">Height</span>
             <input
               id="panel-floating-height"
               type="number"
               min={0}
               max={9999}
+              className={panelLayoutWarning?.fields.has('floatingHeight') ? 'opd-input-warn' : ''}
               value={panelLayoutInputs.floatingHeight}
               onChange={(e) => handlePanelLayoutInput('floatingHeight', e.target.value)}
               onBlur={() => handlePanelLayoutBlur('floatingHeight')}
@@ -1502,18 +1541,20 @@ function Settings({ onClose }: SettingsProps) {
               type="number"
               min={0}
               max={9999}
+              className={panelLayoutWarning?.fields.has('floatingY') ? 'opd-input-warn' : ''}
               value={panelLayoutInputs.floatingY}
               onChange={(e) => handlePanelLayoutInput('floatingY', e.target.value)}
               onBlur={() => handlePanelLayoutBlur('floatingY')}
               aria-label="Floating top position"
             />
-            <span>px</span>
+            <span className="opd-unit-gap">px</span>
             <span className="opd-field-label">Left</span>
             <input
               id="panel-floating-x"
               type="number"
               min={0}
               max={9999}
+              className={panelLayoutWarning?.fields.has('floatingX') ? 'opd-input-warn' : ''}
               value={panelLayoutInputs.floatingX}
               onChange={(e) => handlePanelLayoutInput('floatingX', e.target.value)}
               onBlur={() => handlePanelLayoutBlur('floatingX')}
@@ -1521,6 +1562,16 @@ function Settings({ onClose }: SettingsProps) {
             />
             <span>px</span>
           </div>
+          {panelLayoutWarning && (
+            <div className="setting-item opd-warning">
+              <p>One or more values will be adjusted to fit at render time:</p>
+              <ul>
+                {panelLayoutWarning.issues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 

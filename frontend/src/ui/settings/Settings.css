@@ -105,9 +105,40 @@
 
 .object-panel-defaults .opd-field-label {
   display: inline-block;
-  width: 4em;
+  width: 3em;
   flex-shrink: 0;
-  text-align: right;
+}
+
+.object-panel-defaults .opd-unit-gap {
+  margin-right: var(--spacing-md);
+}
+
+.object-panel-defaults input.opd-input-warn {
+  border-color: var(--color-warning, #e6a700);
+  outline: 1px solid var(--color-warning, #e6a700);
+}
+
+.object-panel-defaults .opd-warning {
+  font-size: var(--font-size-small);
+  color: #92600a;
+  padding-top: var(--spacing-sm);
+}
+
+[data-theme="dark"] .object-panel-defaults .opd-warning {
+  color: var(--color-warning, #f59e0b);
+}
+
+.object-panel-defaults .opd-warning p {
+  margin: 0 0 var(--spacing-xs) 0;
+}
+
+.object-panel-defaults .opd-warning ul {
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+.object-panel-defaults .opd-warning li {
+  margin: 0;
 }
 
 [data-theme="dark"] .setting-item-inline input[type="number"] {
