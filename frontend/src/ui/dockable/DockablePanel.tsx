@@ -28,12 +28,7 @@ import { DockablePanelHeader } from './DockablePanelHeader';
 import { useDockablePanelDragResize } from './useDockablePanelDragResize';
 import { useDockablePanelMaximize } from './useDockablePanelMaximize';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
-import {
-  PANEL_DEFAULTS,
-  getPanelSizeConstraints,
-  getContentBounds,
-  LAYOUT,
-} from './dockablePanelLayout';
+import { PANEL_DEFAULTS, getPanelSizeConstraints, getContentBounds } from './dockablePanelLayout';
 import { getGroupForPanel, getGroupTabs } from './tabGroupState';
 import type { PanelSizeConstraints } from './dockablePanelLayout';
 import type { TabInfo } from './DockableTabBar';
@@ -571,16 +566,14 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     const content = getContentBounds();
 
     if (panelState.position === 'floating') {
-      const maxW = Math.max(constraints.floating.minWidth, content.width - LAYOUT.WINDOW_MARGIN);
-      const maxH = Math.max(constraints.floating.minHeight, content.height - LAYOUT.WINDOW_MARGIN);
+      const maxW = Math.max(constraints.floating.minWidth, content.width);
+      const maxH = Math.max(constraints.floating.minHeight, content.height);
       const clampedW = Math.min(panelState.size.width, maxW);
       const clampedH = Math.min(panelState.size.height, maxH);
-      const maxX = Math.max(0, content.width - clampedW - 20);
-      const maxY = Math.max(LAYOUT.MIN_EDGE_DISTANCE, content.height - clampedH - 20);
+      const maxX = Math.max(0, content.width - clampedW);
+      const maxY = Math.max(0, content.height - clampedH);
       const clampedX = Math.round(Math.max(0, Math.min(panelState.floatingPosition.x, maxX)));
-      const clampedY = Math.round(
-        Math.max(LAYOUT.MIN_EDGE_DISTANCE, Math.min(panelState.floatingPosition.y, maxY))
-      );
+      const clampedY = Math.round(Math.max(0, Math.min(panelState.floatingPosition.y, maxY)));
 
       style.width = `${clampedW}px`;
       style.height = `${clampedH}px`;
