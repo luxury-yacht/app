@@ -1366,6 +1366,65 @@ describe('refreshOrchestrator', () => {
     ).toThrow('requires a non-empty scope value');
   });
 
+  it('preserves event stream state when toggling scoped enablement with preserveState', async () => {
+    eventStreamMocks.startCluster.mockClear();
+    eventStreamMocks.stopCluster.mockClear();
+
+    refreshOrchestrator.registerDomain({
+      domain: 'cluster-events',
+      refresherName: CLUSTER_REFRESHERS.events,
+      category: 'cluster',
+      autoStart: false,
+      streaming: {
+        start: (scope: string) => eventStreamMocks.startCluster(scope),
+        stop: (scope: string, options?: { reset?: boolean }) =>
+          eventStreamMocks.stopCluster(scope, options?.reset ?? false),
+      },
+    });
+
+    setScopedDomainState('cluster-events', 'cluster', (previous) => ({
+      ...previous,
+      status: 'ready',
+      data: {
+        events: [
+          {
+            kind: 'Event',
+            clusterId: 'cluster-a',
+            name: 'existing',
+            namespace: 'default',
+            type: 'Normal',
+            source: 'kubelet',
+            reason: 'Started',
+            object: 'Pod/web',
+            message: 'still here',
+            age: '1m',
+          },
+        ],
+      },
+      error: null,
+      lastUpdated: 1,
+      lastAutoRefresh: 1,
+      isManual: false,
+      scope: 'cluster',
+      stats: null,
+    }));
+
+    await refreshOrchestrator.setScopedDomainEnabled('cluster-events', 'cluster', false, {
+      preserveState: true,
+    });
+    expect(eventStreamMocks.stopCluster).toHaveBeenCalledWith('cluster', false);
+    expect(getScopedDomainState('cluster-events', 'cluster').data?.events).toHaveLength(1);
+
+    await refreshOrchestrator.setScopedDomainEnabled('cluster-events', 'cluster', true, {
+      preserveState: true,
+    });
+    expect(eventStreamMocks.startCluster).toHaveBeenCalledWith('cluster');
+
+    const state = getScopedDomainState('cluster-events', 'cluster');
+    expect(state.status).toBe('updating');
+    expect(state.data?.events?.[0].message).toBe('still here');
+  });
+
   it('resets state when streaming start fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const startError = new Error('stream boom');

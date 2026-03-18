@@ -95,6 +95,163 @@ describe('EventStreamManager', () => {
     expect(state.data?.events?.[0].clusterName).toBe('alpha');
   });
 
+  test('applyPayload preserves backend createdAt for initial snapshot events', async () => {
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+    const createdAt = Date.now() - 6 * 24 * 60 * 60 * 1000;
+
+    manager.applyPayload('cluster-events', 'cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 1,
+      generatedAt: 123,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-a',
+          kind: 'Event',
+          name: 'older-event',
+          namespace: 'default',
+          type: 'Warning',
+          source: 'kubelet',
+          reason: 'BackOff',
+          object: 'Pod/web',
+          message: 'Retrying',
+          age: '6d4hr',
+          createdAt,
+        },
+      ],
+    });
+
+    await flushTimers();
+
+    const state = getScopedDomainState('cluster-events', 'cluster');
+    expect(state.data?.events?.[0].ageTimestamp).toBe(createdAt);
+  });
+
+  test('reset payload keeps existing events that are temporarily absent during reconnect', async () => {
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+
+    manager.applyPayload('cluster-events', 'cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 1,
+      generatedAt: 100,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-a',
+          name: 'event-older',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Normal',
+          source: 'kubelet',
+          reason: 'Started',
+          object: 'Pod/older',
+          message: 'older event',
+          createdAt: 1000,
+        },
+        {
+          clusterId: 'cluster-a',
+          name: 'event-newer',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'kubelet',
+          reason: 'BackOff',
+          object: 'Pod/newer',
+          message: 'newer event',
+          createdAt: 2000,
+        },
+      ],
+    });
+    await flushTimers();
+
+    manager.applyPayload('cluster-events', 'cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 2,
+      generatedAt: 200,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-a',
+          name: 'event-newer',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Warning',
+          source: 'kubelet',
+          reason: 'BackOff',
+          object: 'Pod/newer',
+          message: 'newer event',
+          createdAt: 2000,
+        },
+      ],
+    });
+    await flushTimers();
+
+    const state = getScopedDomainState('cluster-events', 'cluster');
+    expect(state.data?.events?.map((event) => event.name)).toEqual(['event-newer', 'event-older']);
+  });
+
+  test('updates replace the existing row for the same event object name', async () => {
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+    const initialCreatedAt = 1_700_000_001_000;
+    const updatedCreatedAt = 1_700_000_003_000;
+
+    manager.applyPayload('cluster-events', 'cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 1,
+      generatedAt: 100,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-a',
+          name: 'event-1',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Normal',
+          source: 'kubelet',
+          reason: 'Started',
+          object: 'Pod/web',
+          message: 'first version',
+          createdAt: initialCreatedAt,
+        },
+      ],
+    });
+    await flushTimers();
+
+    manager.applyPayload('cluster-events', 'cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 2,
+      generatedAt: 200,
+      events: [
+        {
+          clusterId: 'cluster-a',
+          name: 'event-1',
+          namespace: 'default',
+          objectNamespace: 'default',
+          type: 'Normal',
+          source: 'kubelet',
+          reason: 'Started',
+          object: 'Pod/web',
+          message: 'updated version',
+          createdAt: updatedCreatedAt,
+        },
+      ],
+    });
+    await flushTimers();
+
+    const state = getScopedDomainState('cluster-events', 'cluster');
+    expect(state.data?.events).toHaveLength(1);
+    expect(state.data?.events?.[0].message).toBe('updated version');
+    expect(state.data?.events?.[0].ageTimestamp).toBe(updatedCreatedAt);
+  });
+
   test('applyPayload updates namespace events state', async () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();
@@ -223,6 +380,7 @@ describe('EventStreamManager', () => {
           namespace: 'dev',
           reason: 'Started',
           message: 'Initial',
+          createdAt: 1_700_000_001_000,
         },
       ],
     };
@@ -238,6 +396,7 @@ describe('EventStreamManager', () => {
           namespace: 'dev',
           reason: 'Update',
           message: 'Updated',
+          createdAt: 1_700_000_002_000,
         },
       ],
     });

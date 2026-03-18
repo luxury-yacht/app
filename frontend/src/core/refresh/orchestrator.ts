@@ -512,18 +512,20 @@ class RefreshOrchestrator {
       }
     }
 
-    // When preserveState is true, disabling stops activity but keeps the
-    // scoped domain state in the store so diagnostics and other consumers
-    // can still see the last snapshot. Full cleanup happens via an explicit
-    // resetScopedDomain call (e.g. when the panel closes).
-    const resetOnDisable = !options?.preserveState;
+    // When preserveState is true, toggling the domain stops/restarts activity
+    // without clearing the last scoped snapshot from the store. This is useful
+    // for event streams where reconnects should not blank the visible table.
+    const preserveState = Boolean(options?.preserveState);
+    const resetOnDisable = !preserveState;
 
     if (config.streaming) {
       const readyKey = makeInFlightKey(domain, normalizedScope);
       const shouldStream = this.shouldStreamScope(domain, normalizedScope);
       if (enabled && shouldStream) {
         this.streamingReady.delete(readyKey);
-        resetScopedDomainState(domain, normalizedScope);
+        if (!preserveState) {
+          resetScopedDomainState(domain, normalizedScope);
+        }
         this.scheduleStreamingStart(domain, normalizedScope, config.streaming);
       } else if (!enabled) {
         this.streamingReady.delete(readyKey);

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -56,14 +57,16 @@ func (m *stubEventManager) Subscribe(scope string) (<-chan eventstream.StreamEve
 }
 
 func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
+	initialTimestamp := time.Now().Add(-2 * time.Hour)
 	service := stubSnapshotService{
 		build: func(ctx context.Context, domain, scope string) (*refresh.Snapshot, error) {
 			return &refresh.Snapshot{
 				Domain: domain,
 				Payload: snapshot.ClusterEventsSnapshot{
 					Events: []snapshot.ClusterEventEntry{{
-						ClusterMeta: snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
-						Message:     "initial message",
+						ClusterMeta:  snapshot.ClusterMeta{ClusterID: "cluster-a", ClusterName: "alpha"},
+						Message:      "initial message",
+						AgeTimestamp: initialTimestamp.UnixMilli(),
 					}},
 				},
 			}, nil
@@ -99,6 +102,7 @@ func TestAggregateEventStreamHandlerStreamsAcrossClusters(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return strings.Contains(rec.BodyString(), "initial message")
 	}, time.Second, 10*time.Millisecond)
+	require.Contains(t, rec.BodyString(), `"createdAt":`+strconv.FormatInt(initialTimestamp.UnixMilli(), 10))
 
 	managerA.mu.Lock()
 	require.Equal(t, "cluster", managerA.scope)

@@ -249,6 +249,8 @@ export interface ClusterEventEntry extends ClusterMeta {
   kind: string;
   kindAlias?: string;
   name: string;
+  uid?: string;
+  resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
   type: string;
@@ -515,6 +517,8 @@ export interface NamespaceEventSummary extends ClusterMeta {
   kind: string;
   kindAlias?: string;
   name: string;
+  uid?: string;
+  resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
   type: string;

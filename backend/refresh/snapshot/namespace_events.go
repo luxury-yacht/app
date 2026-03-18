@@ -33,6 +33,8 @@ type EventSummary struct {
 	ClusterMeta
 	Kind            string `json:"kind"`
 	Name            string `json:"name"`
+	UID             string `json:"uid"`
+	ResourceVersion string `json:"resourceVersion"`
 	Namespace       string `json:"namespace"`
 	ObjectNamespace string `json:"objectNamespace"`
 	Type            string `json:"type"`
@@ -41,6 +43,7 @@ type EventSummary struct {
 	Object          string `json:"object"`
 	Message         string `json:"message"`
 	Age             string `json:"age"`
+	AgeTimestamp    int64  `json:"ageTimestamp"`
 }
 
 // RegisterNamespaceEventsDomain registers the events domain.
@@ -109,9 +112,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 	events = filtered
 
 	sort.Slice(events, func(i, j int) bool {
-		iTime := eventTimestamp(events[i])
-		jTime := eventTimestamp(events[j])
-		return iTime.After(jTime)
+		return compareEventOrder(events[i], events[j]) < 0
 	})
 
 	originalCount := len(events)
@@ -135,10 +136,13 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		if event.InvolvedObject.Namespace == "" {
 			continue
 		}
+		timestamp := eventTimestamp(event)
 		summary := EventSummary{
 			ClusterMeta:     meta,
 			Kind:            event.InvolvedObject.Kind,
 			Name:            event.Name,
+			UID:             string(event.UID),
+			ResourceVersion: event.ResourceVersion,
 			Namespace:       event.InvolvedObject.Namespace,
 			ObjectNamespace: event.InvolvedObject.Namespace,
 			Type:            event.Type,
@@ -146,7 +150,8 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			Reason:          event.Reason,
 			Object:          namespaceInvolvedObject(event),
 			Message:         event.Message,
-			Age:             formatAge(eventTimestamp(event)),
+			Age:             formatAge(timestamp),
+			AgeTimestamp:    timestamp.UnixMilli(),
 		}
 		summaries = append(summaries, summary)
 		if v := resourceVersionOrTimestamp(event); v > version {
