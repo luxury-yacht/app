@@ -129,7 +129,9 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
 
             <div className="about-info">
               <div className="about-description">
-                <p><strong>Version {appInfo?.version || 'Loading...'}</strong></p>
+                <p>
+                  <strong>Version {appInfo?.version || 'Loading...'}</strong>
+                </p>
                 {/* Version status indicator */}
                 {appInfo?.update ? (
                   appInfo.update.isUpdateAvailable ? (
