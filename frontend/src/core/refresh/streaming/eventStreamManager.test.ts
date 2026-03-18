@@ -95,6 +95,40 @@ describe('EventStreamManager', () => {
     expect(state.data?.events?.[0].clusterName).toBe('alpha');
   });
 
+  test('applyPayload preserves backend createdAt for initial snapshot events', async () => {
+    const { EventStreamManager } = await import('./eventStreamManager');
+    const manager = new EventStreamManager();
+    const createdAt = Date.now() - 6 * 24 * 60 * 60 * 1000;
+
+    manager.applyPayload('cluster-events', 'cluster', {
+      domain: 'cluster-events',
+      scope: 'cluster',
+      sequence: 1,
+      generatedAt: 123,
+      reset: true,
+      events: [
+        {
+          clusterId: 'cluster-a',
+          kind: 'Event',
+          name: 'older-event',
+          namespace: 'default',
+          type: 'Warning',
+          source: 'kubelet',
+          reason: 'BackOff',
+          object: 'Pod/web',
+          message: 'Retrying',
+          age: '6d4hr',
+          createdAt,
+        },
+      ],
+    });
+
+    await flushTimers();
+
+    const state = getScopedDomainState('cluster-events', 'cluster');
+    expect(state.data?.events?.[0].ageTimestamp).toBe(createdAt);
+  });
+
   test('applyPayload updates namespace events state', async () => {
     const { EventStreamManager } = await import('./eventStreamManager');
     const manager = new EventStreamManager();

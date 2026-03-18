@@ -327,6 +327,7 @@ func convertClusterEntries(events []snapshot.ClusterEventEntry) []Entry {
 			Object:          evt.Object,
 			Message:         evt.Message,
 			Age:             evt.Age,
+			CreatedAt:       evt.AgeTimestamp,
 		})
 	}
 	return entries
@@ -348,6 +349,7 @@ func convertNamespaceEntries(events []snapshot.EventSummary) []Entry {
 			Object:          evt.Object,
 			Message:         evt.Message,
 			Age:             evt.Age,
+			CreatedAt:       evt.AgeTimestamp,
 		})
 	}
 	return entries

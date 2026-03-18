@@ -44,6 +44,7 @@ type ClusterEventEntry struct {
 	Object          string `json:"object"`
 	Message         string `json:"message"`
 	Age             string `json:"age"`
+	AgeTimestamp    int64  `json:"ageTimestamp"`
 }
 
 // RegisterClusterEventsDomain registers the cluster events domain.
@@ -88,7 +89,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		timestamp := eventTimestamp(evt)
 		objectNamespace := evt.InvolvedObject.Namespace
 		entries = append(entries, ClusterEventEntry{
-			ClusterMeta: meta,
+			ClusterMeta:     meta,
 			Kind:            "Event",
 			Name:            evt.Name,
 			Namespace:       objectNamespace,
@@ -99,6 +100,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 			Object:          eventObject(evt),
 			Message:         eventMessage(evt),
 			Age:             formatAge(timestamp),
+			AgeTimestamp:    timestamp.UnixMilli(),
 		})
 		if v := resourceVersionOrTimestamp(evt); v > version {
 			version = v

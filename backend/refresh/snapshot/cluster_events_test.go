@@ -73,10 +73,12 @@ func TestClusterEventsBuilder(t *testing.T) {
 	require.Equal(t, "event-new", first.Name)
 	require.Equal(t, "Normal", first.Type)
 	require.Equal(t, "scheduler", first.Source)
+	require.Equal(t, eventNew.LastTimestamp.UnixMilli(), first.AgeTimestamp)
 
 	require.Equal(t, "event-old", second.Name)
 	require.Equal(t, "Warning", second.Type)
 	require.Contains(t, second.Source, "kubelet")
 	require.Equal(t, "Pod/pod-old", second.Object)
 	require.Equal(t, "BackOff", second.Message) // falls back to reason when message empty
+	require.Equal(t, eventOld.LastTimestamp.UnixMilli(), second.AgeTimestamp)
 }

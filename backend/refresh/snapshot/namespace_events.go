@@ -41,6 +41,7 @@ type EventSummary struct {
 	Object          string `json:"object"`
 	Message         string `json:"message"`
 	Age             string `json:"age"`
+	AgeTimestamp    int64  `json:"ageTimestamp"`
 }
 
 // RegisterNamespaceEventsDomain registers the events domain.
@@ -135,6 +136,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 		if event.InvolvedObject.Namespace == "" {
 			continue
 		}
+		timestamp := eventTimestamp(event)
 		summary := EventSummary{
 			ClusterMeta:     meta,
 			Kind:            event.InvolvedObject.Kind,
@@ -146,7 +148,8 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			Reason:          event.Reason,
 			Object:          namespaceInvolvedObject(event),
 			Message:         event.Message,
-			Age:             formatAge(eventTimestamp(event)),
+			Age:             formatAge(timestamp),
+			AgeTimestamp:    timestamp.UnixMilli(),
 		}
 		summaries = append(summaries, summary)
 		if v := resourceVersionOrTimestamp(event); v > version {
