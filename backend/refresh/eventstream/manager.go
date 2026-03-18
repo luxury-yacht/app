@@ -262,7 +262,9 @@ func (m *Manager) handleEvent(obj interface{}) {
 	entry.CreatedAt = lastSeen.UnixMilli()
 	entry.Age = timeutil.FormatAge(lastSeen)
 
-	m.broadcast("cluster", entry)
+	if entry.ObjectNamespace == "" {
+		m.broadcast("cluster", entry)
+	}
 	if entry.ObjectNamespace != "" {
 		m.broadcast("namespace:"+entry.ObjectNamespace, entry)
 	}

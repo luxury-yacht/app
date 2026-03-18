@@ -88,6 +88,9 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		}
 		timestamp := eventTimestamp(evt)
 		objectNamespace := evt.InvolvedObject.Namespace
+		if strings.TrimSpace(objectNamespace) != "" {
+			continue
+		}
 		entries = append(entries, ClusterEventEntry{
 			ClusterMeta:     meta,
 			Kind:            "Event",
