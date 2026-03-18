@@ -61,6 +61,7 @@ var Aliases = map[string]interface{}{
 	"test-be-cov":         Test.BackendCoverage,
 	"test-fe":             Test.Frontend,
 	"test-fe-cov":         Test.FrontendCoverage,
+	"storybook":           Storybook,
 }
 
 // ===============================
@@ -176,6 +177,18 @@ func Dev() error {
 	}
 
 	return sh.Run("wails", args...)
+}
+
+// Runs Storybook for frontend component development
+func Storybook() error {
+	if err := isNpmInstalled(); err != nil {
+		return err
+	}
+	if err := mage.CheckNodeVersion(); err != nil {
+		return err
+	}
+	fmt.Println("Starting Storybook...")
+	return sh.Run("npm", "run", "storybook", "--prefix", cfg.FrontendDir)
 }
 
 // ===============================
