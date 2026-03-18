@@ -132,7 +132,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
         cf.createTextColumn<EventData>('type', 'Type', (event) => event.type || 'Normal', {
           getClassName: (event) => `event-badge ${(event.type || 'normal').toLowerCase()}`,
         }),
-        cf.createTextColumn('namespace', 'Namespace', (event) => event.namespace || '-'),
         cf.createTextColumn('source', 'Source', (event) => event.source || '-'),
         cf.createTextColumn<EventData>('objectType', 'Object Type', (event) => {
           const parsed = splitEventObject(event.object);
@@ -163,7 +162,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         type: { autoWidth: true },
-        namespace: { width: 200 },
         source: { width: 200 },
         objectType: { autoWidth: true },
         objectName: { width: 200 },

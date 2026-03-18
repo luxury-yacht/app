@@ -28,6 +28,8 @@ type Entry struct {
 	ClusterName     string `json:"clusterName,omitempty"`
 	Kind            string `json:"kind"`
 	Name            string `json:"name"`
+	UID             string `json:"uid,omitempty"`
+	ResourceVersion string `json:"resourceVersion,omitempty"`
 	Namespace       string `json:"namespace"`
 	ObjectNamespace string `json:"objectNamespace"`
 	Type            string `json:"type"`

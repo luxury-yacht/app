@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/testsupport"
+	types "k8s.io/apimachinery/pkg/types"
 )
 
 func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
@@ -74,4 +75,53 @@ func TestNamespaceEventsBuilderUsesEventTimestamps(t *testing.T) {
 	require.Equal(t, "event-old", second.Name)
 	require.Equal(t, eventOld.LastTimestamp.UnixMilli(), second.AgeTimestamp)
 	require.Equal(t, "team-a", second.Namespace)
+}
+
+func TestNamespaceEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
+	timestamp := metav1.NewTime(time.Now().Add(-12 * time.Minute))
+
+	highRV := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "event-high-rv",
+			Namespace:         "team-a",
+			ResourceVersion:   "20",
+			UID:               types.UID("uid-b"),
+			CreationTimestamp: timestamp,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      "Pod",
+			Name:      "api-b",
+			Namespace: "team-a",
+		},
+		LastTimestamp: timestamp,
+	}
+
+	lowRV := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "event-low-rv",
+			Namespace:         "team-a",
+			ResourceVersion:   "10",
+			UID:               types.UID("uid-a"),
+			CreationTimestamp: timestamp,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      "Pod",
+			Name:      "api-a",
+			Namespace: "team-a",
+		},
+		LastTimestamp: timestamp,
+	}
+
+	builder := &NamespaceEventsBuilder{
+		eventLister: testsupport.NewEventLister(t, lowRV, highRV),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "team-a")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(NamespaceEventsSnapshot)
+	require.True(t, ok)
+	require.Len(t, payload.Events, 2)
+	require.Equal(t, "event-high-rv", payload.Events[0].Name)
+	require.Equal(t, "event-low-rv", payload.Events[1].Name)
 }

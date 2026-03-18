@@ -380,6 +380,7 @@ describe('EventStreamManager', () => {
           namespace: 'dev',
           reason: 'Started',
           message: 'Initial',
+          createdAt: 1_700_000_001_000,
         },
       ],
     };
@@ -395,6 +396,7 @@ describe('EventStreamManager', () => {
           namespace: 'dev',
           reason: 'Update',
           message: 'Updated',
+          createdAt: 1_700_000_002_000,
         },
       ],
     });

@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/luxury-yacht/app/backend/testsupport"
+	types "k8s.io/apimachinery/pkg/types"
 )
 
 func TestClusterEventsBuilder(t *testing.T) {
@@ -102,4 +103,51 @@ func TestClusterEventsBuilder(t *testing.T) {
 	require.Equal(t, "FailedMount", second.Message) // falls back to reason when message empty
 	require.Equal(t, clusterEventOld.LastTimestamp.UnixMilli(), second.AgeTimestamp)
 	require.Equal(t, "", second.Namespace)
+}
+
+func TestClusterEventsBuilderUsesDeterministicTieBreakers(t *testing.T) {
+	timestamp := metav1.NewTime(time.Now().Add(-12 * time.Minute))
+
+	highRV := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "event-high-rv",
+			Namespace:         "kube-system",
+			ResourceVersion:   "20",
+			UID:               types.UID("uid-b"),
+			CreationTimestamp: timestamp,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind: "Node",
+			Name: "node-a",
+		},
+		LastTimestamp: timestamp,
+	}
+
+	lowRV := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "event-low-rv",
+			Namespace:         "kube-system",
+			ResourceVersion:   "10",
+			UID:               types.UID("uid-a"),
+			CreationTimestamp: timestamp,
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind: "Node",
+			Name: "node-b",
+		},
+		LastTimestamp: timestamp,
+	}
+
+	builder := &ClusterEventsBuilder{
+		eventLister: testsupport.NewEventLister(t, lowRV, highRV),
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterEventsSnapshot)
+	require.True(t, ok)
+	require.Len(t, payload.Events, 2)
+	require.Equal(t, "event-high-rv", payload.Events[0].Name)
+	require.Equal(t, "event-low-rv", payload.Events[1].Name)
 }

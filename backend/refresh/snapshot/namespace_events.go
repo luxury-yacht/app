@@ -33,6 +33,8 @@ type EventSummary struct {
 	ClusterMeta
 	Kind            string `json:"kind"`
 	Name            string `json:"name"`
+	UID             string `json:"uid"`
+	ResourceVersion string `json:"resourceVersion"`
 	Namespace       string `json:"namespace"`
 	ObjectNamespace string `json:"objectNamespace"`
 	Type            string `json:"type"`
@@ -110,9 +112,7 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 	events = filtered
 
 	sort.Slice(events, func(i, j int) bool {
-		iTime := eventTimestamp(events[i])
-		jTime := eventTimestamp(events[j])
-		return iTime.After(jTime)
+		return compareEventOrder(events[i], events[j]) < 0
 	})
 
 	originalCount := len(events)
@@ -141,6 +141,8 @@ func (b *NamespaceEventsBuilder) Build(ctx context.Context, scope string) (*refr
 			ClusterMeta:     meta,
 			Kind:            event.InvolvedObject.Kind,
 			Name:            event.Name,
+			UID:             string(event.UID),
+			ResourceVersion: event.ResourceVersion,
 			Namespace:       event.InvolvedObject.Namespace,
 			ObjectNamespace: event.InvolvedObject.Namespace,
 			Type:            event.Type,
