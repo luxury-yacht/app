@@ -108,24 +108,6 @@
 }
 
 /* Version status indicators */
-.about-update-available {
-  color: var(--color-warning);
-  font-size: 0.9em;
-}
-
-.about-update-available a {
-  color: var(--color-warning);
-  font-weight: var(--font-weight-semibold);
-}
-
-.about-up-to-date {
-  color: var(--color-success);
-  font-size: 0.9em;
-}
-
-.about-up-to-date-icon {
-  margin-right: 0.25em;
-}
 
 .about-beta-expiry {
   color: var(--color-warning);

@@ -128,20 +128,8 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
             </div>
 
             <div className="about-info">
-              {/* <div className="about-details">
-                <div className="about-field">
-                  <span className="about-label">Version:</span>
-                  <span className="about-value">1.0.0</span>
-                </div>
-
-                <div className="about-field">
-                  <span className="about-label">Built with:</span>
-                  <span className="about-value">Wails</span>
-                </div>
-              </div> */}
-
               <div className="about-description">
-                <p>Version {appInfo?.version || 'Loading...'}</p>
+                <p><strong>Version {appInfo?.version || 'Loading...'}</strong></p>
                 {/* Version status indicator */}
                 {appInfo?.update ? (
                   appInfo.update.isUpdateAvailable ? (
@@ -168,7 +156,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
                     Beta expires: {new Date(appInfo.expiryDate).toLocaleDateString()}
                   </p>
                 ) : null}
-                <p>
+                <p style={{ marginTop: '1em' }}>
                   <a
                     href="https://luxury-yacht.app"
                     onClick={(e) => {
@@ -179,7 +167,7 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
                     luxury-yacht.app
                   </a>
                 </p>
-                <p>
+                <p style={{ marginTop: '1em' }}>
                   Built with{' '}
                   <a
                     href="https://wails.io/"
