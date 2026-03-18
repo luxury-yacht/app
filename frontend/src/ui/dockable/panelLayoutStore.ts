@@ -73,32 +73,14 @@ export function createPanelLayoutStore(): PanelLayoutStore {
 
   const getInitialState = (panelId: string): PanelLayoutState => {
     if (!panelStates.has(panelId)) {
-      // Object panels (prefixed "obj:") use user-configured defaults.
-      const isObjectPanel = panelId.startsWith('obj:');
-      const layout = isObjectPanel ? getObjectPanelLayoutDefaults() : null;
-
-      const defaultFloatingWidth = layout?.floatingWidth ?? 600;
-      const defaultFloatingHeight = layout?.floatingHeight ?? 400;
-      const defaultRightWidth = layout?.dockedRightWidth ?? 400;
-      const defaultBottomHeight = layout?.dockedBottomHeight ?? 300;
-
-      let floatX: number;
-      let floatY: number;
-      if (layout) {
-        floatX = layout.floatingX;
-        floatY = layout.floatingY;
-      } else {
-        const content = getContentBounds();
-        floatX = Math.max(100, (content.width - defaultFloatingWidth) / 2);
-        floatY = Math.max(100, (content.height - defaultFloatingHeight) / 2);
-      }
+      const layout = getObjectPanelLayoutDefaults();
 
       panelStates.set(panelId, {
         position: 'right',
-        floatingSize: { width: defaultFloatingWidth, height: defaultFloatingHeight },
-        rightSize: { width: defaultRightWidth, height: 300 },
-        bottomSize: { width: 400, height: defaultBottomHeight },
-        floatingPosition: { x: floatX, y: floatY },
+        floatingSize: { width: layout.floatingWidth, height: layout.floatingHeight },
+        rightSize: { width: layout.dockedRightWidth, height: 300 },
+        bottomSize: { width: 400, height: layout.dockedBottomHeight },
+        floatingPosition: { x: layout.floatingX, y: layout.floatingY },
         isOpen: false,
         isInitialized: false,
         zIndex: zIndexCounter++,

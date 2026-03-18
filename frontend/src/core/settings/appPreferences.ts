@@ -87,14 +87,6 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   autoRefreshEnabled: true,
   refreshBackgroundClustersEnabled: true,
   metricsRefreshIntervalMs: DEFAULT_METRICS_REFRESH_INTERVAL_MS,
-  gridTablePersistenceMode: 'shared',
-  defaultObjectPanelPosition: 'right',
-  objectPanelDockedRightWidth: 400,
-  objectPanelDockedBottomHeight: 300,
-  objectPanelFloatingWidth: 600,
-  objectPanelFloatingHeight: 400,
-  objectPanelFloatingX: 100,
-  objectPanelFloatingY: 100,
   paletteHueLight: 0,
   paletteSaturationLight: 0,
   paletteBrightnessLight: 0,
@@ -105,6 +97,16 @@ const DEFAULT_PREFERENCES: AppPreferences = {
   accentColorDark: '',
   linkColorLight: '',
   linkColorDark: '',
+
+  // make sure these match the defaults in backend/app_settings.go
+  gridTablePersistenceMode: 'shared',
+  defaultObjectPanelPosition: 'right',
+  objectPanelDockedRightWidth: 600,
+  objectPanelDockedBottomHeight: 400,
+  objectPanelFloatingWidth: 500,
+  objectPanelFloatingHeight: 400,
+  objectPanelFloatingX: 100,
+  objectPanelFloatingY: 100,
 };
 
 let preferenceCache: AppPreferences = { ...DEFAULT_PREFERENCES };
@@ -272,20 +274,24 @@ export const hydrateAppPreferences = async (options?: {
     defaultObjectPanelPosition: normalizeObjectPanelPosition(
       backendSettings?.defaultObjectPanelPosition
     ),
+    // Panel layout: backend stores 0 when unset (Go zero value), so treat
+    // 0 as "use default" for all fields. This means a user who explicitly
+    // sets a position to 0 will see it revert to the default on restart,
+    // which is acceptable since the default is close to 0 anyway.
     objectPanelDockedRightWidth:
-      backendSettings?.objectPanelDockedRightWidth ??
+      backendSettings?.objectPanelDockedRightWidth ||
       DEFAULT_PREFERENCES.objectPanelDockedRightWidth,
     objectPanelDockedBottomHeight:
-      backendSettings?.objectPanelDockedBottomHeight ??
+      backendSettings?.objectPanelDockedBottomHeight ||
       DEFAULT_PREFERENCES.objectPanelDockedBottomHeight,
     objectPanelFloatingWidth:
-      backendSettings?.objectPanelFloatingWidth ?? DEFAULT_PREFERENCES.objectPanelFloatingWidth,
+      backendSettings?.objectPanelFloatingWidth || DEFAULT_PREFERENCES.objectPanelFloatingWidth,
     objectPanelFloatingHeight:
-      backendSettings?.objectPanelFloatingHeight ?? DEFAULT_PREFERENCES.objectPanelFloatingHeight,
+      backendSettings?.objectPanelFloatingHeight || DEFAULT_PREFERENCES.objectPanelFloatingHeight,
     objectPanelFloatingX:
-      backendSettings?.objectPanelFloatingX ?? DEFAULT_PREFERENCES.objectPanelFloatingX,
+      backendSettings?.objectPanelFloatingX || DEFAULT_PREFERENCES.objectPanelFloatingX,
     objectPanelFloatingY:
-      backendSettings?.objectPanelFloatingY ?? DEFAULT_PREFERENCES.objectPanelFloatingY,
+      backendSettings?.objectPanelFloatingY || DEFAULT_PREFERENCES.objectPanelFloatingY,
     paletteHueLight: backendSettings?.paletteHueLight ?? DEFAULT_PREFERENCES.paletteHueLight,
     paletteSaturationLight:
       backendSettings?.paletteSaturationLight ?? DEFAULT_PREFERENCES.paletteSaturationLight,

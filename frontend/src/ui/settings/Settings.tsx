@@ -62,7 +62,7 @@ import {
   type ObjectPanelLayoutDefaults,
 } from '@core/settings/appPreferences';
 import { getActivePanelLayoutStore } from '@ui/dockable/panelLayoutStore';
-import { getContentBounds } from '@ui/dockable/dockablePanelLayout';
+import { getContentBounds, PANEL_DEFAULTS } from '@ui/dockable/dockablePanelLayout';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
@@ -74,8 +74,8 @@ interface SettingsProps {
 }
 
 const objectPanelPositionOptions: DropdownOption[] = [
-  { value: 'right', label: 'Docked Right' },
-  { value: 'bottom', label: 'Docked Bottom' },
+  { value: 'right', label: 'Right' },
+  { value: 'bottom', label: 'Bottom' },
   { value: 'floating', label: 'Floating' },
 ];
 
@@ -232,8 +232,20 @@ function Settings({ onClose }: SettingsProps) {
 
   const loadAppSettings = async () => {
     try {
-      const preferences = await hydrateAppPreferences();
+      const preferences = await hydrateAppPreferences({ force: true });
       setUseShortResourceNames(preferences.useShortResourceNames);
+      // Refresh panel defaults from the freshly hydrated cache.
+      setObjectPanelPositionState(getDefaultObjectPanelPosition());
+      const freshLayout = getObjectPanelLayoutDefaults();
+      setPanelLayout(freshLayout);
+      setPanelLayoutInputs({
+        dockedRightWidth: String(freshLayout.dockedRightWidth),
+        dockedBottomHeight: String(freshLayout.dockedBottomHeight),
+        floatingWidth: String(freshLayout.floatingWidth),
+        floatingHeight: String(freshLayout.floatingHeight),
+        floatingX: String(freshLayout.floatingX),
+        floatingY: String(freshLayout.floatingY),
+      });
       // Palette sliders are loaded by the resolvedTheme effect.
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
@@ -305,11 +317,20 @@ function Settings({ onClose }: SettingsProps) {
     };
   });
 
+  const fieldMinimums: Record<keyof ObjectPanelLayoutDefaults, number> = {
+    dockedRightWidth: PANEL_DEFAULTS.RIGHT_MIN_WIDTH,
+    dockedBottomHeight: PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT,
+    floatingWidth: PANEL_DEFAULTS.FLOATING_MIN_WIDTH,
+    floatingHeight: PANEL_DEFAULTS.FLOATING_MIN_HEIGHT,
+    floatingX: 0,
+    floatingY: 0,
+  };
+
   const handlePanelLayoutInput = (field: keyof ObjectPanelLayoutDefaults, raw: string) => {
     setPanelLayoutInputs((prev) => ({ ...prev, [field]: raw }));
     const parsed = parseInt(raw, 10);
     if (!Number.isNaN(parsed)) {
-      const clamped = Math.max(0, Math.min(9999, parsed));
+      const clamped = Math.max(fieldMinimums[field], Math.min(9999, parsed));
       const updated = { ...panelLayout, [field]: clamped };
       setPanelLayout(updated);
       setObjectPanelLayoutDefaults(updated);
@@ -1481,7 +1502,7 @@ function Settings({ onClose }: SettingsProps) {
             <input
               id="panel-docked-right-width"
               type="number"
-              min={0}
+              min={PANEL_DEFAULTS.RIGHT_MIN_WIDTH}
               max={9999}
               className={panelLayoutWarning?.fields.has('dockedRightWidth') ? 'opd-input-warn' : ''}
               value={panelLayoutInputs.dockedRightWidth}
@@ -1494,7 +1515,7 @@ function Settings({ onClose }: SettingsProps) {
             <input
               id="panel-docked-bottom-height"
               type="number"
-              min={0}
+              min={PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT}
               max={9999}
               className={
                 panelLayoutWarning?.fields.has('dockedBottomHeight') ? 'opd-input-warn' : ''
@@ -1512,7 +1533,7 @@ function Settings({ onClose }: SettingsProps) {
             <input
               id="panel-floating-width"
               type="number"
-              min={0}
+              min={PANEL_DEFAULTS.FLOATING_MIN_WIDTH}
               max={9999}
               className={panelLayoutWarning?.fields.has('floatingWidth') ? 'opd-input-warn' : ''}
               value={panelLayoutInputs.floatingWidth}
@@ -1525,7 +1546,7 @@ function Settings({ onClose }: SettingsProps) {
             <input
               id="panel-floating-height"
               type="number"
-              min={0}
+              min={PANEL_DEFAULTS.FLOATING_MIN_HEIGHT}
               max={9999}
               className={panelLayoutWarning?.fields.has('floatingHeight') ? 'opd-input-warn' : ''}
               value={panelLayoutInputs.floatingHeight}

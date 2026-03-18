@@ -96,7 +96,11 @@
   color: var(--color-text);
 }
 
-/* Object Panel Defaults — fixed-width labels for column alignment */
+/* Object Panel Defaults */
+.object-panel-defaults .dropdown-trigger {
+  min-width: auto;
+}
+
 .object-panel-defaults .opd-row-label {
   display: inline-block;
   width: 5em;

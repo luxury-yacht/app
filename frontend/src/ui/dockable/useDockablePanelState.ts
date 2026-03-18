@@ -129,19 +129,31 @@ export function useDockablePanelState(panelId: string) {
       const finalIsOpen = options.isOpen ?? localState.isOpen;
       const targetPosition = options.position ?? localState.position;
 
+      // Only apply defaultSize when the store used generic fallback values.
+      // Object panels have user-configured sizes set by getInitialState —
+      // those should not be overwritten by PANEL_DEFAULTS from DockablePanel.
+      const isObjectPanel = panelId.startsWith('obj:');
       store.updateState(panelId, {
         position: targetPosition,
         floatingSize: {
-          width: defaultSize.width ?? localState.floatingSize.width,
-          height: defaultSize.height ?? localState.floatingSize.height,
+          width:
+            (isObjectPanel ? localState.floatingSize.width : defaultSize.width) ??
+            localState.floatingSize.width,
+          height:
+            (isObjectPanel ? localState.floatingSize.height : defaultSize.height) ??
+            localState.floatingSize.height,
         },
         rightSize: {
-          width: defaultSize.width ?? localState.rightSize.width,
+          width:
+            (isObjectPanel ? localState.rightSize.width : defaultSize.width) ??
+            localState.rightSize.width,
           height: localState.rightSize.height,
         },
         bottomSize: {
           width: localState.bottomSize.width,
-          height: defaultSize.height ?? localState.bottomSize.height,
+          height:
+            (isObjectPanel ? localState.bottomSize.height : defaultSize.height) ??
+            localState.bottomSize.height,
         },
         floatingPosition: {
           x: options.floatingPosition?.x ?? localState.floatingPosition.x,
