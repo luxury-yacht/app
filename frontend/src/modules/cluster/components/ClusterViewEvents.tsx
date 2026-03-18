@@ -163,12 +163,12 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         type: { autoWidth: true },
-        namespace: { autoWidth: true },
-        source: { autoWidth: true, maxWidth: 250 },
+        namespace: { width: 200 },
+        source: { width: 200 },
         objectType: { autoWidth: true },
-        objectName: { autoWidth: true },
-        reason: { autoWidth: true },
-        message: { autoWidth: true },
+        objectName: { width: 200 },
+        reason: { width: 200 },
+        message: { width: 250 },
         age: { autoWidth: true },
       };
       cf.applyColumnSizing(baseColumns, sizing);

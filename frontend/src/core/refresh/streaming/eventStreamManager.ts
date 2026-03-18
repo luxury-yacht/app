@@ -235,9 +235,18 @@ class EventStreamConnection {
   }
 }
 
-// Include cluster identity in the dedupe key so multi-cluster streams don't collapse events.
-const sortKey = (entry: ClusterEventEntry | NamespaceEventSummary) =>
-  `${entry.clusterId || ''}|${entry.namespace || ''}|${entry.kind || ''}|${entry.name || ''}|${entry.reason || ''}|${entry.message || ''}`;
+// Use the Kubernetes Event object name as the primary identity so updates to the
+// same event replace prior rows instead of rendering as churn. Cluster and
+// namespace scope are included for multi-cluster isolation.
+const eventIdentityKey = (entry: ClusterEventEntry | NamespaceEventSummary) => {
+  const clusterId = entry.clusterId || '';
+  const namespace = entry.objectNamespace || entry.namespace || '';
+  const name = entry.name || '';
+  if (name) {
+    return `${clusterId}|${namespace}|${name}`;
+  }
+  return `${clusterId}|${namespace}|${entry.object || ''}|${entry.source || ''}|${entry.reason || ''}|${entry.type || ''}`;
+};
 
 export class EventStreamManager {
   private clusterConnection: EventStreamConnection | null = null;
@@ -425,9 +434,11 @@ export class EventStreamManager {
     }
     if (domain === CLUSTER_DOMAIN) {
       const incoming = events.map(transformClusterEvent);
-      const { items, total, truncated } = payload.reset
-        ? mergeEvents([], incoming, MAX_CLUSTER_EVENTS)
-        : mergeEvents(this.clusterEvents, incoming, MAX_CLUSTER_EVENTS);
+      const { items, total, truncated } = mergeEvents(
+        payload.reset ? this.clusterEvents : this.clusterEvents,
+        incoming,
+        MAX_CLUSTER_EVENTS
+      );
       const resolvedTotal =
         payloadTotal !== undefined ? Math.max(payloadTotal, items.length) : total;
       const resolvedTruncated = payloadTruncated !== undefined ? payloadTruncated : truncated;
@@ -440,9 +451,7 @@ export class EventStreamManager {
     if (domain === NAMESPACE_DOMAIN) {
       const incoming = events.map(transformNamespaceEvent);
       const existing = this.namespaceEvents.get(scope) ?? [];
-      const { items, total, truncated } = payload.reset
-        ? mergeEvents([], incoming, MAX_NAMESPACE_EVENTS)
-        : mergeEvents(existing, incoming, MAX_NAMESPACE_EVENTS);
+      const { items, total, truncated } = mergeEvents(existing, incoming, MAX_NAMESPACE_EVENTS);
       const resolvedTotal =
         payloadTotal !== undefined ? Math.max(payloadTotal, items.length) : total;
       const resolvedTruncated = payloadTruncated !== undefined ? payloadTruncated : truncated;
@@ -824,25 +833,27 @@ function mergeEvents<T extends ClusterEventEntry | NamespaceEventSummary>(
   maxSize: number
 ): { items: T[]; total: number; truncated: boolean } {
   const map = new Map<string, T>();
-  let total = 0;
-  let truncated = false;
 
   const merged = [...incoming, ...existing];
   for (const item of merged) {
-    const key = sortKey(item);
+    const key = eventIdentityKey(item);
     if (map.has(key)) {
       continue;
     }
-    total++;
-    if (map.size < maxSize) {
-      map.set(key, item);
-    } else {
-      truncated = true;
-    }
+    map.set(key, item);
   }
 
+  const sorted = Array.from(map.values()).sort((a, b) => {
+    const aTimestamp = a.ageTimestamp ?? 0;
+    const bTimestamp = b.ageTimestamp ?? 0;
+    return bTimestamp - aTimestamp;
+  });
+
+  const total = sorted.length;
+  const truncated = total > maxSize;
+
   return {
-    items: Array.from(map.values()),
+    items: truncated ? sorted.slice(0, maxSize) : sorted,
     total,
     truncated,
   };

@@ -924,8 +924,15 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
 
       const shouldEnable =
         Boolean(currentNamespace) && isNamespaceView && activeNamespaceView === resourceKey;
+      const preserveEventsState =
+        domain === 'namespace-events' ? { preserveState: true } : undefined;
       if (namespaceScope) {
-        refreshOrchestrator.setScopedDomainEnabled(domain, namespaceScope, shouldEnable);
+        refreshOrchestrator.setScopedDomainEnabled(
+          domain,
+          namespaceScope,
+          shouldEnable,
+          preserveEventsState
+        );
       }
 
       if (!shouldEnable && !currentNamespace) {
@@ -952,7 +959,12 @@ export const NamespaceResourcesProvider: React.FC<NamespaceResourcesProviderProp
     return () => {
       if (cleanupScope) {
         domains.forEach((domain) => {
-          refreshOrchestrator.setScopedDomainEnabled(domain, cleanupScope, false);
+          refreshOrchestrator.setScopedDomainEnabled(
+            domain,
+            cleanupScope,
+            false,
+            domain === 'namespace-events' ? { preserveState: true } : undefined
+          );
         });
         refreshOrchestrator.setScopedDomainEnabled('pods', cleanupScope, false);
       }
