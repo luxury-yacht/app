@@ -14,6 +14,7 @@ import React, {
   ReactNode,
 } from 'react';
 import { GetZoomLevel, SetZoomLevel } from '@wailsjs/go/backend/App';
+import { isWindowsPlatform } from '@utils/platform';
 
 // Zoom constraints
 const MIN_ZOOM = 50;
@@ -79,9 +80,18 @@ interface ZoomProviderProps {
 export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
 
-  // Apply zoom to document
+  // Apply zoom to document.
+  // On Windows (WebView2/Chromium), CSS zoom on <html> doesn't adjust the
+  // layout viewport — content overflows when zooming in and leaves empty space
+  // when zooming out. Compensate by inversely scaling the element dimensions
+  // so that zoomedSize * zoomFactor = 100% of the window.
   const applyZoom = useCallback((level: number) => {
     document.documentElement.style.zoom = `${level}%`;
+    if (isWindowsPlatform()) {
+      const inverseScale = `${10000 / level}%`;
+      document.documentElement.style.width = inverseScale;
+      document.documentElement.style.height = inverseScale;
+    }
   }, []);
 
   // Persist zoom level to backend
