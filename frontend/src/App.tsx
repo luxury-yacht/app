@@ -60,6 +60,24 @@ const resolveTheme = (): 'light' | 'dark' => {
   return attr === 'dark' ? 'dark' : 'light';
 };
 
+// Apply palette tint and accent color overrides for the given theme.
+const applyThemeOverrides = (theme: 'light' | 'dark') => {
+  const tint = getPaletteTint(theme);
+  if (isPaletteActive(tint.saturation, tint.brightness)) {
+    applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
+  } else {
+    applyTintedPalette(0, 0, 0);
+  }
+  savePaletteTintToLocalStorage(theme, tint.hue, tint.saturation, tint.brightness);
+
+  const lightAccent = getAccentColor('light');
+  const darkAccent = getAccentColor('dark');
+  applyAccentColor(lightAccent, darkAccent);
+  applyAccentBg(theme === 'light' ? lightAccent : darkAccent, theme);
+  saveAccentColorToLocalStorage('light', lightAccent);
+  saveAccentColorToLocalStorage('dark', darkAccent);
+};
+
 /**
  * AppContent - The main app content that uses the contexts
  */
@@ -112,19 +130,7 @@ function AppContent() {
     // When the resolved theme changes, apply the palette for the new theme.
     const unsubThemeResolved = eventBus.on('settings:theme-resolved', (newTheme) => {
       if (!active) return;
-      const tint = getPaletteTint(newTheme);
-      if (isPaletteActive(tint.saturation, tint.brightness)) {
-        applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
-      } else {
-        // Clear palette if the new theme has no tint.
-        applyTintedPalette(0, 0, 0);
-      }
-      savePaletteTintToLocalStorage(newTheme, tint.hue, tint.saturation, tint.brightness);
-
-      // Re-apply accent-bg for the new theme.
-      const accent = getAccentColor(newTheme);
-      applyAccentBg(accent, newTheme);
-      saveAccentColorToLocalStorage(newTheme, accent);
+      applyThemeOverrides(newTheme);
     });
 
     return () => {
@@ -147,21 +153,7 @@ function AppContent() {
       await hydrateAppPreferences({ force: true });
 
       // Re-apply CSS overrides for the current resolved theme.
-      const currentTheme = resolveTheme();
-      const tint = getPaletteTint(currentTheme);
-      if (isPaletteActive(tint.saturation, tint.brightness)) {
-        applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
-      } else {
-        applyTintedPalette(0, 0, 0);
-      }
-      savePaletteTintToLocalStorage(currentTheme, tint.hue, tint.saturation, tint.brightness);
-
-      const lightAccent = getAccentColor('light');
-      const darkAccent = getAccentColor('dark');
-      applyAccentColor(lightAccent, darkAccent);
-      applyAccentBg(currentTheme === 'light' ? lightAccent : darkAccent, currentTheme);
-      saveAccentColorToLocalStorage('light', lightAccent);
-      saveAccentColorToLocalStorage('dark', darkAccent);
+      applyThemeOverrides(resolveTheme());
     };
 
     void applyMatchingTheme();
