@@ -54,6 +54,12 @@ import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';
 import { useWailsRuntimeEvents, useConnectionStatusListener } from '@/hooks/useWailsRuntimeEvents';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
 
+// Resolve the current active theme from the document attribute.
+const resolveTheme = (): 'light' | 'dark' => {
+  const attr = document.documentElement.getAttribute('data-theme');
+  return attr === 'dark' ? 'dark' : 'light';
+};
+
 /**
  * AppContent - The main app content that uses the contexts
  */
@@ -71,12 +77,6 @@ function AppContent() {
   // Hydrate persisted preferences before applying refresh settings and palette tint.
   useEffect(() => {
     let active = true;
-
-    // Resolve the current active theme from the document attribute.
-    const resolveTheme = (): 'light' | 'dark' => {
-      const attr = document.documentElement.getAttribute('data-theme');
-      return attr === 'dark' ? 'dark' : 'light';
-    };
 
     const initializePreferences = async () => {
       try {
@@ -136,11 +136,6 @@ function AppContent() {
   // Auto-apply a matching theme when the active cluster changes.
   useEffect(() => {
     if (!selectedClusterName) return;
-
-    const resolveTheme = (): 'light' | 'dark' => {
-      const attr = document.documentElement.getAttribute('data-theme');
-      return attr === 'dark' ? 'dark' : 'light';
-    };
 
     const applyMatchingTheme = async () => {
       const matched = await matchThemeForCluster(selectedClusterName);
