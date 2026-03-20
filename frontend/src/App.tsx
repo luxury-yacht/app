@@ -168,7 +168,7 @@ function AppContent() {
   // Callbacks for UI actions
   const handleToggleAppLogsPanel = useCallback(() => {
     appLogsPanel.toggle();
-  }, [appLogsPanel]);
+  }, [appLogsPanel.toggle]);
 
   const handleToggleDiagnostics = useCallback(() => {
     eventBus.emit('view:toggle-diagnostics');
@@ -176,7 +176,7 @@ function AppContent() {
 
   const handleToggleObjectDiff = useCallback(() => {
     viewState.setIsObjectDiffOpen(!viewState.isObjectDiffOpen);
-  }, [viewState]);
+  }, [viewState.setIsObjectDiffOpen, viewState.isObjectDiffOpen]);
 
   // Handle Wails runtime events (menu items, etc.)
   useWailsRuntimeEvents({
