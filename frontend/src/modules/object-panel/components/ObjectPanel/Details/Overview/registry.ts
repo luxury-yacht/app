@@ -260,8 +260,7 @@ overviewRegistry.register({
   },
 });
 
-// Utility function to get capabilities (used in tests)
-/** @lintignore */
+// Utility function to get capabilities (used in tests).
 export function getResourceCapabilities(kind: string): OverviewComponentConfig['capabilities'] {
   const config = overviewRegistry.getComponent(kind);
   // If no config found (likely a custom resource), enable delete by default
