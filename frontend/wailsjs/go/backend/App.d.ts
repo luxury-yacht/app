@@ -160,15 +160,9 @@ export function GetWorkloads(arg1:string,arg2:string,arg3:string):Promise<backen
 
 export function GetZoomLevel():Promise<number>;
 
-export function IsActiveSessionsPanelVisible():Promise<boolean>;
-
 export function IsDiagnosticsPanelVisible():Promise<boolean>;
 
 export function IsLogsPanelVisible():Promise<boolean>;
-
-export function IsPortForwardsPanelVisible():Promise<boolean>;
-
-export function IsShellSessionsPanelVisible():Promise<boolean>;
 
 export function IsSidebarVisible():Promise<boolean>;
 
@@ -208,8 +202,6 @@ export function SendShellInput(arg1:string,arg2:string):Promise<void>;
 
 export function SetAccentColor(arg1:string,arg2:string):Promise<void>;
 
-export function SetActiveSessionsPanelVisible(arg1:boolean):Promise<void>;
-
 export function SetAutoRefreshEnabled(arg1:boolean):Promise<void>;
 
 export function SetBackgroundRefreshEnabled(arg1:boolean):Promise<void>;
@@ -234,11 +226,7 @@ export function SetObjectPanelLayout(arg1:number,arg2:number,arg3:number,arg4:nu
 
 export function SetPaletteTint(arg1:string,arg2:number,arg3:number,arg4:number):Promise<void>;
 
-export function SetPortForwardsPanelVisible(arg1:boolean):Promise<void>;
-
 export function SetSelectedKubeconfigs(arg1:Array<string>):Promise<void>;
-
-export function SetShellSessionsPanelVisible(arg1:boolean):Promise<void>;
 
 export function SetSidebarVisible(arg1:boolean):Promise<void>;
 
@@ -266,17 +254,11 @@ export function StopPortForward(arg1:string):Promise<void>;
 
 export function SuspendCronJob(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 
-export function ToggleActiveSessionsPanel():Promise<void>;
-
 export function ToggleDiagnosticsPanel():Promise<void>;
 
 export function ToggleLogsPanel():Promise<void>;
 
 export function ToggleObjectDiff():Promise<void>;
-
-export function TogglePortForwardsPanel():Promise<void>;
-
-export function ToggleShellSessionsPanel():Promise<void>;
 
 export function ToggleSidebar():Promise<void>;
 

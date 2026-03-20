@@ -220,20 +220,6 @@ func createViewMenu(appMenu *menu.Menu, app *App) {
 		}()
 	})
 
-	// Dynamic Active Sessions panel menu item text
-	activeSessionsText := "Show Active Sessions Panel"
-	if app.IsActiveSessionsPanelVisible() {
-		activeSessionsText = "Hide Active Sessions Panel"
-	}
-
-	viewMenu.AddText(activeSessionsText, keys.Combo("s", keys.ShiftKey, keys.CmdOrCtrlKey), func(_ *menu.CallbackData) {
-		go func() {
-			if err := app.ToggleActiveSessionsPanel(); err != nil {
-				println("Failed to toggle active sessions panel:", err.Error())
-			}
-		}()
-	})
-
 	// macOS will automatically add "Enter Full Screen" after this separator
 	if runtime.GOOS == "darwin" {
 		viewMenu.AddSeparator()
