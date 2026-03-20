@@ -97,7 +97,7 @@ users:
 		t.Fatalf("expected kubeconfig initialization to succeed, got %v", err)
 	}
 	clusterID := app.clusterMetaForSelection(kubeconfigSelection{Path: file, Context: "test"}).ID
-	clients := app.clusterClients[clusterID]
+	clients := app.clusterClientsForID(clusterID)
 	if clients == nil || clients.client == nil || clients.restConfig == nil {
 		t.Fatalf("expected cluster clients and restConfig to be initialized")
 	}

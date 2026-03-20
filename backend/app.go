@@ -32,8 +32,7 @@ type App struct {
 	responseCache              *responseCache
 	sidebarVisible             bool
 	diagnosticsPanelVisible    bool
-	logsPanelVisible           bool
-	activeSessionsPanelVisible bool
+	logsPanelVisible bool
 
 	refreshManager               *refresh.Manager
 	refreshHTTPServer            *http.Server

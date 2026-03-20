@@ -511,7 +511,6 @@ func TestGetPodMetricsFallbackWhenClientMissing(t *testing.T) {
 func TestGetPodMetricsForPodsUsesIndividualFetchForSmallSets(t *testing.T) {
 	ctx := context.Background()
 	var getCalls int
-	//lint:ignore SA1019 No replacement for the deprecated method
 	metricsClient := metricsfake.NewSimpleClientset()
 	metricsClient.PrependReactor("get", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		getCalls++
@@ -541,7 +540,6 @@ func TestGetPodMetricsForPodsUsesIndividualFetchForSmallSets(t *testing.T) {
 func TestGetPodMetricsForPodsListsForLargeSets(t *testing.T) {
 	ctx := context.Background()
 	var listCalls int
-	//lint:ignore SA1019 No replacement for the deprecated method
 	metricsClient := metricsfake.NewSimpleClientset()
 	metricsClient.PrependReactor("list", "pods", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		listCalls++
@@ -574,7 +572,6 @@ func TestGetPodMetricsForPodsListsForLargeSets(t *testing.T) {
 
 func TestGetPodMetricsListErrorReturnsEmpty(t *testing.T) {
 	ctx := context.Background()
-	//lint:ignore SA1019 No replacement for the deprecated method
 	metricsClient := metricsfake.NewSimpleClientset()
 	metricsClient.PrependReactor("list", "podmetricses", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("metrics unavailable")

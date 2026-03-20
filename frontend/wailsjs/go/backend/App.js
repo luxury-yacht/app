@@ -310,24 +310,12 @@ export function GetZoomLevel() {
   return window['go']['backend']['App']['GetZoomLevel']();
 }
 
-export function IsActiveSessionsPanelVisible() {
-  return window['go']['backend']['App']['IsActiveSessionsPanelVisible']();
-}
-
 export function IsDiagnosticsPanelVisible() {
   return window['go']['backend']['App']['IsDiagnosticsPanelVisible']();
 }
 
 export function IsLogsPanelVisible() {
   return window['go']['backend']['App']['IsLogsPanelVisible']();
-}
-
-export function IsPortForwardsPanelVisible() {
-  return window['go']['backend']['App']['IsPortForwardsPanelVisible']();
-}
-
-export function IsShellSessionsPanelVisible() {
-  return window['go']['backend']['App']['IsShellSessionsPanelVisible']();
 }
 
 export function IsSidebarVisible() {
@@ -406,10 +394,6 @@ export function SetAccentColor(arg1, arg2) {
   return window['go']['backend']['App']['SetAccentColor'](arg1, arg2);
 }
 
-export function SetActiveSessionsPanelVisible(arg1) {
-  return window['go']['backend']['App']['SetActiveSessionsPanelVisible'](arg1);
-}
-
 export function SetAutoRefreshEnabled(arg1) {
   return window['go']['backend']['App']['SetAutoRefreshEnabled'](arg1);
 }
@@ -458,16 +442,8 @@ export function SetPaletteTint(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['SetPaletteTint'](arg1, arg2, arg3, arg4);
 }
 
-export function SetPortForwardsPanelVisible(arg1) {
-  return window['go']['backend']['App']['SetPortForwardsPanelVisible'](arg1);
-}
-
 export function SetSelectedKubeconfigs(arg1) {
   return window['go']['backend']['App']['SetSelectedKubeconfigs'](arg1);
-}
-
-export function SetShellSessionsPanelVisible(arg1) {
-  return window['go']['backend']['App']['SetShellSessionsPanelVisible'](arg1);
 }
 
 export function SetSidebarVisible(arg1) {
@@ -522,10 +498,6 @@ export function SuspendCronJob(arg1, arg2, arg3, arg4) {
   return window['go']['backend']['App']['SuspendCronJob'](arg1, arg2, arg3, arg4);
 }
 
-export function ToggleActiveSessionsPanel() {
-  return window['go']['backend']['App']['ToggleActiveSessionsPanel']();
-}
-
 export function ToggleDiagnosticsPanel() {
   return window['go']['backend']['App']['ToggleDiagnosticsPanel']();
 }
@@ -536,14 +508,6 @@ export function ToggleLogsPanel() {
 
 export function ToggleObjectDiff() {
   return window['go']['backend']['App']['ToggleObjectDiff']();
-}
-
-export function TogglePortForwardsPanel() {
-  return window['go']['backend']['App']['TogglePortForwardsPanel']();
-}
-
-export function ToggleShellSessionsPanel() {
-  return window['go']['backend']['App']['ToggleShellSessionsPanel']();
 }
 
 export function ToggleSidebar() {

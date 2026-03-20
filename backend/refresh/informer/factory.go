@@ -218,6 +218,11 @@ func (f *Factory) HasSynced(ctx context.Context) bool {
 // The informers themselves stop via context cancellation, but clearing
 // references ensures memory is reclaimed during transport rebuilds.
 func (f *Factory) Shutdown() error {
+	// Ensure any in-progress Start has completed before clearing fields.
+	// The context should already be cancelled by the caller, so
+	// WaitForCacheSync inside Start will return quickly.
+	f.once.Do(func() {})
+
 	f.syncedMu.Lock()
 	f.synced = false
 	f.syncedMu.Unlock()
