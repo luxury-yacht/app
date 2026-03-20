@@ -81,12 +81,10 @@ export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
 
   // Apply zoom to document.
-  // On Windows (Chromium/WebView2), CSS zoom on <html> does not adjust the
-  // layout viewport, so viewport units (vh/dvh) still resolve to the unzoomed
-  // window size. Set a CSS custom property so CSS can compensate with
-  // calc(100dvh / var(--zoom-compensate, 1)).
   const applyZoom = useCallback((level: number) => {
     document.documentElement.style.zoom = `${level}%`;
+    // Windows (chromium) does not properly adjust viewport units with CSS zoom
+    // so we set a CSS variable to compensate.
     if (isWindowsPlatform()) {
       document.documentElement.style.setProperty('--zoom-compensate', `${level / 100}`);
     }
