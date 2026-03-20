@@ -150,19 +150,39 @@ func createViewMenu(appMenu *menu.Menu, app *App) {
 	viewMenu := appMenu.AddSubmenu("View")
 
 	// Zoom controls
-	viewMenu.AddText("Zoom In", keys.CmdOrCtrl("+"), func(_ *menu.CallbackData) {
+	//
+	// On Windows the Wails v2 keyMap has no entries for "+" or "-", so native
+	// accelerators silently become no-ops. We embed the shortcut hint in the
+	// menu label instead (Win32 renders text after \t right-aligned) and let
+	// the frontend keyboard shortcuts handle the actual keypresses.
+	zoomInLabel := "Zoom In"
+	zoomOutLabel := "Zoom Out"
+	resetZoomLabel := "Reset Zoom"
+	var zoomInAccel, zoomOutAccel, resetZoomAccel *keys.Accelerator
+
+	if runtime.GOOS == "windows" {
+		zoomInLabel = "Zoom In\tCtrl+="
+		zoomOutLabel = "Zoom Out\tCtrl+-"
+		resetZoomLabel = "Reset Zoom\tCtrl+0"
+	} else {
+		zoomInAccel = keys.CmdOrCtrl("+")
+		zoomOutAccel = keys.CmdOrCtrl("-")
+		resetZoomAccel = keys.CmdOrCtrl("0")
+	}
+
+	viewMenu.AddText(zoomInLabel, zoomInAccel, func(_ *menu.CallbackData) {
 		go func() {
 			app.emitEvent("zoom-in")
 		}()
 	})
 
-	viewMenu.AddText("Zoom Out", keys.CmdOrCtrl("-"), func(_ *menu.CallbackData) {
+	viewMenu.AddText(zoomOutLabel, zoomOutAccel, func(_ *menu.CallbackData) {
 		go func() {
 			app.emitEvent("zoom-out")
 		}()
 	})
 
-	viewMenu.AddText("Reset Zoom", keys.CmdOrCtrl("0"), func(_ *menu.CallbackData) {
+	viewMenu.AddText(resetZoomLabel, resetZoomAccel, func(_ *menu.CallbackData) {
 		go func() {
 			app.emitEvent("zoom-reset")
 		}()
