@@ -2,7 +2,10 @@
 
 .app {
   flex: 1;
-  height: 100%;
+  /* Divide by --zoom-compensate so the height is correct on Windows where CSS
+     zoom on <html> does not adjust viewport units. Defaults to 1 (no-op) on
+     macOS/Linux where the viewport adjusts automatically. */
+  height: calc(100dvh / var(--zoom-compensate, 1));
   display: flex;
   flex-direction: column;
   background-color: var(--color-bg);
