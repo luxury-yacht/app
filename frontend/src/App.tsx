@@ -200,15 +200,6 @@ function AppContent() {
     return eventBus.on('view:toggle-app-logs', handleToggleAppLogsPanel);
   }, [handleToggleAppLogsPanel]);
 
-  // Error subscription - errors are handled by ErrorContext and error boundaries
-  useEffect(() => {
-    const unsubscribe = errorHandler.subscribe(() => {
-      // Errors are handled by ErrorContext and displayed via ErrorNotificationSystem
-      // Additional handling can be added here if needed (e.g., analytics)
-    });
-    return unsubscribe;
-  }, []);
-
   // Handle manual refresh (Cmd+R)
   const manualRefreshBlocked = ['offline', 'auth_failed', 'rebuilding'].includes(
     connectionStatus.state
