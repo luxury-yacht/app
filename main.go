@@ -88,9 +88,6 @@ func main() {
 		Bind: []any{
 			app,
 		},
-		Windows: &windows.Options{
-			Theme: windows.SystemDefault,
-		},
 		Mac: &mac.Options{
 			TitleBar: &mac.TitleBar{
 				TitlebarAppearsTransparent: true,
@@ -100,6 +97,11 @@ func main() {
 				HideToolbarSeparator:       true,
 			},
 			WebviewIsTransparent: true,
+		},
+		Windows: &windows.Options{
+			Theme:                windows.SystemDefault,
+			IsZoomControlEnabled: false,
+			ZoomFactor:           1.0,
 		},
 		StartHidden:     startHidden,
 		Frameless:       frameless,
