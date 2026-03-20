@@ -88,9 +88,7 @@ export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
   const applyZoom = useCallback((level: number) => {
     document.documentElement.style.zoom = `${level}%`;
     if (isWindowsPlatform()) {
-      const inverseScale = `${10000 / level}%`;
-      document.documentElement.style.width = inverseScale;
-      document.documentElement.style.height = inverseScale;
+      document.documentElement.style.height = `${10000 / level}%`;
     }
   }, []);
 
