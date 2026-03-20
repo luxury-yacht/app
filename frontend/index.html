@@ -1,260 +1,296 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
-<head>
+  <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Luxury Yacht</title>
     <style>
-        body {
-            margin: 0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        }
+      body {
+        margin: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
+          sans-serif;
+      }
     </style>
     <script>
-        // Set theme and apply palette tint immediately to prevent FOUC.
-        // IMPORTANT: The lightness values, MAX_SATURATION, and MAX_BRIGHTNESS_OFFSET
-        // constants are duplicated from frontend/src/utils/paletteTint.ts. Keep both in sync.
-        (function() {
-            var preference = localStorage.getItem('app-theme-preference');
+      // Set theme and apply palette tint immediately to prevent FOUC.
+      // IMPORTANT: The lightness values, MAX_SATURATION, and MAX_BRIGHTNESS_OFFSET
+      // constants are duplicated from frontend/src/utils/paletteTint.ts. Keep both in sync.
+      (function () {
+        var preference = localStorage.getItem('app-theme-preference');
 
-            // If no preference, default to 'system'
-            if (!preference) {
-                preference = 'system';
-                localStorage.setItem('app-theme-preference', 'system');
-            }
+        // If no preference, default to 'system'
+        if (!preference) {
+          preference = 'system';
+          localStorage.setItem('app-theme-preference', 'system');
+        }
 
-            var theme = preference;
+        var theme = preference;
 
-            // If system theme, detect the actual theme to use
-            if (preference === 'system') {
-                theme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-                    ? 'dark'
-                    : 'light';
-            }
+        // If system theme, detect the actual theme to use
+        if (preference === 'system') {
+          theme =
+            window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dark'
+              : 'light';
+        }
 
-            document.documentElement.setAttribute('data-theme', theme);
-            document.documentElement.className = theme;
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.className = theme;
 
-            // Migrate old single-value palette keys to per-theme keys.
-            var oldSaturation = localStorage.getItem('app-palette-saturation');
-            if (oldSaturation !== null) {
-                var oldHue = localStorage.getItem('app-palette-hue') || '0';
-                var oldBrightness = localStorage.getItem('app-palette-brightness') || '0';
-                // Copy old values to both light and dark keys if not already set.
-                if (localStorage.getItem('app-palette-saturation-light') === null) {
-                    localStorage.setItem('app-palette-hue-light', oldHue);
-                    localStorage.setItem('app-palette-saturation-light', oldSaturation);
-                    localStorage.setItem('app-palette-brightness-light', oldBrightness);
-                }
-                if (localStorage.getItem('app-palette-saturation-dark') === null) {
-                    localStorage.setItem('app-palette-hue-dark', oldHue);
-                    localStorage.setItem('app-palette-saturation-dark', oldSaturation);
-                    localStorage.setItem('app-palette-brightness-dark', oldBrightness);
-                }
-                // Remove old keys.
-                localStorage.removeItem('app-palette-hue');
-                localStorage.removeItem('app-palette-saturation');
-                localStorage.removeItem('app-palette-brightness');
-            }
+        // Migrate old single-value palette keys to per-theme keys.
+        var oldSaturation = localStorage.getItem('app-palette-saturation');
+        if (oldSaturation !== null) {
+          var oldHue = localStorage.getItem('app-palette-hue') || '0';
+          var oldBrightness = localStorage.getItem('app-palette-brightness') || '0';
+          // Copy old values to both light and dark keys if not already set.
+          if (localStorage.getItem('app-palette-saturation-light') === null) {
+            localStorage.setItem('app-palette-hue-light', oldHue);
+            localStorage.setItem('app-palette-saturation-light', oldSaturation);
+            localStorage.setItem('app-palette-brightness-light', oldBrightness);
+          }
+          if (localStorage.getItem('app-palette-saturation-dark') === null) {
+            localStorage.setItem('app-palette-hue-dark', oldHue);
+            localStorage.setItem('app-palette-saturation-dark', oldSaturation);
+            localStorage.setItem('app-palette-brightness-dark', oldBrightness);
+          }
+          // Remove old keys.
+          localStorage.removeItem('app-palette-hue');
+          localStorage.removeItem('app-palette-saturation');
+          localStorage.removeItem('app-palette-brightness');
+        }
 
-            // Read per-theme palette values for the resolved theme.
-            var saturation = parseInt(localStorage.getItem('app-palette-saturation-' + theme), 10) || 0;
-            var brightness = parseInt(localStorage.getItem('app-palette-brightness-' + theme), 10) || 0;
-            // Only apply when palette customization is active.
-            if (saturation <= 0 && brightness === 0) return;
+        // Read per-theme palette values for the resolved theme.
+        var saturation = parseInt(localStorage.getItem('app-palette-saturation-' + theme), 10) || 0;
+        var brightness = parseInt(localStorage.getItem('app-palette-brightness-' + theme), 10) || 0;
+        // Only apply when palette customization is active.
+        if (saturation <= 0 && brightness === 0) return;
 
-            var hue = parseInt(localStorage.getItem('app-palette-hue-' + theme), 10) || 0;
-            var maxSat = 20;
-            var maxBrightnessOffset = 10;
-            var saturation = (saturation / 100) * maxSat;
-            var lightnessOffset = (brightness / 50) * maxBrightnessOffset;
+        var hue = parseInt(localStorage.getItem('app-palette-hue-' + theme), 10) || 0;
+        var maxSat = 20;
+        var maxBrightnessOffset = 10;
+        var saturation = (saturation / 100) * maxSat;
+        var lightnessOffset = (brightness / 50) * maxBrightnessOffset;
 
-            // Lightness values matching the neutral hex grays in colors.css
-            var steps = [
-                ['--color-base-950', 4],
-                ['--color-base-900', 10],
-                ['--color-base-800', 18],
-                ['--color-base-700', 25],
-                ['--color-base-600', 32],
-                ['--color-base-500', 44],
-                ['--color-base-400', 54],
-                ['--color-base-300', 69],
-                ['--color-base-200', 82],
-                ['--color-base-100', 88],
-                ['--color-base-50', 96]
-            ];
+        // Lightness values matching the neutral hex grays in colors.css
+        var steps = [
+          ['--color-base-950', 4],
+          ['--color-base-900', 10],
+          ['--color-base-800', 18],
+          ['--color-base-700', 25],
+          ['--color-base-600', 32],
+          ['--color-base-500', 44],
+          ['--color-base-400', 54],
+          ['--color-base-300', 69],
+          ['--color-base-200', 82],
+          ['--color-base-100', 88],
+          ['--color-base-50', 96],
+        ];
 
-            var root = document.documentElement;
-            for (var i = 0; i < steps.length; i++) {
-                var adjusted = Math.min(99, Math.max(1, steps[i][1] + lightnessOffset));
-                root.style.setProperty(
-                    steps[i][0],
-                    'hsl(' + hue + ', ' + saturation + '%, ' + adjusted + '%)'
-                );
-            }
-        })();
+        var root = document.documentElement;
+        for (var i = 0; i < steps.length; i++) {
+          var adjusted = Math.min(99, Math.max(1, steps[i][1] + lightnessOffset));
+          root.style.setProperty(
+            steps[i][0],
+            'hsl(' + hue + ', ' + saturation + '%, ' + adjusted + '%)'
+          );
+        }
+      })();
     </script>
     <script>
-        // Apply custom accent colors from localStorage to prevent FOUC.
-        // IMPORTANT: The hex→HSL→hex conversion and offset tables are duplicated from
-        // frontend/src/utils/accentColor.ts. Keep both in sync.
-        (function() {
-            var accentLight = localStorage.getItem('app-accent-color-light') || '';
-            var accentDark = localStorage.getItem('app-accent-color-dark') || '';
-            if (!accentLight && !accentDark) return;
+      // Apply custom accent colors from localStorage to prevent FOUC.
+      // IMPORTANT: The hex→HSL→hex conversion and offset tables are duplicated from
+      // frontend/src/utils/accentColor.ts. Keep both in sync.
+      (function () {
+        var accentLight = localStorage.getItem('app-accent-color-light') || '';
+        var accentDark = localStorage.getItem('app-accent-color-dark') || '';
+        if (!accentLight && !accentDark) return;
 
-            var theme = document.documentElement.getAttribute('data-theme') || 'light';
+        var theme = document.documentElement.getAttribute('data-theme') || 'light';
 
-            function hexToRgb(hex) {
-                return {
-                    r: parseInt(hex.slice(1, 3), 16),
-                    g: parseInt(hex.slice(3, 5), 16),
-                    b: parseInt(hex.slice(5, 7), 16)
-                };
-            }
+        function hexToRgb(hex) {
+          return {
+            r: parseInt(hex.slice(1, 3), 16),
+            g: parseInt(hex.slice(3, 5), 16),
+            b: parseInt(hex.slice(5, 7), 16),
+          };
+        }
 
-            function hexToHsl(hex) {
-                var r = parseInt(hex.slice(1, 3), 16) / 255;
-                var g = parseInt(hex.slice(3, 5), 16) / 255;
-                var b = parseInt(hex.slice(5, 7), 16) / 255;
-                var max = Math.max(r, g, b), min = Math.min(r, g, b);
-                var l = (max + min) / 2;
-                if (max === min) return { h: 0, s: 0, l: l * 100 };
-                var d = max - min;
-                var s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-                var h = 0;
-                if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-                else if (max === g) h = ((b - r) / d + 2) / 6;
-                else h = ((r - g) / d + 4) / 6;
-                return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
-            }
+        function hexToHsl(hex) {
+          var r = parseInt(hex.slice(1, 3), 16) / 255;
+          var g = parseInt(hex.slice(3, 5), 16) / 255;
+          var b = parseInt(hex.slice(5, 7), 16) / 255;
+          var max = Math.max(r, g, b),
+            min = Math.min(r, g, b);
+          var l = (max + min) / 2;
+          if (max === min) return { h: 0, s: 0, l: l * 100 };
+          var d = max - min;
+          var s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+          var h = 0;
+          if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+          else if (max === g) h = ((b - r) / d + 2) / 6;
+          else h = ((r - g) / d + 4) / 6;
+          return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+        }
 
-            function hslToHex(h, s, l) {
-                var sN = s / 100, lN = l / 100;
-                var c = (1 - Math.abs(2 * lN - 1)) * sN;
-                var x = c * (1 - Math.abs((h / 60) % 2 - 1));
-                var m = lN - c / 2;
-                var r1 = 0, g1 = 0, b1 = 0;
-                if (h < 60) { r1 = c; g1 = x; }
-                else if (h < 120) { r1 = x; g1 = c; }
-                else if (h < 180) { g1 = c; b1 = x; }
-                else if (h < 240) { g1 = x; b1 = c; }
-                else if (h < 300) { r1 = x; b1 = c; }
-                else { r1 = c; b1 = x; }
-                function toHex(v) {
-                    var hex = Math.round((v + m) * 255).toString(16);
-                    return hex.length === 1 ? '0' + hex : hex;
-                }
-                return '#' + toHex(r1) + toHex(g1) + toHex(b1);
-            }
+        function hslToHex(h, s, l) {
+          var sN = s / 100,
+            lN = l / 100;
+          var c = (1 - Math.abs(2 * lN - 1)) * sN;
+          var x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+          var m = lN - c / 2;
+          var r1 = 0,
+            g1 = 0,
+            b1 = 0;
+          if (h < 60) {
+            r1 = c;
+            g1 = x;
+          } else if (h < 120) {
+            r1 = x;
+            g1 = c;
+          } else if (h < 180) {
+            g1 = c;
+            b1 = x;
+          } else if (h < 240) {
+            g1 = x;
+            b1 = c;
+          } else if (h < 300) {
+            r1 = x;
+            b1 = c;
+          } else {
+            r1 = c;
+            b1 = x;
+          }
+          function toHex(v) {
+            var hex = Math.round((v + m) * 255).toString(16);
+            return hex.length === 1 ? '0' + hex : hex;
+          }
+          return '#' + toHex(r1) + toHex(g1) + toHex(b1);
+        }
 
-            // Light palette offsets: 700=-8, 600=0, 500=+10, 400=+20, 300=+32
-            // Dark palette offsets: 700=-14, 600=-7, 500=0, 400=+7, 300=+15, 200=+27
-            function applyShades(hex, offsets) {
-                var hsl = hexToHsl(hex);
-                var root = document.documentElement;
-                for (var token in offsets) {
-                    var adjusted = Math.min(95, Math.max(5, hsl.l + offsets[token]));
-                    root.style.setProperty(token, hslToHex(hsl.h, hsl.s, adjusted));
-                }
-            }
+        // Light palette offsets: 700=-8, 600=0, 500=+10, 400=+20, 300=+32
+        // Dark palette offsets: 700=-14, 600=-7, 500=0, 400=+7, 300=+15, 200=+27
+        function applyShades(hex, offsets) {
+          var hsl = hexToHsl(hex);
+          var root = document.documentElement;
+          for (var token in offsets) {
+            var adjusted = Math.min(95, Math.max(5, hsl.l + offsets[token]));
+            root.style.setProperty(token, hslToHex(hsl.h, hsl.s, adjusted));
+          }
+        }
 
-            if (accentLight) {
-                applyShades(accentLight, {
-                    '--color-accent-light-700': -8,
-                    '--color-accent-light-600': 0,
-                    '--color-accent-light-500': 10,
-                    '--color-accent-light-400': 20,
-                    '--color-accent-light-300': 32
-                });
-                if (theme === 'light') {
-                    var rgb = hexToRgb(accentLight);
-                    document.documentElement.style.setProperty(
-                        '--color-accent-bg',
-                        'rgba(' + rgb.r + ', ' + rgb.g + ', ' + rgb.b + ', 0.1)'
-                    );
-                }
-            }
-            if (accentDark) {
-                applyShades(accentDark, {
-                    '--color-accent-dark-700': -14,
-                    '--color-accent-dark-600': -7,
-                    '--color-accent-dark-500': 0,
-                    '--color-accent-dark-400': 7,
-                    '--color-accent-dark-300': 15,
-                    '--color-accent-dark-200': 27
-                });
-                if (theme === 'dark') {
-                    var rgb = hexToRgb(accentDark);
-                    document.documentElement.style.setProperty(
-                        '--color-accent-bg',
-                        'rgba(' + rgb.r + ', ' + rgb.g + ', ' + rgb.b + ', 0.15)'
-                    );
-                }
-            }
-        })();
+        if (accentLight) {
+          applyShades(accentLight, {
+            '--color-accent-light-700': -8,
+            '--color-accent-light-600': 0,
+            '--color-accent-light-500': 10,
+            '--color-accent-light-400': 20,
+            '--color-accent-light-300': 32,
+          });
+          if (theme === 'light') {
+            var rgb = hexToRgb(accentLight);
+            document.documentElement.style.setProperty(
+              '--color-accent-bg',
+              'rgba(' + rgb.r + ', ' + rgb.g + ', ' + rgb.b + ', 0.1)'
+            );
+          }
+        }
+        if (accentDark) {
+          applyShades(accentDark, {
+            '--color-accent-dark-700': -14,
+            '--color-accent-dark-600': -7,
+            '--color-accent-dark-500': 0,
+            '--color-accent-dark-400': 7,
+            '--color-accent-dark-300': 15,
+            '--color-accent-dark-200': 27,
+          });
+          if (theme === 'dark') {
+            var rgb = hexToRgb(accentDark);
+            document.documentElement.style.setProperty(
+              '--color-accent-bg',
+              'rgba(' + rgb.r + ', ' + rgb.g + ', ' + rgb.b + ', 0.15)'
+            );
+          }
+        }
+      })();
     </script>
     <script>
-        // Apply custom link colors from localStorage to prevent FOUC.
-        // IMPORTANT: The hover lightness offset (+12) is duplicated from
-        // frontend/src/utils/linkColor.ts. Keep both in sync.
-        (function() {
-            var theme = document.documentElement.getAttribute('data-theme') || 'light';
-            var linkColor = theme === 'light'
-                ? localStorage.getItem('app-link-color-light') || ''
-                : localStorage.getItem('app-link-color-dark') || '';
-            if (!linkColor) return;
+      // Apply custom link colors from localStorage to prevent FOUC.
+      // IMPORTANT: The hover lightness offset (+12) is duplicated from
+      // frontend/src/utils/linkColor.ts. Keep both in sync.
+      (function () {
+        var theme = document.documentElement.getAttribute('data-theme') || 'light';
+        var linkColor =
+          theme === 'light'
+            ? localStorage.getItem('app-link-color-light') || ''
+            : localStorage.getItem('app-link-color-dark') || '';
+        if (!linkColor) return;
 
-            // Inline hex→HSL→hex for hover color generation (same as accentColor FOUC script).
-            function hexToHsl(hex) {
-                var r = parseInt(hex.slice(1, 3), 16) / 255;
-                var g = parseInt(hex.slice(3, 5), 16) / 255;
-                var b = parseInt(hex.slice(5, 7), 16) / 255;
-                var max = Math.max(r, g, b), min = Math.min(r, g, b);
-                var l = (max + min) / 2;
-                if (max === min) return { h: 0, s: 0, l: l * 100 };
-                var d = max - min;
-                var s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-                var h = 0;
-                if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
-                else if (max === g) h = ((b - r) / d + 2) / 6;
-                else h = ((r - g) / d + 4) / 6;
-                return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
-            }
-            function hslToHex(h, s, l) {
-                var sN = s / 100, lN = l / 100;
-                var c = (1 - Math.abs(2 * lN - 1)) * sN;
-                var x = c * (1 - Math.abs((h / 60) % 2 - 1));
-                var m = lN - c / 2;
-                var r1 = 0, g1 = 0, b1 = 0;
-                if (h < 60) { r1 = c; g1 = x; }
-                else if (h < 120) { r1 = x; g1 = c; }
-                else if (h < 180) { g1 = c; b1 = x; }
-                else if (h < 240) { g1 = x; b1 = c; }
-                else if (h < 300) { r1 = x; b1 = c; }
-                else { r1 = c; b1 = x; }
-                function toHex(v) {
-                    var hex = Math.round((v + m) * 255).toString(16);
-                    return hex.length === 1 ? '0' + hex : hex;
-                }
-                return '#' + toHex(r1) + toHex(g1) + toHex(b1);
-            }
+        // Inline hex→HSL→hex for hover color generation (same as accentColor FOUC script).
+        function hexToHsl(hex) {
+          var r = parseInt(hex.slice(1, 3), 16) / 255;
+          var g = parseInt(hex.slice(3, 5), 16) / 255;
+          var b = parseInt(hex.slice(5, 7), 16) / 255;
+          var max = Math.max(r, g, b),
+            min = Math.min(r, g, b);
+          var l = (max + min) / 2;
+          if (max === min) return { h: 0, s: 0, l: l * 100 };
+          var d = max - min;
+          var s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+          var h = 0;
+          if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+          else if (max === g) h = ((b - r) / d + 2) / 6;
+          else h = ((r - g) / d + 4) / 6;
+          return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+        }
+        function hslToHex(h, s, l) {
+          var sN = s / 100,
+            lN = l / 100;
+          var c = (1 - Math.abs(2 * lN - 1)) * sN;
+          var x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+          var m = lN - c / 2;
+          var r1 = 0,
+            g1 = 0,
+            b1 = 0;
+          if (h < 60) {
+            r1 = c;
+            g1 = x;
+          } else if (h < 120) {
+            r1 = x;
+            g1 = c;
+          } else if (h < 180) {
+            g1 = c;
+            b1 = x;
+          } else if (h < 240) {
+            g1 = x;
+            b1 = c;
+          } else if (h < 300) {
+            r1 = x;
+            b1 = c;
+          } else {
+            r1 = c;
+            b1 = x;
+          }
+          function toHex(v) {
+            var hex = Math.round((v + m) * 255).toString(16);
+            return hex.length === 1 ? '0' + hex : hex;
+          }
+          return '#' + toHex(r1) + toHex(g1) + toHex(b1);
+        }
 
-            var root = document.documentElement;
-            root.style.setProperty('--color-object-panel-link', linkColor);
-            // Hover = ±12 lightness (lighter in dark, darker in light), clamped to 5%-95%.
-            var hsl = hexToHsl(linkColor);
-            var direction = theme === 'dark' ? 1 : -1;
-            var hoverL = Math.min(95, Math.max(5, hsl.l + 12 * direction));
-            root.style.setProperty('--color-object-panel-link-hover', hslToHex(hsl.h, hsl.s, hoverL));
-        })();
+        var root = document.documentElement;
+        root.style.setProperty('--color-object-panel-link', linkColor);
+        // Hover = ±12 lightness (lighter in dark, darker in light), clamped to 5%-95%.
+        var hsl = hexToHsl(linkColor);
+        var direction = theme === 'dark' ? 1 : -1;
+        var hoverL = Math.min(95, Math.max(5, hsl.l + 12 * direction));
+        root.style.setProperty('--color-object-panel-link-hover', hslToHex(hsl.h, hsl.s, hoverL));
+      })();
     </script>
-</head>
+  </head>
 
-<body>
-    <div id="app"></div>
+  <body>
+    <div id="app" style="flex: 1; display: flex"></div>
     <script type="module" src="/src/main.ts"></script>
-</body>
-
+  </body>
 </html>

@@ -269,14 +269,12 @@ function App() {
           <KeyboardProvider>
             <ConnectionStatusProvider>
               <AuthErrorProvider>
-                <div className="app-window-frame">
-                  <div className="app">
-                    <KubernetesProvider>
-                      <DockablePanelProvider>
-                        <AppContent />
-                      </DockablePanelProvider>
-                    </KubernetesProvider>
-                  </div>
+                <div className="app">
+                  <KubernetesProvider>
+                    <DockablePanelProvider>
+                      <AppContent />
+                    </DockablePanelProvider>
+                  </KubernetesProvider>
                 </div>
               </AuthErrorProvider>
             </ConnectionStatusProvider>
