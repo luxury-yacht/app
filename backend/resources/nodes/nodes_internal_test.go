@@ -41,7 +41,6 @@ func TestEnsureMetricsClientInitializesClient(t *testing.T) {
 }
 
 func TestListNodeMetricsHandlesAPIErrors(t *testing.T) {
-	//lint:ignore SA1019 No replacement for the deprecated method
 	client := metricsfake.NewSimpleClientset()
 	service := NewService(testsupport.NewResourceDependencies(testsupport.WithDepsMetricsClient(client)))
 
@@ -62,7 +61,6 @@ func TestListNodeMetricsReturnsValues(t *testing.T) {
 		},
 	}
 
-	//lint:ignore SA1019 No replacement for the deprecated method
 	client := metricsfake.NewSimpleClientset(metrics)
 	client.Fake.PrependReactor("*", "*", func(cgotesting.Action) (bool, runtime.Object, error) {
 		return true, &metricsv1beta1.NodeMetricsList{Items: []metricsv1beta1.NodeMetrics{*metrics}}, nil
@@ -102,7 +100,6 @@ func TestGetNodeMetricsReturnsUsage(t *testing.T) {
 		},
 	}
 
-	//lint:ignore SA1019 No replacement for the deprecated method
 	client := metricsfake.NewSimpleClientset(metrics)
 	client.Fake.PrependReactor("*", "*", func(action cgotesting.Action) (bool, runtime.Object, error) {
 		if get, ok := action.(cgotesting.GetAction); ok && get.GetName() == "node-1" {
