@@ -77,11 +77,7 @@ export const MultipleKubeconfigPaths: Story = {
     (Story) => {
       setMockSettingsBackend({
         themeInfo: { currentTheme: 'dark', userTheme: 'system' },
-        kubeconfigSearchPaths: [
-          '~/.kube',
-          '/etc/kubernetes',
-          '/opt/clusters/staging',
-        ],
+        kubeconfigSearchPaths: ['~/.kube', '/etc/kubernetes', '/opt/clusters/staging'],
       });
       return <Story />;
     },
