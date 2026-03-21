@@ -29,20 +29,9 @@
   width: 100%;
 }
 
-/* Default circled "i" icon rendered when no children are provided */
+/* Default circled "?" SVG icon rendered when no children are provided */
 .tooltip-info-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 1px solid var(--color-text-tertiary);
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 700;
-  cursor: default;
   vertical-align: middle;
-  line-height: 1;
-  color: var(--color-text-tertiary);
+  cursor: default;
+  color: var(--color-text-secondary);
 }

@@ -1477,7 +1477,11 @@ function Settings({ onClose }: SettingsProps) {
                 checked={useShortResourceNames}
                 onChange={(e) => handleShortNamesToggle(e.target.checked)}
               />
-              Use short resource names (e.g., "sts" for StatefulSets)
+              Short resource names{' '}
+              <Tooltip
+                content='Display short resource names (e.g., "sts" instead of "StatefulSets").'
+                variant="dark"
+              />
             </label>
           </div>
         </div>
@@ -1611,7 +1615,11 @@ function Settings({ onClose }: SettingsProps) {
                   checked={refreshEnabled}
                   onChange={(e) => handleRefreshToggle(e.target.checked)}
                 />
-                Enable auto-refresh
+                Enable auto-refresh{' '}
+                <Tooltip
+                  content="Automatically refresh resource data at regular intervals to keep views up to date."
+                  variant="dark"
+                />
               </label>
             </div>
             <div className="setting-item">
@@ -1622,7 +1630,11 @@ function Settings({ onClose }: SettingsProps) {
                   checked={backgroundRefreshEnabled}
                   onChange={(e) => setBackgroundRefresh(e.target.checked)}
                 />
-                Include background clusters in auto-refresh
+                Include background clusters in auto-refresh{' '}
+                <Tooltip
+                  content="When enabled, clusters that are not actively selected will also be refreshed in the background so their data stays current when you switch to them."
+                  variant="dark"
+                />
               </label>
             </div>
           </div>
@@ -1638,7 +1650,11 @@ function Settings({ onClose }: SettingsProps) {
                   checked={persistenceMode === 'namespaced'}
                   onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
                 />
-                Enable per-namespace view settings
+                Enable per-namespace view settings{' '}
+                <Tooltip
+                  content="Save separate column, sorting, and filter settings for each namespace instead of sharing a single view across all namespaces."
+                  variant="dark"
+                />
               </label>
             </div>
             <div className="setting-item setting-actions">
