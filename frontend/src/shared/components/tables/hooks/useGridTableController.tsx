@@ -51,6 +51,9 @@ import {
   normalizeKindClass,
   parseWidthInputToNumber,
 } from '@shared/components/tables/GridTable.utils';
+import ContextMenu from '@shared/components/ContextMenu';
+import type { ContextMenuItem } from '@shared/components/ContextMenu';
+import { SortAscIcon, SortDescIcon } from '@shared/components/icons/MenuIcons';
 
 // ---------------------------------------------------------------------------
 // Selectors / constants consumed only by the controller
@@ -120,6 +123,7 @@ export interface GridTableControllerResult<T> {
 
   // Context menu
   contextMenuNode: ReactNode;
+  headerContextMenuNode: ReactNode;
   handleWrapperContextMenu: (e: React.MouseEvent) => void;
 
   // Virtualization
@@ -201,6 +205,14 @@ export function useGridTableController<T>({
   const paginationEnabled = Boolean(onRequestMore);
   const contextMenuActiveRef = useRef(false);
   const [tableViewportWidth, setTableViewportWidth] = useState(0);
+
+  // Header context menu state
+  const [headerContextMenuPosition, setHeaderContextMenuPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [headerContextMenuColumnKey, setHeaderContextMenuColumnKey] = useState<string | null>(null);
+
   const isShortcutOptOutTarget = useCallback((target: EventTarget | null) => {
     if (!(target instanceof HTMLElement)) {
       return false;
@@ -786,6 +798,102 @@ export function useGridTableController<T>({
     [onSort]
   );
 
+  const handleHeaderContextMenu = useCallback(
+    (event: React.MouseEvent, columnKey: string) => {
+      event.preventDefault();
+      contextMenuActiveRef.current = true;
+      setHeaderContextMenuPosition({ x: event.clientX, y: event.clientY });
+      setHeaderContextMenuColumnKey(columnKey);
+    },
+    [contextMenuActiveRef]
+  );
+
+  const headerContextMenuItems: ContextMenuItem[] = useMemo(() => {
+    if (!headerContextMenuColumnKey) return [];
+
+    const column = columns.find((c) => c.key === headerContextMenuColumnKey);
+    if (!column) return [];
+
+    const isSortable = !!column.sortable;
+    const isHideable = !lockedColumns.has(column.key);
+
+    if (!isSortable && !isHideable) {
+      return [{ label: 'No Actions', disabled: true }];
+    }
+
+    const isCurrentlySorted = sortConfig?.key === column.key;
+    const currentDirection = isCurrentlySorted ? (sortConfig?.direction ?? null) : null;
+
+    const items: ContextMenuItem[] = [];
+
+    if (isSortable) {
+      items.push(
+        {
+          label: 'Sort Ascending',
+          icon: <SortAscIcon />,
+          onClick: () => onSort?.(column.key, 'asc'),
+          disabled: currentDirection === 'asc',
+        },
+        {
+          label: 'Sort Descending',
+          icon: <SortDescIcon />,
+          onClick: () => onSort?.(column.key, 'desc'),
+          disabled: currentDirection === 'desc',
+        },
+        {
+          label: 'Clear Sort',
+          icon: '×',
+          onClick: () => onSort?.(column.key, null),
+          disabled: !isCurrentlySorted,
+        }
+      );
+    }
+
+    if (isSortable && isHideable) {
+      items.push({ divider: true });
+    }
+
+    if (isHideable) {
+      items.push({
+        label: 'Hide Column',
+        onClick: () =>
+          applyVisibilityChanges((next) => {
+            next[column.key] = false;
+            return true;
+          }),
+      });
+    }
+
+    return items;
+  }, [
+    headerContextMenuColumnKey,
+    columns,
+    lockedColumns,
+    sortConfig,
+    onSort,
+    applyVisibilityChanges,
+  ]);
+
+  const headerContextMenuNode = useMemo(() => {
+    if (!headerContextMenuPosition || !headerContextMenuColumnKey) return null;
+    return (
+      <ContextMenu
+        items={headerContextMenuItems}
+        position={headerContextMenuPosition}
+        onClose={() => {
+          contextMenuActiveRef.current = false;
+          setHeaderContextMenuPosition(null);
+          setHeaderContextMenuColumnKey(null);
+        }}
+      />
+    );
+  }, [
+    headerContextMenuItems,
+    headerContextMenuPosition,
+    headerContextMenuColumnKey,
+    contextMenuActiveRef,
+  ]);
+
   const renderRowContent = useGridTableRowRenderer({
     keyExtractor,
     getRowClassName: getRowClassNameWithFocus,
@@ -822,6 +930,7 @@ export function useGridTableController<T>({
     renderedColumns,
     enableColumnResizing,
     isFixedColumnKey,
+    handleHeaderContextMenu,
     columnWidths,
     handleHeaderClick,
     renderSortIndicator,
@@ -841,6 +950,7 @@ export function useGridTableController<T>({
     handleWrapperBlur,
     hoverState,
     contextMenuNode,
+    headerContextMenuNode,
     handleWrapperContextMenu,
     shouldVirtualize,
     virtualRows,

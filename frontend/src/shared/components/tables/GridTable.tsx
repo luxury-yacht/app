@@ -62,6 +62,7 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     handleWrapperBlur,
     hoverState,
     contextMenuNode,
+    headerContextMenuNode,
     handleWrapperContextMenu,
     shouldVirtualize,
     virtualRows,
@@ -156,7 +157,12 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       filters={filtersNode}
       header={headerNode}
       body={bodyNode}
-      contextMenu={contextMenuNode}
+      contextMenu={
+        <>
+          {contextMenuNode}
+          {headerContextMenuNode}
+        </>
+      }
     />
   );
 

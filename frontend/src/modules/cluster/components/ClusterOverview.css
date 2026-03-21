@@ -50,8 +50,12 @@
 }
 
 .overview-update-meta {
-  color: #f59e0b;
+  color: var(--color-accent);
   font-size: 1rem;
+}
+
+.overview-update-banner:hover .overview-update-meta {
+  text-decoration: underline;
 }
 
 .overview-header {

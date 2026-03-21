@@ -1435,8 +1435,14 @@ it('does not hide locked columns through visibility menu', async () => {
   });
   await flushAsync();
 
+  // The header context menu appears with a disabled "No Actions" item
+  // since the column is neither sortable nor hideable.
   const menu = document.body.querySelector<HTMLDivElement>('.context-menu');
-  expect(menu).toBeNull();
+  expect(menu).not.toBeNull();
+  const items = menu!.querySelectorAll('[role="menuitem"]');
+  expect(items).toHaveLength(1);
+  expect(items[0].textContent).toBe('No Actions');
+  expect(items[0].classList.contains('disabled')).toBe(true);
   expect(onColumnVisibilityChange).not.toHaveBeenCalled();
 
   cleanup();

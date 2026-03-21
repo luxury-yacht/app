@@ -340,7 +340,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <div className="overview-update-text">
               <span className="overview-update-meta">
                 {updateInfo?.latestVersion ? ` ${updateInfo.latestVersion}` : ''} update available!
-                Click here to go to the release page.
+                Click here to go to the downloads page.
               </span>
             </div>
           </button>
