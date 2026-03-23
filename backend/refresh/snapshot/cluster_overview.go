@@ -86,6 +86,8 @@ type ClusterOverviewPayload struct {
 	FargateNodes int `json:"fargateNodes"`
 	RegularNodes int `json:"regularNodes"`
 	EC2Nodes     int `json:"ec2Nodes"`
+	VirtualNodes int `json:"virtualNodes"`
+	VMNodes      int `json:"vmNodes"`
 
 	TotalPods           int `json:"totalPods"`
 	TotalContainers     int `json:"totalContainers"`
@@ -276,6 +278,7 @@ func buildClusterOverviewSnapshot(
 	var memUsageBytes int64
 
 	nonFargateNodes := 0
+	virtualKubeletNodes := 0
 
 	for _, node := range nodes {
 		if node == nil {
@@ -289,8 +292,15 @@ func buildClusterOverviewSnapshot(
 		cpuAllocatableMilli += node.Status.Allocatable.Cpu().MilliValue()
 		memAllocatableBytes += node.Status.Allocatable.Memory().Value()
 
+		// EKS Fargate nodes carry the eks.amazonaws.com/compute-type label.
 		if _, ok := node.Labels["eks.amazonaws.com/compute-type"]; ok {
 			overview.FargateNodes++
+			continue
+		}
+		// AKS Virtual Nodes (backed by Azure Container Instances) carry
+		// the type=virtual-kubelet label, set by the virtual-kubelet binary.
+		if node.Labels["type"] == "virtual-kubelet" {
+			virtualKubeletNodes++
 			continue
 		}
 		nonFargateNodes++
@@ -424,9 +434,13 @@ func buildClusterOverviewSnapshot(
 
 	clusterType := detectClusterType(overview.ClusterVersion, serverHost)
 	overview.ClusterType = clusterType
-	if clusterType == "EKS" {
+	switch clusterType {
+	case "EKS":
 		overview.EC2Nodes = nonFargateNodes
-	} else {
+	case "AKS":
+		overview.VirtualNodes = virtualKubeletNodes
+		overview.VMNodes = nonFargateNodes
+	default:
 		overview.RegularNodes = nonFargateNodes
 	}
 

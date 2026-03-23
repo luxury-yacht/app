@@ -162,6 +162,8 @@ export interface ClusterOverviewPayload {
   fargateNodes: number;
   regularNodes: number;
   ec2Nodes: number;
+  virtualNodes: number;
+  vmNodes: number;
   totalPods: number;
   totalContainers: number;
   totalInitContainers: number;
