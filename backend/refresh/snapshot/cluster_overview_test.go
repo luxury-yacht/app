@@ -167,6 +167,8 @@ func TestClusterOverviewBuilder(t *testing.T) {
 	require.Equal(t, 1, overview.FargateNodes)
 	require.Equal(t, 1, overview.EC2Nodes)
 	require.Equal(t, 0, overview.RegularNodes)
+	require.Equal(t, 0, overview.VirtualNodes)
+	require.Equal(t, 0, overview.VMNodes)
 	require.Equal(t, 2, overview.TotalPods)
 	require.Equal(t, 1, overview.RunningPods)
 	require.Equal(t, 1, overview.PendingPods)
@@ -286,6 +288,116 @@ func TestDetectClusterTypeFallsBackToServerHostForAKS(t *testing.T) {
 
 func TestDetectClusterTypePrefersVersionWhenPresent(t *testing.T) {
 	require.Equal(t, "EKS", detectClusterType("v1.28.3-eks-b1234", "https://mycluster.azmk8s.io"))
+}
+
+// TestClusterOverviewAKSVirtualNodes verifies that AKS clusters categorize
+// nodes with the type=virtual-kubelet label as virtual nodes and count the
+// remainder as VM nodes.
+func TestClusterOverviewAKSVirtualNodes(t *testing.T) {
+	now := time.Now()
+
+	nodeVM := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "aks-nodepool1-12345678-vmss000000",
+			ResourceVersion:   "10",
+			CreationTimestamp: metav1.NewTime(now.Add(-2 * time.Hour)),
+		},
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("2000m"),
+				corev1.ResourceMemory: resource.MustParse("8Gi"),
+			},
+		},
+	}
+
+	nodeVirtual := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "virtual-node-aci-linux",
+			ResourceVersion:   "11",
+			CreationTimestamp: metav1.NewTime(now.Add(-1 * time.Hour)),
+			Labels: map[string]string{
+				"type": "virtual-kubelet",
+			},
+		},
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("10000m"),
+				corev1.ResourceMemory: resource.MustParse("100Gi"),
+			},
+		},
+	}
+
+	builder := &ClusterOverviewBuilder{
+		nodeLister:      testsupport.NewNodeLister(t, nodeVM, nodeVirtual),
+		podLister:       testsupport.NewPodLister(t),
+		namespaceLister: testsupport.NewNamespaceLister(t),
+		metrics:         fakeClusterMetrics{},
+		cachedVersion:   "v1.29.0",
+		versionFetched:  now,
+		serverHost:      "https://mycluster.azmk8s.io",
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+
+	overview := payload.Overview
+	require.Equal(t, "AKS", overview.ClusterType)
+	require.Equal(t, 2, overview.TotalNodes)
+	require.Equal(t, 1, overview.VirtualNodes)
+	require.Equal(t, 1, overview.VMNodes)
+	// EKS- and generic-only fields should be zero for AKS.
+	require.Equal(t, 0, overview.FargateNodes)
+	require.Equal(t, 0, overview.EC2Nodes)
+	require.Equal(t, 0, overview.RegularNodes)
+}
+
+// TestClusterOverviewGKEShowsOnlyTotal verifies that GKE clusters only
+// populate TotalNodes (no provider-specific breakdown).
+func TestClusterOverviewGKEShowsOnlyTotal(t *testing.T) {
+	now := time.Now()
+
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "gke-pool-1-abc123",
+			ResourceVersion:   "10",
+			CreationTimestamp: metav1.NewTime(now.Add(-2 * time.Hour)),
+		},
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("2000m"),
+				corev1.ResourceMemory: resource.MustParse("8Gi"),
+			},
+		},
+	}
+
+	builder := &ClusterOverviewBuilder{
+		nodeLister:      testsupport.NewNodeLister(t, node),
+		podLister:       testsupport.NewPodLister(t),
+		namespaceLister: testsupport.NewNamespaceLister(t),
+		metrics:         fakeClusterMetrics{},
+		cachedVersion:   "v1.29.0-gke.1234",
+		versionFetched:  now,
+	}
+
+	snapshot, err := builder.Build(context.Background(), "")
+	require.NoError(t, err)
+
+	payload, ok := snapshot.Payload.(ClusterOverviewSnapshot)
+	require.True(t, ok)
+
+	overview := payload.Overview
+	require.Equal(t, "GKE", overview.ClusterType)
+	require.Equal(t, 1, overview.TotalNodes)
+	// GKE nodes are counted as regular; the frontend does not display this breakdown.
+	require.Equal(t, 1, overview.RegularNodes)
+	// Provider-specific fields should be zero for GKE.
+	require.Equal(t, 0, overview.FargateNodes)
+	require.Equal(t, 0, overview.EC2Nodes)
+	require.Equal(t, 0, overview.VirtualNodes)
+	require.Equal(t, 0, overview.VMNodes)
 }
 
 func TestClusterOverviewSuppressesInitialMetricsErrors(t *testing.T) {

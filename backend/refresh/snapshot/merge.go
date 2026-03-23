@@ -640,6 +640,8 @@ func mergeClusterOverviewPayload(payloads []ClusterOverviewSnapshot) ClusterOver
 		out.FargateNodes += overview.FargateNodes
 		out.RegularNodes += overview.RegularNodes
 		out.EC2Nodes += overview.EC2Nodes
+		out.VirtualNodes += overview.VirtualNodes
+		out.VMNodes += overview.VMNodes
 		out.TotalPods += overview.TotalPods
 		out.TotalContainers += overview.TotalContainers
 		out.TotalInitContainers += overview.TotalInitContainers

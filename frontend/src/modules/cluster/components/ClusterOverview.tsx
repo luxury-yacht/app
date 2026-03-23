@@ -43,6 +43,8 @@ const EMPTY_OVERVIEW: ClusterOverviewPayload = {
   fargateNodes: 0,
   regularNodes: 0,
   ec2Nodes: 0,
+  virtualNodes: 0,
+  vmNodes: 0,
   totalPods: 0,
   totalContainers: 0,
   totalInitContainers: 0,
@@ -482,20 +484,36 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               <div className={`stat-value${skeletonTextClass}`}>{displayOverview.totalNodes}</div>
               <div className="stat-label">Total</div>
             </div>
-            <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>
-                {displayOverview.clusterType === 'EKS'
-                  ? displayOverview.ec2Nodes
-                  : displayOverview.regularNodes}
-              </div>
-              <div className="stat-label">
-                {displayOverview.clusterType === 'EKS' ? 'EC2' : 'Standard'}
-              </div>
-            </div>
-            <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>{displayOverview.fargateNodes}</div>
-              <div className="stat-label">Fargate</div>
-            </div>
+            {/* EKS clusters: show EC2 and Fargate breakdown */}
+            {displayOverview.clusterType === 'EKS' && (
+              <>
+                <div className={`stat-card${skeletonBlockClass}`}>
+                  <div className={`stat-value${skeletonTextClass}`}>{displayOverview.ec2Nodes}</div>
+                  <div className="stat-label">EC2</div>
+                </div>
+                <div className={`stat-card${skeletonBlockClass}`}>
+                  <div className={`stat-value${skeletonTextClass}`}>
+                    {displayOverview.fargateNodes}
+                  </div>
+                  <div className="stat-label">Fargate</div>
+                </div>
+              </>
+            )}
+            {/* AKS clusters: show VM and Virtual (ACI) breakdown */}
+            {displayOverview.clusterType === 'AKS' && (
+              <>
+                <div className={`stat-card${skeletonBlockClass}`}>
+                  <div className={`stat-value${skeletonTextClass}`}>{displayOverview.vmNodes}</div>
+                  <div className="stat-label">VM</div>
+                </div>
+                <div className={`stat-card${skeletonBlockClass}`}>
+                  <div className={`stat-value${skeletonTextClass}`}>
+                    {displayOverview.virtualNodes}
+                  </div>
+                  <div className="stat-label">Virtual</div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
