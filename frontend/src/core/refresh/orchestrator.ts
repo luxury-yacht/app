@@ -86,6 +86,12 @@ type DomainFetchOptions = {
   metricsOnly?: boolean;
 };
 
+// Refreshers are disabled at registration by default. Most domains rely on
+// view hooks (e.g. ClusterResourcesContext, useBrowseCatalog) to enable
+// scopes on demand rather than polling from app startup. Changing this to
+// true would cause all streaming domains to start polling immediately at
+// registration, regardless of whether the user is on the relevant view.
+// Set autoStart: true on individual domain registrations when needed.
 const DEFAULT_AUTO_START = false;
 const noopStreamingCleanup = () => {};
 // Keep streaming metrics refreshes aligned with the configurable metrics cadence.
@@ -820,10 +826,17 @@ class RefreshOrchestrator {
 
   // Resource stream health gates polling so snapshots stay active until delivery resumes.
   private isStreamingHealthy(domain: RefreshDomain, scope?: string): boolean {
-    if (!scope || !this.isResourceStreamDomain(domain)) {
+    if (!scope) {
       return false;
     }
-    return resourceStreamManager.isHealthy(domain, scope);
+    if (this.isResourceStreamDomain(domain)) {
+      return resourceStreamManager.isHealthy(domain, scope);
+    }
+    // SSE-based streaming domains: check the stream manager directly.
+    if (domain === 'catalog') {
+      return catalogStreamManager.isHealthy();
+    }
+    return false;
   }
 
   private shouldStreamScope(domain: RefreshDomain, scope?: string): boolean {
@@ -1171,14 +1184,20 @@ class RefreshOrchestrator {
       const shouldStream = this.shouldStreamScope(domain, normalizedScope);
       if (shouldStream) {
         if (options.isManual) {
-          // Only use refreshOnce when the stream is already connected.
-          // If the stream is still being set up (e.g. WebSocket handshake
-          // in progress), fall through to a snapshot fetch so data arrives
-          // immediately rather than waiting for the connection.
-          if (this.isStreamingActive(domain, normalizedScope)) {
+          // For resource-stream (WebSocket) domains, use refreshOnce when
+          // the stream is already connected for immediate delta delivery.
+          // For SSE domains (catalog, events), always fall through to a
+          // snapshot fetch — the SSE stream delivers full snapshots on its
+          // own schedule and refreshStreamingDomainOnce just restarts the
+          // connection, which is wasteful for a manual refresh.
+          if (
+            this.isResourceStreamDomain(domain) &&
+            this.isStreamingActive(domain, normalizedScope)
+          ) {
             await this.refreshStreamingDomainOnce(domain, normalizedScope);
             return;
           }
+          // SSE domains and inactive streams fall through to performFetch.
         } else {
           this.startStreamingScope(domain, normalizedScope, config.streaming);
         }

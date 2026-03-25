@@ -92,6 +92,7 @@ const catalogStreamMocks = vi.hoisted(() => ({
   start: vi.fn(),
   stop: vi.fn(),
   refreshOnce: vi.fn(),
+  isHealthy: vi.fn(() => false),
 }));
 
 vi.mock('./streaming/catalogStreamManager', () => ({
@@ -837,7 +838,7 @@ describe('refreshOrchestrator', () => {
     expect(refreshManagerMocks.enableMock).toHaveBeenCalledWith(NAMESPACE_REFRESHERS.config);
   });
 
-  it('uses streaming refreshOnce for manual refresh when a domain stream is active', async () => {
+  it('uses snapshot fetch for manual refresh on SSE domains even when stream is active', async () => {
     catalogStreamMocks.refreshOnce.mockClear();
     clientMocks.fetchSnapshotMock.mockClear();
 
@@ -865,10 +866,13 @@ describe('refreshOrchestrator', () => {
     clientMocks.fetchSnapshotMock.mockClear();
 
     // Trigger a manual refresh via fetchScopedDomain.
+    // SSE domains (catalog) should fall through to a snapshot fetch instead of
+    // redirecting to refreshStreamingDomainOnce, because the SSE stream delivers
+    // full snapshots on its own schedule and restarting it is wasteful.
     await refreshOrchestrator.fetchScopedDomain('catalog', 'scope=all', { isManual: true });
 
-    expect(catalogStreamMocks.refreshOnce).toHaveBeenCalledWith('scope=all');
-    expect(clientMocks.fetchSnapshotMock).not.toHaveBeenCalled();
+    expect(catalogStreamMocks.refreshOnce).not.toHaveBeenCalled();
+    expect(clientMocks.fetchSnapshotMock).toHaveBeenCalled();
   });
 
   it('keeps polling enabled when a resource stream is active but unhealthy', () => {

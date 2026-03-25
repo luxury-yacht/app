@@ -125,6 +125,7 @@ type Options struct {
 	EvictionTTL                time.Duration // time-to-live for evicted items
 	StreamingBatchSize         int           // number of items per streaming batch
 	StreamingFlushInterval     time.Duration // interval between streaming flushes
+	EnableReactiveUpdates      bool          // enables informer-driven incremental updates (default true)
 }
 
 // QueryOptions controls catalog queries executed against the in-memory cache.
