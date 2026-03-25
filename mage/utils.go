@@ -10,9 +10,11 @@ import (
 	"time"
 )
 
-// checkNodeVersion reads .nvmrc and verifies the active Node version matches.
-// Since nvm is a shell function (not a binary), we can't call "nvm use" from Go,
-// so we report a clear error telling the developer to switch manually.
+// CheckNodeVersion reads .nvmrc and ensures the correct Node version is active.
+// Since nvm is a shell function (not a binary), we can't call "nvm use" from Go.
+// Instead, if the current node version doesn't match, we look for the correct
+// version in the nvm install directory and prepend its bin/ to PATH so all
+// subsequent npm/npx/node calls in this process use the right version.
 func CheckNodeVersion() error {
 	data, err := os.ReadFile(".nvmrc")
 	if err != nil {
@@ -21,17 +23,32 @@ func CheckNodeVersion() error {
 	expected := strings.TrimSpace(string(data))
 	expected = strings.TrimPrefix(expected, "v")
 
+	// Check if the current node already matches.
 	nodeCmd := exec.Command("node", "--version")
 	out, err := nodeCmd.Output()
-	if err != nil {
-		return fmt.Errorf("node is not installed or not in PATH: %w", err)
+	if err == nil {
+		actual := strings.TrimPrefix(strings.TrimSpace(string(out)), "v")
+		if actual == expected {
+			return nil
+		}
 	}
-	actual := strings.TrimSpace(string(out))
-	actual = strings.TrimPrefix(actual, "v")
 
-	if actual != expected {
-		return fmt.Errorf("node version mismatch: .nvmrc requires v%s but current node is v%s. Run 'nvm use' to switch", expected, actual)
+	// Current node doesn't match (or isn't found). Try to find the right
+	// version in the nvm directory and prepend it to PATH.
+	nvmDir := os.Getenv("NVM_DIR")
+	if nvmDir == "" {
+		home, _ := os.UserHomeDir()
+		nvmDir = home + "/.nvm"
 	}
+
+	nodeBinDir := fmt.Sprintf("%s/versions/node/v%s/bin", nvmDir, expected)
+	if _, err := os.Stat(nodeBinDir + "/node"); err != nil {
+		return fmt.Errorf("node v%s is not installed via nvm (looked in %s). Run 'nvm install %s'", expected, nodeBinDir, expected)
+	}
+
+	// Prepend the correct node bin directory to PATH for this process.
+	os.Setenv("PATH", nodeBinDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	fmt.Printf("Using node v%s from %s\n", expected, nodeBinDir)
 	return nil
 }
 

@@ -90,6 +90,7 @@ class CatalogStreamManager {
   private flushTimer: number | null = null;
   private lastAppliedSequence = 0;
   private lastFallbackAt = 0;
+  private lastEventAt = 0;
   private mergeQueue = new CatalogStreamMergeQueue({
     maxBatchSize: CATALOG_STREAM_BATCH_SIZE,
     maxPending: CATALOG_STREAM_MAX_PENDING,
@@ -181,6 +182,17 @@ class CatalogStreamManager {
     }
   }
 
+  /** Reports whether the catalog stream has delivered data recently. */
+  isHealthy(): boolean {
+    if (!this.eventSource || this.closed) {
+      return false;
+    }
+    // Consider healthy if we received an event within the last 90 seconds.
+    // The catalog sync runs every 60s (or 5min with reactive updates),
+    // so 90s gives margin for one missed cycle.
+    return this.lastEventAt > 0 && Date.now() - this.lastEventAt < 90_000;
+  }
+
   async refreshOnce(scope: string): Promise<void> {
     await this.restart(scope);
   }
@@ -247,6 +259,7 @@ class CatalogStreamManager {
         console.error('Invalid catalog stream event payload structure');
         return;
       }
+      this.lastEventAt = Date.now();
       const payload = parsed;
       const isPaginatedScope = Boolean(this.scope && this.scope.includes('continue='));
       const shouldReset = payload.reset && !isPaginatedScope;

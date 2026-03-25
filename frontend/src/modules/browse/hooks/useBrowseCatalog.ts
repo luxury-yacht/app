@@ -199,9 +199,11 @@ export function useBrowseCatalog({
     if (!domain.data) {
       return;
     }
-    // Only apply snapshots once the domain is `ready` so we don't mistakenly treat
-    // stale data as belonging to a new scope.
-    if (domain.status !== 'ready') {
+    // Skip transient states where data isn't meaningful yet.
+    // Allow both 'ready' and 'updating' — the catalog stream delivers complete
+    // snapshots in both states, and gating on 'ready' alone causes the view to
+    // miss real-time updates delivered via SSE while status is 'updating'.
+    if (domain.status !== 'ready' && domain.status !== 'updating') {
       return;
     }
     // Check if the incoming data matches the namespace we're expecting.
@@ -227,14 +229,8 @@ export function useBrowseCatalog({
     const mode = requestModeRef.current;
     requestModeRef.current = null;
 
-    if (mode === 'reset') {
-      // Explicit reset (query changed): replace all items with the new snapshot
-      const { items: nextItems, indexByUid } = dedupeByUID(payload.items ?? []);
-      itemsRef.current = nextItems;
-      indexByUidRef.current = indexByUid.size ? indexByUid : rebuildIndexByUID(nextItems);
-      setItems(nextItems);
-    } else {
-      // Append mode or refresh (mode === 'append' or null): merge items to preserve pagination
+    if (mode === 'append') {
+      // Append mode (load-more pagination): merge new items into the existing list.
       const { nextItems, changed } = upsertByUID(
         itemsRef.current,
         indexByUidRef.current,
@@ -244,6 +240,15 @@ export function useBrowseCatalog({
         itemsRef.current = nextItems;
         setItems(nextItems);
       }
+    } else {
+      // Reset or streaming refresh (mode === 'reset' or null): replace all items
+      // so that additions, deletions, and updates are reflected immediately.
+      // upsertByUID cannot handle deletions — it only adds/updates from incoming,
+      // so stale items would persist until the next scope change.
+      const { items: nextItems, indexByUid } = dedupeByUID(payload.items ?? []);
+      itemsRef.current = nextItems;
+      indexByUidRef.current = indexByUid.size ? indexByUid : rebuildIndexByUID(nextItems);
+      setItems(nextItems);
     }
 
     setContinueToken(parseContinueToken(payload.continue));

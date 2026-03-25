@@ -179,12 +179,27 @@ func (s *Service) runLoop(ctx context.Context) error {
 		s.logWarn(fmt.Sprintf("initial catalog sync failed: %v", err))
 	}
 
+	// Start reactive update notifier if enabled.
+	if s.opts.EnableReactiveUpdates && s.deps.InformerFactory != nil {
+		notifier := newWatchNotifier(ctx, s)
+		registerWatchHandlers(s.deps.InformerFactory, s.deps.APIExtensionsInformerFactory, notifier, s)
+		go notifier.run()
+		s.logInfo("catalog reactive updates enabled")
+	}
+
 	if s.opts.ResyncInterval <= 0 {
 		<-ctx.Done()
 		return ctx.Err()
 	}
 
-	ticker := time.NewTicker(s.opts.ResyncInterval)
+	resyncInterval := s.opts.ResyncInterval
+	if s.opts.EnableReactiveUpdates && s.deps.InformerFactory != nil {
+		// With reactive updates the full resync is a consistency safety net.
+		if resyncInterval < 5*time.Minute {
+			resyncInterval = 5 * time.Minute
+		}
+	}
+	ticker := time.NewTicker(resyncInterval)
 	defer ticker.Stop()
 
 	for {
@@ -201,6 +216,8 @@ func (s *Service) runLoop(ctx context.Context) error {
 
 func (s *Service) sync(ctx context.Context) error {
 	start := s.now()
+	s.syncInProgress.Store(true)
+	defer s.syncInProgress.Store(false)
 
 	currentItems, currentLastSeen, prevResourceCount := s.captureCurrentState()
 	newItems := cloneSummaryMap(currentItems)
