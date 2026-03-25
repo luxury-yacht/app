@@ -171,7 +171,7 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-config',
       refresherName: CLUSTER_REFRESHERS.config,
       category: 'cluster',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => resourceStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -192,7 +192,6 @@ describe('refreshOrchestrator', () => {
       domain: 'object-maintenance',
       refresherName: SYSTEM_REFRESHERS.objectMaintenance,
       category: 'system',
-      autoStart: false,
     });
   };
 
@@ -201,7 +200,6 @@ describe('refreshOrchestrator', () => {
       domain: 'catalog-diff',
       refresherName: CLUSTER_REFRESHERS.catalogDiff,
       category: 'cluster',
-      autoStart: false,
     });
   };
 
@@ -230,7 +228,6 @@ describe('refreshOrchestrator', () => {
       domain: 'pods',
       refresherName: SYSTEM_REFRESHERS.unifiedPods,
       category: 'system',
-      autoStart: true,
     });
   };
 
@@ -245,7 +242,6 @@ describe('refreshOrchestrator', () => {
       domain: 'namespaces',
       refresherName: SYSTEM_REFRESHERS.namespaces,
       category: 'system',
-      autoStart: true,
     });
     refreshOrchestrator.setScopedDomainEnabled('namespaces', 'cluster:cluster-a', true);
 
@@ -356,7 +352,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-config',
       refresherName: 'cluster-config',
       category: 'cluster',
-      autoStart: true,
     });
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
@@ -427,7 +422,6 @@ describe('refreshOrchestrator', () => {
       domain: 'namespaces',
       refresherName: SYSTEM_REFRESHERS.namespaces,
       category: 'system',
-      autoStart: true,
     });
     refreshOrchestrator.setScopedDomainEnabled('namespaces', scope, true);
 
@@ -596,7 +590,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-config',
       refresherName: 'cluster-config',
       category: 'cluster',
-      autoStart: true,
     });
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
@@ -671,7 +664,7 @@ describe('refreshOrchestrator', () => {
       domain: 'namespace-events',
       refresherName: NAMESPACE_REFRESHERS.events,
       category: 'namespace',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => eventStreamMocks.startNamespace(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -716,7 +709,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-config',
       refresherName: 'cluster-config',
       category: 'cluster',
-      autoStart: true,
     });
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
     await subscriber?.(true, new AbortController().signal);
@@ -747,7 +739,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-overview',
       refresherName: SYSTEM_REFRESHERS.clusterOverview,
       category: 'cluster',
-      autoStart: false,
     });
 
     // Metrics demand should follow the visibility of metrics-driven domains.
@@ -764,7 +755,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-overview',
       refresherName: SYSTEM_REFRESHERS.clusterOverview,
       category: 'system',
-      autoStart: false,
     });
 
     const scopeA = buildClusterScopeList(['cluster-a'], '');
@@ -795,7 +785,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-config',
       refresherName: CLUSTER_REFRESHERS.config,
       category: 'cluster',
-      autoStart: true,
     });
 
     const subscribeResults = refreshManagerMocks.subscribeMock.mock.results;
@@ -808,7 +797,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-config',
       refresherName: CLUSTER_REFRESHERS.config,
       category: 'cluster',
-      autoStart: false,
     });
 
     expect(firstUnsubscribe).toHaveBeenCalledTimes(1);
@@ -826,7 +814,6 @@ describe('refreshOrchestrator', () => {
       domain: 'namespace-config',
       refresherName: NAMESPACE_REFRESHERS.config,
       category: 'namespace',
-      autoStart: false,
     });
 
     refreshManagerMocks.disableMock.mockClear();
@@ -846,7 +833,7 @@ describe('refreshOrchestrator', () => {
       domain: 'catalog',
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => catalogStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -988,7 +975,7 @@ describe('refreshOrchestrator', () => {
       domain: 'catalog',
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => catalogStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1013,7 +1000,7 @@ describe('refreshOrchestrator', () => {
       domain: 'catalog',
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => {
           catalogStreamMocks.start(scope);
@@ -1052,7 +1039,7 @@ describe('refreshOrchestrator', () => {
       domain: 'catalog',
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => {
           catalogStreamMocks.start(scope);
@@ -1085,7 +1072,7 @@ describe('refreshOrchestrator', () => {
       domain: 'catalog',
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => catalogStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1156,7 +1143,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-config',
       refresherName: 'cluster-config',
       category: 'cluster',
-      autoStart: true,
     });
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
     errorHandlerMock.handle.mockClear();
@@ -1183,7 +1169,7 @@ describe('refreshOrchestrator', () => {
       domain: 'object-logs',
       refresherName: SYSTEM_REFRESHERS.objectLogs,
       category: 'system',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => logStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1209,7 +1195,7 @@ describe('refreshOrchestrator', () => {
       domain: 'catalog',
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => catalogStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1266,7 +1252,7 @@ describe('refreshOrchestrator', () => {
       domain: 'object-logs',
       refresherName: SYSTEM_REFRESHERS.objectLogs,
       category: 'system',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => logStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1279,7 +1265,7 @@ describe('refreshOrchestrator', () => {
       domain: 'namespace-events',
       refresherName: NAMESPACE_REFRESHERS.events,
       category: 'namespace',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => eventStreamMocks.startNamespace(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1312,7 +1298,7 @@ describe('refreshOrchestrator', () => {
       domain: 'object-logs',
       refresherName: SYSTEM_REFRESHERS.objectLogs,
       category: 'system',
-      autoStart: false,
+
       streaming: {
         start: startSpy,
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1336,7 +1322,6 @@ describe('refreshOrchestrator', () => {
       domain: 'namespace-config',
       refresherName: NAMESPACE_REFRESHERS.config,
       category: 'namespace',
-      autoStart: false,
     });
 
     refreshOrchestrator.updateContext({
@@ -1357,7 +1342,7 @@ describe('refreshOrchestrator', () => {
       domain: 'namespace-events',
       refresherName: NAMESPACE_REFRESHERS.events,
       category: 'namespace',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => eventStreamMocks.startNamespace(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1378,7 +1363,7 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-events',
       refresherName: CLUSTER_REFRESHERS.events,
       category: 'cluster',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => eventStreamMocks.startCluster(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1438,7 +1423,7 @@ describe('refreshOrchestrator', () => {
       domain: 'object-logs',
       refresherName: SYSTEM_REFRESHERS.objectLogs,
       category: 'system',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => logStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1479,7 +1464,7 @@ describe('refreshOrchestrator', () => {
       domain: 'catalog',
       refresherName: CLUSTER_REFRESHERS.browse,
       category: 'cluster',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => catalogStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1518,7 +1503,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-config',
       refresherName: CLUSTER_REFRESHERS.config,
       category: 'cluster',
-      autoStart: true,
     });
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
@@ -1533,7 +1517,7 @@ describe('refreshOrchestrator', () => {
       domain: 'pods',
       refresherName: SYSTEM_REFRESHERS.unifiedPods,
       category: 'system',
-      autoStart: false,
+
       streaming: {
         start: (scope: string) => resourceStreamMocks.start(scope),
         stop: (scope: string, options?: { reset?: boolean }) =>
@@ -1850,7 +1834,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-config',
       refresherName: CLUSTER_REFRESHERS.config,
       category: 'cluster',
-      autoStart: true,
     });
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
@@ -1888,7 +1871,6 @@ describe('refreshOrchestrator', () => {
       domain: 'cluster-config',
       refresherName: CLUSTER_REFRESHERS.config,
       category: 'cluster',
-      autoStart: true,
     });
     refreshOrchestrator.setScopedDomainEnabled('cluster-config', scope, true);
 
