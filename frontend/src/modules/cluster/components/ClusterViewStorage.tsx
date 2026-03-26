@@ -297,7 +297,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     );
 
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(error, 'No data available'),
+      () => resolveEmptyStateMessage(error, 'No cluster-scoped storage objects found'),
       [error]
     );
 

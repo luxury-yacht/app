@@ -318,8 +318,9 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     );
 
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(undefined, 'No data available'),
-      []
+      () => resolveEmptyStateMessage(undefined,
+        `No helm objects found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`),
+      [namespace]
     );
 
     return (

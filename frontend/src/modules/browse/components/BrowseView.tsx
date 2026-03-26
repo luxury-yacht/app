@@ -319,7 +319,9 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     tableClassName ?? (isNamespaceScoped ? 'gridtable-namespace-browse' : 'gridtable-browse');
   const resolvedEmptyMessage =
     emptyMessage ??
-    (isNamespaceScoped ? 'No resources found in this namespace.' : 'No catalog objects found.');
+    (isClusterScoped
+      ? 'No cluster-scoped objects found'
+      : `No objects found ${isNamespaceScoped ? 'in this namespace' : 'in any namespaces'}`);
   const resolvedLoadingMessage =
     loadingMessage ?? (isNamespaceScoped ? 'Loading resources...' : 'Loading browse catalog...');
 

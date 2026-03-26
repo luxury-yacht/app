@@ -77,6 +77,8 @@ describe('GridTableBody', () => {
       viewportWidth: 0,
       loading: false,
       focusedRowKey: null,
+      hasActiveFilters: false,
+      onClearFilters: vi.fn(),
     };
 
     const allProps = { ...defaultProps, ...props } as BodyProps;

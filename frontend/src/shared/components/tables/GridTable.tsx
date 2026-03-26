@@ -81,6 +81,8 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     handleManualLoadMore,
     showLoadingOverlay,
     loadingOverlayMessage,
+    hasActiveFilters,
+    onClearFilters,
     wrapWithProfiler,
   } = useGridTableController<T>(props);
 
@@ -129,6 +131,8 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       viewportWidth={tableViewportWidth}
       loading={loading}
       focusedRowKey={focusedRowKey}
+      hasActiveFilters={hasActiveFilters}
+      onClearFilters={onClearFilters}
     />
   );
 

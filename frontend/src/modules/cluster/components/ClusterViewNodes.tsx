@@ -241,7 +241,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     ]);
 
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(error, 'No data available'),
+      () => resolveEmptyStateMessage(error, 'No nodes found'),
       [error]
     );
 

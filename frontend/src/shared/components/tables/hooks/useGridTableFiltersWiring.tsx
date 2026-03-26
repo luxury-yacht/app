@@ -223,6 +223,7 @@ export function useGridTableFiltersWiring<T>({
     showNamespaceDropdown,
     filtersBarProps,
     filtersNode,
+    handleFilterReset,
   };
 }
 
