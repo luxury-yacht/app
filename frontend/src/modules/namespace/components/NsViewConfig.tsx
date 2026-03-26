@@ -229,8 +229,12 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
     );
 
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(undefined, 'No data available'),
-      []
+      () =>
+        resolveEmptyStateMessage(
+          undefined,
+          `No config objects found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
+        ),
+      [namespace]
     );
 
     return (

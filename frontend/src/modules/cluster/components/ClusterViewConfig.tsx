@@ -207,7 +207,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
 
     // Resolve empty state message
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(error, 'No data available'),
+      () => resolveEmptyStateMessage(error, 'No cluster-scoped config objects found'),
       [error]
     );
 

@@ -153,6 +153,10 @@ export interface GridTableControllerResult<T> {
   showLoadingOverlay: boolean;
   loadingOverlayMessage: string;
 
+  // Filters
+  hasActiveFilters: boolean;
+  onClearFilters: () => void;
+
   // Profiler
   wrapWithProfiler: (node: ReactElement) => ReactElement;
 }
@@ -265,17 +269,26 @@ export function useGridTableController<T>({
   const {
     filteringEnabled,
     tableData,
+    activeFilters,
     filterSignature,
     filtersContainerRef,
     filterFocusIndexRef,
     showKindDropdown,
     showNamespaceDropdown,
     filtersNode,
+    handleFilterReset,
   } = useGridTableFiltersWiring<T>({
     data: sourceData,
     filters,
     columnsDropdown: columnsDropdownConfig ?? undefined,
   });
+
+  // Whether any filter is actively narrowing results (search text, kind, or namespace selections).
+  const hasActiveFilters =
+    filteringEnabled &&
+    (activeFilters.search !== '' ||
+      activeFilters.kinds.length > 0 ||
+      activeFilters.namespaces.length > 0);
 
   const loadingOverlayMessage = loadingOverlay?.message ?? 'Refreshing...';
   const showLoadingOverlay = loadingOverlay ? loadingOverlay.show : loading && tableData.length > 0;
@@ -969,6 +982,8 @@ export function useGridTableController<T>({
     handleManualLoadMore,
     showLoadingOverlay,
     loadingOverlayMessage,
+    hasActiveFilters,
+    onClearFilters: handleFilterReset,
     wrapWithProfiler,
   };
 }

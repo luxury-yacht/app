@@ -225,7 +225,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
 
     // Resolve empty state message
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(error, 'No data available'),
+      () => resolveEmptyStateMessage(error, 'No cluster-scoped custom objects found'),
       [error]
     );
 

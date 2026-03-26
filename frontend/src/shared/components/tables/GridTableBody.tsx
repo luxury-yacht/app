@@ -54,6 +54,10 @@ interface GridTableBodyProps<T> {
   loading: boolean;
   /** Key of the currently focused row — drives aria-activedescendant on the grid container. */
   focusedRowKey: string | null;
+  /** Whether any filter is actively narrowing results. */
+  hasActiveFilters: boolean;
+  /** Callback to clear all active filters. */
+  onClearFilters: () => void;
 }
 
 function GridTableBody<T>({
@@ -89,6 +93,8 @@ function GridTableBody<T>({
   viewportWidth,
   loading,
   focusedRowKey,
+  hasActiveFilters,
+  onClearFilters,
 }: GridTableBodyProps<T>) {
   const stretchDecisionRef = useRef<boolean | null>(null);
 
@@ -98,7 +104,26 @@ function GridTableBody<T>({
 
   const renderRows = () => {
     if (tableData.length === 0) {
-      return <div className="gridtable-empty">{emptyMessage}</div>;
+      return (
+        <div className="gridtable-empty">
+          {emptyMessage}
+          {hasActiveFilters && (
+            <div className="gridtable-empty-filter-hint">
+              Filters are enabled that may be hiding objects.{' '}
+              <a
+                href="#"
+                className="gridtable-empty-filter-hint__link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onClearFilters();
+                }}
+              >
+                Clear filters
+              </a>
+            </div>
+          )}
+        </div>
+      );
     }
 
     if (shouldVirtualize) {

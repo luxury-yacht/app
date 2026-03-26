@@ -240,10 +240,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       useShortResourceNames,
     ]);
 
-    const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(error, 'No data available'),
-      [error]
-    );
+    const emptyMessage = useMemo(() => resolveEmptyStateMessage(error, 'No nodes found'), [error]);
 
     const keyExtractor = useCallback(
       (row: ClusterNodeRow) => buildClusterScopedKey(row, `node:${row.name}`),

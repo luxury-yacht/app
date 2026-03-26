@@ -5,6 +5,7 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
+import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getPodStatusSeverity } from '@/utils/podStatusSeverity';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { eventBus } from '@/core/events';
@@ -484,6 +485,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       [handlePodOpen, permissionMap]
     );
 
+    const emptyMessage = useMemo(
+      () =>
+        resolveEmptyStateMessage(
+          undefined,
+          `No pods found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
+        ),
+      [namespace]
+    );
+
     return (
       <>
         {error && <div className="namespace-error-message">{error}</div>}
@@ -526,6 +536,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             columnVisibility={columnVisibility}
             onColumnVisibilityChange={setColumnVisibility}
             allowHorizontalOverflow={true}
+            emptyMessage={emptyMessage}
             loadingOverlay={{
               show: Boolean(loading) && displayedPods.length > 0,
               message: 'Updating pods…',

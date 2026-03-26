@@ -249,8 +249,12 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     );
 
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(undefined, 'No data available'),
-      []
+      () =>
+        resolveEmptyStateMessage(
+          undefined,
+          `No events found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
+        ),
+      [namespace]
     );
 
     return (

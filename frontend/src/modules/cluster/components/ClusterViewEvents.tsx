@@ -232,7 +232,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
 
     // Resolve empty state message
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(error, 'No data available'),
+      () => resolveEmptyStateMessage(error, 'No cluster-scoped events found'),
       [error]
     );
 

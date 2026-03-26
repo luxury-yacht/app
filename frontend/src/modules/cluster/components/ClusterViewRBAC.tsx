@@ -207,7 +207,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
 
     // Resolve empty state message
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(error, 'No data available'),
+      () => resolveEmptyStateMessage(error, 'No cluster-scoped RBAC objects found'),
       [error]
     );
 

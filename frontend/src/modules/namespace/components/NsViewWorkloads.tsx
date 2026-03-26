@@ -406,8 +406,12 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     );
 
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(undefined, 'No data available'),
-      []
+      () =>
+        resolveEmptyStateMessage(
+          undefined,
+          `No workloads found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
+        ),
+      [namespace]
     );
 
     const boundaryLoading = Boolean(loading) || !(Boolean(loaded) || sortedWorkloads.length > 0);
