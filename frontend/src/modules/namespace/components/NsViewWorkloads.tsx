@@ -406,8 +406,11 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     );
 
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(undefined,
-        `No workloads found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`),
+      () =>
+        resolveEmptyStateMessage(
+          undefined,
+          `No workloads found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
+        ),
       [namespace]
     );
 

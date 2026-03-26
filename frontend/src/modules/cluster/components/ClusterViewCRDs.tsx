@@ -209,10 +209,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
     );
 
     // Resolve empty state message
-    const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(error, 'No CRDs found'),
-      [error]
-    );
+    const emptyMessage = useMemo(() => resolveEmptyStateMessage(error, 'No CRDs found'), [error]);
 
     return (
       <>

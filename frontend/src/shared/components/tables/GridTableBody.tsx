@@ -113,7 +113,10 @@ function GridTableBody<T>({
               <a
                 href="#"
                 className="gridtable-empty-filter-hint__link"
-                onClick={(e) => { e.preventDefault(); onClearFilters(); }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  onClearFilters();
+                }}
               >
                 Clear filters
               </a>

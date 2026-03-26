@@ -238,8 +238,11 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     );
 
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(undefined,
-        `No RBAC objects found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`),
+      () =>
+        resolveEmptyStateMessage(
+          undefined,
+          `No RBAC objects found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
+        ),
       [namespace]
     );
 
