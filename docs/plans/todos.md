@@ -1,25 +1,20 @@
 # TODO
 
+- Link behavior
+  - Click to open in Object Panel
+  - Ctrl/Cmd+click to go to that item in its view
+- Show number of items in tables
+  - Perhaps an option to turn on row numbers?
+
 ## Issues
 
 ## Feature Ideas
 
 - Gridtable improvements
-  - Link behavior
-    - Click to open in Object Panel
-    - Ctrl/Cmd+click to go to that item in its view
   - Allow column order change via drag
     - should reset button also reset to default column order?
       - probably not because that reset is for filters
-  - Right-click menu on table header
-    - Sort asc/desc
-    - Move column left/right
-    - Hide column
-    - Reset to defaults
-  - Hover buttons to hide column, set sort?
   - Pods view, change default column order to Name, Owner, Namespace
-  - Show number of items in tables
-    - Perhaps an option to turn on row numbers?
 
 - Transfer files to/from pods
   - Select container

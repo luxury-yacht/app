@@ -10,6 +10,7 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
@@ -59,6 +60,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
   ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
+    const objectLink = useObjectLink();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
 
@@ -146,17 +148,16 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
           'Storage Class',
           (resource) => resource.storageClass || 'default',
           {
-            onClick: (resource) => {
-              if (!resource.storageClass) {
-                return;
-              }
-              openWithObject({
-                kind: 'StorageClass',
-                name: resource.storageClass,
-                clusterId: resource.clusterId ?? undefined,
-                clusterName: resource.clusterName ?? undefined,
-              });
-            },
+            ...objectLink((resource) =>
+              resource.storageClass
+                ? {
+                    kind: 'StorageClass',
+                    name: resource.storageClass,
+                    clusterId: resource.clusterId ?? undefined,
+                    clusterName: resource.clusterName ?? undefined,
+                  }
+                : undefined
+            ),
             isInteractive: (resource) => Boolean(resource.storageClass),
             getClassName: (resource) =>
               resource.storageClass ? 'storage-class-link' : 'default-class',
@@ -187,7 +188,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     }, [
       handleResourceClick,
       navigateToView,
-      openWithObject,
+      objectLink,
       showNamespaceColumn,
       useShortResourceNames,
     ]);

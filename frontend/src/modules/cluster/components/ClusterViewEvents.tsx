@@ -12,6 +12,7 @@ import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -56,6 +57,7 @@ interface EventViewProps {
 const ClusterEventsView: React.FC<EventViewProps> = React.memo(
   ({ data, loading = false, loaded, error }) => {
     const { openWithObject } = useObjectPanel();
+    const objectLink = useObjectLink();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
 
@@ -91,26 +93,34 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       return values.filter(Boolean);
     }, []);
 
-    const handleEventClick = useCallback(
+    // Build an object reference from an event's involved object for navigation.
+    const getEventObjectRef = useCallback(
       (event: EventData) => {
-        // Events don't have a direct object panel view, but we could open the related object.
         const parsed = splitEventObject(event.object);
         if (!parsed.isLinkable) {
-          return;
+          return undefined;
         }
         const namespace =
           event.objectNamespace && event.objectNamespace.length > 0
             ? event.objectNamespace
             : undefined;
-        openWithObject({
+        return {
           kind: parsed.objectType,
           name: parsed.objectName,
           namespace,
           clusterId: event.clusterId ?? undefined,
           clusterName: event.clusterName ?? undefined,
-        });
+        };
       },
-      [openWithObject, splitEventObject]
+      [splitEventObject]
+    );
+
+    const handleEventClick = useCallback(
+      (event: EventData) => {
+        const ref = getEventObjectRef(event);
+        if (ref) openWithObject(ref);
+      },
+      [getEventObjectRef, openWithObject]
     );
 
     const keyExtractor = useCallback(
@@ -145,7 +155,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
             return parsed.objectName;
           },
           {
-            onClick: handleEventClick,
+            ...objectLink(getEventObjectRef),
             isInteractive: (event) => splitEventObject(event.object).isLinkable,
           }
         ),
@@ -172,7 +182,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleEventClick, splitEventObject, useShortResourceNames]);
+    }, [getEventObjectRef, objectLink, splitEventObject, useShortResourceNames]);
 
     // Set up grid table persistence
     const {

@@ -82,7 +82,15 @@ function matchesRequest<T>(item: T, request: FocusRequest): boolean {
 }
 
 /**
+ * Escapes a row key for use in a CSS attribute selector.
+ */
+function escapeKey(key: string): string {
+  return typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(key) : key;
+}
+
+/**
  * Finds the matching row index and focuses it, scrolling it into view.
+ * Handles virtualized tables where the target row may not be in the DOM.
  * Returns true if a match was found.
  */
 function tryFocus<T>(
@@ -96,23 +104,63 @@ function tryFocus<T>(
     if (matchesRequest(tableData[i], request)) {
       const key = keyExtractor(tableData[i], i);
       setFocusedRowKey(key);
-
-      // Scroll the row into view after React renders the focus state.
-      requestAnimationFrame(() => {
-        const wrapper = wrapperRef.current;
-        if (!wrapper) return;
-        const escapedKey =
-          typeof CSS !== 'undefined' && typeof CSS.escape === 'function' ? CSS.escape(key) : key;
-        const rowElement = wrapper.querySelector<HTMLElement>(
-          `.gridtable-row[data-row-key="${escapedKey}"]`
-        );
-        rowElement?.scrollIntoView({ block: 'nearest' });
-      });
-
+      scrollToFocusedRow(key, i, tableData.length, wrapperRef);
       return true;
     }
   }
   return false;
+}
+
+/**
+ * Scrolls a focused row into view. When the table is virtualized and
+ * the row is outside the current virtual viewport, scrolls the container
+ * to the approximate position first, then retries the DOM lookup once
+ * the virtual window has updated.
+ */
+function scrollToFocusedRow(
+  key: string,
+  rowIndex: number,
+  rowCount: number,
+  wrapperRef: RefObject<HTMLDivElement | null>
+): void {
+  const selector = `.gridtable-row[data-row-key="${escapeKey(key)}"]`;
+
+  requestAnimationFrame(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    // Try direct DOM lookup — works for non-virtualized tables and rows
+    // that happen to be within the current virtual viewport.
+    const rowElement = wrapper.querySelector<HTMLElement>(selector);
+    if (rowElement) {
+      rowElement.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+
+    // Row not in DOM — table is likely virtualized and the row is off-screen.
+    // Scroll the container to bring the row into the virtual viewport.
+    const virtualBody = wrapper.querySelector<HTMLElement>('.gridtable-virtual-body');
+    if (!virtualBody || rowCount <= 0) return;
+
+    const totalHeight = virtualBody.offsetHeight;
+    const estimatedRowHeight = totalHeight / rowCount;
+    const targetTop = Math.max(0, rowIndex * estimatedRowHeight - wrapper.clientHeight / 2);
+    wrapper.scrollTo({ top: targetTop, behavior: 'auto' });
+
+    // Retry a few frames later once the virtual viewport has re-rendered.
+    let retries = 3;
+    const retryScroll = () => {
+      const el = wrapperRef.current?.querySelector<HTMLElement>(selector);
+      if (el) {
+        el.scrollIntoView({ block: 'nearest' });
+        return;
+      }
+      if (--retries > 0) {
+        requestAnimationFrame(retryScroll);
+      }
+    };
+    requestAnimationFrame(retryScroll);
+  });
 }
 
 export function useGridTableExternalFocus<T>({
