@@ -246,6 +246,10 @@ export function GetResourceQuota(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetResourceQuota'](arg1, arg2, arg3);
 }
 
+export function GetRevisionHistory(arg1, arg2, arg3, arg4) {
+  return window['go']['backend']['App']['GetRevisionHistory'](arg1, arg2, arg3, arg4);
+}
+
 export function GetRole(arg1, arg2, arg3) {
   return window['go']['backend']['App']['GetRole'](arg1, arg2, arg3);
 }
@@ -372,6 +376,10 @@ export function RetryAuth() {
 
 export function RetryClusterAuth(arg1) {
   return window['go']['backend']['App']['RetryClusterAuth'](arg1);
+}
+
+export function RollbackWorkload(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['backend']['App']['RollbackWorkload'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function SaveTheme(arg1) {

@@ -2,9 +2,6 @@
 
 - Better handling of long values in the log JSON viewer
 
-- rollback
-  - choose a replicaset
-
 ## Issues
 
 ## Feature Ideas

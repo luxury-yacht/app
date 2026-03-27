@@ -129,6 +129,7 @@ export type PanelState = {
   showScaleInput: boolean;
   showRestartConfirm: boolean;
   showDeleteConfirm: boolean;
+  showRollbackModal: boolean;
 
   // Resource deletion state
   resourceDeleted: boolean;
@@ -143,7 +144,8 @@ export type PanelAction =
   | { type: 'SHOW_SCALE_INPUT'; payload: boolean }
   | { type: 'SHOW_RESTART_CONFIRM'; payload: boolean }
   | { type: 'SHOW_DELETE_CONFIRM'; payload: boolean }
+  | { type: 'SHOW_ROLLBACK_MODAL'; payload: boolean }
   | { type: 'SET_RESOURCE_DELETED'; payload: { deleted: boolean; name: string } }
   | { type: 'RESET_STATE' };
 
-export type ResourceAction = 'restart' | 'delete' | 'scale';
+export type ResourceAction = 'restart' | 'delete' | 'scale' | 'rollback';

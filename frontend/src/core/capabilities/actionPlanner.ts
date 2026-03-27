@@ -100,7 +100,8 @@ const ownerRestartDefinition = (
 export type CapabilityActionId =
   | 'core.nodes.pod.delete'
   | 'core.nodes.pod.portforward'
-  | 'core.nodes.workload.restart';
+  | 'core.nodes.workload.restart'
+  | 'core.nodes.workload.rollback';
 
 interface NamespaceActionBuildContext {
   namespace: string;
@@ -146,10 +147,29 @@ registerNamespaceAction({
   },
 });
 
+// Rollback uses the same patch permission as restart — piggybacks on ownerRestartDefinition
+registerNamespaceAction({
+  id: 'core.nodes.workload.rollback',
+  build: ({ namespace, ownerKinds }) => {
+    if (ownerKinds.size === 0) {
+      return [];
+    }
+    const definitions: CapabilityDefinition[] = [];
+    ownerKinds.forEach((ownerKind) => {
+      const definition = ownerRestartDefinition(namespace, ownerKind);
+      if (definition) {
+        definitions.push(definition);
+      }
+    });
+    return definitions;
+  },
+});
+
 const DEFAULT_ACTIONS: CapabilityActionId[] = [
   'core.nodes.pod.delete',
   'core.nodes.pod.portforward',
   'core.nodes.workload.restart',
+  'core.nodes.workload.rollback',
 ];
 
 interface PlanNamespaceActionsInput {

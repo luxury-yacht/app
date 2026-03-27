@@ -308,6 +308,26 @@ export namespace backend {
 	        this.startedAt = source["startedAt"];
 	    }
 	}
+	export class RevisionEntry {
+	    revision: number;
+	    createdAt: string;
+	    changeCause: string;
+	    current: boolean;
+	    podTemplate: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RevisionEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.revision = source["revision"];
+	        this.createdAt = source["createdAt"];
+	        this.changeCause = source["changeCause"];
+	        this.current = source["current"];
+	        this.podTemplate = source["podTemplate"];
+	    }
+	}
 	export class SelectionDiagnostics {
 	    activeQueueDepth: number;
 	    maxQueueDepth: number;
