@@ -272,6 +272,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         showKindDropdown: true,
         showNamespaceDropdown: showNamespaceColumn,
         includeClusterScopedSyntheticNamespace: false,
+        totalCount,
         customActions: (
           // Keep pagination actions out of the scrollable body. The in-body pagination button
           // can interact with virtual scroll/focus management and trigger React update-depth
@@ -283,7 +284,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
             disabled={!continueToken || isRequestingMore}
             title={!continueToken ? 'All items loaded' : undefined}
           >
-            {isRequestingMore ? 'Loading…' : `Load More (${items.length} of ${totalCount})`}
+            {isRequestingMore ? 'Loading…' : 'Load More'}
           </button>
         ),
       },
@@ -298,7 +299,6 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       handleLoadMore,
       continueToken,
       isRequestingMore,
-      items.length,
       totalCount,
     ]
   );

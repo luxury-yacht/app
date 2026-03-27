@@ -82,6 +82,8 @@ export interface GridTableFilterOptions {
   includeClusterScopedSyntheticNamespace?: boolean;
   customActions?: React.ReactNode;
   searchActions?: SearchInputAction[];
+  /** Override the total item count shown in the filter bar (e.g. server-side total for paginated views). */
+  totalCount?: number;
 }
 
 export interface GridTableFilterConfig<T> {
