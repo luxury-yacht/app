@@ -11,6 +11,7 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -55,6 +56,7 @@ interface EventViewProps {
 const NsEventsTable: React.FC<EventViewProps> = React.memo(
   ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
+    const objectLink = useObjectLink();
     const useShortResourceNames = useShortNames();
 
     // Parse the involved object reference into its type and name for display/navigation.
@@ -89,12 +91,12 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       []
     );
 
-    const handleEventClick = useCallback(
+    // Build an object reference from an event's involved object for navigation.
+    const getEventObjectRef = useCallback(
       (event: EventData) => {
-        // Events don't have a direct object panel view, but we could open the related object
         const parsed = splitEventObject(event.object);
         if (!parsed.isLinkable) {
-          return;
+          return undefined;
         }
         const resolvedNamespace =
           event.objectNamespace && event.objectNamespace.length > 0
@@ -102,15 +104,23 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             : event.namespace && event.namespace.length > 0
               ? event.namespace
               : namespace;
-        openWithObject({
+        return {
           kind: parsed.objectType,
           name: parsed.objectName,
           namespace: resolvedNamespace,
           clusterId: event.clusterId ?? undefined,
           clusterName: event.clusterName ?? undefined,
-        });
+        };
       },
-      [openWithObject, namespace, splitEventObject]
+      [namespace, splitEventObject]
+    );
+
+    const handleEventClick = useCallback(
+      (event: EventData) => {
+        const ref = getEventObjectRef(event);
+        if (ref) openWithObject(ref);
+      },
+      [getEventObjectRef, openWithObject]
     );
 
     const keyExtractor = useCallback(
@@ -163,7 +173,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             return parsed.objectName;
           },
           {
-            onClick: handleEventClick,
+            ...objectLink(getEventObjectRef),
             isInteractive: (event) => splitEventObject(event.object).isLinkable,
           }
         ),
@@ -191,7 +201,13 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleEventClick, showNamespaceColumn, splitEventObject, useShortResourceNames]);
+    }, [
+      getEventObjectRef,
+      objectLink,
+      showNamespaceColumn,
+      splitEventObject,
+      useShortResourceNames,
+    ]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 

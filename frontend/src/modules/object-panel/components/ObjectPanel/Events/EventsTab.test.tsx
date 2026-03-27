@@ -19,6 +19,10 @@ vi.mock('@modules/object-panel/hooks/useObjectPanel', () => ({
   }),
 }));
 
+vi.mock('@shared/hooks/useNavigateToView', () => ({
+  useNavigateToView: () => ({ navigateToView: vi.fn() }),
+}));
+
 vi.mock('@/core/refresh/clusterScope', () => ({
   buildClusterScope: (_clusterId: string | undefined, scope: string) => `scoped:${scope}`,
 }));

@@ -19,6 +19,7 @@ import {
 } from '@shared/components/tables/columnFactories';
 import { useTableSort } from '@hooks/useTableSort';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
 import { getPodStatusSeverity } from '@utils/podStatusSeverity';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
@@ -58,6 +59,7 @@ const workloadNameFromOwner = (pod: PodSnapshotEntry) =>
 export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error, isActive }) => {
   const { openWithObject, objectData } = useObjectPanel();
   const { navigateToView } = useNavigateToView();
+  const objectLink = useObjectLink();
   const viewState = useViewState();
   const namespaceContext = useNamespace();
 
@@ -151,27 +153,29 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
         getClassName: (pod) => getRestartsClassName(pod),
       }),
       createTextColumn<PodSnapshotEntry>('owner', 'Owner', (pod) => workloadNameFromOwner(pod), {
-        onClick: (pod) =>
+        ...objectLink((pod) =>
           pod.ownerKind && pod.ownerName
-            ? openWithObject({
+            ? {
                 kind: pod.ownerKind,
                 name: pod.ownerName,
                 namespace: pod.namespace,
                 ...getPodClusterMeta(pod),
-              })
-            : undefined,
+              }
+            : undefined
+        ),
         isInteractive: (pod) => Boolean(pod.ownerKind && pod.ownerName),
         getClassName: (pod) => (pod.ownerKind && pod.ownerName ? 'object-panel-link' : undefined),
       }),
       createTextColumn<PodSnapshotEntry>('node', 'Node', (pod) => pod.node || '—', {
-        onClick: (pod) =>
+        ...objectLink((pod) =>
           pod.node
-            ? openWithObject({
+            ? {
                 kind: 'Node',
                 name: pod.node,
                 ...getPodClusterMeta(pod),
-              })
-            : undefined,
+              }
+            : undefined
+        ),
         isInteractive: (pod) => Boolean(pod.node),
         getClassName: (pod) => (pod.node ? 'object-panel-link' : undefined),
       }),
@@ -228,6 +232,7 @@ export const PodsTab: React.FC<PodsTabProps> = ({ pods, metrics, loading, error,
     metrics?.stale,
     metricsLastUpdated,
     navigateToView,
+    objectLink,
     getPodClusterMeta,
     openWithObject,
   ]);

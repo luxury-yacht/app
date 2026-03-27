@@ -22,6 +22,7 @@ import { useRefreshScopedDomain } from '@/core/refresh/store';
 import { useRefreshWatcher } from '@/core/refresh/hooks/useRefreshWatcher';
 import type { ObjectEventsRefresherName } from '@/core/refresh/refresherTypes';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useNavigateToView } from '@shared/hooks/useNavigateToView';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { PanelObjectData } from '../types';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
@@ -69,6 +70,7 @@ interface EventDisplay {
 
 const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
   const { openWithObject } = useObjectPanel();
+  const { navigateToView } = useNavigateToView();
   const openWithObjectRef = useRef(openWithObject);
   useEffect(() => {
     openWithObjectRef.current = openWithObject;
@@ -234,6 +236,29 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
     [objectData?.clusterId, objectData?.clusterName]
   );
 
+  // Alt+click: navigate to the related object's view and focus it.
+  const navigateToRelatedObject = useCallback(
+    (item: EventDisplay) => {
+      if (!item.objectKind || !item.objectName) {
+        return;
+      }
+
+      const resolvedNamespace =
+        item.objectNamespace && item.objectNamespace !== CLUSTER_SCOPE
+          ? item.objectNamespace
+          : undefined;
+
+      navigateToView({
+        kind: item.objectKind,
+        name: item.objectName,
+        namespace: resolvedNamespace,
+        clusterId: item.clusterId ?? objectData?.clusterId ?? undefined,
+        clusterName: item.clusterName ?? objectData?.clusterName ?? undefined,
+      });
+    },
+    [navigateToView, objectData?.clusterId, objectData?.clusterName]
+  );
+
   const columns = useMemo<GridColumnDefinition<EventDisplay>[]>(() => {
     const base: GridColumnDefinition<EventDisplay>[] = [
       createTextColumn<EventDisplay>('type', 'Type', (item) => item.type || 'Normal', {
@@ -253,6 +278,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
         (item) => item.objectName || '-',
         {
           onClick: openRelatedObject,
+          onAltClick: navigateToRelatedObject,
           isInteractive: (item) => Boolean(item.objectKind && item.objectName),
         }
       ),
@@ -283,7 +309,7 @@ const EventsTab: React.FC<EventsTabProps> = ({ objectData, isActive }) => {
     applyColumnSizing(base, sizing);
 
     return base;
-  }, [openRelatedObject]);
+  }, [openRelatedObject, navigateToRelatedObject]);
 
   const { sortedData, sortConfig, handleSort } = useTableSort(events, 'ageTimestamp', 'desc', {
     columns,
