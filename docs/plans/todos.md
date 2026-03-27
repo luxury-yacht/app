@@ -1,8 +1,9 @@
 # TODO
 
-- Link behavior
-  - Click to open in Object Panel
-  - Ctrl/Cmd+click to go to that item in its view
+- Loading progress instead of spinner that has no info
+  - Show "n of n objects loaded"
+  - Can we get number of objects before loading?
+
 - Show number of items in tables
   - Perhaps an option to turn on row numbers?
 
