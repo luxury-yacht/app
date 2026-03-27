@@ -157,6 +157,14 @@ export function useGridTableFiltersWiring<T>({
   const showColumnsDropdown = Boolean(columnsDropdown);
   const resolvedCustomActions = customActions ?? resolvedFilterOptions.customActions;
 
+  // Compute result count: displayed items vs total items.
+  // If the consumer provides a totalCount override (e.g. server-side paginated total), use it.
+  const resultCount = useMemo(() => {
+    if (!filteringEnabled) return undefined;
+    const total = filters?.options?.totalCount ?? data.length;
+    return { displayed: tableData.length, total };
+  }, [filteringEnabled, filters?.options?.totalCount, data.length, tableData.length]);
+
   const filtersBarProps = useMemo<ComponentProps<typeof GridTableFiltersBar>>(
     () => ({
       searchInputId,
@@ -183,6 +191,7 @@ export function useGridTableFiltersWiring<T>({
       searchShortcutActive,
       searchShortcutPriority,
       customActions: resolvedCustomActions,
+      resultCount,
     }),
     [
       searchInputId,
@@ -206,6 +215,7 @@ export function useGridTableFiltersWiring<T>({
       searchShortcutActive,
       searchShortcutPriority,
       resolvedCustomActions,
+      resultCount,
     ]
   );
 

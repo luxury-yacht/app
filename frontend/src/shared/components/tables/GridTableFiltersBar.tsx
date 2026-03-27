@@ -40,6 +40,8 @@ interface GridTableFiltersBarProps {
   searchShortcutPriority?: number;
   containerRef?: React.Ref<HTMLDivElement>;
   customActions?: React.ReactNode;
+  /** Displayed vs total item count shown to the right of actions. */
+  resultCount?: { displayed: number; total: number };
 }
 
 const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
@@ -67,6 +69,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   searchShortcutPriority = 0,
   containerRef,
   customActions,
+  resultCount,
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   // Treat any non-empty search/kind/namespace selection as an active filter.
@@ -168,6 +171,13 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               >
                 {customActions}
               </div>
+            )}
+            {resultCount && (
+              <span className="gridtable-filter-result-count" data-gridtable-filter-role="result-count">
+                {resultCount.displayed === resultCount.total
+                  ? `${resultCount.total} items`
+                  : `${resultCount.displayed} of ${resultCount.total} items`}
+              </span>
             )}
           </div>
         </div>
