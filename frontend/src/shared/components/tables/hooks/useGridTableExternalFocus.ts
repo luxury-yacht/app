@@ -176,19 +176,28 @@ export function useGridTableExternalFocus<T>({
   const keyExtractorRef = useRef(keyExtractor);
   keyExtractorRef.current = keyExtractor;
 
-  // Subscribe to focus-request events. The listener only attempts an
-  // immediate focus — it never modifies the module-level buffer.
-  // Buffer management is handled by useNavigateToView (sets) and the
-  // data-check effect below (clears on match).
+  // Tracks the last request this instance matched via the eventBus.
+  // When the eventBus fires, every mounted GridTable tries an immediate
+  // match. If this instance succeeds, we record the request here so the
+  // data-check effect below knows NOT to consume the module-level buffer
+  // for the same request — the buffer must survive for the *target* view's
+  // GridTable, which may not have mounted yet.
+  const eventBusMatchRef = useRef<FocusRequest | null>(null);
+
+  // Subscribe to focus-request events. The listener attempts an immediate
+  // focus and records the match, but never clears the module-level buffer.
   useEffect(() => {
     return eventBus.on('gridtable:focus-request', (request) => {
-      tryFocus(
+      const matched = tryFocus(
         request,
         tableDataRef.current,
         keyExtractorRef.current,
         setFocusedRowKey,
         wrapperRef
       );
+      if (matched) {
+        eventBusMatchRef.current = request;
+      }
     });
   }, [setFocusedRowKey, wrapperRef]);
 
@@ -196,11 +205,20 @@ export function useGridTableExternalFocus<T>({
   // for a pending request that a previous (or current) event couldn't fulfill.
   // Uses keyExtractorRef instead of keyExtractor in deps to avoid spurious
   // re-runs when inline keyExtractor functions create new references on
-  // re-render — this prevents object-panel GridTables from prematurely
-  // consuming the buffer before the target view's GridTable loads data.
+  // re-render.
   useEffect(() => {
     const pending = pendingFocusRequest;
     if (!pending || tableData.length === 0) {
+      return;
+    }
+
+    // If this instance already matched this exact request via the eventBus,
+    // skip buffer consumption. The buffer is reserved for a newly-mounting
+    // GridTable in the target view (e.g. navigateToView switched from
+    // the Object Panel to a namespace view — the Object Panel's GridTable
+    // matched immediately via eventBus, but the target view still needs
+    // the buffer to highlight the row once it loads data).
+    if (eventBusMatchRef.current === pending) {
       return;
     }
 
