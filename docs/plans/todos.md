@@ -2,6 +2,9 @@
 
 - Better handling of long values in the log JSON viewer
 
+- rollback
+  - choose a replicaset
+
 ## Issues
 
 ## Feature Ideas
@@ -21,8 +24,6 @@
   - reuse the existing code editor
 
 - More deployment options
-  - rollback
-    - choose a replicaset or just roll back to the most recent?
   - Container scope:
     - set image
       - show a list of containers and their images, allow override
