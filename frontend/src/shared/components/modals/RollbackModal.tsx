@@ -246,12 +246,12 @@ const RollbackModal = ({
                   .join(' ');
 
                 return (
-                  <div
+                  <button
                     key={entry.revision}
+                    type="button"
                     className={classNames}
-                    onClick={() => {
-                      if (!isCurrent) setSelectedRevision(entry.revision);
-                    }}
+                    disabled={isCurrent}
+                    onClick={() => setSelectedRevision(entry.revision)}
                     data-testid={`revision-item-${entry.revision}`}
                   >
                     <div className="rollback-revision-item-header">
@@ -264,7 +264,7 @@ const RollbackModal = ({
                         {entry.changeCause}
                       </span>
                     )}
-                  </div>
+                  </button>
                 );
               })}
             </div>

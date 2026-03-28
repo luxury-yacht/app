@@ -48,34 +48,54 @@
   border-radius: 3px;
 }
 
+/* Matches gridtable-row highlight behavior: same variables, borders, and transitions. */
 .rollback-revision-item {
   display: flex;
   flex-direction: column;
   gap: 2px;
   padding: 0.5rem 1rem;
-  cursor: pointer;
+  width: 100%;
+  border: none;
   border-left: 3px solid transparent;
+  border-bottom: 1px solid var(--grid-border-color, var(--color-table-border));
+  background-color: var(--grid-bg-primary, var(--color-bg));
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
   transition:
     background-color var(--duration-fast, 150ms) var(--ease-out, ease),
-    border-color var(--duration-fast, 150ms) var(--ease-out, ease);
+    border-left-color var(--duration-fast, 150ms) var(--ease-out, ease);
 }
 
-.rollback-revision-item:hover:not(.rollback-revision-item--disabled) {
-  background: var(--color-bg-hover);
+.rollback-revision-item:last-child {
+  border-bottom: none;
+}
+
+.rollback-revision-item:hover:not(:disabled) {
+  background-color: var(--grid-bg-hover, var(--color-bg-tertiary));
+  border-left-color: var(--color-accent);
+}
+
+.rollback-revision-item:focus-visible {
+  background-color: var(--grid-bg-hover, var(--color-bg-tertiary));
+  border-left-color: var(--color-accent);
 }
 
 .rollback-revision-item--selected {
-  background: var(--color-bg-tertiary);
-  border-left-color: var(--color-accent, var(--primary-color));
+  background-color: var(--color-bg-tertiary);
+  border-left-color: var(--color-accent);
 }
 
 .rollback-revision-item--selected:hover {
-  background: var(--color-bg-tertiary);
+  background-color: var(--color-bg-tertiary);
 }
 
-.rollback-revision-item--disabled {
+.rollback-revision-item:disabled {
   cursor: default;
-  opacity: 0.6;
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .rollback-revision-item-header {
