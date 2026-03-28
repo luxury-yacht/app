@@ -22,6 +22,7 @@ interface GenericOverviewProps {
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
   onRestart?: () => void;
+  onRollback?: () => void;
   onScale?: (replicas: number) => void;
   onDelete?: () => void;
   onTrigger?: () => void;
@@ -89,6 +90,7 @@ const Overview: React.FC<OverviewProps> = (props) => {
             actionLoading={props.actionLoading || props.deleteLoading}
             hpaManaged={hpaManaged}
             onRestart={props.onRestart}
+            onRollback={props.onRollback}
             onScale={props.onScale}
             onDelete={props.onDelete}
             onTrigger={props.onTrigger}

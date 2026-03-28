@@ -34,6 +34,8 @@ interface ObjectPanelActions {
   hideRestartConfirm: () => void;
   showDeleteConfirm: () => void;
   hideDeleteConfirm: () => void;
+  showRollbackModal: () => void;
+  hideRollbackModal: () => void;
 }
 
 const getWorkloadKind = (
@@ -94,6 +96,14 @@ export const useObjectPanelActions = ({
 
   const hideDeleteConfirm = useCallback(() => {
     dispatch({ type: 'SHOW_DELETE_CONFIRM', payload: false });
+  }, [dispatch]);
+
+  const showRollbackModal = useCallback(() => {
+    dispatch({ type: 'SHOW_ROLLBACK_MODAL', payload: true });
+  }, [dispatch]);
+
+  const hideRollbackModal = useCallback(() => {
+    dispatch({ type: 'SHOW_ROLLBACK_MODAL', payload: false });
   }, [dispatch]);
 
   const handleAction = useCallback(
@@ -197,5 +207,7 @@ export const useObjectPanelActions = ({
     hideRestartConfirm,
     showDeleteConfirm,
     hideDeleteConfirm,
+    showRollbackModal,
+    hideRollbackModal,
   };
 };

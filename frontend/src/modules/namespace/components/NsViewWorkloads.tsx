@@ -21,6 +21,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import ScaleModal from '@shared/components/modals/ScaleModal';
+import RollbackModal from '@shared/components/modals/RollbackModal';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
@@ -108,6 +109,9 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     }>({ show: false, cronjob: null });
 
     const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
+
+    // Rollback target: tracks which workload the rollback modal is open for.
+    const [rollbackTarget, setRollbackTarget] = useState<WorkloadData | null>(null);
 
     const handleWorkloadClick = useCallback(
       (workload: WorkloadData) => {
@@ -393,12 +397,15 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             },
             onTrigger: () => setTriggerConfirm({ show: true, cronjob: row }),
             onSuspendToggle: () => handleSuspendToggle(row),
+            onRollback: () => setRollbackTarget(row),
           },
           permissions: {
             restart: restartStatus,
             scale: scaleStatus,
             delete: deleteStatus,
             portForward: portForwardStatus,
+            // Rollback uses patch permission, same as restart.
+            rollback: restartStatus,
           },
         });
       },
@@ -518,6 +525,16 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         />
 
         <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
+
+        {/* Rollback modal: opens when a rollback action is triggered from the context menu */}
+        <RollbackModal
+          isOpen={rollbackTarget !== null}
+          onClose={() => setRollbackTarget(null)}
+          clusterId={rollbackTarget?.clusterId ?? ''}
+          namespace={rollbackTarget?.namespace ?? ''}
+          name={rollbackTarget?.name ?? ''}
+          kind={rollbackTarget?.kind ?? ''}
+        />
       </>
     );
   }

@@ -6,7 +6,6 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { flushSync } from 'react-dom';
 import './modals.css';
 import './ObjectDiffModal.css';
 import Dropdown from '@shared/components/dropdowns/Dropdown/Dropdown';
@@ -22,10 +21,10 @@ import type { CatalogItem, CatalogSnapshotPayload } from '@core/refresh/types';
 import {
   computeLineDiff,
   MAX_DIFF_LINES,
-  type DiffLine,
   type DiffResult,
-  type DiffLineType,
 } from '@modules/object-panel/components/ObjectPanel/Yaml/yamlDiff';
+import { mergeDiffLines } from '@shared/components/diff/diffUtils';
+import DiffViewer from '@shared/components/diff/DiffViewer';
 import {
   buildIgnoredMetadataLineSet,
   maskMutedMetadataLines,
@@ -133,91 +132,6 @@ const formatChangeAge = (timestamp: number): string => {
 const normalizeMatchNamespace = (namespace?: string | null): string => {
   const trimmed = namespace?.trim();
   return trimmed ? trimmed : CLUSTER_SCOPE;
-};
-
-type DisplayDiffLine = DiffLine & {
-  leftType: DiffLineType;
-  rightType: DiffLineType;
-};
-
-type TruncationMap = Record<number, { left: boolean; right: boolean }>;
-
-const areTruncationMapsEqual = (left: TruncationMap, right: TruncationMap) => {
-  const leftKeys = Object.keys(left);
-  const rightKeys = Object.keys(right);
-  if (leftKeys.length !== rightKeys.length) {
-    return false;
-  }
-  return leftKeys.every((key) => {
-    const index = Number(key);
-    const leftValue = left[index];
-    const rightValue = right[index];
-    if (!rightValue) {
-      return false;
-    }
-    return leftValue.left === rightValue.left && leftValue.right === rightValue.right;
-  });
-};
-
-// Merge adjacent remove/add blocks so modifications display on a single row.
-const mergeDiffLines = (lines: DiffLine[]): DisplayDiffLine[] => {
-  const merged: DisplayDiffLine[] = [];
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i];
-    if (line.type === 'context') {
-      merged.push({
-        ...line,
-        leftType: 'context',
-        rightType: 'context',
-      });
-      continue;
-    }
-
-    const removed: DiffLine[] = [];
-    const added: DiffLine[] = [];
-    while (i < lines.length && lines[i].type !== 'context') {
-      if (lines[i].type === 'removed') {
-        removed.push(lines[i]);
-      } else {
-        added.push(lines[i]);
-      }
-      i += 1;
-    }
-
-    const maxCount = Math.max(removed.length, added.length);
-    for (let idx = 0; idx < maxCount; idx += 1) {
-      const removedLine = removed[idx];
-      const addedLine = added[idx];
-      if (removedLine && addedLine) {
-        merged.push({
-          type: 'context',
-          value: '',
-          leftLineNumber: removedLine.leftLineNumber,
-          rightLineNumber: addedLine.rightLineNumber,
-          leftType: 'removed',
-          rightType: 'added',
-        });
-      } else if (removedLine) {
-        merged.push({
-          ...removedLine,
-          leftType: 'removed',
-          rightType: 'context',
-        });
-      } else if (addedLine) {
-        merged.push({
-          ...addedLine,
-          leftType: 'context',
-          rightType: 'added',
-        });
-      }
-    }
-
-    if (i < lines.length && lines[i].type === 'context') {
-      i -= 1;
-    }
-  }
-
-  return merged;
 };
 
 const buildObjectOptions = (items: CatalogItem[]): DropdownOption[] =>
@@ -363,10 +277,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const [leftYamlStable, setLeftYamlStable] = useState('');
   const [rightYamlStable, setRightYamlStable] = useState('');
   const [showDiffOnly, setShowDiffOnly] = useState(false);
-  const [selectionSide, setSelectionSide] = useState<'left' | 'right'>('left');
-  // Track row expansion and truncation so we can toggle wrapped lines on demand.
-  const [expandedRows, setExpandedRows] = useState<Set<number>>(() => new Set());
-  const [truncatedRows, setTruncatedRows] = useState<TruncationMap>({});
   const [leftNoMatch, setLeftNoMatch] = useState(false);
   const [rightNoMatch, setRightNoMatch] = useState(false);
   const [pendingLeftMatch, setPendingLeftMatch] = useState<MatchRequest | null>(null);
@@ -377,9 +287,7 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   const rightChecksumRef = useRef<string | null>(null);
   const leftNoMatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rightNoMatchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const diffTableRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
-  const truncatedRowsRef = useRef<TruncationMap>({});
   const useShortNamesSetting = useShortNames();
 
   const clusterOptions = useMemo<DropdownOption[]>(() => {
@@ -648,23 +556,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
   }, [leftMaskedYaml, rightMaskedYaml]);
 
   const displayDiffLines = useMemo(() => mergeDiffLines(diffResult?.lines ?? []), [diffResult]);
-  const visibleDiffLines = useMemo(() => {
-    if (!showDiffOnly) {
-      return displayDiffLines;
-    }
-    return displayDiffLines.filter(
-      (line) => line.leftType !== 'context' || line.rightType !== 'context'
-    );
-  }, [displayDiffLines, showDiffOnly]);
-
-  useEffect(() => {
-    truncatedRowsRef.current = truncatedRows;
-  }, [truncatedRows]);
-
-  useEffect(() => {
-    setExpandedRows(new Set());
-    setTruncatedRows({});
-  }, [visibleDiffLines]);
   const diffTruncated = diffResult?.truncated ?? false;
   const leftYamlError = leftYaml.state.error ?? null;
   const rightYamlError = rightYaml.state.error ?? null;
@@ -672,67 +563,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     leftYaml.state.status === 'loading' || leftYaml.state.status === 'initialising';
   const rightYamlInitialLoading =
     rightYaml.state.status === 'loading' || rightYaml.state.status === 'initialising';
-
-  // Measure text overflow to decide which rows should show expand/collapse toggles.
-  const computeTruncation = useCallback(() => {
-    const table = diffTableRef.current;
-    if (!table) {
-      return;
-    }
-
-    const next: TruncationMap = {};
-    const prev = truncatedRowsRef.current;
-    const nodes = table.querySelectorAll<HTMLElement>(
-      '.object-diff-line-text[data-row-index][data-side]'
-    );
-
-    nodes.forEach((node) => {
-      const rowIndex = Number(node.dataset.rowIndex);
-      if (Number.isNaN(rowIndex)) {
-        return;
-      }
-      if (expandedRows.has(rowIndex)) {
-        if (prev[rowIndex]) {
-          next[rowIndex] = { ...prev[rowIndex] };
-        }
-        return;
-      }
-
-      const side = node.dataset.side === 'right' ? 'right' : 'left';
-      const isTruncated = node.scrollWidth > node.clientWidth;
-      if (!next[rowIndex]) {
-        next[rowIndex] = { left: false, right: false };
-      }
-      next[rowIndex][side] = isTruncated;
-    });
-
-    expandedRows.forEach((rowIndex) => {
-      if (prev[rowIndex] && !next[rowIndex]) {
-        next[rowIndex] = { ...prev[rowIndex] };
-      }
-    });
-
-    setTruncatedRows((current) => (areTruncationMapsEqual(current, next) ? current : next));
-  }, [expandedRows]);
-
-  useEffect(() => {
-    if (!diffTableRef.current) {
-      return;
-    }
-    const frame = requestAnimationFrame(() => computeTruncation());
-    return () => cancelAnimationFrame(frame);
-  }, [computeTruncation, visibleDiffLines]);
-
-  useEffect(() => {
-    const table = diffTableRef.current;
-    if (!table || typeof ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => computeTruncation());
-    observer.observe(table);
-    return () => observer.disconnect();
-  }, [computeTruncation]);
 
   // Reset change tracking when the user swaps objects.
   useEffect(() => {
@@ -988,43 +818,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     });
   };
 
-  const getLineText = (lines: string[], lineNumber?: number | null): string => {
-    if (!lineNumber || lineNumber < 1) {
-      return '';
-    }
-    return lines[lineNumber - 1] ?? '';
-  };
-
-  const selectSideText = (side: 'left' | 'right') => {
-    const table = diffTableRef.current;
-    if (!table) {
-      return;
-    }
-    const selector =
-      side === 'left'
-        ? '.object-diff-cell-left .object-diff-line-text'
-        : '.object-diff-cell-right .object-diff-line-text';
-    const nodes = Array.from(table.querySelectorAll<HTMLElement>(selector));
-    if (nodes.length === 0) {
-      return;
-    }
-    const selection = window.getSelection();
-    if (!selection) {
-      return;
-    }
-    const firstNode = nodes[0].firstChild ?? nodes[0];
-    const lastNode = nodes[nodes.length - 1].firstChild ?? nodes[nodes.length - 1];
-    const range = document.createRange();
-    range.setStart(firstNode, 0);
-    if (lastNode.nodeType === Node.TEXT_NODE) {
-      range.setEnd(lastNode, lastNode.textContent?.length ?? 0);
-    } else {
-      range.setEnd(lastNode, lastNode.childNodes.length);
-    }
-    selection.removeAllRanges();
-    selection.addRange(range);
-  };
-
   // Render a selection label with object name emphasized and metadata muted.
   const renderSelectionLabel = (selection: CatalogItem | null) => {
     const parts = buildSelectionParts(selection, useShortNamesSetting);
@@ -1040,111 +833,6 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
         <span className="object-diff-column-name">{parts.objectName}</span>
         <span className="object-diff-column-meta"> ({parts.kindLabel})</span>
       </>
-    );
-  };
-
-  const toggleExpandedRow = (rowIndex: number) => {
-    setExpandedRows((current) => {
-      const next = new Set(current);
-      if (next.has(rowIndex)) {
-        next.delete(rowIndex);
-      } else {
-        next.add(rowIndex);
-      }
-      return next;
-    });
-  };
-
-  const renderDiffRow = (line: DisplayDiffLine, index: number) => {
-    const leftText = getLineText(leftDisplayLines, line.leftLineNumber);
-    const rightText = getLineText(rightDisplayLines, line.rightLineNumber);
-    const leftNumber =
-      line.leftLineNumber !== null && line.leftLineNumber !== undefined ? line.leftLineNumber : '';
-    const rightNumber =
-      line.rightLineNumber !== null && line.rightLineNumber !== undefined
-        ? line.rightLineNumber
-        : '';
-    const leftType = line.leftType;
-    const rightType = line.rightType;
-    const leftMuted =
-      line.leftLineNumber !== null &&
-      line.leftLineNumber !== undefined &&
-      leftMutedLines.has(line.leftLineNumber);
-    const rightMuted =
-      line.rightLineNumber !== null &&
-      line.rightLineNumber !== undefined &&
-      rightMutedLines.has(line.rightLineNumber);
-    const rowTruncation = truncatedRows[index];
-    const isExpanded = expandedRows.has(index);
-    const leftHasToggle = Boolean(rowTruncation?.left);
-    const rightHasToggle = Boolean(rowTruncation?.right);
-    const toggleSymbol = isExpanded ? '▼' : '▶︎';
-
-    const renderLineGutter = (
-      side: 'left' | 'right',
-      lineNumber: number | string,
-      showToggle: boolean
-    ) => (
-      <span className="object-diff-line-gutter">
-        {showToggle ? (
-          <button
-            type="button"
-            className="object-diff-expand-toggle"
-            onMouseDown={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-            }}
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              toggleExpandedRow(index);
-            }}
-            aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${side} line ${lineNumber}`}
-          >
-            {toggleSymbol}
-          </button>
-        ) : (
-          <span className="object-diff-expand-placeholder" aria-hidden="true" />
-        )}
-        <span className="object-diff-line-number">{lineNumber}</span>
-      </span>
-    );
-
-    return (
-      <div key={`diff-${index}`} className={`object-diff-row object-diff-row-${line.type}`}>
-        <div
-          className={[
-            'object-diff-cell',
-            'object-diff-cell-left',
-            `object-diff-cell-${leftType}`,
-            isExpanded ? 'object-diff-cell-expanded' : '',
-            leftMuted ? 'object-diff-cell-muted' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          {renderLineGutter('left', leftNumber, leftHasToggle)}
-          <span className="object-diff-line-text" data-row-index={index} data-side="left">
-            {leftText}
-          </span>
-        </div>
-        <div
-          className={[
-            'object-diff-cell',
-            'object-diff-cell-right',
-            `object-diff-cell-${rightType}`,
-            isExpanded ? 'object-diff-cell-expanded' : '',
-            rightMuted ? 'object-diff-cell-muted' : '',
-          ]
-            .filter(Boolean)
-            .join(' ')}
-        >
-          {renderLineGutter('right', rightNumber, rightHasToggle)}
-          <span className="object-diff-line-text" data-row-index={index} data-side="right">
-            {rightText}
-          </span>
-        </div>
-      </div>
     );
   };
 
@@ -1193,7 +881,10 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
         </div>
       );
     }
-    if (showDiffOnly && visibleDiffLines.length === 0) {
+    if (
+      showDiffOnly &&
+      displayDiffLines.every((line) => line.leftType === 'context' && line.rightType === 'context')
+    ) {
       return (
         <div className="object-diff-empty object-diff-success">
           No diffs. Compared objects are identical.
@@ -1202,39 +893,14 @@ const ObjectDiffModal: React.FC<ObjectDiffModalProps> = ({ isOpen, onClose }) =>
     }
 
     return (
-      <div
-        className={`object-diff-table selection-${selectionSide}`}
-        ref={diffTableRef}
-        onMouseDown={(event) => {
-          const target = event.target as HTMLElement | null;
-          if (target?.closest('.object-diff-cell-left')) {
-            flushSync(() => setSelectionSide('left'));
-            return;
-          }
-          if (target?.closest('.object-diff-cell-right')) {
-            flushSync(() => setSelectionSide('right'));
-          }
-        }}
-        onClick={(event) => {
-          if (event.detail !== 3) {
-            return;
-          }
-          const target = event.target as HTMLElement | null;
-          const side = target?.closest('.object-diff-cell-left')
-            ? 'left'
-            : target?.closest('.object-diff-cell-right')
-              ? 'right'
-              : null;
-          if (!side) {
-            return;
-          }
-          event.preventDefault();
-          flushSync(() => setSelectionSide(side));
-          selectSideText(side);
-        }}
-      >
-        {visibleDiffLines.map(renderDiffRow)}
-      </div>
+      <DiffViewer
+        lines={displayDiffLines}
+        leftText={leftYamlNormalized}
+        rightText={rightYamlNormalized}
+        leftMutedLines={leftMutedLines}
+        rightMutedLines={rightMutedLines}
+        showDiffOnly={showDiffOnly}
+      />
     );
   };
 

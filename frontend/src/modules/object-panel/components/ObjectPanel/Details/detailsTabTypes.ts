@@ -70,6 +70,7 @@ export interface DetailsTabProps {
   scaleReplicas: number;
   showScaleInput: boolean;
   onRestartClick: () => void;
+  onRollbackClick?: () => void;
   onDeleteClick: () => void;
   onScaleClick: (replicas?: number) => void;
   onScaleCancel: () => void;

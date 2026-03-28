@@ -173,7 +173,10 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               </div>
             )}
             {resultCount && (
-              <span className="gridtable-filter-result-count" data-gridtable-filter-role="result-count">
+              <span
+                className="gridtable-filter-result-count"
+                data-gridtable-filter-role="result-count"
+              >
                 {resultCount.displayed === resultCount.total
                   ? `${resultCount.total} items`
                   : `${resultCount.displayed} of ${resultCount.total} items`}

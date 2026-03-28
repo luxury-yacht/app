@@ -2,6 +2,10 @@
 
 - Better handling of long values in the log JSON viewer
 
+- Resource creation
+  - starter templates for common resource types
+  - reuse the existing code editor
+
 ## Issues
 
 ## Feature Ideas
@@ -16,13 +20,7 @@
   - Select container
   - can we show a file dialog for the remote filesystem?
 
-- Resource creation
-  - starter templates for common resource types
-  - reuse the existing code editor
-
 - More deployment options
-  - rollback
-    - choose a replicaset or just roll back to the most recent?
   - Container scope:
     - set image
       - show a list of containers and their images, allow override
