@@ -7,10 +7,10 @@
 
 @import "@ui/modals/modals.css";
 
-/* Modal sizing — wide enough for the split layout. */
+/* Modal sizing — fixed so toggling "diff only" doesn't resize the modal. */
 .rollback-modal {
-  min-width: 800px;
-  max-width: 1100px;
+  width: min(1100px, 90vw);
+  height: min(80vh, 800px);
 }
 
 /* Split body: revision list on the left, diff on the right. */
