@@ -61,7 +61,7 @@ Luxury Yacht is built with [Wails](https://wails.io/), a framework for building 
 To install Wails:
 
 ```bash
- go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 ```
 
 Once Wails is installed, run `wails doctor` to see what other dependencies are required for your OS.
@@ -102,7 +102,7 @@ Note that hot-reload of the Go backend will cause the app to restart, while chan
 
 [Storybook](https://storybook.js.org/) is available for developing and previewing UI components in isolation.
 
-> *NOTE*: you may need to run `nvm install` in the repo root to install the correct version of node from `.nvmrc`
+> _NOTE_: you may need to run `nvm install` in the repo root to install the correct version of node from `.nvmrc`
 
 ```bash
 mage storybook
