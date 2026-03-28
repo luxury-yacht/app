@@ -2,6 +2,10 @@
 
 - Better handling of long values in the log JSON viewer
 
+- Resource creation
+  - starter templates for common resource types
+  - reuse the existing code editor
+
 ## Issues
 
 ## Feature Ideas
@@ -15,10 +19,6 @@
 - Transfer files to/from pods
   - Select container
   - can we show a file dialog for the remote filesystem?
-
-- Resource creation
-  - starter templates for common resource types
-  - reuse the existing code editor
 
 - More deployment options
   - Container scope:
