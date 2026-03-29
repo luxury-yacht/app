@@ -782,16 +782,13 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const derivedFieldKeys = useMemo(() => {
     if (parsedLogs.length === 0) return [];
     const seen = new Set<string>();
-    const keys: string[] = [];
     for (const entry of parsedLogs) {
       for (const key of Object.keys(entry.data)) {
-        if (!seen.has(key)) {
-          seen.add(key);
-          keys.push(key);
-        }
+        seen.add(key);
       }
     }
-    return keys;
+    // Sort alphabetically so column order is stable across buffer changes
+    return Array.from(seen).sort();
   }, [parsedLogs]);
 
   const tableColumns = useMemo(() => {
