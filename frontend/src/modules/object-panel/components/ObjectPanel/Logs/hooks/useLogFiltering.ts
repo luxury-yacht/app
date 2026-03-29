@@ -129,12 +129,21 @@ export function useLogFiltering({
     filteredEntries.forEach((entry, index) => {
       try {
         const jsonData = JSON.parse(entry.line);
+        // Only accept non-empty plain objects (reject arrays, primitives, null, {})
+        if (
+          typeof jsonData !== 'object' ||
+          jsonData === null ||
+          Array.isArray(jsonData) ||
+          Object.keys(jsonData).length === 0
+        ) {
+          return;
+        }
         parsed.push({
           ...jsonData,
           _rawLine: entry.line,
           _lineNumber: index + 1,
           _timestamp: entry.timestamp,
-          _pod: isWorkload ? entry.pod : 'undefined',
+          _pod: isWorkload ? entry.pod : undefined,
           _container: entry.container,
           _seq: entry._seq,
         });

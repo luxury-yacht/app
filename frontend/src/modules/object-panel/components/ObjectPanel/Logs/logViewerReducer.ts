@@ -40,7 +40,6 @@ export interface LogViewerState {
   // Parsed view state
   isParsedView: boolean;
   parsedLogs: ParsedLogEntry[];
-  parsedFieldKeys: string[];
 
   // Loading/status state
   copyFeedback: CopyFeedback;
@@ -72,8 +71,6 @@ export type LogViewerAction =
   | { type: 'TOGGLE_PARSED_VIEW' }
   | { type: 'SET_PARSED_VIEW'; payload: boolean }
   | { type: 'SET_PARSED_LOGS'; payload: ParsedLogEntry[] }
-  | { type: 'SET_PARSED_FIELD_KEYS'; payload: string[] }
-  | { type: 'ADD_PARSED_FIELD_KEYS'; payload: string[] }
 
   // Loading/status actions
   | { type: 'SET_COPY_FEEDBACK'; payload: CopyFeedback }
@@ -109,8 +106,6 @@ export const initialLogViewerState: LogViewerState = {
   // Parsed view state
   isParsedView: false,
   parsedLogs: [],
-  parsedFieldKeys: [],
-
   // Loading/status state
   copyFeedback: 'idle',
   manualRefreshPending: false,
@@ -163,14 +158,6 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
       };
     case 'SET_PARSED_LOGS':
       return { ...state, parsedLogs: action.payload };
-    case 'SET_PARSED_FIELD_KEYS':
-      return { ...state, parsedFieldKeys: action.payload };
-    case 'ADD_PARSED_FIELD_KEYS': {
-      const existingKeys = new Set(state.parsedFieldKeys);
-      const newKeys = action.payload.filter((key) => !existingKeys.has(key));
-      if (newKeys.length === 0) return state;
-      return { ...state, parsedFieldKeys: [...state.parsedFieldKeys, ...newKeys] };
-    }
 
     // Loading/status actions
     case 'SET_COPY_FEEDBACK':
@@ -193,6 +180,8 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
         selectedFilter: '',
         selectedContainer: action.isWorkload ? state.selectedContainer : '',
         textFilter: '',
+        isParsedView: false,
+        parsedLogs: [],
         manualRefreshPending: false,
         fallbackActive: false,
         fallbackError: null,

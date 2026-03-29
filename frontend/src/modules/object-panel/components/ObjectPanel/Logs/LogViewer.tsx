@@ -40,6 +40,9 @@ const PARSED_COLUMN_MIN_WIDTH = 120;
 const PARSED_TIMESTAMP_MIN_WIDTH = 180;
 const PARSED_POD_COLUMN_MIN_WIDTH = 160;
 
+// Internal fields on ParsedLogEntry that should not appear as user-data columns
+const INTERNAL_KEYS = new Set(['_rawLine', '_lineNumber', '_timestamp', '_pod', '_container', '_seq']);
+
 const LogViewer: React.FC<LogViewerProps> = ({
   namespace,
   resourceName,
@@ -66,7 +69,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
     copyFeedback,
     isParsedView,
     parsedLogs,
-    parsedFieldKeys,
     manualRefreshPending,
     fallbackActive,
     fallbackError,
@@ -515,9 +517,8 @@ const LogViewer: React.FC<LogViewerProps> = ({
     const fallbackColor = styles.getPropertyValue('--log-pod-color-fallback').trim();
     const colorMap: Record<string, string> = {};
 
-    // Get unique pod names from log entries
-    const uniquePods = Array.from(new Set(logEntries.map((entry) => entry.pod)));
-    uniquePods.forEach((pod, index) => {
+    // Use the already-deduplicated and sorted pod list from state
+    availablePods.forEach((pod, index) => {
       colorMap[pod] = colors[index % colors.length];
     });
 
@@ -525,7 +526,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
     colorMap['__fallback__'] = fallbackColor;
 
     return colorMap;
-  }, [logEntries]);
+  }, [availablePods]);
 
   useEffect(() => {
     if (isWorkload) {
@@ -623,10 +624,8 @@ const LogViewer: React.FC<LogViewerProps> = ({
       ? parsedLogs
           .map((entry) => {
             const payload = { ...entry } as Record<string, unknown>;
-            Object.keys(payload).forEach((key) => {
-              if (key.startsWith('_')) {
-                delete payload[key];
-              }
+            INTERNAL_KEYS.forEach((key) => {
+              delete payload[key];
             });
             return Object.keys(payload).length ? JSON.stringify(payload) : entry._rawLine;
           })
@@ -780,39 +779,29 @@ const LogViewer: React.FC<LogViewerProps> = ({
     }
   }, [autoScroll, displayLogs, isParsedView, logEntries.length, parsedLogs.length]);
 
-  // Table columns for parsed view - track field keys from parsed logs
-  // Note: We use a ref to track previous keys to avoid infinite loops
-  const parsedFieldKeysRef = useRef<string[]>([]);
-  useEffect(() => {
-    if (parsedLogs.length === 0) {
-      if (parsedFieldKeysRef.current.length > 0) {
-        parsedFieldKeysRef.current = [];
-        dispatch({ type: 'SET_PARSED_FIELD_KEYS', payload: [] });
-      }
-      return;
-    }
-    const existingKeys = new Set(parsedFieldKeysRef.current);
-    const newKeys: string[] = [];
+  // Derive field keys directly from parsed logs
+  const derivedFieldKeys = useMemo(() => {
+    if (parsedLogs.length === 0) return [];
+    const seen = new Set<string>();
+    const keys: string[] = [];
     parsedLogs.forEach((entry) => {
       Object.keys(entry).forEach((key) => {
-        if (!key.startsWith('_') && !existingKeys.has(key) && !newKeys.includes(key)) {
-          newKeys.push(key);
+        if (!INTERNAL_KEYS.has(key) && !seen.has(key)) {
+          seen.add(key);
+          keys.push(key);
         }
       });
     });
-    if (newKeys.length > 0) {
-      parsedFieldKeysRef.current = [...parsedFieldKeysRef.current, ...newKeys];
-      dispatch({ type: 'ADD_PARSED_FIELD_KEYS', payload: newKeys });
-    }
+    return keys;
   }, [parsedLogs]);
 
   const tableColumns = useMemo(() => {
-    if (parsedLogs.length === 0) return [];
+    if (derivedFieldKeys.length === 0) return [];
 
     const columns: GridColumnDefinition<ParsedLogEntry>[] = [];
-    const sample = parsedLogs[0];
 
-    if (showTimestamps && sample._timestamp) {
+    // Always show metadata columns when relevant — don't gate on first entry
+    if (showTimestamps) {
       columns.push({
         key: '_timestamp',
         header: 'API Timestamp',
@@ -823,7 +812,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
       });
     }
 
-    if (isWorkload && sample._pod) {
+    if (isWorkload) {
       columns.push({
         key: '_pod',
         header: 'Pod',
@@ -844,18 +833,17 @@ const LogViewer: React.FC<LogViewerProps> = ({
       });
     }
 
-    if (sample._container) {
-      columns.push({
-        key: '_container',
-        header: 'Container',
-        sortable: false,
-        minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
-        render: (item: ParsedLogEntry) => item._container || '-',
-      });
-    }
+    columns.push({
+      key: '_container',
+      header: 'Container',
+      sortable: false,
+      minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
+      render: (item: ParsedLogEntry) => item._container || '-',
+    });
 
+    // Promote well-known timestamp and level fields to appear first
     const timestampCandidates = ['timestamp', 'time', 'ts'];
-    const jsonTimestampKey = parsedFieldKeys.find((key) => timestampCandidates.includes(key));
+    const jsonTimestampKey = derivedFieldKeys.find((key) => timestampCandidates.includes(key));
     if (jsonTimestampKey) {
       columns.push({
         key: jsonTimestampKey,
@@ -870,7 +858,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
     }
 
     const levelCandidates = ['level', 'severity', 'log_level'];
-    const jsonLevelKey = parsedFieldKeys.find((key) => levelCandidates.includes(key));
+    const jsonLevelKey = derivedFieldKeys.find((key) => levelCandidates.includes(key));
     if (jsonLevelKey) {
       columns.push({
         key: jsonLevelKey,
@@ -884,8 +872,9 @@ const LogViewer: React.FC<LogViewerProps> = ({
       });
     }
 
+    // Add remaining user-data columns
     const addedKeys = new Set(columns.map((col) => col.key));
-    parsedFieldKeys.forEach((key) => {
+    derivedFieldKeys.forEach((key) => {
       if (addedKeys.has(key)) {
         return;
       }
@@ -907,7 +896,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
     });
 
     return columns;
-  }, [isWorkload, parsedFieldKeys, parsedLogs, podColors, showTimestamps]);
+  }, [derivedFieldKeys, isWorkload, podColors, showTimestamps]);
 
   // Loading state
   if (isPendingLogs) {
