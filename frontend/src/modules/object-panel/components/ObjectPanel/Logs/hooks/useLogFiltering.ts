@@ -139,13 +139,13 @@ export function useLogFiltering({
           return;
         }
         parsed.push({
-          ...jsonData,
-          _rawLine: entry.line,
-          _lineNumber: index + 1,
-          _timestamp: entry.timestamp,
-          _pod: isWorkload ? entry.pod : undefined,
-          _container: entry.container,
-          _seq: entry._seq,
+          data: jsonData,
+          rawLine: entry.line,
+          lineNumber: index + 1,
+          timestamp: entry.timestamp,
+          pod: isWorkload ? entry.pod : undefined,
+          container: entry.container,
+          seq: entry._seq,
         });
       } catch {
         // Not JSON, ignore

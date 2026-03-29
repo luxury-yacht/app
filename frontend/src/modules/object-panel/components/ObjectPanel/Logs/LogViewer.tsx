@@ -40,9 +40,6 @@ const PARSED_COLUMN_MIN_WIDTH = 120;
 const PARSED_TIMESTAMP_MIN_WIDTH = 180;
 const PARSED_POD_COLUMN_MIN_WIDTH = 160;
 
-// Internal fields on ParsedLogEntry that should not appear as user-data columns
-const INTERNAL_KEYS = new Set(['_rawLine', '_lineNumber', '_timestamp', '_pod', '_container', '_seq']);
-
 const LogViewer: React.FC<LogViewerProps> = ({
   namespace,
   resourceName,
@@ -622,13 +619,9 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const handleCopyLogs = useCallback(async () => {
     const text = isParsedView
       ? parsedLogs
-          .map((entry) => {
-            const payload = { ...entry } as Record<string, unknown>;
-            INTERNAL_KEYS.forEach((key) => {
-              delete payload[key];
-            });
-            return Object.keys(payload).length ? JSON.stringify(payload) : entry._rawLine;
-          })
+          .map((entry) =>
+            Object.keys(entry.data).length ? JSON.stringify(entry.data) : entry.rawLine
+          )
           .join('\n')
       : displayLogs;
     if (!text) {
@@ -779,19 +772,19 @@ const LogViewer: React.FC<LogViewerProps> = ({
     }
   }, [autoScroll, displayLogs, isParsedView, logEntries.length, parsedLogs.length]);
 
-  // Derive field keys directly from parsed logs
+  // Derive field keys directly from parsed log data
   const derivedFieldKeys = useMemo(() => {
     if (parsedLogs.length === 0) return [];
     const seen = new Set<string>();
     const keys: string[] = [];
-    parsedLogs.forEach((entry) => {
-      Object.keys(entry).forEach((key) => {
-        if (!INTERNAL_KEYS.has(key) && !seen.has(key)) {
+    for (const entry of parsedLogs) {
+      for (const key of Object.keys(entry.data)) {
+        if (!seen.has(key)) {
           seen.add(key);
           keys.push(key);
         }
-      });
-    });
+      }
+    }
     return keys;
   }, [parsedLogs]);
 
@@ -808,7 +801,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
         sortable: false,
         minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
         render: (item: ParsedLogEntry) =>
-          item._timestamp ? formatTimestamp(item._timestamp) : '-',
+          item.timestamp ? formatTimestamp(item.timestamp) : '-',
       });
     }
 
@@ -823,11 +816,11 @@ const LogViewer: React.FC<LogViewerProps> = ({
             className="pod-color-text"
             style={
               {
-                '--pod-color': podColors[item._pod || ''] || podColors['__fallback__'],
+                '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
               } as React.CSSProperties
             }
           >
-            {item._pod || '-'}
+            {item.pod || '-'}
           </span>
         ),
       });
@@ -838,7 +831,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
       header: 'Container',
       sortable: false,
       minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
-      render: (item: ParsedLogEntry) => item._container || '-',
+      render: (item: ParsedLogEntry) => item.container || '-',
     });
 
     // Promote well-known timestamp and level fields to appear first
@@ -850,10 +843,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
         header: jsonTimestampKey,
         sortable: false,
         minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
-        render: (item: ParsedLogEntry) => {
-          const value = item[jsonTimestampKey];
-          return formatParsedValue(value);
-        },
+        render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonTimestampKey]),
       });
     }
 
@@ -865,10 +855,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
         header: jsonLevelKey,
         sortable: false,
         minWidth: PARSED_COLUMN_MIN_WIDTH,
-        render: (item: ParsedLogEntry) => {
-          const value = item[jsonLevelKey];
-          return formatParsedValue(value);
-        },
+        render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonLevelKey]),
       });
     }
 
@@ -884,8 +871,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
         sortable: false,
         minWidth: PARSED_COLUMN_MIN_WIDTH,
         render: (item: ParsedLogEntry) => {
-          const value = item[key];
-          const displayValue = formatParsedValue(value);
+          const displayValue = formatParsedValue(item.data[key]);
           return (
             <div className="parsed-log-cell" title={displayValue}>
               {displayValue}
@@ -1134,7 +1120,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
             <GridTable
               data={parsedLogs}
               columns={tableColumns}
-              keyExtractor={(item: ParsedLogEntry, index: number) => `log-${item._seq ?? index}`}
+              keyExtractor={(item: ParsedLogEntry, index: number) => `log-${item.seq ?? index}`}
               className="parsed-logs-table"
               tableClassName="gridtable-parsed-logs"
               virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

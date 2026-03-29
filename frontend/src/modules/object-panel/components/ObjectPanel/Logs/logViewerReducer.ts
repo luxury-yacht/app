@@ -6,13 +6,14 @@
  */
 
 export interface ParsedLogEntry {
-  [key: string]: unknown;
-  _pod?: string;
-  _container?: string;
-  _timestamp?: string;
-  _rawLine: string;
-  _lineNumber: number;
-  _seq?: number;
+  /** User JSON fields — never collides with internal metadata */
+  data: Record<string, unknown>;
+  pod?: string;
+  container?: string;
+  timestamp?: string;
+  rawLine: string;
+  lineNumber: number;
+  seq?: number;
 }
 
 export type CopyFeedback = 'idle' | 'copied' | 'error';
