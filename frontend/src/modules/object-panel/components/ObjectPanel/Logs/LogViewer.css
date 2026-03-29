@@ -429,6 +429,38 @@
   }
 }
 
+/* Expanded parsed log rows — click to expand, click to collapse */
+.gridtable-parsed-logs .parsed-row-expanded {
+  background-color: var(--log-table-row-hover-bg);
+  cursor: pointer;
+}
+
+.gridtable-parsed-logs .parsed-row-expanded .grid-cell {
+  align-items: flex-start;
+  overflow: visible;
+  max-width: none;
+}
+
+.gridtable-parsed-logs .parsed-row-expanded .grid-cell-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.gridtable-parsed-logs .parsed-row-expanded .parsed-log-cell {
+  max-width: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* Collapsed rows show pointer to indicate clickability */
+.gridtable-parsed-logs .gridtable-row {
+  cursor: pointer;
+}
+
 /* Viewport-aware tooltip */
 .parsed-log-tooltip {
   background-color: var(--log-tooltip-bg);

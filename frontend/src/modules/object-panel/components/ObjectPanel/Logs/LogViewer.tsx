@@ -66,6 +66,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
     copyFeedback,
     isParsedView,
     parsedLogs,
+    expandedRows,
     manualRefreshPending,
     fallbackActive,
     fallbackError,
@@ -646,12 +647,17 @@ const LogViewer: React.FC<LogViewerProps> = ({
       return;
     }
     if (!parsedCandidates.length) {
-      dispatch({ type: 'SET_PARSED_LOGS', payload: [] });
-      dispatch({ type: 'SET_PARSED_VIEW', payload: false });
+      // Only exit parsed view if there are entries but none are JSON.
+      // When entries are empty (e.g. stream reconnecting), keep parsed view
+      // active so the user isn't kicked out on transient empty states.
+      if (filteredEntries.length > 0) {
+        dispatch({ type: 'SET_PARSED_LOGS', payload: [] });
+        dispatch({ type: 'SET_PARSED_VIEW', payload: false });
+      }
       return;
     }
     dispatch({ type: 'SET_PARSED_LOGS', payload: parsedCandidates });
-  }, [isParsedView, parsedCandidates]);
+  }, [isParsedView, parsedCandidates, filteredEntries.length]);
 
   // Fetch containers for single pod
   useEffect(() => {
@@ -883,6 +889,38 @@ const LogViewer: React.FC<LogViewerProps> = ({
 
     return columns;
   }, [derivedFieldKeys, isWorkload, podColors, showTimestamps]);
+
+  // Row expansion for parsed view.
+  // GridTable's onRowClick only fires for keyboard activation (Enter), not mouse
+  // clicks, so we use event delegation on a wrapper to handle pointer clicks.
+  const handleParsedTableClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>('.gridtable-row');
+      if (!row) return;
+      const key = row.dataset.rowKey;
+      if (key) {
+        dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: key });
+      }
+    },
+    [dispatch]
+  );
+
+  // Also wire onRowClick for keyboard (Enter) accessibility
+  const handleParsedRowKeyboard = useCallback(
+    (item: ParsedLogEntry) => {
+      const key = `log-${item.seq ?? item.lineNumber}`;
+      dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: key });
+    },
+    [dispatch]
+  );
+
+  const getParsedRowClassName = useCallback(
+    (_item: ParsedLogEntry, index: number) => {
+      const key = `log-${parsedLogs[index]?.seq ?? index}`;
+      return expandedRows.has(key) ? 'parsed-row-expanded' : undefined;
+    },
+    [expandedRows, parsedLogs]
+  );
 
   // Loading state
   if (isPendingLogs) {
@@ -1117,14 +1155,18 @@ const LogViewer: React.FC<LogViewerProps> = ({
 
         <div className="pod-logs-content" ref={logsContentRef}>
           {isParsedView ? (
-            <GridTable
-              data={parsedLogs}
-              columns={tableColumns}
-              keyExtractor={(item: ParsedLogEntry, index: number) => `log-${item.seq ?? index}`}
-              className="parsed-logs-table"
-              tableClassName="gridtable-parsed-logs"
-              virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            />
+            <div onClick={handleParsedTableClick} style={{ height: '100%' }}>
+              <GridTable
+                data={parsedLogs}
+                columns={tableColumns}
+                keyExtractor={(item: ParsedLogEntry, index: number) => `log-${item.seq ?? index}`}
+                onRowClick={handleParsedRowKeyboard}
+                getRowClassName={getParsedRowClassName}
+                className="parsed-logs-table"
+                tableClassName="gridtable-parsed-logs"
+                virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
+              />
+            </div>
           ) : (
             <div className={`pod-logs-text ${!wrapText ? 'no-wrap' : ''}`}>
               {displayLogs
