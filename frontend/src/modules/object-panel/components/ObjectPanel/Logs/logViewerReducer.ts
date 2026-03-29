@@ -164,8 +164,7 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
         expandedRows: new Set<string>(),
       };
     case 'SET_PARSED_LOGS':
-      // Clear expanded rows when log data changes — row keys may have shifted
-      return { ...state, parsedLogs: action.payload, expandedRows: new Set<string>() };
+      return { ...state, parsedLogs: action.payload };
     case 'TOGGLE_ROW_EXPANSION': {
       const next = new Set(state.expandedRows);
       if (next.has(action.payload)) {
