@@ -528,7 +528,7 @@
 .log-toggle-group {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
 }
 
 .log-toggle {
@@ -558,12 +558,14 @@
 .log-toggle.active {
   opacity: 1;
   color: var(--color-text);
+  background: var(--color-bg-tertiary);
 }
 
 .log-toggle:disabled {
   color: var(--color-text-secondary);
   opacity: 0.3;
   cursor: not-allowed;
+  background: transparent;
 }
 
 .log-toggle:disabled:hover {
@@ -572,7 +574,7 @@
 
 .log-toggle-separator {
   margin: 0 8px;
-  color: var(--color-text);
+  visibility: hidden;
 }
 
 /* Light theme adjustments for parsed table */
