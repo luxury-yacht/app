@@ -24,8 +24,8 @@ import {
   WrapTextIcon,
   ParseJsonIcon,
   CopyIcon,
-  ToolbarSeparator,
 } from '@shared/components/icons/LogIcons';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
@@ -1056,74 +1056,79 @@ const LogViewer: React.FC<LogViewerProps> = ({
               )}
             </div>
 
-            <div className="log-toggle-group">
-              <button
-                type="button"
-                className={`log-toggle${autoRefresh ? ' active' : ''}`}
-                onClick={() => dispatch({ type: 'TOGGLE_AUTO_REFRESH' })}
-                title={`Auto-refresh (R)`}
-              >
-                <AutoRefreshIcon />
-              </button>
-              <button
-                type="button"
-                className={`log-toggle${autoScroll ? ' active' : ''}`}
-                onClick={() => dispatch({ type: 'TOGGLE_AUTO_SCROLL' })}
-                title={`Auto-scroll (S)`}
-              >
-                <AutoScrollIcon />
-              </button>
-
-              <ToolbarSeparator />
-
-              <button
-                type="button"
-                className={`log-toggle${showPreviousLogs ? ' active' : ''}`}
-                onClick={handleTogglePreviousLogs}
-                disabled={!supportsPreviousLogs}
-                title={`Previous logs (X)`}
-              >
-                <PreviousLogsIcon />
-              </button>
-              <button
-                type="button"
-                className={`log-toggle${showTimestamps ? ' active' : ''}`}
-                onClick={() => dispatch({ type: 'TOGGLE_TIMESTAMPS' })}
-                title={`Timestamps (T)`}
-              >
-                <TimestampIcon />
-              </button>
-              <button
-                type="button"
-                className={`log-toggle${wrapText ? ' active' : ''}`}
-                onClick={() => dispatch({ type: 'TOGGLE_WRAP_TEXT' })}
-                disabled={isParsedView}
-                title={`Wrap text (W)`}
-              >
-                <WrapTextIcon />
-              </button>
-              <button
-                type="button"
-                className={`log-toggle${isParsedView ? ' active' : ''}`}
-                onClick={() => dispatch({ type: 'TOGGLE_PARSED_VIEW' })}
-                disabled={!canParseLogs}
-                title={`Parse as JSON (P)`}
-              >
-                <ParseJsonIcon />
-              </button>
-
-              <ToolbarSeparator />
-
-              <button
-                type="button"
-                className={`log-toggle${copyFeedback !== 'idle' ? ` ${copyFeedback}` : ''}`}
-                onClick={handleCopyLogs}
-                disabled={!displayLogs && !isParsedView}
-                title="Copy to clipboard"
-              >
-                <CopyIcon />
-              </button>
-            </div>
+            <IconBar
+              items={
+                [
+                  {
+                    type: 'toggle',
+                    id: 'autoRefresh',
+                    icon: <AutoRefreshIcon />,
+                    active: autoRefresh,
+                    onClick: () => dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
+                    title: 'Auto-refresh (R)',
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'autoScroll',
+                    icon: <AutoScrollIcon />,
+                    active: autoScroll,
+                    onClick: () => dispatch({ type: 'TOGGLE_AUTO_SCROLL' }),
+                    title: 'Auto-scroll (S)',
+                  },
+                  { type: 'separator' },
+                  {
+                    type: 'toggle',
+                    id: 'previousLogs',
+                    icon: <PreviousLogsIcon />,
+                    active: showPreviousLogs,
+                    onClick: handleTogglePreviousLogs,
+                    title: 'Previous logs (X)',
+                    disabled: !supportsPreviousLogs,
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'timestamps',
+                    icon: <TimestampIcon />,
+                    active: showTimestamps,
+                    onClick: () => dispatch({ type: 'TOGGLE_TIMESTAMPS' }),
+                    title: 'Timestamps (T)',
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'wrapText',
+                    icon: <WrapTextIcon />,
+                    active: wrapText,
+                    onClick: () => dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
+                    title: 'Wrap text (W)',
+                    disabled: isParsedView,
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'parseJson',
+                    icon: <ParseJsonIcon />,
+                    active: isParsedView,
+                    onClick: () => dispatch({ type: 'TOGGLE_PARSED_VIEW' }),
+                    title: 'Parse as JSON (P)',
+                    disabled: !canParseLogs,
+                  },
+                  { type: 'separator' },
+                  {
+                    type: 'action',
+                    id: 'copy',
+                    icon: <CopyIcon />,
+                    onClick: handleCopyLogs,
+                    title: 'Copy to clipboard',
+                    disabled: !displayLogs && !isParsedView,
+                    feedback:
+                      copyFeedback === 'copied'
+                        ? 'success'
+                        : copyFeedback === 'error'
+                          ? 'error'
+                          : null,
+                  },
+                ] satisfies IconBarItem[]
+              }
+            />
           </div>
         </div>
 
