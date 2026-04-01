@@ -1087,19 +1087,19 @@ const LogViewer: React.FC<LogViewerProps> = ({
             <div className="log-toggle-group">
               <button
                 type="button"
-                className={`log-toggle${autoScroll ? ' active' : ''}`}
-                onClick={() => dispatch({ type: 'TOGGLE_AUTO_SCROLL' })}
-                title={`Auto-scroll (S)`}
-              >
-                <AutoScrollIcon />
-              </button>
-              <button
-                type="button"
                 className={`log-toggle${autoRefresh ? ' active' : ''}`}
                 onClick={() => dispatch({ type: 'TOGGLE_AUTO_REFRESH' })}
                 title={`Auto-refresh (R)`}
               >
                 <AutoRefreshIcon />
+              </button>
+              <button
+                type="button"
+                className={`log-toggle${autoScroll ? ' active' : ''}`}
+                onClick={() => dispatch({ type: 'TOGGLE_AUTO_SCROLL' })}
+                title={`Auto-scroll (S)`}
+              >
+                <AutoScrollIcon />
               </button>
               <button
                 type="button"
@@ -1138,15 +1138,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
               </button>
             </div>
 
-            {!autoRefresh && (
-              <button
-                className="button generic"
-                onClick={handleManualRefresh}
-                disabled={loading || manualRefreshPending}
-              >
-                {manualRefreshPending ? 'Refreshing…' : 'Refresh'}
-              </button>
-            )}
             <button
               className="button generic"
               onClick={handleCopyLogs}
