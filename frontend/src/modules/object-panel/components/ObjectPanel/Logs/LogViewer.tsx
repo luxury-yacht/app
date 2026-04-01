@@ -1116,7 +1116,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
 
               <button
                 type="button"
-                className={`log-toggle${copyFeedback === 'copied' ? ' active' : ''}`}
+                className={`log-toggle${copyFeedback !== 'idle' ? ` ${copyFeedback}` : ''}`}
                 onClick={handleCopyLogs}
                 disabled={!displayLogs && !isParsedView}
                 title="Copy to clipboard"

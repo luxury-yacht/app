@@ -572,6 +572,17 @@
   background: transparent;
 }
 
+/* Copy button feedback flash */
+.log-toggle.copied {
+  opacity: 1;
+  color: var(--color-success);
+}
+
+.log-toggle.error {
+  opacity: 1;
+  color: var(--color-error);
+}
+
 .log-toggle-separator {
   margin: 0 8px;
   visibility: hidden;
