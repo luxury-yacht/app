@@ -1076,15 +1076,18 @@ const LogViewer: React.FC<LogViewerProps> = ({
                     title: 'Auto-scroll (S)',
                   },
                   { type: 'separator' },
-                  {
-                    type: 'toggle',
-                    id: 'previousLogs',
-                    icon: <PreviousLogsIcon />,
-                    active: showPreviousLogs,
-                    onClick: handleTogglePreviousLogs,
-                    title: 'Previous logs (X)',
-                    disabled: !supportsPreviousLogs,
-                  },
+                  ...(supportsPreviousLogs
+                    ? [
+                        {
+                          type: 'toggle' as const,
+                          id: 'previousLogs',
+                          icon: <PreviousLogsIcon />,
+                          active: showPreviousLogs,
+                          onClick: handleTogglePreviousLogs,
+                          title: 'Previous logs (X)',
+                        },
+                      ]
+                    : []),
                   {
                     type: 'toggle',
                     id: 'timestamps',
