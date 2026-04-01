@@ -628,7 +628,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
     if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
     copyTimerRef.current = setTimeout(
       () => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }),
-      1500
+      750
     );
   }, [dispatch]);
 
