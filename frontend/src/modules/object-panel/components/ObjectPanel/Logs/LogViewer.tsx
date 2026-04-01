@@ -670,10 +670,11 @@ const LogViewer: React.FC<LogViewerProps> = ({
     }
     if (!parsedCandidates.length) {
       // Only exit parsed view if there are entries but none are JSON.
-      // When entries are empty (e.g. stream reconnecting), keep parsed view
-      // active so the user isn't kicked out on transient empty states.
+      // When entries are empty (e.g. stream reconnecting or switching to
+      // previous logs), keep parsed view active but clear stale data so
+      // old logs aren't displayed while waiting for new data.
+      dispatch({ type: 'SET_PARSED_LOGS', payload: [] });
       if (filteredEntries.length > 0) {
-        dispatch({ type: 'SET_PARSED_LOGS', payload: [] });
         dispatch({ type: 'SET_PARSED_VIEW', payload: false });
       }
       return;
