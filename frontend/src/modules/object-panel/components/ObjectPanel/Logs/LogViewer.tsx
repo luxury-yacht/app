@@ -32,6 +32,10 @@ interface LogViewerProps {
   isActive?: boolean;
   activePodNames?: string[] | null;
   clusterId?: string | null;
+  /** Restore parsed view state from a previous mount. */
+  initialParsedView?: boolean;
+  /** Called when parsed view state changes so the parent can preserve it. */
+  onParsedViewChange?: (isParsed: boolean) => void;
 }
 
 const ALL_CONTAINERS = ''; // Empty string means all containers in the backend
@@ -47,9 +51,14 @@ const LogViewer: React.FC<LogViewerProps> = ({
   isActive = false,
   activePodNames = null,
   clusterId,
+  initialParsedView = false,
+  onParsedViewChange,
 }) => {
-  // Consolidated state via reducer
-  const [state, dispatch] = useReducer(logViewerReducer, initialLogViewerState);
+  // Consolidated state via reducer. Restore parsed view from parent if provided.
+  const [state, dispatch] = useReducer(logViewerReducer, {
+    ...initialLogViewerState,
+    isParsedView: initialParsedView,
+  });
 
   // Destructure commonly used state for readability
   const {
@@ -73,6 +82,11 @@ const LogViewer: React.FC<LogViewerProps> = ({
     showPreviousLogs,
     isLoadingPreviousLogs,
   } = state;
+
+  // Notify parent when parsed view changes so it can preserve across remounts
+  useEffect(() => {
+    onParsedViewChange?.(isParsedView);
+  }, [isParsedView, onParsedViewChange]);
 
   const hasPrimedScopeRef = useRef(false);
   const fallbackRecoveringRef = useRef(false);
