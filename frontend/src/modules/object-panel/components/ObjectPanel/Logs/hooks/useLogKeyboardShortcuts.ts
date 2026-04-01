@@ -110,17 +110,17 @@ export function useLogKeyboardShortcuts({
     priority: 20,
   });
 
-  // Toggle text wrap with 'W' key
+  // Toggle text wrap with 'W' key (only in raw view — has no effect in parsed view)
   useShortcut({
     key: 'w',
     handler: useCallback(() => {
-      if (!isActive) return false;
+      if (!isActive || isParsedView) return false;
       dispatch({ type: 'TOGGLE_WRAP_TEXT' });
       return true;
-    }, [isActive, dispatch]),
+    }, [isActive, isParsedView, dispatch]),
     description: 'Toggle text wrap',
     category: 'Logs Tab',
-    enabled: isActive,
+    enabled: isActive && !isParsedView,
     view: 'global',
     priority: 20,
   });

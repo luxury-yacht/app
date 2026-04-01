@@ -1101,16 +1101,15 @@ const LogViewer: React.FC<LogViewerProps> = ({
               >
                 <AutoRefreshIcon />
               </button>
-              {supportsPreviousLogs && (
-                <button
-                  type="button"
-                  className={`log-toggle${showPreviousLogs ? ' active' : ''}`}
-                  onClick={handleTogglePreviousLogs}
-                  title={`Previous logs (X)`}
-                >
-                  <PreviousLogsIcon />
-                </button>
-              )}
+              <button
+                type="button"
+                className={`log-toggle${showPreviousLogs ? ' active' : ''}`}
+                onClick={handleTogglePreviousLogs}
+                disabled={!supportsPreviousLogs}
+                title={`Previous logs (X)`}
+              >
+                <PreviousLogsIcon />
+              </button>
               <button
                 type="button"
                 className={`log-toggle${showTimestamps ? ' active' : ''}`}
@@ -1123,20 +1122,20 @@ const LogViewer: React.FC<LogViewerProps> = ({
                 type="button"
                 className={`log-toggle${wrapText ? ' active' : ''}`}
                 onClick={() => dispatch({ type: 'TOGGLE_WRAP_TEXT' })}
+                disabled={isParsedView}
                 title={`Wrap text (W)`}
               >
                 <WrapTextIcon />
               </button>
-              {canParseLogs && (
-                <button
-                  type="button"
-                  className={`log-toggle${isParsedView ? ' active' : ''}`}
-                  onClick={() => dispatch({ type: 'TOGGLE_PARSED_VIEW' })}
-                  title={`Parse as JSON (P)`}
-                >
-                  <ParseJsonIcon />
-                </button>
-              )}
+              <button
+                type="button"
+                className={`log-toggle${isParsedView ? ' active' : ''}`}
+                onClick={() => dispatch({ type: 'TOGGLE_PARSED_VIEW' })}
+                disabled={!canParseLogs}
+                title={`Parse as JSON (P)`}
+              >
+                <ParseJsonIcon />
+              </button>
             </div>
 
             {!autoRefresh && (
