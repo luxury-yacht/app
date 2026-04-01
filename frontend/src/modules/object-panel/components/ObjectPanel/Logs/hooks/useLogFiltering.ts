@@ -6,7 +6,7 @@
  */
 import { useMemo } from 'react';
 import type { ObjectLogEntry } from '@/core/refresh/types';
-import type { ParsedLogEntry } from '../logViewerReducer';
+import { ALL_CONTAINERS, type ParsedLogEntry } from '../logViewerReducer';
 
 interface UseLogFilteringParams {
   logEntries: ObjectLogEntry[];
@@ -33,8 +33,6 @@ export function useLogFiltering({
   selectedContainer,
   textFilter,
 }: UseLogFilteringParams): UseLogFilteringResult {
-  const ALL_CONTAINERS = '';
-
   const orderedEntries = useMemo(() => {
     if (logEntries.length <= 1) {
       return logEntries;

@@ -5,6 +5,9 @@
  * for better state management and reduced complexity.
  */
 
+// Empty string means "all containers" in both the backend API and the filter UI
+export const ALL_CONTAINERS = '';
+
 export interface ParsedLogEntry {
   /** User JSON fields — never collides with internal metadata */
   data: Record<string, unknown>;

@@ -22,7 +22,12 @@ import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/sto
 import type { ObjectLogEntry } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { types } from '@wailsjs/go/models';
-import { logViewerReducer, initialLogViewerState, type ParsedLogEntry } from './logViewerReducer';
+import {
+  ALL_CONTAINERS,
+  logViewerReducer,
+  initialLogViewerState,
+  type ParsedLogEntry,
+} from './logViewerReducer';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
 
 interface LogViewerProps {
@@ -38,11 +43,40 @@ interface LogViewerProps {
   onParsedViewChange?: (isParsed: boolean) => void;
 }
 
-const ALL_CONTAINERS = ''; // Empty string means all containers in the backend
 const LOG_DOMAIN = 'object-logs' as const;
 const PARSED_COLUMN_MIN_WIDTH = 120;
 const PARSED_TIMESTAMP_MIN_WIDTH = 180;
 const PARSED_POD_COLUMN_MIN_WIDTH = 160;
+
+// Truncate RFC3339Nano timestamps to millisecond precision for display
+const formatTimestamp = (timestamp: string): string => {
+  const match = timestamp.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.(\d+)(.*)$/);
+  if (match) {
+    const [, dateTime, nanos, rest] = match;
+    const millis = nanos.substring(0, 3).padEnd(3, '0');
+    return `${dateTime}.${millis}${rest}`;
+  }
+  return timestamp;
+};
+
+// Format a parsed JSON value for table cell display
+const formatParsedValue = (value: unknown): string => {
+  if (value === undefined || value === null) {
+    return '-';
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'string') {
+    return value.length > 0 ? value : '-';
+  }
+  const stringified = String(value);
+  return stringified.length > 0 ? stringified : '-';
+};
+
+// Build a display label for a container, appending :init for init containers
+const formatContainerLabel = (container: string, isInit: boolean): string =>
+  isInit ? `${container}:init` : container;
 
 const LogViewer: React.FC<LogViewerProps> = ({
   namespace,
@@ -574,32 +608,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
     return displayName.replace(' (init)', '').replace(' (debug)', '');
   };
 
-  // Check if logs can be parsed as JSON
-  // Format timestamp to round milliseconds to 3 digits
-  const formatTimestamp = (timestamp: string): string => {
-    // Regex to match RFC3339Nano format with nanoseconds
-    const match = timestamp.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.(\d+)(.*)$/);
-    if (match) {
-      const [, dateTime, nanos, rest] = match;
-      // Take first 3 digits of fractional seconds
-      const millis = nanos.substring(0, 3).padEnd(3, '0');
-      return `${dateTime}.${millis}${rest}`;
-    }
-    return timestamp;
-  };
-  const formatParsedValue = (value: unknown): string => {
-    if (value === undefined || value === null) {
-      return '-';
-    }
-    if (typeof value === 'object') {
-      return JSON.stringify(value);
-    }
-    if (typeof value === 'string') {
-      return value.length > 0 ? value : '-';
-    }
-    const stringified = String(value);
-    return stringified.length > 0 ? stringified : '-';
-  };
   const displayLogs = useMemo(() => {
     if (filteredEntries.length === 0) {
       if (isPendingLogs) {
@@ -614,7 +622,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
           showTimestamps && entry.timestamp ? `[${formatTimestamp(entry.timestamp)}] ` : '';
 
         if (isWorkload) {
-          const containerLabel = entry.isInit ? `${entry.container}:init` : entry.container;
+          const containerLabel = formatContainerLabel(entry.container, entry.isInit);
           const formatted = entry.line.trim()
             ? `[${entry.pod}/${containerLabel}] ${entry.line}`
             : entry.line;
@@ -622,7 +630,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
         }
 
         if (selectedContainer === ALL_CONTAINERS) {
-          const containerLabel = entry.isInit ? `${entry.container}:init` : entry.container;
+          const containerLabel = formatContainerLabel(entry.container, entry.isInit);
           const formatted = entry.line.trim() ? `[${containerLabel}] ${entry.line}` : entry.line;
           return timestampPrefix + formatted;
         }
