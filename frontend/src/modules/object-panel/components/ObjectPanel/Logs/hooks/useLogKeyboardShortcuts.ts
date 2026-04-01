@@ -134,7 +134,9 @@ export function useLogKeyboardShortcuts({
     return logsContentRef.current;
   }, [isParsedView, logsContentRef]);
 
-  // Scroll to top with Home key (disables auto-scroll to prevent fighting)
+  // Scroll to top with Home key (disables auto-scroll to prevent fighting).
+  // Priority 500 to override GridTable's Home/End at 400, which would
+  // otherwise intercept these keys when the parsed view table has focus.
   useShortcut({
     key: 'Home',
     handler: useCallback(() => {
@@ -151,7 +153,7 @@ export function useLogKeyboardShortcuts({
     category: 'Logs Tab',
     enabled: isActive,
     view: 'global',
-    priority: 20,
+    priority: 500,
   });
 
   // Scroll to bottom with End key (re-enables auto-scroll)
@@ -171,7 +173,7 @@ export function useLogKeyboardShortcuts({
     category: 'Logs Tab',
     enabled: isActive,
     view: 'global',
-    priority: 20,
+    priority: 500,
   });
 
   // Focus filter input shortcut
