@@ -12,7 +12,8 @@ import { CategoryIcon } from '@shared/components/icons/MenuIcons';
 export interface FavoriteItem {
   id: string;
   name: string;
-  clusterName: string;
+  /** If set, this is a cluster-specific favorite. If null, it's generic. */
+  clusterName: string | null;
   viewType: 'namespace' | 'cluster';
   view: string;
   namespace?: string;
@@ -21,52 +22,44 @@ export interface FavoriteItem {
 
 interface SidebarFavoritesPrototypeProps {
   favorites: FavoriteItem[];
-  /** Show cluster badge on each item (when favorites span multiple clusters). */
-  showClusterBadges?: boolean;
-  /** ID of the currently active favorite (highlighted). */
   activeFavoriteId?: string | null;
-  /** Initially collapsed? */
   defaultCollapsed?: boolean;
 }
 
-const FavoriteStarIcon: React.FC<{ width?: number; height?: number }> = ({
-  width = 14,
-  height = 14,
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    width={width}
-    height={height}
-  >
-    <path d="M12 1L15.09 7.26L22 8.27L17 13.14L18.18 20.02L12 16.77L5.82 20.02L7 13.14L2 8.27L8.91 7.26L12 1Z" />
-  </svg>
-);
+/** Generic favorite icon — dashed circle (applies to any cluster). */
+function GenericIcon({ width = 14, height = 14 }: { width?: number; height?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      width={width}
+      height={height}
+      style={{ flexShrink: 0, opacity: 0.5 }}
+    >
+      <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
+    </svg>
+  );
+}
 
-const ChevronIcon: React.FC<{ expanded: boolean; width?: number; height?: number }> = ({
-  expanded,
-  width = 12,
-  height = 12,
-}) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    viewBox="0 0 24 24"
-    fill="currentColor"
-    width={width}
-    height={height}
-    style={{
-      transition: 'transform 150ms ease',
-      transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)',
-    }}
-  >
-    <path d="M9.29 6.71a1 1 0 0 0 0 1.41L13.17 12l-3.88 3.88a1 1 0 1 0 1.41 1.41l4.59-4.59a1 1 0 0 0 0-1.41L10.7 6.71a1 1 0 0 0-1.41 0z" />
-  </svg>
-);
+/** Cluster-specific favorite icon — pin (pinned to a cluster). */
+function PinIcon({ width = 14, height = 14 }: { width?: number; height?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      width={width}
+      height={height}
+      style={{ flexShrink: 0, opacity: 0.5 }}
+    >
+      <path d="M17 4a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2.5L5.5 8 4 9.5V12h7v8l1 1 1-1v-8h7V9.5L18.5 8 17 6.5V4z" />
+    </svg>
+  );
+}
 
 export function SidebarFavoritesPrototype({
   favorites,
-  showClusterBadges = false,
   activeFavoriteId = null,
   defaultCollapsed = false,
 }: SidebarFavoritesPrototypeProps) {
@@ -94,28 +87,12 @@ export function SidebarFavoritesPrototype({
               data-sidebar-target-kind="favorite"
               tabIndex={-1}
               style={{ gap: '0.4rem' }}
+              title={fav.name}
             >
-              <CategoryIcon width={14} height={14} />
+              {fav.clusterName ? <PinIcon /> : <GenericIcon />}
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {fav.name}
               </span>
-              {showClusterBadges && (
-                <span
-                  style={{
-                    fontSize: '0.65rem',
-                    padding: '0.05rem 0.35rem',
-                    borderRadius: '3px',
-                    background: 'var(--color-bg-tertiary)',
-                    color: 'var(--color-text-secondary)',
-                    fontWeight: 500,
-                    letterSpacing: '0.02em',
-                    flexShrink: 0,
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {fav.clusterName}
-                </span>
-              )}
             </div>
           ))}
         </div>

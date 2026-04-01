@@ -20,9 +20,11 @@ import './AppHeader.css';
 interface AppHeaderProps {
   contentTitle: string;
   onAboutClick?: () => void;
+  /** Slot rendered in the controls area before the settings button (used for prototyping). */
+  extraControls?: React.ReactNode;
 }
 
-const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => {
+const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick, extraControls }) => {
   const viewState = useViewState();
 
   const isMac = isMacPlatform();
@@ -75,6 +77,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
           <SessionsStatus />
         </div>
         <KubeconfigSelector />
+        {extraControls}
         <button
           className="settings-button"
           onClick={() => viewState.setIsSettingsOpen(true)}
