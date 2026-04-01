@@ -541,8 +541,8 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--color-text-secondary);
-  opacity: 0.5;
+  color: var(--color-accent);
+  opacity: 0.4;
   cursor: pointer;
   transition:
     opacity 0.15s ease,
@@ -551,7 +551,7 @@
 }
 
 .log-toggle:hover {
-  opacity: 0.8;
+  opacity: 0.7;
   background: var(--color-bg-tertiary);
 }
 
@@ -561,8 +561,13 @@
 }
 
 .log-toggle:disabled {
+  color: var(--color-text-secondary);
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+.log-toggle:disabled:hover {
+  background: transparent;
 }
 
 /* Light theme adjustments for parsed table */

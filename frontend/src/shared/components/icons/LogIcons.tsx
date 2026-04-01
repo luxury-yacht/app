@@ -33,7 +33,7 @@ export const AutoScrollIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-/** Circular arrows — auto-refresh (stroke-based icon) */
+/** Circular arrows — auto-refresh */
 export const AutoRefreshIcon: React.FC<IconProps> = ({
   width = 16,
   height = 16,
@@ -73,7 +73,7 @@ export const PreviousLogsIcon: React.FC<IconProps> = ({
   </svg>
 );
 
-/** Clock face — API timestamp display (stroke-based icon) */
+/** Clock face — API timestamp display */
 export const TimestampIcon: React.FC<IconProps> = ({
   width = 16,
   height = 16,
