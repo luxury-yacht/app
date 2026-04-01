@@ -1,6 +1,7 @@
 # TODO
 
-- Better handling of long values in the log JSON viewer
+- Favorites/bookmarks
+  - Bookmark specific views
 
 - Resource creation
   - starter templates for common resource types
@@ -35,15 +36,6 @@
 
 - Multi-select/batch operations
   - Allow batch operations, but could be dangerous
-
-- Favorites/bookmarks
-  - Bookmark specific views
-
-- Customize Cluster Overview
-  - from a predefined set of widgets
-
-- ArgoCD integration to show drift
-  - Would need permission to query the argo API
 
 ## Wails v3 (when ready)
 

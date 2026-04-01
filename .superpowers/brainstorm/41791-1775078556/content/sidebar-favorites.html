@@ -1,0 +1,110 @@
+<h2>Sidebar: Favorites Section</h2>
+<p class="subtitle">Favorites section at top of sidebar, shown when favorites exist. Cluster badge visible when favorites span multiple clusters.</p>
+
+<div class="split" style="gap: 32px;">
+
+  <!-- With favorites -->
+  <div class="mockup">
+    <div class="mockup-header">Sidebar — With Favorites</div>
+    <div class="mockup-body" style="padding: 0; font-size: 13px; line-height: 1; background: #1e1e2e; color: #cdd6f4;">
+
+      <!-- Favorites Section -->
+      <div style="padding: 10px 12px 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #7f849c; display: flex; justify-content: space-between; align-items: center;">
+        <span>&#9662; Favorites</span>
+      </div>
+
+      <div style="padding: 2px 0;">
+        <div style="padding: 6px 12px 6px 20px; display: flex; align-items: center; gap: 8px; cursor: pointer; background: rgba(137,180,250,0.12); border-left: 2px solid #89b4fa;">
+          <span style="font-size: 12px; opacity: 0.6;">&#9733;</span>
+          <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Prod CronJobs</span>
+          <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(166,227,161,0.15); color: #a6e3a1;">prod</span>
+        </div>
+        <div style="padding: 6px 12px 6px 20px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <span style="font-size: 12px; opacity: 0.6;">&#9733;</span>
+          <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Staging / default / Pods</span>
+          <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(250,179,135,0.15); color: #fab387;">staging</span>
+        </div>
+        <div style="padding: 6px 12px 6px 20px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <span style="font-size: 12px; opacity: 0.6;">&#9733;</span>
+          <span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Dev / Nodes</span>
+          <span style="font-size: 9px; padding: 1px 5px; border-radius: 3px; background: rgba(180,190,254,0.15); color: #b4befe;">dev</span>
+        </div>
+      </div>
+
+      <div style="height: 1px; background: rgba(127,132,156,0.2); margin: 6px 12px;"></div>
+
+      <!-- Cluster Section -->
+      <div style="padding: 10px 12px 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #7f849c;">
+        &#9662; Cluster
+      </div>
+      <div style="padding: 2px 0;">
+        <div style="padding: 6px 12px 6px 20px; cursor: pointer;">Overview</div>
+        <div style="padding: 6px 12px 6px 20px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #7f849c; padding-top: 10px;">&#9662; Resources</div>
+        <div style="padding: 5px 12px 5px 32px; cursor: pointer; color: #a6adc8;">Browse</div>
+        <div style="padding: 5px 12px 5px 32px; cursor: pointer; color: #a6adc8;">Nodes</div>
+        <div style="padding: 5px 12px 5px 32px; cursor: pointer; color: #a6adc8;">Config</div>
+      </div>
+
+      <div style="height: 1px; background: rgba(127,132,156,0.2); margin: 6px 12px;"></div>
+
+      <!-- Namespaces Section -->
+      <div style="padding: 10px 12px 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #7f849c;">
+        &#9662; Namespaces
+      </div>
+      <div style="padding: 2px 0;">
+        <div style="padding: 5px 12px 5px 20px; cursor: pointer; color: #a6adc8;">All Namespaces</div>
+        <div style="padding: 5px 12px 5px 20px; cursor: pointer; color: #a6adc8;">&#9656; default</div>
+        <div style="padding: 5px 12px 5px 20px; cursor: pointer; color: #a6adc8;">&#9656; kube-system</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- No favorites -->
+  <div class="mockup">
+    <div class="mockup-header">Sidebar — No Favorites (section hidden)</div>
+    <div class="mockup-body" style="padding: 0; font-size: 13px; line-height: 1; background: #1e1e2e; color: #cdd6f4;">
+
+      <!-- Cluster Section (at top now) -->
+      <div style="padding: 10px 12px 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #7f849c;">
+        &#9662; Cluster
+      </div>
+      <div style="padding: 2px 0;">
+        <div style="padding: 6px 12px 6px 20px; cursor: pointer; background: rgba(137,180,250,0.12); border-left: 2px solid #89b4fa;">Overview</div>
+        <div style="padding: 6px 12px 6px 20px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #7f849c; padding-top: 10px;">&#9662; Resources</div>
+        <div style="padding: 5px 12px 5px 32px; cursor: pointer; color: #a6adc8;">Browse</div>
+        <div style="padding: 5px 12px 5px 32px; cursor: pointer; color: #a6adc8;">Nodes</div>
+        <div style="padding: 5px 12px 5px 32px; cursor: pointer; color: #a6adc8;">Config</div>
+        <div style="padding: 5px 12px 5px 32px; cursor: pointer; color: #a6adc8;">CRDs</div>
+        <div style="padding: 5px 12px 5px 32px; cursor: pointer; color: #a6adc8;">Custom</div>
+        <div style="padding: 5px 12px 5px 32px; cursor: pointer; color: #a6adc8;">Events</div>
+      </div>
+
+      <div style="height: 1px; background: rgba(127,132,156,0.2); margin: 6px 12px;"></div>
+
+      <!-- Namespaces Section -->
+      <div style="padding: 10px 12px 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #7f849c;">
+        &#9662; Namespaces
+      </div>
+      <div style="padding: 2px 0;">
+        <div style="padding: 5px 12px 5px 20px; cursor: pointer; color: #a6adc8;">All Namespaces</div>
+        <div style="padding: 5px 12px 5px 20px; cursor: pointer; color: #a6adc8;">&#9656; default</div>
+        <div style="padding: 5px 12px 5px 20px; cursor: pointer; color: #a6adc8;">&#9656; kube-system</div>
+        <div style="padding: 5px 12px 5px 20px; cursor: pointer; color: #a6adc8;">&#9656; monitoring</div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div style="margin-top: 24px;">
+  <h3>Key details</h3>
+  <ul style="color: #aaa; font-size: 14px; line-height: 1.7;">
+    <li>Cluster badge (colored label on right) only shown when favorites span multiple clusters</li>
+    <li>Selected favorite highlighted with left border accent, same as other sidebar selections</li>
+    <li>Star icon on each item — decorative here, functional star is in the view header</li>
+    <li>Section completely absent when no favorites exist (right panel)</li>
+    <li>Separator line between Favorites and Cluster sections</li>
+  </ul>
+</div>
