@@ -16,6 +16,14 @@ import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { useLogFiltering } from './hooks/useLogFiltering';
 import { useLogStreamFallback, isLogDataUnavailable } from './hooks/useLogStreamFallback';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import {
+  AutoScrollIcon,
+  AutoRefreshIcon,
+  PreviousLogsIcon,
+  TimestampIcon,
+  WrapTextIcon,
+  ParseJsonIcon,
+} from '@shared/components/icons/LogIcons';
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
@@ -1076,90 +1084,60 @@ const LogViewer: React.FC<LogViewerProps> = ({
               )}
             </div>
 
-            <Dropdown
-              options={[
-                {
-                  value: 'autoScroll',
-                  label: 'Auto-scroll',
-                  metadata: { checked: autoScroll, shortcut: 'S' },
-                },
-                {
-                  value: 'autoRefresh',
-                  label: 'Auto-refresh',
-                  metadata: { checked: autoRefresh, shortcut: 'R' },
-                },
-                ...(supportsPreviousLogs
-                  ? [
-                      {
-                        value: 'previousLogs',
-                        label: 'Show previous logs',
-                        metadata: { checked: showPreviousLogs, shortcut: 'X' },
-                      },
-                    ]
-                  : []),
-                {
-                  value: 'showTimestamps',
-                  label: 'Show API timestamps',
-                  metadata: { checked: showTimestamps, shortcut: 'T' },
-                },
-                {
-                  value: 'wrapText',
-                  label: 'Wrap text',
-                  metadata: { checked: wrapText, shortcut: 'W' },
-                },
-                ...(canParseLogs
-                  ? [
-                      {
-                        value: 'parseJson',
-                        label: 'Parse as JSON',
-                        metadata: { checked: isParsedView, shortcut: 'P' },
-                        disabled: !canParseLogs,
-                      },
-                    ]
-                  : []),
-              ]}
-              value="options"
-              onChange={(value) => {
-                if (value !== 'options') {
-                  switch (value) {
-                    case 'autoScroll':
-                      dispatch({ type: 'TOGGLE_AUTO_SCROLL' });
-                      break;
-                    case 'autoRefresh':
-                      dispatch({ type: 'TOGGLE_AUTO_REFRESH' });
-                      break;
-                    case 'previousLogs':
-                      if (supportsPreviousLogs) {
-                        handleTogglePreviousLogs();
-                      }
-                      break;
-                    case 'showTimestamps':
-                      dispatch({ type: 'TOGGLE_TIMESTAMPS' });
-                      break;
-                    case 'wrapText':
-                      dispatch({ type: 'TOGGLE_WRAP_TEXT' });
-                      break;
-                    case 'parseJson':
-                      if (!canParseLogs) {
-                        break;
-                      }
-                      dispatch({ type: 'TOGGLE_PARSED_VIEW' });
-                      break;
-                  }
-                }
-              }}
-              displayValue="Options"
-              size="compact"
-              renderOption={(option) => (
-                <div className="log-option-row">
-                  <span className="log-option-check">{option.metadata?.checked ? '✓' : ''}</span>
-                  <span className="log-option-label">{option.label}</span>
-                  <span className="keycap">
-                    <kbd>{option.metadata?.shortcut}</kbd>
-                  </span>
-                </div>
+            <div className="log-toggle-group">
+              <button
+                type="button"
+                className={`log-toggle${autoScroll ? ' active' : ''}`}
+                onClick={() => dispatch({ type: 'TOGGLE_AUTO_SCROLL' })}
+                title={`Auto-scroll (S)`}
+              >
+                <AutoScrollIcon />
+              </button>
+              <button
+                type="button"
+                className={`log-toggle${autoRefresh ? ' active' : ''}`}
+                onClick={() => dispatch({ type: 'TOGGLE_AUTO_REFRESH' })}
+                title={`Auto-refresh (R)`}
+              >
+                <AutoRefreshIcon />
+              </button>
+              {supportsPreviousLogs && (
+                <button
+                  type="button"
+                  className={`log-toggle${showPreviousLogs ? ' active' : ''}`}
+                  onClick={handleTogglePreviousLogs}
+                  title={`Previous logs (X)`}
+                >
+                  <PreviousLogsIcon />
+                </button>
               )}
-            />
+              <button
+                type="button"
+                className={`log-toggle${showTimestamps ? ' active' : ''}`}
+                onClick={() => dispatch({ type: 'TOGGLE_TIMESTAMPS' })}
+                title={`Timestamps (T)`}
+              >
+                <TimestampIcon />
+              </button>
+              <button
+                type="button"
+                className={`log-toggle${wrapText ? ' active' : ''}`}
+                onClick={() => dispatch({ type: 'TOGGLE_WRAP_TEXT' })}
+                title={`Wrap text (W)`}
+              >
+                <WrapTextIcon />
+              </button>
+              {canParseLogs && (
+                <button
+                  type="button"
+                  className={`log-toggle${isParsedView ? ' active' : ''}`}
+                  onClick={() => dispatch({ type: 'TOGGLE_PARSED_VIEW' })}
+                  title={`Parse as JSON (P)`}
+                >
+                  <ParseJsonIcon />
+                </button>
+              )}
+            </div>
 
             {!autoRefresh && (
               <button
