@@ -432,9 +432,9 @@
 /* Expanded parsed log rows — click to expand, click to collapse */
 .gridtable-parsed-logs .parsed-row-expanded {
   background-color: var(--log-table-row-hover-bg);
-  cursor: pointer;
 }
 
+/* When expanded, remove truncation so full cell content is visible with word wrap */
 .gridtable-parsed-logs .parsed-row-expanded .grid-cell {
   align-items: flex-start;
   overflow: visible;
@@ -456,7 +456,7 @@
   text-overflow: clip;
 }
 
-/* Collapsed rows show pointer to indicate clickability */
+/* All parsed rows show pointer to indicate clickability */
 .gridtable-parsed-logs .gridtable-row {
   cursor: pointer;
 }

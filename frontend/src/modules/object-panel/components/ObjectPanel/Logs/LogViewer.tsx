@@ -803,8 +803,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
         header: 'API Timestamp',
         sortable: false,
         minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
-        render: (item: ParsedLogEntry) =>
-          item.timestamp ? formatTimestamp(item.timestamp) : '-',
+        render: (item: ParsedLogEntry) => (item.timestamp ? formatTimestamp(item.timestamp) : '-'),
       });
     }
 

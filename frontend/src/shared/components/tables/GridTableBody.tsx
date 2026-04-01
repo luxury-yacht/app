@@ -35,7 +35,6 @@ interface GridTableBodyProps<T> {
   totalVirtualHeight: number;
   virtualOffset: number;
   renderRowContent: RenderRowContentFn<T>;
-  firstVirtualRowRef: RefObject<HTMLDivElement | null>;
   paginationEnabled: boolean;
   paginationStatus: string;
   showPaginationStatus: boolean;
@@ -76,7 +75,6 @@ function GridTableBody<T>({
   totalVirtualHeight,
   virtualOffset,
   renderRowContent,
-  firstVirtualRowRef,
   paginationEnabled,
   paginationStatus,
   showPaginationStatus,
@@ -127,7 +125,6 @@ function GridTableBody<T>({
     }
 
     if (shouldVirtualize) {
-      firstVirtualRowRef.current = null;
       const shouldStretch = (() => {
         if (!allowHorizontalOverflow || contentWidth <= 0) {
           stretchDecisionRef.current = false;
@@ -164,7 +161,7 @@ function GridTableBody<T>({
             {virtualRows.map((item, idx) => {
               const absoluteIndex = virtualRangeStart + idx;
               const rowKey = keyExtractor(item, absoluteIndex);
-              return renderRowContent(item, absoluteIndex, idx === 0, rowKey, `slot-${idx}`);
+              return renderRowContent(item, absoluteIndex, true, rowKey, `slot-${idx}`);
             })}
           </div>
         </div>
