@@ -23,6 +23,8 @@ import {
   TimestampIcon,
   WrapTextIcon,
   ParseJsonIcon,
+  CopyIcon,
+  ToolbarSeparator,
 } from '@shared/components/icons/LogIcons';
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
@@ -118,7 +120,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
     isParsedView,
     parsedLogs,
     expandedRows,
-    manualRefreshPending,
     fallbackActive,
     fallbackError,
     showPreviousLogs,
@@ -209,7 +210,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
   // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
   const snapshotSequence = logScope ? (logSnapshot.data?.sequence ?? 0) : 0;
   const hasReceivedInitialLogs = snapshotSequence >= 2;
-  const loading = snapshotStatus === 'loading' && logEntries.length === 0;
+
   const displayError = snapshotError && !isLogDataUnavailable(snapshotError) ? snapshotError : null;
   const fallbackDisplayError =
     fallbackError && !isLogDataUnavailable(fallbackError) ? fallbackError : null;
@@ -504,35 +505,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
         dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
       });
   }, [fetchLogs, logScope, showPreviousLogs, supportsPreviousLogs]);
-
-  const handleManualRefresh = useCallback(async () => {
-    if (!logScope) {
-      return;
-    }
-    dispatch({ type: 'SET_MANUAL_REFRESH_PENDING', payload: true });
-    if (showPreviousLogs) {
-      dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: true });
-    }
-    try {
-      if (showPreviousLogs) {
-        await fetchLogs({ previous: true, isManual: true });
-      } else if (fallbackActive) {
-        await fetchFallbackLogs(true);
-      } else if (autoRefresh) {
-        await refreshOrchestrator.restartStreamingDomain(LOG_DOMAIN, logScope);
-      } else {
-        // Streaming domain is stopped when autoRefresh is off, so fetch directly.
-        await fetchLogs({ isManual: true });
-      }
-    } catch (refreshError) {
-      console.error('Failed to refresh logs', refreshError);
-    } finally {
-      dispatch({ type: 'SET_MANUAL_REFRESH_PENDING', payload: false });
-      if (showPreviousLogs) {
-        dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
-      }
-    }
-  }, [autoRefresh, fallbackActive, fetchFallbackLogs, fetchLogs, logScope, showPreviousLogs]);
 
   useEffect(() => {
     if (!supportsPreviousLogs && showPreviousLogs) {
@@ -1101,6 +1073,9 @@ const LogViewer: React.FC<LogViewerProps> = ({
               >
                 <AutoScrollIcon />
               </button>
+
+              <ToolbarSeparator />
+
               <button
                 type="button"
                 className={`log-toggle${showPreviousLogs ? ' active' : ''}`}
@@ -1136,20 +1111,19 @@ const LogViewer: React.FC<LogViewerProps> = ({
               >
                 <ParseJsonIcon />
               </button>
-            </div>
 
-            <button
-              className="button generic"
-              onClick={handleCopyLogs}
-              disabled={!displayLogs && !isParsedView}
-              title="Copy all logs to clipboard"
-            >
-              {copyFeedback === 'copied'
-                ? 'Copied'
-                : copyFeedback === 'error'
-                  ? 'Copy failed'
-                  : 'Copy'}
-            </button>
+              <ToolbarSeparator />
+
+              <button
+                type="button"
+                className={`log-toggle${copyFeedback === 'copied' ? ' active' : ''}`}
+                onClick={handleCopyLogs}
+                disabled={!displayLogs && !isParsedView}
+                title="Copy to clipboard"
+              >
+                <CopyIcon />
+              </button>
+            </div>
           </div>
         </div>
 

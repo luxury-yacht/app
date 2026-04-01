@@ -128,3 +128,33 @@ export const ParseJsonIcon: React.FC<IconProps> = ({
     <path d="M5 3c-1.1 0-2 .9-2 2s-.9 2-2 2v2c1.1 0 2 .9 2 2s.9 2 2 2h2v-2H5v-1c0-1.1-.9-2-2-2c1.1 0 2-.9 2-2V5h2V3m4 0c1.1 0 2 .9 2 2s.9 2 2 2v2c-1.1 0-2 .9-2 2s-.9 2-2 2H9v-2h2v-1c0-1.1.9-2 2-2c-1.1 0-2-.9-2-2V5H9V3zm11 3v12c0 1.11-.89 2-2 2H4a2 2 0 0 1-2-2v-3h2v3h16V6h-2.97V4H20c1.11 0 2 .89 2 2" />
   </svg>
 );
+
+/** Clipboard — copy to clipboard */
+export const CopyIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    width={width}
+    height={height}
+    fill={fill}
+  >
+    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2m0 16H8V7h11z" />
+  </svg>
+);
+
+/** Thin vertical line — group separator */
+export const ToolbarSeparator: React.FC<{ height?: number }> = ({ height = 16 }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 2 16"
+    width={2}
+    height={height}
+    className="log-toggle-separator"
+  >
+    <line x1="1" y1="1" x2="1" y2="15" stroke="currentColor" strokeWidth={1} opacity={0.3} />
+  </svg>
+);

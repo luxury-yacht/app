@@ -369,49 +369,6 @@ describe('LogViewer active pod synchronisation', () => {
     expectDisabledShortcut('p');
   });
 
-  it('fetches previous pod logs on manual refresh', async () => {
-    (LogFetcher as unknown as ViMock).mockResolvedValue({ entries: [] });
-
-    await renderViewer({
-      resourceKind: 'Pod',
-      resourceName: 'api',
-      activePodNames: ['api'],
-    });
-
-    const enablePrevious = getLatestShortcut('x');
-    expect(enablePrevious?.enabled).toBe(true);
-
-    await act(async () => {
-      expect(enablePrevious?.handler()).toBe(true);
-      await Promise.resolve();
-    });
-
-    const toggleAutoRefresh = getLatestShortcut('r');
-    await act(async () => {
-      expect(toggleAutoRefresh?.handler()).toBe(true);
-      await Promise.resolve();
-    });
-
-    (LogFetcher as unknown as ViMock).mockClear();
-
-    const refreshButton = container.querySelector('button.button.generic');
-    expect(refreshButton?.textContent).toContain('Refresh');
-
-    await act(async () => {
-      refreshButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      await Promise.resolve();
-    });
-
-    expect(LogFetcher).toHaveBeenCalledTimes(1);
-    const request = (LogFetcher as unknown as ViMock).mock.calls[0][1];
-    expect((LogFetcher as unknown as ViMock).mock.calls[0][0]).toBe('alpha:ctx');
-    expect(request).toMatchObject({
-      namespace: 'team-a',
-      podName: 'api',
-      previous: true,
-    });
-  });
-
   it('triggers fallback fetcher when streaming is unavailable', async () => {
     seedLogSnapshot(
       [
