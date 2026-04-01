@@ -19,46 +19,43 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-
-    /* Path aliases */
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
+      "@/*": ["./src/*"],
 
       /* Module aliases */
-      "@modules/*": ["src/modules/*"],
-      "@modules/cluster/*": ["src/modules/cluster/*"],
-      "@modules/namespace/*": ["src/modules/namespace/*"],
-      "@modules/kubernetes/*": ["src/modules/kubernetes/*"],
-      "@modules/object-panel/*": ["src/modules/object-panel/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@modules/cluster/*": ["./src/modules/cluster/*"],
+      "@modules/namespace/*": ["./src/modules/namespace/*"],
+      "@modules/kubernetes/*": ["./src/modules/kubernetes/*"],
+      "@modules/object-panel/*": ["./src/modules/object-panel/*"],
 
       /* UI aliases */
-      "@ui/*": ["src/ui/*"],
-      "@ui/layout/*": ["src/ui/layout/*"],
-      "@ui/navigation/*": ["src/ui/navigation/*"],
-      "@ui/command-palette/*": ["src/ui/command-palette/*"],
-      "@ui/shortcuts/*": ["src/ui/shortcuts/*"],
+      "@ui/*": ["./src/ui/*"],
+      "@ui/layout/*": ["./src/ui/layout/*"],
+      "@ui/navigation/*": ["./src/ui/navigation/*"],
+      "@ui/command-palette/*": ["./src/ui/command-palette/*"],
+      "@ui/shortcuts/*": ["./src/ui/shortcuts/*"],
 
       /* Shared aliases */
-      "@shared/*": ["src/shared/*"],
-      "@shared/components/*": ["src/shared/components/*"],
-      "@shared/hooks/*": ["src/shared/hooks/*"],
-      "@shared/utils/*": ["src/shared/utils/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@shared/components/*": ["./src/shared/components/*"],
+      "@shared/hooks/*": ["./src/shared/hooks/*"],
+      "@shared/utils/*": ["./src/shared/utils/*"],
 
       /* Styles alias */
-      "@styles/*": ["styles/*"],
+      "@styles/*": ["./styles/*"],
 
       /* Core aliases */
-      "@core/*": ["src/core/*"],
-      "@core/contexts/*": ["src/core/contexts/*"],
+      "@core/*": ["./src/core/*"],
+      "@core/contexts/*": ["./src/core/contexts/*"],
 
       /* Remaining aliases */
-      "@hooks/*": ["src/hooks/*"],
-      "@types/*": ["src/types/*"],
-      "@utils/*": ["src/utils/*"],
-      "@contexts/*": ["src/core/contexts/*"],
-      "@assets/*": ["src/assets/*"],
-      "@wailsjs/*": ["wailsjs/*"]
+      "@hooks/*": ["./src/hooks/*"],
+      "@types/*": ["./src/types/*"],
+      "@utils/*": ["./src/utils/*"],
+      "@contexts/*": ["./src/core/contexts/*"],
+      "@assets/*": ["./src/assets/*"],
+      "@wailsjs/*": ["./wailsjs/*"]
     }
   },
   "include": ["src", "wailsjs/**/*.d.ts"],

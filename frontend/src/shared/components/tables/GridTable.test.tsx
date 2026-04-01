@@ -244,6 +244,7 @@ describe('GridTable virtualization', () => {
       callback: IntersectionObserverCallback;
       readonly root: Element | Document | null = null;
       readonly rootMargin: string = '0px';
+      readonly scrollMargin: string = '0px';
       readonly thresholds: ReadonlyArray<number> = [0];
       observe = vi.fn((target: Element) => {
         observedEntries.push({
@@ -1299,6 +1300,7 @@ it('triggers auto pagination via the load more sentinel', async () => {
     private readonly callback: IntersectionObserverCallback;
     readonly root: Element | Document | null = null;
     readonly rootMargin = '0px';
+    readonly scrollMargin = '0px';
     readonly thresholds = [0];
 
     constructor(callback: IntersectionObserverCallback) {
