@@ -99,6 +99,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const previousLogCountRef = useRef<number>(0);
   const filterInputRef = useRef<HTMLInputElement>(null);
   const seqCounterRef = useRef(0);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resourceKindKey = resourceKind?.toLowerCase() ?? '';
   const isWorkload = resourceKindKey !== 'pod';
@@ -631,6 +632,22 @@ const LogViewer: React.FC<LogViewerProps> = ({
       .join('\n');
   }, [filteredEntries, isPendingLogs, isWorkload, selectedContainer, showTimestamps, textFilter]);
 
+  // Schedule copy feedback reset, cancelling any prior pending timer
+  const scheduleCopyReset = useCallback(() => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(
+      () => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }),
+      1500
+    );
+  }, [dispatch]);
+
+  // Clean up copy timer on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
   const handleCopyLogs = useCallback(async () => {
     const text = isParsedView
       ? parsedLogs
@@ -641,19 +658,19 @@ const LogViewer: React.FC<LogViewerProps> = ({
       : displayLogs;
     if (!text) {
       dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
-      window.setTimeout(() => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }), 1500);
+      scheduleCopyReset();
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
       dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'copied' });
-      window.setTimeout(() => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }), 1500);
+      scheduleCopyReset();
     } catch (err) {
       console.error('Failed to copy logs', err);
       dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
-      window.setTimeout(() => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }), 1500);
+      scheduleCopyReset();
     }
-  }, [displayLogs, isParsedView, parsedLogs]);
+  }, [displayLogs, isParsedView, parsedLogs, scheduleCopyReset, dispatch]);
 
   useEffect(() => {
     if (!isParsedView) {
@@ -767,6 +784,8 @@ const LogViewer: React.FC<LogViewerProps> = ({
         }
       };
 
+      let rafId: number | undefined;
+
       if (isParsedView && parsedLogs.length > 0) {
         // For parsed view, wait for the gridtable-wrapper to be rendered
         let attempts = 0;
@@ -775,20 +794,22 @@ const LogViewer: React.FC<LogViewerProps> = ({
         const checkAndScroll = () => {
           const wrapper = logsContentRef.current?.querySelector('.gridtable-wrapper');
           if (wrapper && wrapper.scrollHeight > 0) {
-            // Wrapper is rendered, scroll to bottom
-            requestAnimationFrame(scrollToBottom);
+            rafId = requestAnimationFrame(scrollToBottom);
           } else if (attempts < maxAttempts) {
-            // Try again next frame
             attempts++;
-            requestAnimationFrame(checkAndScroll);
+            rafId = requestAnimationFrame(checkAndScroll);
           }
         };
 
-        requestAnimationFrame(checkAndScroll);
+        rafId = requestAnimationFrame(checkAndScroll);
       } else if (!isParsedView && displayLogs) {
         // For raw view, scroll immediately after next frame
-        requestAnimationFrame(scrollToBottom);
+        rafId = requestAnimationFrame(scrollToBottom);
       }
+
+      return () => {
+        if (rafId !== undefined) cancelAnimationFrame(rafId);
+      };
     }
   }, [autoScroll, displayLogs, isParsedView, logEntries.length, parsedLogs.length]);
 
@@ -926,7 +947,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
 
   const getParsedRowClassName = useCallback(
     (_item: ParsedLogEntry, index: number) => {
-      const key = `log-${parsedLogs[index]?.seq ?? index}`;
+      const key = `log-${parsedLogs[index]?.seq ?? parsedLogs[index]?.lineNumber ?? index}`;
       return expandedRows.has(key) ? 'parsed-row-expanded' : undefined;
     },
     [expandedRows, parsedLogs]
@@ -1169,7 +1190,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
               <GridTable
                 data={parsedLogs}
                 columns={tableColumns}
-                keyExtractor={(item: ParsedLogEntry, index: number) => `log-${item.seq ?? index}`}
+                keyExtractor={(item: ParsedLogEntry) => `log-${item.seq ?? item.lineNumber}`}
                 onRowClick={handleParsedRowKeyboard}
                 getRowClassName={getParsedRowClassName}
                 className="parsed-logs-table"
