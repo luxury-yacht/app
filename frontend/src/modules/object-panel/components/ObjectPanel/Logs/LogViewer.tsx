@@ -536,11 +536,14 @@ const LogViewer: React.FC<LogViewerProps> = ({
   // Keyboard shortcuts for Logs tab
   useLogKeyboardShortcuts({
     isActive,
+    isParsedView,
+    autoScroll,
     dispatch,
     supportsPreviousLogs,
     canParseLogs,
     handleTogglePreviousLogs,
     filterInputRef,
+    logsContentRef,
   });
 
   // Generate consistent colors for pods (workload view)

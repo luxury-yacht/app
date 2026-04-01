@@ -10,11 +10,14 @@ import type { LogViewerAction } from '../logViewerReducer';
 
 interface UseLogKeyboardShortcutsParams {
   isActive: boolean;
+  isParsedView: boolean;
+  autoScroll: boolean;
   dispatch: React.Dispatch<LogViewerAction>;
   supportsPreviousLogs: boolean;
   canParseLogs: boolean;
   handleTogglePreviousLogs: () => void;
   filterInputRef: RefObject<HTMLInputElement | null>;
+  logsContentRef: RefObject<HTMLDivElement | null>;
 }
 
 /**
@@ -23,11 +26,14 @@ interface UseLogKeyboardShortcutsParams {
  */
 export function useLogKeyboardShortcuts({
   isActive,
+  isParsedView,
+  autoScroll,
   dispatch,
   supportsPreviousLogs,
   canParseLogs,
   handleTogglePreviousLogs,
   filterInputRef,
+  logsContentRef,
 }: UseLogKeyboardShortcutsParams) {
   // Toggle auto-scroll with 'S' key
   useShortcut({
@@ -113,6 +119,55 @@ export function useLogKeyboardShortcuts({
       return true;
     }, [isActive, dispatch]),
     description: 'Toggle text wrap',
+    category: 'Logs Tab',
+    enabled: isActive,
+    view: 'global',
+    priority: 20,
+  });
+
+  // Helper to get the scroll container for the current view mode
+  const getScrollContainer = useCallback((): HTMLElement | null => {
+    if (!logsContentRef.current) return null;
+    if (isParsedView) {
+      return logsContentRef.current.querySelector('.gridtable-wrapper');
+    }
+    return logsContentRef.current;
+  }, [isParsedView, logsContentRef]);
+
+  // Scroll to top with Home key (disables auto-scroll to prevent fighting)
+  useShortcut({
+    key: 'Home',
+    handler: useCallback(() => {
+      if (!isActive) return false;
+      const container = getScrollContainer();
+      if (!container) return false;
+      container.scrollTo({ top: 0, behavior: 'auto' });
+      if (autoScroll) {
+        dispatch({ type: 'TOGGLE_AUTO_SCROLL' });
+      }
+      return true;
+    }, [isActive, autoScroll, getScrollContainer, dispatch]),
+    description: 'Scroll to top',
+    category: 'Logs Tab',
+    enabled: isActive,
+    view: 'global',
+    priority: 20,
+  });
+
+  // Scroll to bottom with End key (re-enables auto-scroll)
+  useShortcut({
+    key: 'End',
+    handler: useCallback(() => {
+      if (!isActive) return false;
+      const container = getScrollContainer();
+      if (!container) return false;
+      container.scrollTo({ top: container.scrollHeight, behavior: 'auto' });
+      if (!autoScroll) {
+        dispatch({ type: 'TOGGLE_AUTO_SCROLL' });
+      }
+      return true;
+    }, [isActive, autoScroll, getScrollContainer, dispatch]),
+    description: 'Scroll to bottom',
     category: 'Logs Tab',
     enabled: isActive,
     view: 'global',
