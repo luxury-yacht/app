@@ -9,6 +9,7 @@ import { useCallback } from 'react';
 import type React from 'react';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
 import { getStableRowId } from '@shared/components/tables/GridTable.utils';
+import type { MeasureRowRefFn } from '@shared/components/tables/hooks/useGridTableVirtualization';
 
 // Returns row/cell render callbacks for GridTable, wiring hover handlers,
 // context menus, and slotting for virtualization measurements.
@@ -16,7 +17,7 @@ import { getStableRowId } from '@shared/components/tables/GridTable.utils';
 export type RenderRowContentFn<T> = (
   item: T,
   absoluteIndex: number,
-  attachMeasurementRef: boolean,
+  shouldMeasure: boolean,
   elementKey: string,
   slotId?: string
 ) => React.ReactNode;
@@ -57,7 +58,7 @@ export interface UseGridTableRowRendererParams<T> {
     content: React.ReactNode;
     text: string;
   };
-  firstVirtualRowRef: React.RefObject<HTMLDivElement | null>;
+  measureRowRef: MeasureRowRefFn;
 }
 
 export function useGridTableRowRenderer<T>({
@@ -72,13 +73,13 @@ export function useGridTableRowRenderer<T>({
   columnWindowRange,
   handleContextMenu,
   getCachedCellContent,
-  firstVirtualRowRef,
+  measureRowRef,
 }: UseGridTableRowRendererParams<T>): RenderRowContentFn<T> {
   return useCallback(
     (
       item: T,
       absoluteIndex: number,
-      attachMeasurementRef: boolean,
+      shouldMeasure: boolean,
       elementKey: string,
       slotId?: string
     ): React.ReactNode => {
@@ -89,12 +90,10 @@ export function useGridTableRowRenderer<T>({
       const isSelected = rowClassName.includes('gridtable-row--selected');
       const isFocused = rowClassName.includes('gridtable-row--focused');
 
-      const setMeasurementRef = attachMeasurementRef
-        ? (node: HTMLDivElement | null) => {
-            if (node) {
-              firstVirtualRowRef.current = node;
-            }
-          }
+      // When shouldMeasure is true (virtualized rows), attach a ref callback
+      // that reports the row's height to the virtualizer for variable-height support.
+      const setMeasurementRef = shouldMeasure
+        ? (node: HTMLDivElement | null) => measureRowRef(rowKey, node)
         : undefined;
 
       // Build a DOM-safe id for aria-activedescendant references.
@@ -169,7 +168,7 @@ export function useGridTableRowRenderer<T>({
       columnWindowRange,
       handleContextMenu,
       getCachedCellContent,
-      firstVirtualRowRef,
+      measureRowRef,
     ]
   );
 }

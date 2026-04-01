@@ -69,7 +69,6 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     virtualRange,
     totalVirtualHeight,
     virtualOffset,
-    firstVirtualRowRef,
     scrollbarWidth,
     tableContentWidth,
     tableViewportWidth,
@@ -114,7 +113,6 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       totalVirtualHeight={totalVirtualHeight}
       virtualOffset={virtualOffset}
       renderRowContent={renderRowContent}
-      firstVirtualRowRef={firstVirtualRowRef}
       paginationEnabled={paginationEnabled}
       paginationStatus={resolvedPaginationStatus}
       showPaginationStatus={showPaginationStatus}

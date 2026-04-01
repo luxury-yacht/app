@@ -132,7 +132,6 @@ export interface GridTableControllerResult<T> {
   virtualRange: { start: number; end: number };
   totalVirtualHeight: number;
   virtualOffset: number;
-  firstVirtualRowRef: RefObject<HTMLDivElement | null>;
   scrollbarWidth: number;
 
   // Columns
@@ -530,7 +529,8 @@ export function useGridTableController<T>({
     virtualRowHeight,
     totalVirtualHeight,
     virtualOffset,
-    firstVirtualRowRef,
+    measureRowRef,
+    getRowTop,
     scrollbarWidth,
   } = useGridTableVirtualization({
     data: tableData,
@@ -666,9 +666,10 @@ export function useGridTableController<T>({
       focusedRowIndex != null &&
       focusedRowIndex >= 0
     ) {
-      // Mimic scrollIntoView({ block: 'nearest' }) - only scroll if row is outside visible area
-      const rowTop = focusedRowIndex * virtualRowHeight;
-      const rowBottom = rowTop + virtualRowHeight;
+      // Mimic scrollIntoView({ block: 'nearest' }) - only scroll if row is outside visible area.
+      // Uses getRowTop for accurate per-row positioning with variable row heights.
+      const rowTop = getRowTop(focusedRowIndex);
+      const rowBottom = getRowTop(focusedRowIndex + 1);
       const viewportTop = wrapper.scrollTop;
       const viewportBottom = viewportTop + wrapper.clientHeight;
 
@@ -688,6 +689,7 @@ export function useGridTableController<T>({
     shouldVirtualize,
     updateHoverForElement,
     virtualRowHeight,
+    getRowTop,
     wrapperRef,
     lastNavigationMethodRef,
   ]);
@@ -919,7 +921,7 @@ export function useGridTableController<T>({
     columnWindowRange,
     handleContextMenu: handleCellContextMenu,
     getCachedCellContent,
-    firstVirtualRowRef,
+    measureRowRef,
   });
 
   const { loadMoreSentinelRef, handleManualLoadMore, paginationStatus } = useGridTablePagination({
@@ -970,7 +972,6 @@ export function useGridTableController<T>({
     virtualRange,
     totalVirtualHeight,
     virtualOffset,
-    firstVirtualRowRef,
     scrollbarWidth,
     tableContentWidth,
     tableViewportWidth,

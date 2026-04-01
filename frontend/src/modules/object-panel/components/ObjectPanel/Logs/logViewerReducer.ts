@@ -5,14 +5,18 @@
  * for better state management and reduced complexity.
  */
 
+// Empty string means "all containers" in both the backend API and the filter UI
+export const ALL_CONTAINERS = '';
+
 export interface ParsedLogEntry {
-  [key: string]: unknown;
-  _pod?: string;
-  _container?: string;
-  _timestamp?: string;
-  _rawLine: string;
-  _lineNumber: number;
-  _seq?: number;
+  /** User JSON fields — never collides with internal metadata */
+  data: Record<string, unknown>;
+  pod?: string;
+  container?: string;
+  timestamp?: string;
+  rawLine: string;
+  lineNumber: number;
+  seq?: number;
 }
 
 export type CopyFeedback = 'idle' | 'copied' | 'error';
@@ -40,7 +44,7 @@ export interface LogViewerState {
   // Parsed view state
   isParsedView: boolean;
   parsedLogs: ParsedLogEntry[];
-  parsedFieldKeys: string[];
+  expandedRows: Set<string>;
 
   // Loading/status state
   copyFeedback: CopyFeedback;
@@ -72,8 +76,7 @@ export type LogViewerAction =
   | { type: 'TOGGLE_PARSED_VIEW' }
   | { type: 'SET_PARSED_VIEW'; payload: boolean }
   | { type: 'SET_PARSED_LOGS'; payload: ParsedLogEntry[] }
-  | { type: 'SET_PARSED_FIELD_KEYS'; payload: string[] }
-  | { type: 'ADD_PARSED_FIELD_KEYS'; payload: string[] }
+  | { type: 'TOGGLE_ROW_EXPANSION'; payload: string }
 
   // Loading/status actions
   | { type: 'SET_COPY_FEEDBACK'; payload: CopyFeedback }
@@ -109,7 +112,7 @@ export const initialLogViewerState: LogViewerState = {
   // Parsed view state
   isParsedView: false,
   parsedLogs: [],
-  parsedFieldKeys: [],
+  expandedRows: new Set<string>(),
 
   // Loading/status state
   copyFeedback: 'idle',
@@ -154,22 +157,25 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
         ...state,
         isParsedView: !state.isParsedView,
         parsedLogs: state.isParsedView ? [] : state.parsedLogs,
+        expandedRows: new Set<string>(),
       };
     case 'SET_PARSED_VIEW':
       return {
         ...state,
         isParsedView: action.payload,
         parsedLogs: action.payload ? state.parsedLogs : [],
+        expandedRows: new Set<string>(),
       };
     case 'SET_PARSED_LOGS':
       return { ...state, parsedLogs: action.payload };
-    case 'SET_PARSED_FIELD_KEYS':
-      return { ...state, parsedFieldKeys: action.payload };
-    case 'ADD_PARSED_FIELD_KEYS': {
-      const existingKeys = new Set(state.parsedFieldKeys);
-      const newKeys = action.payload.filter((key) => !existingKeys.has(key));
-      if (newKeys.length === 0) return state;
-      return { ...state, parsedFieldKeys: [...state.parsedFieldKeys, ...newKeys] };
+    case 'TOGGLE_ROW_EXPANSION': {
+      const next = new Set(state.expandedRows);
+      if (next.has(action.payload)) {
+        next.delete(action.payload);
+      } else {
+        next.add(action.payload);
+      }
+      return { ...state, expandedRows: next };
     }
 
     // Loading/status actions
@@ -193,6 +199,9 @@ export function logViewerReducer(state: LogViewerState, action: LogViewerAction)
         selectedFilter: '',
         selectedContainer: action.isWorkload ? state.selectedContainer : '',
         textFilter: '',
+        isParsedView: false,
+        parsedLogs: [],
+        expandedRows: new Set<string>(),
         manualRefreshPending: false,
         fallbackActive: false,
         fallbackError: null,

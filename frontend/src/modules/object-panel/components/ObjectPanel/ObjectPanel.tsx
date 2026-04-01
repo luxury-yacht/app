@@ -711,7 +711,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         <ObjectPanelContent
           activeTab={state.activeTab}
           detailTabProps={detailTabProps}
-          isPanelOpen={isOpen}
+          isPanelOpen={isOpen && isActiveTab}
           capabilities={capabilities}
           capabilityReasons={capabilityReasons}
           detailScope={detailScope}

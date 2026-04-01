@@ -6,7 +6,7 @@
  */
 import { useMemo } from 'react';
 import type { ObjectLogEntry } from '@/core/refresh/types';
-import type { ParsedLogEntry } from '../logViewerReducer';
+import { ALL_CONTAINERS, type ParsedLogEntry } from '../logViewerReducer';
 
 interface UseLogFilteringParams {
   logEntries: ObjectLogEntry[];
@@ -33,8 +33,6 @@ export function useLogFiltering({
   selectedContainer,
   textFilter,
 }: UseLogFilteringParams): UseLogFilteringResult {
-  const ALL_CONTAINERS = '';
-
   const orderedEntries = useMemo(() => {
     if (logEntries.length <= 1) {
       return logEntries;
@@ -57,11 +55,9 @@ export function useLogFiltering({
       const bHasTimestamp = b.timestampMs !== null;
 
       if (aHasTimestamp && bHasTimestamp) {
-        const aMs = a.timestampMs;
-        const bMs = b.timestampMs;
-        if (aMs === null || bMs === null) {
-          return a.index - b.index;
-        }
+        // Both are non-null since aHasTimestamp/bHasTimestamp confirmed it
+        const aMs = a.timestampMs as number;
+        const bMs = b.timestampMs as number;
         if (aMs !== bMs) {
           return aMs - bMs;
         }
@@ -129,14 +125,23 @@ export function useLogFiltering({
     filteredEntries.forEach((entry, index) => {
       try {
         const jsonData = JSON.parse(entry.line);
+        // Only accept non-empty plain objects (reject arrays, primitives, null, {})
+        if (
+          typeof jsonData !== 'object' ||
+          jsonData === null ||
+          Array.isArray(jsonData) ||
+          Object.keys(jsonData).length === 0
+        ) {
+          return;
+        }
         parsed.push({
-          ...jsonData,
-          _rawLine: entry.line,
-          _lineNumber: index + 1,
-          _timestamp: entry.timestamp,
-          _pod: isWorkload ? entry.pod : 'undefined',
-          _container: entry.container,
-          _seq: entry._seq,
+          data: jsonData,
+          rawLine: entry.line,
+          lineNumber: index + 1,
+          timestamp: entry.timestamp,
+          pod: isWorkload ? entry.pod : undefined,
+          container: entry.container,
+          seq: entry._seq,
         });
       } catch {
         // Not JSON, ignore

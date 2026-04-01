@@ -62,7 +62,7 @@ describe('useGridTableRowRenderer', () => {
   ];
 
   it('renders rows with virtualization applied', () => {
-    const firstVirtualRowRef = { current: null as HTMLDivElement | null };
+    const measureRowRef = vi.fn();
     const handleRowClick = vi.fn();
     const renderers = renderHook(() =>
       useGridTableRowRenderer({
@@ -85,7 +85,7 @@ describe('useGridTableRowRenderer', () => {
           content: `${column.key}-${item.name}`,
           text: item.name,
         }),
-        firstVirtualRowRef,
+        measureRowRef,
       })
     );
 
@@ -116,7 +116,7 @@ describe('useGridTableRowRenderer', () => {
   });
 
   it('renders plain rows when virtualization disabled', () => {
-    const firstVirtualRowRef = { current: null as HTMLDivElement | null };
+    const measureRowRef = vi.fn();
     const handleRowClick = vi.fn();
     const renderers = renderHook(() =>
       useGridTableRowRenderer({
@@ -136,7 +136,7 @@ describe('useGridTableRowRenderer', () => {
         columnWindowRange: { startIndex: 0, endIndex: 1 },
         handleContextMenu: vi.fn(),
         getCachedCellContent: () => ({ content: 'cell', text: 'cell' }),
-        firstVirtualRowRef,
+        measureRowRef,
       })
     );
 
