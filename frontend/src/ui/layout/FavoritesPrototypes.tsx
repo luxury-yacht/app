@@ -4,7 +4,7 @@
  * Prototype components for Favorites design options.
  * Used in Storybook stories only — not part of the production build.
  *
- * Option B: Star menu dropdown in the header toolbar
+ * Option B: Favorites menu dropdown in the header toolbar
  * Option C: Favorites integrated into the command palette
  */
 
@@ -59,10 +59,10 @@ function TypeIcon({ clusterName }: { clusterName: string | null }) {
 }
 
 // ---------------------------------------------------------------------------
-// Option B: Star menu dropdown
+// Option B: Favorites menu dropdown
 // ---------------------------------------------------------------------------
 
-export function StarMenuDropdown({
+export function FavMenuDropdown({
   favorites,
   activeFavoriteId = null,
   isOpen: controlledOpen,
@@ -76,7 +76,7 @@ export function StarMenuDropdown({
 
   return (
     <div style={{ position: 'relative', display: 'inline-flex' }}>
-      {/* Star button — same style as settings button */}
+      {/* Favorites button — same style as settings button */}
       <button
         className="settings-button"
         onClick={() => setInternalOpen((prev) => !prev)}
@@ -93,7 +93,8 @@ export function StarMenuDropdown({
             position: 'absolute',
             top: 'calc(100% + 6px)',
             right: 0,
-            width: '320px',
+            width: 'max-content',
+            minWidth: '200px',
             maxHeight: '400px',
             background: 'var(--color-bg)',
             border: '1px solid var(--color-border)',
@@ -106,27 +107,6 @@ export function StarMenuDropdown({
             animation: 'commandPaletteIn 150ms ease-out',
           }}
         >
-          {/* Header */}
-          <div
-            style={{
-              padding: '0.6rem 0.75rem',
-              borderBottom: '1px solid var(--color-border)',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              color: 'var(--color-text-secondary)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <span>Favorites</span>
-            <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
-              {favorites.length} saved
-            </span>
-          </div>
-
           {/* Items */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '0.35rem 0' }}>
             {favorites.length === 0 ? (
@@ -139,7 +119,7 @@ export function StarMenuDropdown({
                   fontStyle: 'italic',
                 }}
               >
-                No favorites yet. Click the star icon on any view to save it.
+                No favorites yet. Click the heart icon on any view to save it.
               </div>
             ) : (
               favorites.map((fav) => (
