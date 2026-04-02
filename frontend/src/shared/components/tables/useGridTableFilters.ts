@@ -162,6 +162,8 @@ export function useGridTableFilters<T>({
 
   const resolvedFilterOptions = useMemo<InternalFilterOptions>(() => {
     const searchPlaceholder = filters?.options?.searchPlaceholder;
+    const preActions = filters?.options?.preActions;
+    const postActions = filters?.options?.postActions;
     const customActions = filters?.options?.customActions;
     const searchActions = filters?.options?.searchActions;
     if (!filteringEnabled) {
@@ -169,6 +171,8 @@ export function useGridTableFilters<T>({
         searchPlaceholder,
         kinds: [],
         namespaces: [],
+        preActions,
+        postActions,
         customActions,
         searchActions,
       };
@@ -250,6 +254,8 @@ export function useGridTableFilters<T>({
       searchPlaceholder,
       kinds,
       namespaces: namespaceOptions,
+      preActions,
+      postActions,
       customActions,
       searchActions,
     };

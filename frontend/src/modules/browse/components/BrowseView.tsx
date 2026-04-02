@@ -40,6 +40,7 @@ import {
   type BrowseTableRow,
 } from '@modules/browse/hooks/useBrowseColumns';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
+import { LoadMoreIcon, FavoriteOutlineIcon } from '@shared/components/icons/MenuIcons';
 
 const VIRTUALIZATION_THRESHOLD = 80;
 
@@ -273,20 +274,26 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         showNamespaceDropdown: showNamespaceColumn,
         includeClusterScopedSyntheticNamespace: false,
         totalCount,
-        customActions: (
-          // Keep pagination actions out of the scrollable body. The in-body pagination button
-          // can interact with virtual scroll/focus management and trigger React update-depth
-          // errors on some datasets.
-          <button
-            type="button"
-            className="button generic"
-            onClick={handleLoadMore}
-            disabled={!continueToken || isRequestingMore}
-            title={!continueToken ? 'All items loaded' : undefined}
-          >
-            {isRequestingMore ? 'Loading…' : 'Load More'}
-          </button>
-        ),
+        preActions: [
+          {
+            type: 'toggle' as const,
+            id: 'favorite',
+            icon: <FavoriteOutlineIcon />,
+            active: false,
+            onClick: () => {},
+            title: 'Save as favorite',
+          },
+        ],
+        postActions: [
+          {
+            type: 'action' as const,
+            id: 'load-more',
+            icon: <LoadMoreIcon />,
+            onClick: handleLoadMore,
+            title: !continueToken ? 'All items loaded' : isRequestingMore ? 'Loading…' : 'Load more',
+            disabled: !continueToken || isRequestingMore,
+          },
+        ],
       },
     }),
     [

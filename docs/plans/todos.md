@@ -3,6 +3,8 @@
 - Favorites/bookmarks
   - Bookmark specific views
 
+- Preemptive permissions check - start as soon as the view is opened, don't wait for right-click
+
 - Resource creation
   - starter templates for common resource types
   - reuse the existing code editor

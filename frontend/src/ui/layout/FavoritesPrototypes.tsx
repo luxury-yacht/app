@@ -122,7 +122,7 @@ export function FavMenuDropdown({
                 No favorites yet. Click the heart icon on any view to save it.
               </div>
             ) : (
-              favorites.map((fav) => (
+              favorites.map((fav, idx) => (
                 <div
                   key={fav.id}
                   style={{
@@ -132,6 +132,7 @@ export function FavMenuDropdown({
                     padding: '0.4rem 0.75rem',
                     cursor: 'pointer',
                     borderLeft: '3px solid transparent',
+                    position: 'relative',
                     transition: 'background-color 150ms ease, border-color 150ms ease',
                     ...(activeFavoriteId === fav.id
                       ? {
@@ -140,18 +141,21 @@ export function FavMenuDropdown({
                         }
                       : {}),
                   }}
-                  title={fav.name}
                   onMouseEnter={(e) => {
                     if (activeFavoriteId !== fav.id) {
                       e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)';
                       e.currentTarget.style.borderLeftColor = 'var(--color-border)';
                     }
+                    const actions = e.currentTarget.querySelector<HTMLElement>('.fav-hover-actions');
+                    if (actions) actions.style.display = 'flex';
                   }}
                   onMouseLeave={(e) => {
                     if (activeFavoriteId !== fav.id) {
                       e.currentTarget.style.backgroundColor = 'transparent';
                       e.currentTarget.style.borderLeftColor = 'transparent';
                     }
+                    const actions = e.currentTarget.querySelector<HTMLElement>('.fav-hover-actions');
+                    if (actions) actions.style.display = 'none';
                   }}
                 >
                   <TypeIcon clusterName={fav.clusterName} />
@@ -166,6 +170,94 @@ export function FavMenuDropdown({
                     }}
                   >
                     {fav.name}
+                  </span>
+                  <span
+                    className="fav-hover-actions"
+                    style={{
+                      display: 'none',
+                      alignItems: 'center',
+                      gap: '2px',
+                      position: 'absolute',
+                      right: '0.5rem',
+                      background: 'linear-gradient(to right, transparent, var(--color-bg-secondary) 25%)',
+                      paddingLeft: '1rem',
+                      paddingRight: '0.1rem',
+                    }}
+                  >
+                    <button
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: '2px',
+                        cursor: idx === 0 ? 'default' : 'pointer',
+                        color: 'var(--color-text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        borderRadius: '3px',
+                        opacity: idx === 0 ? 0.3 : 1,
+                      }}
+                      title="Move up"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+                        <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />
+                      </svg>
+                    </button>
+                    <button
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: '2px',
+                        cursor: idx === favorites.length - 1 ? 'default' : 'pointer',
+                        color: 'var(--color-text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        borderRadius: '3px',
+                        opacity: idx === favorites.length - 1 ? 0.3 : 1,
+                      }}
+                      title="Move down"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+                        <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
+                      </svg>
+                    </button>
+                    <button
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: '2px',
+                        cursor: 'pointer',
+                        color: 'var(--color-text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        borderRadius: '3px',
+                      }}
+                      title="Rename"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                      </svg>
+                    </button>
+                    <button
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: '2px',
+                        cursor: 'pointer',
+                        color: 'var(--color-text-secondary)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        borderRadius: '3px',
+                      }}
+                      title="Delete"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+                      </svg>
+                    </button>
                   </span>
                 </div>
               ))

@@ -9,6 +9,7 @@ import type React from 'react';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import type { SearchInputAction } from '@shared/components/inputs/SearchInput';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 
 export type ColumnWidthUnit = 'px' | 'em' | 'rem' | '%';
 export type ColumnWidthInput =
@@ -80,6 +81,11 @@ export interface GridTableFilterOptions {
   showKindDropdown?: boolean;
   showNamespaceDropdown?: boolean;
   includeClusterScopedSyntheticNamespace?: boolean;
+  /** IconBar items rendered before the built-in Reset action (e.g. Favorite toggle). */
+  preActions?: IconBarItem[];
+  /** IconBar items rendered after a separator following Reset (e.g. Load More). */
+  postActions?: IconBarItem[];
+  /** Arbitrary ReactNode content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
   searchActions?: SearchInputAction[];
   /** Override the total item count shown in the filter bar (e.g. server-side total for paginated views). */
@@ -142,6 +148,8 @@ export interface InternalFilterOptions {
   kinds: DropdownOption[];
   namespaces: DropdownOption[];
   searchPlaceholder?: string;
+  preActions?: IconBarItem[];
+  postActions?: IconBarItem[];
   customActions?: React.ReactNode;
   searchActions?: SearchInputAction[];
 }
