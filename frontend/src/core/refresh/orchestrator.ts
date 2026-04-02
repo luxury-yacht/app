@@ -1217,7 +1217,9 @@ class RefreshOrchestrator {
         );
         return;
       }
-      if (shouldStream && this.isStreamingHealthy(domain, normalizedScope)) {
+      // Skip polling when the stream is healthy — but not for manual fetches,
+      // which may be explicit pagination requests that the stream won't serve.
+      if (!options.isManual && shouldStream && this.isStreamingHealthy(domain, normalizedScope)) {
         return;
       }
     }

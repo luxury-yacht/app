@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { getScopedDomainState, setScopedDomainState } from '@/core/refresh/store';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -278,7 +279,12 @@ export function useBrowseCatalog({
     setHasLoadedOnce(true);
   }, [domain.data, hasLoadedOnce]);
 
-  // Load more handler
+  // Load more handler.
+  // Fetches the next page using a paginated scope (with continueToken), then
+  // copies the result to the base catalogScope so the domain watcher sees it.
+  const catalogScopeRef = useRef(catalogScope);
+  catalogScopeRef.current = catalogScope;
+
   const handleLoadMore = useCallback(() => {
     if (!continueToken || isRequestingMore) {
       return;
@@ -300,7 +306,22 @@ export function useBrowseCatalog({
     // Enable the paginated scope and fetch it directly.
     refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, true);
     lastAppliedScopeRef.current = normalizedScope;
-    void refreshOrchestrator.fetchScopedDomain('catalog', normalizedScope, { isManual: true });
+    void refreshOrchestrator
+      .fetchScopedDomain('catalog', normalizedScope, { isManual: true })
+      .then(() => {
+        // The fetch wrote results to the paginated scope. Copy to the base
+        // scope so the domain watcher (useRefreshScopedDomain) sees the update.
+        const pageResult = getScopedDomainState('catalog', normalizedScope);
+        if (pageResult.data) {
+          const baseScope = catalogScopeRef.current;
+          setScopedDomainState('catalog', baseScope, () => ({
+            ...pageResult,
+            scope: baseScope,
+          }));
+        }
+        // Clean up the temporary paginated scope.
+        refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, false);
+      });
   }, [
     continueToken,
     isRequestingMore,
