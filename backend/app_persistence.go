@@ -7,10 +7,39 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const persistenceSchemaVersion = 1
 const gridTablePersistenceVersionKey = "v1"
+
+// Favorite represents a user-saved view bookmark.
+type Favorite struct {
+	ID               string              `json:"id"`
+	Name             string              `json:"name"`
+	ClusterSelection string              `json:"clusterSelection"`
+	ViewType         string              `json:"viewType"`
+	View             string              `json:"view"`
+	Namespace        string              `json:"namespace"`
+	Filters          *FavoriteFilters    `json:"filters"`
+	TableState       *FavoriteTableState `json:"tableState"`
+	Order            int                 `json:"order"`
+}
+
+// FavoriteFilters holds the search and filter state for a favorite.
+type FavoriteFilters struct {
+	Search     string   `json:"search"`
+	Kinds      []string `json:"kinds"`
+	Namespaces []string `json:"namespaces"`
+}
+
+// FavoriteTableState holds the table display state for a favorite.
+type FavoriteTableState struct {
+	SortColumn       string          `json:"sortColumn"`
+	SortDirection    string          `json:"sortDirection"`
+	ColumnVisibility map[string]bool `json:"columnVisibility"`
+}
 
 // persistenceFile captures the persisted UI state stored in persistence.json.
 type persistenceFile struct {
@@ -18,6 +47,7 @@ type persistenceFile struct {
 	UpdatedAt     time.Time              `json:"updatedAt"`
 	ClusterTabs   persistenceClusterTabs `json:"clusterTabs"`
 	Tables        persistenceTables      `json:"tables"`
+	Favorites     []Favorite             `json:"favorites"`
 }
 
 type persistenceClusterTabs struct {
@@ -315,4 +345,124 @@ func (a *App) ClearGridTablePersistence() (int, error) {
 		return 0, err
 	}
 	return removed, nil
+}
+
+// GetFavorites returns a copy of the persisted favorites list.
+func (a *App) GetFavorites() ([]Favorite, error) {
+	a.persistenceMu.Lock()
+	defer a.persistenceMu.Unlock()
+
+	state, err := a.loadPersistenceFile()
+	if err != nil {
+		return nil, err
+	}
+	// Return a copy to avoid sharing the backing array.
+	result := make([]Favorite, len(state.Favorites))
+	copy(result, state.Favorites)
+	return result, nil
+}
+
+// AddFavorite generates an ID, assigns Order, appends the favorite, and persists.
+func (a *App) AddFavorite(fav Favorite) (Favorite, error) {
+	fav.ID = uuid.New().String()
+
+	a.persistenceMu.Lock()
+	defer a.persistenceMu.Unlock()
+
+	state, err := a.loadPersistenceFile()
+	if err != nil {
+		return Favorite{}, err
+	}
+	fav.Order = len(state.Favorites)
+	state.Favorites = append(state.Favorites, fav)
+	if err := a.savePersistenceFile(state); err != nil {
+		return Favorite{}, err
+	}
+	return fav, nil
+}
+
+// UpdateFavorite replaces a favorite by ID, preserving its Order. Returns an error if not found.
+func (a *App) UpdateFavorite(fav Favorite) error {
+	a.persistenceMu.Lock()
+	defer a.persistenceMu.Unlock()
+
+	state, err := a.loadPersistenceFile()
+	if err != nil {
+		return err
+	}
+	for i, existing := range state.Favorites {
+		if existing.ID == fav.ID {
+			fav.Order = existing.Order
+			state.Favorites[i] = fav
+			return a.savePersistenceFile(state)
+		}
+	}
+	return fmt.Errorf("favorite %q not found", fav.ID)
+}
+
+// DeleteFavorite removes a favorite by ID and re-indexes Order. Returns an error if not found.
+func (a *App) DeleteFavorite(id string) error {
+	a.persistenceMu.Lock()
+	defer a.persistenceMu.Unlock()
+
+	state, err := a.loadPersistenceFile()
+	if err != nil {
+		return err
+	}
+	idx := -1
+	for i, fav := range state.Favorites {
+		if fav.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return fmt.Errorf("favorite %q not found", id)
+	}
+	state.Favorites = append(state.Favorites[:idx], state.Favorites[idx+1:]...)
+	// Re-index Order after removal.
+	for i := range state.Favorites {
+		state.Favorites[i].Order = i
+	}
+	return a.savePersistenceFile(state)
+}
+
+// SetFavoriteOrder reorders favorites according to the given ID list.
+// Any favorites not in the list are appended in their existing relative order.
+func (a *App) SetFavoriteOrder(ids []string) error {
+	a.persistenceMu.Lock()
+	defer a.persistenceMu.Unlock()
+
+	state, err := a.loadPersistenceFile()
+	if err != nil {
+		return err
+	}
+
+	// Build a lookup from ID to favorite.
+	lookup := make(map[string]Favorite, len(state.Favorites))
+	for _, fav := range state.Favorites {
+		lookup[fav.ID] = fav
+	}
+
+	// Place favorites in the requested order.
+	reordered := make([]Favorite, 0, len(state.Favorites))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		if fav, ok := lookup[id]; ok {
+			seen[id] = struct{}{}
+			reordered = append(reordered, fav)
+		}
+	}
+	// Append any favorites not mentioned in ids, preserving their relative order.
+	for _, fav := range state.Favorites {
+		if _, ok := seen[fav.ID]; !ok {
+			reordered = append(reordered, fav)
+		}
+	}
+	// Re-index Order.
+	for i := range reordered {
+		reordered[i].Order = i
+	}
+	state.Favorites = reordered
+	return a.savePersistenceFile(state)
 }

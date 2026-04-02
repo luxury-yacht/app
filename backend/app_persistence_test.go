@@ -8,6 +8,87 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAppFavoritesRoundTrip(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	// Initially empty.
+	favs, err := app.GetFavorites()
+	require.NoError(t, err)
+	require.Empty(t, favs)
+
+	// Add a favorite.
+	fav := Favorite{
+		Name:             "prod / default / Pods",
+		ClusterSelection: "/path/config:prod",
+		ViewType:         "namespace",
+		View:             "pods",
+		Namespace:        "default",
+		Filters:          &FavoriteFilters{Search: "nginx", Kinds: []string{"Pod"}},
+		TableState:       &FavoriteTableState{SortColumn: "name", SortDirection: "asc"},
+	}
+	added, err := app.AddFavorite(fav)
+	require.NoError(t, err)
+	require.NotEmpty(t, added.ID)
+	require.Equal(t, "prod / default / Pods", added.Name)
+	require.Equal(t, 0, added.Order)
+
+	// Get should return it.
+	favs, err = app.GetFavorites()
+	require.NoError(t, err)
+	require.Len(t, favs, 1)
+	require.Equal(t, added.ID, favs[0].ID)
+
+	// Update the name.
+	added.Name = "Renamed"
+	require.NoError(t, app.UpdateFavorite(added))
+	favs, err = app.GetFavorites()
+	require.NoError(t, err)
+	require.Equal(t, "Renamed", favs[0].Name)
+
+	// Delete.
+	require.NoError(t, app.DeleteFavorite(added.ID))
+	favs, err = app.GetFavorites()
+	require.NoError(t, err)
+	require.Empty(t, favs)
+}
+
+func TestAppFavoritesOrdering(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	a, _ := app.AddFavorite(Favorite{Name: "A", ViewType: "cluster", View: "nodes"})
+	b, _ := app.AddFavorite(Favorite{Name: "B", ViewType: "cluster", View: "rbac"})
+	c, _ := app.AddFavorite(Favorite{Name: "C", ViewType: "namespace", View: "pods", Namespace: "default"})
+
+	// Reorder: C, A, B
+	require.NoError(t, app.SetFavoriteOrder([]string{c.ID, a.ID, b.ID}))
+
+	favs, _ := app.GetFavorites()
+	require.Equal(t, "C", favs[0].Name)
+	require.Equal(t, 0, favs[0].Order)
+	require.Equal(t, "A", favs[1].Name)
+	require.Equal(t, 1, favs[1].Order)
+	require.Equal(t, "B", favs[2].Name)
+	require.Equal(t, 2, favs[2].Order)
+}
+
+func TestAppDeleteFavoriteNotFound(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	err := app.DeleteFavorite("nonexistent")
+	require.Error(t, err)
+}
+
+func TestAppUpdateFavoriteNotFound(t *testing.T) {
+	setTestConfigEnv(t)
+	app := newTestAppWithDefaults(t)
+
+	err := app.UpdateFavorite(Favorite{ID: "nonexistent", Name: "X"})
+	require.Error(t, err)
+}
+
 func TestAppClusterTabOrderRoundTrip(t *testing.T) {
 	setTestConfigEnv(t)
 	app := newTestAppWithDefaults(t)
