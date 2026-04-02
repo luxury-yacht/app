@@ -10,7 +10,6 @@
  * story navigations within the shared iframe.
  */
 
-import React from 'react';
 import type { Decorator } from '@storybook/react';
 import { ErrorProvider } from '@core/contexts/ErrorContext';
 import { ZoomProvider } from '@core/contexts/ZoomContext';

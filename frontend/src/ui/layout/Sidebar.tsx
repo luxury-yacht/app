@@ -72,12 +72,7 @@ const toNamespaceKey = (clusterId: string | undefined, scope: string): string =>
   return scoped || scope;
 };
 
-interface SidebarProps {
-  /** Slot rendered above the Cluster section (used for Favorites prototype in Storybook). */
-  favoritesSlot?: React.ReactNode;
-}
-
-function Sidebar({ favoritesSlot }: SidebarProps = {}) {
+function Sidebar() {
   const {
     namespaces,
     namespaceLoading,
@@ -439,7 +434,6 @@ function Sidebar({ favoritesSlot }: SidebarProps = {}) {
         </button>
         {!isCollapsed && (
           <>
-            {favoritesSlot}
             <div className="sidebar-section">
               <h3>Cluster</h3>
               <div className="cluster-items">

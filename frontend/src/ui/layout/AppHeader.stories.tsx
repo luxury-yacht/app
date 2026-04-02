@@ -6,7 +6,6 @@
  * FavoritesContext. Full Storybook integration is tracked in Tasks 7 & 8.
  */
 
-import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import AppHeader from './AppHeader';
 import { SidebarProvidersDecorator } from '../../../.storybook/decorators/SidebarProvidersDecorator';
