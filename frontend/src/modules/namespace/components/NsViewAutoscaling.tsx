@@ -28,6 +28,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 // Data interface for autoscaling resources
 export interface AutoscalingData {
@@ -82,7 +83,6 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
-
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
       resource: AutoscalingData | null;
@@ -288,6 +288,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<AutoscalingData>({
       viewId: 'namespace-autoscaling',
       namespace,
@@ -302,6 +303,17 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
     });
 
     const handleDeleteConfirm = useCallback(async () => {
@@ -391,6 +403,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                preActions: [favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

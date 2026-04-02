@@ -18,6 +18,7 @@ import React, { useMemo, useCallback } from 'react';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -72,7 +73,6 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
-
     const handleResourceClick = useCallback(
       (resource: HelmData) => {
         openWithObject({
@@ -278,6 +278,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<HelmData>({
       viewId: 'namespace-helm',
       namespace,
@@ -292,6 +293,17 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
     });
 
     const getContextMenuItems = useCallback(
@@ -354,6 +366,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
             options: {
               showKindDropdown: true,
               showNamespaceDropdown: showNamespaceColumn,
+              preActions: [favToggle],
             },
           }}
           virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

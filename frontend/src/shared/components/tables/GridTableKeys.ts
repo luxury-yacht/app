@@ -61,7 +61,8 @@ export const useGridTableKeyboardScopes = ({
       );
     }
     addTarget(container.querySelector<HTMLElement>('[data-gridtable-filter-role="search"] input'));
-    addTarget(container.querySelector<HTMLElement>('[data-gridtable-filter-role="reset"]'));
+    // Reset is now an IconBar button.
+    addTarget(container.querySelector<HTMLElement>('.icon-bar-button[title="Reset filters"]'));
 
     return targets;
   }, [filteringEnabled, filtersContainerRef, showKindDropdown, showNamespaceDropdown]);

@@ -28,6 +28,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 // Data interface for quota resources (ResourceQuotas, LimitRanges, PodDisruptionBudgets)
 export interface QuotaData {
@@ -74,7 +75,6 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
-
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
       resource: QuotaData | null;
@@ -165,6 +165,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<QuotaData>({
       viewId: 'namespace-quotas',
       namespace,
@@ -179,6 +180,17 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
     });
 
     const handleDeleteConfirm = useCallback(async () => {
@@ -268,6 +280,7 @@ const QuotasViewGrid: React.FC<QuotasViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                preActions: [favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

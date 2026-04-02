@@ -29,6 +29,7 @@ import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 // Data interface for network resources
 export interface NetworkData {
@@ -60,7 +61,6 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
-
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
       resource: NetworkData | null;
@@ -161,6 +161,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<NetworkData>({
       viewId: 'namespace-network',
       namespace,
@@ -175,6 +176,17 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
     });
 
     const handleDeleteConfirm = useCallback(async () => {
@@ -279,6 +291,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                preActions: [favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

@@ -9,6 +9,8 @@ import { useCallback, useMemo, type ReactNode } from 'react';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useFavorites } from '@core/contexts/FavoritesContext';
+import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
 import { useTheme } from '@core/contexts/ThemeContext';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { refreshOrchestrator, useAutoRefresh } from '@/core/refresh';
@@ -43,6 +45,7 @@ export function useCommandPaletteCommands() {
     kubeconfigs,
     setActiveKubeconfig,
   } = useKubeconfig();
+  const { favorites, setPendingFavorite } = useFavorites();
   const { theme } = useTheme();
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
   const { toggle: toggleAutoRefresh } = useAutoRefresh();
@@ -557,6 +560,46 @@ export function useCommandPaletteCommands() {
     });
   }, [kubeconfigs, selectedKubeconfigs, setActiveKubeconfig, setSelectedKubeconfigs]);
 
-  // Order: Application, Settings, Navigation (including namespace views), Kubeconfigs, Namespaces
-  return [...commands, ...namespaceviewCommands, ...namespaceCommands, ...kubeconfigCommands];
+  // Build commands from saved favorites so they appear as a searchable group.
+  const favoriteCommands: Command[] = useMemo(
+    () =>
+      favorites.map((fav) => ({
+        id: `fav-${fav.id}`,
+        label: fav.name,
+        icon: fav.clusterSelection ? '📌' : '⭕',
+        category: 'Favorites',
+        action: () => {
+          navigateToFavorite(fav, {
+            selectedKubeconfigs,
+            setSelectedKubeconfigs,
+            setActiveKubeconfig,
+            setViewType: viewState.setViewType,
+            setActiveClusterView: viewState.setActiveClusterView,
+            setActiveNamespaceTab: viewState.setActiveNamespaceTab,
+            setSelectedNamespace: namespace.setSelectedNamespace,
+            onNamespaceSelect: viewState.onNamespaceSelect,
+            setSidebarSelection: viewState.setSidebarSelection,
+            setPendingFavorite,
+          });
+        },
+        keywords: ['favorite', 'bookmark', fav.view, fav.namespace].filter(Boolean),
+      })),
+    [
+      favorites,
+      selectedKubeconfigs,
+      setSelectedKubeconfigs,
+      setActiveKubeconfig,
+      viewState,
+      namespace,
+      setPendingFavorite,
+    ]
+  );
+
+  return [
+    ...commands,
+    ...namespaceviewCommands,
+    ...favoriteCommands,
+    ...namespaceCommands,
+    ...kubeconfigCommands,
+  ];
 }

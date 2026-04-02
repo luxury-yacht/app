@@ -33,6 +33,7 @@ import { errorHandler } from '@utils/errorHandler';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 interface PodsViewProps {
   namespace: string;
@@ -333,6 +334,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<PodSnapshotEntry>({
       viewId: 'namespace-pods',
       namespace,
@@ -347,6 +349,17 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
     });
 
     const handleDeleteConfirm = useCallback(async () => {
@@ -528,6 +541,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
               options: {
                 showNamespaceDropdown: showNamespaceFilter,
                 customActions: unhealthyToggle,
+                preActions: [favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

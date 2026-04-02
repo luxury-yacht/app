@@ -28,6 +28,7 @@ import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 // Data interface for RBAC resources
 export interface RBACData {
@@ -80,7 +81,6 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
-
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
       resource: RBACData | null;
@@ -172,6 +172,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<RBACData>({
       viewId: 'namespace-rbac',
       namespace,
@@ -186,6 +187,17 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
     });
 
     const handleDeleteConfirm = useCallback(async () => {
@@ -275,6 +287,7 @@ const RBACViewGrid: React.FC<RBACViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                preActions: [favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

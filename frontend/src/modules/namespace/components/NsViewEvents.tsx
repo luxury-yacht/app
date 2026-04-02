@@ -25,6 +25,7 @@ import GridTable, {
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 export interface EventData {
   kind: string;
@@ -58,7 +59,6 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const objectLink = useObjectLink();
     const useShortResourceNames = useShortNames();
-
     // Parse the involved object reference into its type and name for display/navigation.
     const splitEventObject = useCallback((value?: string | null) => {
       const raw = (value ?? '').trim();
@@ -221,6 +221,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<EventData>({
       viewId: 'namespace-events',
       namespace,
@@ -235,6 +236,17 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
     });
 
     // Get context menu items
@@ -303,6 +315,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             },
             options: {
               showNamespaceDropdown: showNamespaceFilter,
+              preActions: [favToggle],
             },
           }}
           virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

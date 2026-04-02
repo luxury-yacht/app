@@ -29,9 +29,11 @@ type Favorite struct {
 
 // FavoriteFilters holds the search and filter state for a favorite.
 type FavoriteFilters struct {
-	Search     string   `json:"search"`
-	Kinds      []string `json:"kinds"`
-	Namespaces []string `json:"namespaces"`
+	Search          string   `json:"search"`
+	Kinds           []string `json:"kinds"`
+	Namespaces      []string `json:"namespaces"`
+	CaseSensitive   bool     `json:"caseSensitive"`
+	IncludeMetadata bool     `json:"includeMetadata"`
 }
 
 // FavoriteTableState holds the table display state for a favorite.

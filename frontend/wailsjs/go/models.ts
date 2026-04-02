@@ -222,6 +222,8 @@ export namespace backend {
 	    search: string;
 	    kinds: string[];
 	    namespaces: string[];
+	    caseSensitive: boolean;
+	    includeMetadata: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new FavoriteFilters(source);
@@ -232,6 +234,8 @@ export namespace backend {
 	        this.search = source["search"];
 	        this.kinds = source["kinds"];
 	        this.namespaces = source["namespaces"];
+	        this.caseSensitive = source["caseSensitive"];
+	        this.includeMetadata = source["includeMetadata"];
 	    }
 	}
 	export class Favorite {

@@ -29,6 +29,7 @@ import { DeleteResource } from '@wailsjs/go/backend/App';
 import { errorHandler } from '@utils/errorHandler';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 // Data interface for storage resources (PVCs, VolumeAttachments, etc.)
 export interface StorageData {
@@ -63,7 +64,6 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
     const objectLink = useObjectLink();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
-
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
       resource: StorageData | null;
@@ -205,6 +205,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<StorageData>({
       viewId: 'namespace-storage',
       namespace,
@@ -219,6 +220,17 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
     });
 
     const handleDeleteConfirm = useCallback(async () => {
@@ -308,6 +320,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               options: {
                 showKindDropdown: true,
                 showNamespaceDropdown: showNamespaceFilter,
+                preActions: [favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

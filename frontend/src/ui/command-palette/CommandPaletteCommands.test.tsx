@@ -56,6 +56,14 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => mocks.namespace,
 }));
 
+vi.mock('@core/contexts/FavoritesContext', () => ({
+  useFavorites: () => ({ favorites: [], addFavorite: vi.fn(), deleteFavorite: vi.fn(), reorderFavorites: vi.fn(), updateFavorite: vi.fn() }),
+}));
+
+vi.mock('@ui/favorites/navigateToFavorite', () => ({
+  navigateToFavorite: vi.fn(),
+}));
+
 vi.mock('@core/contexts/ThemeContext', () => ({
   useTheme: () => ({ theme: 'light' }),
 }));

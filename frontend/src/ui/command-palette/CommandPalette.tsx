@@ -38,6 +38,7 @@ const CATEGORY_ORDER = [
   'Application',
   'Settings',
   'Navigation',
+  'Favorites',
   'Namespaces',
   'Kubeconfigs',
   'General', // Fallback for any uncategorized commands

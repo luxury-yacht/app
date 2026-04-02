@@ -2,24 +2,14 @@
  * frontend/src/ui/layout/AppHeader.stories.tsx
  *
  * Storybook stories for the AppHeader component.
+ * Note: The FavMenuDropdown is now embedded directly in AppHeader and uses the
+ * FavoritesContext. Full Storybook integration is tracked in Tasks 7 & 8.
  */
 
 import React from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import AppHeader from './AppHeader';
-import { FavMenuDropdown, type FavoriteItem } from './FavoritesPrototypes';
 import { SidebarProvidersDecorator } from '../../../.storybook/decorators/SidebarProvidersDecorator';
-
-const FAVORITES: FavoriteItem[] = [
-  { id: 'g1', name: 'default / Workloads', clusterName: null, viewType: 'namespace', view: 'workloads', namespace: 'default' },
-  { id: 'g2', name: 'kube-system / Pods', clusterName: null, viewType: 'namespace', view: 'pods', namespace: 'kube-system', hasFilters: true },
-  { id: 'g3', name: 'Nodes', clusterName: null, viewType: 'cluster', view: 'nodes' },
-  { id: 'c1', name: 'prod / CronJobs', clusterName: 'prod', viewType: 'namespace', view: 'workloads', namespace: 'default', hasFilters: true },
-  { id: 'c2', name: 'prod / monitoring / Network', clusterName: 'prod', viewType: 'namespace', view: 'network', namespace: 'monitoring' },
-  { id: 'c3', name: 'staging / default / Pods', clusterName: 'staging', viewType: 'namespace', view: 'pods', namespace: 'default' },
-  { id: 'c4', name: 'dev / Nodes', clusterName: 'dev', viewType: 'cluster', view: 'nodes' },
-  { id: 'c5', name: 'production-us-east-1 / my-very-long-namespace-name / Workloads (filtered by kind: CronJob, search: batch-processor)', clusterName: 'production-us-east-1', viewType: 'namespace', view: 'workloads', namespace: 'my-very-long-namespace-name', hasFilters: true },
-];
 
 const meta: Meta<typeof AppHeader> = {
   title: 'Layout/AppHeader',
@@ -36,28 +26,5 @@ const meta: Meta<typeof AppHeader> = {
 export default meta;
 type Story = StoryObj<typeof AppHeader>;
 
-/** Default header without favorites. */
+/** Default header — now includes the real FavMenuDropdown. */
 export const Default: Story = {};
-
-/** Favorites menu dropdown open with favorites. */
-export const FavoritesMenuOpen: Story = {
-  args: {
-    extraControls: (
-      <FavMenuDropdown favorites={FAVORITES} activeFavoriteId="g1" isOpen={true} />
-    ),
-  },
-};
-
-/** Favorites menu dropdown open with no favorites. */
-export const FavoritesMenuEmpty: Story = {
-  args: {
-    extraControls: <FavMenuDropdown favorites={[]} isOpen={true} />,
-  },
-};
-
-/** Favorites button closed. */
-export const FavoritesButtonClosed: Story = {
-  args: {
-    extraControls: <FavMenuDropdown favorites={FAVORITES} />,
-  },
-};

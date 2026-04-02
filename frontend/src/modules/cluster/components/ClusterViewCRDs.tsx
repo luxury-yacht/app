@@ -27,6 +27,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 // Define the data structure for Custom Resource Definitions
 interface CRDsData {
@@ -139,6 +140,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useGridTablePersistence<CRDsData>({
       viewId: 'cluster-crds',
       clusterIdentity: selectedClusterId,
@@ -155,6 +157,17 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: setPersistedSort,
+      setColumnVisibility,
+      hydrated,
     });
 
     // Handle delete confirmation
@@ -239,6 +252,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showKindDropdown: true,
+                preActions: [favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

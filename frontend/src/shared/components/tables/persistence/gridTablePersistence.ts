@@ -386,9 +386,10 @@ export const prunePersistedState = <T>(
       search: normalizedSearch,
       kinds,
       namespaces,
+      caseSensitive: persisted.filters.caseSensitive ?? false,
     };
 
-    if (filters.search !== '' || filters.kinds.length > 0 || filters.namespaces.length > 0) {
+    if (filters.search !== '' || filters.kinds.length > 0 || filters.namespaces.length > 0 || filters.caseSensitive) {
       pruned.filters = filters;
     }
   }
@@ -454,8 +455,9 @@ export const buildPersistedStateForSave = <T>(
       search: context.filters.search?.trim() ?? '',
       kinds: normalizeFilterArray(context.filters.kinds),
       namespaces: isNamespaceScoped ? [] : normalizeFilterArray(context.filters.namespaces),
+      caseSensitive: context.filters.caseSensitive ?? false,
     };
-    if (filters.search || filters.kinds.length > 0 || filters.namespaces.length > 0) {
+    if (filters.search || filters.kinds.length > 0 || filters.namespaces.length > 0 || filters.caseSensitive) {
       state.filters = filters;
     }
   }

@@ -48,6 +48,9 @@ export interface AppEvents {
   'view:toggle-app-logs': void;
   'cluster-tabs:order': string[];
 
+  // Favorites events
+  'favorites:changed': unknown[];
+
   // Refresh events
   'refresh:state-change': { name: string; state: RefresherState };
   'refresh:registered': { name: string };

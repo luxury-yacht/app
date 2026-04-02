@@ -27,6 +27,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 // Define the data structure for Persistent Volumes
 interface StorageData {
@@ -233,6 +234,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useGridTablePersistence<StorageData>({
       viewId: 'cluster-storage',
       clusterIdentity: selectedClusterId,
@@ -248,6 +250,17 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: setPersistedSort,
+      setColumnVisibility,
+      hydrated,
     });
 
     // Handle delete confirmation
@@ -329,6 +342,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showKindDropdown: true,
+                preActions: [favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

@@ -74,7 +74,7 @@ describe('GridTableFiltersBar', () => {
     await act(async () => {
       root.render(
         <GridTableFiltersBar
-          activeFilters={{ search: '', kinds: [], namespaces: [] }}
+          activeFilters={{ search: '', kinds: [], namespaces: [], caseSensitive: false }}
           resolvedFilterOptions={{
             kinds: [
               { label: 'Pods', value: 'Pod' },
@@ -92,6 +92,7 @@ describe('GridTableFiltersBar', () => {
           onNamespacesChange={vi.fn()}
           onSearchChange={vi.fn()}
           onReset={vi.fn()}
+          onToggleCaseSensitive={vi.fn()}
           renderOption={(option) => option.label}
           renderKindsValue={() => 'Kinds'}
           renderNamespacesValue={() => 'Namespaces'}
@@ -111,7 +112,7 @@ describe('GridTableFiltersBar', () => {
     await renderFilters({
       showKindDropdown: true,
       showNamespaceDropdown: true,
-      activeFilters: { search: 'pods', kinds: [], namespaces: [] },
+      activeFilters: { search: 'pods', kinds: [], namespaces: [], caseSensitive: false },
       onKindsChange,
       onNamespacesChange,
       onSearchChange,

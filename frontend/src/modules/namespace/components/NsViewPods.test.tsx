@@ -33,6 +33,29 @@ const {
 
 const clusterMetricsMock = vi.hoisted(() => ({ current: null as any }));
 
+vi.mock('@core/contexts/FavoritesContext', () => ({
+  useFavorites: () => ({
+    favorites: [],
+    currentFavoriteMatch: null,
+    addFavorite: vi.fn(),
+    updateFavorite: vi.fn(),
+    deleteFavorite: vi.fn(),
+    reorderFavorites: vi.fn(),
+  }),
+  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock('@ui/favorites/FavToggle', () => ({
+  useFavToggle: () => ({
+    type: 'toggle',
+    id: 'favorite',
+    icon: null,
+    active: false,
+    onClick: () => {},
+    title: 'Save as favorite',
+  }),
+}));
+
 vi.mock('@shared/components/tables/GridTable', () => ({
   default: (props: any) => {
     gridTablePropsRef.current = props;
@@ -75,7 +98,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => {
       },
       columnVisibility: null,
       setColumnVisibility: vi.fn(),
-      filters: { search: '', kinds: [], namespaces: [] },
+      filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
       setFilters: vi.fn(),
       isNamespaceScoped: true,
       resetState: vi.fn(),

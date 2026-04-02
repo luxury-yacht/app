@@ -25,6 +25,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 interface EventData {
   kind: string;
@@ -60,7 +61,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     const objectLink = useObjectLink();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
-
     // Parse the involved object reference into its type and name for display/navigation.
     const splitEventObject = useCallback((value?: string | null) => {
       const raw = (value ?? '').trim();
@@ -195,6 +195,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useGridTablePersistence<EventData>({
       viewId: 'cluster-events',
       clusterIdentity: selectedClusterId,
@@ -211,6 +212,17 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: setPersistedSort,
+      setColumnVisibility,
+      hydrated,
     });
 
     // Get context menu items
@@ -273,6 +285,9 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
             onReset: resetPersistedState,
             accessors: {
               getSearchText,
+            },
+            options: {
+              preActions: [favToggle],
             },
           }}
           virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

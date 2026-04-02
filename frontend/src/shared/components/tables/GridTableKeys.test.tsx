@@ -46,7 +46,7 @@ describe('GridTableKeys filter target selectors', () => {
   // These selectors must stay in sync with getFilterTargets in GridTableKeys.ts.
   const SELECTORS = {
     search: '[data-gridtable-filter-role="search"] input',
-    reset: '[data-gridtable-filter-role="reset"]',
+    reset: '.icon-bar-button[title="Reset filters"]',
     kind: '[data-gridtable-filter-role="kind"] .dropdown-trigger',
     namespace: '[data-gridtable-filter-role="namespace"] .dropdown-trigger',
   };
@@ -55,7 +55,7 @@ describe('GridTableKeys filter target selectors', () => {
     overrides?: Partial<React.ComponentProps<typeof GridTableFiltersBar>>
   ) => {
     const defaultProps: React.ComponentProps<typeof GridTableFiltersBar> = {
-      activeFilters: { search: '', kinds: [], namespaces: [] },
+      activeFilters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
       resolvedFilterOptions: {
         kinds: [{ label: 'Pod', value: 'Pod' }],
         namespaces: [{ label: 'default', value: 'default' }],
@@ -67,6 +67,7 @@ describe('GridTableKeys filter target selectors', () => {
       onNamespacesChange: vi.fn(),
       onSearchChange: vi.fn(),
       onReset: vi.fn(),
+      onToggleCaseSensitive: vi.fn(),
       renderOption: (opt) => opt.label,
       renderKindsValue: () => 'Kinds',
       renderNamespacesValue: () => 'Namespaces',

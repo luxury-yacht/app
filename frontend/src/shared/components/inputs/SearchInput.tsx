@@ -1,26 +1,10 @@
 /**
  * frontend/src/shared/components/inputs/SearchInput.tsx
  *
- * Reusable search/filter text input with optional right-side icon toggle
- * buttons for features like case-sensitivity, regex mode, etc.
- * Works as a plain search input when no actions are provided.
+ * Reusable search/filter text input.
  */
 
 import React, { useState, useCallback } from 'react';
-
-/** Describes a toggle action rendered as an icon button inside the input. */
-export interface SearchInputAction {
-  /** Unique key used for React rendering. */
-  id: string;
-  /** The icon element to render inside the button. */
-  icon: React.ReactNode;
-  /** Whether the toggle is currently active. */
-  active: boolean;
-  /** Called when the button is clicked. */
-  onToggle: () => void;
-  /** Optional tooltip text shown on hover. */
-  tooltip?: string;
-}
 
 export interface SearchInputProps {
   /** Current input value (controlled). */
@@ -29,8 +13,6 @@ export interface SearchInputProps {
   onChange: (value: string) => void;
   /** Placeholder text shown when the input is empty. */
   placeholder?: string;
-  /** Optional toggle actions rendered as icon buttons on the right side. */
-  actions?: SearchInputAction[];
   /** Additional CSS class applied to the outermost wrapper. */
   className?: string;
   /** HTML id applied to the inner input element. */
@@ -51,7 +33,6 @@ const SearchInput: React.FC<SearchInputProps> = ({
   value,
   onChange,
   placeholder = 'Search',
-  actions,
   className,
   id,
   name,
@@ -104,22 +85,6 @@ const SearchInput: React.FC<SearchInputProps> = ({
         disabled={disabled}
       />
 
-      {actions && actions.length > 0 && (
-        <div className="search-input-actions">
-          {actions.map((action) => (
-            <button
-              key={action.id}
-              type="button"
-              className={`search-input-action${action.active ? ' active' : ''}`}
-              onClick={action.onToggle}
-              title={action.tooltip}
-              disabled={disabled}
-            >
-              {action.icon}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

@@ -15,7 +15,7 @@ import type {
 } from '@shared/components/tables/GridTable.types';
 import { useSearchShortcutTarget } from '@ui/shortcuts';
 import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
-import { ResetFiltersIcon } from '@shared/components/icons/MenuIcons';
+import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/MenuIcons';
 
 interface GridTableFiltersBarProps {
   activeFilters: GridTableFilterState;
@@ -28,6 +28,8 @@ interface GridTableFiltersBarProps {
   onNamespacesChange: (value: string | string[]) => void;
   onSearchChange: (value: string) => void;
   onReset: () => void;
+  /** Toggle the case-sensitive search filter. */
+  onToggleCaseSensitive: () => void;
   renderOption: (option: DropdownOption, isSelected: boolean) => React.ReactNode;
   renderKindsValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
   renderNamespacesValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
@@ -62,6 +64,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   onNamespacesChange,
   onSearchChange,
   onReset,
+  onToggleCaseSensitive,
   renderOption,
   renderKindsValue,
   renderNamespacesValue,
@@ -117,6 +120,15 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
         title: 'Reset filters',
         disabled: !hasActiveFilters,
       },
+      // Case-sensitive toggle is built into the filter bar so every view gets it.
+      {
+        type: 'toggle',
+        id: 'case-sensitive',
+        icon: <CaseSensitiveIcon width={16} height={16} />,
+        active: activeFilters.caseSensitive,
+        onClick: onToggleCaseSensitive,
+        title: 'Match case',
+      },
     ];
     if (preActions && preActions.length > 0) {
       items.push(...preActions);
@@ -126,7 +138,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       items.push(...postActions);
     }
     return items;
-  }, [onReset, hasActiveFilters, preActions, postActions]);
+  }, [onReset, hasActiveFilters, activeFilters.caseSensitive, onToggleCaseSensitive, preActions, postActions]);
 
   return (
     <div className="gridtable-filter-bar" ref={containerRef}>
@@ -181,7 +193,6 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               value={activeFilters.search}
               onChange={onSearchChange}
               onKeyDown={handleSearchKeyDown}
-              actions={resolvedFilterOptions.searchActions}
             />
           </div>
           <div className="gridtable-filter-actions">

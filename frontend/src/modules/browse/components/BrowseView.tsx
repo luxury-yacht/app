@@ -40,7 +40,8 @@ import {
   type BrowseTableRow,
 } from '@modules/browse/hooks/useBrowseColumns';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
-import { LoadMoreIcon, FavoriteOutlineIcon } from '@shared/components/icons/MenuIcons';
+import { LoadMoreIcon } from '@shared/components/icons/MenuIcons';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 const VIRTUALIZATION_THRESHOLD = 80;
 
@@ -213,6 +214,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         filters: namespacePersistence.filters,
         setFilters: namespacePersistence.setFilters,
         resetState: namespacePersistence.resetState,
+        hydrated: namespacePersistence.hydrated,
       }
     : {
         sortConfig: clusterPersistence.sortConfig,
@@ -224,6 +226,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         filters: clusterPersistence.filters,
         setFilters: clusterPersistence.setFilters,
         resetState: clusterPersistence.resetState,
+        hydrated: clusterPersistence.hydrated,
       };
 
   // Get catalog data
@@ -260,6 +263,17 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     onChange: persistence.setSortConfig,
   });
 
+  const favToggle = useFavToggle({
+    filters: persistence.filters,
+    sortColumn: sortConfig?.key ?? null,
+    sortDirection: sortConfig?.direction ?? 'asc',
+    columnVisibility: persistence.columnVisibility ?? {},
+    setFilters: persistence.setFilters,
+    setSortConfig: persistence.setSortConfig,
+    setColumnVisibility: persistence.setColumnVisibility,
+    hydrated: persistence.hydrated,
+  });
+
   // Build grid filters configuration
   const gridFilters = useMemo(
     () => ({
@@ -274,16 +288,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         showNamespaceDropdown: showNamespaceColumn,
         includeClusterScopedSyntheticNamespace: false,
         totalCount,
-        preActions: [
-          {
-            type: 'toggle' as const,
-            id: 'favorite',
-            icon: <FavoriteOutlineIcon />,
-            active: false,
-            onClick: () => {},
-            title: 'Save as favorite',
-          },
-        ],
+        preActions: [favToggle],
         postActions: [
           {
             type: 'action' as const,
@@ -303,6 +308,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       filterOptions.kinds,
       filterOptions.namespaces,
       showNamespaceColumn,
+      favToggle,
       handleLoadMore,
       continueToken,
       isRequestingMore,

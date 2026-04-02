@@ -32,6 +32,7 @@ import {
 } from '@/utils/resourceCalculations';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useMetadataSearch } from '@shared/components/tables/hooks/useMetadataSearch';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 // Define props for NodesViewGrid component
 interface NodesViewProps {
@@ -51,7 +52,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId, selectedClusterIds } = useKubeconfig();
     // Metadata-aware search: when toggled on, includes labels and annotations.
-    const { searchActions, getSearchText } = useMetadataSearch<ClusterNodeRow>({
+    const { includeMetadata, setIncludeMetadata, metadataToggle, getSearchText } = useMetadataSearch<ClusterNodeRow>({
       getDefaultValues: useCallback((row: ClusterNodeRow) => [row.name, row.kind], []),
       getMetadataMaps: useCallback((row: ClusterNodeRow) => [row.labels, row.annotations], []),
     });
@@ -258,6 +259,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useGridTablePersistence<ClusterNodeRow>({
       viewId: 'cluster-nodes',
       clusterIdentity: selectedClusterId,
@@ -274,6 +276,19 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       columns: tableColumns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
+    });
+
+    const favToggle = useFavToggle({
+      filters: persistedFilters,
+      includeMetadata,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: setPersistedSort,
+      setColumnVisibility,
+      setIncludeMetadata,
+      hydrated,
     });
 
     // Get context menu items
@@ -325,7 +340,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
                 getSearchText,
               },
               options: {
-                searchActions,
+                preActions: [metadataToggle, favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}

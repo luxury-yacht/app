@@ -170,6 +170,7 @@ describe('useGridTablePersistence integration', () => {
       search: '',
       kinds: [],
       namespaces: [],
+      caseSensitive: false,
     });
 
     await act(async () => {
