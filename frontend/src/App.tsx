@@ -36,6 +36,7 @@ import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
+import { ClusterLifecycleProvider } from '@core/contexts/ClusterLifecycleContext';
 import { FavoritesProvider } from '@core/contexts/FavoritesContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { ErrorProvider } from '@core/contexts/ErrorContext';
@@ -250,11 +251,13 @@ function App() {
               <AuthErrorProvider>
                 <div className="app">
                   <KubernetesProvider>
-                    <FavoritesProvider>
-                      <DockablePanelProvider>
-                        <AppContent />
-                      </DockablePanelProvider>
-                    </FavoritesProvider>
+                    <ClusterLifecycleProvider>
+                      <FavoritesProvider>
+                        <DockablePanelProvider>
+                          <AppContent />
+                        </DockablePanelProvider>
+                      </FavoritesProvider>
+                    </ClusterLifecycleProvider>
                   </KubernetesProvider>
                 </div>
               </AuthErrorProvider>

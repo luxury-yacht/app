@@ -52,6 +52,8 @@ export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;
 
 export function GetAllClusterAuthStates():Promise<Record<string, Record<string, any>>>;
 
+export function GetAllClusterLifecycleStates():Promise<Record<string, backend.ClusterLifecycleState>>;
+
 export function GetAppInfo():Promise<backend.AppInfo>;
 
 export function GetAppSettings():Promise<types.AppSettings>;

@@ -104,6 +104,9 @@ export interface AppEvents {
     clusterId: string;
   };
 
+  // Cluster lifecycle events — bridged from Wails runtime by ClusterLifecycleContext.
+  'cluster:lifecycle': { clusterId: string; state: string; previousState: string };
+
   // App visibility events
   'app:visibility-hidden': void;
   'app:visibility-visible': void;

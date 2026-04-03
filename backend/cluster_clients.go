@@ -106,6 +106,12 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 			tasks = append(tasks, createTask{selection: sel, meta: meta})
 		}
 
+		for _, task := range tasks {
+			if a.clusterLifecycle != nil {
+				a.clusterLifecycle.SetState(task.meta.ID, ClusterStateConnecting)
+			}
+		}
+
 		built := make([]builtClient, 0, len(tasks))
 		limit := clusterClientBuildConcurrencyLimit(len(tasks))
 		var builtMu sync.Mutex
@@ -145,6 +151,12 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 			a.clusterClients[item.id] = item.clients
 		}
 		a.clusterClientsMu.Unlock()
+
+		for _, item := range built {
+			if a.clusterLifecycle != nil {
+				a.clusterLifecycle.SetState(item.id, ClusterStateConnected)
+			}
+		}
 	}
 
 	var removedClusterIDs []string
@@ -173,6 +185,12 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 		}
 		if err := a.StopClusterPortForwards(clusterID); err != nil && a.logger != nil {
 			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for removed cluster %s: %v", clusterID, err), "KubernetesClient")
+		}
+	}
+
+	for _, id := range removedClusterIDs {
+		if a.clusterLifecycle != nil {
+			a.clusterLifecycle.Remove(id)
 		}
 	}
 

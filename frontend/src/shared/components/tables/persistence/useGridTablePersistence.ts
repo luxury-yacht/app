@@ -135,7 +135,13 @@ export function useGridTablePersistence<T>({
     setSortConfig(null);
     setColumnVisibility(null);
     setColumnWidths(null);
-    setFilters({ search: '', kinds: [], namespaces: [], caseSensitive: false, includeMetadata: false });
+    setFilters({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    });
   }, [storageKey]);
 
   useEffect(() => {
@@ -193,7 +199,13 @@ export function useGridTablePersistence<T>({
     setSortConfig(null);
     setColumnVisibility({});
     setColumnWidths({});
-    setFilters({ search: '', kinds: [], namespaces: [], caseSensitive: false, includeMetadata: false });
+    setFilters({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    });
   }, [storageKey]);
 
   useEffect(() => {
@@ -244,12 +256,9 @@ export function useGridTablePersistence<T>({
     saveTimerRef.current = setTimeout(save, SAVE_DEBOUNCE_MS);
 
     return () => {
-      // Flush any pending save immediately on cleanup (e.g. cluster switch)
-      // so state isn't lost when the debounce timer hasn't fired yet.
       if (saveTimerRef.current) {
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = null;
-        save();
       }
     };
   }, [

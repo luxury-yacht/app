@@ -38,6 +38,7 @@ const runtimeProxy = new Proxy(
   GetThemeInfo: () => Promise.resolve({ currentTheme: 'dark', userTheme: 'system' }),
   GetCatalogDiagnostics: () => Promise.resolve({ enabled: false }),
   GetAllClusterAuthStates: () => Promise.resolve({}),
+  GetAllClusterLifecycleStates: () => Promise.resolve({}),
   RetryClusterAuth: () => Promise.resolve(),
   ListShellSessions: () => Promise.resolve([]),
   ListPortForwards: () => Promise.resolve([]),

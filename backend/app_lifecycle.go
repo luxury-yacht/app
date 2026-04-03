@@ -32,6 +32,13 @@ var (
 func (a *App) Startup(ctx context.Context) {
 	a.Ctx = ctx
 	a.eventEmitter = runtimeEventsEmit
+	a.clusterLifecycle = newClusterLifecycle(func(clusterId, state, previousState string) {
+		a.emitEvent("cluster:lifecycle", map[string]string{
+			"clusterId":     clusterId,
+			"state":         state,
+			"previousState": previousState,
+		})
+	})
 	a.logger.Info("Application startup initiated", "App")
 
 	errorcapture.Init()

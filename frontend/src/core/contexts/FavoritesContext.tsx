@@ -6,7 +6,15 @@
  * user's current navigation state (cluster, view, namespace) matches
  * any saved favorite.
  */
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import type { Favorite } from '@/core/persistence/favorites';
 import {
   hydrateFavorites,
@@ -17,6 +25,7 @@ import {
   subscribeFavorites,
 } from '@/core/persistence/favorites';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
@@ -58,7 +67,8 @@ interface FavoritesProviderProps {
 export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }) => {
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [pendingFavorite, setPendingFavorite] = useState<Favorite | null>(null);
-  const { selectedKubeconfig } = useKubeconfig();
+  const { selectedKubeconfig, selectedClusterId } = useKubeconfig();
+  const { isClusterReady } = useClusterLifecycle();
   const viewState = useViewState();
   const namespaceCtx = useNamespace();
   // Track whether navigation state has been applied for the current pending favorite.
@@ -86,43 +96,52 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
   }, []);
 
   // Apply navigation state (view, namespace, sidebar) from a pending favorite
-  // once the correct cluster is active. This runs after cluster switching settles
-  // so the per-cluster navigation state restore doesn't overwrite our changes.
+  // once the correct cluster is active and ready. The isClusterReady gate replaces
+  // the old queueMicrotask timing hack — the effect re-runs when cluster lifecycle
+  // state changes, so navigation applies exactly when the cluster is ready.
   useEffect(() => {
     if (!pendingFavorite) {
       navigationAppliedRef.current = false;
       return;
     }
-    // Don't apply twice for the same pending favorite.
     if (navigationAppliedRef.current) return;
 
-    // For cluster-specific favorites, wait for the correct cluster to become active.
+    // For cluster-specific favorites, wait for the correct cluster to be active AND ready.
     const isClusterSpecific = pendingFavorite.clusterSelection !== '';
-    if (isClusterSpecific && selectedKubeconfig !== pendingFavorite.clusterSelection) return;
+    if (isClusterSpecific) {
+      if (selectedKubeconfig !== pendingFavorite.clusterSelection) return;
+      if (!isClusterReady(selectedClusterId)) return;
+    } else {
+      // Generic favorite: wait for the active cluster to be ready.
+      if (selectedClusterId && !isClusterReady(selectedClusterId)) return;
+    }
 
     navigationAppliedRef.current = true;
 
-    // Use a microtask to ensure this runs after React has committed
-    // the cluster switch state updates (NavigationStateProvider, etc.).
-    queueMicrotask(() => {
-      if (pendingFavorite.viewType === 'namespace') {
-        viewState.setViewType('namespace');
-        viewState.setActiveNamespaceTab(pendingFavorite.view as NamespaceViewType);
-        if (pendingFavorite.namespace) {
-          namespaceCtx.setSelectedNamespace(pendingFavorite.namespace);
-          viewState.onNamespaceSelect(pendingFavorite.namespace);
-        }
-        viewState.setSidebarSelection({
-          type: 'namespace',
-          value: pendingFavorite.namespace || '',
-        });
-      } else if (pendingFavorite.viewType === 'cluster') {
-        viewState.setViewType('cluster');
-        viewState.setActiveClusterView((pendingFavorite.view as ClusterViewType) || null);
-        viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
+    if (pendingFavorite.viewType === 'namespace') {
+      viewState.setViewType('namespace');
+      viewState.setActiveNamespaceTab(pendingFavorite.view as NamespaceViewType);
+      if (pendingFavorite.namespace) {
+        namespaceCtx.setSelectedNamespace(pendingFavorite.namespace);
+        viewState.onNamespaceSelect(pendingFavorite.namespace);
       }
-    });
-  }, [pendingFavorite, selectedKubeconfig, viewState, namespaceCtx]);
+      viewState.setSidebarSelection({
+        type: 'namespace',
+        value: pendingFavorite.namespace || '',
+      });
+    } else if (pendingFavorite.viewType === 'cluster') {
+      viewState.setViewType('cluster');
+      viewState.setActiveClusterView((pendingFavorite.view as ClusterViewType) || null);
+      viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
+    }
+  }, [
+    pendingFavorite,
+    selectedKubeconfig,
+    selectedClusterId,
+    isClusterReady,
+    viewState,
+    namespaceCtx,
+  ]);
 
   // ---------- Mutation callbacks ----------
 

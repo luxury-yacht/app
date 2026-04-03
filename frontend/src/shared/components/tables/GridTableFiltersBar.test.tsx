@@ -74,7 +74,13 @@ describe('GridTableFiltersBar', () => {
     await act(async () => {
       root.render(
         <GridTableFiltersBar
-          activeFilters={{ search: '', kinds: [], namespaces: [], caseSensitive: false, includeMetadata: false }}
+          activeFilters={{
+            search: '',
+            kinds: [],
+            namespaces: [],
+            caseSensitive: false,
+            includeMetadata: false,
+          }}
           resolvedFilterOptions={{
             kinds: [
               { label: 'Pods', value: 'Pod' },
@@ -112,7 +118,13 @@ describe('GridTableFiltersBar', () => {
     await renderFilters({
       showKindDropdown: true,
       showNamespaceDropdown: true,
-      activeFilters: { search: 'pods', kinds: [], namespaces: [], caseSensitive: false, includeMetadata: false },
+      activeFilters: {
+        search: 'pods',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
       onKindsChange,
       onNamespacesChange,
       onSearchChange,

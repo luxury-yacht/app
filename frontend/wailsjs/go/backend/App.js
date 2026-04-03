@@ -94,6 +94,10 @@ export function GetAllClusterAuthStates() {
   return window['go']['backend']['App']['GetAllClusterAuthStates']();
 }
 
+export function GetAllClusterLifecycleStates() {
+  return window['go']['backend']['App']['GetAllClusterLifecycleStates']();
+}
+
 export function GetAppInfo() {
   return window['go']['backend']['App']['GetAppInfo']();
 }

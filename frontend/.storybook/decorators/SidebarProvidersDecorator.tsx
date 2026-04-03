@@ -17,6 +17,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { ConnectionStatusProvider } from '@/core/connection/connectionStatus';
 import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
+import { ClusterLifecycleProvider } from '@core/contexts/ClusterLifecycleContext';
 import { FavoritesProvider } from '@core/contexts/FavoritesContext';
 import { DockablePanelProvider } from '@ui/dockable';
 
@@ -35,6 +36,7 @@ export const SidebarProvidersDecorator: Decorator = (Story) => {
           <ConnectionStatusProvider>
             <AuthErrorProvider>
               <KubernetesProvider>
+                <ClusterLifecycleProvider>
                 <FavoritesProvider>
                 <DockablePanelProvider>
                   <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -42,6 +44,7 @@ export const SidebarProvidersDecorator: Decorator = (Story) => {
                   </div>
                 </DockablePanelProvider>
                 </FavoritesProvider>
+                </ClusterLifecycleProvider>
               </KubernetesProvider>
             </AuthErrorProvider>
           </ConnectionStatusProvider>

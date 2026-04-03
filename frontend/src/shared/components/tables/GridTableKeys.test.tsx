@@ -55,7 +55,13 @@ describe('GridTableKeys filter target selectors', () => {
     overrides?: Partial<React.ComponentProps<typeof GridTableFiltersBar>>
   ) => {
     const defaultProps: React.ComponentProps<typeof GridTableFiltersBar> = {
-      activeFilters: { search: '', kinds: [], namespaces: [], caseSensitive: false, includeMetadata: false },
+      activeFilters: {
+        search: '',
+        kinds: [],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
       resolvedFilterOptions: {
         kinds: [{ label: 'Pod', value: 'Pod' }],
         namespaces: [{ label: 'default', value: 'default' }],

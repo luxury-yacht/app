@@ -107,26 +107,38 @@ vi.mock('./FavSaveModal', () => ({
     if (!isOpen) return null;
     return (
       <div data-testid="fav-save-modal">
-        <button data-testid="modal-save" onClick={() => {
-          onSave({
-            id: existingFavorite?.id ?? '',
-            name: 'Test',
-            clusterSelection: '',
-            viewType: 'namespace',
-            view: 'pods',
-            namespace: 'default',
-            filters: null,
-            tableState: null,
-            order: 0,
-          });
-          onClose();
-        }}>Save</button>
-        <button data-testid="modal-cancel" onClick={onClose}>Cancel</button>
-        {existingFavorite && (
-          <button data-testid="modal-delete" onClick={() => {
-            onDelete(existingFavorite.id);
+        <button
+          data-testid="modal-save"
+          onClick={() => {
+            onSave({
+              id: existingFavorite?.id ?? '',
+              name: 'Test',
+              clusterSelection: '',
+              viewType: 'namespace',
+              view: 'pods',
+              namespace: 'default',
+              filters: null,
+              tableState: null,
+              order: 0,
+            });
             onClose();
-          }}>Delete</button>
+          }}
+        >
+          Save
+        </button>
+        <button data-testid="modal-cancel" onClick={onClose}>
+          Cancel
+        </button>
+        {existingFavorite && (
+          <button
+            data-testid="modal-delete"
+            onClick={() => {
+              onDelete(existingFavorite.id);
+              onClose();
+            }}
+          >
+            Delete
+          </button>
         )}
       </div>
     );
@@ -159,7 +171,13 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
  */
 const HookWrapper: React.FC = () => {
   const { item, modal } = useFavToggle({
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false, includeMetadata: false },
+    filters: {
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    },
     sortColumn: null,
     sortDirection: 'asc',
     columnVisibility: {},

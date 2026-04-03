@@ -114,7 +114,13 @@ describe('gridTablePersistence', () => {
       columnVisibility: { status: false, extra: true },
       columnWidths: { status: sampleWidthState, orphan: sampleWidthState },
       sort: { key: 'name', direction: 'asc' },
-      filters: { search: 'abc', kinds: ['Pod'], namespaces: ['team-a'], caseSensitive: false, includeMetadata: false },
+      filters: {
+        search: 'abc',
+        kinds: ['Pod'],
+        namespaces: ['team-a'],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
       filterOptions: { isNamespaceScoped: true },
     });
 
@@ -123,7 +129,13 @@ describe('gridTablePersistence', () => {
       columnVisibility: { status: false },
       columnWidths: { status: sampleWidthState },
       sort: { key: 'name', direction: 'asc' },
-      filters: { search: 'abc', kinds: ['Pod'], namespaces: [], caseSensitive: false, includeMetadata: false },
+      filters: {
+        search: 'abc',
+        kinds: ['Pod'],
+        namespaces: [],
+        caseSensitive: false,
+        includeMetadata: false,
+      },
     });
   });
 });

@@ -221,6 +221,18 @@ func (a *App) buildRefreshMux(
 
 	// Wrap the base refresh API with aggregate services for multi-cluster domains.
 	aggregateService := newAggregateSnapshotService(clusterOrder, subsystems)
+
+	// Wire the lifecycle transition: when a cluster's namespace domain first serves
+	// data successfully, move it from loading/loading_slow to ready.
+	aggregateService.onFirstSnapshot = func(clusterID string) {
+		if a.clusterLifecycle == nil {
+			return
+		}
+		state := a.clusterLifecycle.GetState(clusterID)
+		if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
+			a.clusterLifecycle.SetState(clusterID, ClusterStateReady)
+		}
+	}
 	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)
 	aggregateEvents := newAggregateEventStreamHandler(
 		aggregateService,

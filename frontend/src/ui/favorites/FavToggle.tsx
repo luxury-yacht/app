@@ -79,7 +79,10 @@ const CLUSTER_VIEW_LABELS: Record<string, string> = {
  * Returns an IconBarItem (toggle type) for the heart favorite button
  * in the GridTableFiltersBar's preActions slot.
  */
-export function useFavToggle(state: FavToggleState): { item: IconBarItem; modal: React.JSX.Element } {
+export function useFavToggle(state: FavToggleState): {
+  item: IconBarItem;
+  modal: React.JSX.Element;
+} {
   const {
     favorites,
     addFavorite,

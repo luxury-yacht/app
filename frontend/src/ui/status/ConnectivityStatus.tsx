@@ -12,6 +12,7 @@ import { refreshOrchestrator } from '@/core/refresh';
 import { useClusterHealthListener } from '@/hooks/useWailsRuntimeEvents';
 import { useAuthError, useActiveClusterAuthState } from '@/core/contexts/AuthErrorContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { eventBus } from '@/core/events';
 import { getAutoRefreshEnabled } from '@/core/settings/appPreferences';
 
@@ -23,6 +24,8 @@ const ConnectivityStatus: React.FC = () => {
   const { getActiveClusterHealth } = useClusterHealthListener(selectedClusterId);
   const { handleRetry } = useAuthError();
   const authState = useActiveClusterAuthState(selectedClusterId);
+  const { getClusterState } = useClusterLifecycle();
+  const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
 
   useEffect(() => {
     setIsPaused(!getAutoRefreshEnabled());
@@ -45,6 +48,12 @@ const ConnectivityStatus: React.FC = () => {
   /** Map domain state to shared status state. */
   const getStatus = (): StatusState => {
     if (isPaused) return 'inactive';
+    if (lifecycleState === 'auth_failed') return 'unhealthy';
+    if (lifecycleState === 'disconnected') return 'unhealthy';
+    if (lifecycleState === 'reconnecting') return 'degraded';
+    if (lifecycleState === 'connecting' || lifecycleState === 'loading') return 'refreshing';
+    if (lifecycleState === 'loading_slow') return 'degraded';
+    // Fall through to existing auth/health checks for ready state and edge cases.
     if (authState.hasError && authState.isRecovering) return 'degraded';
     if (authState.hasError) return 'unhealthy';
     if (health === 'degraded') return 'degraded';
@@ -55,11 +64,18 @@ const ConnectivityStatus: React.FC = () => {
   /** Generate the popover message. */
   const getMessage = (): string => {
     if (isPaused) return 'Auto-refresh paused';
+    if (lifecycleState === 'connecting') return 'Connecting...';
+    if (lifecycleState === 'auth_failed') return 'Auth Failed';
+    if (lifecycleState === 'connected' || lifecycleState === 'loading') return 'Loading...';
+    if (lifecycleState === 'loading_slow') return 'Loading (taking longer than expected)...';
+    if (lifecycleState === 'disconnected') return 'Disconnected';
+    if (lifecycleState === 'reconnecting') return 'Reconnecting...';
+    // Fall through to existing checks.
     if (authState.hasError && authState.isRecovering) return 'Retrying authentication...';
     if (authState.hasError) return authState.reason || 'Authentication failed';
     if (health === 'degraded') return 'Reconnecting...';
     if (isRefreshing) return 'Refreshing...';
-    return 'Connected';
+    return 'Ready';
   };
 
   /** Determine the action button label. */

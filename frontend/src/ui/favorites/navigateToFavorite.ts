@@ -44,12 +44,8 @@ export function navigateToFavorite(
   contexts: NavigationContexts,
   onComplete?: () => void
 ): void {
-  const {
-    selectedKubeconfigs,
-    setSelectedKubeconfigs,
-    setActiveKubeconfig,
-    setPendingFavorite,
-  } = contexts;
+  const { selectedKubeconfigs, setSelectedKubeconfigs, setActiveKubeconfig, setPendingFavorite } =
+    contexts;
 
   // Store the favorite so effects in FavoritesContext can restore
   // the full navigation + filter state after the cluster has settled.

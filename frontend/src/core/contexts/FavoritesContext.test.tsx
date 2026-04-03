@@ -4,6 +4,7 @@
  * Test suite for FavoritesContext.
  * Validates provider hydration, hook guard, and currentFavoriteMatch logic.
  */
+import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,7 +41,16 @@ let mockSelectedNamespace: string | undefined = 'default';
 vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   useKubeconfig: () => ({
     selectedKubeconfig: mockSelectedKubeconfig,
+    selectedClusterId: 'cluster-1',
   }),
+}));
+
+vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
+  useClusterLifecycle: () => ({
+    getClusterState: () => 'ready',
+    isClusterReady: () => true,
+  }),
+  ClusterLifecycleProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
 
 vi.mock('@core/contexts/ViewStateContext', () => ({
