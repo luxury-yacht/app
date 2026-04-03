@@ -571,7 +571,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
           <div className="modal-footer">
             {isEditing && (
               <button
-                className="modal-btn modal-btn-danger"
+                className="button danger"
                 onClick={handleDelete}
                 data-fav-modal-focusable="true"
               >
@@ -579,15 +579,11 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
               </button>
             )}
             <div className="fav-save-footer-spacer" />
-            <button
-              className="modal-btn modal-btn-secondary"
-              onClick={onClose}
-              data-fav-modal-focusable="true"
-            >
+            <button className="button cancel" onClick={onClose} data-fav-modal-focusable="true">
               Cancel
             </button>
             <button
-              className="modal-btn modal-btn-primary"
+              className="button save"
               onClick={handleSave}
               disabled={isEditing && !changesDetected}
               data-fav-modal-focusable="true"

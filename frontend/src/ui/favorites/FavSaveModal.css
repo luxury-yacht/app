@@ -32,11 +32,9 @@
 }
 
 /* Disabled Save button when no changes detected (editing mode) */
-.fav-save-modal .modal-btn-primary:disabled {
+.fav-save-modal .button.save:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
 }
 
 /* Dropdowns nested under radio buttons — indented to show association */
