@@ -261,7 +261,9 @@ const FavMenuDropdown: React.FC = () => {
       // The synthetic "All Namespaces" scope is always available.
       if (isAllNamespaces(fav.namespace)) return false;
       const ns = namespaceCtx.namespaces;
-      return ns.length > 0 && !ns.some((n) => n.scope === fav.namespace || n.name === fav.namespace);
+      return (
+        ns.length > 0 && !ns.some((n) => n.scope === fav.namespace || n.name === fav.namespace)
+      );
     },
     [namespaceCtx.namespaces]
   );
@@ -274,7 +276,7 @@ const FavMenuDropdown: React.FC = () => {
         title="Favorites"
         aria-label="Favorites"
       >
-        <FavoriteOutlineIcon width={20} height={20} />
+        <FavoriteOutlineIcon width={18} height={18} />
       </button>
 
       {isOpen && (

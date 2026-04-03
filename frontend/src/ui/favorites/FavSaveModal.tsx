@@ -139,7 +139,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   onClose,
   existingFavorite,
   defaultName,
-  clusterName,
+  clusterName: _clusterName,
   kubeconfigSelection,
   viewType,
   viewLabel,

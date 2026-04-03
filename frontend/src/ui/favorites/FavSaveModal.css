@@ -4,6 +4,12 @@
   max-width: 480px;
 }
 
+/* Limit dropdown menu height inside the modal so it doesn't overflow
+   the viewport. The modal content remains scrollable normally. */
+.fav-save-modal .dropdown-menu {
+  max-height: 200px;
+}
+
 .fav-save-input {
   width: 100%;
   padding: 0.45rem 0.65rem;
