@@ -70,7 +70,13 @@ function TypeIcon({ clusterSelection }: { clusterSelection: string }) {
 
 function ChevronUpIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      width={13}
+      height={13}
+    >
       <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z" />
     </svg>
   );
@@ -78,7 +84,13 @@ function ChevronUpIcon() {
 
 function ChevronDownIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      width={13}
+      height={13}
+    >
       <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z" />
     </svg>
   );
@@ -86,7 +98,13 @@ function ChevronDownIcon() {
 
 function PencilIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      width={13}
+      height={13}
+    >
       <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
     </svg>
   );
@@ -94,7 +112,13 @@ function PencilIcon() {
 
 function TrashIcon() {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width={13} height={13}>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      width={13}
+      height={13}
+    >
       <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
     </svg>
   );
@@ -111,8 +135,14 @@ const FavMenuDropdown: React.FC = () => {
   const anchorRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const { favorites, currentFavoriteMatch, updateFavorite, deleteFavorite, reorderFavorites, setPendingFavorite } =
-    useFavorites();
+  const {
+    favorites,
+    currentFavoriteMatch,
+    updateFavorite,
+    deleteFavorite,
+    reorderFavorites,
+    setPendingFavorite,
+  } = useFavorites();
   const kubeconfigCtx = useKubeconfig();
   const viewState = useViewState();
   const namespaceCtx = useNamespace();

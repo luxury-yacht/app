@@ -138,7 +138,14 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
       items.push(...postActions);
     }
     return items;
-  }, [onReset, hasActiveFilters, activeFilters.caseSensitive, onToggleCaseSensitive, preActions, postActions]);
+  }, [
+    onReset,
+    hasActiveFilters,
+    activeFilters.caseSensitive,
+    onToggleCaseSensitive,
+    preActions,
+    postActions,
+  ]);
 
   return (
     <div className="gridtable-filter-bar" ref={containerRef}>

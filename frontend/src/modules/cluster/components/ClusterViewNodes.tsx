@@ -52,10 +52,11 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId, selectedClusterIds } = useKubeconfig();
     // Metadata-aware search: when toggled on, includes labels and annotations.
-    const { includeMetadata, setIncludeMetadata, metadataToggle, getSearchText } = useMetadataSearch<ClusterNodeRow>({
-      getDefaultValues: useCallback((row: ClusterNodeRow) => [row.name, row.kind], []),
-      getMetadataMaps: useCallback((row: ClusterNodeRow) => [row.labels, row.annotations], []),
-    });
+    const { includeMetadata, setIncludeMetadata, metadataToggle, getSearchText } =
+      useMetadataSearch<ClusterNodeRow>({
+        getDefaultValues: useCallback((row: ClusterNodeRow) => [row.name, row.kind], []),
+        getMetadataMaps: useCallback((row: ClusterNodeRow) => [row.labels, row.annotations], []),
+      });
     const useShortResourceNames = useShortNames();
     // Build scoped key for multi-cluster node metrics lookup.
     const nodesScope = useMemo(

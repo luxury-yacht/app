@@ -11,7 +11,11 @@ import './BrowseView.css';
 import GridTableFiltersBar from '@shared/components/tables/GridTableFiltersBar';
 import GridTableLayout from '@shared/components/tables/GridTableLayout';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
-import { LoadMoreIcon, FavoriteOutlineIcon, FavoriteFilledIcon } from '@shared/components/icons/MenuIcons';
+import {
+  LoadMoreIcon,
+  FavoriteOutlineIcon,
+  FavoriteFilledIcon,
+} from '@shared/components/icons/MenuIcons';
 import { KeyboardProviderDecorator } from '../../../../.storybook/decorators/KeyboardProviderDecorator';
 
 // Column widths matching the real BrowseView (from useBrowseColumns.tsx)
@@ -21,9 +25,7 @@ const COL_NS = 220;
 const COL_AGE = 120;
 
 const noOp = () => {};
-const renderOption = (option: { value: string; label: string }) => (
-  <span>{option.label}</span>
-);
+const renderOption = (option: { value: string; label: string }) => <span>{option.label}</span>;
 const renderValue = () => <span>All kinds</span>;
 const renderColumnsValue = () => <span>Columns</span>;
 
@@ -44,7 +46,13 @@ const COLUMNS = [
 ];
 
 const ROWS = [
-  { kind: 'ReplicaSet', name: 'nginx-deployment-7fb96c846b', ns: 'default', age: '3d', focused: true },
+  {
+    kind: 'ReplicaSet',
+    name: 'nginx-deployment-7fb96c846b',
+    ns: 'default',
+    age: '3d',
+    focused: true,
+  },
   { kind: 'Deployment', name: 'nginx-deployment', ns: 'default', age: '3d' },
   { kind: 'StatefulSet', name: 'redis-master-0', ns: 'default', age: '5d' },
   { kind: 'ReplicaSet', name: 'coredns-5dd5756b68', ns: 'kube-system', age: '30d' },
@@ -110,16 +118,24 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
       <div className="gridtable gridtable--header gridtable-browse">
         <div className="gridtable-header">
           <div className="grid-cell-header" style={{ width: COL_KIND }} data-sortable="true">
-            <div className="header-content"><span>Kind</span></div>
+            <div className="header-content">
+              <span>Kind</span>
+            </div>
           </div>
           <div className="grid-cell-header" style={{ width: COL_NAME }} data-sortable="true">
-            <div className="header-content"><span>Name</span></div>
+            <div className="header-content">
+              <span>Name</span>
+            </div>
           </div>
           <div className="grid-cell-header" style={{ width: COL_NS }} data-sortable="true">
-            <div className="header-content"><span>Namespace</span></div>
+            <div className="header-content">
+              <span>Namespace</span>
+            </div>
           </div>
           <div className="grid-cell-header" style={{ width: COL_AGE }} data-sortable="true">
-            <div className="header-content"><span>Age</span></div>
+            <div className="header-content">
+              <span>Age</span>
+            </div>
           </div>
         </div>
       </div>

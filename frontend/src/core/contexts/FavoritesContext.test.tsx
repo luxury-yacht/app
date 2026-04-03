@@ -150,7 +150,10 @@ describe('FavoritesContext', () => {
   });
 
   it('hydrates favorites on mount', async () => {
-    const favorites = [makeFavorite({ id: 'fav-1' }), makeFavorite({ id: 'fav-2', name: 'Second' })];
+    const favorites = [
+      makeFavorite({ id: 'fav-1' }),
+      makeFavorite({ id: 'fav-2', name: 'Second' }),
+    ];
     persistenceMocks.hydrateFavorites.mockResolvedValue(favorites);
 
     await renderProvider();

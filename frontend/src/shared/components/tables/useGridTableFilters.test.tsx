@@ -179,7 +179,12 @@ describe('useGridTableFilters', () => {
     });
 
     result = getResult();
-    expect(result?.activeFilters).toEqual({ search: '', kinds: [], namespaces: [], caseSensitive: false });
+    expect(result?.activeFilters).toEqual({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+    });
     expect(result?.tableData.length).toBe(rows.length);
   });
 

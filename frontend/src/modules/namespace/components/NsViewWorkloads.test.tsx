@@ -190,7 +190,12 @@ describe('NsViewWorkloads', () => {
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
-    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [], caseSensitive: false });
+    expect(props.filters?.value).toEqual({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+    });
     expect(props.columnVisibility).toBe(null);
     expect(props.columnWidths).toBe(null);
   });

@@ -146,16 +146,13 @@ export function useGridTableFilters<T>({
   );
 
   // Toggle the case-sensitive flag through the shared filter state.
-  const toggleCaseSensitive = useCallback(
-    () => {
-      const next = normalizeFilterState({
-        ...activeFilters,
-        caseSensitive: !activeFilters.caseSensitive,
-      });
-      setFiltersState(next);
-    },
-    [activeFilters, setFiltersState]
-  );
+  const toggleCaseSensitive = useCallback(() => {
+    const next = normalizeFilterState({
+      ...activeFilters,
+      caseSensitive: !activeFilters.caseSensitive,
+    });
+    setFiltersState(next);
+  }, [activeFilters, setFiltersState]);
 
   const filterAccessors = useMemo<GridTableFilterAccessors<T>>(() => {
     const getKind = filters?.accessors?.getKind ?? ((row: T) => defaultGetKind(row) ?? null);

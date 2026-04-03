@@ -295,7 +295,11 @@ const BrowseView: React.FC<BrowseViewProps> = ({
             id: 'load-more',
             icon: <LoadMoreIcon />,
             onClick: handleLoadMore,
-            title: !continueToken ? 'All items loaded' : isRequestingMore ? 'Loading…' : 'Load more',
+            title: !continueToken
+              ? 'All items loaded'
+              : isRequestingMore
+                ? 'Loading…'
+                : 'Load more',
             disabled: !continueToken || isRequestingMore,
           },
         ],

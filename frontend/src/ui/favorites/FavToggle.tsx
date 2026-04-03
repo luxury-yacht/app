@@ -183,7 +183,14 @@ const PopoverItem: React.FC<PopoverItemProps> = ({ label, onClick }) => (
  * in the GridTableFiltersBar's preActions slot.
  */
 export function useFavToggle(state: FavToggleState): IconBarItem {
-  const { currentFavoriteMatch, addFavorite, updateFavorite, deleteFavorite, pendingFavorite, setPendingFavorite } = useFavorites();
+  const {
+    currentFavoriteMatch,
+    addFavorite,
+    updateFavorite,
+    deleteFavorite,
+    pendingFavorite,
+    setPendingFavorite,
+  } = useFavorites();
   const { selectedKubeconfig, selectedClusterName } = useKubeconfig();
   const { viewType, activeNamespaceTab, activeClusterTab } = useViewState();
   const { selectedNamespace } = useNamespace();
@@ -220,7 +227,15 @@ export function useFavToggle(state: FavToggleState): IconBarItem {
       state.setColumnVisibility(pendingFavorite.tableState.columnVisibility);
     }
     setPendingFavorite(null);
-  }, [pendingFavorite, setPendingFavorite, viewType, activeNamespaceTab, activeClusterTab, selectedNamespace, state]);
+  }, [
+    pendingFavorite,
+    setPendingFavorite,
+    viewType,
+    activeNamespaceTab,
+    activeClusterTab,
+    selectedNamespace,
+    state,
+  ]);
 
   const [popoverOpen, setPopoverOpen] = useState(false);
   // Ref to the icon-bar button element so the popover can position near it.
@@ -271,19 +286,25 @@ export function useFavToggle(state: FavToggleState): IconBarItem {
   );
 
   // Snapshot the current filter and table state for saving.
-  const snapshotFilters = useCallback((): FavoriteFilters => ({
-    search: state.filters.search,
-    kinds: [...state.filters.kinds],
-    namespaces: [...state.filters.namespaces],
-    caseSensitive: state.filters.caseSensitive ?? false,
-    includeMetadata: state.includeMetadata ?? false,
-  }), [state.filters, state.includeMetadata]);
+  const snapshotFilters = useCallback(
+    (): FavoriteFilters => ({
+      search: state.filters.search,
+      kinds: [...state.filters.kinds],
+      namespaces: [...state.filters.namespaces],
+      caseSensitive: state.filters.caseSensitive ?? false,
+      includeMetadata: state.includeMetadata ?? false,
+    }),
+    [state.filters, state.includeMetadata]
+  );
 
-  const snapshotTableState = useCallback((): FavoriteTableState => ({
-    sortColumn: state.sortColumn ?? '',
-    sortDirection: state.sortDirection,
-    columnVisibility: { ...state.columnVisibility },
-  }), [state.sortColumn, state.sortDirection, state.columnVisibility]);
+  const snapshotTableState = useCallback(
+    (): FavoriteTableState => ({
+      sortColumn: state.sortColumn ?? '',
+      sortDirection: state.sortDirection,
+      columnVisibility: { ...state.columnVisibility },
+    }),
+    [state.sortColumn, state.sortDirection, state.columnVisibility]
+  );
 
   const hasActiveFilters =
     state.filters.search.trim().length > 0 ||
@@ -303,7 +324,15 @@ export function useFavToggle(state: FavToggleState): IconBarItem {
       tableState: snapshotTableState(),
       order: 0,
     }),
-    [generateName, hasActiveFilters, viewType, activeViewTab, selectedNamespace, snapshotFilters, snapshotTableState]
+    [
+      generateName,
+      hasActiveFilters,
+      viewType,
+      activeViewTab,
+      selectedNamespace,
+      snapshotFilters,
+      snapshotTableState,
+    ]
   );
 
   const handleClose = useCallback(() => setPopoverOpen(false), []);
@@ -364,10 +393,7 @@ export function useFavToggle(state: FavToggleState): IconBarItem {
               ) : (
                 <>
                   <PopoverItem label="Save for any cluster" onClick={handleAddForAnyCluster} />
-                  <PopoverItem
-                    label="Save for this cluster"
-                    onClick={handleAddForThisCluster}
-                  />
+                  <PopoverItem label="Save for this cluster" onClick={handleAddForThisCluster} />
                 </>
               )}
             </FavTogglePopover>

@@ -138,7 +138,12 @@ describe('ClusterViewEvents', () => {
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'ageTimestamp', direction: 'desc' });
     expect(props.columnVisibility).toBe(null);
-    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [], caseSensitive: false });
+    expect(props.filters?.value).toEqual({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+    });
 
     const key = props.keyExtractor(baseEvent, 0);
     expect(key).toContain('team-a');

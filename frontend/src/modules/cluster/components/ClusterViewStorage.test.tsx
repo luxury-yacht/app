@@ -140,7 +140,12 @@ describe('ClusterViewStorage', () => {
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
     expect(props.columnVisibility).toBe(null);
-    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [], caseSensitive: false });
+    expect(props.filters?.value).toEqual({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+    });
     expect(props.columnWidths).toBe(null);
   });
 });

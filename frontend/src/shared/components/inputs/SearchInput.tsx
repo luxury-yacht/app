@@ -84,7 +84,6 @@ const SearchInput: React.FC<SearchInputProps> = ({
         autoFocus={autoFocus}
         disabled={disabled}
       />
-
     </div>
   );
 };

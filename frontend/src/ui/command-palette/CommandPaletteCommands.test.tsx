@@ -57,7 +57,13 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
 }));
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
-  useFavorites: () => ({ favorites: [], addFavorite: vi.fn(), deleteFavorite: vi.fn(), reorderFavorites: vi.fn(), updateFavorite: vi.fn() }),
+  useFavorites: () => ({
+    favorites: [],
+    addFavorite: vi.fn(),
+    deleteFavorite: vi.fn(),
+    reorderFavorites: vi.fn(),
+    updateFavorite: vi.fn(),
+  }),
 }));
 
 vi.mock('@ui/favorites/navigateToFavorite', () => ({

@@ -109,8 +109,26 @@ const mockSetSelectedNamespace = vi.fn();
 vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   useNamespace: () => ({
     namespaces: [
-      { name: 'default', scope: '', status: 'Active', details: '', age: '', hasWorkloads: true, workloadsUnknown: false, resourceVersion: '1' },
-      { name: 'kube-system', scope: '', status: 'Active', details: '', age: '', hasWorkloads: true, workloadsUnknown: false, resourceVersion: '1' },
+      {
+        name: 'default',
+        scope: '',
+        status: 'Active',
+        details: '',
+        age: '',
+        hasWorkloads: true,
+        workloadsUnknown: false,
+        resourceVersion: '1',
+      },
+      {
+        name: 'kube-system',
+        scope: '',
+        status: 'Active',
+        details: '',
+        age: '',
+        hasWorkloads: true,
+        workloadsUnknown: false,
+        resourceVersion: '1',
+      },
     ],
     selectedNamespace: 'default',
     namespaceLoading: false,
@@ -219,7 +237,12 @@ describe('FavMenuDropdown', () => {
   it('shows dropdown with favorites on click', async () => {
     mockFavorites.push(
       makeFavorite({ id: 'fav-1', name: 'My Pods' }),
-      makeFavorite({ id: 'fav-2', name: 'Kube System Events', view: 'events', namespace: 'kube-system' })
+      makeFavorite({
+        id: 'fav-2',
+        name: 'Kube System Events',
+        view: 'events',
+        namespace: 'kube-system',
+      })
     );
 
     await renderComponent();
@@ -258,7 +281,13 @@ describe('FavMenuDropdown', () => {
 
   it('clicking a favorite triggers navigation', async () => {
     mockFavorites.push(
-      makeFavorite({ id: 'fav-1', name: 'My Pods', viewType: 'namespace', view: 'pods', namespace: 'default' })
+      makeFavorite({
+        id: 'fav-1',
+        name: 'My Pods',
+        viewType: 'namespace',
+        view: 'pods',
+        namespace: 'default',
+      })
     );
 
     await renderComponent();
