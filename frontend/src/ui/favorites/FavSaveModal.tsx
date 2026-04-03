@@ -160,7 +160,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   const [clusterSpecific, setClusterSpecific] = useState(true);
   const [clusterSelection, setClusterSelection] = useState('');
   const [scope, setScope] = useState<'cluster' | 'namespace'>('cluster');
-  const [view, setView] = useState('');
+  const [clusterView, setClusterView] = useState('browse');
+  const [namespaceView, setNamespaceView] = useState('browse');
   const [selectedNamespace, setSelectedNamespace] = useState('');
   const [filterText, setFilterText] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
@@ -175,7 +176,11 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       setClusterSpecific(existingFavorite.clusterSelection !== '');
       setClusterSelection(existingFavorite.clusterSelection || kubeconfigSelection);
       setScope(existingFavorite.viewType as 'cluster' | 'namespace');
-      setView(existingFavorite.view);
+      if (existingFavorite.viewType === 'cluster') {
+        setClusterView(existingFavorite.view);
+      } else {
+        setNamespaceView(existingFavorite.view);
+      }
       setSelectedNamespace(existingFavorite.namespace || '');
       setFilterText(existingFavorite.filters?.search ?? '');
       setCaseSensitive(existingFavorite.filters?.caseSensitive ?? false);
@@ -185,7 +190,12 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       setClusterSpecific(true);
       setClusterSelection(kubeconfigSelection);
       setScope(viewType as 'cluster' | 'namespace');
-      setView(resolveViewId(viewLabel, viewType));
+      const resolvedView = resolveViewId(viewLabel, viewType);
+      if (viewType === 'cluster') {
+        setClusterView(resolvedView);
+      } else {
+        setNamespaceView(resolvedView);
+      }
       setSelectedNamespace(namespace);
       setFilterText(filters.search);
       setCaseSensitive(filters.caseSensitive);
@@ -256,8 +266,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   }, [kubeconfigs]);
 
   // View dropdown: depends on scope.
-  const viewOptions = scope === 'namespace' ? NAMESPACE_VIEWS : CLUSTER_VIEWS;
-
   // Namespace dropdown: "All Namespaces" at top, then actual namespaces.
   const namespaceOptions = useMemo(() => {
     const opts = [{ value: 'All Namespaces', label: 'All Namespaces' }];
@@ -282,16 +290,12 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     }
   };
 
-  // When Scope changes, reset View to the first available view for that scope.
   const handleScopeChange = (newScope: 'cluster' | 'namespace') => {
     setScope(newScope);
-    const views = newScope === 'namespace' ? NAMESPACE_VIEWS : CLUSTER_VIEWS;
-    // Keep current view if it exists in the new scope.
-    const viewExists = views.some((v) => v.value === view);
-    if (!viewExists) {
-      setView(views[0].value);
-    }
   };
+
+  // The active view depends on the selected scope.
+  const activeView = scope === 'cluster' ? clusterView : namespaceView;
 
   // Detect whether Save should be enabled when editing.
   const changesDetected = isEditing
@@ -301,7 +305,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
         clusterSpecific,
         clusterSelection,
         scope,
-        view,
+        activeView,
         selectedNamespace,
         filterText,
         caseSensitive,
@@ -317,7 +321,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       name: name.trim() || defaultName,
       clusterSelection: clusterSpecific ? clusterSelection : '',
       viewType: scope,
-      view,
+      view: activeView,
       namespace: scope === 'namespace' ? selectedNamespace : '',
       filters: {
         search: filterText,
@@ -455,6 +459,13 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   />
                   <span>Cluster</span>
                 </label>
+                <Dropdown
+                  options={CLUSTER_VIEWS}
+                  value={clusterView}
+                  onChange={(val) => setClusterView(val as string)}
+                  placeholder="Select view..."
+                  disabled={scope !== 'cluster'}
+                />
                 <label className="fav-save-radio">
                   <input
                     type="radio"
@@ -466,6 +477,13 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   <span>Namespaced</span>
                 </label>
                 <Dropdown
+                  options={NAMESPACE_VIEWS}
+                  value={namespaceView}
+                  onChange={(val) => setNamespaceView(val as string)}
+                  placeholder="Select view..."
+                  disabled={scope !== 'namespace'}
+                />
+                <Dropdown
                   options={namespaceOptions}
                   value={selectedNamespace}
                   onChange={(val) => setSelectedNamespace(val as string)}
@@ -473,17 +491,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                   disabled={scope !== 'namespace'}
                 />
               </div>
-            </div>
-
-            {/* View */}
-            <div className="fav-save-field">
-              <span className="fav-save-label">View</span>
-              <Dropdown
-                options={viewOptions}
-                value={view}
-                onChange={(val) => setView(val as string)}
-                placeholder="Select view..."
-              />
             </div>
 
             {/* Filters */}
