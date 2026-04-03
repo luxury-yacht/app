@@ -2,20 +2,29 @@
 
 ## Favorites
 
+- Create a Storybook story for this modal. Make sure it uses the actual code so that changes visible in the storybook are real.
 - When clicking the Favorite button in the view, use a modal instead of a dropdown menu.
 - Reuse the existing Modal component and styles
 - Modal should show:
   - `Name` as text field to change the name, prepopulated with the default
-  - Radio buttons to select `Cluster-specific` or `Any Cluster`
-  - Description of what is being bookmarked:
-    - `Cluster` (shows cluster name or Any)
-    - `Scope` (Cluster or Namespaced)
-    - `View` (shows the View name)
-    - `Filters`
-      - `Filter Text`
-      - `Case-Sensitive` and `Include Metadata` as disabled checkboxes
-    - Delete, Save, and Cancel buttons
-      - Show a secondary confirmation modal for Delete.
+  - `Type`
+    - Radio buttons to select `Cluster-specific` or `Any Cluster`
+  - `Cluster` (shows cluster name or Any)
+    - Dropdown whose contents are derived from all available clusters (not just the ones that are open)
+  - `Scope`
+    - Radio buttons to select Cluster or Namespaced
+  - `View` (shows the View name)
+    - Dropdown, populate this based on the value of the Scope dropdown
+  - `Namespace` (only visible when Scope is Namespaced)
+    - Dropdown, populate with all available namespaces, including `All Namespaces` at the top of the list
+  - `Filters`
+    - `Filter Text`
+      - Editable text field
+    - `Case-Sensitive` and `Include Metadata`
+      - Editable checkboxes
+  - Delete, Save, and Cancel buttons
+    - When editing, only enable the Save button when changes are made.
+    - Show a secondary confirmation modal for Delete.
 
 ## Other
 

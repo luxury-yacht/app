@@ -2,20 +2,58 @@
  * frontend/src/ui/favorites/FavSaveModal.tsx
  *
  * Modal for saving, updating, or deleting a favorite.
- * Shows the favorite name, cluster binding choice, and a read-only
- * summary of the view and filter state being bookmarked.
+ * All fields are editable: name, cluster type, cluster, scope, view,
+ * namespace, and filter settings.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useShortcut, useKeyboardContext } from '@ui/shortcuts';
 import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import '@ui/modals/modals.css';
+import '@shared/components/KubeconfigSelector.css';
 import './FavSaveModal.css';
+
+// ---------------------------------------------------------------------------
+// View lists — mirrors the Sidebar navigation tabs.
+// ---------------------------------------------------------------------------
+
+const CLUSTER_VIEWS = [
+  { value: 'browse', label: 'Browse' },
+  { value: 'nodes', label: 'Nodes' },
+  { value: 'config', label: 'Config' },
+  { value: 'crds', label: 'CRDs' },
+  { value: 'custom', label: 'Custom' },
+  { value: 'events', label: 'Events' },
+  { value: 'rbac', label: 'RBAC' },
+  { value: 'storage', label: 'Storage' },
+];
+
+const NAMESPACE_VIEWS = [
+  { value: 'browse', label: 'Browse' },
+  { value: 'workloads', label: 'Workloads' },
+  { value: 'pods', label: 'Pods' },
+  { value: 'autoscaling', label: 'Autoscaling' },
+  { value: 'config', label: 'Config' },
+  { value: 'custom', label: 'Custom' },
+  { value: 'events', label: 'Events' },
+  { value: 'helm', label: 'Helm' },
+  { value: 'network', label: 'Network' },
+  { value: 'quotas', label: 'Quotas' },
+  { value: 'rbac', label: 'RBAC' },
+  { value: 'storage', label: 'Storage' },
+];
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
 
 export interface FavSaveModalProps {
   isOpen: boolean;
@@ -46,6 +84,54 @@ export interface FavSaveModalProps {
   onDelete: (id: string) => void;
 }
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Resolve view tab id from a view label (e.g. "Pods" -> "pods"). */
+const resolveViewId = (label: string, viewType: string): string => {
+  const views = viewType === 'namespace' ? NAMESPACE_VIEWS : CLUSTER_VIEWS;
+  // Try exact label match first.
+  const match = views.find((v) => v.label === label);
+  if (match) return match.value;
+  // Fall back to lowercase comparison.
+  const lower = label.toLowerCase();
+  const fallback = views.find((v) => v.value === lower || v.label.toLowerCase() === lower);
+  return fallback?.value ?? views[0].value;
+};
+
+/** Compare current form state against an existing favorite to detect changes. */
+const hasFormChanges = (
+  existing: Favorite,
+  name: string,
+  clusterSpecific: boolean,
+  clusterSelection: string,
+  scope: 'cluster' | 'namespace',
+  view: string,
+  namespace: string,
+  filterText: string,
+  caseSensitive: boolean,
+  includeMetadata: boolean
+): boolean => {
+  if (name !== existing.name) return true;
+  const existingIsClusterSpecific = existing.clusterSelection !== '';
+  if (clusterSpecific !== existingIsClusterSpecific) return true;
+  if (clusterSpecific && clusterSelection !== existing.clusterSelection) return true;
+  if (scope !== existing.viewType) return true;
+  if (view !== existing.view) return true;
+  if (scope === 'namespace' && namespace !== existing.namespace) return true;
+  if (existing.filters) {
+    if (filterText !== (existing.filters.search ?? '')) return true;
+    if (caseSensitive !== (existing.filters.caseSensitive ?? false)) return true;
+    if (includeMetadata !== (existing.filters.includeMetadata ?? false)) return true;
+  }
+  return false;
+};
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 const FavSaveModal: React.FC<FavSaveModalProps> = ({
   isOpen,
   onClose,
@@ -63,27 +149,52 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   onDelete,
 }) => {
   const isEditing = existingFavorite != null;
-  const [name, setName] = useState('');
-  const [clusterSpecific, setClusterSpecific] = useState(true);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const { kubeconfigs } = useKubeconfig();
+  const { namespaces } = useNamespace();
   const { pushContext, popContext } = useKeyboardContext();
   const contextPushedRef = useRef(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Initialize form state when the modal opens.
+  // ----- Form state -----
+  const [name, setName] = useState('');
+  const [clusterSpecific, setClusterSpecific] = useState(true);
+  const [clusterSelection, setClusterSelection] = useState('');
+  const [scope, setScope] = useState<'cluster' | 'namespace'>('cluster');
+  const [view, setView] = useState('');
+  const [selectedNamespace, setSelectedNamespace] = useState('');
+  const [filterText, setFilterText] = useState('');
+  const [caseSensitive, setCaseSensitive] = useState(false);
+  const [includeMetadataState, setIncludeMetadataState] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // ----- Initialize form when modal opens -----
   useEffect(() => {
     if (!isOpen) return;
     if (existingFavorite) {
       setName(existingFavorite.name);
       setClusterSpecific(existingFavorite.clusterSelection !== '');
+      setClusterSelection(existingFavorite.clusterSelection || kubeconfigSelection);
+      setScope(existingFavorite.viewType as 'cluster' | 'namespace');
+      setView(existingFavorite.view);
+      setSelectedNamespace(existingFavorite.namespace || '');
+      setFilterText(existingFavorite.filters?.search ?? '');
+      setCaseSensitive(existingFavorite.filters?.caseSensitive ?? false);
+      setIncludeMetadataState(existingFavorite.filters?.includeMetadata ?? false);
     } else {
       setName(defaultName);
       setClusterSpecific(true);
+      setClusterSelection(kubeconfigSelection);
+      setScope(viewType as 'cluster' | 'namespace');
+      setView(resolveViewId(viewLabel, viewType));
+      setSelectedNamespace(namespace);
+      setFilterText(filters.search);
+      setCaseSensitive(filters.caseSensitive);
+      setIncludeMetadataState(includeMetadata);
     }
     setShowDeleteConfirm(false);
-  }, [isOpen, existingFavorite, defaultName]);
+  }, [isOpen, existingFavorite, defaultName, kubeconfigSelection, viewType, viewLabel, namespace, filters, includeMetadata]);
 
-  // Keyboard context management.
+  // ----- Keyboard context management -----
   useEffect(() => {
     if (!isOpen) {
       if (contextPushedRef.current) {
@@ -123,16 +234,99 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     disabled: !isOpen || showDeleteConfirm,
   });
 
+  // ----- Dropdown options -----
+
+  // Cluster dropdown: all available kubeconfigs, formatted like KubeconfigSelector.
+  const clusterOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return kubeconfigs.map((kc) => {
+      const isFirstForFile = !seen.has(kc.name);
+      if (isFirstForFile) seen.add(kc.name);
+      return {
+        value: `${kc.path}:${kc.context}`,
+        label: `${kc.name} [${kc.context}]`,
+        metadata: {
+          isFirstForFile,
+          filename: kc.name,
+          context: kc.context,
+          isCurrentContext: kc.isCurrentContext,
+        },
+      };
+    });
+  }, [kubeconfigs]);
+
+  // View dropdown: depends on scope.
+  const viewOptions = scope === 'namespace' ? NAMESPACE_VIEWS : CLUSTER_VIEWS;
+
+  // Namespace dropdown: "All Namespaces" at top, then actual namespaces.
+  const namespaceOptions = useMemo(() => {
+    const opts = [{ value: 'All Namespaces', label: 'All Namespaces' }];
+    namespaces.forEach((ns) => {
+      // Skip the synthetic "All Namespaces" item already added above.
+      if (ns.isSynthetic) return;
+      opts.push({ value: ns.scope || ns.name, label: ns.name });
+    });
+    return opts;
+  }, [namespaces]);
+
+  // ----- Derived state -----
+
+  // When Type changes to "Any Cluster", clear cluster selection.
+  const handleTypeChange = (isClusterSpecific: boolean) => {
+    setClusterSpecific(isClusterSpecific);
+    if (!isClusterSpecific) {
+      setClusterSelection('');
+    } else if (!clusterSelection) {
+      // Restore the current kubeconfig selection when switching back.
+      setClusterSelection(kubeconfigSelection);
+    }
+  };
+
+  // When Scope changes, reset View to the first available view for that scope.
+  const handleScopeChange = (newScope: 'cluster' | 'namespace') => {
+    setScope(newScope);
+    const views = newScope === 'namespace' ? NAMESPACE_VIEWS : CLUSTER_VIEWS;
+    // Keep current view if it exists in the new scope.
+    const viewExists = views.some((v) => v.value === view);
+    if (!viewExists) {
+      setView(views[0].value);
+    }
+  };
+
+  // Detect whether Save should be enabled when editing.
+  const changesDetected = isEditing
+    ? hasFormChanges(
+        existingFavorite!,
+        name.trim() || defaultName,
+        clusterSpecific,
+        clusterSelection,
+        scope,
+        view,
+        selectedNamespace,
+        filterText,
+        caseSensitive,
+        includeMetadataState
+      )
+    : true;
+
+  // ----- Handlers -----
+
   const handleSave = () => {
     const fav: Favorite = {
       id: existingFavorite?.id ?? '',
       name: name.trim() || defaultName,
-      clusterSelection: clusterSpecific ? kubeconfigSelection : '',
-      viewType,
-      view: existingFavorite?.view ?? '',
-      namespace: existingFavorite?.namespace ?? namespace,
-      filters: { ...filters, includeMetadata },
-      tableState,
+      clusterSelection: clusterSpecific ? clusterSelection : '',
+      viewType: scope,
+      view,
+      namespace: scope === 'namespace' ? selectedNamespace : '',
+      filters: {
+        search: filterText,
+        kinds: existingFavorite?.filters?.kinds ?? filters.kinds ?? [],
+        namespaces: existingFavorite?.filters?.namespaces ?? filters.namespaces ?? [],
+        caseSensitive,
+        includeMetadata: includeMetadataState,
+      },
+      tableState: existingFavorite?.tableState ?? tableState,
       order: existingFavorite?.order ?? 0,
     };
     onSave(fav);
@@ -152,9 +346,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   };
 
   if (!isOpen) return null;
-
-  const hasFilterText = filters.search.trim().length > 0;
-  const scopeLabel = viewType === 'namespace' ? 'Namespaced' : 'Cluster';
 
   return createPortal(
     <>
@@ -177,7 +368,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
           </div>
 
           <div className="modal-content">
-            {/* Name field */}
+            {/* Name */}
             <div className="fav-save-field">
               <label className="fav-save-label" htmlFor="fav-name">Name</label>
               <input
@@ -190,8 +381,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                 autoCorrect="off"
                 spellCheck={false}
                 onKeyDown={(e) => {
-                  // Allow standard text editing shortcuts to reach the input
-                  // before the app's keyboard shortcut system intercepts them.
                   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
                     e.preventDefault();
                     (e.target as HTMLInputElement).select();
@@ -202,78 +391,151 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
               />
             </div>
 
-            {/* Cluster binding */}
+            {/* Type (cluster binding) */}
             <div className="fav-save-field">
-              <span className="fav-save-label">Cluster Binding</span>
+              <span className="fav-save-label">Type</span>
               <div className="fav-save-radios">
                 <label className="fav-save-radio">
                   <input
                     type="radio"
-                    name="cluster-binding"
-                    checked={clusterSpecific}
-                    onChange={() => setClusterSpecific(true)}
-                    data-fav-modal-focusable="true"
-                  />
-                  <span>Cluster-specific ({clusterName})</span>
-                </label>
-                <label className="fav-save-radio">
-                  <input
-                    type="radio"
-                    name="cluster-binding"
+                    name="cluster-type"
                     checked={!clusterSpecific}
-                    onChange={() => setClusterSpecific(false)}
+                    onChange={() => handleTypeChange(false)}
                     data-fav-modal-focusable="true"
                   />
                   <span>Any Cluster</span>
                 </label>
+                <label className="fav-save-radio">
+                  <input
+                    type="radio"
+                    name="cluster-type"
+                    checked={clusterSpecific}
+                    onChange={() => handleTypeChange(true)}
+                    data-fav-modal-focusable="true"
+                  />
+                  <span>Cluster-specific</span>
+                </label>
+                <Dropdown
+                  options={clusterOptions}
+                  value={clusterSelection}
+                  onChange={(val) => setClusterSelection(val as string)}
+                  placeholder="Select cluster..."
+                  disabled={!clusterSpecific}
+                  renderValue={(val) => {
+                    const match = clusterOptions.find((o) => o.value === val);
+                    return match?.metadata?.context ?? val;
+                  }}
+                  renderOption={(option) => (
+                    <div
+                      className={`kubeconfig-option${!option.metadata?.isFirstForFile ? ' no-filename' : ''}${option.metadata?.isCurrentContext ? ' current-context' : ''}`}
+                    >
+                      {option.metadata?.isFirstForFile && (
+                        <div className="kubeconfig-filename">{option.metadata.filename}</div>
+                      )}
+                      <div className="kubeconfig-context">
+                        <span className="kubeconfig-context-label">{option.metadata?.context}</span>
+                      </div>
+                    </div>
+                  )}
+                />
               </div>
             </div>
 
-            {/* Description of what's being bookmarked */}
-            <div className="fav-save-details">
-              <div className="fav-save-detail-row">
-                <span className="fav-save-detail-label">Cluster</span>
-                <span className="fav-save-detail-value">
-                  {clusterSpecific ? clusterName : 'Any'}
-                </span>
+            {/* Scope */}
+            <div className="fav-save-field">
+              <span className="fav-save-label">Scope</span>
+              <div className="fav-save-radios">
+                <label className="fav-save-radio">
+                  <input
+                    type="radio"
+                    name="scope"
+                    checked={scope === 'cluster'}
+                    onChange={() => handleScopeChange('cluster')}
+                    data-fav-modal-focusable="true"
+                  />
+                  <span>Cluster</span>
+                </label>
+                <label className="fav-save-radio">
+                  <input
+                    type="radio"
+                    name="scope"
+                    checked={scope === 'namespace'}
+                    onChange={() => handleScopeChange('namespace')}
+                    data-fav-modal-focusable="true"
+                  />
+                  <span>Namespaced</span>
+                </label>
+                <Dropdown
+                  options={namespaceOptions}
+                  value={selectedNamespace}
+                  onChange={(val) => setSelectedNamespace(val as string)}
+                  placeholder="Select namespace..."
+                  disabled={scope !== 'namespace'}
+                />
               </div>
-              <div className="fav-save-detail-row">
-                <span className="fav-save-detail-label">Scope</span>
-                <span className="fav-save-detail-value">{scopeLabel}</span>
-              </div>
-              <div className="fav-save-detail-row">
-                <span className="fav-save-detail-label">View</span>
-                <span className="fav-save-detail-value">{viewLabel}</span>
-              </div>
-              {namespace && viewType === 'namespace' && (
-                <div className="fav-save-detail-row">
-                  <span className="fav-save-detail-label">Namespace</span>
-                  <span className="fav-save-detail-value">{namespace}</span>
+            </div>
+
+            {/* View */}
+            <div className="fav-save-field">
+              <span className="fav-save-label">View</span>
+              <Dropdown
+                options={viewOptions}
+                value={view}
+                onChange={(val) => setView(val as string)}
+                placeholder="Select view..."
+              />
+            </div>
+
+            {/* Filters */}
+            <div className="fav-save-field">
+              <span className="fav-save-label">Filters</span>
+              <div className="fav-save-filters">
+                <div className="fav-save-filter-row">
+                  <label className="fav-save-filter-label" htmlFor="fav-filter-text">
+                    Filter Text
+                  </label>
+                  <input
+                    id="fav-filter-text"
+                    type="text"
+                    className="fav-save-input"
+                    value={filterText}
+                    onChange={(e) => setFilterText(e.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+                        e.preventDefault();
+                        (e.target as HTMLInputElement).select();
+                      }
+                    }}
+                    data-fav-modal-focusable="true"
+                  />
                 </div>
-              )}
-              <div className="fav-save-detail-row">
-                <span className="fav-save-detail-label">Filter Text</span>
-                <span className="fav-save-detail-value">
-                  {hasFilterText ? filters.search : '(none)'}
-                </span>
-              </div>
-              <div className="fav-save-detail-row">
-                <span className="fav-save-detail-label">Case-Sensitive</span>
-                <input
-                  type="checkbox"
-                  checked={filters.caseSensitive}
-                  disabled
-                  className="fav-save-checkbox"
-                />
-              </div>
-              <div className="fav-save-detail-row">
-                <span className="fav-save-detail-label">Include Metadata</span>
-                <input
-                  type="checkbox"
-                  checked={includeMetadata}
-                  disabled
-                  className="fav-save-checkbox"
-                />
+                <div className="fav-save-filter-row">
+                  <label className="fav-save-filter-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={caseSensitive}
+                      onChange={(e) => setCaseSensitive(e.target.checked)}
+                      className="fav-save-checkbox"
+                      data-fav-modal-focusable="true"
+                    />
+                    <span>Case-Sensitive</span>
+                  </label>
+                </div>
+                <div className="fav-save-filter-row">
+                  <label className="fav-save-filter-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={includeMetadataState}
+                      onChange={(e) => setIncludeMetadataState(e.target.checked)}
+                      className="fav-save-checkbox"
+                      data-fav-modal-focusable="true"
+                    />
+                    <span>Include Metadata</span>
+                  </label>
+                </div>
               </div>
             </div>
           </div>
@@ -299,6 +561,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
             <button
               className="modal-btn modal-btn-primary"
               onClick={handleSave}
+              disabled={isEditing && !changesDetected}
               data-fav-modal-focusable="true"
             >
               Save

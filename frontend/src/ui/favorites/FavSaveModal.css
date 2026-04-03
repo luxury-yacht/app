@@ -55,41 +55,62 @@
   margin: 0;
 }
 
-.fav-save-details {
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  padding: 0.75rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
-.fav-save-detail-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  font-size: 0.8rem;
-}
-
-.fav-save-detail-label {
-  color: var(--color-text-secondary);
-  flex-shrink: 0;
-}
-
-.fav-save-detail-value {
-  color: var(--color-text);
-  text-align: right;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .fav-save-checkbox {
   accent-color: var(--color-accent);
 }
 
 .fav-save-footer-spacer {
   flex: 1;
+}
+
+/* Filters section */
+
+.fav-save-filters {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.fav-save-filter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fav-save-filter-label {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin-bottom: 0.2rem;
+}
+
+.fav-save-filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.fav-save-filter-checkbox input[type="checkbox"] {
+  margin: 0;
+}
+
+/* Disabled Save button when no changes detected (editing mode) */
+
+.fav-save-modal .modal-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Ensure dropdowns within the modal fill available width */
+
+.fav-save-field > .dropdown {
+  width: 100%;
 }

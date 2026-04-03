@@ -238,16 +238,10 @@ export function useFavToggle(state: FavToggleState): { item: IconBarItem; modal:
       if (fav.id) {
         await updateFavorite(fav);
       } else {
-        // Fill in view/namespace from current state since the modal
-        // doesn't track these (they come from navigation context).
-        await addFavorite({
-          ...fav,
-          view: activeViewTab ?? '',
-          namespace: viewType === 'namespace' ? (selectedNamespace ?? '') : '',
-        });
+        await addFavorite(fav);
       }
     },
-    [addFavorite, updateFavorite, activeViewTab, viewType, selectedNamespace]
+    [addFavorite, updateFavorite]
   );
 
   const handleDelete = useCallback(
