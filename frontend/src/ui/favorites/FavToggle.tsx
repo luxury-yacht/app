@@ -31,6 +31,10 @@ export interface FavToggleState {
   sortDirection: 'asc' | 'desc';
   /** Current column visibility map. */
   columnVisibility: Record<string, boolean>;
+  /** Available kind values for the favorites modal kind filter dropdown. */
+  availableKinds?: string[];
+  /** Available namespace values for the favorites modal namespace filter dropdown. */
+  availableFilterNamespaces?: string[];
   /** Whether the persistence layer has finished hydrating. Restore waits for this. */
   hydrated?: boolean;
   /** Setters for restoring state from a pending favorite. */
@@ -285,6 +289,8 @@ export function useFavToggle(state: FavToggleState): {
         filters={currentFilters}
         tableState={currentTableState}
         includeMetadata={state.includeMetadata ?? false}
+        availableKinds={state.availableKinds}
+        availableFilterNamespaces={state.availableFilterNamespaces}
         onSave={handleSave}
         onDelete={handleDelete}
       />

@@ -43,3 +43,33 @@
   margin-top: 0.35rem;
   margin-left: 1.5rem;
 }
+
+/* Inline rows: label on left, controls on right. Shared by all sections. */
+.fav-save-modal .fav-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fav-save-modal .fav-inline-row > label {
+  flex: 0 0 7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.fav-save-modal .fav-inline-row > .dropdown {
+  flex: 1;
+  margin-top: 0;
+  margin-left: 0;
+  width: auto;
+}
+
+.fav-save-modal .fav-inline-row > .fav-save-input {
+  flex: 1;
+}
+
+/* Indented row for controls that align with the dropdown column above */
+.fav-save-modal .fav-inline-row-indented {
+  padding-left: calc(7rem + 0.5rem);
+}

@@ -198,6 +198,16 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       onChange: onSortChange,
     });
 
+    // Derive available kinds and namespaces from the data for the favorites modal dropdowns.
+    const availableKinds = useMemo(
+      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
+      [data]
+    );
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
+      [data]
+    );
+
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: sortConfig?.key ?? null,
@@ -207,6 +217,8 @@ const CustomViewGrid: React.FC<CustomViewProps> = React.memo(
       setSortConfig: onSortChange,
       setColumnVisibility,
       hydrated,
+      availableKinds,
+      availableFilterNamespaces,
     });
 
     const handleDeleteConfirm = useCallback(async () => {

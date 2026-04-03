@@ -80,6 +80,10 @@ export interface FavSaveModalProps {
   tableState: FavoriteTableState;
   /** Whether the include-metadata toggle is active. */
   includeMetadata: boolean;
+  /** Available kind values for the kind filter dropdown. */
+  availableKinds?: string[];
+  /** Available namespace values for the namespace filter dropdown. */
+  availableFilterNamespaces?: string[];
   /** Called to save (add or update) the favorite. */
   onSave: (fav: Favorite) => void;
   /** Called to delete the favorite (only when editing an existing one). */
@@ -103,6 +107,10 @@ const resolveViewId = (label: string, viewType: string): string => {
 };
 
 /** Compare current form state against an existing favorite to detect changes. */
+const arraysEqual = (a: string[], b: string[]): boolean =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
+
+/** Compare current form state against an existing favorite to detect changes. */
 const hasFormChanges = (
   existing: Favorite,
   name: string,
@@ -112,6 +120,8 @@ const hasFormChanges = (
   view: string,
   namespace: string,
   filterText: string,
+  filterKinds: string[],
+  filterNamespaces: string[],
   caseSensitive: boolean,
   includeMetadata: boolean
 ): boolean => {
@@ -124,6 +134,8 @@ const hasFormChanges = (
   if (scope === 'namespace' && namespace !== existing.namespace) return true;
   if (existing.filters) {
     if (filterText !== (existing.filters.search ?? '')) return true;
+    if (!arraysEqual(filterKinds, existing.filters.kinds ?? [])) return true;
+    if (!arraysEqual(filterNamespaces, existing.filters.namespaces ?? [])) return true;
     if (caseSensitive !== (existing.filters.caseSensitive ?? false)) return true;
     if (includeMetadata !== (existing.filters.includeMetadata ?? false)) return true;
   }
@@ -147,6 +159,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   filters,
   tableState,
   includeMetadata,
+  availableKinds,
+  availableFilterNamespaces,
   onSave,
   onDelete,
 }) => {
@@ -166,6 +180,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   const [namespaceView, setNamespaceView] = useState('browse');
   const [selectedNamespace, setSelectedNamespace] = useState(ALL_NAMESPACES_SCOPE);
   const [filterText, setFilterText] = useState('');
+  const [filterKinds, setFilterKinds] = useState<string[]>([]);
+  const [filterNamespaces, setFilterNamespaces] = useState<string[]>([]);
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [includeMetadataState, setIncludeMetadataState] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -185,6 +201,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       }
       setSelectedNamespace(existingFavorite.namespace || ALL_NAMESPACES_SCOPE);
       setFilterText(existingFavorite.filters?.search ?? '');
+      setFilterKinds(existingFavorite.filters?.kinds ?? []);
+      setFilterNamespaces(existingFavorite.filters?.namespaces ?? []);
       setCaseSensitive(existingFavorite.filters?.caseSensitive ?? false);
       setIncludeMetadataState(existingFavorite.filters?.includeMetadata ?? false);
     } else {
@@ -200,6 +218,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       }
       setSelectedNamespace(namespace || ALL_NAMESPACES_SCOPE);
       setFilterText(filters.search);
+      setFilterKinds(filters.kinds ?? []);
+      setFilterNamespaces(filters.namespaces ?? []);
       setCaseSensitive(filters.caseSensitive);
       setIncludeMetadataState(includeMetadata);
     }
@@ -289,6 +309,24 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     return opts;
   }, [namespaces]);
 
+  // Kind filter dropdown: merge available kinds with any saved kinds not in the list.
+  const kindDropdownOptions = useMemo(() => {
+    const all = new Set(availableKinds ?? []);
+    filterKinds.forEach((k) => all.add(k));
+    return Array.from(all)
+      .sort()
+      .map((k) => ({ value: k, label: k }));
+  }, [availableKinds, filterKinds]);
+
+  // Namespace filter dropdown: merge available filter namespaces with saved ones.
+  const nsFilterDropdownOptions = useMemo(() => {
+    const all = new Set(availableFilterNamespaces ?? []);
+    filterNamespaces.forEach((ns) => all.add(ns));
+    return Array.from(all)
+      .sort()
+      .map((ns) => ({ value: ns, label: ns }));
+  }, [availableFilterNamespaces, filterNamespaces]);
+
   // ----- Derived state -----
 
   // When Type changes to "Any Cluster", clear cluster selection.
@@ -320,6 +358,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
         activeView,
         selectedNamespace,
         filterText,
+        filterKinds,
+        filterNamespaces,
         caseSensitive,
         includeMetadataState
       )
@@ -337,8 +377,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       namespace: scope === 'namespace' ? selectedNamespace : '',
       filters: {
         search: filterText,
-        kinds: existingFavorite?.filters?.kinds ?? filters.kinds ?? [],
-        namespaces: existingFavorite?.filters?.namespaces ?? filters.namespaces ?? [],
+        kinds: filterKinds,
+        namespaces: filterNamespaces,
         caseSensitive,
         includeMetadata: includeMetadataState,
       },
@@ -413,9 +453,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
 
             {/* Type (cluster binding) */}
             <div className="settings-section">
-              <h3>Type</h3>
+              <h3>Scope</h3>
               <div className="settings-items">
-                <div className="setting-item">
+                <div className="setting-item fav-inline-row">
                   <label>
                     <input
                       type="radio"
@@ -424,10 +464,10 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                       onChange={() => handleTypeChange(false)}
                       data-fav-modal-focusable="true"
                     />
-                    Any Cluster
+                    Any
                   </label>
                 </div>
-                <div className="setting-item">
+                <div className="setting-item fav-inline-row">
                   <label>
                     <input
                       type="radio"
@@ -436,7 +476,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                       onChange={() => handleTypeChange(true)}
                       data-fav-modal-focusable="true"
                     />
-                    Cluster-specific
+                    Cluster
                   </label>
                   <Dropdown
                     options={clusterOptions}
@@ -472,7 +512,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
             <div className="settings-section">
               <h3>View</h3>
               <div className="settings-items">
-                <div className="setting-item">
+                <div className="setting-item fav-inline-row">
                   <label>
                     <input
                       type="radio"
@@ -491,7 +531,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     disabled={scope !== 'cluster'}
                   />
                 </div>
-                <div className="setting-item">
+                <div className="setting-item fav-inline-row">
                   <label>
                     <input
                       type="radio"
@@ -509,6 +549,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     placeholder="Select view..."
                     disabled={scope !== 'namespace'}
                   />
+                </div>
+                <div className="setting-item fav-inline-row fav-inline-row-indented">
                   <Dropdown
                     options={namespaceOptions}
                     value={selectedNamespace}
@@ -523,7 +565,31 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
             <div className="settings-section">
               <h3>Filters</h3>
               <div className="settings-items">
-                <div className="setting-item">
+                {kindDropdownOptions.length > 0 && (
+                  <div className="setting-item fav-inline-row">
+                    <label>Kinds</label>
+                    <Dropdown
+                      options={kindDropdownOptions}
+                      value={filterKinds}
+                      onChange={(val) => setFilterKinds(Array.isArray(val) ? val : val ? [val] : [])}
+                      placeholder="All kinds"
+                      multiple
+                    />
+                  </div>
+                )}
+                {nsFilterDropdownOptions.length > 0 && (
+                  <div className="setting-item fav-inline-row">
+                    <label>Namespaces</label>
+                    <Dropdown
+                      options={nsFilterDropdownOptions}
+                      value={filterNamespaces}
+                      onChange={(val) => setFilterNamespaces(Array.isArray(val) ? val : val ? [val] : [])}
+                      placeholder="All namespaces"
+                      multiple
+                    />
+                  </div>
+                )}
+                <div className="setting-item fav-inline-row">
                   <label htmlFor="fav-filter-text">Filter Text</label>
                   <input
                     id="fav-filter-text"
