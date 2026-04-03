@@ -11,7 +11,7 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useFavorites } from '@core/contexts/FavoritesContext';
 import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
-import { FavoriteGenericIcon, FavoritePinIcon } from '@shared/components/icons/MenuIcons';
+import { FavoriteGenericIcon, FavoritePinIcon, SettingsIcon, CollapseSidebarIcon, ExpandSidebarIcon, LogsIcon, ThemeIcon } from '@shared/components/icons/MenuIcons';
 import { useTheme } from '@core/contexts/ThemeContext';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { refreshOrchestrator, useAutoRefresh } from '@/core/refresh';
@@ -109,6 +109,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'open-settings',
         label: 'Settings',
+        icon: <SettingsIcon width={16} height={16} />,
         description: 'Open application settings',
         category: 'Application',
         action: () => {
@@ -119,14 +120,15 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'toggle-sidebar',
-        label: 'Show/Hide Sidebar',
-        description: 'Show or hide the sidebar',
+        label: viewState.isSidebarVisible ? 'Hide Sidebar' : 'Show Sidebar',
+        icon: viewState.isSidebarVisible ? <CollapseSidebarIcon width={16} height={16} /> : <ExpandSidebarIcon width={16} height={16} />,
+        description: viewState.isSidebarVisible ? 'Hide the sidebar' : 'Show the sidebar',
         category: 'Application',
         action: () => {
           viewState.toggleSidebar();
         },
         keywords: ['sidebar', 'toggle', 'hide', 'show'],
-        shortcut: 'B',
+        shortcut: isMacPlatform() ? ['⌘', 'B'] : ['Ctrl', 'B'],
       },
       {
         id: 'open-object-diff',
@@ -142,6 +144,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'toggle-application-logs',
         label: 'Application Logs Panel',
+        icon: <LogsIcon width={16} height={16} />,
         description: 'Toggle application logs',
         category: 'Application',
         action: () => {
@@ -231,6 +234,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'theme-light',
         label: 'Theme - Light',
+        icon: <ThemeIcon width={16} height={16} />,
         description: `Switch to light theme${theme === 'light' ? ' (current)' : ''}`,
         category: 'Settings',
         action: async () => {
@@ -245,6 +249,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'theme-dark',
         label: 'Theme - Dark',
+        icon: <ThemeIcon width={16} height={16} />,
         description: `Switch to dark theme${theme === 'dark' ? ' (current)' : ''}`,
         category: 'Settings',
         action: async () => {
@@ -259,6 +264,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'theme-system',
         label: 'Theme - System',
+        icon: <ThemeIcon width={16} height={16} />,
         description: `Use system theme preference${theme === 'system' ? ' (current)' : ''}`,
         category: 'Settings',
         action: async () => {
