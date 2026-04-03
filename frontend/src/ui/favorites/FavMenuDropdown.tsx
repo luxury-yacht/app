@@ -7,7 +7,11 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { FavoriteOutlineIcon } from '@shared/components/icons/MenuIcons';
+import {
+  FavoriteFilledIcon,
+  FavoriteGenericIcon,
+  FavoritePinIcon,
+} from '@shared/components/icons/MenuIcons';
 import { useFavorites } from '@core/contexts/FavoritesContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
@@ -18,51 +22,14 @@ import { navigateToFavorite } from './navigateToFavorite';
 import './FavMenuDropdown.css';
 
 // ---------------------------------------------------------------------------
-// Inline SVG icons — small type indicators and hover-action icons.
-// Sourced from the FavoritesPrototypes reference component.
+// Inline SVG icons — hover-action icons.
 // ---------------------------------------------------------------------------
-
-function GenericIcon({ width = 14, height = 14 }: { width?: number; height?: number }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      width={width}
-      height={height}
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeDasharray="4 3"
-      />
-    </svg>
-  );
-}
-
-function PinIcon({ width = 14, height = 14 }: { width?: number; height?: number }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      width={width}
-      height={height}
-    >
-      <path d="M17 4a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2.5L5.5 8 4 9.5V12h7v8l1 1 1-1v-8h7V9.5L18.5 8 17 6.5V4z" />
-    </svg>
-  );
-}
 
 /** Returns a dashed-circle for generic favorites or a pin for cluster-specific ones. */
 function TypeIcon({ clusterSelection }: { clusterSelection: string }) {
   return (
     <span className="fav-dropdown-type-icon">
-      {clusterSelection ? <PinIcon /> : <GenericIcon />}
+      {clusterSelection ? <FavoritePinIcon /> : <FavoriteGenericIcon />}
     </span>
   );
 }
@@ -97,47 +64,15 @@ function ChevronDownIcon() {
   );
 }
 
-function PencilIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      width={13}
-      height={13}
-    >
-      <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      width={13}
-      height={13}
-    >
-      <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
-    </svg>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
 
 const FavMenuDropdown: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
   const anchorRef = useRef<HTMLDivElement>(null);
-  const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const { favorites, updateFavorite, deleteFavorite, reorderFavorites, setPendingFavorite } =
-    useFavorites();
+  const { favorites, reorderFavorites, setPendingFavorite } = useFavorites();
   const kubeconfigCtx = useKubeconfig();
   const viewState = useViewState();
   const namespaceCtx = useNamespace();
@@ -149,7 +84,6 @@ const FavMenuDropdown: React.FC = () => {
     const handleClickOutside = (e: MouseEvent) => {
       if (anchorRef.current && !anchorRef.current.contains(e.target as Node)) {
         setIsOpen(false);
-        setRenamingId(null);
       }
     };
 
@@ -157,45 +91,8 @@ const FavMenuDropdown: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  // Focus the rename input when entering rename mode.
-  useEffect(() => {
-    if (renamingId && renameInputRef.current) {
-      renameInputRef.current.focus();
-      renameInputRef.current.select();
-    }
-  }, [renamingId]);
-
-  const toggleOpen = useCallback(() => {
-    setIsOpen((prev) => !prev);
-    setRenamingId(null);
-  }, []);
-
-  const closeDropdown = useCallback(() => {
-    setIsOpen(false);
-    setRenamingId(null);
-  }, []);
-
-  // -- Rename --
-
-  const startRename = useCallback((fav: Favorite) => {
-    setRenamingId(fav.id);
-    setRenameValue(fav.name);
-  }, []);
-
-  const commitRename = useCallback(
-    async (fav: Favorite) => {
-      const trimmed = renameValue.trim();
-      if (trimmed && trimmed !== fav.name) {
-        await updateFavorite({ ...fav, name: trimmed });
-      }
-      setRenamingId(null);
-    },
-    [renameValue, updateFavorite]
-  );
-
-  const cancelRename = useCallback(() => {
-    setRenamingId(null);
-  }, []);
+  const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
+  const closeDropdown = useCallback(() => setIsOpen(false), []);
 
   // -- Reorder --
 
@@ -217,15 +114,6 @@ const FavMenuDropdown: React.FC = () => {
       await reorderFavorites(ids);
     },
     [favorites, reorderFavorites]
-  );
-
-  // -- Delete --
-
-  const handleDelete = useCallback(
-    async (id: string) => {
-      await deleteFavorite(id);
-    },
-    [deleteFavorite]
   );
 
   // -- Navigate --
@@ -276,7 +164,7 @@ const FavMenuDropdown: React.FC = () => {
         title="Favorites"
         aria-label="Favorites"
       >
-        <FavoriteOutlineIcon width={18} height={18} />
+        <FavoriteFilledIcon width={18} height={18} />
       </button>
 
       {isOpen && (
@@ -289,46 +177,19 @@ const FavMenuDropdown: React.FC = () => {
               </div>
             ) : (
               favorites.map((fav, idx) => {
-                const isActive = false;
                 const disabled = isDisabled(fav);
-                const isRenaming = renamingId === fav.id;
 
                 return (
                   <div
                     key={fav.id}
-                    className={
-                      'fav-dropdown-row' +
-                      (isActive ? ' active' : '') +
-                      (disabled ? ' disabled' : '') +
-                      (isRenaming ? ' renaming' : '')
-                    }
+                    className={'fav-dropdown-row' + (disabled ? ' disabled' : '')}
                     role="menuitem"
                     onClick={() => {
-                      if (!disabled && !isRenaming) handleNavigate(fav);
-                    }}
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      if (!disabled) startRename(fav);
+                      if (!disabled) handleNavigate(fav);
                     }}
                   >
                     <TypeIcon clusterSelection={fav.clusterSelection} />
-
-                    {isRenaming ? (
-                      <input
-                        ref={renameInputRef}
-                        className="fav-dropdown-rename-input"
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') void commitRename(fav);
-                          if (e.key === 'Escape') cancelRename();
-                        }}
-                        onBlur={() => void commitRename(fav)}
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    ) : (
-                      <span className="fav-dropdown-name">{fav.name}</span>
-                    )}
+                    <span className="fav-dropdown-name">{fav.name}</span>
 
                     <span className="fav-dropdown-hover-actions">
                       <button
@@ -351,26 +212,6 @@ const FavMenuDropdown: React.FC = () => {
                       >
                         <ChevronDownIcon />
                       </button>
-                      <button
-                        className="fav-dropdown-action-btn"
-                        title="Rename"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startRename(fav);
-                        }}
-                      >
-                        <PencilIcon />
-                      </button>
-                      <button
-                        className="fav-dropdown-action-btn"
-                        title="Delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleDelete(fav.id);
-                        }}
-                      >
-                        <TrashIcon />
-                      </button>
                     </span>
                   </div>
                 );
@@ -381,10 +222,10 @@ const FavMenuDropdown: React.FC = () => {
           {/* Footer legend */}
           <div className="fav-dropdown-footer">
             <span className="fav-dropdown-footer-item">
-              <GenericIcon width={10} height={10} /> any cluster
+              <FavoriteGenericIcon width={10} height={10} /> any cluster
             </span>
             <span className="fav-dropdown-footer-item">
-              <PinIcon width={10} height={10} /> pinned to cluster
+              <FavoritePinIcon width={10} height={10} /> pinned to cluster
             </span>
           </div>
         </div>

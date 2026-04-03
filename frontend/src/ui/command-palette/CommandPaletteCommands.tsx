@@ -11,6 +11,7 @@ import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useFavorites } from '@core/contexts/FavoritesContext';
 import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
+import { FavoriteGenericIcon, FavoritePinIcon } from '@shared/components/icons/MenuIcons';
 import { useTheme } from '@core/contexts/ThemeContext';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { refreshOrchestrator, useAutoRefresh } from '@/core/refresh';
@@ -27,7 +28,7 @@ export interface Command {
   label: string;
   renderLabel?: ReactNode;
   description?: string;
-  icon?: string;
+  icon?: ReactNode;
   category?: string;
   action: () => void;
   keywords?: string[];
@@ -566,7 +567,7 @@ export function useCommandPaletteCommands() {
       favorites.map((fav) => ({
         id: `fav-${fav.id}`,
         label: fav.name,
-        icon: fav.clusterSelection ? '📌' : '⭕',
+        icon: fav.clusterSelection ? <FavoritePinIcon width={16} height={16} /> : <FavoriteGenericIcon width={16} height={16} />,
         category: 'Favorites',
         action: () => {
           navigateToFavorite(fav, {

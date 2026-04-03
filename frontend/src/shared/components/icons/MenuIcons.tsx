@@ -571,3 +571,33 @@ export const FavoriteFilledIcon: React.FC<IconProps> = ({
     <path d="M22.5 4c-2 0-3.9.8-5.3 2.2L16 7.4l-1.1-1.1c-2.9-3-7.7-3-10.6-.1l-.1.1c-3 3-3 7.8 0 10.8L16 29l11.8-11.9c3-3 3-7.8 0-10.8C26.4 4.8 24.5 4 22.5 4" />
   </svg>
 );
+
+export const FavoriteGenericIcon: React.FC<IconProps> = ({
+  width = 14,
+  height = 14,
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    width={width}
+    height={height}
+  >
+    <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="2" strokeDasharray="4 3" />
+  </svg>
+);
+
+export const FavoritePinIcon: React.FC<IconProps> = ({
+  width = 14,
+  height = 14,
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    width={width}
+    height={height}
+  >
+    <path d="M17 4a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v2.5L5.5 8 4 9.5V12h7v8l1 1 1-1v-8h7V9.5L18.5 8 17 6.5V4z" />
+  </svg>
+);

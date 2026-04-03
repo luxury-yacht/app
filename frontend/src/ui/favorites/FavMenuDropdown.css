@@ -116,20 +116,6 @@
   white-space: nowrap;
 }
 
-/* Inline rename input */
-
-.fav-dropdown-rename-input {
-  flex: 1;
-  font-size: 0.8rem;
-  color: var(--color-text);
-  background: var(--color-bg);
-  border: 1px solid var(--color-accent);
-  border-radius: 3px;
-  padding: 0 0.25rem;
-  outline: none;
-  min-width: 0;
-}
-
 /* Hover actions overlay */
 
 .fav-dropdown-hover-actions {
@@ -145,11 +131,6 @@
 
 .fav-dropdown-row:hover .fav-dropdown-hover-actions {
   display: flex;
-}
-
-/* Prevent hover actions from showing when row is in rename mode */
-.fav-dropdown-row.renaming:hover .fav-dropdown-hover-actions {
-  display: none;
 }
 
 /* Action button */

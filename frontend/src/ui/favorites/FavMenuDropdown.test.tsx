@@ -335,12 +335,10 @@ describe('FavMenuDropdown', () => {
     expect(actions).toBeTruthy();
 
     const buttons = actions!.querySelectorAll('button');
-    // 4 action buttons: up, down, rename, delete
-    expect(buttons.length).toBe(4);
+    // 2 action buttons: up, down
+    expect(buttons.length).toBe(2);
     expect(buttons[0].title).toBe('Move up');
     expect(buttons[1].title).toBe('Move down');
-    expect(buttons[2].title).toBe('Rename');
-    expect(buttons[3].title).toBe('Delete');
   });
 
   // -----------------------------------------------------------------------
@@ -355,28 +353,6 @@ describe('FavMenuDropdown', () => {
     expect(footer).toBeTruthy();
     expect(footer!.textContent).toContain('any cluster');
     expect(footer!.textContent).toContain('pinned to cluster');
-  });
-
-  // -----------------------------------------------------------------------
-  // 7. Delete action calls deleteFavorite
-  // -----------------------------------------------------------------------
-
-  it('delete action calls deleteFavorite', async () => {
-    mockFavorites.push(makeFavorite({ id: 'fav-1', name: 'My Pods' }));
-
-    await renderComponent();
-    await clickButton();
-
-    const actions = container.querySelector('.fav-dropdown-hover-actions');
-    const deleteBtn = actions!.querySelector<HTMLButtonElement>('button[title="Delete"]');
-    expect(deleteBtn).toBeTruthy();
-
-    await act(async () => {
-      deleteBtn!.click();
-      await Promise.resolve();
-    });
-
-    expect(mockDeleteFavorite).toHaveBeenCalledWith('fav-1');
   });
 
   // -----------------------------------------------------------------------
