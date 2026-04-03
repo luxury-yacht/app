@@ -16,15 +16,11 @@ import {
   setFavoriteOrder,
   subscribeFavorites,
 } from '@/core/persistence/favorites';
-import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
-import { useViewState } from '@core/contexts/ViewStateContext';
-import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 
 // ---------- Types ----------
 
 interface FavoritesContextType {
   favorites: Favorite[];
-  currentFavoriteMatch: Favorite | null;
   addFavorite: (fav: Favorite) => Promise<Favorite>;
   updateFavorite: (fav: Favorite) => Promise<void>;
   deleteFavorite: (id: string) => Promise<void>;
@@ -58,9 +54,6 @@ interface FavoritesProviderProps {
 export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }) => {
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [pendingFavorite, setPendingFavorite] = useState<Favorite | null>(null);
-  const { selectedKubeconfig } = useKubeconfig();
-  const { viewType, activeNamespaceTab, activeClusterTab } = useViewState();
-  const { selectedNamespace } = useNamespace();
 
   // Hydrate the favorites cache from the backend on mount.
   useEffect(() => {
@@ -82,32 +75,6 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
       setFavorites(favs);
     });
   }, []);
-
-  // Determine the active view tab based on the current view type.
-  const activeViewTab = viewType === 'namespace' ? activeNamespaceTab : activeClusterTab;
-
-  // Compute `currentFavoriteMatch` — the first favorite whose saved navigation
-  // state matches the user's current cluster, view, tab, and namespace.
-  const currentFavoriteMatch = useMemo<Favorite | null>(() => {
-    for (const fav of favorites) {
-      // Cluster match: if a favorite is cluster-specific, it must match
-      // the active kubeconfig; a generic favorite (empty clusterSelection)
-      // matches any cluster.
-      const clusterMatches =
-        fav.clusterSelection === '' || selectedKubeconfig === fav.clusterSelection;
-      if (!clusterMatches) continue;
-
-      if (viewType !== fav.viewType) continue;
-
-      if (activeViewTab !== fav.view) continue;
-
-      // For namespace views, the selected namespace must also match.
-      if (viewType === 'namespace' && selectedNamespace !== fav.namespace) continue;
-
-      return fav;
-    }
-    return null;
-  }, [favorites, selectedKubeconfig, viewType, activeViewTab, selectedNamespace]);
 
   // ---------- Mutation callbacks ----------
 
@@ -132,7 +99,6 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
   const value = useMemo<FavoritesContextType>(
     () => ({
       favorites,
-      currentFavoriteMatch,
       addFavorite: handleAddFavorite,
       updateFavorite: handleUpdateFavorite,
       deleteFavorite: handleDeleteFavorite,
@@ -142,7 +108,6 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
     }),
     [
       favorites,
-      currentFavoriteMatch,
       handleAddFavorite,
       handleUpdateFavorite,
       handleDeleteFavorite,

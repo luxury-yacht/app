@@ -50,6 +50,11 @@ const runtimeProxy = new Proxy(
     gridTablePersistenceMode: 'shared',
     defaultObjectPanelPosition: 'right',
   }),
+  GetFavorites: () => Promise.resolve([]),
+  AddFavorite: (fav: unknown) => Promise.resolve({ ...(fav as Record<string, unknown>), id: String(Date.now()) }),
+  UpdateFavorite: () => Promise.resolve(),
+  DeleteFavorite: () => Promise.resolve(),
+  SetFavoriteOrder: () => Promise.resolve(),
 } as Record<string, (...args: unknown[]) => unknown>;
 
 // Nested proxy for window.go.backend.App.* — returns async noOp for Go RPCs

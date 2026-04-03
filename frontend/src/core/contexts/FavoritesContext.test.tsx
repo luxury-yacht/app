@@ -162,70 +162,7 @@ describe('FavoritesContext', () => {
     expect(stateRef.current?.favorites).toEqual(favorites);
   });
 
-  it('returns null for currentFavoriteMatch when no favorite matches', async () => {
-    const favorites = [
-      makeFavorite({
-        id: 'fav-1',
-        clusterSelection: '/other/kubeconfig:other-context',
-        viewType: 'namespace',
-        view: 'workloads',
-        namespace: 'default',
-      }),
-    ];
-    persistenceMocks.hydrateFavorites.mockResolvedValue(favorites);
-
-    await renderProvider();
-
-    // The favorite has a different clusterSelection than the mock kubeconfig
-    expect(stateRef.current?.currentFavoriteMatch).toBeNull();
-  });
-
-  it('returns matching favorite for a cluster-specific favorite', async () => {
-    const matchingFav = makeFavorite({
-      id: 'fav-match',
-      clusterSelection: '/path/to/kubeconfig:my-context',
-      viewType: 'namespace',
-      view: 'workloads',
-      namespace: 'default',
-    });
-    persistenceMocks.hydrateFavorites.mockResolvedValue([matchingFav]);
-
-    await renderProvider();
-
-    expect(stateRef.current?.currentFavoriteMatch).toEqual(matchingFav);
-  });
-
-  it('returns matching favorite for a generic favorite (empty clusterSelection)', async () => {
-    // A generic favorite should match any cluster.
-    const genericFav = makeFavorite({
-      id: 'fav-generic',
-      clusterSelection: '',
-      viewType: 'namespace',
-      view: 'workloads',
-      namespace: 'default',
-    });
-    persistenceMocks.hydrateFavorites.mockResolvedValue([genericFav]);
-
-    await renderProvider();
-
-    expect(stateRef.current?.currentFavoriteMatch).toEqual(genericFav);
-  });
-
-  it('matches cluster-view favorites using activeClusterTab', async () => {
-    mockViewType = 'cluster';
-    mockActiveClusterTab = 'nodes';
-
-    const clusterFav = makeFavorite({
-      id: 'fav-cluster',
-      clusterSelection: '/path/to/kubeconfig:my-context',
-      viewType: 'cluster',
-      view: 'nodes',
-      namespace: '',
-    });
-    persistenceMocks.hydrateFavorites.mockResolvedValue([clusterFav]);
-
-    await renderProvider();
-
-    expect(stateRef.current?.currentFavoriteMatch).toEqual(clusterFav);
-  });
+  // Note: currentFavoriteMatch was moved from FavoritesContext to useFavToggle
+  // so that filter state can be included in the match. Tests for matching
+  // logic are in FavToggle.test.tsx.
 });

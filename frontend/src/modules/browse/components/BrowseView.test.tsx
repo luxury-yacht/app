@@ -14,7 +14,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
     favorites: [],
-    currentFavoriteMatch: null,
+
     addFavorite: vi.fn(),
     updateFavorite: vi.fn(),
     deleteFavorite: vi.fn(),

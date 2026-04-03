@@ -33,7 +33,7 @@ const {
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
     favorites: [],
-    currentFavoriteMatch: null,
+
     addFavorite: vi.fn(),
     updateFavorite: vi.fn(),
     deleteFavorite: vi.fn(),

@@ -17,6 +17,7 @@ import { KeyboardProvider } from '@ui/shortcuts';
 import { ConnectionStatusProvider } from '@/core/connection/connectionStatus';
 import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
+import { FavoritesProvider } from '@core/contexts/FavoritesContext';
 import { DockablePanelProvider } from '@ui/dockable';
 
 let mountCounter = 0;
@@ -34,11 +35,13 @@ export const SidebarProvidersDecorator: Decorator = (Story) => {
           <ConnectionStatusProvider>
             <AuthErrorProvider>
               <KubernetesProvider>
+                <FavoritesProvider>
                 <DockablePanelProvider>
                   <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
                     <Story />
                   </div>
                 </DockablePanelProvider>
+                </FavoritesProvider>
               </KubernetesProvider>
             </AuthErrorProvider>
           </ConnectionStatusProvider>

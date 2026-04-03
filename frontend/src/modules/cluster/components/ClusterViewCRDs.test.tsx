@@ -13,7 +13,7 @@ import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
     favorites: [],
-    currentFavoriteMatch: null,
+
     addFavorite: vi.fn(),
     updateFavorite: vi.fn(),
     deleteFavorite: vi.fn(),

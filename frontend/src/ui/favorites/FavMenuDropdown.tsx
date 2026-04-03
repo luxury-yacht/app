@@ -12,6 +12,7 @@ import { useFavorites } from '@core/contexts/FavoritesContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { isAllNamespaces } from '@modules/namespace/constants';
 import type { Favorite } from '@/core/persistence/favorites';
 import { navigateToFavorite } from './navigateToFavorite';
 import './FavMenuDropdown.css';
@@ -135,14 +136,8 @@ const FavMenuDropdown: React.FC = () => {
   const anchorRef = useRef<HTMLDivElement>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  const {
-    favorites,
-    currentFavoriteMatch,
-    updateFavorite,
-    deleteFavorite,
-    reorderFavorites,
-    setPendingFavorite,
-  } = useFavorites();
+  const { favorites, updateFavorite, deleteFavorite, reorderFavorites, setPendingFavorite } =
+    useFavorites();
   const kubeconfigCtx = useKubeconfig();
   const viewState = useViewState();
   const namespaceCtx = useNamespace();
@@ -263,9 +258,10 @@ const FavMenuDropdown: React.FC = () => {
     (fav: Favorite): boolean => {
       if (fav.clusterSelection !== '') return false;
       if (fav.viewType !== 'namespace' || !fav.namespace) return false;
-      // Access the namespace list from context to check availability.
+      // The synthetic "All Namespaces" scope is always available.
+      if (isAllNamespaces(fav.namespace)) return false;
       const ns = namespaceCtx.namespaces;
-      return ns.length > 0 && !ns.some((n) => n.name === fav.namespace);
+      return ns.length > 0 && !ns.some((n) => n.scope === fav.namespace || n.name === fav.namespace);
     },
     [namespaceCtx.namespaces]
   );
@@ -291,7 +287,7 @@ const FavMenuDropdown: React.FC = () => {
               </div>
             ) : (
               favorites.map((fav, idx) => {
-                const isActive = currentFavoriteMatch?.id === fav.id;
+                const isActive = false;
                 const disabled = isDisabled(fav);
                 const isRenaming = renamingId === fav.id;
 

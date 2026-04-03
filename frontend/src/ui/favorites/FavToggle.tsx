@@ -184,7 +184,7 @@ const PopoverItem: React.FC<PopoverItemProps> = ({ label, onClick }) => (
  */
 export function useFavToggle(state: FavToggleState): IconBarItem {
   const {
-    currentFavoriteMatch,
+    favorites,
     addFavorite,
     updateFavorite,
     deleteFavorite,
@@ -194,6 +194,53 @@ export function useFavToggle(state: FavToggleState): IconBarItem {
   const { selectedKubeconfig, selectedClusterName } = useKubeconfig();
   const { viewType, activeNamespaceTab, activeClusterTab } = useViewState();
   const { selectedNamespace } = useNamespace();
+
+  // Derive the active view tab.
+  const activeViewTab = viewType === 'namespace' ? activeNamespaceTab : activeClusterTab;
+
+  // Match the current view + filter state against saved favorites.
+  // Includes filter comparison so multiple favorites on the same view
+  // with different filters are treated as distinct entries.
+  const currentFavoriteMatch = useMemo<Favorite | null>(() => {
+    for (const fav of favorites) {
+      const clusterMatches =
+        fav.clusterSelection === '' || selectedKubeconfig === fav.clusterSelection;
+      if (!clusterMatches) continue;
+      if (viewType !== fav.viewType) continue;
+      if (activeViewTab !== fav.view) continue;
+      if (viewType === 'namespace' && selectedNamespace !== fav.namespace) continue;
+
+      // Compare filters: search text, kinds, namespaces, caseSensitive, includeMetadata.
+      if (fav.filters) {
+        const search = state.filters.search.trim();
+        const favSearch = (fav.filters.search ?? '').trim();
+        if (search !== favSearch) continue;
+
+        const kinds = [...state.filters.kinds].sort().join(',');
+        const favKinds = [...(fav.filters.kinds ?? [])].sort().join(',');
+        if (kinds !== favKinds) continue;
+
+        const ns = [...state.filters.namespaces].sort().join(',');
+        const favNs = [...(fav.filters.namespaces ?? [])].sort().join(',');
+        if (ns !== favNs) continue;
+
+        if ((state.filters.caseSensitive ?? false) !== (fav.filters.caseSensitive ?? false))
+          continue;
+        if ((state.includeMetadata ?? false) !== (fav.filters.includeMetadata ?? false)) continue;
+      }
+
+      return fav;
+    }
+    return null;
+  }, [
+    favorites,
+    selectedKubeconfig,
+    viewType,
+    activeViewTab,
+    selectedNamespace,
+    state.filters,
+    state.includeMetadata,
+  ]);
 
   // Restore filter/table state from a pending favorite when it matches this view.
   // Waits for the persistence layer to finish hydrating so the restore isn't
@@ -242,9 +289,6 @@ export function useFavToggle(state: FavToggleState): IconBarItem {
   const anchorRef = useRef<HTMLElement | null>(null);
 
   const isFavorited = currentFavoriteMatch != null;
-
-  // Derive the active view tab (used for building the Favorite payload).
-  const activeViewTab = viewType === 'namespace' ? activeNamespaceTab : activeClusterTab;
 
   // Build a human-readable display label for the view tab.
   const viewLabel = useMemo(() => {

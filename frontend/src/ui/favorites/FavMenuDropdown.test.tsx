@@ -16,7 +16,6 @@ import type { Favorite } from '@/core/persistence/favorites';
 // ---------------------------------------------------------------------------
 
 const mockFavorites: Favorite[] = [];
-const mockCurrentFavoriteMatch: Favorite | null = null;
 const mockUpdateFavorite = vi.fn().mockResolvedValue(undefined);
 const mockDeleteFavorite = vi.fn().mockResolvedValue(undefined);
 const mockReorderFavorites = vi.fn().mockResolvedValue(undefined);
@@ -25,7 +24,6 @@ const mockAddFavorite = vi.fn().mockResolvedValue(undefined);
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
     favorites: mockFavorites,
-    currentFavoriteMatch: mockCurrentFavoriteMatch,
     addFavorite: mockAddFavorite,
     updateFavorite: mockUpdateFavorite,
     deleteFavorite: mockDeleteFavorite,

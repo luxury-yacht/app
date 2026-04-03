@@ -1689,7 +1689,7 @@ function Settings({ onClose }: SettingsProps) {
       <ConfirmationModal
         isOpen={isClearStateConfirmOpen}
         title="Factory Reset"
-        message="This will clear all saved state and restart the app. Are you sure?"
+        message="⚠️ This will clear ALL saved state (preferences, favorites, view settings, etc.) and restart the app. Are you sure?"
         confirmText="Confirm"
         confirmButtonClass="danger"
         onConfirm={handleClearAllState}

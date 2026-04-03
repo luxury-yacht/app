@@ -15,19 +15,20 @@ import type { Favorite } from '@/core/persistence/favorites';
 // Mocks — declared before importing the hook under test.
 // ---------------------------------------------------------------------------
 
-let mockCurrentFavoriteMatch: Favorite | null = null;
+let mockFavorites: Favorite[] = [];
 const mockAddFavorite = vi.fn().mockResolvedValue({ id: 'new-fav' });
 const mockUpdateFavorite = vi.fn().mockResolvedValue(undefined);
 const mockDeleteFavorite = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@core/contexts/FavoritesContext', () => ({
   useFavorites: () => ({
-    favorites: [],
-    currentFavoriteMatch: mockCurrentFavoriteMatch,
+    favorites: mockFavorites,
     addFavorite: mockAddFavorite,
     updateFavorite: mockUpdateFavorite,
     deleteFavorite: mockDeleteFavorite,
     reorderFavorites: vi.fn().mockResolvedValue(undefined),
+    pendingFavorite: null,
+    setPendingFavorite: vi.fn(),
   }),
 }));
 
@@ -115,7 +116,7 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
   viewType: 'namespace',
   view: 'pods',
   namespace: 'default',
-  filters: null,
+  filters: { search: '', kinds: [], namespaces: [], caseSensitive: false, includeMetadata: false },
   tableState: null,
   order: 0,
   ...overrides,
@@ -181,7 +182,7 @@ describe('useFavToggle', () => {
   });
 
   beforeEach(() => {
-    mockCurrentFavoriteMatch = null;
+    mockFavorites = [];
     mockAddFavorite.mockClear();
     mockUpdateFavorite.mockClear();
     mockDeleteFavorite.mockClear();
@@ -203,7 +204,7 @@ describe('useFavToggle', () => {
   // -------------------------------------------------------------------------
 
   it('returns outline heart when not favorited', async () => {
-    mockCurrentFavoriteMatch = null;
+    mockFavorites = [];
 
     await renderHook();
 
@@ -218,7 +219,7 @@ describe('useFavToggle', () => {
   // -------------------------------------------------------------------------
 
   it('returns filled heart when favorited', async () => {
-    mockCurrentFavoriteMatch = makeFavorite();
+    mockFavorites = [makeFavorite()];
 
     await renderHook();
 
@@ -233,7 +234,7 @@ describe('useFavToggle', () => {
   // -------------------------------------------------------------------------
 
   it('click when not favorited shows add popover choices', async () => {
-    mockCurrentFavoriteMatch = null;
+    mockFavorites = [];
 
     await renderHook();
     await clickToggle();
@@ -253,7 +254,7 @@ describe('useFavToggle', () => {
   // -------------------------------------------------------------------------
 
   it('click when favorited shows update/remove choices', async () => {
-    mockCurrentFavoriteMatch = makeFavorite();
+    mockFavorites = [makeFavorite()];
 
     await renderHook();
     await clickToggle();
@@ -272,7 +273,7 @@ describe('useFavToggle', () => {
   // -------------------------------------------------------------------------
 
   it('save for any cluster calls addFavorite with empty clusterSelection', async () => {
-    mockCurrentFavoriteMatch = null;
+    mockFavorites = [];
 
     await renderHook();
     await clickToggle();
@@ -294,7 +295,7 @@ describe('useFavToggle', () => {
   // -------------------------------------------------------------------------
 
   it('save for this cluster calls addFavorite with selectedKubeconfig', async () => {
-    mockCurrentFavoriteMatch = null;
+    mockFavorites = [];
 
     await renderHook();
     await clickToggle();
@@ -316,7 +317,7 @@ describe('useFavToggle', () => {
   // -------------------------------------------------------------------------
 
   it('remove calls deleteFavorite', async () => {
-    mockCurrentFavoriteMatch = makeFavorite({ id: 'fav-42' });
+    mockFavorites = [makeFavorite({ id: 'fav-42' })];
 
     await renderHook();
     await clickToggle();
@@ -335,7 +336,7 @@ describe('useFavToggle', () => {
   // -------------------------------------------------------------------------
 
   it('update calls updateFavorite', async () => {
-    mockCurrentFavoriteMatch = makeFavorite({ id: 'fav-42' });
+    mockFavorites = [makeFavorite({ id: 'fav-42' })];
 
     await renderHook();
     await clickToggle();
@@ -355,7 +356,7 @@ describe('useFavToggle', () => {
   // -------------------------------------------------------------------------
 
   it('popover closes after clicking an action', async () => {
-    mockCurrentFavoriteMatch = null;
+    mockFavorites = [];
 
     await renderHook();
     await clickToggle();
