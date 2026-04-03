@@ -120,11 +120,13 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
 
     if (pendingFavorite.viewType === 'namespace') {
       viewState.setViewType('namespace');
-      viewState.setActiveNamespaceTab(pendingFavorite.view as NamespaceViewType);
       if (pendingFavorite.namespace) {
         namespaceCtx.setSelectedNamespace(pendingFavorite.namespace);
         viewState.onNamespaceSelect(pendingFavorite.namespace);
       }
+      // Set the tab AFTER onNamespaceSelect, which defaults to 'browse'
+      // when coming from a non-namespace view. The favorite's view overrides that.
+      viewState.setActiveNamespaceTab(pendingFavorite.view as NamespaceViewType);
       viewState.setSidebarSelection({
         type: 'namespace',
         value: pendingFavorite.namespace || '',
