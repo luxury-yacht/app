@@ -139,12 +139,17 @@ export function useFavToggle(state: FavToggleState): { item: IconBarItem; modal:
     state.includeMetadata,
   ]);
 
-  // Restore filter/table state from a pending favorite when it matches this view.
-  // Waits for the persistence layer to finish hydrating so the restore isn't
-  // overwritten by the hydration effect.
+  // Restore filter/table state from a pending favorite once:
+  // 1. The correct view is active (viewType + tab + namespace match)
+  // 2. The persistence layer has hydrated for this view
+  //
+  // The FavoritesContext effect handles cluster switching and view navigation.
+  // This effect waits for those to settle before applying filter/table state.
   useEffect(() => {
     if (!pendingFavorite) return;
-    if (!state.hydrated) return; // Wait for persistence hydration to complete.
+    if (!state.hydrated) return;
+
+    // Only apply in the view that matches the favorite's target.
     if (pendingFavorite.viewType !== viewType) return;
     const expectedTab = viewType === 'namespace' ? activeNamespaceTab : activeClusterTab;
     if (pendingFavorite.view !== expectedTab) return;
@@ -158,9 +163,6 @@ export function useFavToggle(state: FavToggleState): { item: IconBarItem; modal:
         caseSensitive: pendingFavorite.filters.caseSensitive ?? false,
         includeMetadata: pendingFavorite.filters.includeMetadata ?? false,
       });
-    }
-    if (pendingFavorite.filters && state.setIncludeMetadata) {
-      state.setIncludeMetadata(pendingFavorite.filters.includeMetadata ?? false);
     }
     if (pendingFavorite.tableState?.sortColumn && state.setSortConfig) {
       state.setSortConfig({
