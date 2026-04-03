@@ -445,8 +445,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     placeholder="Select cluster..."
                     disabled={!clusterSpecific}
                     renderValue={(val) => {
+                      if (!clusterSpecific) return 'Select cluster...';
                       const match = clusterOptions.find((o) => o.value === val);
-                      return match?.metadata?.context ?? val;
+                      return match?.metadata?.context ?? val ?? 'Select cluster...';
                     }}
                     renderOption={(option) => (
                       <div
