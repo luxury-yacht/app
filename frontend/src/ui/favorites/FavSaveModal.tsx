@@ -28,31 +28,41 @@ import './FavSaveModal.css';
 // View lists — mirrors the Sidebar navigation tabs.
 // ---------------------------------------------------------------------------
 
-const CLUSTER_VIEWS = [
-  { value: 'browse', label: 'Browse' },
-  { value: 'nodes', label: 'Nodes' },
-  { value: 'config', label: 'Config' },
-  { value: 'crds', label: 'CRDs' },
-  { value: 'custom', label: 'Custom' },
-  { value: 'events', label: 'Events' },
-  { value: 'rbac', label: 'RBAC' },
-  { value: 'storage', label: 'Storage' },
+// Combined view list with scope prefix to avoid value collisions.
+// The value format is "scope:view" (e.g. "cluster:nodes", "namespace:pods").
+const ALL_VIEWS = [
+  { value: '__cluster_header__', label: 'Cluster', group: 'header' as const },
+  { value: 'cluster:browse', label: 'Browse' },
+  { value: 'cluster:nodes', label: 'Nodes' },
+  { value: 'cluster:config', label: 'Config' },
+  { value: 'cluster:crds', label: 'CRDs' },
+  { value: 'cluster:custom', label: 'Custom' },
+  { value: 'cluster:events', label: 'Events' },
+  { value: 'cluster:rbac', label: 'RBAC' },
+  { value: 'cluster:storage', label: 'Storage' },
+  { value: '__namespace_header__', label: 'Namespaced', group: 'header' as const },
+  { value: 'namespace:browse', label: 'Browse' },
+  { value: 'namespace:workloads', label: 'Workloads' },
+  { value: 'namespace:pods', label: 'Pods' },
+  { value: 'namespace:autoscaling', label: 'Autoscaling' },
+  { value: 'namespace:config', label: 'Config' },
+  { value: 'namespace:custom', label: 'Custom' },
+  { value: 'namespace:events', label: 'Events' },
+  { value: 'namespace:helm', label: 'Helm' },
+  { value: 'namespace:network', label: 'Network' },
+  { value: 'namespace:quotas', label: 'Quotas' },
+  { value: 'namespace:rbac', label: 'RBAC' },
+  { value: 'namespace:storage', label: 'Storage' },
 ];
 
-const NAMESPACE_VIEWS = [
-  { value: 'browse', label: 'Browse' },
-  { value: 'workloads', label: 'Workloads' },
-  { value: 'pods', label: 'Pods' },
-  { value: 'autoscaling', label: 'Autoscaling' },
-  { value: 'config', label: 'Config' },
-  { value: 'custom', label: 'Custom' },
-  { value: 'events', label: 'Events' },
-  { value: 'helm', label: 'Helm' },
-  { value: 'network', label: 'Network' },
-  { value: 'quotas', label: 'Quotas' },
-  { value: 'rbac', label: 'RBAC' },
-  { value: 'storage', label: 'Storage' },
-];
+/** Parse a combined view value into scope and view. */
+const parseViewValue = (combined: string): { scope: 'cluster' | 'namespace'; view: string } => {
+  const [scope, view] = combined.split(':');
+  return { scope: scope as 'cluster' | 'namespace', view };
+};
+
+/** Build a combined view value from scope and view. */
+const buildViewValue = (scope: string, view: string): string => `${scope}:${view}`;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -96,15 +106,16 @@ export interface FavSaveModalProps {
 // ---------------------------------------------------------------------------
 
 /** Resolve view tab id from a view label (e.g. "Pods" -> "pods"). */
+/** Resolve a view label (e.g. "Pods") to a view ID (e.g. "pods") for the given scope. */
 const resolveViewId = (label: string, viewType: string): string => {
-  const views = viewType === 'namespace' ? NAMESPACE_VIEWS : CLUSTER_VIEWS;
-  // Try exact label match first.
-  const match = views.find((v) => v.label === label);
-  if (match) return match.value;
-  // Fall back to lowercase comparison.
+  const prefix = viewType + ':';
+  const scopedViews = ALL_VIEWS.filter((v) => v.value.startsWith(prefix));
   const lower = label.toLowerCase();
-  const fallback = views.find((v) => v.value === lower || v.label.toLowerCase() === lower);
-  return fallback?.value ?? views[0].value;
+  const match = scopedViews.find(
+    (v) => v.label === label || v.label.toLowerCase() === lower || v.value === prefix + lower
+  );
+  // Return just the view part (without prefix) since buildViewValue adds it back.
+  return match ? match.value.split(':')[1] : lower;
 };
 
 /** Compare current form state against an existing favorite to detect changes. */
@@ -176,9 +187,8 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   const [name, setName] = useState('');
   const [clusterSpecific, setClusterSpecific] = useState(true);
   const [clusterSelection, setClusterSelection] = useState('');
-  const [scope, setScope] = useState<'cluster' | 'namespace'>('cluster');
-  const [clusterView, setClusterView] = useState('browse');
-  const [namespaceView, setNamespaceView] = useState('browse');
+  // Combined "scope:view" value (e.g. "cluster:nodes", "namespace:pods").
+  const [selectedView, setSelectedView] = useState('cluster:browse');
   const [selectedNamespace, setSelectedNamespace] = useState(ALL_NAMESPACES_SCOPE);
   const [filterText, setFilterText] = useState('');
   const [filterKinds, setFilterKinds] = useState<string[]>([]);
@@ -194,12 +204,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       setName(existingFavorite.name);
       setClusterSpecific(existingFavorite.clusterSelection !== '');
       setClusterSelection(existingFavorite.clusterSelection || kubeconfigSelection);
-      setScope(existingFavorite.viewType as 'cluster' | 'namespace');
-      if (existingFavorite.viewType === 'cluster') {
-        setClusterView(existingFavorite.view);
-      } else {
-        setNamespaceView(existingFavorite.view);
-      }
+      setSelectedView(buildViewValue(existingFavorite.viewType, existingFavorite.view));
       setSelectedNamespace(existingFavorite.namespace || ALL_NAMESPACES_SCOPE);
       setFilterText(existingFavorite.filters?.search ?? '');
       setFilterKinds(existingFavorite.filters?.kinds ?? []);
@@ -210,13 +215,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       setName(defaultName);
       setClusterSpecific(true);
       setClusterSelection(kubeconfigSelection);
-      setScope(viewType as 'cluster' | 'namespace');
-      const resolvedView = resolveViewId(viewLabel, viewType);
-      if (viewType === 'cluster') {
-        setClusterView(resolvedView);
-      } else {
-        setNamespaceView(resolvedView);
-      }
+      setSelectedView(buildViewValue(viewType, resolveViewId(viewLabel, viewType)));
       setSelectedNamespace(namespace || ALL_NAMESPACES_SCOPE);
       setFilterText(filters.search);
       setFilterKinds(filters.kinds ?? []);
@@ -341,12 +340,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
     }
   };
 
-  const handleScopeChange = (newScope: 'cluster' | 'namespace') => {
-    setScope(newScope);
-  };
-
-  // The active view depends on the selected scope.
-  const activeView = scope === 'cluster' ? clusterView : namespaceView;
+  // Derive scope and view from the combined selectedView value.
+  const { scope, view: activeView } = parseViewValue(selectedView);
+  const isNamespaceScope = scope === 'namespace';
 
   // Detect whether Save should be enabled when editing.
   const changesDetected = isEditing
@@ -516,51 +512,24 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
               <h3>View</h3>
               <div className="settings-items">
                 <div className="setting-item fav-inline-row">
-                  <label>
-                    <input
-                      type="radio"
-                      name="scope"
-                      checked={scope === 'cluster'}
-                      onChange={() => handleScopeChange('cluster')}
-                      data-fav-modal-focusable="true"
-                    />
-                    Cluster
-                  </label>
+                  <label>View</label>
                   <Dropdown
-                    options={CLUSTER_VIEWS}
-                    value={clusterView}
-                    onChange={(val) => setClusterView(val as string)}
+                    options={ALL_VIEWS}
+                    value={selectedView}
+                    onChange={(val) => setSelectedView(val as string)}
                     placeholder="Select view..."
-                    disabled={scope !== 'cluster'}
                   />
                 </div>
-                <div className="setting-item fav-inline-row">
-                  <label>
-                    <input
-                      type="radio"
-                      name="scope"
-                      checked={scope === 'namespace'}
-                      onChange={() => handleScopeChange('namespace')}
-                      data-fav-modal-focusable="true"
+                {isNamespaceScope && (
+                  <div className="setting-item fav-inline-row">
+                    <label>Namespace</label>
+                    <Dropdown
+                      options={namespaceOptions}
+                      value={selectedNamespace}
+                      onChange={(val) => setSelectedNamespace(val as string)}
                     />
-                    Namespaced
-                  </label>
-                  <Dropdown
-                    options={NAMESPACE_VIEWS}
-                    value={namespaceView}
-                    onChange={(val) => setNamespaceView(val as string)}
-                    placeholder="Select view..."
-                    disabled={scope !== 'namespace'}
-                  />
-                </div>
-                <div className="setting-item fav-inline-row fav-inline-row-indented">
-                  <Dropdown
-                    options={namespaceOptions}
-                    value={selectedNamespace}
-                    onChange={(val) => setSelectedNamespace(val as string)}
-                    disabled={scope !== 'namespace'}
-                  />
-                </div>
+                  </div>
+                )}
               </div>
             </div>
 
