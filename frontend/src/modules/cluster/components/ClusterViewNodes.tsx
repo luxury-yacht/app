@@ -279,7 +279,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
-    const favToggle = useFavToggle({
+    const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       includeMetadata,
       sortColumn: sortConfig?.key ?? null,
@@ -352,6 +352,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
             allowHorizontalOverflow={true}
           />
         </ResourceLoadingBoundary>
+        {favModal}
       </>
     );
   }

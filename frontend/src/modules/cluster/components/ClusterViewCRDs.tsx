@@ -159,7 +159,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
-    const favToggle = useFavToggle({
+    const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: sortConfig?.key ?? null,
       sortDirection: sortConfig?.direction ?? 'asc',
@@ -274,6 +274,7 @@ const CRDsViewGrid: React.FC<CRDsViewProps> = React.memo(
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
         />
+        {favModal}
       </>
     );
   }

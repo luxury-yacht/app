@@ -1,7 +1,23 @@
 # TODO
 
-- Favorites/bookmarks
-  - Bookmark specific views
+## Favorites
+
+- When clicking the Favorite button in the view, use a modal instead of a dropdown menu.
+- Reuse the existing Modal component and styles
+- Modal should show:
+  - `Name` as text field to change the name, prepopulated with the default
+  - Radio buttons to select `Cluster-specific` or `Any Cluster`
+  - Description of what is being bookmarked:
+    - `Cluster` (shows cluster name or Any)
+    - `Scope` (Cluster or Namespaced)
+    - `View` (shows the View name)
+    - `Filters`
+      - `Filter Text`
+      - `Case-Sensitive` and `Include Metadata` as disabled checkboxes
+    - Delete, Save, and Cancel buttons
+      - Show a secondary confirmation modal for Delete.
+
+## Other
 
 - Preemptive permissions check - start as soon as the view is opened, don't wait for right-click
 

@@ -263,7 +263,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     onChange: persistence.setSortConfig,
   });
 
-  const favToggle = useFavToggle({
+  const { item: favToggle, modal: favModal } = useFavToggle({
     filters: persistence.filters,
     sortColumn: sortConfig?.key ?? null,
     sortDirection: sortConfig?.direction ?? 'asc',
@@ -343,36 +343,39 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     loadingMessage ?? (isNamespaceScoped ? 'Loading resources...' : 'Loading browse catalog...');
 
   return (
-    <ResourceLoadingBoundary
-      loading={loading}
-      dataLength={sortedData.length}
-      hasLoaded={hasLoadedOnce}
-      spinnerMessage={resolvedLoadingMessage}
-      allowPartial
-      suppressEmptyWarning
-    >
-      <GridTable<BrowseTableRow>
-        data={sortedData}
-        columns={columns}
-        keyExtractor={keyExtractor}
-        onRowClick={handleOpen}
-        onSort={handleSort}
-        sortConfig={sortConfig}
-        tableClassName={resolvedTableClassName}
-        useShortNames={useShortResourceNames}
-        enableContextMenu
-        getCustomContextMenuItems={getContextMenuItems}
-        filters={gridFilters}
-        virtualization={virtualizationOptions}
-        allowHorizontalOverflow={true}
-        emptyMessage={resolvedEmptyMessage}
-        columnWidths={persistence.columnWidths}
-        onColumnWidthsChange={persistence.setColumnWidths}
-        columnVisibility={persistence.columnVisibility}
-        onColumnVisibilityChange={persistence.setColumnVisibility}
-        loadingOverlay={loadingOverlay}
-      />
-    </ResourceLoadingBoundary>
+    <>
+      <ResourceLoadingBoundary
+        loading={loading}
+        dataLength={sortedData.length}
+        hasLoaded={hasLoadedOnce}
+        spinnerMessage={resolvedLoadingMessage}
+        allowPartial
+        suppressEmptyWarning
+      >
+        <GridTable<BrowseTableRow>
+          data={sortedData}
+          columns={columns}
+          keyExtractor={keyExtractor}
+          onRowClick={handleOpen}
+          onSort={handleSort}
+          sortConfig={sortConfig}
+          tableClassName={resolvedTableClassName}
+          useShortNames={useShortResourceNames}
+          enableContextMenu
+          getCustomContextMenuItems={getContextMenuItems}
+          filters={gridFilters}
+          virtualization={virtualizationOptions}
+          allowHorizontalOverflow={true}
+          emptyMessage={resolvedEmptyMessage}
+          columnWidths={persistence.columnWidths}
+          onColumnWidthsChange={persistence.setColumnWidths}
+          columnVisibility={persistence.columnVisibility}
+          onColumnVisibilityChange={persistence.setColumnVisibility}
+          loadingOverlay={loadingOverlay}
+        />
+      </ResourceLoadingBoundary>
+      {favModal}
+    </>
   );
 };
 

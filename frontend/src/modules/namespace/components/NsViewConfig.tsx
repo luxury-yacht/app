@@ -180,7 +180,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       onChange: onSortChange,
     });
 
-    const favToggle = useFavToggle({
+    const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: sortConfig?.key ?? null,
       sortDirection: sortConfig?.direction ?? 'asc',
@@ -300,6 +300,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
         />
+        {favModal}
       </>
     );
   }

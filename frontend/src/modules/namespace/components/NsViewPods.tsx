@@ -351,7 +351,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       onChange: onSortChange,
     });
 
-    const favToggle = useFavToggle({
+    const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: sortConfig?.key ?? null,
       sortDirection: sortConfig?.direction ?? 'asc',
@@ -570,6 +570,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         />
 
         <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
+        {favModal}
       </>
     );
   }

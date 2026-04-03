@@ -305,7 +305,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       onChange: onSortChange,
     });
 
-    const favToggle = useFavToggle({
+    const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: sortConfig?.key ?? null,
       sortDirection: sortConfig?.direction ?? 'asc',
@@ -425,6 +425,7 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
         />
+        {favModal}
       </>
     );
   }

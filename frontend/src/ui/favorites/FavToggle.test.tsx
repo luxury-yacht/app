@@ -102,6 +102,37 @@ vi.mock('@modules/namespace/contexts/NamespaceContext', () => ({
   }),
 }));
 
+vi.mock('./FavSaveModal', () => ({
+  default: ({ isOpen, onClose, onSave, onDelete, existingFavorite }: any) => {
+    if (!isOpen) return null;
+    return (
+      <div data-testid="fav-save-modal">
+        <button data-testid="modal-save" onClick={() => {
+          onSave({
+            id: existingFavorite?.id ?? '',
+            name: 'Test',
+            clusterSelection: '',
+            viewType: 'namespace',
+            view: 'pods',
+            namespace: 'default',
+            filters: null,
+            tableState: null,
+            order: 0,
+          });
+          onClose();
+        }}>Save</button>
+        <button data-testid="modal-cancel" onClick={onClose}>Cancel</button>
+        {existingFavorite && (
+          <button data-testid="modal-delete" onClick={() => {
+            onDelete(existingFavorite.id);
+            onClose();
+          }}>Delete</button>
+        )}
+      </div>
+    );
+  },
+}));
+
 // Import after mocks
 import { useFavToggle } from './FavToggle';
 
@@ -127,7 +158,7 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
  * IconBarItem as a button with the icon inside — mirroring how IconBar renders it.
  */
 const HookWrapper: React.FC = () => {
-  const item = useFavToggle({
+  const { item, modal } = useFavToggle({
     filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
     sortColumn: null,
     sortDirection: 'asc',
@@ -146,6 +177,7 @@ const HookWrapper: React.FC = () => {
         >
           {item.icon}
         </button>
+        {modal}
       </div>
     );
   }
@@ -226,105 +258,72 @@ describe('useFavToggle', () => {
     const btn = container.querySelector<HTMLButtonElement>('[data-testid="fav-toggle-button"]');
     expect(btn).toBeTruthy();
     expect(btn!.getAttribute('data-active')).toBe('true');
-    expect(btn!.title).toBe('Update or remove favorite');
+    expect(btn!.title).toBe('Edit favorite');
   });
 
   // -------------------------------------------------------------------------
-  // 3. Click when not favorited shows add popover choices
+  // 3. Click opens modal
   // -------------------------------------------------------------------------
 
-  it('click when not favorited shows add popover choices', async () => {
+  it('click opens the save modal', async () => {
     mockFavorites = [];
 
     await renderHook();
     await clickToggle();
 
-    // Popover is rendered via portal to document.body.
-    const popover = document.querySelector('[data-testid="fav-toggle-popover"]');
-    expect(popover).toBeTruthy();
-
-    const items = document.querySelectorAll('[data-testid="fav-toggle-popover-item"]');
-    expect(items.length).toBe(2);
-    expect(items[0].textContent).toBe('Save for any cluster');
-    expect(items[1].textContent).toBe('Save for this cluster');
+    const modal = document.querySelector('[data-testid="fav-save-modal"]');
+    expect(modal).toBeTruthy();
   });
 
   // -------------------------------------------------------------------------
-  // 4. Click when favorited shows update/remove choices
+  // 4. Click when favorited opens modal with delete button
   // -------------------------------------------------------------------------
 
-  it('click when favorited shows update/remove choices', async () => {
+  it('click when favorited shows modal with delete option', async () => {
     mockFavorites = [makeFavorite()];
 
     await renderHook();
     await clickToggle();
 
-    const popover = document.querySelector('[data-testid="fav-toggle-popover"]');
-    expect(popover).toBeTruthy();
+    const modal = document.querySelector('[data-testid="fav-save-modal"]');
+    expect(modal).toBeTruthy();
 
-    const items = document.querySelectorAll('[data-testid="fav-toggle-popover-item"]');
-    expect(items.length).toBe(2);
-    expect(items[0].textContent).toBe('Update');
-    expect(items[1].textContent).toBe('Remove');
+    const deleteBtn = document.querySelector('[data-testid="modal-delete"]');
+    expect(deleteBtn).toBeTruthy();
   });
 
   // -------------------------------------------------------------------------
-  // 5. "Save for any cluster" calls addFavorite with empty clusterSelection
+  // 5. Save via modal calls addFavorite
   // -------------------------------------------------------------------------
 
-  it('save for any cluster calls addFavorite with empty clusterSelection', async () => {
+  it('save via modal calls addFavorite', async () => {
     mockFavorites = [];
 
     await renderHook();
     await clickToggle();
 
-    const items = document.querySelectorAll<HTMLElement>('[data-testid="fav-toggle-popover-item"]');
+    const saveBtn = document.querySelector<HTMLElement>('[data-testid="modal-save"]');
     await act(async () => {
-      items[0].click();
+      saveBtn!.click();
       await Promise.resolve();
     });
 
     expect(mockAddFavorite).toHaveBeenCalledTimes(1);
-    const arg = mockAddFavorite.mock.calls[0][0];
-    expect(arg.clusterSelection).toBe('');
-    expect(arg.name).toBe('default / Pods');
   });
 
   // -------------------------------------------------------------------------
-  // 6. "Save for this cluster" calls addFavorite with selectedKubeconfig
+  // 6. Delete via modal calls deleteFavorite
   // -------------------------------------------------------------------------
 
-  it('save for this cluster calls addFavorite with selectedKubeconfig', async () => {
-    mockFavorites = [];
-
-    await renderHook();
-    await clickToggle();
-
-    const items = document.querySelectorAll<HTMLElement>('[data-testid="fav-toggle-popover-item"]');
-    await act(async () => {
-      items[1].click();
-      await Promise.resolve();
-    });
-
-    expect(mockAddFavorite).toHaveBeenCalledTimes(1);
-    const arg = mockAddFavorite.mock.calls[0][0];
-    expect(arg.clusterSelection).toBe('/home/user/.kube/config:production');
-    expect(arg.name).toBe('production / default / Pods');
-  });
-
-  // -------------------------------------------------------------------------
-  // 7. "Remove" calls deleteFavorite
-  // -------------------------------------------------------------------------
-
-  it('remove calls deleteFavorite', async () => {
+  it('delete via modal calls deleteFavorite', async () => {
     mockFavorites = [makeFavorite({ id: 'fav-42' })];
 
     await renderHook();
     await clickToggle();
 
-    const items = document.querySelectorAll<HTMLElement>('[data-testid="fav-toggle-popover-item"]');
+    const deleteBtn = document.querySelector<HTMLElement>('[data-testid="modal-delete"]');
     await act(async () => {
-      items[1].click(); // "Remove"
+      deleteBtn!.click();
       await Promise.resolve();
     });
 
@@ -332,44 +331,43 @@ describe('useFavToggle', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 8. "Update" calls updateFavorite
+  // 7. Modal closes after save
   // -------------------------------------------------------------------------
 
-  it('update calls updateFavorite', async () => {
-    mockFavorites = [makeFavorite({ id: 'fav-42' })];
-
-    await renderHook();
-    await clickToggle();
-
-    const items = document.querySelectorAll<HTMLElement>('[data-testid="fav-toggle-popover-item"]');
-    await act(async () => {
-      items[0].click(); // "Update"
-      await Promise.resolve();
-    });
-
-    expect(mockUpdateFavorite).toHaveBeenCalledTimes(1);
-    expect(mockUpdateFavorite.mock.calls[0][0].id).toBe('fav-42');
-  });
-
-  // -------------------------------------------------------------------------
-  // 9. Popover closes after action
-  // -------------------------------------------------------------------------
-
-  it('popover closes after clicking an action', async () => {
+  it('modal closes after save', async () => {
     mockFavorites = [];
 
     await renderHook();
     await clickToggle();
 
-    expect(document.querySelector('[data-testid="fav-toggle-popover"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="fav-save-modal"]')).toBeTruthy();
 
-    const items = document.querySelectorAll<HTMLElement>('[data-testid="fav-toggle-popover-item"]');
+    const saveBtn = document.querySelector<HTMLElement>('[data-testid="modal-save"]');
     await act(async () => {
-      items[0].click();
-      // Flush the mock promise and any resulting state updates.
+      saveBtn!.click();
       await new Promise((r) => setTimeout(r, 0));
     });
 
-    expect(document.querySelector('[data-testid="fav-toggle-popover"]')).toBeNull();
+    expect(document.querySelector('[data-testid="fav-save-modal"]')).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // 8. Cancel closes modal without saving
+  // -------------------------------------------------------------------------
+
+  it('cancel closes modal without saving', async () => {
+    mockFavorites = [];
+
+    await renderHook();
+    await clickToggle();
+
+    const cancelBtn = document.querySelector<HTMLElement>('[data-testid="modal-cancel"]');
+    await act(async () => {
+      cancelBtn!.click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(document.querySelector('[data-testid="fav-save-modal"]')).toBeNull();
+    expect(mockAddFavorite).not.toHaveBeenCalled();
   });
 });

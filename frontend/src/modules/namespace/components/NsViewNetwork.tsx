@@ -178,7 +178,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
       onChange: onSortChange,
     });
 
-    const favToggle = useFavToggle({
+    const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: sortConfig?.key ?? null,
       sortDirection: sortConfig?.direction ?? 'asc',
@@ -315,6 +315,7 @@ const NetworkViewGrid: React.FC<NetworkViewProps> = React.memo(
         />
 
         <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
+        {favModal}
       </>
     );
   }

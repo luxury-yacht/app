@@ -3,12 +3,11 @@
  *
  * Hook that returns an IconBarItem for a heart toggle in the GridTableFiltersBar.
  * When the current view matches a saved favorite the heart is filled;
- * otherwise it is outlined.  Clicking the heart opens a small popover with
- * context-appropriate actions (add / update / remove).
+ * otherwise it is outlined. Clicking the heart opens a modal to save,
+ * update, or delete the favorite.
  */
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { FavoriteOutlineIcon, FavoriteFilledIcon } from '@shared/components/icons/MenuIcons';
 import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 import { useFavorites } from '@core/contexts/FavoritesContext';
@@ -17,6 +16,7 @@ import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
+import FavSaveModal from './FavSaveModal';
 
 /** Current view state that the FavToggle needs to snapshot when saving a favorite.
  *  Also accepts setters for restoring state from a pending favorite on navigation. */
@@ -72,109 +72,6 @@ const CLUSTER_VIEW_LABELS: Record<string, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// FavTogglePopover — small absolutely-positioned popover with action choices.
-// ---------------------------------------------------------------------------
-
-interface FavTogglePopoverProps {
-  anchorRef: React.RefObject<HTMLElement | null>;
-  onClose: () => void;
-  children: React.ReactNode;
-}
-
-/**
- * Renders an absolutely positioned popover near the anchor element.
- * Closes on click-outside.
- */
-const FavTogglePopover: React.FC<FavTogglePopoverProps> = ({ anchorRef, onClose, children }) => {
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
-
-  // Compute fixed position from anchor element's bounding rect.
-  useEffect(() => {
-    if (!anchorRef.current) return;
-    const rect = anchorRef.current.getBoundingClientRect();
-    setPosition({ top: rect.bottom + 4, left: rect.left });
-  }, [anchorRef]);
-
-  // Close on click-outside.
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        popoverRef.current &&
-        !popoverRef.current.contains(e.target as Node) &&
-        anchorRef.current &&
-        !anchorRef.current.contains(e.target as Node)
-      ) {
-        onClose();
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [anchorRef, onClose]);
-
-  // Render via portal to escape overflow:hidden on .gridtable-container.
-  return createPortal(
-    <div
-      ref={popoverRef}
-      className="fav-toggle-popover"
-      data-testid="fav-toggle-popover"
-      onClick={(e) => e.stopPropagation()}
-      style={{
-        position: 'fixed',
-        top: position.top,
-        left: position.left,
-        width: 'max-content',
-        minWidth: '160px',
-        background: 'var(--color-bg)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--border-radius-lg, 8px)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-        zIndex: 9999,
-        overflow: 'hidden',
-        padding: '0.35rem 0',
-      }}
-    >
-      {children}
-    </div>,
-    document.body
-  );
-};
-
-interface PopoverItemProps {
-  label: string;
-  onClick: () => void;
-}
-
-const PopoverItem: React.FC<PopoverItemProps> = ({ label, onClick }) => (
-  <div
-    className="fav-toggle-popover-item"
-    data-testid="fav-toggle-popover-item"
-    role="menuitem"
-    onClick={(e) => {
-      // Stop propagation so the click doesn't bubble up to the icon-bar
-      // toggle button, which would re-open the popover immediately.
-      e.stopPropagation();
-      onClick();
-    }}
-    style={{
-      padding: '0.4rem 0.75rem',
-      cursor: 'pointer',
-      fontSize: '0.8rem',
-      color: 'var(--color-text)',
-      whiteSpace: 'nowrap',
-    }}
-    onMouseEnter={(e) => {
-      (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-bg-secondary)';
-    }}
-    onMouseLeave={(e) => {
-      (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
-    }}
-  >
-    {label}
-  </div>
-);
-
-// ---------------------------------------------------------------------------
 // useFavToggle hook
 // ---------------------------------------------------------------------------
 
@@ -182,7 +79,7 @@ const PopoverItem: React.FC<PopoverItemProps> = ({ label, onClick }) => (
  * Returns an IconBarItem (toggle type) for the heart favorite button
  * in the GridTableFiltersBar's preActions slot.
  */
-export function useFavToggle(state: FavToggleState): IconBarItem {
+export function useFavToggle(state: FavToggleState): { item: IconBarItem; modal: React.JSX.Element } {
   const {
     favorites,
     addFavorite,
@@ -284,9 +181,7 @@ export function useFavToggle(state: FavToggleState): IconBarItem {
     state,
   ]);
 
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  // Ref to the icon-bar button element so the popover can position near it.
-  const anchorRef = useRef<HTMLElement | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
 
   const isFavorited = currentFavoriteMatch != null;
 
@@ -299,38 +194,26 @@ export function useFavToggle(state: FavToggleState): IconBarItem {
     return CLUSTER_VIEW_LABELS[tab] ?? tab;
   }, [viewType, activeViewTab]);
 
-  /**
-   * Auto-generate a friendly name for a new favorite.
-   *
-   * Format depends on scope:
-   *   - Generic cluster view:   "{viewLabel}"
-   *   - Generic namespace view: "{namespace} / {viewLabel}"
-   *   - Cluster-specific cluster view:   "{contextName} / {viewLabel}"
-   *   - Cluster-specific namespace view: "{contextName} / {namespace} / {viewLabel}"
-   *
-   * If any filters are active, " (filtered)" is appended.
-   */
-  const generateName = useCallback(
-    (clusterSpecific: boolean): string => {
-      const parts: string[] = [];
+  // Auto-generate a default name for new favorites.
+  const defaultName = useMemo(() => {
+    const parts: string[] = [];
+    if (selectedClusterName) {
+      parts.push(selectedClusterName);
+    }
+    if (viewType === 'namespace' && selectedNamespace) {
+      parts.push(selectedNamespace);
+    }
+    parts.push(viewLabel);
+    const base = parts.join(' / ');
+    const hasActiveFilters =
+      state.filters.search.trim().length > 0 ||
+      state.filters.kinds.length > 0 ||
+      state.filters.namespaces.length > 0;
+    return hasActiveFilters ? `${base} (filtered)` : base;
+  }, [selectedClusterName, viewType, selectedNamespace, viewLabel, state.filters]);
 
-      if (clusterSpecific && selectedClusterName) {
-        parts.push(selectedClusterName);
-      }
-
-      if (viewType === 'namespace' && selectedNamespace) {
-        parts.push(selectedNamespace);
-      }
-
-      parts.push(viewLabel);
-
-      return parts.join(' / ');
-    },
-    [selectedClusterName, viewType, selectedNamespace, viewLabel]
-  );
-
-  // Snapshot the current filter and table state for saving.
-  const snapshotFilters = useCallback(
+  // Snapshot current filter and table state for the modal.
+  const currentFilters = useMemo(
     (): FavoriteFilters => ({
       search: state.filters.search,
       kinds: [...state.filters.kinds],
@@ -341,7 +224,7 @@ export function useFavToggle(state: FavToggleState): IconBarItem {
     [state.filters, state.includeMetadata]
   );
 
-  const snapshotTableState = useCallback(
+  const currentTableState = useMemo(
     (): FavoriteTableState => ({
       sortColumn: state.sortColumn ?? '',
       sortDirection: state.sortDirection,
@@ -350,114 +233,61 @@ export function useFavToggle(state: FavToggleState): IconBarItem {
     [state.sortColumn, state.sortDirection, state.columnVisibility]
   );
 
-  const hasActiveFilters =
-    state.filters.search.trim().length > 0 ||
-    state.filters.kinds.length > 0 ||
-    state.filters.namespaces.length > 0;
-
-  // Build a Favorite payload for add operations.
-  const buildNewFavorite = useCallback(
-    (clusterSelection: string): Favorite => ({
-      id: '', // Backend assigns the ID.
-      name: generateName(clusterSelection !== '') + (hasActiveFilters ? ' (filtered)' : ''),
-      clusterSelection,
-      viewType,
-      view: activeViewTab ?? '',
-      namespace: viewType === 'namespace' ? (selectedNamespace ?? '') : '',
-      filters: snapshotFilters(),
-      tableState: snapshotTableState(),
-      order: 0,
-    }),
-    [
-      generateName,
-      hasActiveFilters,
-      viewType,
-      activeViewTab,
-      selectedNamespace,
-      snapshotFilters,
-      snapshotTableState,
-    ]
+  const handleSave = useCallback(
+    async (fav: Favorite) => {
+      if (fav.id) {
+        await updateFavorite(fav);
+      } else {
+        // Fill in view/namespace from current state since the modal
+        // doesn't track these (they come from navigation context).
+        await addFavorite({
+          ...fav,
+          view: activeViewTab ?? '',
+          namespace: viewType === 'namespace' ? (selectedNamespace ?? '') : '',
+        });
+      }
+    },
+    [addFavorite, updateFavorite, activeViewTab, viewType, selectedNamespace]
   );
 
-  const handleClose = useCallback(() => setPopoverOpen(false), []);
-
-  // -- Add handlers (when not yet favorited) --
-
-  const handleAddForAnyCluster = useCallback(async () => {
-    setPopoverOpen(false);
-    await addFavorite(buildNewFavorite(''));
-  }, [addFavorite, buildNewFavorite]);
-
-  const handleAddForThisCluster = useCallback(async () => {
-    setPopoverOpen(false);
-    await addFavorite(buildNewFavorite(selectedKubeconfig));
-  }, [addFavorite, buildNewFavorite, selectedKubeconfig]);
-
-  // -- Update / Remove handlers (when already favorited) --
-
-  const handleUpdate = useCallback(async () => {
-    if (!currentFavoriteMatch) return;
-    setPopoverOpen(false);
-    // Preserve name and cluster binding; snapshot current filters and table state.
-    await updateFavorite({
-      ...currentFavoriteMatch,
-      filters: snapshotFilters(),
-      tableState: snapshotTableState(),
-    });
-  }, [currentFavoriteMatch, updateFavorite, snapshotFilters, snapshotTableState]);
-
-  const handleRemove = useCallback(async () => {
-    if (!currentFavoriteMatch) return;
-    setPopoverOpen(false);
-    await deleteFavorite(currentFavoriteMatch.id);
-  }, [currentFavoriteMatch, deleteFavorite]);
-
-  const handleClick = useCallback(() => {
-    setPopoverOpen((prev) => !prev);
-  }, []);
+  const handleDelete = useCallback(
+    async (id: string) => {
+      await deleteFavorite(id);
+    },
+    [deleteFavorite]
+  );
 
   // Build the IconBarItem returned to the caller.
   const item = useMemo<IconBarItem>(() => {
     return {
       type: 'toggle' as const,
       id: 'favorite',
-      icon: (
-        <span
-          ref={anchorRef as React.Ref<HTMLSpanElement>}
-          style={{ position: 'relative', display: 'inline-flex' }}
-        >
-          {isFavorited ? <FavoriteFilledIcon /> : <FavoriteOutlineIcon />}
-          {popoverOpen && (
-            <FavTogglePopover anchorRef={anchorRef} onClose={handleClose}>
-              {isFavorited ? (
-                <>
-                  <PopoverItem label="Update" onClick={handleUpdate} />
-                  <PopoverItem label="Remove" onClick={handleRemove} />
-                </>
-              ) : (
-                <>
-                  <PopoverItem label="Save for any cluster" onClick={handleAddForAnyCluster} />
-                  <PopoverItem label="Save for this cluster" onClick={handleAddForThisCluster} />
-                </>
-              )}
-            </FavTogglePopover>
-          )}
-        </span>
-      ),
+      icon: isFavorited ? <FavoriteFilledIcon /> : <FavoriteOutlineIcon />,
       active: isFavorited,
-      onClick: handleClick,
-      title: isFavorited ? 'Update or remove favorite' : 'Save as favorite',
+      onClick: () => setModalOpen(true),
+      title: isFavorited ? 'Edit favorite' : 'Save as favorite',
     };
-  }, [
-    isFavorited,
-    popoverOpen,
-    handleClick,
-    handleClose,
-    handleUpdate,
-    handleRemove,
-    handleAddForAnyCluster,
-    handleAddForThisCluster,
-  ]);
+  }, [isFavorited]);
 
-  return item;
+  return {
+    item,
+    modal: (
+      <FavSaveModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        existingFavorite={currentFavoriteMatch}
+        defaultName={defaultName}
+        clusterName={selectedClusterName}
+        kubeconfigSelection={selectedKubeconfig}
+        viewType={viewType}
+        viewLabel={viewLabel}
+        namespace={viewType === 'namespace' ? (selectedNamespace ?? '') : ''}
+        filters={currentFilters}
+        tableState={currentTableState}
+        includeMetadata={state.includeMetadata ?? false}
+        onSave={handleSave}
+        onDelete={handleDelete}
+      />
+    ),
+  };
 }

@@ -182,7 +182,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       onChange: onSortChange,
     });
 
-    const favToggle = useFavToggle({
+    const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: workloadSortConfig?.key ?? null,
       sortDirection: workloadSortConfig?.direction ?? 'asc',
@@ -549,6 +549,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           name={rollbackTarget?.name ?? ''}
           kind={rollbackTarget?.kind ?? ''}
         />
+        {favModal}
       </>
     );
   }

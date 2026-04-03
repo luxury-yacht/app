@@ -1,0 +1,95 @@
+/* Favorite Save Modal */
+
+.fav-save-modal {
+  max-width: 480px;
+}
+
+.fav-save-field {
+  margin-bottom: 1rem;
+}
+
+.fav-save-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.4rem;
+}
+
+.fav-save-input {
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.875rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  box-sizing: border-box;
+}
+
+.fav-save-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
+}
+
+.fav-save-radios {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.fav-save-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.fav-save-radio input[type="radio"] {
+  accent-color: var(--color-accent);
+  margin: 0;
+}
+
+.fav-save-details {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.fav-save-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.8rem;
+}
+
+.fav-save-detail-label {
+  color: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.fav-save-detail-value {
+  color: var(--color-text);
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fav-save-checkbox {
+  accent-color: var(--color-accent);
+}
+
+.fav-save-footer-spacer {
+  flex: 1;
+}
