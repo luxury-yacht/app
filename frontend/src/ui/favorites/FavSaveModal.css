@@ -33,8 +33,9 @@
   box-shadow: none;
 }
 
-/* Ensure dropdowns within setting items fill available width */
+/* Dropdowns nested under radio buttons — indented to show association */
 .fav-save-modal .setting-item > .dropdown {
-  width: 100%;
+  width: auto;
   margin-top: 0.35rem;
+  margin-left: 1.5rem;
 }

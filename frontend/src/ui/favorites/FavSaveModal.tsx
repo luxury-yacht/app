@@ -16,6 +16,7 @@ import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import '@ui/modals/modals.css';
 import '@ui/settings/Settings.css';
@@ -163,7 +164,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   const [scope, setScope] = useState<'cluster' | 'namespace'>('cluster');
   const [clusterView, setClusterView] = useState('browse');
   const [namespaceView, setNamespaceView] = useState('browse');
-  const [selectedNamespace, setSelectedNamespace] = useState('');
+  const [selectedNamespace, setSelectedNamespace] = useState(ALL_NAMESPACES_SCOPE);
   const [filterText, setFilterText] = useState('');
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [includeMetadataState, setIncludeMetadataState] = useState(false);
@@ -182,7 +183,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       } else {
         setNamespaceView(existingFavorite.view);
       }
-      setSelectedNamespace(existingFavorite.namespace || '');
+      setSelectedNamespace(existingFavorite.namespace || ALL_NAMESPACES_SCOPE);
       setFilterText(existingFavorite.filters?.search ?? '');
       setCaseSensitive(existingFavorite.filters?.caseSensitive ?? false);
       setIncludeMetadataState(existingFavorite.filters?.includeMetadata ?? false);
@@ -197,13 +198,23 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
       } else {
         setNamespaceView(resolvedView);
       }
-      setSelectedNamespace(namespace);
+      setSelectedNamespace(namespace || ALL_NAMESPACES_SCOPE);
       setFilterText(filters.search);
       setCaseSensitive(filters.caseSensitive);
       setIncludeMetadataState(includeMetadata);
     }
     setShowDeleteConfirm(false);
-  }, [isOpen, existingFavorite, defaultName, kubeconfigSelection, viewType, viewLabel, namespace, filters, includeMetadata]);
+  }, [
+    isOpen,
+    existingFavorite,
+    defaultName,
+    kubeconfigSelection,
+    viewType,
+    viewLabel,
+    namespace,
+    filters,
+    includeMetadata,
+  ]);
 
   // ----- Keyboard context management -----
   useEffect(() => {
@@ -269,7 +280,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
   // View dropdown: depends on scope.
   // Namespace dropdown: "All Namespaces" at top, then actual namespaces.
   const namespaceOptions = useMemo(() => {
-    const opts = [{ value: 'All Namespaces', label: 'All Namespaces' }];
+    const opts = [{ value: ALL_NAMESPACES_SCOPE, label: 'All Namespaces' }];
     namespaces.forEach((ns) => {
       // Skip the synthetic "All Namespaces" item already added above.
       if (ns.isSynthetic) return;
@@ -445,7 +456,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                           <div className="kubeconfig-filename">{option.metadata.filename}</div>
                         )}
                         <div className="kubeconfig-context">
-                          <span className="kubeconfig-context-label">{option.metadata?.context}</span>
+                          <span className="kubeconfig-context-label">
+                            {option.metadata?.context}
+                          </span>
                         </div>
                       </div>
                     )}
@@ -454,9 +467,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
               </div>
             </div>
 
-            {/* Scope & View */}
+            {/* View */}
             <div className="settings-section">
-              <h3>Scope</h3>
+              <h3>View</h3>
               <div className="settings-items">
                 <div className="setting-item">
                   <label>
@@ -499,7 +512,6 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     options={namespaceOptions}
                     value={selectedNamespace}
                     onChange={(val) => setSelectedNamespace(val as string)}
-                    placeholder="Select namespace..."
                     disabled={scope !== 'namespace'}
                   />
                 </div>
@@ -538,7 +550,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                       onChange={(e) => setCaseSensitive(e.target.checked)}
                       data-fav-modal-focusable="true"
                     />
-                    Case-Sensitive
+                    Match case
                   </label>
                 </div>
                 <div className="setting-item">
@@ -549,7 +561,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                       onChange={(e) => setIncludeMetadataState(e.target.checked)}
                       data-fav-modal-focusable="true"
                     />
-                    Include Metadata
+                    Include metadata
                   </label>
                 </div>
               </div>
