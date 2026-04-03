@@ -80,6 +80,7 @@ type App struct {
 	clusterClientsMu sync.Mutex
 	clusterClients   map[string]*clusterClients
 	clusterOps       *clusterOperationCoordinator
+	clusterLifecycle *clusterLifecycle
 
 	shellSessions   map[string]*shellSession
 	shellSessionsMu sync.Mutex

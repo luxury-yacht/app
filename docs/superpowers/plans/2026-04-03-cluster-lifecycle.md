@@ -40,6 +40,72 @@
 
 ---
 
+## Task 0: Safety Tests for Integration Points
+
+Before modifying any existing files, write tests that verify the current behavior of the code paths we'll be wiring lifecycle transitions into. These tests act as a safety net — if lifecycle wiring breaks existing behavior, these tests catch it.
+
+**Current test coverage gaps:**
+- `syncClusterClientPool` — builds cluster clients for new selections, removes stale ones. **No tests.**
+- `initKubernetesClient` — orchestrates client pool sync + refresh subsystem setup. **No test file.**
+- `cluster_auth.go` `handleAuthStateChange` — emits auth events. **Partially tested** via isolation tests.
+- `app_refresh_setup.go` namespace handler — serves namespace snapshots. **No tests.**
+
+**Files:**
+- Create: `backend/cluster_clients_sync_test.go`
+- Create: `backend/app_kubernetes_client_test.go`
+
+- [ ] **Step 1: Test syncClusterClientPool creates clients for new selections**
+
+Create `backend/cluster_clients_sync_test.go`:
+
+Test that calling `syncClusterClientPool` with a selection that doesn't have an existing client entry causes a new client to be created and added to `a.clusterClients`. Use the existing test infrastructure (`newTestAppWithDefaults`, fake clientsets).
+
+The test should verify:
+- Before: `a.clusterClients` is empty
+- After: `a.clusterClients` has an entry for the selection
+- The entry has a non-nil client
+
+- [ ] **Step 2: Test syncClusterClientPool removes stale clients**
+
+Test that calling `syncClusterClientPool` with a subset of the previously connected clusters causes the stale entries to be removed from `a.clusterClients`.
+
+- Before: `a.clusterClients` has entries for cluster-1 and cluster-2
+- Call with only cluster-1
+- After: only cluster-1 remains
+
+- [ ] **Step 3: Test syncClusterClientPool is idempotent for existing clients**
+
+Test that calling `syncClusterClientPool` with the same selection twice doesn't recreate the client. The client pointer should be the same object after both calls.
+
+- [ ] **Step 4: Test initKubernetesClient succeeds with valid selections**
+
+Create `backend/app_kubernetes_client_test.go`:
+
+Test that `initKubernetesClient` succeeds when `selectedKubeconfigs` has a valid selection that resolves to a working cluster. This requires mocking the kubeconfig resolution and client build. The test should verify:
+- No error returned
+- `a.clusterClients` is populated
+- Refresh subsystem is initialized (or was already initialized)
+
+- [ ] **Step 5: Test initKubernetesClient fails gracefully with no selections**
+
+Test that `initKubernetesClient` returns an error when `selectedKubeconfigs` is empty.
+
+- [ ] **Step 6: Test auth failure event emission**
+
+Verify that `handleAuthStateChange` with `StateInvalid` emits a `cluster:auth:failed` event with the correct cluster ID and reason. Capture events via a mock `eventEmitter`.
+
+- [ ] **Step 7: Run all new tests**
+
+Run: `cd backend && go test -run "TestSyncClusterClientPool|TestInitKubernetesClient|TestAuthFailureEvent" -v`
+Expected: All tests PASS, verifying existing behavior is captured.
+
+- [ ] **Step 8: Run full backend test suite to confirm no regressions**
+
+Run: `cd backend && go test ./... -count=1`
+Expected: All tests PASS.
+
+---
+
 ## Task 1: Backend State Machine
 
 **Files:**
