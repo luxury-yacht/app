@@ -618,6 +618,58 @@ export const ThemeIcon: React.FC<IconProps> = ({
   </svg>
 );
 
+export const InfoIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 20 20"
+    fill={fill}
+    width={width}
+    height={height}
+  >
+    <path d="M10 .4C4.697.4.399 4.698.399 10A9.6 9.6 0 0 0 10 19.601c5.301 0 9.6-4.298 9.6-9.601c0-5.302-4.299-9.6-9.6-9.6m.896 3.466c.936 0 1.211.543 1.211 1.164c0 .775-.62 1.492-1.679 1.492c-.886 0-1.308-.445-1.282-1.182c0-.621.519-1.474 1.75-1.474M8.498 15.75c-.64 0-1.107-.389-.66-2.094l.733-3.025c.127-.484.148-.678 0-.678c-.191 0-1.022.334-1.512.664l-.319-.523c1.555-1.299 3.343-2.061 4.108-2.061c.64 0 .746.756.427 1.92l-.84 3.18c-.149.562-.085.756.064.756c.192 0 .82-.232 1.438-.719l.362.486c-1.513 1.512-3.162 2.094-3.801 2.094" />
+  </svg>
+);
+
+export const DiagnosticsIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  fill = 'currentColor',
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill={fill}
+    width={width}
+    height={height}
+  >
+    <path d="M16.03 6H4.004v3.938h.382L6.41 6.714l1.764 3.5l.723-1.152h3.611a4.5 4.5 0 0 0-.2 2h-2.301l-2.023 3.224l-1.765-3.5l-.722 1.152H4.004V15H16.03v-.062a4.55 4.55 0 0 0 2.005-.114V17h-7.016v1h2.005a1.001 1.001 0 1 1 0 2H7.01a1.001 1.001 0 1 1 0-2h2.004v-1H2V4h16.035v2.176a4.5 4.5 0 0 0-2.005-.114z" />
+    <path fillRule="evenodd" d="M19.868 12.165A3.504 3.504 0 0 0 16.782 7a3.504 3.504 0 0 0-3.508 3.5c0 1.933 1.57 3.5 3.508 3.5c.604 0 1.172-.152 1.668-.42l2.133 2.127L22 14.293zM16.782 12c.83 0 1.503-.672 1.503-1.5S17.612 9 16.782 9s-1.504.672-1.504 1.5s.674 1.5 1.504 1.5" clipRule="evenodd" />
+  </svg>
+);
+
+export const DiffIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={1.5}
+    width={width}
+    height={height}
+  >
+    <path d="m3.75 13.75h8m0-7.5h-8m4-4v8" />
+  </svg>
+);
+
 export const LogsIcon: React.FC<IconProps> = ({
   width = 16,
   height = 16,
@@ -634,5 +686,24 @@ export const LogsIcon: React.FC<IconProps> = ({
     height={height}
   >
     <path d="M3 5h1m-1 7h1m-1 7h1M8 5h1m-1 7h1m-1 7h1m4-14h8m-8 7h8m-8 7h8" />
+  </svg>
+);
+
+export const RefreshIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+}) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={2}
+    width={width}
+    height={height}
+  >
+    <path d="M20 11A8.1 8.1 0 0 0 4.5 9M4 5v4h4m-4 4a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4" />
   </svg>
 );
