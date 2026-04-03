@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
@@ -247,16 +246,12 @@ func (a *App) buildRefreshMux(
 	// Wire the lifecycle transition: when a cluster's namespace domain first serves
 	// data successfully, move it from loading/loading_slow to ready.
 	aggregateService.onFirstSnapshot = func(clusterID string) {
-		log.Printf("[lifecycle-debug] onFirstSnapshot CALLBACK FIRED for cluster %s", clusterID)
 		if a.clusterLifecycle == nil {
-			log.Printf("[lifecycle-debug] onFirstSnapshot: clusterLifecycle is nil for %s", clusterID)
 			return
 		}
 		state := a.clusterLifecycle.GetState(clusterID)
-		log.Printf("[lifecycle-debug] onFirstSnapshot: cluster %s current state=%s", clusterID, string(state))
 		if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
 			a.clusterLifecycle.SetState(clusterID, ClusterStateReady)
-			log.Printf("[lifecycle-debug] onFirstSnapshot: cluster %s transitioned to ready", clusterID)
 		}
 	}
 	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)

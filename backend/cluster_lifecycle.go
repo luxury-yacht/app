@@ -1,7 +1,6 @@
 package backend
 
 import (
-	"log"
 	"sync"
 	"time"
 )
@@ -61,7 +60,6 @@ func newClusterLifecycleWithSlowThreshold(
 // SetState transitions a cluster to the given state. It cancels any pending slow timer,
 // starts a new one if entering Loading, and invokes the emitter callback.
 func (cl *clusterLifecycle) SetState(clusterId string, state ClusterLifecycleState) {
-	log.Printf("[lifecycle-debug] SetState: cluster=%s newState=%s", clusterId, string(state))
 	cl.mu.Lock()
 
 	entry := cl.entries[clusterId]

@@ -3,7 +3,6 @@ package backend
 import (
 	"context"
 	"fmt"
-	"log"
 	"maps"
 	"sort"
 	"strings"
@@ -107,7 +106,6 @@ func (s *aggregateSnapshotService) Build(ctx context.Context, domain, scope stri
 		// Notify the lifecycle module on the first successful namespace snapshot
 		// for each cluster. This drives the loading → ready transition.
 		if domain == "namespaces" {
-			log.Printf("[lifecycle-debug] namespace snapshot built successfully for cluster %s", id)
 			s.markFirstSnapshot(id)
 		}
 	}
@@ -210,14 +208,12 @@ func isSingleClusterDomain(domain string) bool {
 
 // markFirstSnapshot fires the onFirstSnapshot callback exactly once per cluster.
 func (s *aggregateSnapshotService) markFirstSnapshot(clusterID string) {
-	log.Printf("[lifecycle-debug] markFirstSnapshot called for cluster %s, onFirstSnapshot=%v", clusterID, s.onFirstSnapshot != nil)
 	if s.onFirstSnapshot == nil {
 		return
 	}
 	s.firstSnapshotMu.Lock()
 	if s.firstSnapshotOK[clusterID] {
 		s.firstSnapshotMu.Unlock()
-		log.Printf("[lifecycle-debug] cluster %s already marked, skipping", clusterID)
 		return
 	}
 	if s.firstSnapshotOK == nil {
