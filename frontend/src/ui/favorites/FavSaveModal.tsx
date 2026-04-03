@@ -13,6 +13,7 @@ import { useModalFocusTrap } from '@shared/components/modals/useModalFocusTrap';
 import { KeyboardContextPriority, KeyboardScopePriority } from '@ui/shortcuts/priorities';
 import { CloseIcon } from '@shared/components/icons/MenuIcons';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import Tooltip from '@shared/components/Tooltip';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
@@ -465,6 +466,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                       data-fav-modal-focusable="true"
                     />
                     Any
+                    <Tooltip content="Can be used in any cluster. Attempts to open this view in the current active cluster." />
                   </label>
                 </div>
                 <div className="setting-item fav-inline-row">
@@ -477,6 +479,7 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                       data-fav-modal-focusable="true"
                     />
                     Cluster
+                    <Tooltip content="Opens the saved view in a specific cluster, and will activate that cluster if needed." />
                   </label>
                   <Dropdown
                     options={clusterOptions}
@@ -571,7 +574,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     <Dropdown
                       options={kindDropdownOptions}
                       value={filterKinds}
-                      onChange={(val) => setFilterKinds(Array.isArray(val) ? val : val ? [val] : [])}
+                      onChange={(val) =>
+                        setFilterKinds(Array.isArray(val) ? val : val ? [val] : [])
+                      }
                       placeholder="All kinds"
                       multiple
                     />
@@ -583,7 +588,9 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     <Dropdown
                       options={nsFilterDropdownOptions}
                       value={filterNamespaces}
-                      onChange={(val) => setFilterNamespaces(Array.isArray(val) ? val : val ? [val] : [])}
+                      onChange={(val) =>
+                        setFilterNamespaces(Array.isArray(val) ? val : val ? [val] : [])
+                      }
                       placeholder="All namespaces"
                       multiple
                     />
