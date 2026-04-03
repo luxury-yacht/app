@@ -156,6 +156,7 @@ export function useFavToggle(state: FavToggleState): { item: IconBarItem; modal:
         kinds: pendingFavorite.filters.kinds ?? [],
         namespaces: pendingFavorite.filters.namespaces ?? [],
         caseSensitive: pendingFavorite.filters.caseSensitive ?? false,
+        includeMetadata: pendingFavorite.filters.includeMetadata ?? false,
       });
     }
     if (pendingFavorite.filters && state.setIncludeMetadata) {

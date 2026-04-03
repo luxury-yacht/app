@@ -51,12 +51,6 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const { selectedClusterId, selectedClusterIds } = useKubeconfig();
-    // Metadata-aware search: when toggled on, includes labels and annotations.
-    const { includeMetadata, setIncludeMetadata, metadataToggle, getSearchText } =
-      useMetadataSearch<ClusterNodeRow>({
-        getDefaultValues: useCallback((row: ClusterNodeRow) => [row.name, row.kind], []),
-        getMetadataMaps: useCallback((row: ClusterNodeRow) => [row.labels, row.annotations], []),
-      });
     const useShortResourceNames = useShortNames();
     // Build scoped key for multi-cluster node metrics lookup.
     const nodesScope = useMemo(
@@ -271,6 +265,16 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       keyExtractor,
       filterOptions: { isNamespaceScoped: false },
     });
+
+    // Metadata-aware search: when toggled on, includes labels and annotations.
+    // State is stored in persistedFilters.includeMetadata so it persists across cluster switches.
+    const { includeMetadata, setIncludeMetadata, metadataToggle, getSearchText } =
+      useMetadataSearch<ClusterNodeRow>({
+        getDefaultValues: useCallback((row: ClusterNodeRow) => [row.name, row.kind], []),
+        getMetadataMaps: useCallback((row: ClusterNodeRow) => [row.labels, row.annotations], []),
+        filters: persistedFilters,
+        onFiltersChange: setPersistedFilters,
+      });
 
     // Set up table sorting
     const { sortedData, sortConfig, handleSort } = useTableSort(data, 'name', 'asc', {

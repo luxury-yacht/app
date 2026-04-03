@@ -48,25 +48,18 @@ export function navigateToFavorite(
     selectedKubeconfigs,
     setSelectedKubeconfigs,
     setActiveKubeconfig,
-    setViewType,
-    setActiveClusterView,
-    setActiveNamespaceTab,
-    setSelectedNamespace,
-    onNamespaceSelect,
-    setSidebarSelection,
     setPendingFavorite,
   } = contexts;
 
-  // Store the favorite so the target view can restore filter/table state on mount.
+  // Store the favorite so effects in FavoritesContext can restore
+  // the full navigation + filter state after the cluster has settled.
   setPendingFavorite(favorite);
 
   const isClusterSpecific = favorite.clusterSelection !== '';
 
-  // Step 1–3: Handle cluster switching if this is a cluster-pinned favorite.
   if (isClusterSpecific) {
     const alreadyOpen = selectedKubeconfigs.includes(favorite.clusterSelection);
     if (!alreadyOpen) {
-      // Add the cluster first, then activate it once the selection is committed.
       const updated = [...selectedKubeconfigs, favorite.clusterSelection];
       void setSelectedKubeconfigs(updated).then(() => {
         setActiveKubeconfig(favorite.clusterSelection);
@@ -75,32 +68,6 @@ export function navigateToFavorite(
       setActiveKubeconfig(favorite.clusterSelection);
     }
   }
-  // Generic favorites: no cluster switching — use whatever is active.
 
-  // Step 4: Set the view type and active tab.
-  if (favorite.viewType === 'namespace') {
-    setViewType('namespace');
-    setActiveNamespaceTab(favorite.view as NamespaceViewType);
-
-    // Step 5: Select the namespace and trigger the namespace-select side effects.
-    if (favorite.namespace) {
-      setSelectedNamespace(favorite.namespace);
-      onNamespaceSelect(favorite.namespace);
-    }
-
-    // Step 6: Update sidebar to reflect the namespace selection.
-    setSidebarSelection({
-      type: 'namespace',
-      value: favorite.namespace || '',
-    });
-  } else if (favorite.viewType === 'cluster') {
-    setViewType('cluster');
-    setActiveClusterView((favorite.view as ClusterViewType) || null);
-
-    // Step 6: Sidebar reflects the cluster view.
-    setSidebarSelection({ type: 'cluster', value: 'cluster' });
-  }
-
-  // Signal that navigation is complete (e.g. close the dropdown).
   onComplete?.();
 }

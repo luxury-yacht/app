@@ -29,10 +29,11 @@ vi.mock('@core/contexts/FavoritesContext', () => ({
     deleteFavorite: mockDeleteFavorite,
     reorderFavorites: mockReorderFavorites,
     pendingFavorite: null,
-    setPendingFavorite: vi.fn(),
+    setPendingFavorite: mockSetPendingFavorite,
   }),
 }));
 
+const mockSetPendingFavorite = vi.fn();
 const mockSetSelectedKubeconfigs = vi.fn().mockResolvedValue(undefined);
 const mockSetActiveKubeconfig = vi.fn();
 
@@ -299,15 +300,16 @@ describe('FavMenuDropdown', () => {
       await Promise.resolve();
     });
 
-    // Navigation utility should have been invoked, which calls setViewType.
-    expect(mockSetViewType).toHaveBeenCalledWith('namespace');
-    expect(mockSetActiveNamespaceTab).toHaveBeenCalledWith('pods');
-    expect(mockSetSelectedNamespace).toHaveBeenCalledWith('default');
-    expect(mockOnNamespaceSelect).toHaveBeenCalledWith('default');
-    expect(mockSetSidebarSelection).toHaveBeenCalledWith({
-      type: 'namespace',
-      value: 'default',
-    });
+    // navigateToFavorite sets the pending favorite; the FavoritesContext
+    // effect handles the actual view/namespace/sidebar navigation.
+    expect(mockSetPendingFavorite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'fav-1',
+        viewType: 'namespace',
+        view: 'pods',
+        namespace: 'default',
+      })
+    );
 
     // Dropdown should close after navigation.
     expect(container.querySelector('.fav-dropdown-panel')).toBeNull();

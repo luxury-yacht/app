@@ -6,7 +6,7 @@
  * user's current navigation state (cluster, view, namespace) matches
  * any saved favorite.
  */
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Favorite } from '@/core/persistence/favorites';
 import {
   hydrateFavorites,
@@ -16,6 +16,10 @@ import {
   setFavoriteOrder,
   subscribeFavorites,
 } from '@/core/persistence/favorites';
+import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useViewState } from '@core/contexts/ViewStateContext';
+import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
+import type { ClusterViewType, NamespaceViewType } from '@/types/navigation/views';
 
 // ---------- Types ----------
 
@@ -54,6 +58,11 @@ interface FavoritesProviderProps {
 export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }) => {
   const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [pendingFavorite, setPendingFavorite] = useState<Favorite | null>(null);
+  const { selectedKubeconfig } = useKubeconfig();
+  const viewState = useViewState();
+  const namespaceCtx = useNamespace();
+  // Track whether navigation state has been applied for the current pending favorite.
+  const navigationAppliedRef = useRef(false);
 
   // Hydrate the favorites cache from the backend on mount.
   useEffect(() => {
@@ -75,6 +84,45 @@ export const FavoritesProvider: React.FC<FavoritesProviderProps> = ({ children }
       setFavorites(favs);
     });
   }, []);
+
+  // Apply navigation state (view, namespace, sidebar) from a pending favorite
+  // once the correct cluster is active. This runs after cluster switching settles
+  // so the per-cluster navigation state restore doesn't overwrite our changes.
+  useEffect(() => {
+    if (!pendingFavorite) {
+      navigationAppliedRef.current = false;
+      return;
+    }
+    // Don't apply twice for the same pending favorite.
+    if (navigationAppliedRef.current) return;
+
+    // For cluster-specific favorites, wait for the correct cluster to become active.
+    const isClusterSpecific = pendingFavorite.clusterSelection !== '';
+    if (isClusterSpecific && selectedKubeconfig !== pendingFavorite.clusterSelection) return;
+
+    navigationAppliedRef.current = true;
+
+    // Use a microtask to ensure this runs after React has committed
+    // the cluster switch state updates (NavigationStateProvider, etc.).
+    queueMicrotask(() => {
+      if (pendingFavorite.viewType === 'namespace') {
+        viewState.setViewType('namespace');
+        viewState.setActiveNamespaceTab(pendingFavorite.view as NamespaceViewType);
+        if (pendingFavorite.namespace) {
+          namespaceCtx.setSelectedNamespace(pendingFavorite.namespace);
+          viewState.onNamespaceSelect(pendingFavorite.namespace);
+        }
+        viewState.setSidebarSelection({
+          type: 'namespace',
+          value: pendingFavorite.namespace || '',
+        });
+      } else if (pendingFavorite.viewType === 'cluster') {
+        viewState.setViewType('cluster');
+        viewState.setActiveClusterView((pendingFavorite.view as ClusterViewType) || null);
+        viewState.setSidebarSelection({ type: 'cluster', value: 'cluster' });
+      }
+    });
+  }, [pendingFavorite, selectedKubeconfig, viewState, namespaceCtx]);
 
   // ---------- Mutation callbacks ----------
 

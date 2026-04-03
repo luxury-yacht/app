@@ -19,6 +19,7 @@ const DEFAULT_FILTER_STATE: GridTableFilterState = {
   kinds: [],
   namespaces: [],
   caseSensitive: false,
+  includeMetadata: false,
 };
 
 const normalizeFilterArray = (values?: string[]): string[] => {
@@ -55,11 +56,13 @@ const normalizeFilterState = (state?: Partial<GridTableFilterState>): GridTableF
   kinds: normalizeFilterArray(state?.kinds),
   namespaces: normalizeFilterArray(state?.namespaces),
   caseSensitive: state?.caseSensitive ?? false,
+  includeMetadata: state?.includeMetadata ?? false,
 });
 
 const areFilterStatesEqual = (a: GridTableFilterState, b: GridTableFilterState): boolean =>
   a.search === b.search &&
   a.caseSensitive === b.caseSensitive &&
+  a.includeMetadata === b.includeMetadata &&
   a.kinds.length === b.kinds.length &&
   a.namespaces.length === b.namespaces.length &&
   a.kinds.every((value, index) => value === b.kinds[index]) &&

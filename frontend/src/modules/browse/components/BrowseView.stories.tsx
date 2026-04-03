@@ -84,7 +84,7 @@ function MockBrowseView({ isFavorited = false }: { isFavorited?: boolean }) {
   };
   const filtersNode = (
     <GridTableFiltersBar
-      activeFilters={{ search: '', kinds: [], namespaces: [], caseSensitive: false }}
+      activeFilters={{ search: '', kinds: [], namespaces: [], caseSensitive: false, includeMetadata: false }}
       resolvedFilterOptions={{
         kinds: KINDS,
         namespaces: [],

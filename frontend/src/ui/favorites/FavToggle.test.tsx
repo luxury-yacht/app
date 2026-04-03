@@ -159,7 +159,7 @@ const makeFavorite = (overrides: Partial<Favorite> = {}): Favorite => ({
  */
 const HookWrapper: React.FC = () => {
   const { item, modal } = useFavToggle({
-    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
+    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false, includeMetadata: false },
     sortColumn: null,
     sortDirection: 'asc',
     columnVisibility: {},

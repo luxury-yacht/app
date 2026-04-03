@@ -387,6 +387,7 @@ export const prunePersistedState = <T>(
       kinds,
       namespaces,
       caseSensitive: persisted.filters.caseSensitive ?? false,
+      includeMetadata: persisted.filters.includeMetadata ?? false,
     };
 
     if (
@@ -461,6 +462,7 @@ export const buildPersistedStateForSave = <T>(
       kinds: normalizeFilterArray(context.filters.kinds),
       namespaces: isNamespaceScoped ? [] : normalizeFilterArray(context.filters.namespaces),
       caseSensitive: context.filters.caseSensitive ?? false,
+      includeMetadata: context.filters.includeMetadata ?? false,
     };
     if (
       filters.search ||

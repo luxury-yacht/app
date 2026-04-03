@@ -66,6 +66,7 @@ export interface GridTableFilterState {
   kinds: string[];
   namespaces: string[];
   caseSensitive: boolean;
+  includeMetadata: boolean;
 }
 
 export interface GridTableFilterAccessors<T> {
