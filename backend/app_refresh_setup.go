@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -84,11 +85,23 @@ func (a *App) buildRefreshSubsystems(
 	}
 
 	for _, selection := range selections {
+		// Use the canonical ID from clusterClients rather than re-deriving
+		// from the selection, which can produce inconsistent IDs when a
+		// kubeconfig file contains multiple contexts.
 		clusterMeta := a.clusterMetaForSelection(selection)
 		if clusterMeta.ID == "" {
 			return nil, nil, fmt.Errorf("cluster identifier missing for selection %s", selection.String())
 		}
 		clients := a.clusterClientsForID(clusterMeta.ID)
+		if clients == nil {
+			// Fallback: try matching by stored meta in clusterClients in case
+			// the re-derived ID doesn't match the canonical one.
+			clients = a.clusterClientsForSelection(selection)
+		}
+		if clients != nil {
+			// Always use the canonical meta from the stored client.
+			clusterMeta = clients.meta
+		}
 		if clients == nil {
 			return nil, nil, fmt.Errorf("cluster clients unavailable for %s", clusterMeta.ID)
 		}
@@ -162,6 +175,15 @@ func (a *App) buildRefreshSubsystemForSelection(
 	if err != nil {
 		return nil, err
 	}
+
+	// Transition to loading now that the subsystem is built and about to
+	// start serving data. This is the single place where loading is set,
+	// regardless of whether the cluster was opened at startup, via the
+	// kubeconfig selector, or after auth recovery.
+	if a.clusterLifecycle != nil {
+		a.clusterLifecycle.SetState(clusterMeta.ID, ClusterStateLoading)
+	}
+
 	// Watch informer updates to invalidate cached detail/YAML/helm responses.
 	a.registerResponseCacheInvalidation(subsystem, clusterMeta.ID)
 	return subsystem, nil
@@ -225,12 +247,16 @@ func (a *App) buildRefreshMux(
 	// Wire the lifecycle transition: when a cluster's namespace domain first serves
 	// data successfully, move it from loading/loading_slow to ready.
 	aggregateService.onFirstSnapshot = func(clusterID string) {
+		log.Printf("[lifecycle-debug] onFirstSnapshot CALLBACK FIRED for cluster %s", clusterID)
 		if a.clusterLifecycle == nil {
+			log.Printf("[lifecycle-debug] onFirstSnapshot: clusterLifecycle is nil for %s", clusterID)
 			return
 		}
 		state := a.clusterLifecycle.GetState(clusterID)
+		log.Printf("[lifecycle-debug] onFirstSnapshot: cluster %s current state=%s", clusterID, string(state))
 		if state == ClusterStateLoading || state == ClusterStateLoadingSlow {
 			a.clusterLifecycle.SetState(clusterID, ClusterStateReady)
+			log.Printf("[lifecycle-debug] onFirstSnapshot: cluster %s transitioned to ready", clusterID)
 		}
 	}
 	aggregateQueue := newAggregateManualQueue(clusterOrder, subsystems)

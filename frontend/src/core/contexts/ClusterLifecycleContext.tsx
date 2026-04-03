@@ -51,52 +51,49 @@ export const ClusterLifecycleProvider: React.FC<ClusterLifecycleProviderProps> =
   const [states, setStates] = useState<Map<string, ClusterLifecycleState>>(() => new Map());
   const { selectedClusterIds } = useKubeconfig();
 
-  // Hydrate from backend on mount.
+  // Subscribe to lifecycle events FIRST, then hydrate. This ensures any events
+  // emitted between the hydration RPC call and its response aren't lost.
   useEffect(() => {
     let active = true;
+    const runtime = (window as any).runtime;
 
+    // 1. Subscribe to live events.
+    const handleLifecycleEvent = (...args: unknown[]) => {
+      const payload = args[0] as
+        | { clusterId?: string; state?: string; previousState?: string }
+        | undefined;
+      if (!active || !payload?.clusterId || !payload.state) {
+        return;
+      }
+      setStates((prev) => {
+        const next = new Map(prev);
+        next.set(payload.clusterId!, payload.state as ClusterLifecycleState);
+        return next;
+      });
+    };
+
+    const dispose = runtime?.EventsOn?.('cluster:lifecycle', handleLifecycleEvent);
+
+    // 2. Hydrate current state from backend. Events that arrive between the RPC
+    //    and its resolution are handled by the subscription above. We merge
+    //    hydrated state with any events already received so newer events win.
     const runtimeApp = (window as any)?.go?.backend?.App;
     if (runtimeApp?.GetAllClusterLifecycleStates) {
       runtimeApp.GetAllClusterLifecycleStates().then((result: Record<string, string> | null) => {
         if (active && result) {
-          setStates(new Map(Object.entries(result) as [string, ClusterLifecycleState][]));
+          setStates((prev) => {
+            const merged = new Map(Object.entries(result) as [string, ClusterLifecycleState][]);
+            // Events received after the RPC was sent take precedence.
+            prev.forEach((state, id) => merged.set(id, state));
+            return merged;
+          });
         }
       });
     }
 
     return () => {
       active = false;
-    };
-  }, []);
-
-  // Subscribe to cluster:lifecycle Wails events.
-  useEffect(() => {
-    const runtime = window.runtime;
-    if (!runtime?.EventsOn) {
-      return;
-    }
-
-    const handleLifecycleEvent = (...args: unknown[]) => {
-      const payload = args[0] as
-        | { clusterId?: string; state?: string; previousState?: string }
-        | undefined;
-      if (!payload?.clusterId || !payload.state) {
-        return;
-      }
-
-      const { clusterId, state } = payload;
-
-      setStates((prev) => {
-        const next = new Map(prev);
-        next.set(clusterId, state as ClusterLifecycleState);
-        return next;
-      });
-    };
-
-    const dispose = runtime.EventsOn('cluster:lifecycle', handleLifecycleEvent);
-
-    return () => {
-      dispose();
+      if (typeof dispose === 'function') dispose();
     };
   }, []);
 

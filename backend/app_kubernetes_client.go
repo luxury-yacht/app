@@ -28,19 +28,6 @@ func (a *App) initKubernetesClient() (err error) {
 
 	a.startObjectCatalog()
 
-	if a.clusterLifecycle != nil {
-		selections, _ := a.selectedKubeconfigSelections()
-		for _, sel := range selections {
-			meta := a.clusterMetaForSelection(sel)
-			if meta.ID != "" {
-				state := a.clusterLifecycle.GetState(meta.ID)
-				if state == ClusterStateConnected {
-					a.clusterLifecycle.SetState(meta.ID, ClusterStateLoading)
-				}
-			}
-		}
-	}
-
 	a.logger.Info(fmt.Sprintf("Successfully established Kubernetes clients for %d cluster(s)", len(selections)), "KubernetesClient")
 	// Note: Global connection status tracking has been removed. Connection health
 	// is now tracked per-cluster via cluster:health:* and cluster:auth:* events.
