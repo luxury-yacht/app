@@ -18,6 +18,7 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import type { Favorite, FavoriteFilters, FavoriteTableState } from '@/core/persistence/favorites';
 import '@ui/modals/modals.css';
+import '@ui/settings/Settings.css';
 import '@shared/components/KubeconfigSelector.css';
 import './FavSaveModal.css';
 
@@ -373,134 +374,144 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
 
           <div className="modal-content">
             {/* Name */}
-            <div className="fav-save-field">
-              <label className="fav-save-label" htmlFor="fav-name">Name</label>
-              <input
-                id="fav-name"
-                type="text"
-                className="fav-save-input"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                onKeyDown={(e) => {
-                  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
-                    e.preventDefault();
-                    (e.target as HTMLInputElement).select();
-                  }
-                }}
-                autoFocus
-                data-fav-modal-focusable="true"
-              />
-            </div>
-
-            {/* Type (cluster binding) */}
-            <div className="fav-save-field">
-              <span className="fav-save-label">Type</span>
-              <div className="fav-save-radios">
-                <label className="fav-save-radio">
+            <div className="settings-section">
+              <h3>Name</h3>
+              <div className="settings-items">
+                <div className="setting-item">
                   <input
-                    type="radio"
-                    name="cluster-type"
-                    checked={!clusterSpecific}
-                    onChange={() => handleTypeChange(false)}
+                    id="fav-name"
+                    type="text"
+                    className="fav-save-input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    onKeyDown={(e) => {
+                      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+                        e.preventDefault();
+                        (e.target as HTMLInputElement).select();
+                      }
+                    }}
+                    autoFocus
                     data-fav-modal-focusable="true"
                   />
-                  <span>Any Cluster</span>
-                </label>
-                <label className="fav-save-radio">
-                  <input
-                    type="radio"
-                    name="cluster-type"
-                    checked={clusterSpecific}
-                    onChange={() => handleTypeChange(true)}
-                    data-fav-modal-focusable="true"
-                  />
-                  <span>Cluster-specific</span>
-                </label>
-                <Dropdown
-                  options={clusterOptions}
-                  value={clusterSelection}
-                  onChange={(val) => setClusterSelection(val as string)}
-                  placeholder="Select cluster..."
-                  disabled={!clusterSpecific}
-                  renderValue={(val) => {
-                    const match = clusterOptions.find((o) => o.value === val);
-                    return match?.metadata?.context ?? val;
-                  }}
-                  renderOption={(option) => (
-                    <div
-                      className={`kubeconfig-option${!option.metadata?.isFirstForFile ? ' no-filename' : ''}${option.metadata?.isCurrentContext ? ' current-context' : ''}`}
-                    >
-                      {option.metadata?.isFirstForFile && (
-                        <div className="kubeconfig-filename">{option.metadata.filename}</div>
-                      )}
-                      <div className="kubeconfig-context">
-                        <span className="kubeconfig-context-label">{option.metadata?.context}</span>
-                      </div>
-                    </div>
-                  )}
-                />
+                </div>
               </div>
             </div>
 
-            {/* Scope */}
-            <div className="fav-save-field">
-              <span className="fav-save-label">Scope</span>
-              <div className="fav-save-radios">
-                <label className="fav-save-radio">
-                  <input
-                    type="radio"
-                    name="scope"
-                    checked={scope === 'cluster'}
-                    onChange={() => handleScopeChange('cluster')}
-                    data-fav-modal-focusable="true"
+            {/* Type (cluster binding) */}
+            <div className="settings-section">
+              <h3>Type</h3>
+              <div className="settings-items">
+                <div className="setting-item">
+                  <label>
+                    <input
+                      type="radio"
+                      name="cluster-type"
+                      checked={!clusterSpecific}
+                      onChange={() => handleTypeChange(false)}
+                      data-fav-modal-focusable="true"
+                    />
+                    Any Cluster
+                  </label>
+                </div>
+                <div className="setting-item">
+                  <label>
+                    <input
+                      type="radio"
+                      name="cluster-type"
+                      checked={clusterSpecific}
+                      onChange={() => handleTypeChange(true)}
+                      data-fav-modal-focusable="true"
+                    />
+                    Cluster-specific
+                  </label>
+                  <Dropdown
+                    options={clusterOptions}
+                    value={clusterSelection}
+                    onChange={(val) => setClusterSelection(val as string)}
+                    placeholder="Select cluster..."
+                    disabled={!clusterSpecific}
+                    renderValue={(val) => {
+                      const match = clusterOptions.find((o) => o.value === val);
+                      return match?.metadata?.context ?? val;
+                    }}
+                    renderOption={(option) => (
+                      <div
+                        className={`kubeconfig-option${!option.metadata?.isFirstForFile ? ' no-filename' : ''}${option.metadata?.isCurrentContext ? ' current-context' : ''}`}
+                      >
+                        {option.metadata?.isFirstForFile && (
+                          <div className="kubeconfig-filename">{option.metadata.filename}</div>
+                        )}
+                        <div className="kubeconfig-context">
+                          <span className="kubeconfig-context-label">{option.metadata?.context}</span>
+                        </div>
+                      </div>
+                    )}
                   />
-                  <span>Cluster</span>
-                </label>
-                <Dropdown
-                  options={CLUSTER_VIEWS}
-                  value={clusterView}
-                  onChange={(val) => setClusterView(val as string)}
-                  placeholder="Select view..."
-                  disabled={scope !== 'cluster'}
-                />
-                <label className="fav-save-radio">
-                  <input
-                    type="radio"
-                    name="scope"
-                    checked={scope === 'namespace'}
-                    onChange={() => handleScopeChange('namespace')}
-                    data-fav-modal-focusable="true"
+                </div>
+              </div>
+            </div>
+
+            {/* Scope & View */}
+            <div className="settings-section">
+              <h3>Scope</h3>
+              <div className="settings-items">
+                <div className="setting-item">
+                  <label>
+                    <input
+                      type="radio"
+                      name="scope"
+                      checked={scope === 'cluster'}
+                      onChange={() => handleScopeChange('cluster')}
+                      data-fav-modal-focusable="true"
+                    />
+                    Cluster
+                  </label>
+                  <Dropdown
+                    options={CLUSTER_VIEWS}
+                    value={clusterView}
+                    onChange={(val) => setClusterView(val as string)}
+                    placeholder="Select view..."
+                    disabled={scope !== 'cluster'}
                   />
-                  <span>Namespaced</span>
-                </label>
-                <Dropdown
-                  options={NAMESPACE_VIEWS}
-                  value={namespaceView}
-                  onChange={(val) => setNamespaceView(val as string)}
-                  placeholder="Select view..."
-                  disabled={scope !== 'namespace'}
-                />
-                <Dropdown
-                  options={namespaceOptions}
-                  value={selectedNamespace}
-                  onChange={(val) => setSelectedNamespace(val as string)}
-                  placeholder="Select namespace..."
-                  disabled={scope !== 'namespace'}
-                />
+                </div>
+                <div className="setting-item">
+                  <label>
+                    <input
+                      type="radio"
+                      name="scope"
+                      checked={scope === 'namespace'}
+                      onChange={() => handleScopeChange('namespace')}
+                      data-fav-modal-focusable="true"
+                    />
+                    Namespaced
+                  </label>
+                  <Dropdown
+                    options={NAMESPACE_VIEWS}
+                    value={namespaceView}
+                    onChange={(val) => setNamespaceView(val as string)}
+                    placeholder="Select view..."
+                    disabled={scope !== 'namespace'}
+                  />
+                  <Dropdown
+                    options={namespaceOptions}
+                    value={selectedNamespace}
+                    onChange={(val) => setSelectedNamespace(val as string)}
+                    placeholder="Select namespace..."
+                    disabled={scope !== 'namespace'}
+                  />
+                </div>
               </div>
             </div>
 
             {/* Filters */}
-            <div className="fav-save-field">
-              <span className="fav-save-label">Filters</span>
-              <div className="fav-save-filters">
-                <div className="fav-save-filter-row">
-                  <label className="fav-save-filter-label" htmlFor="fav-filter-text">
-                    Filter Text
-                  </label>
+            <div className="settings-section">
+              <h3>Filters</h3>
+              <div className="settings-items">
+                <div className="setting-item">
+                  <label htmlFor="fav-filter-text">Filter Text</label>
                   <input
                     id="fav-filter-text"
                     type="text"
@@ -519,28 +530,26 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                     data-fav-modal-focusable="true"
                   />
                 </div>
-                <div className="fav-save-filter-row">
-                  <label className="fav-save-filter-checkbox">
+                <div className="setting-item">
+                  <label>
                     <input
                       type="checkbox"
                       checked={caseSensitive}
                       onChange={(e) => setCaseSensitive(e.target.checked)}
-                      className="fav-save-checkbox"
                       data-fav-modal-focusable="true"
                     />
-                    <span>Case-Sensitive</span>
+                    Case-Sensitive
                   </label>
                 </div>
-                <div className="fav-save-filter-row">
-                  <label className="fav-save-filter-checkbox">
+                <div className="setting-item">
+                  <label>
                     <input
                       type="checkbox"
                       checked={includeMetadataState}
                       onChange={(e) => setIncludeMetadataState(e.target.checked)}
-                      className="fav-save-checkbox"
                       data-fav-modal-focusable="true"
                     />
-                    <span>Include Metadata</span>
+                    Include Metadata
                   </label>
                 </div>
               </div>
