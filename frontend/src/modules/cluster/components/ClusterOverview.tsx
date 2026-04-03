@@ -75,15 +75,23 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   // Map lifecycle state to a human-readable label.
   const lifecycleLabel = useMemo(() => {
     switch (lifecycleState) {
-      case 'connecting': return 'Connecting';
-      case 'auth_failed': return 'Auth Failed';
+      case 'connecting':
+        return 'Connecting';
+      case 'auth_failed':
+        return 'Auth Failed';
       case 'connected':
-      case 'loading': return 'Loading';
-      case 'loading_slow': return 'Loading (slow)';
-      case 'ready': return 'Ready';
-      case 'disconnected': return 'Disconnected';
-      case 'reconnecting': return 'Reconnecting';
-      default: return '';
+      case 'loading':
+        return 'Loading';
+      case 'loading_slow':
+        return 'Loading (slow)';
+      case 'ready':
+        return 'Ready';
+      case 'disconnected':
+        return 'Disconnected';
+      case 'reconnecting':
+        return 'Reconnecting';
+      default:
+        return '';
     }
   }, [lifecycleState]);
 
