@@ -283,6 +283,7 @@ const NodesViewGrid: React.FC<NodesViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
+    // Nodes view only shows Node kind - no availableKinds or availableFilterNamespaces needed.
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       includeMetadata,

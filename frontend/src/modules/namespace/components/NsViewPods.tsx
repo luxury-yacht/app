@@ -351,6 +351,11 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       onChange: onSortChange,
     });
 
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
+      [data]
+    );
+
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: sortConfig?.key ?? null,
@@ -360,6 +365,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       setSortConfig: onSortChange,
       setColumnVisibility,
       hydrated,
+      availableFilterNamespaces,
     });
 
     const handleDeleteConfirm = useCallback(async () => {

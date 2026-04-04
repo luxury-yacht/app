@@ -182,6 +182,15 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       onChange: onSortChange,
     });
 
+    const availableKinds = useMemo(
+      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
+      [data]
+    );
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
+      [data]
+    );
+
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: workloadSortConfig?.key ?? null,
@@ -191,6 +200,8 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       setSortConfig: onSortChange,
       setColumnVisibility,
       hydrated,
+      availableKinds,
+      availableFilterNamespaces,
     });
 
     const canRestart = useCallback(

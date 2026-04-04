@@ -252,6 +252,11 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
+    const availableKinds = useMemo(
+      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
+      [data]
+    );
+
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: sortConfig?.key ?? null,
@@ -261,6 +266,7 @@ const StorageViewGrid: React.FC<StorageViewProps> = React.memo(
       setSortConfig: setPersistedSort,
       setColumnVisibility,
       hydrated,
+      availableKinds,
     });
 
     // Handle delete confirmation

@@ -272,6 +272,8 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     setSortConfig: persistence.setSortConfig,
     setColumnVisibility: persistence.setColumnVisibility,
     hydrated: persistence.hydrated,
+    availableKinds: filterOptions.kinds,
+    availableFilterNamespaces: filterOptions.namespaces,
   });
 
   // Build grid filters configuration

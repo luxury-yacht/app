@@ -305,6 +305,15 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       onChange: onSortChange,
     });
 
+    const availableKinds = useMemo(
+      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
+      [data]
+    );
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
+      [data]
+    );
+
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: sortConfig?.key ?? null,
@@ -314,6 +323,8 @@ const AutoscalingViewGrid: React.FC<AutoscalingViewProps> = React.memo(
       setSortConfig: onSortChange,
       setColumnVisibility,
       hydrated,
+      availableKinds,
+      availableFilterNamespaces,
     });
 
     const handleDeleteConfirm = useCallback(async () => {

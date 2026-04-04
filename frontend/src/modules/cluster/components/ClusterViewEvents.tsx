@@ -214,6 +214,11 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       onChange: setPersistedSort,
     });
 
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
+      [data]
+    );
+
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: sortConfig?.key ?? null,
@@ -223,6 +228,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       setSortConfig: setPersistedSort,
       setColumnVisibility,
       hydrated,
+      availableFilterNamespaces,
     });
 
     // Get context menu items

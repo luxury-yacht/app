@@ -238,6 +238,11 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       onChange: onSortChange,
     });
 
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean) as string[])].sort(),
+      [data]
+    );
+
     const { item: favToggle, modal: favModal } = useFavToggle({
       filters: persistedFilters,
       sortColumn: sortConfig?.key ?? null,
@@ -247,6 +252,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       setSortConfig: onSortChange,
       setColumnVisibility,
       hydrated,
+      availableFilterNamespaces,
     });
 
     // Get context menu items
