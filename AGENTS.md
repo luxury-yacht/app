@@ -10,6 +10,8 @@ Area-specific rules: `backend/AGENTS.md`, `frontend/AGENTS.md`.
   must include `clusterId`. Fix any code that doesn't do this.
 - Don't change code, appearance, or dependencies beyond what was explicitly requested.
   When adding dependencies, use the latest stable version.
+- Make the minimal change requested. Don't rewrite or restructure components for small
+  changes. Match existing patterns by reusing selectors/classes, not creating new ones.
 - Prefer the difficult-but-correct fix over the simple-but-incomplete one.
 - Ask clarifying questions when the problem is unclear; ask for help when stuck.
 - Add comments where the logic isn't self-evident, using plain language.
@@ -19,6 +21,15 @@ Area-specific rules: `backend/AGENTS.md`, `frontend/AGENTS.md`.
 - Aim for ≥80% test coverage; note gaps and ask for guidance if not feasible.
 - Never run state-modifying git commands or create PRs unless explicitly directed.
   Read-only git commands are fine.
+
+## Claude Code Setup
+
+Add this to `.claude/settings.local.json` so memories are stored in the project
+(`.claude/memory/`) instead of your home directory:
+
+```json
+{ "autoMemoryDirectory": "<project-root>/.claude/memory" }
+```
 
 ## Documentation
 

@@ -20,9 +20,18 @@ Applies to React/TypeScript code under `frontend/`.
 - Validate domain state in the Diagnostics panel.
 - Catalog browse: keep snapshot/manual refresh flow (see `frontend/src/core/refresh/orchestrator.ts` catalog registration); avoid SSE-driven renders for Browse.
 
+## Storybook
+
+- Stories must use real components and real CSS classes — never inline style
+  approximations. Mock only the data/provider layer, not the rendering.
+- Changes belong in production code. Stories verify changes, they don't contain them.
+- Before writing a story, trace ALL hook dependencies to identify required providers.
+  Don't discover them one crash at a time.
+
 ## CSS
 
 - Never use inline CSS; keep CSS in files.
+- All form labels for inputs must have the exact same spacing unless told otherwise.
 - Favor reusing shared styles in `frontend/src/styles`; otherwise keep CSS close to the source (for example `ContextMenu.tsx` → `ContextMenu.css`).
 - Always tokenize sizes/colors with shared tokens in `frontend/src/styles`; colors must support Light and Dark themes.
 
