@@ -1,7 +1,11 @@
 /* application */
 
 .app {
-  height: 100vh;
+  flex: 1;
+  /* Divide by --zoom-compensate so the height is correct on Windows where CSS
+     zoom on <html> does not adjust viewport units. Defaults to 1 (no-op) on
+     macOS/Linux where the viewport adjusts automatically. */
+  height: calc(100dvh / var(--zoom-compensate, 1));
   display: flex;
   flex-direction: column;
   background-color: var(--color-bg);
@@ -9,17 +13,11 @@
   position: relative;
   /* Prevent text selection by default */
   user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
 }
 
 /* Utility class to allow text selection on specific elements */
 .selectable {
   user-select: text;
-  -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
 }
 
 .app-container {

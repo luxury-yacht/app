@@ -145,8 +145,8 @@ describe('useWindowBoundsConstraint', () => {
       vi.runAllTimers();
     });
 
-    expect(panelState.setSize).toHaveBeenCalledWith({ width: 700, height: 500 });
-    expect(panelState.setFloatingPosition).toHaveBeenCalledWith({ x: 0, y: 50 });
+    expect(panelState.setSize).toHaveBeenCalledWith({ width: 800, height: 600 });
+    expect(panelState.setFloatingPosition).toHaveBeenCalledWith({ x: 0, y: 0 });
 
     await unmount();
   });

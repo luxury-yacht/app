@@ -28,7 +28,7 @@ import { DockablePanelHeader } from './DockablePanelHeader';
 import { useDockablePanelDragResize } from './useDockablePanelDragResize';
 import { useDockablePanelMaximize } from './useDockablePanelMaximize';
 import { useWindowBoundsConstraint } from './useDockablePanelWindowBounds';
-import { PANEL_DEFAULTS, getPanelSizeConstraints } from './dockablePanelLayout';
+import { PANEL_DEFAULTS, getPanelSizeConstraints, getContentBounds } from './dockablePanelLayout';
 import { getGroupForPanel, getGroupTabs } from './tabGroupState';
 import type { PanelSizeConstraints } from './dockablePanelLayout';
 import type { TabInfo } from './DockableTabBar';
@@ -561,22 +561,33 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
       style['--dockable-panel-translate-y'] = '0px';
       return style;
     }
+
+    // Clamp dimensions and position to keep the panel within the visible content area.
+    const content = getContentBounds();
+
     if (panelState.position === 'floating') {
-      const roundedX = Math.round(panelState.floatingPosition.x);
-      const roundedY = Math.round(panelState.floatingPosition.y);
-      style.width = `${panelState.size.width}px`;
-      style.height = `${panelState.size.height}px`;
-      style.transform = `translate3d(${roundedX}px, ${roundedY}px, 0)`;
+      const maxW = Math.max(constraints.floating.minWidth, content.width);
+      const maxH = Math.max(constraints.floating.minHeight, content.height);
+      const clampedW = Math.min(panelState.size.width, maxW);
+      const clampedH = Math.min(panelState.size.height, maxH);
+      const maxX = Math.max(0, content.width - clampedW);
+      const maxY = Math.max(0, content.height - clampedH);
+      const clampedX = Math.round(Math.max(0, Math.min(panelState.floatingPosition.x, maxX)));
+      const clampedY = Math.round(Math.max(0, Math.min(panelState.floatingPosition.y, maxY)));
+
+      style.width = `${clampedW}px`;
+      style.height = `${clampedH}px`;
+      style.transform = `translate3d(${clampedX}px, ${clampedY}px, 0)`;
       style.top = 0;
       style.left = 0;
-      style['--dockable-panel-translate-x'] = `${roundedX}px`;
-      style['--dockable-panel-translate-y'] = `${roundedY}px`;
+      style['--dockable-panel-translate-x'] = `${clampedX}px`;
+      style['--dockable-panel-translate-y'] = `${clampedY}px`;
     } else if (panelState.position === 'right') {
-      style.width = `${panelState.size.width}px`;
-      // Height is determined by CSS top/bottom positioning, not an explicit value.
-      // Setting height: 100% here would overflow the bottom by the top offset.
+      const maxW = Math.max(constraints.right.minWidth, content.width);
+      style.width = `${Math.min(panelState.size.width, maxW)}px`;
     } else if (panelState.position === 'bottom') {
-      style.height = `${panelState.size.height}px`;
+      const maxH = Math.max(constraints.bottom.minHeight, content.height);
+      style.height = `${Math.min(panelState.size.height, maxH)}px`;
       style.width = '100%';
     }
     return style;
@@ -587,6 +598,7 @@ const DockablePanelInner: React.FC<DockablePanelProps> = (props) => {
     panelState.zIndex,
     isMaximized,
     maximizedRect,
+    constraints,
   ]);
 
   if (!panelState.isOpen) return null;

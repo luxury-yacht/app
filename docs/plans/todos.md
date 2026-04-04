@@ -1,33 +1,28 @@
 # TODO
 
+- Preemptive permissions check - start as soon as the view is opened, don't wait for right-click
+
+- Resource creation
+  - starter templates for common resource types
+  - reuse the existing code editor
+
 ## Issues
+
+- Large cluster pagination — views other than Browse (e.g. Pods) load all items in one request. On clusters with thousands of resources this could be slow. Consider adding pagination/Load More to all grid table views.
 
 ## Feature Ideas
 
 - Gridtable improvements
-  - Link behavior
-    - Click to open in Object Panel
-    - Ctrl/Cmd+click to go to that item in its view
   - Allow column order change via drag
     - should reset button also reset to default column order?
       - probably not because that reset is for filters
-  - Right-click menu on table header
-    - Sort asc/desc
-    - Move column left/right
-    - Hide column
-    - Reset to defaults
-  - Hover buttons to hide column, set sort?
   - Pods view, change default column order to Name, Owner, Namespace
-  - Show number of items in tables
-    - Perhaps an option to turn on row numbers?
 
 - Transfer files to/from pods
   - Select container
   - can we show a file dialog for the remote filesystem?
 
 - More deployment options
-  - rollback
-    - choose a replicaset or just roll back to the most recent?
   - Container scope:
     - set image
       - show a list of containers and their images, allow override
@@ -42,15 +37,6 @@
 
 - Multi-select/batch operations
   - Allow batch operations, but could be dangerous
-
-- Favorites/bookmarks
-  - Bookmark specific views
-
-- Customize Cluster Overview
-  - from a predefined set of widgets
-
-- ArgoCD integration to show drift
-  - Would need permission to query the argo API
 
 ## Wails v3 (when ready)
 

@@ -78,6 +78,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
   scaleReplicas,
   showScaleInput,
   onRestartClick,
+  onRollbackClick,
   onDeleteClick,
   onScaleClick,
   onScaleCancel,
@@ -219,6 +220,7 @@ const DetailsTabContent: React.FC<DetailsTabProps> = ({
             restartDisabledReason={restartDisabledReason}
             scaleDisabledReason={scaleDisabledReason}
             onRestart={onRestartClick}
+            onRollback={onRollbackClick}
             onScale={(replicas: number) => onScaleClick(replicas)}
             onScaleCancel={onScaleCancel}
             onScaleReplicasChange={onScaleReplicasChange}

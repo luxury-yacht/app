@@ -21,6 +21,10 @@ import (
 	"github.com/luxury-yacht/app/backend/refresh/telemetry"
 )
 
+func mustUnixMilli(value time.Time) int64 {
+	return value.UnixMilli()
+}
+
 type flushRecorder struct {
 	*httptest.ResponseRecorder
 	mu sync.Mutex
@@ -147,6 +151,7 @@ func TestHandlerRejectsWhenSubscriberLimitReached(t *testing.T) {
 }
 
 func TestHandlerStreamsEvents(t *testing.T) {
+	initialTimestamp := time.Now().Add(-6 * time.Hour)
 	initialSnapshot := &refresh.Snapshot{
 		Domain: "cluster-events",
 		Payload: snapshot.ClusterEventsSnapshot{
@@ -160,6 +165,7 @@ func TestHandlerStreamsEvents(t *testing.T) {
 				Object:          "Pod/test",
 				Message:         "initial message",
 				Age:             "0s",
+				AgeTimestamp:    mustUnixMilli(initialTimestamp),
 			}},
 		},
 		Stats: refresh.SnapshotStats{ItemCount: 1},
@@ -185,6 +191,10 @@ func TestHandlerStreamsEvents(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return strings.Contains(rec.BodyString(), "initial message")
 	}, time.Second, 10*time.Millisecond)
+
+	payloads := parseEventPayloads(rec.BodyString())
+	require.NotEmpty(t, payloads)
+	require.Equal(t, mustUnixMilli(initialTimestamp), payloads[0].Events[0].CreatedAt)
 
 	var ch chan StreamEvent
 	require.Eventually(t, func() bool {
@@ -251,6 +261,7 @@ func TestHandlerResumesFromSince(t *testing.T) {
 					Object:          "Pod/test",
 					Message:         "snapshot message",
 					Age:             "0s",
+					AgeTimestamp:    mustUnixMilli(time.Now().Add(-5 * time.Minute)),
 				}},
 			},
 			Stats: refresh.SnapshotStats{ItemCount: 1},
@@ -320,6 +331,7 @@ func TestHandlerFallsBackToSnapshotWhenResumeTooOld(t *testing.T) {
 					Object:          "Pod/test",
 					Message:         "snapshot fallback",
 					Age:             "0s",
+					AgeTimestamp:    mustUnixMilli(time.Now().Add(-10 * time.Minute)),
 				}},
 			},
 			Stats: refresh.SnapshotStats{ItemCount: 1},

@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   GetKubeconfigSearchPaths,
   GetThemeInfo,
@@ -53,6 +53,18 @@ import {
   setGridTablePersistenceMode,
   type GridTablePersistenceMode,
 } from '@shared/components/tables/persistence/gridTablePersistenceSettings';
+import {
+  getDefaultObjectPanelPosition,
+  setDefaultObjectPanelPosition,
+  getObjectPanelLayoutDefaults,
+  setObjectPanelLayoutDefaults,
+  type ObjectPanelPosition,
+  type ObjectPanelLayoutDefaults,
+} from '@core/settings/appPreferences';
+import { getActivePanelLayoutStore } from '@ui/dockable/panelLayoutStore';
+import { getContentBounds, PANEL_DEFAULTS } from '@ui/dockable/dockablePanelLayout';
+import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import SegmentedButton from '@shared/components/SegmentedButton';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -60,6 +72,12 @@ import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 interface SettingsProps {
   onClose?: () => void;
 }
+
+const objectPanelPositionOptions: DropdownOption[] = [
+  { value: 'right', label: 'Right' },
+  { value: 'bottom', label: 'Bottom' },
+  { value: 'floating', label: 'Floating' },
+];
 
 function Settings({ onClose }: SettingsProps) {
   const [themeInfo, setThemeInfo] = useState<types.ThemeInfo | null>(null);
@@ -70,6 +88,12 @@ function Settings({ onClose }: SettingsProps) {
   const [useShortResourceNames, setUseShortResourceNames] = useState<boolean>(false);
   const [persistenceMode, setPersistenceMode] = useState<GridTablePersistenceMode>(() =>
     getGridTablePersistenceMode()
+  );
+  const [objectPanelPosition, setObjectPanelPositionState] = useState<ObjectPanelPosition>(() =>
+    getDefaultObjectPanelPosition()
+  );
+  const [panelLayout, setPanelLayout] = useState<ObjectPanelLayoutDefaults>(() =>
+    getObjectPanelLayoutDefaults()
   );
   // Track kubeconfig search paths for the settings panel.
   const [kubeconfigPaths, setKubeconfigPaths] = useState<string[]>([]);
@@ -138,6 +162,17 @@ function Settings({ onClose }: SettingsProps) {
     loadAppSettings();
     loadKubeconfigPaths();
     setPersistenceMode(getGridTablePersistenceMode());
+    setObjectPanelPositionState(getDefaultObjectPanelPosition());
+    const loadedLayout = getObjectPanelLayoutDefaults();
+    setPanelLayout(loadedLayout);
+    setPanelLayoutInputs({
+      dockedRightWidth: String(loadedLayout.dockedRightWidth),
+      dockedBottomHeight: String(loadedLayout.dockedBottomHeight),
+      floatingWidth: String(loadedLayout.floatingWidth),
+      floatingHeight: String(loadedLayout.floatingHeight),
+      floatingX: String(loadedLayout.floatingX),
+      floatingY: String(loadedLayout.floatingY),
+    });
 
     // Initialize system theme listener using shared utility
     const themeCleanup = initSystemThemeListener();
@@ -197,8 +232,20 @@ function Settings({ onClose }: SettingsProps) {
 
   const loadAppSettings = async () => {
     try {
-      const preferences = await hydrateAppPreferences();
+      const preferences = await hydrateAppPreferences({ force: true });
       setUseShortResourceNames(preferences.useShortResourceNames);
+      // Refresh panel defaults from the freshly hydrated cache.
+      setObjectPanelPositionState(getDefaultObjectPanelPosition());
+      const freshLayout = getObjectPanelLayoutDefaults();
+      setPanelLayout(freshLayout);
+      setPanelLayoutInputs({
+        dockedRightWidth: String(freshLayout.dockedRightWidth),
+        dockedBottomHeight: String(freshLayout.dockedBottomHeight),
+        floatingWidth: String(freshLayout.floatingWidth),
+        floatingHeight: String(freshLayout.floatingHeight),
+        floatingX: String(freshLayout.floatingX),
+        floatingY: String(freshLayout.floatingY),
+      });
       // Palette sliders are loaded by the resolvedTheme effect.
     } catch (error) {
       errorHandler.handle(error, { action: 'loadAppSettings' });
@@ -248,6 +295,87 @@ function Settings({ onClose }: SettingsProps) {
     setPersistenceMode(mode);
     setGridTablePersistenceMode(mode);
   };
+
+  const handleObjectPanelPositionChange = (position: ObjectPanelPosition) => {
+    setObjectPanelPositionState(position);
+    setDefaultObjectPanelPosition(position);
+  };
+
+  // Track raw input strings so users can freely backspace/clear without
+  // the value snapping back to 0 on every keystroke.
+  const [panelLayoutInputs, setPanelLayoutInputs] = useState<
+    Record<keyof ObjectPanelLayoutDefaults, string>
+  >(() => {
+    const defaults = getObjectPanelLayoutDefaults();
+    return {
+      dockedRightWidth: String(defaults.dockedRightWidth),
+      dockedBottomHeight: String(defaults.dockedBottomHeight),
+      floatingWidth: String(defaults.floatingWidth),
+      floatingHeight: String(defaults.floatingHeight),
+      floatingX: String(defaults.floatingX),
+      floatingY: String(defaults.floatingY),
+    };
+  });
+
+  const fieldMinimums: Record<keyof ObjectPanelLayoutDefaults, number> = {
+    dockedRightWidth: PANEL_DEFAULTS.RIGHT_MIN_WIDTH,
+    dockedBottomHeight: PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT,
+    floatingWidth: PANEL_DEFAULTS.FLOATING_MIN_WIDTH,
+    floatingHeight: PANEL_DEFAULTS.FLOATING_MIN_HEIGHT,
+    floatingX: 0,
+    floatingY: 0,
+  };
+
+  const handlePanelLayoutInput = (field: keyof ObjectPanelLayoutDefaults, raw: string) => {
+    setPanelLayoutInputs((prev) => ({ ...prev, [field]: raw }));
+    const parsed = parseInt(raw, 10);
+    if (!Number.isNaN(parsed)) {
+      const clamped = Math.max(fieldMinimums[field], Math.min(9999, parsed));
+      const updated = { ...panelLayout, [field]: clamped };
+      setPanelLayout(updated);
+      setObjectPanelLayoutDefaults(updated);
+      getActivePanelLayoutStore().applyObjectPanelLayoutDefaults();
+    }
+  };
+
+  const handlePanelLayoutBlur = (field: keyof ObjectPanelLayoutDefaults) => {
+    // On blur, normalize the display to the current numeric value.
+    setPanelLayoutInputs((prev) => ({ ...prev, [field]: String(panelLayout[field]) }));
+  };
+
+  // Warn when configured values exceed the current visible area.
+  const panelLayoutWarning = useMemo(() => {
+    const content = getContentBounds();
+    const issues: string[] = [];
+    const fields = new Set<keyof ObjectPanelLayoutDefaults>();
+    if (panelLayout.dockedRightWidth > content.width) {
+      issues.push('docked width exceeds content area');
+      fields.add('dockedRightWidth');
+    }
+    if (panelLayout.dockedBottomHeight > content.height) {
+      issues.push('docked height exceeds content area');
+      fields.add('dockedBottomHeight');
+    }
+    if (panelLayout.floatingWidth > content.width) {
+      issues.push('floating width exceeds content area');
+      fields.add('floatingWidth');
+    }
+    if (panelLayout.floatingHeight > content.height) {
+      issues.push('floating height exceeds content area');
+      fields.add('floatingHeight');
+    }
+    if (panelLayout.floatingX + panelLayout.floatingWidth > content.width) {
+      issues.push('floating panel extends beyond right edge');
+      fields.add('floatingX');
+      fields.add('floatingWidth');
+    }
+    if (panelLayout.floatingY + panelLayout.floatingHeight > content.height) {
+      issues.push('floating panel extends beyond bottom edge');
+      fields.add('floatingY');
+      fields.add('floatingHeight');
+    }
+    return issues.length > 0 ? { issues, fields } : null;
+  }, [panelLayout]);
 
   // Debounced persistence for palette tint — avoids hammering the backend during fast drags.
   const debouncePalettePersist = useCallback(
@@ -1349,9 +1477,128 @@ function Settings({ onClose }: SettingsProps) {
                 checked={useShortResourceNames}
                 onChange={(e) => handleShortNamesToggle(e.target.checked)}
               />
-              Use short resource names (e.g., "sts" for StatefulSets)
+              Short resource names{' '}
+              <Tooltip
+                content='Display short resource names (e.g., "sts" instead of "StatefulSets").'
+                variant="dark"
+              />
             </label>
           </div>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h3>Object Panel Defaults</h3>
+        <div className="settings-items object-panel-defaults">
+          <div className="setting-item setting-item-inline">
+            <span className="opd-row-label">Position</span>
+            <Dropdown
+              options={objectPanelPositionOptions}
+              value={objectPanelPosition}
+              onChange={(val) => handleObjectPanelPositionChange(val as ObjectPanelPosition)}
+              variant="outlined"
+              ariaLabel="Default Object Panel position"
+            />
+          </div>
+          <div className="setting-item setting-item-inline">
+            <span className="opd-row-label">Docked</span>
+            <span className="opd-field-label">Width</span>
+            <input
+              id="panel-docked-right-width"
+              type="number"
+              min={PANEL_DEFAULTS.RIGHT_MIN_WIDTH}
+              max={9999}
+              className={panelLayoutWarning?.fields.has('dockedRightWidth') ? 'opd-input-warn' : ''}
+              value={panelLayoutInputs.dockedRightWidth}
+              onChange={(e) => handlePanelLayoutInput('dockedRightWidth', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('dockedRightWidth')}
+              aria-label="Docked right width"
+            />
+            <span className="opd-unit-gap">px</span>
+            <span className="opd-field-label">Height</span>
+            <input
+              id="panel-docked-bottom-height"
+              type="number"
+              min={PANEL_DEFAULTS.BOTTOM_MIN_HEIGHT}
+              max={9999}
+              className={
+                panelLayoutWarning?.fields.has('dockedBottomHeight') ? 'opd-input-warn' : ''
+              }
+              value={panelLayoutInputs.dockedBottomHeight}
+              onChange={(e) => handlePanelLayoutInput('dockedBottomHeight', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('dockedBottomHeight')}
+              aria-label="Docked bottom height"
+            />
+            <span>px</span>
+          </div>
+          <div className="setting-item setting-item-inline">
+            <span className="opd-row-label">Floating</span>
+            <span className="opd-field-label">Width</span>
+            <input
+              id="panel-floating-width"
+              type="number"
+              min={PANEL_DEFAULTS.FLOATING_MIN_WIDTH}
+              max={9999}
+              className={panelLayoutWarning?.fields.has('floatingWidth') ? 'opd-input-warn' : ''}
+              value={panelLayoutInputs.floatingWidth}
+              onChange={(e) => handlePanelLayoutInput('floatingWidth', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('floatingWidth')}
+              aria-label="Floating width"
+            />
+            <span className="opd-unit-gap">px</span>
+            <span className="opd-field-label">Height</span>
+            <input
+              id="panel-floating-height"
+              type="number"
+              min={PANEL_DEFAULTS.FLOATING_MIN_HEIGHT}
+              max={9999}
+              className={panelLayoutWarning?.fields.has('floatingHeight') ? 'opd-input-warn' : ''}
+              value={panelLayoutInputs.floatingHeight}
+              onChange={(e) => handlePanelLayoutInput('floatingHeight', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('floatingHeight')}
+              aria-label="Floating height"
+            />
+            <span>px</span>
+          </div>
+          <div className="setting-item setting-item-inline">
+            <span className="opd-row-label"></span>
+            <span className="opd-field-label">Top</span>
+            <input
+              id="panel-floating-y"
+              type="number"
+              min={0}
+              max={9999}
+              className={panelLayoutWarning?.fields.has('floatingY') ? 'opd-input-warn' : ''}
+              value={panelLayoutInputs.floatingY}
+              onChange={(e) => handlePanelLayoutInput('floatingY', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('floatingY')}
+              aria-label="Floating top position"
+            />
+            <span className="opd-unit-gap">px</span>
+            <span className="opd-field-label">Left</span>
+            <input
+              id="panel-floating-x"
+              type="number"
+              min={0}
+              max={9999}
+              className={panelLayoutWarning?.fields.has('floatingX') ? 'opd-input-warn' : ''}
+              value={panelLayoutInputs.floatingX}
+              onChange={(e) => handlePanelLayoutInput('floatingX', e.target.value)}
+              onBlur={() => handlePanelLayoutBlur('floatingX')}
+              aria-label="Floating left position"
+            />
+            <span>px</span>
+          </div>
+          {panelLayoutWarning && (
+            <div className="setting-item opd-warning">
+              <p>One or more values will be adjusted to fit at render time:</p>
+              <ul>
+                {panelLayoutWarning.issues.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1368,7 +1615,11 @@ function Settings({ onClose }: SettingsProps) {
                   checked={refreshEnabled}
                   onChange={(e) => handleRefreshToggle(e.target.checked)}
                 />
-                Enable auto-refresh
+                Enable auto-refresh{' '}
+                <Tooltip
+                  content="Automatically refresh resource data at regular intervals to keep views up to date."
+                  variant="dark"
+                />
               </label>
             </div>
             <div className="setting-item">
@@ -1379,7 +1630,11 @@ function Settings({ onClose }: SettingsProps) {
                   checked={backgroundRefreshEnabled}
                   onChange={(e) => setBackgroundRefresh(e.target.checked)}
                 />
-                Include background clusters in auto-refresh
+                Include background clusters in auto-refresh{' '}
+                <Tooltip
+                  content="When enabled, clusters that are not actively selected will also be refreshed in the background so their data stays current when you switch to them."
+                  variant="dark"
+                />
               </label>
             </div>
           </div>
@@ -1395,7 +1650,11 @@ function Settings({ onClose }: SettingsProps) {
                   checked={persistenceMode === 'namespaced'}
                   onChange={(e) => handlePersistenceModeToggle(e.target.checked)}
                 />
-                Enable per-namespace view settings
+                Enable per-namespace view settings{' '}
+                <Tooltip
+                  content="Save separate column, sorting, and filter settings for each namespace instead of sharing a single view across all namespaces."
+                  variant="dark"
+                />
               </label>
             </div>
             <div className="setting-item setting-actions">
@@ -1430,7 +1689,7 @@ function Settings({ onClose }: SettingsProps) {
       <ConfirmationModal
         isOpen={isClearStateConfirmOpen}
         title="Factory Reset"
-        message="This will clear all saved state and restart the app. Are you sure?"
+        message="⚠️ This will clear ALL saved state (preferences, favorites, view settings, etc.) and restart the app. Are you sure?"
         confirmText="Confirm"
         confirmButtonClass="danger"
         onConfirm={handleClearAllState}

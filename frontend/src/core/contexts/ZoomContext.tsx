@@ -14,6 +14,7 @@ import React, {
   ReactNode,
 } from 'react';
 import { GetZoomLevel, SetZoomLevel } from '@wailsjs/go/backend/App';
+import { isWindowsPlatform } from '@utils/platform';
 
 // Zoom constraints
 const MIN_ZOOM = 50;
@@ -79,9 +80,14 @@ interface ZoomProviderProps {
 export const ZoomProvider: React.FC<ZoomProviderProps> = ({ children }) => {
   const [zoomLevel, setZoomLevel] = useState(DEFAULT_ZOOM);
 
-  // Apply zoom to document
+  // Apply zoom to document.
   const applyZoom = useCallback((level: number) => {
     document.documentElement.style.zoom = `${level}%`;
+    // Windows (chromium) does not properly adjust viewport units with CSS zoom
+    // so we set a CSS variable to compensate.
+    if (isWindowsPlatform()) {
+      document.documentElement.style.setProperty('--zoom-compensate', `${level / 100}`);
+    }
   }, []);
 
   // Persist zoom level to backend

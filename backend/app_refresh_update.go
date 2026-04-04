@@ -28,6 +28,13 @@ func (a *App) updateRefreshSubsystemSelections(selections []kubeconfigSelection)
 		if meta.ID == "" {
 			return fmt.Errorf("cluster identifier missing for selection %s", selection.String())
 		}
+		// Prefer the canonical meta from clusterClients to avoid ID
+		// inconsistencies when a kubeconfig has multiple contexts.
+		if clients := a.clusterClientsForID(meta.ID); clients != nil {
+			meta = clients.meta
+		} else if clients := a.clusterClientsForSelection(selection); clients != nil {
+			meta = clients.meta
+		}
 		if _, exists := desired[meta.ID]; exists {
 			continue
 		}

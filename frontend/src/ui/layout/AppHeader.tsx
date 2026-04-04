@@ -10,6 +10,7 @@ import KubeconfigSelector from '@shared/components/KubeconfigSelector';
 import ConnectivityStatus from '@ui/status/ConnectivityStatus';
 import MetricsStatus from '@ui/status/MetricsStatus';
 import SessionsStatus from '@ui/status/SessionsStatus';
+import FavMenuDropdown from '@ui/favorites/FavMenuDropdown';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { WindowToggleMaximise } from '@wailsjs/runtime/runtime';
 import { SettingsIcon } from '@shared/components/icons/MenuIcons';
@@ -75,6 +76,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({ contentTitle, onAboutClick }) => 
           <SessionsStatus />
         </div>
         <KubeconfigSelector />
+        <FavMenuDropdown />
         <button
           className="settings-button"
           onClick={() => viewState.setIsSettingsOpen(true)}

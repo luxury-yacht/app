@@ -32,8 +32,7 @@ type App struct {
 	responseCache              *responseCache
 	sidebarVisible             bool
 	diagnosticsPanelVisible    bool
-	logsPanelVisible           bool
-	activeSessionsPanelVisible bool
+	logsPanelVisible bool
 
 	refreshManager               *refresh.Manager
 	refreshHTTPServer            *http.Server
@@ -81,6 +80,7 @@ type App struct {
 	clusterClientsMu sync.Mutex
 	clusterClients   map[string]*clusterClients
 	clusterOps       *clusterOperationCoordinator
+	clusterLifecycle *clusterLifecycle
 
 	shellSessions   map[string]*shellSession
 	shellSessionsMu sync.Mutex

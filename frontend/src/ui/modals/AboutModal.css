@@ -99,12 +99,20 @@
 
 .about-description a {
   color: var(--color-accent);
-  text-decoration: underline;
+  text-decoration: none;
   transition: opacity 150ms ease;
 }
 
 .about-description a:hover {
+  text-decoration: underline;
   opacity: 0.8;
+}
+
+/* Version status indicators */
+
+.about-beta-expiry {
+  color: var(--color-warning);
+  font-size: 0.9em;
 }
 
 /* ==========================================================================
@@ -124,11 +132,12 @@
 
 .about-license a {
   color: var(--color-accent);
-  text-decoration: underline;
+  text-decoration: none;
   transition: opacity 150ms ease;
 }
 
 .about-license a:hover {
+  text-decoration: underline;
   opacity: 0.8;
 }
 

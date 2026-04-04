@@ -35,7 +35,6 @@ interface GridTableBodyProps<T> {
   totalVirtualHeight: number;
   virtualOffset: number;
   renderRowContent: RenderRowContentFn<T>;
-  firstVirtualRowRef: RefObject<HTMLDivElement | null>;
   paginationEnabled: boolean;
   paginationStatus: string;
   showPaginationStatus: boolean;
@@ -54,6 +53,10 @@ interface GridTableBodyProps<T> {
   loading: boolean;
   /** Key of the currently focused row — drives aria-activedescendant on the grid container. */
   focusedRowKey: string | null;
+  /** Whether any filter is actively narrowing results. */
+  hasActiveFilters: boolean;
+  /** Callback to clear all active filters. */
+  onClearFilters: () => void;
 }
 
 function GridTableBody<T>({
@@ -72,7 +75,6 @@ function GridTableBody<T>({
   totalVirtualHeight,
   virtualOffset,
   renderRowContent,
-  firstVirtualRowRef,
   paginationEnabled,
   paginationStatus,
   showPaginationStatus,
@@ -89,6 +91,8 @@ function GridTableBody<T>({
   viewportWidth,
   loading,
   focusedRowKey,
+  hasActiveFilters,
+  onClearFilters,
 }: GridTableBodyProps<T>) {
   const stretchDecisionRef = useRef<boolean | null>(null);
 
@@ -98,11 +102,29 @@ function GridTableBody<T>({
 
   const renderRows = () => {
     if (tableData.length === 0) {
-      return <div className="gridtable-empty">{emptyMessage}</div>;
+      return (
+        <div className="gridtable-empty">
+          {emptyMessage}
+          {hasActiveFilters && (
+            <div className="gridtable-empty-filter-hint">
+              Filters are enabled that may be hiding objects.{' '}
+              <a
+                href="#"
+                className="gridtable-empty-filter-hint__link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onClearFilters();
+                }}
+              >
+                Clear filters
+              </a>
+            </div>
+          )}
+        </div>
+      );
     }
 
     if (shouldVirtualize) {
-      firstVirtualRowRef.current = null;
       const shouldStretch = (() => {
         if (!allowHorizontalOverflow || contentWidth <= 0) {
           stretchDecisionRef.current = false;
@@ -139,7 +161,7 @@ function GridTableBody<T>({
             {virtualRows.map((item, idx) => {
               const absoluteIndex = virtualRangeStart + idx;
               const rowKey = keyExtractor(item, absoluteIndex);
-              return renderRowContent(item, absoluteIndex, idx === 0, rowKey, `slot-${idx}`);
+              return renderRowContent(item, absoluteIndex, true, rowKey, `slot-${idx}`);
             })}
           </div>
         </div>

@@ -9,6 +9,23 @@ import { useCallback, useMemo, type ReactNode } from 'react';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { useNamespace } from '@modules/namespace/contexts/NamespaceContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
+import { useFavorites } from '@core/contexts/FavoritesContext';
+import { navigateToFavorite } from '@ui/favorites/navigateToFavorite';
+import {
+  FavoriteGenericIcon,
+  FavoritePinIcon,
+  SettingsIcon,
+  CollapseSidebarIcon,
+  ExpandSidebarIcon,
+  InfoIcon,
+  CloseIcon,
+  ResetFiltersIcon,
+  RefreshIcon,
+  DiagnosticsIcon,
+  DiffIcon,
+  LogsIcon,
+  ThemeIcon,
+} from '@shared/components/icons/MenuIcons';
 import { useTheme } from '@core/contexts/ThemeContext';
 import { useZoom } from '@core/contexts/ZoomContext';
 import { refreshOrchestrator, useAutoRefresh } from '@/core/refresh';
@@ -25,7 +42,7 @@ export interface Command {
   label: string;
   renderLabel?: ReactNode;
   description?: string;
-  icon?: string;
+  icon?: ReactNode;
   category?: string;
   action: () => void;
   keywords?: string[];
@@ -43,6 +60,7 @@ export function useCommandPaletteCommands() {
     kubeconfigs,
     setActiveKubeconfig,
   } = useKubeconfig();
+  const { favorites, setPendingFavorite } = useFavorites();
   const { theme } = useTheme();
   const { zoomIn, zoomOut, resetZoom, zoomLevel } = useZoom();
   const { toggle: toggleAutoRefresh } = useAutoRefresh();
@@ -98,6 +116,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'open-about',
         label: 'About',
+        icon: <InfoIcon width={16} height={16} />,
         description: 'Open about dialog',
         category: 'Application',
         action: () => {
@@ -108,6 +127,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'open-settings',
         label: 'Settings',
+        icon: <SettingsIcon width={16} height={16} />,
         description: 'Open application settings',
         category: 'Application',
         action: () => {
@@ -118,8 +138,13 @@ export function useCommandPaletteCommands() {
       },
       {
         id: 'toggle-sidebar',
-        label: 'Show/Hide Sidebar',
-        description: 'Show or hide the sidebar',
+        label: viewState.isSidebarVisible ? 'Hide Sidebar' : 'Show Sidebar',
+        icon: viewState.isSidebarVisible ? (
+          <CollapseSidebarIcon width={16} height={16} />
+        ) : (
+          <ExpandSidebarIcon width={16} height={16} />
+        ),
+        description: viewState.isSidebarVisible ? 'Hide the sidebar' : 'Show the sidebar',
         category: 'Application',
         action: () => {
           viewState.toggleSidebar();
@@ -130,6 +155,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'open-object-diff',
         label: 'Diff Objects',
+        icon: <DiffIcon width={16} height={16} />,
         description: 'Compare Kubernetes objects in a side-by-side YAML diff',
         category: 'Application',
         action: () => {
@@ -141,6 +167,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'toggle-application-logs',
         label: 'Application Logs Panel',
+        icon: <LogsIcon width={16} height={16} />,
         description: 'Toggle application logs',
         category: 'Application',
         action: () => {
@@ -152,6 +179,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'toggle-diagnostics',
         label: 'Diagnostics Panel',
+        icon: <DiagnosticsIcon width={16} height={16} />,
         description: 'Show diagnostics (refresh, permissions)',
         category: 'Application',
         action: () => {
@@ -207,6 +235,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'reset-all-gridtable-state',
         label: 'Reset All Views',
+        icon: <ResetFiltersIcon width={16} height={16} />,
         description: 'Clear all persisted GridTable state (columns, sort, filters)',
         category: 'Settings',
         action: () => {
@@ -217,6 +246,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'toggle-auto-refresh',
         label: 'Toggle Auto-Refresh',
+        icon: <RefreshIcon width={16} height={16} />,
         description: 'Enable or disable automatic refresh',
         category: 'Settings',
         action: toggleAutoRefresh,
@@ -243,6 +273,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'theme-light',
         label: 'Theme - Light',
+        icon: <ThemeIcon width={16} height={16} />,
         description: `Switch to light theme${theme === 'light' ? ' (current)' : ''}`,
         category: 'Settings',
         action: async () => {
@@ -257,6 +288,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'theme-dark',
         label: 'Theme - Dark',
+        icon: <ThemeIcon width={16} height={16} />,
         description: `Switch to dark theme${theme === 'dark' ? ' (current)' : ''}`,
         category: 'Settings',
         action: async () => {
@@ -271,6 +303,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'theme-system',
         label: 'Theme - System',
+        icon: <ThemeIcon width={16} height={16} />,
         description: `Use system theme preference${theme === 'system' ? ' (current)' : ''}`,
         category: 'Settings',
         action: async () => {
@@ -287,6 +320,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'refresh-view',
         label: 'Refresh Current View',
+        icon: <RefreshIcon width={16} height={16} />,
         description: 'Manually refresh the current view',
         category: 'Navigation',
         action: () => {
@@ -298,6 +332,7 @@ export function useCommandPaletteCommands() {
       {
         id: 'close-cluster-tab',
         label: 'Close Current Cluster Tab',
+        icon: <CloseIcon width={16} height={16} />,
         description: 'Close the active cluster tab',
         category: 'Navigation',
         action: closeCurrentClusterTab,
@@ -573,6 +608,42 @@ export function useCommandPaletteCommands() {
     });
   }, [kubeconfigs, selectedKubeconfigs, setActiveKubeconfig, setSelectedKubeconfigs]);
 
-  // Order: Application, Settings, Navigation (including namespace views), Kubeconfigs, Namespaces
-  return [...commands, ...namespaceviewCommands, ...namespaceCommands, ...kubeconfigCommands];
+  // Build commands from saved favorites so they appear as a searchable group.
+  const favoriteCommands: Command[] = useMemo(
+    () =>
+      favorites.map((fav) => ({
+        id: `fav-${fav.id}`,
+        label: fav.name,
+        icon: fav.clusterSelection ? (
+          <FavoritePinIcon width={16} height={16} />
+        ) : (
+          <FavoriteGenericIcon width={16} height={16} />
+        ),
+        category: 'Favorites',
+        action: () => {
+          navigateToFavorite(fav, {
+            selectedKubeconfigs,
+            setSelectedKubeconfigs,
+            setActiveKubeconfig,
+            setPendingFavorite,
+          });
+        },
+        keywords: ['favorite', 'bookmark', fav.view, fav.namespace].filter(Boolean),
+      })),
+    [
+      favorites,
+      selectedKubeconfigs,
+      setSelectedKubeconfigs,
+      setActiveKubeconfig,
+      setPendingFavorite,
+    ]
+  );
+
+  return [
+    ...commands,
+    ...namespaceviewCommands,
+    ...favoriteCommands,
+    ...namespaceCommands,
+    ...kubeconfigCommands,
+  ];
 }

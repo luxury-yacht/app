@@ -13,6 +13,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -96,6 +97,11 @@ func main() {
 				HideToolbarSeparator:       true,
 			},
 			WebviewIsTransparent: true,
+		},
+		Windows: &windows.Options{
+			Theme:                windows.SystemDefault,
+			IsZoomControlEnabled: false,
+			ZoomFactor:           1.0,
 		},
 		StartHidden:     startHidden,
 		Frameless:       frameless,

@@ -11,6 +11,7 @@ import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import {
   OpenIcon,
   RestartIcon,
+  RollbackIcon,
   ScaleIcon,
   DeleteIcon,
   PortForwardIcon,
@@ -58,6 +59,7 @@ export interface ObjectActionData {
 export interface ObjectActionHandlers {
   onOpen?: () => void;
   onRestart?: () => void;
+  onRollback?: () => void;
   onScale?: () => void;
   onDelete?: () => void;
   onPortForward?: () => void;
@@ -76,6 +78,7 @@ export interface PermissionStatus {
 
 // Kinds that support each action
 export const RESTARTABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
+export const ROLLBACKABLE_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet'];
 export const SCALABLE_KINDS = ['Deployment', 'StatefulSet', 'ReplicaSet'];
 const PORT_FORWARDABLE_KINDS = ['Pod', 'Deployment', 'StatefulSet', 'DaemonSet', 'Service'];
 
@@ -86,6 +89,7 @@ export interface BuildObjectActionsOptions {
   handlers: ObjectActionHandlers;
   permissions: {
     restart?: PermissionStatus | null;
+    rollback?: PermissionStatus | null;
     scale?: PermissionStatus | null;
     delete?: PermissionStatus | null;
     portForward?: PermissionStatus | null;
@@ -108,6 +112,7 @@ export function buildObjectActionItems({
 
   const {
     restart: restartStatus,
+    rollback: rollbackStatus,
     scale: scaleStatus,
     delete: deleteStatus,
     portForward: portForwardStatus,
@@ -116,6 +121,7 @@ export function buildObjectActionItems({
   // Permission pending header
   const anyPending =
     restartStatus?.pending ||
+    rollbackStatus?.pending ||
     scaleStatus?.pending ||
     deleteStatus?.pending ||
     portForwardStatus?.pending;
@@ -180,6 +186,21 @@ export function buildObjectActionItems({
       label: 'Restart',
       icon: <RestartIcon />,
       onClick: handlers.onRestart,
+      disabled: actionLoading,
+    });
+  }
+
+  // Rollback
+  if (
+    ROLLBACKABLE_KINDS.includes(normalizedKind) &&
+    rollbackStatus?.allowed &&
+    !rollbackStatus.pending &&
+    handlers.onRollback
+  ) {
+    menuItems.push({
+      label: 'Rollback',
+      icon: <RollbackIcon />,
+      onClick: handlers.onRollback,
       disabled: actionLoading,
     });
   }
@@ -268,6 +289,8 @@ export function useObjectActions({
     const restartStatus =
       permissionMap.get(getPermissionKey(normalizedKind, 'patch', namespace, null, clusterId)) ??
       null;
+    // Rollback uses the same patch permission as restart
+    const rollbackStatus = restartStatus;
     const scaleStatus =
       permissionMap.get(
         getPermissionKey(normalizedKind, 'update', namespace, 'scale', clusterId)
@@ -286,6 +309,7 @@ export function useObjectActions({
       handlers,
       permissions: {
         restart: restartStatus,
+        rollback: rollbackStatus,
         scale: scaleStatus,
         delete: deleteStatus,
         portForward: portForwardStatus,

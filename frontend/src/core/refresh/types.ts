@@ -162,6 +162,8 @@ export interface ClusterOverviewPayload {
   fargateNodes: number;
   regularNodes: number;
   ec2Nodes: number;
+  virtualNodes: number;
+  vmNodes: number;
   totalPods: number;
   totalContainers: number;
   totalInitContainers: number;
@@ -249,6 +251,8 @@ export interface ClusterEventEntry extends ClusterMeta {
   kind: string;
   kindAlias?: string;
   name: string;
+  uid?: string;
+  resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
   type: string;
@@ -515,6 +519,8 @@ export interface NamespaceEventSummary extends ClusterMeta {
   kind: string;
   kindAlias?: string;
   name: string;
+  uid?: string;
+  resourceVersion?: string;
   namespace: string;
   objectNamespace?: string;
   type: string;
@@ -567,6 +573,8 @@ export interface ObjectLogEntry {
   container: string;
   line: string;
   isInit: boolean;
+  /** Monotonically increasing sequence ID assigned by the frontend for stable rendering keys. */
+  _seq?: number;
 }
 
 export interface ObjectLogsSnapshotPayload {

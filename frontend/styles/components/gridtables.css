@@ -423,6 +423,22 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   margin: 1rem;
 }
 
+.gridtable-empty-filter-hint {
+  margin-top: 0.5rem;
+  font-size: calc(var(--grid-font-size-data) - 1px);
+  color: var(--grid-text-secondary);
+}
+
+.gridtable-empty-filter-hint__link {
+  color: var(--accent-color, #4a9eff);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.gridtable-empty-filter-hint__link:hover {
+  text-decoration: underline;
+}
+
 /* Initial loading state - consistent positioning */
 .gridtable-container.gridtable-initial-loading {
   min-height: 400px;
@@ -675,6 +691,12 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   display: flex;
   align-items: center;
   margin-left: var(--spacing-lg);
+}
+
+.gridtable-filter-result-count {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
 }
 
 .gridtable-filter-group label {

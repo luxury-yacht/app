@@ -46,6 +46,7 @@ describe('useObjectPanelActions', () => {
     showScaleInput: false,
     showRestartConfirm: false,
     showDeleteConfirm: false,
+    showRollbackModal: false,
     resourceDeleted: false,
     deletedResourceName: '',
   });

@@ -86,8 +86,8 @@ export function useWindowBoundsConstraint(
 
         // If the panel is floating, constrain its size and position within content bounds.
         if (currentPanelState.position === 'floating') {
-          const maxWidth = content.width - LAYOUT.WINDOW_MARGIN;
-          const maxHeight = content.height - LAYOUT.WINDOW_MARGIN;
+          const maxWidth = content.width;
+          const maxHeight = content.height;
 
           // Constrain width.
           if (currentSize.width > maxWidth) {
@@ -107,16 +107,13 @@ export function useWindowBoundsConstraint(
 
           // Ensure panel stays within right edge.
           if (rightEdge > content.width) {
-            newPosition.x = Math.max(LAYOUT.MIN_EDGE_DISTANCE, content.width - newSize.width - 20);
+            newPosition.x = Math.max(0, content.width - newSize.width);
             needsUpdate = true;
           }
 
           // Ensure panel stays within bottom edge.
           if (bottomEdge > content.height) {
-            newPosition.y = Math.max(
-              LAYOUT.MIN_EDGE_DISTANCE,
-              content.height - newSize.height - 20
-            );
+            newPosition.y = Math.max(0, content.height - newSize.height);
             needsUpdate = true;
           }
 
@@ -127,8 +124,8 @@ export function useWindowBoundsConstraint(
           }
 
           // Ensure panel stays within top edge.
-          if (currentPosition.y < LAYOUT.MIN_EDGE_DISTANCE) {
-            newPosition.y = LAYOUT.MIN_EDGE_DISTANCE;
+          if (currentPosition.y < 0) {
+            newPosition.y = 0;
             needsUpdate = true;
           }
         } else if (currentPanelState.position === 'right') {

@@ -61,6 +61,80 @@ func TestManagerBroadcastsToSubscribers(t *testing.T) {
 	}
 }
 
+func TestManagerOnlyBroadcastsClusterScopedEventsToClusterSubscribers(t *testing.T) {
+	client := fake.NewClientset()
+	factory := informers.NewSharedInformerFactory(client, 0)
+	informer := factory.Core().V1().Events()
+
+	manager := NewManager(informer, noopLogger{}, telemetry.NewRecorder())
+
+	stopCh := make(chan struct{})
+	defer close(stopCh)
+
+	go factory.Start(stopCh)
+	cache.WaitForCacheSync(stopCh, informer.Informer().HasSynced)
+
+	clusterCh, cancelCluster := manager.Subscribe("cluster")
+	defer cancelCluster()
+	namespaceCh, cancelNamespace := manager.Subscribe("namespace:default")
+	defer cancelNamespace()
+
+	clusterScoped := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "cluster-event",
+			Namespace: "kube-system",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind: "Node",
+			Name: "node-a",
+		},
+		Message: "Node updated",
+		Type:    "Normal",
+	}
+
+	namespaced := &corev1.Event{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "ns-event",
+			Namespace: "default",
+		},
+		InvolvedObject: corev1.ObjectReference{
+			Kind:      "Pod",
+			Name:      "web-123",
+			Namespace: "default",
+		},
+		Message: "Pod restarted",
+		Type:    "Warning",
+	}
+
+	manager.handleEvent(clusterScoped)
+
+	select {
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for cluster-scoped event")
+	case streamEvent := <-clusterCh:
+		if streamEvent.Entry.Name != "cluster-event" {
+			t.Fatalf("unexpected cluster entry: %+v", streamEvent.Entry)
+		}
+	}
+
+	manager.handleEvent(namespaced)
+
+	select {
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for namespace event")
+	case streamEvent := <-namespaceCh:
+		if streamEvent.Entry.Name != "ns-event" {
+			t.Fatalf("unexpected namespace entry: %+v", streamEvent.Entry)
+		}
+	}
+
+	select {
+	case streamEvent := <-clusterCh:
+		t.Fatalf("did not expect namespaced event on cluster stream: %+v", streamEvent.Entry)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 func TestManagerEvictsResumeBufferWhenLastSubscriberCancels(t *testing.T) {
 	manager := &Manager{
 		logger:      noopLogger{},

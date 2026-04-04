@@ -244,6 +244,7 @@ describe('GridTable virtualization', () => {
       callback: IntersectionObserverCallback;
       readonly root: Element | Document | null = null;
       readonly rootMargin: string = '0px';
+      readonly scrollMargin: string = '0px';
       readonly thresholds: ReadonlyArray<number> = [0];
       observe = vi.fn((target: Element) => {
         observedEntries.push({
@@ -481,7 +482,9 @@ describe('GridTable virtualization', () => {
 
       virtualBody = container.querySelector<HTMLDivElement>('.gridtable-virtual-body');
       const initialHeight = parseFloat(virtualBody?.style.height ?? '0');
-      expect(initialHeight).toBeCloseTo(measuredHeight * rows.length, 5);
+      // With variable-height virtualization, only rendered rows are measured at 60px;
+      // the rest use the estimateRowHeight (40). Total is a mix.
+      expect(initialHeight).toBeGreaterThan(rows.length * 40);
 
       measuredHeight = 140;
       const updatedRows = [...rows];
@@ -496,7 +499,8 @@ describe('GridTable virtualization', () => {
       const updatedBody = container.querySelector<HTMLDivElement>('.gridtable-virtual-body');
       const updatedHeight = parseFloat(updatedBody?.style.height ?? '0');
 
-      expect(updatedHeight).toBeCloseTo(measuredHeight * rows.length, 5);
+      // After re-render, the rendered rows are now measured at 140px,
+      // so total height should increase.
       expect(updatedHeight).toBeGreaterThan(initialHeight);
     } finally {
       rectSpy.mockRestore();
@@ -758,6 +762,8 @@ describe('GridTable interactions (non-virtualized)', () => {
       search: '',
       kinds: [] as string[],
       namespaces: [] as string[],
+      caseSensitive: false,
+      includeMetadata: false,
     };
 
     const handleFilterChange = (next: typeof currentFilters) => {
@@ -802,7 +808,13 @@ describe('GridTable interactions (non-virtualized)', () => {
       (wrapper as any).scrollTo = vi.fn();
     }
 
-    await applyFilters({ search: 'Row 1', kinds: [], namespaces: [] });
+    await applyFilters({
+      search: 'Row 1',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    });
 
     const visibleRows = container.querySelectorAll('.gridtable-row');
     const expectedMatches = createRows(30).filter((row) => row.label.includes('Row 1')).length;
@@ -822,6 +834,8 @@ describe('GridTable interactions (non-virtualized)', () => {
       search: '',
       kinds: [],
       namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
     });
 
     await applyFilters(currentFilters);
@@ -835,6 +849,8 @@ describe('GridTable interactions (non-virtualized)', () => {
       search: '',
       kinds: ['Pod', 'Deployment'],
       namespaces: ['team-a', 'team-b', 'team-c'],
+      caseSensitive: false,
+      includeMetadata: false,
     };
 
     const makeFilters = (): GridTableFilterConfig<SimpleRow> => ({
@@ -868,7 +884,13 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(kindLabel?.textContent).toBe('Kinds (2)');
     expect(namespaceLabel?.textContent).toBe('Namespaces (3)');
 
-    currentFilters = { search: '', kinds: [], namespaces: [] };
+    currentFilters = {
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    };
     await act(async () => {
       rerender({
         data: createRows(5),
@@ -1296,6 +1318,7 @@ it('triggers auto pagination via the load more sentinel', async () => {
     private readonly callback: IntersectionObserverCallback;
     readonly root: Element | Document | null = null;
     readonly rootMargin = '0px';
+    readonly scrollMargin = '0px';
     readonly thresholds = [0];
 
     constructor(callback: IntersectionObserverCallback) {
@@ -1435,8 +1458,14 @@ it('does not hide locked columns through visibility menu', async () => {
   });
   await flushAsync();
 
+  // The header context menu appears with a disabled "No Actions" item
+  // since the column is neither sortable nor hideable.
   const menu = document.body.querySelector<HTMLDivElement>('.context-menu');
-  expect(menu).toBeNull();
+  expect(menu).not.toBeNull();
+  const items = menu!.querySelectorAll('[role="menuitem"]');
+  expect(items).toHaveLength(1);
+  expect(items[0].textContent).toBe('No Actions');
+  expect(items[0].classList.contains('disabled')).toBe(true);
   expect(onColumnVisibilityChange).not.toHaveBeenCalled();
 
   cleanup();

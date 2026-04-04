@@ -94,6 +94,16 @@ export function useLogStreamFallback({
       return;
     }
 
+    // When auto-refresh is disabled, stop the stream so the log view freezes.
+    // Streaming will resume when auto-refresh is re-enabled.
+    if (!autoRefresh) {
+      refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
+      refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
+        preserveState: true,
+      });
+      return;
+    }
+
     if (showPreviousLogs) {
       refreshOrchestrator.stopStreamingDomain(LOG_DOMAIN, logScope, { reset: false });
       refreshOrchestrator.setScopedDomainEnabled(LOG_DOMAIN, logScope, false, {
@@ -136,7 +146,15 @@ export function useLogStreamFallback({
         preserveState: true,
       });
     };
-  }, [dispatch, fallbackActive, fallbackRecoveringRef, isActive, logScope, showPreviousLogs]);
+  }, [
+    autoRefresh,
+    dispatch,
+    fallbackActive,
+    fallbackRecoveringRef,
+    isActive,
+    logScope,
+    showPreviousLogs,
+  ]);
 
   // --- Reset primed ref when fallback or previous-logs mode changes ---
   useEffect(() => {

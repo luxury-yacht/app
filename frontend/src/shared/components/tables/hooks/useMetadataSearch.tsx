@@ -4,24 +4,34 @@
  * Reusable hook that provides an "Include Metadata" search toggle for GridTable.
  * When active, the search filter includes label and annotation key/value pairs
  * alongside the default search fields.
+ *
+ * The toggle state is stored in GridTableFilterState.includeMetadata so it
+ * persists across cluster switches and is captured in favorites.
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { MetadataIcon } from '@shared/components/icons/MenuIcons';
-import type { SearchInputAction } from '@shared/components/inputs/SearchInput';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
+import type { GridTableFilterState } from '@shared/components/tables/GridTable.types';
 
 export interface UseMetadataSearchOptions<T> {
   /** Return the default (non-metadata) search strings for a row. */
   getDefaultValues: (row: T) => string[];
   /** Return metadata maps (e.g. labels, annotations) to include when the toggle is on. */
   getMetadataMaps: (row: T) => (Record<string, string> | undefined)[];
+  /** Current filter state (provides includeMetadata). */
+  filters: GridTableFilterState;
+  /** Called when includeMetadata changes. */
+  onFiltersChange: (next: GridTableFilterState) => void;
 }
 
 export interface UseMetadataSearchResult<T> {
   /** Whether the metadata toggle is currently active. */
   includeMetadata: boolean;
-  /** Search action config to pass to filters.options.searchActions. */
-  searchActions: SearchInputAction[];
+  /** Set the metadata toggle state directly (used to restore from favorites). */
+  setIncludeMetadata: (value: boolean) => void;
+  /** IconBar toggle item for the metadata search toggle. */
+  metadataToggle: IconBarItem;
   /** Custom getSearchText accessor to pass to filters.accessors.getSearchText. */
   getSearchText: (row: T) => string[];
 }
@@ -31,31 +41,39 @@ export interface UseMetadataSearchResult<T> {
  *
  * Usage:
  * ```tsx
- * const { searchActions, getSearchText } = useMetadataSearch({
+ * const { metadataToggle, getSearchText } = useMetadataSearch({
  *   getDefaultValues: (row) => [row.name, row.kind],
  *   getMetadataMaps: (row) => [row.labels, row.annotations],
+ *   filters: persistedFilters,
+ *   onFiltersChange: setPersistedFilters,
  * });
- * // Then pass searchActions to filters.options.searchActions
+ * // Then pass metadataToggle in filters.options.preActions
  * // and getSearchText to filters.accessors.getSearchText
  * ```
  */
 export function useMetadataSearch<T>(
   options: UseMetadataSearchOptions<T>
 ): UseMetadataSearchResult<T> {
-  const { getDefaultValues, getMetadataMaps } = options;
-  const [includeMetadata, setIncludeMetadata] = useState(false);
+  const { getDefaultValues, getMetadataMaps, filters, onFiltersChange } = options;
+  const includeMetadata = filters.includeMetadata;
 
-  const searchActions = useMemo<SearchInputAction[]>(
-    () => [
-      {
-        id: 'include-metadata',
-        icon: <MetadataIcon width={14} height={14} />,
-        active: includeMetadata,
-        onToggle: () => setIncludeMetadata((prev) => !prev),
-        tooltip: 'Include metadata',
-      },
-    ],
-    [includeMetadata]
+  const setIncludeMetadata = useCallback(
+    (value: boolean) => {
+      onFiltersChange({ ...filters, includeMetadata: value });
+    },
+    [filters, onFiltersChange]
+  );
+
+  const metadataToggle = useMemo<IconBarItem>(
+    () => ({
+      type: 'toggle' as const,
+      id: 'include-metadata',
+      icon: <MetadataIcon width={16} height={16} />,
+      active: includeMetadata,
+      onClick: () => setIncludeMetadata(!includeMetadata),
+      title: 'Include metadata',
+    }),
+    [includeMetadata, setIncludeMetadata]
   );
 
   const getSearchText = useCallback(
@@ -74,5 +92,5 @@ export function useMetadataSearch<T>(
     [includeMetadata, getDefaultValues, getMetadataMaps]
   );
 
-  return { includeMetadata, searchActions, getSearchText };
+  return { includeMetadata, setIncludeMetadata, metadataToggle, getSearchText };
 }

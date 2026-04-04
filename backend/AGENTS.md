@@ -23,6 +23,12 @@ Applies to Go code under `backend/`.
 - Lifecycle: refresh subsystem setup in `backend/app_refresh_setup.go`, teardown/rebuild in `backend/app_refresh_recovery.go`, base URL in `backend/app_refresh.go`.
 - Client init: `backend/app_kubernetes_client.go` owns client setup and triggers refresh subsystem + object catalog start.
 
+## HTTP Server (Refresh API)
+
+- The loopback HTTP server (`backend/refresh/api/`) is consumed by a native Wails
+  webview, not a browser. Browser security patterns (CORS, CSP, cookie flags) are
+  irrelevant. The security boundary is loopback binding + the random port.
+
 ## Testing Guidelines
 
 - Backend tests stay adjacent to their targets with `_test.go` suffixes and `TestXxx` functions.

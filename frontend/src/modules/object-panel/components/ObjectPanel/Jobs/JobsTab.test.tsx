@@ -19,7 +19,7 @@ const mockUseGridTablePersistence = vi.fn().mockReturnValue({
   setColumnWidths: vi.fn(),
   columnVisibility: null,
   setColumnVisibility: vi.fn(),
-  filters: { search: '', kinds: [], namespaces: [] },
+  filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
   setFilters: vi.fn(),
   resetState: vi.fn(),
 });

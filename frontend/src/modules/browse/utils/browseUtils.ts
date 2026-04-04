@@ -99,6 +99,12 @@ export type UpsertResult = {
 /**
  * Upserts incoming items into the current list by UID.
  * Updates existing items if their resourceVersion differs, appends new items.
+ *
+ * WARNING: This function only handles additions and updates — it never removes
+ * items from `current` that are absent in `incoming`. Do NOT use this for
+ * auto-refresh where deletions must be reflected. Use `dedupeByUID` with full
+ * replacement instead. This function is only correct for append/pagination
+ * (load-more) where the incoming set is additive by definition.
  */
 export const upsertByUID = (
   current: CatalogItem[],

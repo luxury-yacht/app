@@ -127,26 +127,48 @@ const AboutModal: React.FC<AboutModalProps> = React.memo(({ isOpen, onClose }) =
             </div>
 
             <div className="about-info">
-              {/* <div className="about-details">
-                <div className="about-field">
-                  <span className="about-label">Version:</span>
-                  <span className="about-value">1.0.0</span>
-                </div>
-
-                <div className="about-field">
-                  <span className="about-label">Built with:</span>
-                  <span className="about-value">Wails</span>
-                </div>
-              </div> */}
-
               <div className="about-description">
-                <p>Version {appInfo?.version || 'Loading...'}</p>
+                <p>
+                  <strong>Version {appInfo?.version || 'Loading...'}</strong>
+                </p>
+                {/* Version status indicator */}
+                {appInfo?.update ? (
+                  appInfo.update.isUpdateAvailable ? (
+                    <p className="about-update-available">
+                      Update available:{' '}
+                      <a
+                        href={appInfo.update.releaseUrl}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          BrowserOpenURL(appInfo.update!.releaseUrl);
+                        }}
+                      >
+                        {appInfo.update.latestVersion}
+                      </a>
+                    </p>
+                  ) : !appInfo.update.error ? (
+                    <p className="about-up-to-date">
+                      <span className="about-up-to-date-icon">&#x2714;</span> Up to date
+                    </p>
+                  ) : null
+                ) : null}
                 {appInfo?.isBeta && appInfo?.expiryDate ? (
-                  <p style={{ color: 'var(--color-warning)', fontSize: '0.9em' }}>
+                  <p className="about-beta-expiry">
                     Beta expires: {new Date(appInfo.expiryDate).toLocaleDateString()}
                   </p>
                 ) : null}
-                <p>
+                <p style={{ marginTop: '1em' }}>
+                  <a
+                    href="https://luxury-yacht.app"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      BrowserOpenURL('https://luxury-yacht.app');
+                    }}
+                  >
+                    luxury-yacht.app
+                  </a>
+                </p>
+                <p style={{ marginTop: '1em' }}>
                   Built with{' '}
                   <a
                     href="https://wails.io/"

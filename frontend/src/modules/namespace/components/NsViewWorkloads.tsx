@@ -21,6 +21,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import ScaleModal from '@shared/components/modals/ScaleModal';
+import RollbackModal from '@shared/components/modals/RollbackModal';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import type { GridColumnDefinition } from '@shared/components/tables/GridTable.types';
@@ -49,6 +50,7 @@ import {
   normalizeKind,
   RESTARTABLE_KINDS,
 } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 interface WorkloadsViewProps {
   namespace: string;
@@ -109,6 +111,9 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
 
     const [portForwardTarget, setPortForwardTarget] = useState<PortForwardTarget | null>(null);
 
+    // Rollback target: tracks which workload the rollback modal is open for.
+    const [rollbackTarget, setRollbackTarget] = useState<WorkloadData | null>(null);
+
     const handleWorkloadClick = useCallback(
       (workload: WorkloadData) => {
         openWithObject({
@@ -156,6 +161,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<WorkloadData>({
       viewId: 'namespace-workloads',
       namespace,
@@ -174,6 +180,28 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       columns: tableColumns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const availableKinds = useMemo(
+      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
+      [data]
+    );
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
+      [data]
+    );
+
+    const { item: favToggle, modal: favModal } = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: workloadSortConfig?.key ?? null,
+      sortDirection: workloadSortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
+      availableKinds,
+      availableFilterNamespaces,
     });
 
     const canRestart = useCallback(
@@ -393,12 +421,15 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
             },
             onTrigger: () => setTriggerConfirm({ show: true, cronjob: row }),
             onSuspendToggle: () => handleSuspendToggle(row),
+            onRollback: () => setRollbackTarget(row),
           },
           permissions: {
             restart: restartStatus,
             scale: scaleStatus,
             delete: deleteStatus,
             portForward: portForwardStatus,
+            // Rollback uses patch permission, same as restart.
+            rollback: restartStatus,
           },
         });
       },
@@ -406,8 +437,12 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
     );
 
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(undefined, 'No data available'),
-      []
+      () =>
+        resolveEmptyStateMessage(
+          undefined,
+          `No workloads found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
+        ),
+      [namespace]
     );
 
     const boundaryLoading = Boolean(loading) || !(Boolean(loaded) || sortedWorkloads.length > 0);
@@ -452,6 +487,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
               options: {
                 showNamespaceDropdown: showNamespaceFilter,
                 showKindDropdown: true,
+                preActions: [favToggle],
               },
             }}
             virtualization={{ enabled: true, threshold: 40, overscan: 8, estimateRowHeight: 44 }}
@@ -514,6 +550,17 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
         />
 
         <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
+
+        {/* Rollback modal: opens when a rollback action is triggered from the context menu */}
+        <RollbackModal
+          isOpen={rollbackTarget !== null}
+          onClose={() => setRollbackTarget(null)}
+          clusterId={rollbackTarget?.clusterId ?? ''}
+          namespace={rollbackTarget?.namespace ?? ''}
+          name={rollbackTarget?.name ?? ''}
+          kind={rollbackTarget?.kind ?? ''}
+        />
+        {favModal}
       </>
     );
   }

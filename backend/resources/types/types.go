@@ -36,6 +36,13 @@ type AppSettings struct {
 	RefreshBackgroundClustersEnabled bool     `json:"refreshBackgroundClustersEnabled"` // Refresh inactive clusters in the background
 	MetricsRefreshIntervalMs         int      `json:"metricsRefreshIntervalMs"`         // Metrics refresh interval (ms)
 	GridTablePersistenceMode         string   `json:"gridTablePersistenceMode"`         // "shared" or "namespaced"
+	DefaultObjectPanelPosition       string   `json:"defaultObjectPanelPosition"`       // "right", "bottom", or "floating"
+	ObjectPanelDockedRightWidth      int      `json:"objectPanelDockedRightWidth"`      // Default width when docked right (px)
+	ObjectPanelDockedBottomHeight    int      `json:"objectPanelDockedBottomHeight"`    // Default height when docked bottom (px)
+	ObjectPanelFloatingWidth         int      `json:"objectPanelFloatingWidth"`         // Default floating width (px)
+	ObjectPanelFloatingHeight        int      `json:"objectPanelFloatingHeight"`        // Default floating height (px)
+	ObjectPanelFloatingX             int      `json:"objectPanelFloatingX"`             // Default floating X position (px)
+	ObjectPanelFloatingY             int      `json:"objectPanelFloatingY"`             // Default floating Y position (px)
 	PaletteHueLight                  int      `json:"paletteHueLight"`                  // Hue for gray palette tint in light theme (0-360)
 	PaletteSaturationLight           int      `json:"paletteSaturationLight"`           // Saturation intensity for gray palette tint in light theme (0-100)
 	PaletteBrightnessLight           int      `json:"paletteBrightnessLight"`           // Brightness offset for gray palette in light theme (-50 to +50)

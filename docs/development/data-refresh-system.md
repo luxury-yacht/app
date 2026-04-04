@@ -12,61 +12,72 @@ The refresh system has three layers:
 
 Multi-cluster support uses a single refresh orchestrator in the frontend and a backend subsystem per active cluster. All snapshot payloads include cluster metadata, and frontend scopes encode cluster IDs so the right data shows in the right tab.
 
-The refresh subsystem builds point‑in‑time “snapshots” for UI views and serves them over HTTP; streaming endpoints push incremental updates for long‑lived views. The object catalog is the source of truth for namespaces/cluster listings. See backend/app_refresh_setup.go, backend/refresh/system/manager.go, backend/objectcatalog/service.go.
+The refresh subsystem builds point-in-time "snapshots" for UI views and serves them over HTTP; streaming endpoints push incremental updates for long-lived views. The object catalog is the source of truth for namespaces/cluster listings. See backend/app_refresh_setup.go, backend/refresh/system/manager.go, backend/objectcatalog/service.go.
 
 ### Informers (watch + cache)
 
-Informers keep a live, in‑memory cache of Kubernetes resources by watching the API. In the catalog, when a resource is supported by a shared informer, the service reads from that cache instead of listing directly. This reduces API load and improves latency. See backend/objectcatalog/informer_registry.go, backend/objectcatalog/collect.go#L52, backend/objectcatalog/collect.go#L324.
+Informers are long-lived Kubernetes watchers that maintain an in-memory cache of resources. They continuously receive watch events from the API server and keep the cache current. Multiple consumers share the same informer instance, avoiding redundant API calls.
 
-Informers are long‑lived watchers + caches of Kubernetes resources. They continuously update in the background and let code read a current, shared in‑memory view. In this repo, that’s mainly used by the object catalog to list resources efficiently (backend/objectcatalog/informer_registry.go, backend/objectcatalog/collect.go).
+In this codebase, informers are used by:
 
-Informers are a live, constantly updated index.
+- The **object catalog** to list resources efficiently instead of making direct API calls (backend/objectcatalog/informer_registry.go, backend/objectcatalog/collect.go).
+- The **resource stream manager** to push real-time deltas to the frontend via WebSocket (backend/refresh/resourcestream/manager.go).
+- The **event stream manager** to push Kubernetes Events via SSE (backend/refresh/eventstream/manager.go).
+- The **response cache invalidation** layer to clear stale object detail/YAML caches when resources change (backend/response_cache_invalidation.go).
+- Snapshot builders that read from informer listers instead of hitting the API directly.
 
-There is no direct frontend usage of informers; they are backend‑only caches.
+The shared informer factory is created in backend/refresh/informer/factory.go, which wraps `k8s.io/client-go/informers.SharedInformerFactory` and gates informer creation on list+watch SSAR permission checks. A single factory instance is shared across all consumers within a cluster's refresh subsystem.
 
-### Snapshots (point‑in‑time responses)
+There is no direct frontend usage of informers; they are backend-only caches.
 
-Snapshot builders gather data for specific “domains” (cluster, namespace, etc.) and assemble the JSON payloads the frontend requests. Each file under backend/refresh/snapshot/ implements a slice of that data (e.g., workloads, config, events). The refresh manager wires domains and permissions. See backend/refresh/snapshot/\*.go, backend/refresh/system/manager.go.
+### Snapshots (point-in-time responses)
 
-Snapshot builders are request/refresh‑time assemblers. They gather whatever data they need (often via direct list/get calls and the catalog) and build the response payload for a specific domain (backend/refresh/snapshot/\*.go).
-
-Snapshot builders are the report generators that pull from the index (and other sources) to answer a specific request.
+Snapshot builders gather data for specific "domains" (cluster, namespace, etc.) and assemble the JSON payloads the frontend requests. Each file under backend/refresh/snapshot/ implements a slice of that data (e.g., workloads, config, events). The refresh manager wires domains and permissions. See backend/refresh/snapshot/\*.go, backend/refresh/system/manager.go.
 
 The frontend fetches snapshot payloads via fetchSnapshot in frontend/src/core/refresh/client.ts, used by the refresh orchestrator to load domains like nodes, namespace-workloads, etc. (frontend/src/core/refresh/orchestrator.ts). A direct UI example is the command palette doing a catalog search with fetchSnapshot('catalog', ...) in frontend/src/ui/command-palette/CommandPalette.tsx.
 
+The backend snapshot service (backend/refresh/snapshot/service.go) wraps snapshot builders with a short-lived in-memory cache (`SnapshotCacheTTL = 5s`) and singleflight dedup to collapse concurrent requests for the same domain+scope into a single build.
+
 ### Streams (incremental updates)
 
-Streams are SSE endpoints used for long‑running, high‑volume updates like catalog, logs, and events. Instead of re‑polling, the frontend subscribes and receives deltas or batches. See:
+Streams are long-lived connections that push updates to the frontend instead of requiring it to poll. There are two transport protocols:
 
-- Catalog stream: backend/refresh/snapshot/catalog_stream.go (fed by backend/objectcatalog/streaming.go)
-- Event stream: backend/refresh/eventstream/handler.go
-- Log stream: backend/refresh/logstream/handler.go
-- Resource stream: backend/refresh/resourcestream/handler.go
+**WebSocket** — used by the resource stream for most views (workloads, config, network, RBAC, storage, nodes, etc.). The frontend sends REQUEST/CANCEL messages; the backend responds with RESET, ADDED, MODIFIED, DELETED, COMPLETE, ERROR, and HEARTBEAT messages. A single shared WebSocket per cluster multiplexes all domain subscriptions. The resource stream hooks directly into shared informer event handlers, so updates arrive within milliseconds of a Kubernetes change.
 
-The frontend orchestrator starts/stops stream managers for live updates (frontend/src/core/refresh/orchestrator.ts). Each manager opens an EventSource to a backend stream endpoint:
+**SSE (Server-Sent Events)** — used by the catalog stream (browse view), event stream, and log stream. These are unidirectional server-push connections with simpler reconnection semantics.
 
-- Catalog: frontend/src/core/refresh/streaming/catalogStreamManager.ts → /api/v2/stream/catalog
-- Events: frontend/src/core/refresh/streaming/eventStreamManager.ts → /api/v2/stream/events
-- Logs: frontend/src/core/refresh/streaming/logStreamManager.ts → /api/v2/stream/logs
-- Resources: frontend/src/core/refresh/streaming/resourceStreamManager.ts → /api/v2/stream/resources
+Stream endpoints:
+
+- Catalog stream (SSE): backend/refresh/snapshot/catalog_stream.go → /api/v2/stream/catalog
+- Event stream (SSE): backend/refresh/eventstream/handler.go → /api/v2/stream/events
+- Log stream (SSE): backend/refresh/logstream/handler.go → /api/v2/stream/logs
+- Resource stream (WebSocket): backend/refresh/resourcestream/handler.go → /api/v2/stream/resources
+
+The frontend orchestrator starts/stops stream managers for live updates (frontend/src/core/refresh/orchestrator.ts):
+
+- Catalog: frontend/src/core/refresh/streaming/catalogStreamManager.ts (EventSource)
+- Events: frontend/src/core/refresh/streaming/eventStreamManager.ts (EventSource)
+- Logs: frontend/src/core/refresh/streaming/logStreamManager.ts (EventSource)
+- Resources: frontend/src/core/refresh/streaming/resourceStreamManager.ts (WebSocket)
 
 ### How it ties together
 
-- The object catalog periodically syncs: discovery → descriptors → collection (via informers or direct list) → in‑memory summaries. It exposes query APIs and a streaming channel.
+- The object catalog periodically syncs: discovery → descriptors → RBAC evaluation → collection (via informers or direct list) → in-memory summaries. It exposes query APIs and a streaming channel for the catalog SSE endpoint.
   See backend/objectcatalog/discovery.go, backend/objectcatalog/sync.go, backend/objectcatalog/collect.go, backend/objectcatalog/query.go, backend/objectcatalog/streaming.go.
-- Snapshot builders use live clients and cached data (including the catalog) to build responses on demand; streaming endpoints use aggregators to emit updates when they change.
+- Snapshot builders use live clients and cached data (including the catalog) to build responses on demand.
+- The resource stream manager registers `AddEventHandler` callbacks on shared informers and broadcasts typed row deltas to WebSocket subscribers using the same `Build*Summary` helpers as the snapshot builders (backend/refresh/snapshot/streaming_helpers.go), ensuring both paths produce identical row shapes.
 
 ### Example - Cluster Overview
 
 Frontend:
 
 - Frontend triggers a snapshot refresh. ClusterOverview enables the domain and calls refreshOrchestrator.triggerManualRefresh('cluster-overview'), then reads data from useRefreshDomain('cluster-overview') (frontend/src/modules/cluster/components/ClusterOverview.tsx).
-- The refresh orchestrator registers cluster-overview as a non‑streaming domain and computes a cluster‑scoped query string via scopeResolver (frontend/src/core/refresh/orchestrator.ts), so it uses snapshots only.
+- The refresh orchestrator registers cluster-overview as a non-streaming domain and computes a cluster-scoped query string via scopeResolver (frontend/src/core/refresh/orchestrator.ts), so it uses snapshots only.
 - fetchSnapshot builds a request to /api/v2/snapshots/cluster-overview with the scope (frontend/src/core/refresh/client.ts), and the returned payload is read from overviewDomain.data.overview and overviewDomain.data.metrics in the component (frontend/src/modules/cluster/components/ClusterOverview.tsx).
 
 Backend:
 
-- The refresh subsystem decides whether to use informers or a list fallback. If list/watch permissions exist for nodes/pods/namespaces, it registers the informer‑based builder; otherwise it falls back to list‑only (backend/refresh/system/manager.go).
+- The refresh subsystem decides whether to use informers or a list fallback. If list/watch permissions exist for nodes/pods/namespaces, it registers the informer-based builder; otherwise it falls back to list-only (backend/refresh/system/manager.go).
 - Informer path: RegisterClusterOverviewDomain wires the shared informer factory; the builder waits for cache sync and then lists from listers (nodes/pods/namespaces) to build the snapshot (backend/refresh/snapshot/cluster_overview.go).
 - List fallback path: RegisterClusterOverviewDomainList fetches nodes/pods/namespaces directly from the API and builds the same snapshot (backend/refresh/snapshot/cluster_overview.go).
 - The snapshot payload is assembled in buildClusterOverviewSnapshot (totals, CPU/memory, pod counts, version detection) and returned as the cluster-overview snapshot (backend/refresh/snapshot/cluster_overview.go).
@@ -81,7 +92,7 @@ Frontend:
 
 Backend:
 
-- If list/watch permissions are available, the nodes snapshot builder uses informer listers; otherwise it falls back to list‑only. This is decided in backend/refresh/system/manager.go and implemented in backend/refresh/snapshot/nodes.go.
+- If list/watch permissions are available, the nodes snapshot builder uses informer listers; otherwise it falls back to list-only. This is decided in backend/refresh/system/manager.go and implemented in backend/refresh/snapshot/nodes.go.
 - The resource stream itself is fed by informers: backend/refresh/resourcestream/manager.go attaches event handlers to node/pod informers and broadcasts updates for the nodes domain to connected clients.
 - So the Nodes view gets live updates from the resource stream, with the nodes snapshot as the fallback/baseline.
 
@@ -119,7 +130,7 @@ Manager is the scheduler, Orchestrator is the executor.
 - Manager owns the timers and rules for when a refresh should happen (intervals, cooldowns, timeouts, manual triggers, context changes). It just fires callbacks.
 - Orchestrator owns how a refresh happens. It builds scopes, calls snapshot APIs, starts/stops streams, writes results into the refresh store, and handles retry/error suppression.
 
-So the Manager decides when to refresh. the Orchestrator decides what to fetch and where to store it.
+So the Manager decides when to refresh. The Orchestrator decides what to fetch and where to store it.
 
 ### Refresh flow diagram
 
@@ -135,7 +146,7 @@ flowchart TD
           (intervals, manual triggers)"]
     --> C["RefreshOrchestrator
           (scope normalization + fetch"]
-    --> D["fetchSnapshot + SSE"]
+    --> D["fetchSnapshot + SSE/WebSocket"]
     --> E["/api/v2/snapshots/\*
           /api/v2/stream/\*"]
     --> F["Backend refresh subsystem
@@ -159,8 +170,8 @@ Domains are registered in `frontend/src/core/refresh/orchestrator.ts` with:
 
 - A refresher name (used by the refresh manager).
 - A category (`system`, `cluster`, or `namespace`).
-- Optional scope resolver (for cluster/namespace scoping).
-- Optional streaming registration (SSE).
+- Optional `autoStart` flag (default is `false` — see Refreshers section).
+- Optional streaming registration (SSE or WebSocket).
 
 On the backend, domains are registered in `backend/refresh/system/manager.go` and implemented in `backend/refresh/snapshot/*.go`.
 
@@ -172,6 +183,10 @@ Refreshers are timers that fire refresh callbacks. The refresher names and their
 - `frontend/src/core/refresh/refresherConfig.ts`
 
 The refresh manager (`frontend/src/core/refresh/RefreshManager.ts`) manages the timers, cooldowns, timeouts, and manual refresh triggers.
+
+**`autoStart` and `DEFAULT_AUTO_START`**: When a domain is registered, the orchestrator creates a refresher and optionally starts it. `DEFAULT_AUTO_START` is `false`, so refreshers are **disabled by default** unless the domain sets `autoStart: true`. Most domains rely on view hooks or `ClusterResourcesContext` to explicitly enable their scopes and trigger fetches, rather than auto-starting a polling timer.
+
+**`pauseRefresherWhenStreaming`**: Streaming domains set this flag on their `StreamingRegistration`. It means "create a refresher (polling timer) for this domain, but the orchestrator may skip snapshot fetches when streaming is healthy." The refresher serves as a fallback — if the stream disconnects or becomes unhealthy, snapshot polling resumes automatically. In practice, `isStreamingHealthy` only returns true for resource-stream domains (WebSocket), so SSE-based streaming domains (catalog, events) always fall through to snapshot fetches on each tick.
 
 ### Scopes
 
@@ -211,23 +226,34 @@ The refresh manager decides which refreshers to trigger based on the refresh con
 
 ### Streaming
 
-Some domains use server-sent events (SSE) instead of polling:
+Streaming domains use long-lived connections instead of polling. There are three streaming subsystems:
 
-- `cluster-events` and `namespace-events` use `eventStreamManager`.
-- `object-logs` uses `logStreamManager` for live log streaming.
+**Resource stream (WebSocket)** — the primary streaming mechanism for most views. Covers: namespace-workloads, namespace-config, namespace-network, namespace-rbac, namespace-storage, namespace-autoscaling, namespace-quotas, namespace-custom, namespace-helm, cluster-rbac, cluster-storage, cluster-config, cluster-crds, cluster-custom, nodes, and pods. Uses `resourceStreamManager` on the frontend and `resourcestream.Manager` on the backend. Streams are **view-gated**: they only start when the corresponding view is active (`isResourceStreamViewActive`), and are torn down when the user navigates away.
+
+**Event stream (SSE)** — pushes Kubernetes Events. `cluster-events` and `namespace-events` use `eventStreamManager`. Each scope maintains an in-memory sorted list of up to 500 events with merge-by-UID deduplication. Supports resume via sequence tokens on reconnect.
+
+**Log stream (SSE)** — pushes container logs for the object panel. Uses `logStreamManager`. Has a polling fallback (`objectLogFallbackManager`) used by the log viewer when streaming is unavailable or disabled.
+
+**Catalog stream (SSE)** — pushes browse view catalog snapshots. Uses `catalogStreamManager`. The catalog SSE delivers full snapshots (not deltas), with `snapshotMode: full|partial` for multi-batch pagination.
 
 Streaming is wired in `frontend/src/core/refresh/orchestrator.ts` and uses `/api/v2/stream/*` endpoints on the backend.
 
-Log streaming also has a polling fallback (`objectLogFallbackManager`) used by the log viewer when streaming is unavailable or disabled.
+#### fetchScopedDomain behavior for streaming domains
+
+When `fetchScopedDomain` is called for a domain with streaming configured:
+
+- **Manual fetch (`isManual: true`)**: if the stream is already active (`isStreamingActive` returns true), the fetch is redirected to `refreshStreamingDomainOnce` instead of performing a snapshot HTTP fetch. This means the SSE/WebSocket stream handles the data delivery, not the snapshot endpoint.
+- **Auto refresh (`isManual: false`)**: the orchestrator calls `startStreamingScope` (fire-and-forget to ensure streaming is running), then checks `isStreamingHealthy`. If healthy (only true for resource-stream WebSocket domains), the snapshot fetch is skipped. Otherwise, it falls through to a normal `performFetch`.
 
 #### Resource streaming invariants and fallbacks
 
-The resource stream (pods, namespace workloads, nodes) uses a websocket transport with explicit resync triggers. These rules are enforced so the UI can fall back to snapshots safely:
+The resource stream (pods, namespace workloads, nodes) uses a WebSocket transport with explicit resync triggers. These rules are enforced so the UI can fall back to snapshots safely:
 
 - Each domain/scope stream must deliver monotonic `resourceVersion` values. If a message is missing a version or the version moves backwards, the frontend triggers a snapshot resync and ignores the stream until resynced.
 - Backend sends `RESET` at subscription start and `COMPLETE` when a subscriber is dropped or a resync is required. The frontend treats both as resync signals.
 - Backpressure is enforced per domain/scope. If a subscriber falls behind, the backend drops it and emits a `COMPLETE` with an error string so the client resyncs.
 - The frontend coalesces bursts of updates over a short window; while a resync is in flight, update messages are ignored.
+- Drift detection: the frontend samples consecutive updates and compares against snapshot data. Significant divergence triggers a `refresh:resource-stream-drift` event, temporarily blocking streaming and falling back to polling.
 
 These rules are implemented in:
 
@@ -278,8 +304,6 @@ The store (`frontend/src/core/refresh/store.ts`) is accessed with hooks such as:
 
 Other refresh utilities live in `frontend/src/core/refresh/hooks`, including `useRefreshContext`, `useRefreshManager`, and `useRefreshWatcher`.
 
-These live under `frontend/src/core/refresh/hooks`.
-
 ### Refresh context
 
 The refresh context is updated whenever:
@@ -320,11 +344,19 @@ The panel surfaces per-domain timings, errors, and permission issues.
 
 The backend builds one refresh subsystem per active cluster (`backend/app_refresh_setup.go`). Each subsystem includes:
 
+- A shared informer factory (`backend/refresh/informer/factory.go`) with RBAC-gated informer creation.
 - A domain registry (`backend/refresh/domain`).
 - Snapshot builders (`backend/refresh/snapshot/*.go`).
+- A snapshot service with short-lived caching and singleflight dedup (`backend/refresh/snapshot/service.go`).
 - A manual refresh queue (`backend/refresh/types.go`).
-- Streaming managers (`backend/refresh/eventstream`, `backend/refresh/logstream`).
+- Streaming managers: resource stream (`backend/refresh/resourcestream`), event stream (`backend/refresh/eventstream`), log stream (`backend/refresh/logstream`).
 - A telemetry recorder (`backend/refresh/telemetry`).
+
+### Response cache
+
+The response cache (`backend/response_cache.go`) is a separate in-memory cache for object detail panel data: object details, YAML content, and Helm manifest/values. It has a configurable TTL (`ResponseCacheTTL = 10s`) and a max-entries cap.
+
+Cache invalidation (`backend/response_cache_invalidation.go`) registers `AddEventHandler` callbacks on every shared informer. When a resource changes, the corresponding object detail and YAML cache entries are cleared. Pods are excluded from invalidation to avoid high-churn cache thrashing. A warm-up guard skips ADD events for old objects during the informer's initial list phase to prevent the cache from being thrashed at startup.
 
 ### Snapshot API
 
@@ -341,11 +373,19 @@ When multiple clusters are active, the backend wraps per-cluster subsystems with
 
 - Aggregate snapshot service merges cluster-scoped responses.
 - Aggregate manual queue targets the correct cluster(s).
-- Aggregate event and log stream handlers fan-in per-cluster streams.
+- Aggregate event, log, resource, and catalog stream handlers fan-in per-cluster streams.
 
 ### Object catalog
 
-The object catalog is the source of truth for cluster and namespace listings. Catalog snapshots are built from `backend/objectcatalog` and surfaced in the `catalog` refresh domain (see `backend/refresh/snapshot/catalog.go`).
+The object catalog is the source of truth for cluster and namespace listings. It runs a periodic sync loop (`backend/objectcatalog/sync.go`) that discovers API resources, evaluates RBAC permissions, and collects object summaries from informer caches or direct list calls. The sync interval defaults to 1 minute (`defaultResyncInterval`).
+
+The catalog exposes:
+
+- `Query()` for paginated, filtered access to the in-memory catalog (used by both the snapshot endpoint and the SSE stream handler).
+- `SubscribeStreaming()` for SSE subscribers to receive notifications when the catalog changes.
+- `Namespaces()`, `Descriptors()`, `Health()` for metadata access.
+
+Catalog snapshots are surfaced in the `catalog` refresh domain (see `backend/refresh/snapshot/catalog.go`). The catalog SSE stream handler (`backend/refresh/snapshot/catalog_stream.go`) subscribes via `SubscribeStreaming()`, re-queries on each signal, and pushes full snapshots to connected clients.
 
 ### Permission gating
 
@@ -439,7 +479,9 @@ See `frontend/src/core/refresh/client.ts` and `orchestrator.ts`.
 
 ### Catalog browse
 
-The `catalog` domain is snapshot-driven and manually refreshed. The frontend does not use the catalog SSE stream to avoid excessive re-render cycles.
+The `catalog` domain uses SSE streaming via `catalogStreamManager`. On mount, `useBrowseCatalog` enables the catalog scope and triggers an initial manual fetch. The catalog SSE stream delivers full snapshots as the backend catalog updates. The browse view applies incoming snapshots by replacing the local item list (for refresh/reset) or merging via `upsertByUID` (for load-more pagination).
+
+The `ClusterResourcesContext` explicitly excludes the catalog domain from its lifecycle management — the browse view manages its own domain enable/disable via `useBrowseCatalog`.
 
 ## Adding or updating refresh domains
 
@@ -447,9 +489,15 @@ When adding a new domain, update:
 
 1. `frontend/src/core/refresh/types.ts` and `DomainPayloadMap`.
 2. `frontend/src/core/refresh/refresherTypes.ts` and `refresherConfig.ts`.
-3. `frontend/src/core/refresh/orchestrator.ts` (register domain, scopes).
+3. `frontend/src/core/refresh/orchestrator.ts` (register domain, scopes, streaming).
 4. `frontend/src/core/refresh/components/diagnostics/diagnosticsPanelConfig.ts`.
 5. Backend snapshot builders in `backend/refresh/snapshot`.
-6. Backend domain registration in `backend/refresh/system/manager.go`.
+6. Backend domain registration in `backend/refresh/system/registrations.go`.
+
+If adding a streaming domain:
+
+7. Register the stream handler in `backend/refresh/system/streams.go`.
+8. For resource-stream domains, add informer event handlers in `backend/refresh/resourcestream/manager.go`.
+9. For SSE domains, implement a stream handler similar to `catalog_stream.go` or `eventstream/handler.go`.
 
 Always include cluster metadata in snapshot payloads and ensure scopes are cluster-prefixed for multi-cluster safety.

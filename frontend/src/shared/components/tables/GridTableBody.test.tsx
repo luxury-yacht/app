@@ -35,7 +35,6 @@ describe('GridTableBody', () => {
 
     const wrapperRef = { current: wrapper };
     const tableRef = { current: table };
-    const firstVirtualRowRef = { current: null as HTMLDivElement | null };
     const sentinelRef = { current: document.createElement('div') };
 
     const defaultRenderRowContent: RenderRowContentFn<TestRow> = (item, index) => (
@@ -60,7 +59,6 @@ describe('GridTableBody', () => {
       totalVirtualHeight: 0,
       virtualOffset: 0,
       renderRowContent: defaultRenderRowContent as RenderRowContentFn<any>,
-      firstVirtualRowRef,
       paginationEnabled: true,
       paginationStatus: 'More rows',
       showPaginationStatus: true,
@@ -77,6 +75,8 @@ describe('GridTableBody', () => {
       viewportWidth: 0,
       loading: false,
       focusedRowKey: null,
+      hasActiveFilters: false,
+      onClearFilters: vi.fn(),
     };
 
     const allProps = { ...defaultProps, ...props } as BodyProps;
@@ -90,7 +90,6 @@ describe('GridTableBody', () => {
       container,
       root,
       props: allProps,
-      firstVirtualRowRef,
     };
   };
 

@@ -9,7 +9,6 @@
 {{- end }}
 
 **Version:** {{.Version}}
-**Build:** {{.BuildLabel}}
 {{- if .Commit }}
 **Commit:** [{{.Commit}}]({{.RepoURL}}/commit/{{.Commit}})
 {{- end }}

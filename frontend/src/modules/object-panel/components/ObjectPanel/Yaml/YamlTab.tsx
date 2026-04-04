@@ -9,6 +9,8 @@ import { EditorView, keymap, type KeyBinding } from '@codemirror/view';
 import { EditorSelection, type Extension } from '@codemirror/state';
 import * as YAML from 'yaml';
 import LoadingSpinner from '@shared/components/LoadingSpinner';
+import ContextMenu, { type ContextMenuItem } from '@shared/components/ContextMenu';
+import { deriveCopyText } from '@ui/shortcuts/context';
 import { useShortcut, useSearchShortcutTarget } from '@ui/shortcuts';
 import { errorHandler } from '@utils/errorHandler';
 import { refreshOrchestrator } from '@/core/refresh';
@@ -71,6 +73,10 @@ const YamlTab: React.FC<YamlTabProps> = ({
   } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [hasServerYamlError, setHasServerYamlError] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{
+    position: { x: number; y: number };
+    items: ContextMenuItem[];
+  } | null>(null);
 
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const editorViewRef = useRef<EditorView | null>(null);
@@ -827,9 +833,101 @@ const YamlTab: React.FC<YamlTabProps> = ({
     [editorKeyBindings]
   );
 
+  // --- Right-click context menu for the CodeMirror editor ---
+  // Use a ref so the CM extension callback always sees the latest isEditing value.
+  const isEditingRef = useRef(isEditing);
+  isEditingRef.current = isEditing;
+
+  const handleContextMenuClose = useCallback(() => setContextMenu(null), []);
+
+  const contextMenuExtension = useMemo<Extension>(
+    () =>
+      EditorView.domEventHandlers({
+        contextmenu: (event: MouseEvent, view: EditorView) => {
+          event.preventDefault();
+
+          // Snapshot selected text before the menu steals focus.
+          const selectedText = deriveCopyText(window.getSelection());
+          const hasSelection = !!selectedText;
+          const editing = isEditingRef.current;
+
+          const items: ContextMenuItem[] = [];
+
+          if (editing) {
+            items.push({
+              label: 'Cut',
+              disabled: !hasSelection,
+              onClick: () => {
+                if (!selectedText) return;
+                navigator.clipboard.writeText(selectedText);
+                const { from, to } = view.state.selection.main;
+                if (from !== to) {
+                  view.dispatch({ changes: { from, to, insert: '' } });
+                }
+              },
+            });
+          }
+
+          items.push({
+            label: 'Copy',
+            disabled: !hasSelection,
+            onClick: () => {
+              if (selectedText) {
+                navigator.clipboard.writeText(selectedText);
+              }
+            },
+          });
+
+          if (editing) {
+            items.push({
+              label: 'Paste',
+              onClick: () => {
+                navigator.clipboard
+                  .readText()
+                  .then((text) => {
+                    if (!text) return;
+                    const { from, to } = view.state.selection.main;
+                    view.dispatch({
+                      changes: { from, to, insert: text },
+                      selection: EditorSelection.cursor(from + text.length),
+                    });
+                    view.focus();
+                  })
+                  .catch(() => {});
+              },
+            });
+          }
+
+          items.push({ divider: true });
+
+          items.push({
+            label: 'Select All',
+            onClick: () => {
+              // Use DOM selection so it works in both read-only and edit modes.
+              const cmContent = view.contentDOM;
+              const sel = window.getSelection();
+              if (sel && cmContent) {
+                sel.removeAllRanges();
+                const range = document.createRange();
+                range.selectNodeContents(cmContent);
+                sel.addRange(range);
+              }
+            },
+          });
+
+          setContextMenu({
+            position: { x: event.clientX, y: event.clientY },
+            items,
+          });
+          return true;
+        },
+      }),
+    []
+  );
+
   const editorExtensions = useMemo<Extension[]>(
-    () => [...baseEditorExtensions, editorKeymapExtension],
-    [baseEditorExtensions, editorKeymapExtension]
+    () => [...baseEditorExtensions, editorKeymapExtension, contextMenuExtension],
+    [baseEditorExtensions, editorKeymapExtension, contextMenuExtension]
   );
 
   useShortcut({
@@ -1078,6 +1176,13 @@ const YamlTab: React.FC<YamlTabProps> = ({
               onCreateEditor={handleEditorCreated}
             />
           </div>
+          {contextMenu && (
+            <ContextMenu
+              items={contextMenu.items}
+              position={contextMenu.position}
+              onClose={handleContextMenuClose}
+            />
+          )}
         </div>
       </div>
     </div>

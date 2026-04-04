@@ -68,12 +68,12 @@ describe('Tooltip', () => {
   // -----------------------------------------------------------------------
   // Default icon
   // -----------------------------------------------------------------------
-  it('renders a default "i" icon when no children are provided', async () => {
+  it('renders a default info icon when no children are provided', async () => {
     const { container, cleanup } = await renderTooltip({ content: 'Help text' });
 
     const icon = container.querySelector('.tooltip-info-icon');
     expect(icon).toBeTruthy();
-    expect(icon?.textContent).toBe('i');
+    expect(icon?.tagName.toLowerCase()).toBe('svg');
 
     cleanup();
   });

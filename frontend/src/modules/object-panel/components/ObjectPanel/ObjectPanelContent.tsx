@@ -4,7 +4,7 @@
  * Renders the content of the object panel based on the active tab and provided props.
  * Each tab is conditionally rendered and wrapped in an error boundary for robustness.
  */
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { refreshOrchestrator } from '@/core/refresh';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import DetailsTab from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
@@ -206,6 +206,13 @@ export function ObjectPanelContent({
     return containers.filter((name): name is string => Boolean(name));
   }, [detailTabProps?.podDetails?.containers]);
 
+  // Preserve parsed view preference across LogViewer unmount/remount (tab switches).
+  // The ref survives because ObjectPanelContent stays mounted while the panel is open.
+  const parsedViewRef = useRef(false);
+  const handleParsedViewChange = useCallback((isParsed: boolean) => {
+    parsedViewRef.current = isParsed;
+  }, []);
+
   if (resourceDeleted) {
     return (
       <div className="object-panel-content">
@@ -249,6 +256,8 @@ export function ObjectPanelContent({
             resourceKind={objectKind || 'pod'}
             activePodNames={activePodNames}
             clusterId={objectData?.clusterId ?? null}
+            initialParsedView={parsedViewRef.current}
+            onParsedViewChange={handleParsedViewChange}
           />
         </ErrorBoundary>
       )}

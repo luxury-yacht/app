@@ -20,6 +20,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import { emitPodsUnhealthySignal } from '@modules/namespace/components/podsFilterSignals';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { GetAppInfo } from '@wailsjs/go/backend/App';
 import { backend } from '@wailsjs/go/models';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -43,6 +44,8 @@ const EMPTY_OVERVIEW: ClusterOverviewPayload = {
   fargateNodes: 0,
   regularNodes: 0,
   ec2Nodes: 0,
+  virtualNodes: 0,
+  vmNodes: 0,
   totalPods: 0,
   totalContainers: 0,
   totalInitContainers: 0,
@@ -66,6 +69,32 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   }, [clusterContext]);
 
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const { getClusterState } = useClusterLifecycle();
+  const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
+
+  // Map lifecycle state to a human-readable label.
+  const lifecycleLabel = useMemo(() => {
+    switch (lifecycleState) {
+      case 'connecting':
+        return 'Connecting';
+      case 'auth_failed':
+        return 'Auth Failed';
+      case 'connected':
+      case 'loading':
+        return 'Loading';
+      case 'loading_slow':
+        return 'Loading (slow)';
+      case 'ready':
+        return 'Ready';
+      case 'disconnected':
+        return 'Disconnected';
+      case 'reconnecting':
+        return 'Reconnecting';
+      default:
+        return '';
+    }
+  }, [lifecycleState]);
+
   // Build scope covering all connected clusters for the cluster-overview domain.
   const overviewScope = useMemo(
     () => buildClusterScopeList(selectedClusterIds, ''),
@@ -340,7 +369,7 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
             <div className="overview-update-text">
               <span className="overview-update-meta">
                 {updateInfo?.latestVersion ? ` ${updateInfo.latestVersion}` : ''} update available!
-                Click here to go to the release page.
+                Click here to go to the downloads page.
               </span>
             </div>
           </button>
@@ -369,6 +398,15 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               <span className="cluster-info-label">Context:</span>
               <span className="cluster-info-value">{contextLabel}</span>
             </span>
+            {lifecycleLabel && (
+              <>
+                <span className="cluster-info-separator">·</span>
+                <span className="cluster-info-item">
+                  <span className="cluster-info-label">Status:</span>
+                  <span className="cluster-info-value">{lifecycleLabel}</span>
+                </span>
+              </>
+            )}
           </div>
         </div>
         {errorMessage && (
@@ -482,20 +520,36 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               <div className={`stat-value${skeletonTextClass}`}>{displayOverview.totalNodes}</div>
               <div className="stat-label">Total</div>
             </div>
-            <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>
-                {displayOverview.clusterType === 'EKS'
-                  ? displayOverview.ec2Nodes
-                  : displayOverview.regularNodes}
-              </div>
-              <div className="stat-label">
-                {displayOverview.clusterType === 'EKS' ? 'EC2' : 'Standard'}
-              </div>
-            </div>
-            <div className={`stat-card${skeletonBlockClass}`}>
-              <div className={`stat-value${skeletonTextClass}`}>{displayOverview.fargateNodes}</div>
-              <div className="stat-label">Fargate</div>
-            </div>
+            {/* EKS clusters: show EC2 and Fargate breakdown */}
+            {displayOverview.clusterType === 'EKS' && (
+              <>
+                <div className={`stat-card${skeletonBlockClass}`}>
+                  <div className={`stat-value${skeletonTextClass}`}>{displayOverview.ec2Nodes}</div>
+                  <div className="stat-label">EC2</div>
+                </div>
+                <div className={`stat-card${skeletonBlockClass}`}>
+                  <div className={`stat-value${skeletonTextClass}`}>
+                    {displayOverview.fargateNodes}
+                  </div>
+                  <div className="stat-label">Fargate</div>
+                </div>
+              </>
+            )}
+            {/* AKS clusters: show VM and Virtual (ACI) breakdown */}
+            {displayOverview.clusterType === 'AKS' && (
+              <>
+                <div className={`stat-card${skeletonBlockClass}`}>
+                  <div className={`stat-value${skeletonTextClass}`}>{displayOverview.vmNodes}</div>
+                  <div className="stat-label">VM</div>
+                </div>
+                <div className={`stat-card${skeletonBlockClass}`}>
+                  <div className={`stat-value${skeletonTextClass}`}>
+                    {displayOverview.virtualNodes}
+                  </div>
+                  <div className="stat-label">Virtual</div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 

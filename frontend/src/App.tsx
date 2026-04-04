@@ -10,6 +10,7 @@ import '@styles/index.css';
 import './App.css';
 import { errorHandler } from '@utils/errorHandler';
 import { KeyboardProvider, GlobalShortcuts } from '@ui/shortcuts';
+import TextContextMenu from '@ui/shortcuts/components/TextContextMenu';
 import {
   refreshOrchestrator,
   initializeAutoRefresh,
@@ -35,6 +36,8 @@ import { applyAccentColor, applyAccentBg, saveAccentColorToLocalStorage } from '
 
 // Contexts
 import { KubernetesProvider } from '@core/contexts/KubernetesProvider';
+import { ClusterLifecycleProvider } from '@core/contexts/ClusterLifecycleContext';
+import { FavoritesProvider } from '@core/contexts/FavoritesContext';
 import { useViewState } from '@core/contexts/ViewStateContext';
 import { ErrorProvider } from '@core/contexts/ErrorContext';
 import { AuthErrorProvider } from '@core/contexts/AuthErrorContext';
@@ -53,6 +56,30 @@ import { useBackendErrorHandler } from '@/hooks/useBackendErrorHandler';
 import { useWailsRuntimeEvents, useConnectionStatusListener } from '@/hooks/useWailsRuntimeEvents';
 import { useSidebarResize } from '@/hooks/useSidebarResize';
 
+// Resolve the current active theme from the document attribute.
+const resolveTheme = (): 'light' | 'dark' => {
+  const attr = document.documentElement.getAttribute('data-theme');
+  return attr === 'dark' ? 'dark' : 'light';
+};
+
+// Apply palette tint and accent color overrides for the given theme.
+const applyThemeOverrides = (theme: 'light' | 'dark') => {
+  const tint = getPaletteTint(theme);
+  if (isPaletteActive(tint.saturation, tint.brightness)) {
+    applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
+  } else {
+    applyTintedPalette(0, 0, 0);
+  }
+  savePaletteTintToLocalStorage(theme, tint.hue, tint.saturation, tint.brightness);
+
+  const lightAccent = getAccentColor('light');
+  const darkAccent = getAccentColor('dark');
+  applyAccentColor(lightAccent, darkAccent);
+  applyAccentBg(theme === 'light' ? lightAccent : darkAccent, theme);
+  saveAccentColorToLocalStorage('light', lightAccent);
+  saveAccentColorToLocalStorage('dark', darkAccent);
+};
+
 /**
  * AppContent - The main app content that uses the contexts
  */
@@ -70,12 +97,6 @@ function AppContent() {
   // Hydrate persisted preferences before applying refresh settings and palette tint.
   useEffect(() => {
     let active = true;
-
-    // Resolve the current active theme from the document attribute.
-    const resolveTheme = (): 'light' | 'dark' => {
-      const attr = document.documentElement.getAttribute('data-theme');
-      return attr === 'dark' ? 'dark' : 'light';
-    };
 
     const initializePreferences = async () => {
       try {
@@ -111,19 +132,7 @@ function AppContent() {
     // When the resolved theme changes, apply the palette for the new theme.
     const unsubThemeResolved = eventBus.on('settings:theme-resolved', (newTheme) => {
       if (!active) return;
-      const tint = getPaletteTint(newTheme);
-      if (isPaletteActive(tint.saturation, tint.brightness)) {
-        applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
-      } else {
-        // Clear palette if the new theme has no tint.
-        applyTintedPalette(0, 0, 0);
-      }
-      savePaletteTintToLocalStorage(newTheme, tint.hue, tint.saturation, tint.brightness);
-
-      // Re-apply accent-bg for the new theme.
-      const accent = getAccentColor(newTheme);
-      applyAccentBg(accent, newTheme);
-      saveAccentColorToLocalStorage(newTheme, accent);
+      applyThemeOverrides(newTheme);
     });
 
     return () => {
@@ -136,11 +145,6 @@ function AppContent() {
   useEffect(() => {
     if (!selectedClusterName) return;
 
-    const resolveTheme = (): 'light' | 'dark' => {
-      const attr = document.documentElement.getAttribute('data-theme');
-      return attr === 'dark' ? 'dark' : 'light';
-    };
-
     const applyMatchingTheme = async () => {
       const matched = await matchThemeForCluster(selectedClusterName);
       if (!matched) return;
@@ -151,21 +155,7 @@ function AppContent() {
       await hydrateAppPreferences({ force: true });
 
       // Re-apply CSS overrides for the current resolved theme.
-      const currentTheme = resolveTheme();
-      const tint = getPaletteTint(currentTheme);
-      if (isPaletteActive(tint.saturation, tint.brightness)) {
-        applyTintedPalette(tint.hue, tint.saturation, tint.brightness);
-      } else {
-        applyTintedPalette(0, 0, 0);
-      }
-      savePaletteTintToLocalStorage(currentTheme, tint.hue, tint.saturation, tint.brightness);
-
-      const lightAccent = getAccentColor('light');
-      const darkAccent = getAccentColor('dark');
-      applyAccentColor(lightAccent, darkAccent);
-      applyAccentBg(currentTheme === 'light' ? lightAccent : darkAccent, currentTheme);
-      saveAccentColorToLocalStorage('light', lightAccent);
-      saveAccentColorToLocalStorage('dark', darkAccent);
+      applyThemeOverrides(resolveTheme());
     };
 
     void applyMatchingTheme();
@@ -212,15 +202,6 @@ function AppContent() {
     return eventBus.on('view:toggle-app-logs', handleToggleAppLogsPanel);
   }, [handleToggleAppLogsPanel]);
 
-  // Error subscription - errors are handled by ErrorContext and error boundaries
-  useEffect(() => {
-    const unsubscribe = errorHandler.subscribe(() => {
-      // Errors are handled by ErrorContext and displayed via ErrorNotificationSystem
-      // Additional handling can be added here if needed (e.g., analytics)
-    });
-    return unsubscribe;
-  }, []);
-
   // Handle manual refresh (Cmd+R)
   const manualRefreshBlocked = ['offline', 'auth_failed', 'rebuilding'].includes(
     connectionStatus.state
@@ -252,6 +233,7 @@ function AppContent() {
         isObjectPanelOpen={viewState.showObjectPanel}
         isSettingsOpen={viewState.isSettingsOpen}
       />
+      <TextContextMenu />
       <AppLayout />
     </>
   );
@@ -268,14 +250,16 @@ function App() {
           <KeyboardProvider>
             <ConnectionStatusProvider>
               <AuthErrorProvider>
-                <div className="app-window-frame">
-                  <div className="app">
-                    <KubernetesProvider>
-                      <DockablePanelProvider>
-                        <AppContent />
-                      </DockablePanelProvider>
-                    </KubernetesProvider>
-                  </div>
+                <div className="app">
+                  <KubernetesProvider>
+                    <ClusterLifecycleProvider>
+                      <FavoritesProvider>
+                        <DockablePanelProvider>
+                          <AppContent />
+                        </DockablePanelProvider>
+                      </FavoritesProvider>
+                    </ClusterLifecycleProvider>
+                  </KubernetesProvider>
                 </div>
               </AuthErrorProvider>
             </ConnectionStatusProvider>

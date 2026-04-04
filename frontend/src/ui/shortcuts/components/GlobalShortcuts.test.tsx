@@ -82,6 +82,17 @@ vi.mock('@modules/kubernetes/config/KubeconfigContext', () => ({
   }),
 }));
 
+vi.mock('@core/contexts/ZoomContext', () => ({
+  useZoom: () => ({
+    zoomLevel: 100,
+    zoomIn: vi.fn(),
+    zoomOut: vi.fn(),
+    resetZoom: vi.fn(),
+    canZoomIn: true,
+    canZoomOut: true,
+  }),
+}));
+
 vi.mock('./ShortcutHelpModal', () => ({
   ShortcutHelpModal: (props: { isOpen: boolean; onClose: () => void }) => {
     latestHelpProps = props;

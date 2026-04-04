@@ -20,6 +20,7 @@ interface ActionsMenuProps {
   // Whether a HorizontalPodAutoscaler manages this workload (disables Scale)
   hpaManaged?: boolean;
   onRestart?: () => void;
+  onRollback?: () => void;
   onScale?: (replicas: number) => void;
   onDelete?: () => void;
   onTrigger?: () => void;
@@ -33,6 +34,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
     actionLoading = false,
     hpaManaged = false,
     onRestart,
+    onRollback,
     onScale,
     onDelete,
     onTrigger,
@@ -53,6 +55,12 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
           ? () => {
               setIsOpen(false);
               onRestart();
+            }
+          : undefined,
+        onRollback: onRollback
+          ? () => {
+              setIsOpen(false);
+              onRollback();
             }
           : undefined,
         onScale: onScale
@@ -85,7 +93,7 @@ export const ActionsMenu = React.memo<ActionsMenuProps>(
           setShowPortForwardModal(true);
         },
       }),
-      [onRestart, onScale, onDelete, onTrigger, onSuspendToggle, currentReplicas]
+      [onRestart, onRollback, onScale, onDelete, onTrigger, onSuspendToggle, currentReplicas]
     );
 
     // Merge hpaManaged flag into the object data for the actions hook.

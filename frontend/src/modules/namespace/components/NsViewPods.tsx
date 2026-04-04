@@ -5,6 +5,7 @@
  * Handles rendering and interactions for the namespace feature.
  */
 
+import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { getPodStatusSeverity } from '@/utils/podStatusSeverity';
 import { getPermissionKey, useUserPermissions } from '@/core/capabilities';
 import { eventBus } from '@/core/events';
@@ -32,6 +33,7 @@ import { errorHandler } from '@utils/errorHandler';
 import { PortForwardModal, PortForwardTarget } from '@modules/port-forward';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
 import { useNavigateToView } from '@shared/hooks/useNavigateToView';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 interface PodsViewProps {
   namespace: string;
@@ -332,6 +334,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<PodSnapshotEntry>({
       viewId: 'namespace-pods',
       namespace,
@@ -346,6 +349,23 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
+      [data]
+    );
+
+    const { item: favToggle, modal: favModal } = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
+      availableFilterNamespaces,
     });
 
     const handleDeleteConfirm = useCallback(async () => {
@@ -484,6 +504,15 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
       [handlePodOpen, permissionMap]
     );
 
+    const emptyMessage = useMemo(
+      () =>
+        resolveEmptyStateMessage(
+          undefined,
+          `No pods found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
+        ),
+      [namespace]
+    );
+
     return (
       <>
         {error && <div className="namespace-error-message">{error}</div>}
@@ -518,6 +547,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
               options: {
                 showNamespaceDropdown: showNamespaceFilter,
                 customActions: unhealthyToggle,
+                preActions: [favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
@@ -526,6 +556,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
             columnVisibility={columnVisibility}
             onColumnVisibilityChange={setColumnVisibility}
             allowHorizontalOverflow={true}
+            emptyMessage={emptyMessage}
             loadingOverlay={{
               show: Boolean(loading) && displayedPods.length > 0,
               message: 'Updating pods…',
@@ -545,6 +576,7 @@ const NsViewPods: React.FC<PodsViewProps> = React.memo(
         />
 
         <PortForwardModal target={portForwardTarget} onClose={() => setPortForwardTarget(null)} />
+        {favModal}
       </>
     );
   }

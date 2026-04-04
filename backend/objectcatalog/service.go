@@ -3,6 +3,7 @@ package objectcatalog
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -86,6 +87,8 @@ type Service struct {
 	healthMu sync.RWMutex
 	health   healthStatus
 
+	syncInProgress atomic.Bool // true while sync() is running — prevents watch flush races
+
 	startOnce sync.Once
 	doneCh    chan struct{}
 
@@ -121,6 +124,7 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		EvictionTTL:                defaultEvictionTTL,
 		StreamingBatchSize:         defaultStreamingBatchSize,
 		StreamingFlushInterval:     defaultStreamingFlushInterval,
+		EnableReactiveUpdates:      true,
 	}
 	if opts != nil {
 		if opts.ResyncInterval > 0 {
@@ -146,6 +150,9 @@ func NewService(deps Dependencies, opts *Options) *Service {
 		}
 		if opts.StreamingFlushInterval > 0 {
 			serviceOpts.StreamingFlushInterval = opts.StreamingFlushInterval
+		}
+		if !opts.EnableReactiveUpdates {
+			serviceOpts.EnableReactiveUpdates = false
 		}
 	}
 

@@ -476,6 +476,8 @@ func convertAggregateSnapshot(snap *refresh.Snapshot) []eventstream.Entry {
 				ClusterName:     evt.ClusterName,
 				Kind:            evt.Kind,
 				Name:            evt.Name,
+				UID:             evt.UID,
+				ResourceVersion: evt.ResourceVersion,
 				Namespace:       evt.ObjectNamespace,
 				ObjectNamespace: evt.ObjectNamespace,
 				Type:            evt.Type,
@@ -484,6 +486,7 @@ func convertAggregateSnapshot(snap *refresh.Snapshot) []eventstream.Entry {
 				Object:          evt.Object,
 				Message:         evt.Message,
 				Age:             evt.Age,
+				CreatedAt:       evt.AgeTimestamp,
 			})
 		}
 		return entries
@@ -495,6 +498,8 @@ func convertAggregateSnapshot(snap *refresh.Snapshot) []eventstream.Entry {
 				ClusterName:     evt.ClusterName,
 				Kind:            evt.Kind,
 				Name:            evt.Name,
+				UID:             evt.UID,
+				ResourceVersion: evt.ResourceVersion,
 				Namespace:       evt.ObjectNamespace,
 				ObjectNamespace: evt.ObjectNamespace,
 				Type:            evt.Type,
@@ -503,6 +508,7 @@ func convertAggregateSnapshot(snap *refresh.Snapshot) []eventstream.Entry {
 				Object:          evt.Object,
 				Message:         evt.Message,
 				Age:             evt.Age,
+				CreatedAt:       evt.AgeTimestamp,
 			})
 		}
 		return entries

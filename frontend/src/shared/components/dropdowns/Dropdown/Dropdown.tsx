@@ -439,7 +439,7 @@ const Dropdown: React.FC<DropdownProps> = ({
                   ) : (
                     <>
                       {multiple && !isGroupHeader && (
-                        <span className="checkbox">{optionIsSelected ? '☑' : '☐'}</span>
+                        <span className="dropdown-filter-check">{optionIsSelected ? '✓' : ''}</span>
                       )}
                       <span className={isGroupHeader ? 'group-header-label' : 'option-label'}>
                         {option.label}

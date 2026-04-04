@@ -41,6 +41,7 @@ export interface NamespaceGridTablePersistenceResult {
   setFilters: (next: GridTableFilterState) => void;
   isNamespaceScoped: boolean;
   resetState: () => void;
+  hydrated: boolean;
 }
 
 export function useNamespaceGridTablePersistence<T>({
@@ -66,6 +67,7 @@ export function useNamespaceGridTablePersistence<T>({
     filters,
     setFilters,
     resetState,
+    hydrated,
   } = useGridTablePersistence<T>({
     viewId,
     clusterIdentity: selectedClusterId,
@@ -111,5 +113,6 @@ export function useNamespaceGridTablePersistence<T>({
     setFilters,
     isNamespaceScoped,
     resetState: handleReset,
+    hydrated,
   };
 }

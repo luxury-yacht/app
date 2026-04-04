@@ -62,13 +62,13 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     handleWrapperBlur,
     hoverState,
     contextMenuNode,
+    headerContextMenuNode,
     handleWrapperContextMenu,
     shouldVirtualize,
     virtualRows,
     virtualRange,
     totalVirtualHeight,
     virtualOffset,
-    firstVirtualRowRef,
     scrollbarWidth,
     tableContentWidth,
     tableViewportWidth,
@@ -80,6 +80,8 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
     handleManualLoadMore,
     showLoadingOverlay,
     loadingOverlayMessage,
+    hasActiveFilters,
+    onClearFilters,
     wrapWithProfiler,
   } = useGridTableController<T>(props);
 
@@ -111,7 +113,6 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       totalVirtualHeight={totalVirtualHeight}
       virtualOffset={virtualOffset}
       renderRowContent={renderRowContent}
-      firstVirtualRowRef={firstVirtualRowRef}
       paginationEnabled={paginationEnabled}
       paginationStatus={resolvedPaginationStatus}
       showPaginationStatus={showPaginationStatus}
@@ -128,6 +129,8 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       viewportWidth={tableViewportWidth}
       loading={loading}
       focusedRowKey={focusedRowKey}
+      hasActiveFilters={hasActiveFilters}
+      onClearFilters={onClearFilters}
     />
   );
 
@@ -156,7 +159,12 @@ const GridTable = memo(function GridTable<T>(props: GridTableProps<T>) {
       filters={filtersNode}
       header={headerNode}
       body={bodyNode}
-      contextMenu={contextMenuNode}
+      contextMenu={
+        <>
+          {contextMenuNode}
+          {headerContextMenuNode}
+        </>
+      }
     />
   );
 

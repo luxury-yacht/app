@@ -36,6 +36,8 @@ type ClusterEventEntry struct {
 	ClusterMeta
 	Kind            string `json:"kind"`
 	Name            string `json:"name"`
+	UID             string `json:"uid"`
+	ResourceVersion string `json:"resourceVersion"`
 	Namespace       string `json:"namespace"`
 	ObjectNamespace string `json:"objectNamespace"`
 	Type            string `json:"type"`
@@ -44,6 +46,7 @@ type ClusterEventEntry struct {
 	Object          string `json:"object"`
 	Message         string `json:"message"`
 	Age             string `json:"age"`
+	AgeTimestamp    int64  `json:"ageTimestamp"`
 }
 
 // RegisterClusterEventsDomain registers the cluster events domain.
@@ -69,9 +72,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 	}
 
 	sort.Slice(events, func(i, j int) bool {
-		ti := eventTimestamp(events[i])
-		tj := eventTimestamp(events[j])
-		return ti.After(tj)
+		return compareEventOrder(events[i], events[j]) < 0
 	})
 
 	originalCount := len(events)
@@ -87,10 +88,15 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 		}
 		timestamp := eventTimestamp(evt)
 		objectNamespace := evt.InvolvedObject.Namespace
+		if strings.TrimSpace(objectNamespace) != "" {
+			continue
+		}
 		entries = append(entries, ClusterEventEntry{
-			ClusterMeta: meta,
+			ClusterMeta:     meta,
 			Kind:            "Event",
 			Name:            evt.Name,
+			UID:             string(evt.UID),
+			ResourceVersion: evt.ResourceVersion,
 			Namespace:       objectNamespace,
 			ObjectNamespace: objectNamespace,
 			Type:            eventSeverity(evt),
@@ -99,6 +105,7 @@ func (b *ClusterEventsBuilder) Build(ctx context.Context, scope string) (*refres
 			Object:          eventObject(evt),
 			Message:         eventMessage(evt),
 			Age:             formatAge(timestamp),
+			AgeTimestamp:    timestamp.UnixMilli(),
 		})
 		if v := resourceVersionOrTimestamp(evt); v > version {
 			version = v
@@ -190,4 +197,69 @@ func eventMessage(evt *corev1.Event) string {
 		return msg
 	}
 	return strings.TrimSpace(evt.Reason)
+}
+
+func compareEventOrder(left, right *corev1.Event) int {
+	leftTimestamp := eventTimestamp(left)
+	rightTimestamp := eventTimestamp(right)
+	if !leftTimestamp.Equal(rightTimestamp) {
+		if leftTimestamp.After(rightTimestamp) {
+			return -1
+		}
+		return 1
+	}
+
+	leftResourceVersion := strings.TrimSpace(left.GetResourceVersion())
+	rightResourceVersion := strings.TrimSpace(right.GetResourceVersion())
+	if leftResourceVersion != rightResourceVersion {
+		if compareNumericStrings(leftResourceVersion, rightResourceVersion) > 0 {
+			return -1
+		}
+		return 1
+	}
+
+	leftUID := string(left.GetUID())
+	rightUID := string(right.GetUID())
+	if leftUID != rightUID {
+		if leftUID < rightUID {
+			return -1
+		}
+		return 1
+	}
+
+	leftName := strings.TrimSpace(left.GetName())
+	rightName := strings.TrimSpace(right.GetName())
+	if leftName != rightName {
+		if leftName < rightName {
+			return -1
+		}
+		return 1
+	}
+
+	return 0
+}
+
+func compareNumericStrings(left, right string) int {
+	left = strings.TrimLeft(left, "0")
+	right = strings.TrimLeft(right, "0")
+	if left == "" {
+		left = "0"
+	}
+	if right == "" {
+		right = "0"
+	}
+
+	if len(left) != len(right) {
+		if len(left) < len(right) {
+			return -1
+		}
+		return 1
+	}
+	if left == right {
+		return 0
+	}
+	if left < right {
+		return -1
+	}
+	return 1
 }

@@ -31,10 +31,17 @@ type settingsFile struct {
 
 // settingsPreferences captures user-configurable preferences.
 type settingsPreferences struct {
-	Theme                    string           `json:"theme"`
-	UseShortResourceNames    bool             `json:"useShortResourceNames"`
-	Refresh                  *settingsRefresh `json:"refresh"`
-	GridTablePersistenceMode string           `json:"gridTablePersistenceMode"`
+	Theme                         string           `json:"theme"`
+	UseShortResourceNames         bool             `json:"useShortResourceNames"`
+	Refresh                       *settingsRefresh `json:"refresh"`
+	GridTablePersistenceMode      string           `json:"gridTablePersistenceMode"`
+	DefaultObjectPanelPosition    string           `json:"defaultObjectPanelPosition"`
+	ObjectPanelDockedRightWidth   int              `json:"objectPanelDockedRightWidth"`
+	ObjectPanelDockedBottomHeight int              `json:"objectPanelDockedBottomHeight"`
+	ObjectPanelFloatingWidth      int              `json:"objectPanelFloatingWidth"`
+	ObjectPanelFloatingHeight     int              `json:"objectPanelFloatingHeight"`
+	ObjectPanelFloatingX          int              `json:"objectPanelFloatingX"`
+	ObjectPanelFloatingY          int              `json:"objectPanelFloatingY"`
 
 	// Migration: old single-value palette fields, read-only, omitted when zero.
 	PaletteHue        int `json:"paletteHue,omitempty"`
@@ -84,9 +91,14 @@ func defaultSettingsFile() *settingsFile {
 		SchemaVersion: settingsSchemaVersion,
 		UpdatedAt:     time.Now().UTC(),
 		Preferences: settingsPreferences{
-			Theme:                    "system",
-			Refresh:                  &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
+			Theme:   "system",
+			Refresh: &settingsRefresh{Auto: true, Background: true, MetricsIntervalMs: defaultMetricsIntervalMs()},
+
 			GridTablePersistenceMode: "shared",
+			// DefaultObjectPanelPosition and object panel layout defaults are
+			// intentionally omitted. The frontend's DEFAULT_PREFERENCES is the
+			// single source of truth; zero/empty values from the backend are
+			// filled in during hydration.
 		},
 		Kubeconfig: settingsKubeconfig{
 			SearchPaths: defaultKubeconfigSearchPaths(),
@@ -281,7 +293,7 @@ func getDefaultAppSettings() *AppSettings {
 		AutoRefreshEnabled:               true,
 		RefreshBackgroundClustersEnabled: true,
 		MetricsRefreshIntervalMs:         defaultMetricsIntervalMs(),
-		GridTablePersistenceMode:         "shared",
+		GridTablePersistenceMode: "shared",
 	}
 }
 
@@ -299,6 +311,13 @@ func (a *App) loadAppSettings() error {
 		RefreshBackgroundClustersEnabled: settings.Preferences.Refresh.Background,
 		MetricsRefreshIntervalMs:         settings.Preferences.Refresh.MetricsIntervalMs,
 		GridTablePersistenceMode:         settings.Preferences.GridTablePersistenceMode,
+		DefaultObjectPanelPosition:       settings.Preferences.DefaultObjectPanelPosition,
+		ObjectPanelDockedRightWidth:      settings.Preferences.ObjectPanelDockedRightWidth,
+		ObjectPanelDockedBottomHeight:    settings.Preferences.ObjectPanelDockedBottomHeight,
+		ObjectPanelFloatingWidth:         settings.Preferences.ObjectPanelFloatingWidth,
+		ObjectPanelFloatingHeight:        settings.Preferences.ObjectPanelFloatingHeight,
+		ObjectPanelFloatingX:             settings.Preferences.ObjectPanelFloatingX,
+		ObjectPanelFloatingY:             settings.Preferences.ObjectPanelFloatingY,
 		PaletteHueLight:                  settings.Preferences.PaletteHueLight,
 		PaletteSaturationLight:           settings.Preferences.PaletteSaturationLight,
 		PaletteBrightnessLight:           settings.Preferences.PaletteBrightnessLight,
@@ -333,6 +352,13 @@ func (a *App) saveAppSettings() error {
 	settings.Preferences.Refresh.Background = a.appSettings.RefreshBackgroundClustersEnabled
 	settings.Preferences.Refresh.MetricsIntervalMs = a.appSettings.MetricsRefreshIntervalMs
 	settings.Preferences.GridTablePersistenceMode = a.appSettings.GridTablePersistenceMode
+	settings.Preferences.DefaultObjectPanelPosition = a.appSettings.DefaultObjectPanelPosition
+	settings.Preferences.ObjectPanelDockedRightWidth = a.appSettings.ObjectPanelDockedRightWidth
+	settings.Preferences.ObjectPanelDockedBottomHeight = a.appSettings.ObjectPanelDockedBottomHeight
+	settings.Preferences.ObjectPanelFloatingWidth = a.appSettings.ObjectPanelFloatingWidth
+	settings.Preferences.ObjectPanelFloatingHeight = a.appSettings.ObjectPanelFloatingHeight
+	settings.Preferences.ObjectPanelFloatingX = a.appSettings.ObjectPanelFloatingX
+	settings.Preferences.ObjectPanelFloatingY = a.appSettings.ObjectPanelFloatingY
 	// Write per-theme palette fields; leave old fields zeroed so omitempty drops them.
 	settings.Preferences.PaletteHueLight = a.appSettings.PaletteHueLight
 	settings.Preferences.PaletteSaturationLight = a.appSettings.PaletteSaturationLight
@@ -498,6 +524,46 @@ func (a *App) SetGridTablePersistenceMode(mode string) error {
 
 	a.logger.Info(fmt.Sprintf("Grid table persistence mode changed to: %s", mode), "Settings")
 	a.appSettings.GridTablePersistenceMode = mode
+	return a.saveAppSettings()
+}
+
+// SetDefaultObjectPanelPosition persists the default object panel position.
+func (a *App) SetDefaultObjectPanelPosition(position string) error {
+	if position != "right" && position != "bottom" && position != "floating" {
+		return fmt.Errorf("invalid default object panel position: %s", position)
+	}
+
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Info(fmt.Sprintf("Default object panel position changed to: %s", position), "Settings")
+	a.appSettings.DefaultObjectPanelPosition = position
+	return a.saveAppSettings()
+}
+
+// SetObjectPanelLayout persists the default object panel dimensions and floating position.
+func (a *App) SetObjectPanelLayout(dockedRightWidth, dockedBottomHeight, floatingWidth, floatingHeight, floatingX, floatingY int) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	if a.appSettings == nil {
+		if err := a.loadAppSettings(); err != nil {
+			return err
+		}
+	}
+
+	a.appSettings.ObjectPanelDockedRightWidth = dockedRightWidth
+	a.appSettings.ObjectPanelDockedBottomHeight = dockedBottomHeight
+	a.appSettings.ObjectPanelFloatingWidth = floatingWidth
+	a.appSettings.ObjectPanelFloatingHeight = floatingHeight
+	a.appSettings.ObjectPanelFloatingX = floatingX
+	a.appSettings.ObjectPanelFloatingY = floatingY
 	return a.saveAppSettings()
 }
 

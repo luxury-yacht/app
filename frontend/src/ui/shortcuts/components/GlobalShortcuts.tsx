@@ -11,6 +11,7 @@ import { useKeyboardContext } from '../context';
 import { ShortcutHelpModal } from './ShortcutHelpModal';
 import { KeyCodes } from '../constants';
 import { isMacPlatform } from '@/utils/platform';
+import { useZoom } from '@core/contexts/ZoomContext';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import {
   getClusterTabOrder,
@@ -51,6 +52,7 @@ export function GlobalShortcuts({
   const { setContext } = useKeyboardContext();
   const { selectedKubeconfig, selectedKubeconfigs, setSelectedKubeconfigs, setActiveKubeconfig } =
     useKubeconfig();
+  const { zoomIn, zoomOut, resetZoom } = useZoom();
   const [clusterTabOrder, setClusterTabOrder] = useState<string[]>(() => getClusterTabOrder());
 
   useEffect(() => {
@@ -323,6 +325,36 @@ export function GlobalShortcuts({
     description: 'Toggle diagnostics panel',
     category: 'Global',
     enabled: !!onToggleDiagnostics,
+    view: 'global',
+  });
+
+  // Zoom shortcuts — the Wails native menu accelerators for +/- don't work on
+  // Windows (the keys are missing from the Windows keyMap), so we register them
+  // here in the frontend shortcut system where they work on all platforms.
+  useShortcut({
+    key: '=',
+    modifiers: macPlatform ? { meta: true } : { ctrl: true },
+    handler: zoomIn,
+    description: 'Zoom in',
+    category: 'View',
+    view: 'global',
+  });
+
+  useShortcut({
+    key: '-',
+    modifiers: macPlatform ? { meta: true } : { ctrl: true },
+    handler: zoomOut,
+    description: 'Zoom out',
+    category: 'View',
+    view: 'global',
+  });
+
+  useShortcut({
+    key: '0',
+    modifiers: macPlatform ? { meta: true } : { ctrl: true },
+    handler: resetZoom,
+    description: 'Reset zoom',
+    category: 'View',
     view: 'global',
   });
 

@@ -27,6 +27,7 @@ const observerCallbacks: IntersectionObserverCallback[] = [];
 const observerStub: IntersectionObserver = {
   root: null,
   rootMargin: '0px',
+  scrollMargin: '0px',
   thresholds: [0],
   observe() {},
   unobserve() {},
@@ -37,12 +38,14 @@ const observerStub: IntersectionObserver = {
 class MockIntersectionObserver implements IntersectionObserver {
   readonly root: Element | Document | null;
   readonly rootMargin: string;
+  readonly scrollMargin: string;
   readonly thresholds: ReadonlyArray<number>;
 
   constructor(callback: IntersectionObserverCallback) {
     observerCallbacks.push(callback);
     this.root = null;
     this.rootMargin = '0px';
+    this.scrollMargin = '0px';
     this.thresholds = [0];
   }
 

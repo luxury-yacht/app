@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { refreshOrchestrator, useRefreshScopedDomain } from '@/core/refresh';
+import { getScopedDomainState, setScopedDomainState } from '@/core/refresh/store';
 import { useCatalogDiagnostics } from '@/core/refresh/diagnostics/useCatalogDiagnostics';
 import type { CatalogItem, CatalogSnapshotPayload } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
@@ -199,9 +200,11 @@ export function useBrowseCatalog({
     if (!domain.data) {
       return;
     }
-    // Only apply snapshots once the domain is `ready` so we don't mistakenly treat
-    // stale data as belonging to a new scope.
-    if (domain.status !== 'ready') {
+    // Skip transient states where data isn't meaningful yet.
+    // Allow both 'ready' and 'updating' — the catalog stream delivers complete
+    // snapshots in both states, and gating on 'ready' alone causes the view to
+    // miss real-time updates delivered via SSE while status is 'updating'.
+    if (domain.status !== 'ready' && domain.status !== 'updating') {
       return;
     }
     // Check if the incoming data matches the namespace we're expecting.
@@ -227,14 +230,8 @@ export function useBrowseCatalog({
     const mode = requestModeRef.current;
     requestModeRef.current = null;
 
-    if (mode === 'reset') {
-      // Explicit reset (query changed): replace all items with the new snapshot
-      const { items: nextItems, indexByUid } = dedupeByUID(payload.items ?? []);
-      itemsRef.current = nextItems;
-      indexByUidRef.current = indexByUid.size ? indexByUid : rebuildIndexByUID(nextItems);
-      setItems(nextItems);
-    } else {
-      // Append mode or refresh (mode === 'append' or null): merge items to preserve pagination
+    if (mode === 'append') {
+      // Append mode (load-more pagination): merge new items into the existing list.
       const { nextItems, changed } = upsertByUID(
         itemsRef.current,
         indexByUidRef.current,
@@ -244,6 +241,15 @@ export function useBrowseCatalog({
         itemsRef.current = nextItems;
         setItems(nextItems);
       }
+    } else {
+      // Reset or streaming refresh (mode === 'reset' or null): replace all items
+      // so that additions, deletions, and updates are reflected immediately.
+      // upsertByUID cannot handle deletions — it only adds/updates from incoming,
+      // so stale items would persist until the next scope change.
+      const { items: nextItems, indexByUid } = dedupeByUID(payload.items ?? []);
+      itemsRef.current = nextItems;
+      indexByUidRef.current = indexByUid.size ? indexByUid : rebuildIndexByUID(nextItems);
+      setItems(nextItems);
     }
 
     setContinueToken(parseContinueToken(payload.continue));
@@ -273,7 +279,12 @@ export function useBrowseCatalog({
     setHasLoadedOnce(true);
   }, [domain.data, hasLoadedOnce]);
 
-  // Load more handler
+  // Load more handler.
+  // Fetches the next page using a paginated scope (with continueToken), then
+  // copies the result to the base catalogScope so the domain watcher sees it.
+  const catalogScopeRef = useRef(catalogScope);
+  catalogScopeRef.current = catalogScope;
+
   const handleLoadMore = useCallback(() => {
     if (!continueToken || isRequestingMore) {
       return;
@@ -295,7 +306,22 @@ export function useBrowseCatalog({
     // Enable the paginated scope and fetch it directly.
     refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, true);
     lastAppliedScopeRef.current = normalizedScope;
-    void refreshOrchestrator.fetchScopedDomain('catalog', normalizedScope, { isManual: true });
+    void refreshOrchestrator
+      .fetchScopedDomain('catalog', normalizedScope, { isManual: true })
+      .then(() => {
+        // The fetch wrote results to the paginated scope. Copy to the base
+        // scope so the domain watcher (useRefreshScopedDomain) sees the update.
+        const pageResult = getScopedDomainState('catalog', normalizedScope);
+        if (pageResult.data) {
+          const baseScope = catalogScopeRef.current;
+          setScopedDomainState('catalog', baseScope, () => ({
+            ...pageResult,
+            scope: baseScope,
+          }));
+        }
+        // Clean up the temporary paginated scope.
+        refreshOrchestrator.setScopedDomainEnabled('catalog', normalizedScope, false);
+      });
   }, [
     continueToken,
     isRequestingMore,

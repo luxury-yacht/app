@@ -7,6 +7,8 @@ import {capabilities} from '../models';
 import {json} from '../models';
 import {templates} from '../models';
 
+export function AddFavorite(arg1:backend.Favorite):Promise<backend.Favorite>;
+
 export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
 export function ApplyTheme(arg1:string):Promise<void>;
@@ -29,6 +31,8 @@ export function CreateVersionedEndpoint(arg1:string,arg2:string,arg3:any,arg4:st
 
 export function CtxOrBackground():Promise<context.Context>;
 
+export function DeleteFavorite(arg1:string):Promise<void>;
+
 export function DeleteGridTablePersistence(arg1:string):Promise<void>;
 
 export function DeleteGridTablePersistenceEntries(arg1:Array<string>):Promise<void>;
@@ -50,6 +54,8 @@ export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Prom
 export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;
 
 export function GetAllClusterAuthStates():Promise<Record<string, Record<string, any>>>;
+
+export function GetAllClusterLifecycleStates():Promise<Record<string, backend.ClusterLifecycleState>>;
 
 export function GetAppInfo():Promise<backend.AppInfo>;
 
@@ -80,6 +86,8 @@ export function GetDaemonSet(arg1:string,arg2:string,arg3:string):Promise<types.
 export function GetDeployment(arg1:string,arg2:string,arg3:string):Promise<types.DeploymentDetails>;
 
 export function GetEndpointSlice(arg1:string,arg2:string,arg3:string):Promise<types.EndpointSliceDetails>;
+
+export function GetFavorites():Promise<Array<backend.Favorite>>;
 
 export function GetGridTablePersistence():Promise<Record<string, json.RawMessage>>;
 
@@ -131,7 +139,7 @@ export function GetReplicaSet(arg1:string,arg2:string,arg3:string):Promise<types
 
 export function GetResourceQuota(arg1:string,arg2:string,arg3:string):Promise<types.ResourceQuotaDetails>;
 
-export function GetResourceTemplates():Promise<Array<templates.ResourceTemplate>>;
+export function GetRevisionHistory(arg1:string,arg2:string,arg3:string,arg4:string):Promise<Array<backend.RevisionEntry>>;
 
 export function GetRole(arg1:string,arg2:string,arg3:string):Promise<types.RoleDetails>;
 
@@ -165,15 +173,9 @@ export function GetWorkloads(arg1:string,arg2:string,arg3:string):Promise<backen
 
 export function GetZoomLevel():Promise<number>;
 
-export function IsActiveSessionsPanelVisible():Promise<boolean>;
-
 export function IsDiagnosticsPanelVisible():Promise<boolean>;
 
 export function IsLogsPanelVisible():Promise<boolean>;
-
-export function IsPortForwardsPanelVisible():Promise<boolean>;
-
-export function IsShellSessionsPanelVisible():Promise<boolean>;
 
 export function IsSidebarVisible():Promise<boolean>;
 
@@ -203,6 +205,8 @@ export function RetryAuth():Promise<void>;
 
 export function RetryClusterAuth(arg1:string):Promise<void>;
 
+export function RollbackWorkload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<void>;
+
 export function SaveTheme(arg1:types.Theme):Promise<void>;
 
 export function SaveWindowSettings():Promise<void>;
@@ -213,13 +217,15 @@ export function SendShellInput(arg1:string,arg2:string):Promise<void>;
 
 export function SetAccentColor(arg1:string,arg2:string):Promise<void>;
 
-export function SetActiveSessionsPanelVisible(arg1:boolean):Promise<void>;
-
 export function SetAutoRefreshEnabled(arg1:boolean):Promise<void>;
 
 export function SetBackgroundRefreshEnabled(arg1:boolean):Promise<void>;
 
 export function SetClusterTabOrder(arg1:Array<string>):Promise<void>;
+
+export function SetDefaultObjectPanelPosition(arg1:string):Promise<void>;
+
+export function SetFavoriteOrder(arg1:Array<string>):Promise<void>;
 
 export function SetGridTablePersistence(arg1:string,arg2:json.RawMessage):Promise<void>;
 
@@ -233,13 +239,11 @@ export function SetLinkColor(arg1:string,arg2:string):Promise<void>;
 
 export function SetLogsPanelVisible(arg1:boolean):Promise<void>;
 
+export function SetObjectPanelLayout(arg1:number,arg2:number,arg3:number,arg4:number,arg5:number,arg6:number):Promise<void>;
+
 export function SetPaletteTint(arg1:string,arg2:number,arg3:number,arg4:number):Promise<void>;
 
-export function SetPortForwardsPanelVisible(arg1:boolean):Promise<void>;
-
 export function SetSelectedKubeconfigs(arg1:Array<string>):Promise<void>;
-
-export function SetShellSessionsPanelVisible(arg1:boolean):Promise<void>;
 
 export function SetSidebarVisible(arg1:boolean):Promise<void>;
 
@@ -267,23 +271,19 @@ export function StopPortForward(arg1:string):Promise<void>;
 
 export function SuspendCronJob(arg1:string,arg2:string,arg3:string,arg4:boolean):Promise<void>;
 
-export function ToggleActiveSessionsPanel():Promise<void>;
-
 export function ToggleDiagnosticsPanel():Promise<void>;
 
 export function ToggleLogsPanel():Promise<void>;
 
 export function ToggleObjectDiff():Promise<void>;
 
-export function TogglePortForwardsPanel():Promise<void>;
-
-export function ToggleShellSessionsPanel():Promise<void>;
-
 export function ToggleSidebar():Promise<void>;
 
 export function TriggerCronJob(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function UncordonNode(arg1:string,arg2:string):Promise<void>;
+
+export function UpdateFavorite(arg1:backend.Favorite):Promise<void>;
 
 export function UpdateMenu():Promise<void>;
 

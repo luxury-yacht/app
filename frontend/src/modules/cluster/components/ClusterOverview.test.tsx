@@ -147,6 +147,13 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
   BrowserOpenURL: (...args: unknown[]) => browserOpenURLMock(...args),
 }));
 
+vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
+  useClusterLifecycle: () => ({
+    getClusterState: () => 'ready',
+    isClusterReady: () => true,
+  }),
+}));
+
 describe('ClusterOverview', () => {
   let cleanupRoot: (() => void) | null = null;
 
@@ -211,6 +218,8 @@ describe('ClusterOverview', () => {
         fargateNodes: 1,
         regularNodes: 2,
         ec2Nodes: 2,
+        virtualNodes: 0,
+        vmNodes: 0,
         totalPods: 42,
         totalContainers: 84,
         totalInitContainers: 3,
@@ -234,6 +243,73 @@ describe('ClusterOverview', () => {
     expect(container.textContent).toContain('EKS');
     expect(container.textContent).toContain('1.26.3');
     expect(container.textContent).not.toContain('Loading cluster overview...');
+  });
+
+  it('shows EC2 and Fargate cards for EKS clusters', async () => {
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        clusterType: 'EKS',
+        totalNodes: 5,
+        ec2Nodes: 3,
+        fargateNodes: 2,
+      },
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(statValueFor(container, 'Total')).toBe('5');
+    expect(statValueFor(container, 'EC2')).toBe('3');
+    expect(statValueFor(container, 'Fargate')).toBe('2');
+    // AKS-specific cards should not appear.
+    expect(statValueFor(container, 'VM')).toBe('');
+    expect(statValueFor(container, 'Virtual')).toBe('');
+  });
+
+  it('shows VM and Virtual cards for AKS clusters', async () => {
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        clusterType: 'AKS',
+        totalNodes: 4,
+        vmNodes: 3,
+        virtualNodes: 1,
+      },
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(statValueFor(container, 'Total')).toBe('4');
+    expect(statValueFor(container, 'VM')).toBe('3');
+    expect(statValueFor(container, 'Virtual')).toBe('1');
+    // EKS-specific cards should not appear.
+    expect(statValueFor(container, 'EC2')).toBe('');
+    expect(statValueFor(container, 'Fargate')).toBe('');
+  });
+
+  it('shows only Total card for GKE clusters', async () => {
+    domainStateRef.current = createDomainState('ready', {
+      overview: {
+        ...EMPTY_OVERVIEW_DATA,
+        clusterType: 'GKE',
+        totalNodes: 6,
+      },
+    });
+
+    const { container, cleanup } = renderClusterOverview();
+    cleanupRoot = cleanup;
+    await flushEffects();
+
+    expect(statValueFor(container, 'Total')).toBe('6');
+    // No provider-specific breakdown cards.
+    expect(statValueFor(container, 'EC2')).toBe('');
+    expect(statValueFor(container, 'Fargate')).toBe('');
+    expect(statValueFor(container, 'VM')).toBe('');
+    expect(statValueFor(container, 'Virtual')).toBe('');
   });
 
   it('renders an update banner when a newer release is available', async () => {
@@ -352,6 +428,8 @@ const EMPTY_OVERVIEW_DATA: ClusterOverviewPayload = {
   fargateNodes: 0,
   regularNodes: 0,
   ec2Nodes: 0,
+  virtualNodes: 0,
+  vmNodes: 0,
   totalPods: 0,
   totalContainers: 0,
   totalInitContainers: 0,

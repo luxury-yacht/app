@@ -13,7 +13,7 @@
 
 export const LAYOUT = {
   /** Minimum distance panels should maintain from content edges */
-  MIN_EDGE_DISTANCE: 50,
+  MIN_EDGE_DISTANCE: 0,
   /** Margin to leave when constraining panel size to content area */
   WINDOW_MARGIN: 100,
   /** Size of the resize detection zone on panel edges */

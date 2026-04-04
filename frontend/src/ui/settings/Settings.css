@@ -81,6 +81,81 @@
   margin: 0;
 }
 
+.setting-item-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.setting-item-inline input[type="number"] {
+  width: 9ch;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-sm);
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+/* Object Panel Defaults */
+.object-panel-defaults .dropdown-trigger {
+  min-width: auto;
+}
+
+.object-panel-defaults .opd-row-label {
+  display: inline-block;
+  width: 5em;
+  flex-shrink: 0;
+}
+
+.object-panel-defaults .opd-field-label {
+  display: inline-block;
+  width: 3em;
+  flex-shrink: 0;
+}
+
+.object-panel-defaults .opd-unit-gap {
+  margin-right: var(--spacing-md);
+}
+
+.object-panel-defaults input.opd-input-warn {
+  border-color: var(--color-warning, #e6a700);
+  outline: 1px solid var(--color-warning, #e6a700);
+}
+
+.object-panel-defaults .opd-warning {
+  font-size: var(--font-size-small);
+  color: #92600a;
+  padding-top: var(--spacing-sm);
+}
+
+[data-theme="dark"] .object-panel-defaults .opd-warning {
+  color: var(--color-warning, #f59e0b);
+}
+
+.object-panel-defaults .opd-warning p {
+  margin: 0 0 var(--spacing-xs) 0;
+}
+
+.object-panel-defaults .opd-warning ul {
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+.object-panel-defaults .opd-warning li {
+  margin: 0;
+}
+
+[data-theme="dark"] .setting-item-inline input[type="number"] {
+  color-scheme: dark;
+}
+
+.setting-item-inline input[type="number"]::-webkit-inner-spin-button,
+.setting-item-inline input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: auto;
+  appearance: auto;
+  opacity: 1;
+}
+
 /* Palette Tint Controls — 4-column grid: label | control | value | reset */
 .palette-tint-controls {
   display: grid;

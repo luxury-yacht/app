@@ -16,13 +16,28 @@ import { useLogKeyboardShortcuts } from './hooks/useLogKeyboardShortcuts';
 import { useLogFiltering } from './hooks/useLogFiltering';
 import { useLogStreamFallback, isLogDataUnavailable } from './hooks/useLogStreamFallback';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
+import {
+  AutoScrollIcon,
+  AutoRefreshIcon,
+  PreviousLogsIcon,
+  TimestampIcon,
+  WrapTextIcon,
+  ParseJsonIcon,
+  CopyIcon,
+} from '@shared/components/icons/LogIcons';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
 import './LogViewer.css';
 import { refreshOrchestrator } from '@/core/refresh/orchestrator';
 import { setScopedDomainState, useRefreshScopedDomain } from '@/core/refresh/store';
 import type { ObjectLogEntry } from '@/core/refresh/types';
 import { buildClusterScope } from '@/core/refresh/clusterScope';
 import type { types } from '@wailsjs/go/models';
-import { logViewerReducer, initialLogViewerState, type ParsedLogEntry } from './logViewerReducer';
+import {
+  ALL_CONTAINERS,
+  logViewerReducer,
+  initialLogViewerState,
+  type ParsedLogEntry,
+} from './logViewerReducer';
 import { CLUSTER_SCOPE, INACTIVE_SCOPE } from '../constants';
 
 interface LogViewerProps {
@@ -32,13 +47,46 @@ interface LogViewerProps {
   isActive?: boolean;
   activePodNames?: string[] | null;
   clusterId?: string | null;
+  /** Restore parsed view state from a previous mount. */
+  initialParsedView?: boolean;
+  /** Called when parsed view state changes so the parent can preserve it. */
+  onParsedViewChange?: (isParsed: boolean) => void;
 }
 
-const ALL_CONTAINERS = ''; // Empty string means all containers in the backend
 const LOG_DOMAIN = 'object-logs' as const;
 const PARSED_COLUMN_MIN_WIDTH = 120;
 const PARSED_TIMESTAMP_MIN_WIDTH = 180;
 const PARSED_POD_COLUMN_MIN_WIDTH = 160;
+
+// Truncate RFC3339Nano timestamps to millisecond precision for display
+const formatTimestamp = (timestamp: string): string => {
+  const match = timestamp.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.(\d+)(.*)$/);
+  if (match) {
+    const [, dateTime, nanos, rest] = match;
+    const millis = nanos.substring(0, 3).padEnd(3, '0');
+    return `${dateTime}.${millis}${rest}`;
+  }
+  return timestamp;
+};
+
+// Format a parsed JSON value for table cell display
+const formatParsedValue = (value: unknown): string => {
+  if (value === undefined || value === null) {
+    return '-';
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+  if (typeof value === 'string') {
+    return value.length > 0 ? value : '-';
+  }
+  const stringified = String(value);
+  return stringified.length > 0 ? stringified : '-';
+};
+
+// Build a display label for a container, appending :init for init containers
+const formatContainerLabel = (container: string, isInit: boolean): string =>
+  isInit ? `${container}:init` : container;
 
 const LogViewer: React.FC<LogViewerProps> = ({
   namespace,
@@ -47,9 +95,14 @@ const LogViewer: React.FC<LogViewerProps> = ({
   isActive = false,
   activePodNames = null,
   clusterId,
+  initialParsedView = false,
+  onParsedViewChange,
 }) => {
-  // Consolidated state via reducer
-  const [state, dispatch] = useReducer(logViewerReducer, initialLogViewerState);
+  // Consolidated state via reducer. Restore parsed view from parent if provided.
+  const [state, dispatch] = useReducer(logViewerReducer, {
+    ...initialLogViewerState,
+    isParsedView: initialParsedView,
+  });
 
   // Destructure commonly used state for readability
   const {
@@ -66,13 +119,17 @@ const LogViewer: React.FC<LogViewerProps> = ({
     copyFeedback,
     isParsedView,
     parsedLogs,
-    parsedFieldKeys,
-    manualRefreshPending,
+    expandedRows,
     fallbackActive,
     fallbackError,
     showPreviousLogs,
     isLoadingPreviousLogs,
   } = state;
+
+  // Notify parent when parsed view changes so it can preserve across remounts
+  useEffect(() => {
+    onParsedViewChange?.(isParsedView);
+  }, [isParsedView, onParsedViewChange]);
 
   const hasPrimedScopeRef = useRef(false);
   const fallbackRecoveringRef = useRef(false);
@@ -84,6 +141,8 @@ const LogViewer: React.FC<LogViewerProps> = ({
   const logsContentRef = useRef<HTMLDivElement>(null);
   const previousLogCountRef = useRef<number>(0);
   const filterInputRef = useRef<HTMLInputElement>(null);
+  const seqCounterRef = useRef(0);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resourceKindKey = resourceKind?.toLowerCase() ?? '';
   const isWorkload = resourceKindKey !== 'pod';
@@ -115,13 +174,43 @@ const LogViewer: React.FC<LogViewerProps> = ({
 
   const logSnapshot = useRefreshScopedDomain(LOG_DOMAIN, logScope ?? INACTIVE_SCOPE);
   const payloadEntries = logScope ? logSnapshot.data?.entries : undefined;
-  const logEntries: ObjectLogEntry[] = useMemo(() => payloadEntries ?? [], [payloadEntries]);
+  const rawLogEntries: ObjectLogEntry[] = useMemo(() => payloadEntries ?? [], [payloadEntries]);
+
+  // When autoScroll is off the user is reading in place. Buffer truncation
+  // in LogStreamManager removes entries from the front, which would shift
+  // the content and cause the viewport to jump. Prevent this by keeping a
+  // stable list that only grows (appends) while autoScroll is off.
+  const stableEntriesRef = useRef<ObjectLogEntry[]>([]);
+  const logEntries: ObjectLogEntry[] = useMemo(() => {
+    if (autoScroll) {
+      stableEntriesRef.current = rawLogEntries;
+      return rawLogEntries;
+    }
+
+    const stable = stableEntriesRef.current;
+    if (stable.length === 0 || rawLogEntries.length === 0) {
+      stableEntriesRef.current = rawLogEntries;
+      return rawLogEntries;
+    }
+
+    // Find entries newer than the last one in our stable list.
+    const lastStableSeq = stable[stable.length - 1]._seq ?? 0;
+    const newEntries = rawLogEntries.filter((e) => (e._seq ?? 0) > lastStableSeq);
+
+    if (newEntries.length === 0) {
+      return stable;
+    }
+
+    const merged = [...stable, ...newEntries];
+    stableEntriesRef.current = merged;
+    return merged;
+  }, [autoScroll, rawLogEntries]);
   const snapshotStatus = logScope ? logSnapshot.status : 'idle';
   const snapshotError = logScope ? logSnapshot.error : null;
   // sequence 1 = connected event, sequence >= 2 = initial logs received (may be empty)
   const snapshotSequence = logScope ? (logSnapshot.data?.sequence ?? 0) : 0;
   const hasReceivedInitialLogs = snapshotSequence >= 2;
-  const loading = snapshotStatus === 'loading' && logEntries.length === 0;
+
   const displayError = snapshotError && !isLogDataUnavailable(snapshotError) ? snapshotError : null;
   const fallbackDisplayError =
     fallbackError && !isLogDataUnavailable(fallbackError) ? fallbackError : null;
@@ -244,6 +333,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
           container: entry.container ?? '',
           line: entry.line ?? '',
           isInit: Boolean(entry.isInit),
+          _seq: ++seqCounterRef.current,
         }));
 
         const generatedAt = Date.now();
@@ -416,34 +506,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
       });
   }, [fetchLogs, logScope, showPreviousLogs, supportsPreviousLogs]);
 
-  const handleManualRefresh = useCallback(async () => {
-    if (!logScope) {
-      return;
-    }
-    dispatch({ type: 'SET_MANUAL_REFRESH_PENDING', payload: true });
-    if (showPreviousLogs) {
-      dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: true });
-    }
-    try {
-      if (showPreviousLogs) {
-        await fetchLogs({ previous: true, isManual: true });
-      } else if (fallbackActive) {
-        await fetchFallbackLogs(true);
-      } else if (autoRefresh) {
-        await refreshOrchestrator.restartStreamingDomain(LOG_DOMAIN, logScope);
-      } else {
-        await refreshOrchestrator.refreshStreamingDomainOnce(LOG_DOMAIN, logScope);
-      }
-    } catch (refreshError) {
-      console.error('Failed to refresh logs', refreshError);
-    } finally {
-      dispatch({ type: 'SET_MANUAL_REFRESH_PENDING', payload: false });
-      if (showPreviousLogs) {
-        dispatch({ type: 'SET_IS_LOADING_PREVIOUS_LOGS', payload: false });
-      }
-    }
-  }, [autoRefresh, fallbackActive, fetchFallbackLogs, fetchLogs, logScope, showPreviousLogs]);
-
   useEffect(() => {
     if (!supportsPreviousLogs && showPreviousLogs) {
       dispatch({ type: 'SET_SHOW_PREVIOUS_LOGS', payload: false });
@@ -454,11 +516,14 @@ const LogViewer: React.FC<LogViewerProps> = ({
   // Keyboard shortcuts for Logs tab
   useLogKeyboardShortcuts({
     isActive,
+    isParsedView,
+    autoScroll,
     dispatch,
     supportsPreviousLogs,
     canParseLogs,
     handleTogglePreviousLogs,
     filterInputRef,
+    logsContentRef,
   });
 
   // Generate consistent colors for pods (workload view)
@@ -482,9 +547,8 @@ const LogViewer: React.FC<LogViewerProps> = ({
     const fallbackColor = styles.getPropertyValue('--log-pod-color-fallback').trim();
     const colorMap: Record<string, string> = {};
 
-    // Get unique pod names from log entries
-    const uniquePods = Array.from(new Set(logEntries.map((entry) => entry.pod)));
-    uniquePods.forEach((pod, index) => {
+    // Use the already-deduplicated and sorted pod list from state
+    availablePods.forEach((pod, index) => {
       colorMap[pod] = colors[index % colors.length];
     });
 
@@ -492,7 +556,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
     colorMap['__fallback__'] = fallbackColor;
 
     return colorMap;
-  }, [logEntries]);
+  }, [availablePods]);
 
   useEffect(() => {
     if (isWorkload) {
@@ -527,32 +591,6 @@ const LogViewer: React.FC<LogViewerProps> = ({
     return displayName.replace(' (init)', '').replace(' (debug)', '');
   };
 
-  // Check if logs can be parsed as JSON
-  // Format timestamp to round milliseconds to 3 digits
-  const formatTimestamp = (timestamp: string): string => {
-    // Regex to match RFC3339Nano format with nanoseconds
-    const match = timestamp.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.(\d+)(.*)$/);
-    if (match) {
-      const [, dateTime, nanos, rest] = match;
-      // Take first 3 digits of fractional seconds
-      const millis = nanos.substring(0, 3).padEnd(3, '0');
-      return `${dateTime}.${millis}${rest}`;
-    }
-    return timestamp;
-  };
-  const formatParsedValue = (value: unknown): string => {
-    if (value === undefined || value === null) {
-      return '-';
-    }
-    if (typeof value === 'object') {
-      return JSON.stringify(value);
-    }
-    if (typeof value === 'string') {
-      return value.length > 0 ? value : '-';
-    }
-    const stringified = String(value);
-    return stringified.length > 0 ? stringified : '-';
-  };
   const displayLogs = useMemo(() => {
     if (filteredEntries.length === 0) {
       if (isPendingLogs) {
@@ -567,7 +605,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
           showTimestamps && entry.timestamp ? `[${formatTimestamp(entry.timestamp)}] ` : '';
 
         if (isWorkload) {
-          const containerLabel = entry.isInit ? `${entry.container}:init` : entry.container;
+          const containerLabel = formatContainerLabel(entry.container, entry.isInit);
           const formatted = entry.line.trim()
             ? `[${entry.pod}/${containerLabel}] ${entry.line}`
             : entry.line;
@@ -575,7 +613,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
         }
 
         if (selectedContainer === ALL_CONTAINERS) {
-          const containerLabel = entry.isInit ? `${entry.container}:init` : entry.container;
+          const containerLabel = formatContainerLabel(entry.container, entry.isInit);
           const formatted = entry.line.trim() ? `[${containerLabel}] ${entry.line}` : entry.line;
           return timestampPrefix + formatted;
         }
@@ -585,35 +623,45 @@ const LogViewer: React.FC<LogViewerProps> = ({
       .join('\n');
   }, [filteredEntries, isPendingLogs, isWorkload, selectedContainer, showTimestamps, textFilter]);
 
+  // Schedule copy feedback reset, cancelling any prior pending timer
+  const scheduleCopyReset = useCallback(() => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(
+      () => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }),
+      750
+    );
+  }, [dispatch]);
+
+  // Clean up copy timer on unmount
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
   const handleCopyLogs = useCallback(async () => {
     const text = isParsedView
       ? parsedLogs
-          .map((entry) => {
-            const payload = { ...entry } as Record<string, unknown>;
-            Object.keys(payload).forEach((key) => {
-              if (key.startsWith('_')) {
-                delete payload[key];
-              }
-            });
-            return Object.keys(payload).length ? JSON.stringify(payload) : entry._rawLine;
-          })
+          .map((entry) =>
+            Object.keys(entry.data).length ? JSON.stringify(entry.data) : entry.rawLine
+          )
           .join('\n')
       : displayLogs;
     if (!text) {
       dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
-      window.setTimeout(() => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }), 1500);
+      scheduleCopyReset();
       return;
     }
     try {
       await navigator.clipboard.writeText(text);
       dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'copied' });
-      window.setTimeout(() => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }), 1500);
+      scheduleCopyReset();
     } catch (err) {
       console.error('Failed to copy logs', err);
       dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'error' });
-      window.setTimeout(() => dispatch({ type: 'SET_COPY_FEEDBACK', payload: 'idle' }), 1500);
+      scheduleCopyReset();
     }
-  }, [displayLogs, isParsedView, parsedLogs]);
+  }, [displayLogs, isParsedView, parsedLogs, scheduleCopyReset, dispatch]);
 
   useEffect(() => {
     if (!isParsedView) {
@@ -621,12 +669,18 @@ const LogViewer: React.FC<LogViewerProps> = ({
       return;
     }
     if (!parsedCandidates.length) {
+      // Only exit parsed view if there are entries but none are JSON.
+      // When entries are empty (e.g. stream reconnecting or switching to
+      // previous logs), keep parsed view active but clear stale data so
+      // old logs aren't displayed while waiting for new data.
       dispatch({ type: 'SET_PARSED_LOGS', payload: [] });
-      dispatch({ type: 'SET_PARSED_VIEW', payload: false });
+      if (filteredEntries.length > 0) {
+        dispatch({ type: 'SET_PARSED_VIEW', payload: false });
+      }
       return;
     }
     dispatch({ type: 'SET_PARSED_LOGS', payload: parsedCandidates });
-  }, [isParsedView, parsedCandidates]);
+  }, [isParsedView, parsedCandidates, filteredEntries.length]);
 
   // Fetch containers for single pod
   useEffect(() => {
@@ -675,6 +729,18 @@ const LogViewer: React.FC<LogViewerProps> = ({
     };
   }, [namespace, podName, isWorkload, resolvedClusterId]);
 
+  // When auto-refresh is re-enabled, the stream restarts with a fresh
+  // (smaller) batch. Reset the previous log count so the auto-scroll
+  // effect treats it as an initial load and scrolls to the bottom.
+  const prevAutoRefreshRef = useRef(autoRefresh);
+  useEffect(() => {
+    const wasOff = !prevAutoRefreshRef.current;
+    prevAutoRefreshRef.current = autoRefresh;
+    if (wasOff && autoRefresh && autoScroll) {
+      previousLogCountRef.current = 0;
+    }
+  }, [autoRefresh, autoScroll]);
+
   // Track previous view to detect view switches
   const previousIsParsedViewRef = useRef(isParsedView);
 
@@ -710,6 +776,8 @@ const LogViewer: React.FC<LogViewerProps> = ({
         }
       };
 
+      let rafId: number | undefined;
+
       if (isParsedView && parsedLogs.length > 0) {
         // For parsed view, wait for the gridtable-wrapper to be rendered
         let attempts = 0;
@@ -718,67 +786,55 @@ const LogViewer: React.FC<LogViewerProps> = ({
         const checkAndScroll = () => {
           const wrapper = logsContentRef.current?.querySelector('.gridtable-wrapper');
           if (wrapper && wrapper.scrollHeight > 0) {
-            // Wrapper is rendered, scroll to bottom
-            requestAnimationFrame(scrollToBottom);
+            rafId = requestAnimationFrame(scrollToBottom);
           } else if (attempts < maxAttempts) {
-            // Try again next frame
             attempts++;
-            requestAnimationFrame(checkAndScroll);
+            rafId = requestAnimationFrame(checkAndScroll);
           }
         };
 
-        requestAnimationFrame(checkAndScroll);
+        rafId = requestAnimationFrame(checkAndScroll);
       } else if (!isParsedView && displayLogs) {
         // For raw view, scroll immediately after next frame
-        requestAnimationFrame(scrollToBottom);
+        rafId = requestAnimationFrame(scrollToBottom);
       }
+
+      return () => {
+        if (rafId !== undefined) cancelAnimationFrame(rafId);
+      };
     }
   }, [autoScroll, displayLogs, isParsedView, logEntries.length, parsedLogs.length]);
 
-  // Table columns for parsed view - track field keys from parsed logs
-  // Note: We use a ref to track previous keys to avoid infinite loops
-  const parsedFieldKeysRef = useRef<string[]>([]);
-  useEffect(() => {
-    if (parsedLogs.length === 0) {
-      if (parsedFieldKeysRef.current.length > 0) {
-        parsedFieldKeysRef.current = [];
-        dispatch({ type: 'SET_PARSED_FIELD_KEYS', payload: [] });
+  // Derive field keys directly from parsed log data
+  const derivedFieldKeys = useMemo(() => {
+    if (parsedLogs.length === 0) return [];
+    const seen = new Set<string>();
+    for (const entry of parsedLogs) {
+      for (const key of Object.keys(entry.data)) {
+        seen.add(key);
       }
-      return;
     }
-    const existingKeys = new Set(parsedFieldKeysRef.current);
-    const newKeys: string[] = [];
-    parsedLogs.forEach((entry) => {
-      Object.keys(entry).forEach((key) => {
-        if (!key.startsWith('_') && !existingKeys.has(key) && !newKeys.includes(key)) {
-          newKeys.push(key);
-        }
-      });
-    });
-    if (newKeys.length > 0) {
-      parsedFieldKeysRef.current = [...parsedFieldKeysRef.current, ...newKeys];
-      dispatch({ type: 'ADD_PARSED_FIELD_KEYS', payload: newKeys });
-    }
+    // Sort alphabetically so column order is stable across buffer changes
+    return Array.from(seen).sort();
   }, [parsedLogs]);
 
   const tableColumns = useMemo(() => {
-    if (parsedLogs.length === 0) return [];
+    if (derivedFieldKeys.length === 0) return [];
 
     const columns: GridColumnDefinition<ParsedLogEntry>[] = [];
-    const sample = parsedLogs[0];
 
-    if (showTimestamps && sample._timestamp) {
+    // Always show metadata columns when relevant — don't gate on first entry
+    if (showTimestamps) {
       columns.push({
         key: '_timestamp',
         header: 'API Timestamp',
         sortable: false,
         minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
-        render: (item: ParsedLogEntry) =>
-          item._timestamp ? formatTimestamp(item._timestamp) : '-',
+        render: (item: ParsedLogEntry) => (item.timestamp ? formatTimestamp(item.timestamp) : '-'),
       });
     }
 
-    if (isWorkload && sample._pod) {
+    if (isWorkload) {
       columns.push({
         key: '_pod',
         header: 'Pod',
@@ -789,58 +845,52 @@ const LogViewer: React.FC<LogViewerProps> = ({
             className="pod-color-text"
             style={
               {
-                '--pod-color': podColors[item._pod || ''] || podColors['__fallback__'],
+                '--pod-color': podColors[item.pod || ''] || podColors['__fallback__'],
               } as React.CSSProperties
             }
           >
-            {item._pod || '-'}
+            {item.pod || '-'}
           </span>
         ),
       });
     }
 
-    if (sample._container) {
-      columns.push({
-        key: '_container',
-        header: 'Container',
-        sortable: false,
-        minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
-        render: (item: ParsedLogEntry) => item._container || '-',
-      });
-    }
+    columns.push({
+      key: '_container',
+      header: 'Container',
+      sortable: false,
+      minWidth: PARSED_POD_COLUMN_MIN_WIDTH,
+      render: (item: ParsedLogEntry) => item.container || '-',
+    });
 
+    // Promote well-known timestamp and level fields to appear first
     const timestampCandidates = ['timestamp', 'time', 'ts'];
-    const jsonTimestampKey = parsedFieldKeys.find((key) => timestampCandidates.includes(key));
+    const jsonTimestampKey = derivedFieldKeys.find((key) => timestampCandidates.includes(key));
     if (jsonTimestampKey) {
       columns.push({
         key: jsonTimestampKey,
         header: jsonTimestampKey,
         sortable: false,
         minWidth: PARSED_TIMESTAMP_MIN_WIDTH,
-        render: (item: ParsedLogEntry) => {
-          const value = item[jsonTimestampKey];
-          return formatParsedValue(value);
-        },
+        render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonTimestampKey]),
       });
     }
 
     const levelCandidates = ['level', 'severity', 'log_level'];
-    const jsonLevelKey = parsedFieldKeys.find((key) => levelCandidates.includes(key));
+    const jsonLevelKey = derivedFieldKeys.find((key) => levelCandidates.includes(key));
     if (jsonLevelKey) {
       columns.push({
         key: jsonLevelKey,
         header: jsonLevelKey,
         sortable: false,
         minWidth: PARSED_COLUMN_MIN_WIDTH,
-        render: (item: ParsedLogEntry) => {
-          const value = item[jsonLevelKey];
-          return formatParsedValue(value);
-        },
+        render: (item: ParsedLogEntry) => formatParsedValue(item.data[jsonLevelKey]),
       });
     }
 
+    // Add remaining user-data columns
     const addedKeys = new Set(columns.map((col) => col.key));
-    parsedFieldKeys.forEach((key) => {
+    derivedFieldKeys.forEach((key) => {
       if (addedKeys.has(key)) {
         return;
       }
@@ -850,8 +900,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
         sortable: false,
         minWidth: PARSED_COLUMN_MIN_WIDTH,
         render: (item: ParsedLogEntry) => {
-          const value = item[key];
-          const displayValue = formatParsedValue(value);
+          const displayValue = formatParsedValue(item.data[key]);
           return (
             <div className="parsed-log-cell" title={displayValue}>
               {displayValue}
@@ -862,7 +911,39 @@ const LogViewer: React.FC<LogViewerProps> = ({
     });
 
     return columns;
-  }, [isWorkload, parsedFieldKeys, parsedLogs, podColors, showTimestamps]);
+  }, [derivedFieldKeys, isWorkload, podColors, showTimestamps]);
+
+  // Row expansion for parsed view.
+  // GridTable's onRowClick only fires for keyboard activation (Enter), not mouse
+  // clicks, so we use event delegation on a wrapper to handle pointer clicks.
+  const handleParsedTableClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const row = (e.target as HTMLElement).closest<HTMLElement>('.gridtable-row');
+      if (!row) return;
+      const key = row.dataset.rowKey;
+      if (key) {
+        dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: key });
+      }
+    },
+    [dispatch]
+  );
+
+  // Also wire onRowClick for keyboard (Enter) accessibility
+  const handleParsedRowKeyboard = useCallback(
+    (item: ParsedLogEntry) => {
+      const key = `log-${item.seq ?? item.lineNumber}`;
+      dispatch({ type: 'TOGGLE_ROW_EXPANSION', payload: key });
+    },
+    [dispatch]
+  );
+
+  const getParsedRowClassName = useCallback(
+    (_item: ParsedLogEntry, index: number) => {
+      const key = `log-${parsedLogs[index]?.seq ?? parsedLogs[index]?.lineNumber ?? index}`;
+      return expandedRows.has(key) ? 'parsed-row-expanded' : undefined;
+    },
+    [expandedRows, parsedLogs]
+  );
 
   // Loading state
   if (isPendingLogs) {
@@ -976,112 +1057,82 @@ const LogViewer: React.FC<LogViewerProps> = ({
               )}
             </div>
 
-            <Dropdown
-              options={[
-                {
-                  value: 'autoScroll',
-                  label: 'Auto-scroll',
-                  metadata: { checked: autoScroll, shortcut: 'S' },
-                },
-                {
-                  value: 'autoRefresh',
-                  label: 'Auto-refresh',
-                  metadata: { checked: autoRefresh, shortcut: 'R' },
-                },
-                ...(supportsPreviousLogs
-                  ? [
-                      {
-                        value: 'previousLogs',
-                        label: 'Show previous logs',
-                        metadata: { checked: showPreviousLogs, shortcut: 'X' },
-                      },
-                    ]
-                  : []),
-                {
-                  value: 'showTimestamps',
-                  label: 'Show API timestamps',
-                  metadata: { checked: showTimestamps, shortcut: 'T' },
-                },
-                {
-                  value: 'wrapText',
-                  label: 'Wrap text',
-                  metadata: { checked: wrapText, shortcut: 'W' },
-                },
-                ...(canParseLogs
-                  ? [
-                      {
-                        value: 'parseJson',
-                        label: 'Parse as JSON',
-                        metadata: { checked: isParsedView, shortcut: 'P' },
-                        disabled: !canParseLogs,
-                      },
-                    ]
-                  : []),
-              ]}
-              value="options"
-              onChange={(value) => {
-                if (value !== 'options') {
-                  switch (value) {
-                    case 'autoScroll':
-                      dispatch({ type: 'TOGGLE_AUTO_SCROLL' });
-                      break;
-                    case 'autoRefresh':
-                      dispatch({ type: 'TOGGLE_AUTO_REFRESH' });
-                      break;
-                    case 'previousLogs':
-                      if (supportsPreviousLogs) {
-                        handleTogglePreviousLogs();
-                      }
-                      break;
-                    case 'showTimestamps':
-                      dispatch({ type: 'TOGGLE_TIMESTAMPS' });
-                      break;
-                    case 'wrapText':
-                      dispatch({ type: 'TOGGLE_WRAP_TEXT' });
-                      break;
-                    case 'parseJson':
-                      if (!canParseLogs) {
-                        break;
-                      }
-                      dispatch({ type: 'TOGGLE_PARSED_VIEW' });
-                      break;
-                  }
-                }
-              }}
-              displayValue="Options"
-              size="compact"
-              renderOption={(option) => (
-                <div className="log-option-row">
-                  <span className="log-option-check">{option.metadata?.checked ? '✓' : ''}</span>
-                  <span className="log-option-label">{option.label}</span>
-                  <span className="keycap">
-                    <kbd>{option.metadata?.shortcut}</kbd>
-                  </span>
-                </div>
-              )}
+            <IconBar
+              items={
+                [
+                  {
+                    type: 'toggle',
+                    id: 'autoRefresh',
+                    icon: <AutoRefreshIcon />,
+                    active: autoRefresh,
+                    onClick: () => dispatch({ type: 'TOGGLE_AUTO_REFRESH' }),
+                    title: 'Auto-refresh (R)',
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'autoScroll',
+                    icon: <AutoScrollIcon />,
+                    active: autoScroll,
+                    onClick: () => dispatch({ type: 'TOGGLE_AUTO_SCROLL' }),
+                    title: 'Auto-scroll (S)',
+                  },
+                  { type: 'separator' },
+                  ...(supportsPreviousLogs
+                    ? [
+                        {
+                          type: 'toggle' as const,
+                          id: 'previousLogs',
+                          icon: <PreviousLogsIcon />,
+                          active: showPreviousLogs,
+                          onClick: handleTogglePreviousLogs,
+                          title: 'Previous logs (X)',
+                        },
+                      ]
+                    : []),
+                  {
+                    type: 'toggle',
+                    id: 'timestamps',
+                    icon: <TimestampIcon />,
+                    active: showTimestamps,
+                    onClick: () => dispatch({ type: 'TOGGLE_TIMESTAMPS' }),
+                    title: 'Timestamps (T)',
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'wrapText',
+                    icon: <WrapTextIcon />,
+                    active: wrapText,
+                    onClick: () => dispatch({ type: 'TOGGLE_WRAP_TEXT' }),
+                    title: 'Wrap text (W)',
+                    disabled: isParsedView,
+                  },
+                  {
+                    type: 'toggle',
+                    id: 'parseJson',
+                    icon: <ParseJsonIcon />,
+                    active: isParsedView,
+                    onClick: () => dispatch({ type: 'TOGGLE_PARSED_VIEW' }),
+                    title: 'Parse as JSON (P)',
+                    disabled: !canParseLogs,
+                  },
+                  { type: 'separator' },
+                  {
+                    type: 'action',
+                    id: 'copy',
+                    icon: <CopyIcon />,
+                    onClick: handleCopyLogs,
+                    title: 'Copy to clipboard',
+                    disabled: !displayLogs && !isParsedView,
+                    feedback:
+                      copyFeedback === 'copied'
+                        ? 'success'
+                        : copyFeedback === 'error'
+                          ? 'error'
+                          : null,
+                  },
+                ] satisfies IconBarItem[]
+              }
             />
-
-            {!autoRefresh && (
-              <button
-                className="button generic"
-                onClick={handleManualRefresh}
-                disabled={loading || manualRefreshPending}
-              >
-                {manualRefreshPending ? 'Refreshing…' : 'Refresh'}
-              </button>
-            )}
-            <button
-              className="button generic"
-              onClick={handleCopyLogs}
-              disabled={!displayLogs && !isParsedView}
-              title="Copy all logs to clipboard"
-            >
-              {copyFeedback === 'copied'
-                ? 'Copied'
-                : copyFeedback === 'error'
-                  ? 'Copy failed'
-                  : 'Copy'}
-            </button>
           </div>
         </div>
 
@@ -1097,18 +1148,26 @@ const LogViewer: React.FC<LogViewerProps> = ({
 
         <div className="pod-logs-content" ref={logsContentRef}>
           {isParsedView ? (
-            <GridTable
-              data={parsedLogs}
-              columns={tableColumns}
-              keyExtractor={(_item: ParsedLogEntry, index: number) => `log-${index}`}
-              className="parsed-logs-table"
-              tableClassName="gridtable-parsed-logs"
-              virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-            />
+            <div onClick={handleParsedTableClick} style={{ height: '100%' }}>
+              <GridTable
+                data={parsedLogs}
+                columns={tableColumns}
+                keyExtractor={(item: ParsedLogEntry) => `log-${item.seq ?? item.lineNumber}`}
+                onRowClick={handleParsedRowKeyboard}
+                getRowClassName={getParsedRowClassName}
+                className="parsed-logs-table"
+                tableClassName="gridtable-parsed-logs"
+                virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
+              />
+            </div>
           ) : (
             <div className={`pod-logs-text ${!wrapText ? 'no-wrap' : ''}`}>
               {displayLogs
                 ? displayLogs.split('\n').map((line, index) => {
+                    // Stable key: use _seq from the source entry so buffer
+                    // truncation doesn't shift every key and cause scroll jumps.
+                    const entryKey = filteredEntries[index]?._seq ?? index;
+
                     // For workload logs, apply color to pod name and timestamp
                     // Note: Lines only have pod info if backend successfully found pods for the workload
                     if (isWorkload && line.includes('[') && line.includes('/')) {
@@ -1125,7 +1184,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
                         const podColor = podColors[pod] || podColors['__fallback__'];
 
                         return (
-                          <div key={index} className="pod-log-line">
+                          <div key={entryKey} className="pod-log-line">
                             {timestamp && (
                               <span
                                 className="pod-log-metadata pod-color-text"
@@ -1166,7 +1225,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
                         const containerLabel = containerMatch ? containerMatch[1] : '';
                         const remainder = containerMatch ? containerMatch[2] : workingLine;
                         return (
-                          <div key={index} className="pod-log-line">
+                          <div key={entryKey} className="pod-log-line">
                             {timestampPrefix && (
                               <span className="pod-log-metadata">{timestampPrefix}</span>
                             )}
@@ -1180,7 +1239,7 @@ const LogViewer: React.FC<LogViewerProps> = ({
                     }
 
                     return (
-                      <div key={index} className="pod-log-line">
+                      <div key={entryKey} className="pod-log-line">
                         {line || '\u00A0'}
                       </div>
                     );

@@ -13,6 +13,7 @@ import type { GridColumnDefinition } from '@shared/components/tables/GridTable.t
 
 const renderSortIndicator = vi.fn((key: string) => <span data-testid={`sort-${key}`} />);
 const handleHeaderClick = vi.fn();
+const handleHeaderContextMenu = vi.fn();
 const handleResizeStart = vi.fn();
 const autoSizeColumn = vi.fn();
 
@@ -45,11 +46,13 @@ const columnWidths = { name: 120, age: 80, role: 100 };
 const HeaderHarness: React.FC<{
   enableResizing: boolean;
   fixedKeys?: string[];
-}> = ({ enableResizing, fixedKeys = [] }) => {
+  withContextMenu?: boolean;
+}> = ({ enableResizing, fixedKeys = [], withContextMenu = false }) => {
   const node = useGridTableHeaderRow({
     renderedColumns: columns,
     enableColumnResizing: enableResizing,
     isFixedColumnKey: (key) => fixedKeys.includes(key),
+    handleHeaderContextMenu: withContextMenu ? handleHeaderContextMenu : undefined,
     columnWidths,
     handleHeaderClick,
     renderSortIndicator,
@@ -72,6 +75,7 @@ describe('useGridTableHeaderRow', () => {
     document.body.appendChild(container);
     root = ReactDOM.createRoot(container);
     handleHeaderClick.mockClear();
+    handleHeaderContextMenu.mockClear();
     handleResizeStart.mockClear();
     autoSizeColumn.mockClear();
     renderSortIndicator.mockClear();
@@ -169,6 +173,37 @@ describe('useGridTableHeaderRow', () => {
     });
     expect(handleHeaderClick).toHaveBeenCalledTimes(1);
     expect(handleHeaderClick).toHaveBeenCalledWith(columns[0]);
+  });
+
+  it('fires handleHeaderContextMenu with column key on right-click', async () => {
+    await act(async () => {
+      root.render(<HeaderHarness enableResizing={false} withContextMenu />);
+    });
+
+    const nameCell = container.querySelector('[data-column="name"]') as HTMLElement;
+    await act(async () => {
+      nameCell.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, clientX: 100, clientY: 200 })
+      );
+      await Promise.resolve();
+    });
+
+    expect(handleHeaderContextMenu).toHaveBeenCalledTimes(1);
+    expect(handleHeaderContextMenu.mock.calls[0][1]).toBe('name');
+  });
+
+  it('does not fire context menu handler when not provided', async () => {
+    await act(async () => {
+      root.render(<HeaderHarness enableResizing={false} />);
+    });
+
+    const nameCell = container.querySelector('[data-column="name"]') as HTMLElement;
+    await act(async () => {
+      nameCell.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(handleHeaderContextMenu).not.toHaveBeenCalled();
   });
 
   it('does not add keyboard/button semantics to non-sortable headers', async () => {

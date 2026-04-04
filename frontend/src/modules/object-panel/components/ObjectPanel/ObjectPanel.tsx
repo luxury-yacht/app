@@ -8,10 +8,12 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import ConfirmationModal from '@shared/components/modals/ConfirmationModal';
+import RollbackModal from '@shared/components/modals/RollbackModal';
 import type { DetailsTabProps } from '@modules/object-panel/components/ObjectPanel/Details/DetailsTab';
 import { types } from '@wailsjs/go/models';
 import { TriggerCronJob, SuspendCronJob } from '@wailsjs/go/backend/App';
 import { DockablePanel, useDockablePanelContext } from '@ui/dockable';
+import { getDefaultObjectPanelPosition } from '@core/settings/appPreferences';
 import { errorHandler } from '@utils/errorHandler';
 import { CurrentObjectPanelContext } from '@modules/object-panel/hooks/useObjectPanel';
 import { useObjectPanelState } from '@/core/contexts/ObjectPanelStateContext';
@@ -133,6 +135,7 @@ const INITIAL_PANEL_STATE: PanelState = {
   showScaleInput: false,
   showRestartConfirm: false,
   showDeleteConfirm: false,
+  showRollbackModal: false,
   resourceDeleted: false,
   deletedResourceName: '',
 };
@@ -153,6 +156,8 @@ function panelReducer(state: PanelState, action: PanelAction): PanelState {
       return { ...state, showRestartConfirm: action.payload };
     case 'SHOW_DELETE_CONFIRM':
       return { ...state, showDeleteConfirm: action.payload };
+    case 'SHOW_ROLLBACK_MODAL':
+      return { ...state, showRollbackModal: action.payload };
     case 'SET_RESOURCE_DELETED':
       return {
         ...state,
@@ -183,7 +188,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
   const objectData = objectRef;
   const { closePanel } = useObjectPanelState();
   const { tabGroups, getPreferredOpenGroupKey } = useDockablePanelContext();
-  const openTargetGroupKey = getPreferredOpenGroupKey('right');
+  const openTargetGroupKey = getPreferredOpenGroupKey(getDefaultObjectPanelPosition());
   const openTargetPosition: DockPosition =
     openTargetGroupKey === 'right' || openTargetGroupKey === 'bottom'
       ? openTargetGroupKey
@@ -329,6 +334,8 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
     hideRestartConfirm: closeRestartConfirm,
     showDeleteConfirm: openDeleteConfirm,
     hideDeleteConfirm: closeDeleteConfirm,
+    showRollbackModal: openRollbackModal,
+    hideRollbackModal: closeRollbackModal,
   } = useObjectPanelActions({
     objectData,
     objectKind,
@@ -563,6 +570,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         scaleReplicas: state.scaleReplicas,
         showScaleInput: state.showScaleInput,
         onRestartClick: openRestartConfirm,
+        onRollbackClick: openRollbackModal,
         onDeleteClick: openDeleteConfirm,
         onScaleClick: (replicas?: number) => {
           if (replicas !== undefined) {
@@ -703,7 +711,7 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         <ObjectPanelContent
           activeTab={state.activeTab}
           detailTabProps={detailTabProps}
-          isPanelOpen={isOpen}
+          isPanelOpen={isOpen && isActiveTab}
           capabilities={capabilities}
           capabilityReasons={capabilityReasons}
           detailScope={detailScope}
@@ -739,6 +747,16 @@ function ObjectPanel({ panelId, objectRef }: ObjectPanelProps) {
         confirmButtonClass="danger"
         onConfirm={() => handleAction('delete', 'showDeleteConfirm')}
         onCancel={closeDeleteConfirm}
+      />
+
+      {/* Rollback Modal — opens the revision history picker for rollbackable workloads */}
+      <RollbackModal
+        isOpen={state.showRollbackModal}
+        onClose={closeRollbackModal}
+        clusterId={objectData?.clusterId ?? ''}
+        namespace={objectData?.namespace ?? ''}
+        name={objectData?.name ?? ''}
+        kind={objectData?.kind ?? ''}
       />
     </CurrentObjectPanelContext.Provider>
   );

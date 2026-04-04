@@ -429,6 +429,38 @@
   }
 }
 
+/* Expanded parsed log rows — click to expand, click to collapse */
+.gridtable-parsed-logs .parsed-row-expanded {
+  background-color: var(--log-table-row-hover-bg);
+}
+
+/* When expanded, remove truncation so full cell content is visible with word wrap */
+.gridtable-parsed-logs .parsed-row-expanded .grid-cell {
+  align-items: flex-start;
+  overflow: visible;
+  max-width: none;
+}
+
+.gridtable-parsed-logs .parsed-row-expanded .grid-cell-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.gridtable-parsed-logs .parsed-row-expanded .parsed-log-cell {
+  max-width: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* All parsed rows show pointer to indicate clickability */
+.gridtable-parsed-logs .gridtable-row {
+  cursor: pointer;
+}
+
 /* Viewport-aware tooltip */
 .parsed-log-tooltip {
   background-color: var(--log-tooltip-bg);
@@ -490,23 +522,6 @@
 .pod-log-line .pod-log-metadata--bold {
   color: var(--pod-color);
   font-weight: 500;
-}
-
-/* Layout for dropdown option rows in the log options menu. */
-.log-option-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-}
-
-.log-option-check {
-  width: 20px;
-  text-align: center;
-}
-
-.log-option-label {
-  flex: 1;
 }
 
 /* Light theme adjustments for parsed table */

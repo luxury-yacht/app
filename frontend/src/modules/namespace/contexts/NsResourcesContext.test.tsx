@@ -215,7 +215,8 @@ describe('NamespaceResourcesProvider', () => {
     expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'namespace-config',
       `${testClusterId}|namespace:team-a`,
-      true
+      true,
+      undefined
     );
     expect(orchestrator.fetchScopedDomain).toHaveBeenCalledWith(
       'namespace-config',
@@ -272,7 +273,8 @@ describe('NamespaceResourcesProvider', () => {
     expect(orchestrator.setScopedDomainEnabled).toHaveBeenCalledWith(
       'namespace-network',
       `${testClusterId}|namespace:team-a`,
-      true
+      true,
+      undefined
     );
   });
 

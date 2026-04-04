@@ -12,6 +12,7 @@ import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useGridTablePersistence } from '@shared/components/tables/persistence/useGridTablePersistence';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -24,6 +25,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 interface EventData {
   kind: string;
@@ -56,9 +58,9 @@ interface EventViewProps {
 const ClusterEventsView: React.FC<EventViewProps> = React.memo(
   ({ data, loading = false, loaded, error }) => {
     const { openWithObject } = useObjectPanel();
+    const objectLink = useObjectLink();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
-
     // Parse the involved object reference into its type and name for display/navigation.
     const splitEventObject = useCallback((value?: string | null) => {
       const raw = (value ?? '').trim();
@@ -91,26 +93,34 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       return values.filter(Boolean);
     }, []);
 
-    const handleEventClick = useCallback(
+    // Build an object reference from an event's involved object for navigation.
+    const getEventObjectRef = useCallback(
       (event: EventData) => {
-        // Events don't have a direct object panel view, but we could open the related object.
         const parsed = splitEventObject(event.object);
         if (!parsed.isLinkable) {
-          return;
+          return undefined;
         }
         const namespace =
           event.objectNamespace && event.objectNamespace.length > 0
             ? event.objectNamespace
             : undefined;
-        openWithObject({
+        return {
           kind: parsed.objectType,
           name: parsed.objectName,
           namespace,
           clusterId: event.clusterId ?? undefined,
           clusterName: event.clusterName ?? undefined,
-        });
+        };
       },
-      [openWithObject, splitEventObject]
+      [splitEventObject]
+    );
+
+    const handleEventClick = useCallback(
+      (event: EventData) => {
+        const ref = getEventObjectRef(event);
+        if (ref) openWithObject(ref);
+      },
+      [getEventObjectRef, openWithObject]
     );
 
     const keyExtractor = useCallback(
@@ -132,7 +142,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
         cf.createTextColumn<EventData>('type', 'Type', (event) => event.type || 'Normal', {
           getClassName: (event) => `event-badge ${(event.type || 'normal').toLowerCase()}`,
         }),
-        cf.createTextColumn('namespace', 'Namespace', (event) => event.namespace || '-'),
         cf.createTextColumn('source', 'Source', (event) => event.source || '-'),
         cf.createTextColumn<EventData>('objectType', 'Object Type', (event) => {
           const parsed = splitEventObject(event.object);
@@ -146,7 +155,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
             return parsed.objectName;
           },
           {
-            onClick: handleEventClick,
+            ...objectLink(getEventObjectRef),
             isInteractive: (event) => splitEventObject(event.object).isLinkable,
           }
         ),
@@ -163,18 +172,17 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         type: { autoWidth: true },
-        namespace: { autoWidth: true },
-        source: { autoWidth: true, maxWidth: 250 },
+        source: { width: 200 },
         objectType: { autoWidth: true },
-        objectName: { autoWidth: true },
-        reason: { autoWidth: true },
-        message: { autoWidth: true },
+        objectName: { width: 200 },
+        reason: { width: 200 },
+        message: { width: 250 },
         age: { autoWidth: true },
       };
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleEventClick, splitEventObject, useShortResourceNames]);
+    }, [getEventObjectRef, objectLink, splitEventObject, useShortResourceNames]);
 
     // Set up grid table persistence
     const {
@@ -187,6 +195,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useGridTablePersistence<EventData>({
       viewId: 'cluster-events',
       clusterIdentity: selectedClusterId,
@@ -203,6 +212,23 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
+    });
+
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
+      [data]
+    );
+
+    const { item: favToggle, modal: favModal } = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: setPersistedSort,
+      setColumnVisibility,
+      hydrated,
+      availableFilterNamespaces,
     });
 
     // Get context menu items
@@ -234,47 +260,53 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
 
     // Resolve empty state message
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(error, 'No data available'),
+      () => resolveEmptyStateMessage(error, 'No cluster-scoped events found'),
       [error]
     );
 
     return (
-      <ResourceLoadingBoundary
-        loading={loading ?? false}
-        dataLength={sortedData.length}
-        hasLoaded={loaded}
-        spinnerMessage="Loading events..."
-      >
-        <GridTable
-          data={sortedData}
-          columns={columns}
-          loading={loading}
-          keyExtractor={keyExtractor}
-          onRowClick={handleEventClick}
-          onSort={handleSort}
-          sortConfig={sortConfig}
-          tableClassName="gridtable-cluster-events"
-          enableContextMenu={true}
-          getCustomContextMenuItems={getContextMenuItems}
-          useShortNames={useShortResourceNames}
-          emptyMessage={emptyMessage}
-          filters={{
-            enabled: true,
-            value: persistedFilters,
-            onChange: setPersistedFilters,
-            onReset: resetPersistedState,
-            accessors: {
-              getSearchText,
-            },
-          }}
-          virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-          columnWidths={columnWidths}
-          onColumnWidthsChange={setColumnWidths}
-          columnVisibility={columnVisibility}
-          onColumnVisibilityChange={setColumnVisibility}
-          allowHorizontalOverflow={true}
-        />
-      </ResourceLoadingBoundary>
+      <>
+        <ResourceLoadingBoundary
+          loading={loading ?? false}
+          dataLength={sortedData.length}
+          hasLoaded={loaded}
+          spinnerMessage="Loading events..."
+        >
+          <GridTable
+            data={sortedData}
+            columns={columns}
+            loading={loading}
+            keyExtractor={keyExtractor}
+            onRowClick={handleEventClick}
+            onSort={handleSort}
+            sortConfig={sortConfig}
+            tableClassName="gridtable-cluster-events"
+            enableContextMenu={true}
+            getCustomContextMenuItems={getContextMenuItems}
+            useShortNames={useShortResourceNames}
+            emptyMessage={emptyMessage}
+            filters={{
+              enabled: true,
+              value: persistedFilters,
+              onChange: setPersistedFilters,
+              onReset: resetPersistedState,
+              accessors: {
+                getSearchText,
+              },
+              options: {
+                preActions: [favToggle],
+              },
+            }}
+            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
+            columnWidths={columnWidths}
+            onColumnWidthsChange={setColumnWidths}
+            columnVisibility={columnVisibility}
+            onColumnVisibilityChange={setColumnVisibility}
+            allowHorizontalOverflow={true}
+          />
+        </ResourceLoadingBoundary>
+        {favModal}
+      </>
     );
   }
 );

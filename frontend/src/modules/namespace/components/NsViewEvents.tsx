@@ -11,6 +11,7 @@ import { getDisplayKind } from '@/utils/kindAliasMap';
 import { resolveEmptyStateMessage } from '@/utils/emptyState';
 import { useNamespaceGridTablePersistence } from '@modules/namespace/hooks/useNamespaceGridTablePersistence';
 import { useObjectPanel } from '@modules/object-panel/hooks/useObjectPanel';
+import { useObjectLink } from '@shared/hooks/useObjectLink';
 import { useShortNames } from '@/hooks/useShortNames';
 import { useTableSort } from '@/hooks/useTableSort';
 import * as cf from '@shared/components/tables/columnFactories';
@@ -24,6 +25,7 @@ import GridTable, {
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 export interface EventData {
   kind: string;
@@ -55,8 +57,8 @@ interface EventViewProps {
 const NsEventsTable: React.FC<EventViewProps> = React.memo(
   ({ namespace, data, loading = false, loaded = false, showNamespaceColumn = false }) => {
     const { openWithObject } = useObjectPanel();
+    const objectLink = useObjectLink();
     const useShortResourceNames = useShortNames();
-
     // Parse the involved object reference into its type and name for display/navigation.
     const splitEventObject = useCallback((value?: string | null) => {
       const raw = (value ?? '').trim();
@@ -89,12 +91,12 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       []
     );
 
-    const handleEventClick = useCallback(
+    // Build an object reference from an event's involved object for navigation.
+    const getEventObjectRef = useCallback(
       (event: EventData) => {
-        // Events don't have a direct object panel view, but we could open the related object
         const parsed = splitEventObject(event.object);
         if (!parsed.isLinkable) {
-          return;
+          return undefined;
         }
         const resolvedNamespace =
           event.objectNamespace && event.objectNamespace.length > 0
@@ -102,15 +104,23 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             : event.namespace && event.namespace.length > 0
               ? event.namespace
               : namespace;
-        openWithObject({
+        return {
           kind: parsed.objectType,
           name: parsed.objectName,
           namespace: resolvedNamespace,
           clusterId: event.clusterId ?? undefined,
           clusterName: event.clusterName ?? undefined,
-        });
+        };
       },
-      [openWithObject, namespace, splitEventObject]
+      [namespace, splitEventObject]
+    );
+
+    const handleEventClick = useCallback(
+      (event: EventData) => {
+        const ref = getEventObjectRef(event);
+        if (ref) openWithObject(ref);
+      },
+      [getEventObjectRef, openWithObject]
     );
 
     const keyExtractor = useCallback(
@@ -163,7 +173,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
             return parsed.objectName;
           },
           {
-            onClick: handleEventClick,
+            ...objectLink(getEventObjectRef),
             isInteractive: (event) => splitEventObject(event.object).isLinkable,
           }
         ),
@@ -180,18 +190,24 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       const sizing: cf.ColumnSizingMap = {
         kind: { autoWidth: true },
         type: { autoWidth: true },
-        namespace: { autoWidth: true },
-        source: { autoWidth: true, maxWidth: 250 },
+        namespace: { width: 200 },
+        source: { width: 200 },
         objectType: { autoWidth: true },
-        objectName: { autoWidth: true },
-        reason: { autoWidth: true },
-        message: { autoWidth: true },
+        objectName: { width: 200 },
+        reason: { width: 200 },
+        message: { width: 250 },
         age: { autoWidth: true },
       };
       cf.applyColumnSizing(baseColumns, sizing);
 
       return baseColumns;
-    }, [handleEventClick, showNamespaceColumn, splitEventObject, useShortResourceNames]);
+    }, [
+      getEventObjectRef,
+      objectLink,
+      showNamespaceColumn,
+      splitEventObject,
+      useShortResourceNames,
+    ]);
 
     const showNamespaceFilter = namespace === ALL_NAMESPACES_SCOPE;
 
@@ -205,6 +221,7 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<EventData>({
       viewId: 'namespace-events',
       namespace,
@@ -219,6 +236,23 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean) as string[])].sort(),
+      [data]
+    );
+
+    const { item: favToggle, modal: favModal } = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
+      availableFilterNamespaces,
     });
 
     // Get context menu items
@@ -249,50 +283,58 @@ const NsEventsTable: React.FC<EventViewProps> = React.memo(
     );
 
     const emptyMessage = useMemo(
-      () => resolveEmptyStateMessage(undefined, 'No data available'),
-      []
+      () =>
+        resolveEmptyStateMessage(
+          undefined,
+          `No events found ${namespace === ALL_NAMESPACES_SCOPE ? 'in any namespaces' : 'in this namespace'}`
+        ),
+      [namespace]
     );
 
     return (
-      <ResourceLoadingBoundary
-        loading={loading ?? false}
-        dataLength={sortedData.length}
-        hasLoaded={loaded}
-        spinnerMessage="Loading events..."
-      >
-        <GridTable
-          data={sortedData}
-          columns={columns}
-          loading={loading}
-          keyExtractor={keyExtractor}
-          onRowClick={handleEventClick}
-          onSort={handleSort}
-          sortConfig={sortConfig}
-          tableClassName="gridtable-ns-events"
-          enableContextMenu={true}
-          getCustomContextMenuItems={getContextMenuItems}
-          useShortNames={useShortResourceNames}
-          emptyMessage={emptyMessage}
-          filters={{
-            enabled: true,
-            value: persistedFilters,
-            onChange: setPersistedFilters,
-            onReset: resetPersistedState,
-            accessors: {
-              getSearchText,
-            },
-            options: {
-              showNamespaceDropdown: showNamespaceFilter,
-            },
-          }}
-          virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-          columnWidths={columnWidths}
-          onColumnWidthsChange={setColumnWidths}
-          columnVisibility={columnVisibility}
-          onColumnVisibilityChange={setColumnVisibility}
-          allowHorizontalOverflow={true}
-        />
-      </ResourceLoadingBoundary>
+      <>
+        <ResourceLoadingBoundary
+          loading={loading ?? false}
+          dataLength={sortedData.length}
+          hasLoaded={loaded}
+          spinnerMessage="Loading events..."
+        >
+          <GridTable
+            data={sortedData}
+            columns={columns}
+            loading={loading}
+            keyExtractor={keyExtractor}
+            onRowClick={handleEventClick}
+            onSort={handleSort}
+            sortConfig={sortConfig}
+            tableClassName="gridtable-ns-events"
+            enableContextMenu={true}
+            getCustomContextMenuItems={getContextMenuItems}
+            useShortNames={useShortResourceNames}
+            emptyMessage={emptyMessage}
+            filters={{
+              enabled: true,
+              value: persistedFilters,
+              onChange: setPersistedFilters,
+              onReset: resetPersistedState,
+              accessors: {
+                getSearchText,
+              },
+              options: {
+                showNamespaceDropdown: showNamespaceFilter,
+                preActions: [favToggle],
+              },
+            }}
+            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
+            columnWidths={columnWidths}
+            onColumnWidthsChange={setColumnWidths}
+            columnVisibility={columnVisibility}
+            onColumnVisibilityChange={setColumnVisibility}
+            allowHorizontalOverflow={true}
+          />
+        </ResourceLoadingBoundary>
+        {favModal}
+      </>
     );
   }
 );

@@ -5,7 +5,7 @@
  * Handles rendering and interactions for the shared components.
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { Dropdown } from '@shared/components/dropdowns/Dropdown';
 import type { DropdownOption } from '@shared/components/dropdowns/Dropdown';
 import SearchInput from '@shared/components/inputs/SearchInput';
@@ -14,6 +14,8 @@ import type {
   InternalFilterOptions,
 } from '@shared/components/tables/GridTable.types';
 import { useSearchShortcutTarget } from '@ui/shortcuts';
+import IconBar, { type IconBarItem } from '@shared/components/IconBar/IconBar';
+import { CaseSensitiveIcon, ResetFiltersIcon } from '@shared/components/icons/MenuIcons';
 
 interface GridTableFiltersBarProps {
   activeFilters: GridTableFilterState;
@@ -26,6 +28,8 @@ interface GridTableFiltersBarProps {
   onNamespacesChange: (value: string | string[]) => void;
   onSearchChange: (value: string) => void;
   onReset: () => void;
+  /** Toggle the case-sensitive search filter. */
+  onToggleCaseSensitive: () => void;
   renderOption: (option: DropdownOption, isSelected: boolean) => React.ReactNode;
   renderKindsValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
   renderNamespacesValue: (value: string | string[], options: DropdownOption[]) => React.ReactNode;
@@ -39,7 +43,14 @@ interface GridTableFiltersBarProps {
   searchShortcutActive?: boolean;
   searchShortcutPriority?: number;
   containerRef?: React.Ref<HTMLDivElement>;
+  /** IconBar items rendered before the built-in Reset action (e.g. Favorite toggle). */
+  preActions?: IconBarItem[];
+  /** IconBar items rendered after a separator following Reset (e.g. Load More). */
+  postActions?: IconBarItem[];
+  /** Arbitrary content rendered after the IconBar (e.g. text toggle buttons). */
   customActions?: React.ReactNode;
+  /** Displayed vs total item count shown to the right of actions. */
+  resultCount?: { displayed: number; total: number };
 }
 
 const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
@@ -53,6 +64,7 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   onNamespacesChange,
   onSearchChange,
   onReset,
+  onToggleCaseSensitive,
   renderOption,
   renderKindsValue,
   renderNamespacesValue,
@@ -66,14 +78,17 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
   searchShortcutActive = false,
   searchShortcutPriority = 0,
   containerRef,
+  preActions,
+  postActions,
   customActions,
+  resultCount,
 }) => {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  // Treat any non-empty search/kind/namespace selection as an active filter.
   const hasActiveFilters =
     activeFilters.search.trim().length > 0 ||
     activeFilters.kinds.length > 0 ||
     activeFilters.namespaces.length > 0;
+
   const handleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'a') {
       event.preventDefault();
@@ -94,6 +109,43 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
     },
     label: 'GridTable filters',
   });
+
+  const iconBarItems = useMemo<IconBarItem[]>(() => {
+    const items: IconBarItem[] = [
+      {
+        type: 'action',
+        id: 'reset',
+        icon: <ResetFiltersIcon />,
+        onClick: onReset,
+        title: 'Reset filters',
+        disabled: !hasActiveFilters,
+      },
+      // Case-sensitive toggle is built into the filter bar so every view gets it.
+      {
+        type: 'toggle',
+        id: 'case-sensitive',
+        icon: <CaseSensitiveIcon width={16} height={16} />,
+        active: activeFilters.caseSensitive,
+        onClick: onToggleCaseSensitive,
+        title: 'Match case',
+      },
+    ];
+    if (preActions && preActions.length > 0) {
+      items.push(...preActions);
+    }
+    if (postActions && postActions.length > 0) {
+      items.push({ type: 'separator' });
+      items.push(...postActions);
+    }
+    return items;
+  }, [
+    onReset,
+    hasActiveFilters,
+    activeFilters.caseSensitive,
+    onToggleCaseSensitive,
+    preActions,
+    postActions,
+  ]);
 
   return (
     <div className="gridtable-filter-bar" ref={containerRef}>
@@ -148,19 +200,10 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               value={activeFilters.search}
               onChange={onSearchChange}
               onKeyDown={handleSearchKeyDown}
-              actions={resolvedFilterOptions.searchActions}
             />
           </div>
           <div className="gridtable-filter-actions">
-            <button
-              type="button"
-              className="button generic"
-              onClick={onReset}
-              data-gridtable-filter-role="reset"
-              disabled={!hasActiveFilters}
-            >
-              Reset
-            </button>
+            <IconBar items={iconBarItems} />
             {customActions && (
               <div
                 className="gridtable-filter-custom-actions"
@@ -168,6 +211,16 @@ const GridTableFiltersBar: React.FC<GridTableFiltersBarProps> = ({
               >
                 {customActions}
               </div>
+            )}
+            {resultCount && (
+              <span
+                className="gridtable-filter-result-count"
+                data-gridtable-filter-role="result-count"
+              >
+                {resultCount.displayed === resultCount.total
+                  ? `${resultCount.total} items`
+                  : `${resultCount.displayed} of ${resultCount.total} items`}
+              </span>
             )}
           </div>
         </div>

@@ -158,7 +158,11 @@ vi.mock('@codemirror/lang-yaml', () => ({
 }));
 
 vi.mock('@codemirror/view', () => ({
-  EditorView: class {},
+  EditorView: class {
+    static domEventHandlers(handlers: unknown) {
+      return handlers;
+    }
+  },
   keymap: {
     of: (bindings: unknown) => bindings,
   },
