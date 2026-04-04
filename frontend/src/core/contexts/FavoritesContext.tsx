@@ -2,9 +2,9 @@
  * frontend/src/core/contexts/FavoritesContext.tsx
  *
  * React context that provides the favorites list and mutation functions
- * to the component tree. Computes `currentFavoriteMatch` — whether the
- * user's current navigation state (cluster, view, namespace) matches
- * any saved favorite.
+ * to the component tree. Manages pendingFavorite for navigation — when a
+ * favorite is activated, this context waits for the cluster to be ready
+ * then applies the view/namespace/sidebar state.
  */
 import React, {
   createContext,

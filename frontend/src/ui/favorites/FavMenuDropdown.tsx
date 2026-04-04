@@ -2,8 +2,8 @@
  * frontend/src/ui/favorites/FavMenuDropdown.tsx
  *
  * Dropdown menu triggered by a heart icon button in the app header.
- * Lists all saved favorites with hover actions for reordering, renaming,
- * and deleting. Clicking a favorite navigates to the saved view state.
+ * Lists all saved favorites with hover actions for reordering.
+ * Clicking a favorite navigates to the saved view state.
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -33,7 +33,7 @@ function TypeIcon({ clusterSelection }: { clusterSelection: string }) {
   );
 }
 
-// Hover action icons (chevron up/down, pencil, trash).
+// Hover action icons (chevron up/down for reordering).
 
 function ChevronUpIcon() {
   return (
