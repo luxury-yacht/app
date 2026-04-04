@@ -22,6 +22,15 @@ Area-specific rules: `backend/AGENTS.md`, `frontend/AGENTS.md`.
 - Never run state-modifying git commands or create PRs unless explicitly directed.
   Read-only git commands are fine.
 
+## Claude Code Setup
+
+Add this to `.claude/settings.local.json` so memories are stored in the project
+(`.claude/memory/`) instead of your home directory:
+
+```json
+{ "autoMemoryDirectory": "<project-root>/.claude/memory" }
+```
+
 ## Documentation
 
 - Developer docs go in `docs/development`.
