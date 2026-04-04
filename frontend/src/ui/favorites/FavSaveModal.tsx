@@ -545,6 +545,12 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                       }
                       placeholder="All kinds"
                       multiple
+                      renderValue={(val) => {
+                        const count = Array.isArray(val) ? val.length : val ? 1 : 0;
+                        if (count === 0) return 'All kinds';
+                        if (count === 1) return Array.isArray(val) ? val[0] : val;
+                        return `${count} selected`;
+                      }}
                     />
                   </div>
                 )}
@@ -559,6 +565,12 @@ const FavSaveModal: React.FC<FavSaveModalProps> = ({
                       }
                       placeholder="All namespaces"
                       multiple
+                      renderValue={(val) => {
+                        const count = Array.isArray(val) ? val.length : val ? 1 : 0;
+                        if (count === 0) return 'All namespaces';
+                        if (count === 1) return Array.isArray(val) ? val[0] : val;
+                        return `${count} selected`;
+                      }}
                     />
                   </div>
                 )}
