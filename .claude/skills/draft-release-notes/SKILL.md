@@ -1,5 +1,5 @@
 ---
-name: release-notes
+name: draft-release-notes
 description: Generate release notes from git log since last tag, following [Keep a Changelog](https://keepachangelog.com) and project conventions
 ---
 
@@ -9,7 +9,7 @@ Generate formatted release notes by reading commits since the last git tag.
 
 ## Usage
 
-`/release-notes` — generate notes from the last tag to HEAD
+`/draft-release-notes` — generate notes from the last tag to HEAD
 `/release-notes <from-tag>` — generate notes from a specific tag to HEAD
 `/release-notes <from-tag> <to-tag>` — generate notes between two tags
 
