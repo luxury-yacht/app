@@ -1,0 +1,29 @@
+{
+  "enableAllProjectMcpServers": true,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | { read -r f; case \"$f\" in */wailsjs/*) echo '{\"decision\":\"block\",\"reason\":\"Do not edit generated wailsjs bindings. Edit the Go backend and run wails generate module instead.\"}'; exit 0 ;; esac; }",
+            "statusMessage": "Checking for generated files..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_response.filePath // .tool_input.file_path' | { read -r f; case \"$f\" in */frontend/src/*.ts|*/frontend/src/*.tsx|*/frontend/src/*.css|*/frontend/src/*.json) cd /Volumes/git/luxury-yacht/app/frontend && npx prettier --write \"$f\" ;; esac; } 2>/dev/null || true",
+            "statusMessage": "Formatting..."
+          }
+        ]
+      }
+    ]
+  }
+}
