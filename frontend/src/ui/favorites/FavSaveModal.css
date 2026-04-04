@@ -1,0 +1,75 @@
+/* Favorite Save Modal */
+
+.fav-save-modal {
+  max-width: 480px;
+}
+
+/* Limit dropdown menu height inside the modal so it doesn't overflow
+   the viewport. The modal content remains scrollable normally. */
+.fav-save-modal .dropdown-menu {
+  max-height: 200px;
+}
+
+.fav-save-input {
+  width: 100%;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.875rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  color: var(--color-text);
+  box-sizing: border-box;
+}
+
+.fav-save-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: var(--dropdown-trigger-focus-shadow);
+}
+
+.fav-save-footer-spacer {
+  flex: 1;
+}
+
+/* Disabled Save button when no changes detected (editing mode) */
+.fav-save-modal .button.save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Dropdowns nested under radio buttons — indented to show association */
+.fav-save-modal .setting-item > .dropdown {
+  width: auto;
+  margin-top: 0.35rem;
+  margin-left: 1.5rem;
+}
+
+/* Inline rows: label on left, controls on right. Shared by all sections. */
+.fav-save-modal .fav-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fav-save-modal .fav-inline-row > label {
+  flex: 0 0 7rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.fav-save-modal .fav-inline-row > .dropdown {
+  flex: 1;
+  margin-top: 0;
+  margin-left: 0;
+  width: auto;
+}
+
+.fav-save-modal .fav-inline-row > .fav-save-input {
+  flex: 1;
+}
+
+/* Indented row for controls that align with the dropdown column above */
+.fav-save-modal .fav-inline-row-indented {
+  padding-left: calc(7rem + 0.5rem);
+}

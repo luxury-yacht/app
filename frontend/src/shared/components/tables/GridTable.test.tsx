@@ -762,6 +762,8 @@ describe('GridTable interactions (non-virtualized)', () => {
       search: '',
       kinds: [] as string[],
       namespaces: [] as string[],
+      caseSensitive: false,
+      includeMetadata: false,
     };
 
     const handleFilterChange = (next: typeof currentFilters) => {
@@ -806,7 +808,13 @@ describe('GridTable interactions (non-virtualized)', () => {
       (wrapper as any).scrollTo = vi.fn();
     }
 
-    await applyFilters({ search: 'Row 1', kinds: [], namespaces: [] });
+    await applyFilters({
+      search: 'Row 1',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    });
 
     const visibleRows = container.querySelectorAll('.gridtable-row');
     const expectedMatches = createRows(30).filter((row) => row.label.includes('Row 1')).length;
@@ -826,6 +834,8 @@ describe('GridTable interactions (non-virtualized)', () => {
       search: '',
       kinds: [],
       namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
     });
 
     await applyFilters(currentFilters);
@@ -839,6 +849,8 @@ describe('GridTable interactions (non-virtualized)', () => {
       search: '',
       kinds: ['Pod', 'Deployment'],
       namespaces: ['team-a', 'team-b', 'team-c'],
+      caseSensitive: false,
+      includeMetadata: false,
     };
 
     const makeFilters = (): GridTableFilterConfig<SimpleRow> => ({
@@ -872,7 +884,13 @@ describe('GridTable interactions (non-virtualized)', () => {
     expect(kindLabel?.textContent).toBe('Kinds (2)');
     expect(namespaceLabel?.textContent).toBe('Namespaces (3)');
 
-    currentFilters = { search: '', kinds: [], namespaces: [] };
+    currentFilters = {
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    };
     await act(async () => {
       rerender({
         data: createRows(5),

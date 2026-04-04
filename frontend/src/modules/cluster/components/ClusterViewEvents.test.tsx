@@ -10,6 +10,29 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewEvents from '@modules/cluster/components/ClusterViewEvents';
 
+vi.mock('@core/contexts/FavoritesContext', () => ({
+  useFavorites: () => ({
+    favorites: [],
+
+    addFavorite: vi.fn(),
+    updateFavorite: vi.fn(),
+    deleteFavorite: vi.fn(),
+    reorderFavorites: vi.fn(),
+  }),
+  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock('@ui/favorites/FavToggle', () => ({
+  useFavToggle: () => ({
+    type: 'toggle',
+    id: 'favorite',
+    icon: null,
+    active: false,
+    onClick: () => {},
+    title: 'Save as favorite',
+  }),
+}));
+
 const gridTablePropsRef: { current: any } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -58,7 +81,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
+    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
     setFilters: vi.fn(),
     resetState: vi.fn(),
     hydrated: true,
@@ -115,7 +138,12 @@ describe('ClusterViewEvents', () => {
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'ageTimestamp', direction: 'desc' });
     expect(props.columnVisibility).toBe(null);
-    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [] });
+    expect(props.filters?.value).toEqual({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+    });
 
     const key = props.keyExtractor(baseEvent, 0);
     expect(key).toContain('team-a');

@@ -18,8 +18,7 @@ import {
   defaultGetSearchText,
 } from '@shared/components/tables/GridTable.utils';
 import type { GridTableFilterConfig } from '@shared/components/tables/GridTable.types';
-import type { SearchInputAction } from '@shared/components/inputs/SearchInput';
-import { CaseSensitiveIcon } from '@shared/components/icons/MenuIcons';
+import type { IconBarItem } from '@shared/components/IconBar/IconBar';
 
 // Bundles all filter-bar wiring for GridTable: resolves filter state, builds
 // dropdown IDs and renderers, manages focus refs, and returns a ready-to-render
@@ -42,7 +41,10 @@ type UseGridTableFiltersWiringOptions<T> = {
   filters: GridTableFilterConfig<T> | undefined;
   columnsDropdown?: ColumnsDropdownConfig;
   searchShortcut?: SearchShortcutConfig;
-  customActions?: ReactNode;
+  /** IconBar items rendered before the built-in Reset action. */
+  preActions?: IconBarItem[];
+  /** IconBar items rendered after a separator following Reset. */
+  postActions?: IconBarItem[];
 };
 
 // This hook gathers everything the GridTable needs to wire up the filter bar.
@@ -54,7 +56,8 @@ export function useGridTableFiltersWiring<T>({
   filters,
   columnsDropdown,
   searchShortcut,
-  customActions,
+  preActions,
+  postActions,
 }: UseGridTableFiltersWiringOptions<T>) {
   const filtersContainerRef = useRef<HTMLDivElement | null>(null);
   const filterFocusIndexRef = useRef<number | null>(null);
@@ -64,12 +67,11 @@ export function useGridTableFiltersWiring<T>({
     tableData,
     activeFilters,
     filterSignature,
-    resolvedFilterOptions: rawFilterOptions,
+    resolvedFilterOptions,
     handleFilterSearchChange,
     handleFilterKindsChange,
     handleFilterNamespacesChange,
     handleFilterReset,
-    caseSensitive,
     toggleCaseSensitive,
   } = useGridTableFilters({
     data,
@@ -78,26 +80,6 @@ export function useGridTableFiltersWiring<T>({
     defaultGetNamespace,
     defaultGetSearchText,
   });
-
-  // Build the built-in case-sensitive search action and prepend it to any
-  // consumer-provided search actions so it appears in every filter bar.
-  const caseSensitiveAction = useMemo<SearchInputAction>(
-    () => ({
-      id: 'case-sensitive',
-      icon: <CaseSensitiveIcon width={14} height={14} />,
-      active: caseSensitive,
-      onToggle: toggleCaseSensitive,
-      tooltip: 'Match case',
-    }),
-    [caseSensitive, toggleCaseSensitive]
-  );
-  const resolvedFilterOptions = useMemo(
-    () => ({
-      ...rawFilterOptions,
-      searchActions: [caseSensitiveAction, ...(rawFilterOptions.searchActions ?? [])],
-    }),
-    [rawFilterOptions, caseSensitiveAction]
-  );
 
   useEffect(() => {
     if (!filteringEnabled) {
@@ -155,7 +137,9 @@ export function useGridTableFiltersWiring<T>({
   const searchShortcutActive = searchShortcut?.active ?? filteringEnabled;
   const searchShortcutPriority = searchShortcut?.priority ?? 5;
   const showColumnsDropdown = Boolean(columnsDropdown);
-  const resolvedCustomActions = customActions ?? resolvedFilterOptions.customActions;
+  const resolvedPreActions = preActions ?? resolvedFilterOptions.preActions;
+  const resolvedPostActions = postActions ?? resolvedFilterOptions.postActions;
+  const resolvedCustomActions = resolvedFilterOptions.customActions;
 
   // Compute result count: displayed items vs total items.
   // If the consumer provides a totalCount override (e.g. server-side paginated total), use it.
@@ -178,6 +162,7 @@ export function useGridTableFiltersWiring<T>({
       onKindsChange: handleKindDropdownChange,
       onNamespacesChange: handleNamespaceDropdownChange,
       onReset: handleFilterReset,
+      onToggleCaseSensitive: toggleCaseSensitive,
       showKindDropdown,
       showNamespaceDropdown,
       renderOption: renderFilterOption,
@@ -190,6 +175,8 @@ export function useGridTableFiltersWiring<T>({
       showColumnsDropdown,
       searchShortcutActive,
       searchShortcutPriority,
+      preActions: resolvedPreActions,
+      postActions: resolvedPostActions,
       customActions: resolvedCustomActions,
       resultCount,
     }),
@@ -204,6 +191,7 @@ export function useGridTableFiltersWiring<T>({
       handleKindDropdownChange,
       handleNamespaceDropdownChange,
       handleFilterReset,
+      toggleCaseSensitive,
       showKindDropdown,
       showNamespaceDropdown,
       renderFilterOption,
@@ -214,6 +202,8 @@ export function useGridTableFiltersWiring<T>({
       showColumnsDropdown,
       searchShortcutActive,
       searchShortcutPriority,
+      resolvedPreActions,
+      resolvedPostActions,
       resolvedCustomActions,
       resultCount,
     ]

@@ -28,6 +28,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 // Define the data structure for cluster custom resources
 interface ClusterCustomData {
@@ -61,7 +62,6 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
     const permissionMap = useUserPermissions();
-
     const [deleteConfirm, setDeleteConfirm] = useState<{
       show: boolean;
       resource: ClusterCustomData | null;
@@ -154,6 +154,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useGridTablePersistence<ClusterCustomData>({
       viewId: 'cluster-custom',
       clusterIdentity: selectedClusterId,
@@ -170,6 +171,23 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
+    });
+
+    const availableKinds = useMemo(
+      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
+      [data]
+    );
+
+    const { item: favToggle, modal: favModal } = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: setPersistedSort,
+      setColumnVisibility,
+      hydrated,
+      availableKinds,
     });
 
     // Handle delete confirmation
@@ -257,6 +275,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showKindDropdown: true,
+                preActions: [favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
@@ -278,6 +297,7 @@ const ClusterViewCustom: React.FC<ClusterCustomViewProps> = React.memo(
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
         />
+        {favModal}
       </>
     );
   }

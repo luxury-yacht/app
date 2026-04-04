@@ -147,6 +147,13 @@ vi.mock('@wailsjs/runtime/runtime', () => ({
   BrowserOpenURL: (...args: unknown[]) => browserOpenURLMock(...args),
 }));
 
+vi.mock('@core/contexts/ClusterLifecycleContext', () => ({
+  useClusterLifecycle: () => ({
+    getClusterState: () => 'ready',
+    isClusterReady: () => true,
+  }),
+}));
+
 describe('ClusterOverview', () => {
   let cleanupRoot: (() => void) | null = null;
 

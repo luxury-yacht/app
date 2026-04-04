@@ -20,6 +20,7 @@ import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 import { useViewState } from '@/core/contexts/ViewStateContext';
 import { emitPodsUnhealthySignal } from '@modules/namespace/components/podsFilterSignals';
 import { BrowserOpenURL } from '@wailsjs/runtime/runtime';
+import { useClusterLifecycle } from '@core/contexts/ClusterLifecycleContext';
 import { GetAppInfo } from '@wailsjs/go/backend/App';
 import { backend } from '@wailsjs/go/models';
 import { useKubeconfig } from '@modules/kubernetes/config/KubeconfigContext';
@@ -68,6 +69,32 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
   }, [clusterContext]);
 
   const { selectedClusterId, selectedClusterIds } = useKubeconfig();
+  const { getClusterState } = useClusterLifecycle();
+  const lifecycleState = selectedClusterId ? getClusterState(selectedClusterId) : '';
+
+  // Map lifecycle state to a human-readable label.
+  const lifecycleLabel = useMemo(() => {
+    switch (lifecycleState) {
+      case 'connecting':
+        return 'Connecting';
+      case 'auth_failed':
+        return 'Auth Failed';
+      case 'connected':
+      case 'loading':
+        return 'Loading';
+      case 'loading_slow':
+        return 'Loading (slow)';
+      case 'ready':
+        return 'Ready';
+      case 'disconnected':
+        return 'Disconnected';
+      case 'reconnecting':
+        return 'Reconnecting';
+      default:
+        return '';
+    }
+  }, [lifecycleState]);
+
   // Build scope covering all connected clusters for the cluster-overview domain.
   const overviewScope = useMemo(
     () => buildClusterScopeList(selectedClusterIds, ''),
@@ -371,6 +398,15 @@ const ClusterOverview: React.FC<ClusterOverviewProps> = ({ clusterContext }) => 
               <span className="cluster-info-label">Context:</span>
               <span className="cluster-info-value">{contextLabel}</span>
             </span>
+            {lifecycleLabel && (
+              <>
+                <span className="cluster-info-separator">·</span>
+                <span className="cluster-info-item">
+                  <span className="cluster-info-label">Status:</span>
+                  <span className="cluster-info-value">{lifecycleLabel}</span>
+                </span>
+              </>
+            )}
           </div>
         </div>
         {errorMessage && (

@@ -6,6 +6,8 @@ import {context} from '../models';
 import {capabilities} from '../models';
 import {json} from '../models';
 
+export function AddFavorite(arg1:backend.Favorite):Promise<backend.Favorite>;
+
 export function ApplyObjectYaml(arg1:string,arg2:backend.ObjectYAMLMutationRequest):Promise<backend.ObjectYAMLMutationResponse>;
 
 export function ApplyTheme(arg1:string):Promise<void>;
@@ -25,6 +27,8 @@ export function CreateDebugContainer(arg1:string,arg2:types.DebugContainerReques
 export function CreateVersionedEndpoint(arg1:string,arg2:string,arg3:any,arg4:string):Promise<backend.VersionedResponse>;
 
 export function CtxOrBackground():Promise<context.Context>;
+
+export function DeleteFavorite(arg1:string):Promise<void>;
 
 export function DeleteGridTablePersistence(arg1:string):Promise<void>;
 
@@ -47,6 +51,8 @@ export function EvaluateCapabilities(arg1:Array<capabilities.CheckRequest>):Prom
 export function ForceDeleteNode(arg1:string,arg2:string):Promise<void>;
 
 export function GetAllClusterAuthStates():Promise<Record<string, Record<string, any>>>;
+
+export function GetAllClusterLifecycleStates():Promise<Record<string, backend.ClusterLifecycleState>>;
 
 export function GetAppInfo():Promise<backend.AppInfo>;
 
@@ -77,6 +83,8 @@ export function GetDaemonSet(arg1:string,arg2:string,arg3:string):Promise<types.
 export function GetDeployment(arg1:string,arg2:string,arg3:string):Promise<types.DeploymentDetails>;
 
 export function GetEndpointSlice(arg1:string,arg2:string,arg3:string):Promise<types.EndpointSliceDetails>;
+
+export function GetFavorites():Promise<Array<backend.Favorite>>;
 
 export function GetGridTablePersistence():Promise<Record<string, json.RawMessage>>;
 
@@ -214,6 +222,8 @@ export function SetClusterTabOrder(arg1:Array<string>):Promise<void>;
 
 export function SetDefaultObjectPanelPosition(arg1:string):Promise<void>;
 
+export function SetFavoriteOrder(arg1:Array<string>):Promise<void>;
+
 export function SetGridTablePersistence(arg1:string,arg2:json.RawMessage):Promise<void>;
 
 export function SetGridTablePersistenceMode(arg1:string):Promise<void>;
@@ -269,6 +279,8 @@ export function ToggleSidebar():Promise<void>;
 export function TriggerCronJob(arg1:string,arg2:string,arg3:string):Promise<string>;
 
 export function UncordonNode(arg1:string,arg2:string):Promise<void>;
+
+export function UpdateFavorite(arg1:backend.Favorite):Promise<void>;
 
 export function UpdateMenu():Promise<void>;
 

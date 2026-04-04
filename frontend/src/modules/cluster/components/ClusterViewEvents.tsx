@@ -25,6 +25,7 @@ import GridTable, {
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 interface EventData {
   kind: string;
@@ -60,7 +61,6 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     const objectLink = useObjectLink();
     const { selectedClusterId } = useKubeconfig();
     const useShortResourceNames = useShortNames();
-
     // Parse the involved object reference into its type and name for display/navigation.
     const splitEventObject = useCallback((value?: string | null) => {
       const raw = (value ?? '').trim();
@@ -195,6 +195,7 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useGridTablePersistence<EventData>({
       viewId: 'cluster-events',
       clusterIdentity: selectedClusterId,
@@ -211,6 +212,23 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
+    });
+
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
+      [data]
+    );
+
+    const { item: favToggle, modal: favModal } = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: setPersistedSort,
+      setColumnVisibility,
+      hydrated,
+      availableFilterNamespaces,
     });
 
     // Get context menu items
@@ -247,42 +265,48 @@ const ClusterEventsView: React.FC<EventViewProps> = React.memo(
     );
 
     return (
-      <ResourceLoadingBoundary
-        loading={loading ?? false}
-        dataLength={sortedData.length}
-        hasLoaded={loaded}
-        spinnerMessage="Loading events..."
-      >
-        <GridTable
-          data={sortedData}
-          columns={columns}
-          loading={loading}
-          keyExtractor={keyExtractor}
-          onRowClick={handleEventClick}
-          onSort={handleSort}
-          sortConfig={sortConfig}
-          tableClassName="gridtable-cluster-events"
-          enableContextMenu={true}
-          getCustomContextMenuItems={getContextMenuItems}
-          useShortNames={useShortResourceNames}
-          emptyMessage={emptyMessage}
-          filters={{
-            enabled: true,
-            value: persistedFilters,
-            onChange: setPersistedFilters,
-            onReset: resetPersistedState,
-            accessors: {
-              getSearchText,
-            },
-          }}
-          virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-          columnWidths={columnWidths}
-          onColumnWidthsChange={setColumnWidths}
-          columnVisibility={columnVisibility}
-          onColumnVisibilityChange={setColumnVisibility}
-          allowHorizontalOverflow={true}
-        />
-      </ResourceLoadingBoundary>
+      <>
+        <ResourceLoadingBoundary
+          loading={loading ?? false}
+          dataLength={sortedData.length}
+          hasLoaded={loaded}
+          spinnerMessage="Loading events..."
+        >
+          <GridTable
+            data={sortedData}
+            columns={columns}
+            loading={loading}
+            keyExtractor={keyExtractor}
+            onRowClick={handleEventClick}
+            onSort={handleSort}
+            sortConfig={sortConfig}
+            tableClassName="gridtable-cluster-events"
+            enableContextMenu={true}
+            getCustomContextMenuItems={getContextMenuItems}
+            useShortNames={useShortResourceNames}
+            emptyMessage={emptyMessage}
+            filters={{
+              enabled: true,
+              value: persistedFilters,
+              onChange: setPersistedFilters,
+              onReset: resetPersistedState,
+              accessors: {
+                getSearchText,
+              },
+              options: {
+                preActions: [favToggle],
+              },
+            }}
+            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
+            columnWidths={columnWidths}
+            onColumnWidthsChange={setColumnWidths}
+            columnVisibility={columnVisibility}
+            onColumnVisibilityChange={setColumnVisibility}
+            allowHorizontalOverflow={true}
+          />
+        </ResourceLoadingBoundary>
+        {favModal}
+      </>
     );
   }
 );

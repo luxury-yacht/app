@@ -27,6 +27,7 @@ import GridTable, {
 } from '@shared/components/tables/GridTable';
 import { buildClusterScopedKey } from '@shared/components/tables/GridTable.utils';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 // Define the data structure for configuration resources
 interface ConfigData {
@@ -136,6 +137,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useGridTablePersistence<ConfigData>({
       viewId: 'cluster-config',
       clusterIdentity: selectedClusterId,
@@ -152,6 +154,23 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: setPersistedSort,
+    });
+
+    const availableKinds = useMemo(
+      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
+      [data]
+    );
+
+    const { item: favToggle, modal: favModal } = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: setPersistedSort,
+      setColumnVisibility,
+      hydrated,
+      availableKinds,
     });
 
     // Handle delete confirmation
@@ -239,6 +258,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
               onReset: resetPersistedState,
               options: {
                 showKindDropdown: true,
+                preActions: [favToggle],
               },
             }}
             virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
@@ -260,6 +280,7 @@ const ConfigViewGrid: React.FC<ConfigViewProps> = React.memo(
           onConfirm={handleDeleteConfirm}
           onCancel={() => setDeleteConfirm({ show: false, resource: null })}
         />
+        {favModal}
       </>
     );
   }

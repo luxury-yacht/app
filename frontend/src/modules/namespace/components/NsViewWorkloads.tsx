@@ -50,6 +50,7 @@ import {
   normalizeKind,
   RESTARTABLE_KINDS,
 } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 interface WorkloadsViewProps {
   namespace: string;
@@ -160,6 +161,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<WorkloadData>({
       viewId: 'namespace-workloads',
       namespace,
@@ -178,6 +180,28 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
       columns: tableColumns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const availableKinds = useMemo(
+      () => [...new Set(data.map((r) => r.kind).filter(Boolean) as string[])].sort(),
+      [data]
+    );
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
+      [data]
+    );
+
+    const { item: favToggle, modal: favModal } = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: workloadSortConfig?.key ?? null,
+      sortDirection: workloadSortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
+      availableKinds,
+      availableFilterNamespaces,
     });
 
     const canRestart = useCallback(
@@ -463,6 +487,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
               options: {
                 showNamespaceDropdown: showNamespaceFilter,
                 showKindDropdown: true,
+                preActions: [favToggle],
               },
             }}
             virtualization={{ enabled: true, threshold: 40, overscan: 8, estimateRowHeight: 44 }}
@@ -535,6 +560,7 @@ const WorkloadsViewGrid: React.FC<WorkloadsViewProps> = React.memo(
           name={rollbackTarget?.name ?? ''}
           kind={rollbackTarget?.kind ?? ''}
         />
+        {favModal}
       </>
     );
   }

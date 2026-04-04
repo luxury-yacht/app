@@ -88,6 +88,9 @@ func (a *App) handleClusterAuthStateChange(clusterID string, state authstate.Sta
 			"clusterName": clusterName,
 			"reason":      reason,
 		})
+		if a.clusterLifecycle != nil {
+			a.clusterLifecycle.SetState(clusterID, ClusterStateAuthFailed)
+		}
 	}
 }
 

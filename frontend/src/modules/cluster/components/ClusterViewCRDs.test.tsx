@@ -10,6 +10,29 @@ import { act } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import ClusterViewCRDs from '@modules/cluster/components/ClusterViewCRDs';
 
+vi.mock('@core/contexts/FavoritesContext', () => ({
+  useFavorites: () => ({
+    favorites: [],
+
+    addFavorite: vi.fn(),
+    updateFavorite: vi.fn(),
+    deleteFavorite: vi.fn(),
+    reorderFavorites: vi.fn(),
+  }),
+  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock('@ui/favorites/FavToggle', () => ({
+  useFavToggle: () => ({
+    type: 'toggle',
+    id: 'favorite',
+    icon: null,
+    active: false,
+    onClick: () => {},
+    title: 'Save as favorite',
+  }),
+}));
+
 const gridTablePropsRef: { current: any } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -60,7 +83,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
+    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
     setFilters: setFiltersMock,
     resetState: vi.fn(),
     hydrated: true,
@@ -120,7 +143,12 @@ describe('ClusterViewCRDs', () => {
     const props = gridTablePropsRef.current;
     expect(props).toBeTruthy();
     expect(props.sortConfig).toEqual({ key: 'name', direction: 'asc' });
-    expect(props.filters?.value).toEqual({ search: '', kinds: [], namespaces: [] });
+    expect(props.filters?.value).toEqual({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+    });
     expect(props.columnVisibility).toBeFalsy();
     expect(props.columnWidths).toBeFalsy();
   });

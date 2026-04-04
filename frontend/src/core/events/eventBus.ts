@@ -48,6 +48,9 @@ export interface AppEvents {
   'view:toggle-app-logs': void;
   'cluster-tabs:order': string[];
 
+  // Favorites events
+  'favorites:changed': unknown[];
+
   // Refresh events
   'refresh:state-change': { name: string; state: RefresherState };
   'refresh:registered': { name: string };
@@ -100,6 +103,9 @@ export interface AppEvents {
     namespace?: string;
     clusterId: string;
   };
+
+  // Cluster lifecycle events — bridged from Wails runtime by ClusterLifecycleContext.
+  'cluster:lifecycle': { clusterId: string; state: string; previousState: string };
 
   // App visibility events
   'app:visibility-hidden': void;

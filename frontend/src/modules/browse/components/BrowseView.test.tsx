@@ -11,6 +11,29 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import BrowseView from '@/modules/browse/components/BrowseView';
 import { ALL_NAMESPACES_SCOPE } from '@modules/namespace/constants';
 
+vi.mock('@core/contexts/FavoritesContext', () => ({
+  useFavorites: () => ({
+    favorites: [],
+
+    addFavorite: vi.fn(),
+    updateFavorite: vi.fn(),
+    deleteFavorite: vi.fn(),
+    reorderFavorites: vi.fn(),
+  }),
+  FavoritesProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
+
+vi.mock('@ui/favorites/FavToggle', () => ({
+  useFavToggle: () => ({
+    type: 'toggle',
+    id: 'favorite',
+    icon: null,
+    active: false,
+    onClick: () => {},
+    title: 'Save as favorite',
+  }),
+}));
+
 const gridTablePropsRef: { current: any } = { current: null };
 
 vi.mock('@shared/components/tables/GridTable', async () => {
@@ -66,7 +89,7 @@ const refreshMocks = vi.hoisted(() => ({
   orchestrator: {
     setDomainEnabled: vi.fn(),
     setScopedDomainEnabled: vi.fn(),
-    fetchScopedDomain: vi.fn(),
+    fetchScopedDomain: vi.fn().mockResolvedValue(undefined),
   },
   catalogDomain: {
     status: 'idle' as any,
@@ -89,7 +112,7 @@ vi.mock('@shared/components/tables/persistence/useGridTablePersistence', () => (
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
+    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
     setFilters: vi.fn(),
     resetState: vi.fn(),
     hydrated: true,
@@ -105,7 +128,7 @@ vi.mock('@modules/namespace/hooks/useNamespaceGridTablePersistence', () => ({
     setColumnWidths: vi.fn(),
     columnVisibility: null,
     setColumnVisibility: vi.fn(),
-    filters: { search: '', kinds: [], namespaces: [] },
+    filters: { search: '', kinds: [], namespaces: [], caseSensitive: false },
     setFilters: vi.fn(),
     isNamespaceScoped: true,
     resetState: vi.fn(),
@@ -127,7 +150,7 @@ describe('BrowseView', () => {
     gridTablePropsRef.current = null;
     refreshMocks.orchestrator.setDomainEnabled.mockReset();
     refreshMocks.orchestrator.setScopedDomainEnabled.mockReset();
-    refreshMocks.orchestrator.fetchScopedDomain.mockReset();
+    refreshMocks.orchestrator.fetchScopedDomain.mockReset().mockResolvedValue(undefined);
     refreshMocks.manager.disable.mockReset();
     refreshMocks.catalogDomain.status = 'idle';
     refreshMocks.catalogDomain.data = null;
@@ -281,8 +304,10 @@ describe('BrowseView', () => {
       expect(gridTablePropsRef.current.data).toHaveLength(1);
 
       await act(async () => {
-        const customActions = gridTablePropsRef.current.filters.options.customActions;
-        customActions.props.onClick();
+        // Load More is now an IconBarItem in postActions, not a customActions JSX button.
+        const postActions = gridTablePropsRef.current.filters.options.postActions;
+        const loadMore = postActions.find((a: { id: string }) => a.id === 'load-more');
+        loadMore.onClick();
         await Promise.resolve();
       });
 

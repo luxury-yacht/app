@@ -1,12 +1,14 @@
 # TODO
 
-- Better handling of long values in the log JSON viewer
+- Preemptive permissions check - start as soon as the view is opened, don't wait for right-click
 
 - Resource creation
   - starter templates for common resource types
   - reuse the existing code editor
 
 ## Issues
+
+- Large cluster pagination — views other than Browse (e.g. Pods) load all items in one request. On clusters with thousands of resources this could be slow. Consider adding pagination/Load More to all grid table views.
 
 ## Feature Ideas
 
@@ -35,15 +37,6 @@
 
 - Multi-select/batch operations
   - Allow batch operations, but could be dangerous
-
-- Favorites/bookmarks
-  - Bookmark specific views
-
-- Customize Cluster Overview
-  - from a predefined set of widgets
-
-- ArgoCD integration to show drift
-  - Would need permission to query the argo API
 
 ## Wails v3 (when ready)
 

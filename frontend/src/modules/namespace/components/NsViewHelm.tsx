@@ -18,6 +18,7 @@ import React, { useMemo, useCallback } from 'react';
 import ResourceLoadingBoundary from '@shared/components/ResourceLoadingBoundary';
 import type { ContextMenuItem } from '@shared/components/ContextMenu';
 import { buildObjectActionItems } from '@shared/hooks/useObjectActions';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 import GridTable, {
   type GridColumnDefinition,
   GRIDTABLE_VIRTUALIZATION_DEFAULT,
@@ -72,7 +73,6 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     const { openWithObject } = useObjectPanel();
     const { navigateToView } = useNavigateToView();
     const useShortResourceNames = useShortNames();
-
     const handleResourceClick = useCallback(
       (resource: HelmData) => {
         openWithObject({
@@ -278,6 +278,7 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       filters: persistedFilters,
       setFilters: setPersistedFilters,
       resetState: resetPersistedState,
+      hydrated,
     } = useNamespaceGridTablePersistence<HelmData>({
       viewId: 'namespace-helm',
       namespace,
@@ -292,6 +293,23 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
       columns,
       controlledSort: persistedSort,
       onChange: onSortChange,
+    });
+
+    const availableFilterNamespaces = useMemo(
+      () => [...new Set(data.map((r) => r.namespace).filter(Boolean))].sort(),
+      [data]
+    );
+
+    const { item: favToggle, modal: favModal } = useFavToggle({
+      filters: persistedFilters,
+      sortColumn: sortConfig?.key ?? null,
+      sortDirection: sortConfig?.direction ?? 'asc',
+      columnVisibility: columnVisibility ?? {},
+      setFilters: setPersistedFilters,
+      setSortConfig: onSortChange,
+      setColumnVisibility,
+      hydrated,
+      availableFilterNamespaces,
     });
 
     const getContextMenuItems = useCallback(
@@ -327,43 +345,47 @@ const HelmViewGrid: React.FC<HelmViewProps> = React.memo(
     );
 
     return (
-      <ResourceLoadingBoundary
-        loading={loading ?? false}
-        dataLength={sortedData.length}
-        hasLoaded={loaded}
-        spinnerMessage="Loading Helm releases..."
-      >
-        <GridTable
-          data={sortedData}
-          columns={columns}
-          loading={loading}
-          keyExtractor={keyExtractor}
-          onRowClick={handleResourceClick}
-          onSort={handleSort}
-          sortConfig={sortConfig}
-          tableClassName="ns-helm-table"
-          enableContextMenu={true}
-          getCustomContextMenuItems={getContextMenuItems}
-          useShortNames={useShortResourceNames}
-          emptyMessage={emptyMessage}
-          filters={{
-            enabled: true,
-            value: persistedFilters,
-            onChange: setPersistedFilters,
-            onReset: resetPersistedState,
-            options: {
-              showKindDropdown: true,
-              showNamespaceDropdown: showNamespaceColumn,
-            },
-          }}
-          virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
-          columnWidths={columnWidths}
-          onColumnWidthsChange={setColumnWidths}
-          columnVisibility={columnVisibility}
-          onColumnVisibilityChange={setColumnVisibility}
-          allowHorizontalOverflow={true}
-        />
-      </ResourceLoadingBoundary>
+      <>
+        <ResourceLoadingBoundary
+          loading={loading ?? false}
+          dataLength={sortedData.length}
+          hasLoaded={loaded}
+          spinnerMessage="Loading Helm releases..."
+        >
+          <GridTable
+            data={sortedData}
+            columns={columns}
+            loading={loading}
+            keyExtractor={keyExtractor}
+            onRowClick={handleResourceClick}
+            onSort={handleSort}
+            sortConfig={sortConfig}
+            tableClassName="ns-helm-table"
+            enableContextMenu={true}
+            getCustomContextMenuItems={getContextMenuItems}
+            useShortNames={useShortResourceNames}
+            emptyMessage={emptyMessage}
+            filters={{
+              enabled: true,
+              value: persistedFilters,
+              onChange: setPersistedFilters,
+              onReset: resetPersistedState,
+              options: {
+                showKindDropdown: true,
+                showNamespaceDropdown: showNamespaceColumn,
+                preActions: [favToggle],
+              },
+            }}
+            virtualization={GRIDTABLE_VIRTUALIZATION_DEFAULT}
+            columnWidths={columnWidths}
+            onColumnWidthsChange={setColumnWidths}
+            columnVisibility={columnVisibility}
+            onColumnVisibilityChange={setColumnVisibility}
+            allowHorizontalOverflow={true}
+          />
+        </ResourceLoadingBoundary>
+        {favModal}
+      </>
     );
   }
 );

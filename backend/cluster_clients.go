@@ -50,6 +50,23 @@ func (a *App) clusterClientsForID(clusterID string) *clusterClients {
 	return a.clusterClients[clusterID]
 }
 
+// clusterClientsForSelection finds stored clients by matching the kubeconfig path
+// and context, regardless of what ID was derived. This handles cases where
+// clusterMetaForSelection re-derives a different ID than what was used at build time.
+func (a *App) clusterClientsForSelection(selection kubeconfigSelection) *clusterClients {
+	if a == nil {
+		return nil
+	}
+	a.clusterClientsMu.Lock()
+	defer a.clusterClientsMu.Unlock()
+	for _, c := range a.clusterClients {
+		if c.kubeconfigPath == selection.Path && c.kubeconfigContext == selection.Context {
+			return c
+		}
+	}
+	return nil
+}
+
 // syncClusterClientPool builds missing clients for the provided selections and drops stale entries.
 func (a *App) syncClusterClientPool(selections []kubeconfigSelection) error {
 	return a.syncClusterClientPoolWithContext(context.Background(), selections)
@@ -66,6 +83,14 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 
 	desired := make(map[string]kubeconfigSelection, len(selections))
 	for _, sel := range selections {
+		// Check if an existing client matches this selection by path+context.
+		// This avoids re-creating clients when clusterMetaForSelection returns
+		// a different ID than what was used at build time (can happen when a
+		// kubeconfig file has multiple contexts).
+		if existing := a.clusterClientsForSelection(sel); existing != nil {
+			desired[existing.meta.ID] = sel
+			continue
+		}
 		meta := a.clusterMetaForSelection(sel)
 		if meta.ID == "" {
 			continue
@@ -104,6 +129,12 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 				continue
 			}
 			tasks = append(tasks, createTask{selection: sel, meta: meta})
+		}
+
+		for _, task := range tasks {
+			if a.clusterLifecycle != nil {
+				a.clusterLifecycle.SetState(task.meta.ID, ClusterStateConnecting)
+			}
 		}
 
 		built := make([]builtClient, 0, len(tasks))
@@ -145,6 +176,12 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 			a.clusterClients[item.id] = item.clients
 		}
 		a.clusterClientsMu.Unlock()
+
+		for _, item := range built {
+			if a.clusterLifecycle != nil {
+				a.clusterLifecycle.SetState(item.id, ClusterStateConnected)
+			}
+		}
 	}
 
 	var removedClusterIDs []string
@@ -173,6 +210,12 @@ func (a *App) syncClusterClientPoolWithContext(ctx context.Context, selections [
 		}
 		if err := a.StopClusterPortForwards(clusterID); err != nil && a.logger != nil {
 			a.logger.Warn(fmt.Sprintf("Failed to stop port forwards for removed cluster %s: %v", clusterID, err), "KubernetesClient")
+		}
+	}
+
+	for _, id := range removedClusterIDs {
+		if a.clusterLifecycle != nil {
+			a.clusterLifecycle.Remove(id)
 		}
 	}
 

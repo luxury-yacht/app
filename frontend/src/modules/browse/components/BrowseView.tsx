@@ -40,6 +40,8 @@ import {
   type BrowseTableRow,
 } from '@modules/browse/hooks/useBrowseColumns';
 import type { BrowseViewProps, BrowseScope } from './BrowseView.types';
+import { LoadMoreIcon } from '@shared/components/icons/MenuIcons';
+import { useFavToggle } from '@ui/favorites/FavToggle';
 
 const VIRTUALIZATION_THRESHOLD = 80;
 
@@ -212,6 +214,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         filters: namespacePersistence.filters,
         setFilters: namespacePersistence.setFilters,
         resetState: namespacePersistence.resetState,
+        hydrated: namespacePersistence.hydrated,
       }
     : {
         sortConfig: clusterPersistence.sortConfig,
@@ -223,6 +226,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         filters: clusterPersistence.filters,
         setFilters: clusterPersistence.setFilters,
         resetState: clusterPersistence.resetState,
+        hydrated: clusterPersistence.hydrated,
       };
 
   // Get catalog data
@@ -259,6 +263,19 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     onChange: persistence.setSortConfig,
   });
 
+  const { item: favToggle, modal: favModal } = useFavToggle({
+    filters: persistence.filters,
+    sortColumn: sortConfig?.key ?? null,
+    sortDirection: sortConfig?.direction ?? 'asc',
+    columnVisibility: persistence.columnVisibility ?? {},
+    setFilters: persistence.setFilters,
+    setSortConfig: persistence.setSortConfig,
+    setColumnVisibility: persistence.setColumnVisibility,
+    hydrated: persistence.hydrated,
+    availableKinds: filterOptions.kinds,
+    availableFilterNamespaces: filterOptions.namespaces,
+  });
+
   // Build grid filters configuration
   const gridFilters = useMemo(
     () => ({
@@ -273,20 +290,21 @@ const BrowseView: React.FC<BrowseViewProps> = ({
         showNamespaceDropdown: showNamespaceColumn,
         includeClusterScopedSyntheticNamespace: false,
         totalCount,
-        customActions: (
-          // Keep pagination actions out of the scrollable body. The in-body pagination button
-          // can interact with virtual scroll/focus management and trigger React update-depth
-          // errors on some datasets.
-          <button
-            type="button"
-            className="button generic"
-            onClick={handleLoadMore}
-            disabled={!continueToken || isRequestingMore}
-            title={!continueToken ? 'All items loaded' : undefined}
-          >
-            {isRequestingMore ? 'Loading…' : 'Load More'}
-          </button>
-        ),
+        preActions: [favToggle],
+        postActions: [
+          {
+            type: 'action' as const,
+            id: 'load-more',
+            icon: <LoadMoreIcon />,
+            onClick: handleLoadMore,
+            title: !continueToken
+              ? 'All items loaded'
+              : isRequestingMore
+                ? 'Loading…'
+                : 'Load more',
+            disabled: !continueToken || isRequestingMore,
+          },
+        ],
       },
     }),
     [
@@ -296,6 +314,7 @@ const BrowseView: React.FC<BrowseViewProps> = ({
       filterOptions.kinds,
       filterOptions.namespaces,
       showNamespaceColumn,
+      favToggle,
       handleLoadMore,
       continueToken,
       isRequestingMore,
@@ -326,36 +345,39 @@ const BrowseView: React.FC<BrowseViewProps> = ({
     loadingMessage ?? (isNamespaceScoped ? 'Loading resources...' : 'Loading browse catalog...');
 
   return (
-    <ResourceLoadingBoundary
-      loading={loading}
-      dataLength={sortedData.length}
-      hasLoaded={hasLoadedOnce}
-      spinnerMessage={resolvedLoadingMessage}
-      allowPartial
-      suppressEmptyWarning
-    >
-      <GridTable<BrowseTableRow>
-        data={sortedData}
-        columns={columns}
-        keyExtractor={keyExtractor}
-        onRowClick={handleOpen}
-        onSort={handleSort}
-        sortConfig={sortConfig}
-        tableClassName={resolvedTableClassName}
-        useShortNames={useShortResourceNames}
-        enableContextMenu
-        getCustomContextMenuItems={getContextMenuItems}
-        filters={gridFilters}
-        virtualization={virtualizationOptions}
-        allowHorizontalOverflow={true}
-        emptyMessage={resolvedEmptyMessage}
-        columnWidths={persistence.columnWidths}
-        onColumnWidthsChange={persistence.setColumnWidths}
-        columnVisibility={persistence.columnVisibility}
-        onColumnVisibilityChange={persistence.setColumnVisibility}
-        loadingOverlay={loadingOverlay}
-      />
-    </ResourceLoadingBoundary>
+    <>
+      <ResourceLoadingBoundary
+        loading={loading}
+        dataLength={sortedData.length}
+        hasLoaded={hasLoadedOnce}
+        spinnerMessage={resolvedLoadingMessage}
+        allowPartial
+        suppressEmptyWarning
+      >
+        <GridTable<BrowseTableRow>
+          data={sortedData}
+          columns={columns}
+          keyExtractor={keyExtractor}
+          onRowClick={handleOpen}
+          onSort={handleSort}
+          sortConfig={sortConfig}
+          tableClassName={resolvedTableClassName}
+          useShortNames={useShortResourceNames}
+          enableContextMenu
+          getCustomContextMenuItems={getContextMenuItems}
+          filters={gridFilters}
+          virtualization={virtualizationOptions}
+          allowHorizontalOverflow={true}
+          emptyMessage={resolvedEmptyMessage}
+          columnWidths={persistence.columnWidths}
+          onColumnWidthsChange={persistence.setColumnWidths}
+          columnVisibility={persistence.columnVisibility}
+          onColumnVisibilityChange={persistence.setColumnVisibility}
+          loadingOverlay={loadingOverlay}
+        />
+      </ResourceLoadingBoundary>
+      {favModal}
+    </>
   );
 };
 

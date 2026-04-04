@@ -697,7 +697,6 @@ body.gridtable-disable-hover .gridtable-hover-overlay {
   font-size: 0.75rem;
   color: var(--color-text-secondary);
   white-space: nowrap;
-  margin-left: var(--spacing-md);
 }
 
 .gridtable-filter-group label {

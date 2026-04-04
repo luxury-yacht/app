@@ -202,6 +202,90 @@ export namespace backend {
 	        this.protocol = source["protocol"];
 	    }
 	}
+	export class FavoriteTableState {
+	    sortColumn: string;
+	    sortDirection: string;
+	    columnVisibility: Record<string, boolean>;
+	
+	    static createFrom(source: any = {}) {
+	        return new FavoriteTableState(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sortColumn = source["sortColumn"];
+	        this.sortDirection = source["sortDirection"];
+	        this.columnVisibility = source["columnVisibility"];
+	    }
+	}
+	export class FavoriteFilters {
+	    search: string;
+	    kinds: string[];
+	    namespaces: string[];
+	    caseSensitive: boolean;
+	    includeMetadata: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new FavoriteFilters(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.search = source["search"];
+	        this.kinds = source["kinds"];
+	        this.namespaces = source["namespaces"];
+	        this.caseSensitive = source["caseSensitive"];
+	        this.includeMetadata = source["includeMetadata"];
+	    }
+	}
+	export class Favorite {
+	    id: string;
+	    name: string;
+	    clusterSelection: string;
+	    viewType: string;
+	    view: string;
+	    namespace: string;
+	    filters?: FavoriteFilters;
+	    tableState?: FavoriteTableState;
+	    order: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new Favorite(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.clusterSelection = source["clusterSelection"];
+	        this.viewType = source["viewType"];
+	        this.view = source["view"];
+	        this.namespace = source["namespace"];
+	        this.filters = this.convertValues(source["filters"], FavoriteFilters);
+	        this.tableState = this.convertValues(source["tableState"], FavoriteTableState);
+	        this.order = source["order"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
 	export class LogEntry {
 	    timestamp: string;
 	    level: string;

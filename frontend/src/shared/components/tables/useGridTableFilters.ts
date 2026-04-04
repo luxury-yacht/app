@@ -18,6 +18,8 @@ const DEFAULT_FILTER_STATE: GridTableFilterState = {
   search: '',
   kinds: [],
   namespaces: [],
+  caseSensitive: false,
+  includeMetadata: false,
 };
 
 const normalizeFilterArray = (values?: string[]): string[] => {
@@ -53,10 +55,14 @@ const normalizeFilterState = (state?: Partial<GridTableFilterState>): GridTableF
   search: state?.search?.trim() ?? '',
   kinds: normalizeFilterArray(state?.kinds),
   namespaces: normalizeFilterArray(state?.namespaces),
+  caseSensitive: state?.caseSensitive ?? false,
+  includeMetadata: state?.includeMetadata ?? false,
 });
 
 const areFilterStatesEqual = (a: GridTableFilterState, b: GridTableFilterState): boolean =>
   a.search === b.search &&
+  a.caseSensitive === b.caseSensitive &&
+  a.includeMetadata === b.includeMetadata &&
   a.kinds.length === b.kinds.length &&
   a.namespaces.length === b.namespaces.length &&
   a.kinds.every((value, index) => value === b.kinds[index]) &&
@@ -142,9 +148,14 @@ export function useGridTableFilters<T>({
     [filters, isControlled]
   );
 
-  // Built-in case-sensitive search toggle, managed internally.
-  const [caseSensitive, setCaseSensitive] = useState(false);
-  const toggleCaseSensitive = useCallback(() => setCaseSensitive((prev) => !prev), []);
+  // Toggle the case-sensitive flag through the shared filter state.
+  const toggleCaseSensitive = useCallback(() => {
+    const next = normalizeFilterState({
+      ...activeFilters,
+      caseSensitive: !activeFilters.caseSensitive,
+    });
+    setFiltersState(next);
+  }, [activeFilters, setFiltersState]);
 
   const filterAccessors = useMemo<GridTableFilterAccessors<T>>(() => {
     const getKind = filters?.accessors?.getKind ?? ((row: T) => defaultGetKind(row) ?? null);
@@ -162,15 +173,17 @@ export function useGridTableFilters<T>({
 
   const resolvedFilterOptions = useMemo<InternalFilterOptions>(() => {
     const searchPlaceholder = filters?.options?.searchPlaceholder;
+    const preActions = filters?.options?.preActions;
+    const postActions = filters?.options?.postActions;
     const customActions = filters?.options?.customActions;
-    const searchActions = filters?.options?.searchActions;
     if (!filteringEnabled) {
       return {
         searchPlaceholder,
         kinds: [],
         namespaces: [],
+        preActions,
+        postActions,
         customActions,
-        searchActions,
       };
     }
 
@@ -250,8 +263,9 @@ export function useGridTableFilters<T>({
       searchPlaceholder,
       kinds,
       namespaces: namespaceOptions,
+      preActions,
+      postActions,
       customActions,
-      searchActions,
     };
   }, [
     filteringEnabled,
@@ -267,7 +281,7 @@ export function useGridTableFilters<T>({
       return data;
     }
 
-    const searchNeedle = caseSensitive
+    const searchNeedle = activeFilters.caseSensitive
       ? activeFilters.search.trim()
       : activeFilters.search.trim().toLowerCase();
     const shouldFilterSearch = searchNeedle.length > 0;
@@ -313,7 +327,7 @@ export function useGridTableFilters<T>({
       return searchValues.some(
         (candidate) =>
           typeof candidate === 'string' &&
-          (caseSensitive
+          (activeFilters.caseSensitive
             ? candidate.includes(searchNeedle)
             : candidate.toLowerCase().includes(searchNeedle))
       );
@@ -326,7 +340,6 @@ export function useGridTableFilters<T>({
     defaultGetKind,
     defaultGetNamespace,
     defaultGetSearchText,
-    caseSensitive,
   ]);
 
   const updateFilters = useCallback(
@@ -385,7 +398,7 @@ export function useGridTableFilters<T>({
     handleFilterKindsChange,
     handleFilterNamespacesChange,
     handleFilterReset,
-    caseSensitive,
+    caseSensitive: activeFilters.caseSensitive,
     toggleCaseSensitive,
   };
 }

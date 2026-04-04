@@ -179,7 +179,13 @@ describe('useGridTableFilters', () => {
     });
 
     result = getResult();
-    expect(result?.activeFilters).toEqual({ search: '', kinds: [], namespaces: [] });
+    expect(result?.activeFilters).toEqual({
+      search: '',
+      kinds: [],
+      namespaces: [],
+      caseSensitive: false,
+      includeMetadata: false,
+    });
     expect(result?.tableData.length).toBe(rows.length);
   });
 
@@ -189,6 +195,8 @@ describe('useGridTableFilters', () => {
       search: '',
       kinds: ['configmap'],
       namespaces: [''],
+      caseSensitive: false,
+      includeMetadata: false,
     };
 
     const { getResult } = await renderHook({
@@ -209,6 +217,8 @@ describe('useGridTableFilters', () => {
       search: 'gateway',
       kinds: ['configmap'],
       namespaces: [''],
+      caseSensitive: false,
+      includeMetadata: false,
     });
 
     result = getResult();
